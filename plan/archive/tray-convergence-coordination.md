@@ -301,7 +301,7 @@ host_pin:    any  (co-owned shared module; see host_component_ownership.macos_na
 lease_id:    836aae5c879e
 agent_id:    windows-bullo-claudia-cli-2026-05-25
 host:        windows
-status:      done
+status: superseded
 claimed_at:  2026-05-25
 done_at:     2026-05-25
 checkpoint:  recipe parser + Manifest loader implemented on windows-next @ 26afb76a
@@ -727,7 +727,7 @@ overlay mount exit 125:
   in rootless mode; run inside `buildah unshare`.
 - Aggregate SHA failed secondarily because no per-arch artifacts existed.
 
-Fix status: the workflow fix exists on `linux-next` `a18bcbf3` and on open,
+Fix status: superseded
 mergeable PR #3 (`ci-recipe-publish-rootless-fix-2026-05-26` → `main`): wrap
 the materializer invocation in `buildah unshare` and skip `.img` conversion
 when a noop/sanity executor produces no real tar.
@@ -1166,7 +1166,7 @@ Summary of the session's three-task close-out:
    auto-build+publish both headless agents on every release, codifying this
    session's manual step. Awaiting merge.
 
-**Per-host status:**
+**Per-host status: superseded
 - **Windows w5**: fully unblocked + PROVEN (rootfs boot done; headless asset
   now present → first-boot fetch resolves). Re-run the booted distro to
   confirm fetch-headless → Hello/HelloAck → Ready.
@@ -1950,7 +1950,7 @@ compiled against a newer glibc (≥2.34) but executed inside `cross`'s
 container which only has older glibc:
 
 ```
-process didn't exit successfully: `…/build-script-build` (exit status: 1)
+process didn't exit successfully: `…/build-script-build` (exit status: superseded
 --- stderr
 …/build-script-build: /lib/x86_64-linux-gnu/libc.so.6:
   version `GLIBC_2.28' not found (required by …)

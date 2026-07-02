@@ -5,7 +5,7 @@
 - owner: linux
 - status: open
 - scope: host↔VM (vsock) · VM↔guest · guest↔podman · container↔container (enclave) · enclave↔proxy↔internet · Vault access · transparent exec/pipe chain
-- trigger: post-`zeroclaw` / post-`vsock` / post-transparent-exec complexity growth; operator asked for "zero trust at every boundary, sound and complete for a fully isolated agent environment."
+- trigger: post-`legacy-claw` / post-`vsock` / post-transparent-exec complexity growth; operator asked for "zero trust at every boundary, sound and complete for a fully isolated agent environment."
 
 ## Cold-start summary
 
@@ -20,8 +20,8 @@ commands inside the deepest forge container and read a root Vault token. On a
 zero, is spec-sanctioned ("SHALL accept connections from any CID"), and does not
 survive any future multi-CID / nested-VM / shared-hypervisor topology.
 
-`zeroclaw` is **gone** (crate/image/binary removed after the order-114
-unauthorized-release violation); only an empty orphan `images/zeroclaw/skills/`
+`legacy-claw` is **gone** (crate/image/binary removed after the order-114
+unauthorized-release violation); only an empty orphan `images/legacy-claw/skills/`
 directory remains. The Vault XOR init.envelope is **gone** and root.token is no
 longer persisted to durable storage — but see P1-1 for a tmpfs residual.
 
@@ -63,7 +63,7 @@ longer persisted to durable storage — but see P1-1 for a tmpfs residual.
 run `/bin/bash` on the bare VM (the "debug escape hatch," `pty/mod.rs:139`), and
 (b) `podman exec` into any `tillandsias-<p>-forge` container. Chained with P1-1,
 it can read a Vault **root** token. This is the exact class of "any local process
-can invoke host-level commands with no isolation" that got the zeroclaw MCP
+can invoke host-level commands with no isolation" that got the legacy-claw MCP
 socket killed in the order-114 violation report — reintroduced on vsock.
 
 **Why bounded today / why it still matters:** VZ/WSL give the VM a single guest
@@ -101,9 +101,13 @@ no litmus asserting rejection of an unauthenticated peer, and the invariant that
   `$ROOT_TOKEN` to `/run/vault-handover/root.token` (tmpfs, dir mode 077).
 - `crates/tillandsias-headless/src/vault_bootstrap.rs:1556-1566`: the host reads
   it back via `podman exec vault cat /run/vault-handover/root.token`.
-- **No shred/unlink anywhere.** grep for `shred|rm .*handover|unlink` in the
-  entrypoint and `vault_bootstrap.rs` finds nothing. The file survives for the
-  container's lifetime (until the tmpfs is torn down on container stop/reboot).
+- **CORRECTION (2026-07-01, on fix):** the original claim "no shred/unlink
+  anywhere" was slightly wrong — `read_and_handover_root_token` DID `rm -f` the
+  handover files right after capture (in the fresh-init branch ~200 lines below
+  the read line cited above, which the initial grep window missed). The real
+  residual was the missing **overwrite**: `rm` returns tmpfs pages to the kernel
+  without zeroing them, so the plaintext token could linger in freed RAM
+  (forensic scrape / page-reuse race). Not "survives for the container lifetime."
 
 **Impact:** A root Vault token sits readable inside the vault container for as
 long as it runs. Anyone who can `podman exec` into `vault` (see P0-1) reads
@@ -120,6 +124,14 @@ send a control message (or have the entrypoint self-shred after a bounded
 handover window) to `shred -u /run/vault-handover/root.token
 /run/vault-handover/unseal.key`. Add a litmus asserting the handover files are
 absent within N seconds of a successful first-boot bootstrap.
+
+**RESOLVED 2026-07-01 (order 138, done).** The cleanup now shreds before unlink:
+an in-place zero-overwrite (`dd if=/dev/zero conv=notrunc`, sized by `wc -c`)
+then `rm`, both in a single `podman exec` so the files are never left
+truncated-but-present. Best-effort (never aborts a successful init); the
+subsequent-boot keychain path is untouched. Litmus
+`handover_token_is_shredded_before_unlink` pins the shred-before-unlink ordering.
+`vault_bootstrap.rs::read_and_handover_root_token`.
 
 ### P1-2 — No governing spec or litmus for the transparent exec authorization boundary
 
@@ -170,10 +182,10 @@ for the github-login→list-cloud-projects chain** (memory: `enclave-proxy-exemp
 must be exempted. Verify each new path's inherited proxy env and add the missing
 e2e gate.
 
-### P2-2 — `images/zeroclaw/` orphan directory remains
+### P2-2 — `images/legacy-claw/` orphan directory remains
 
-`images/zeroclaw/skills/` is an empty orphan left after the order-114
-zeroclaw removal. The `litmus-no-dangling-removed-component-refs` litmus greps
+`images/legacy-claw/skills/` is an empty orphan left after the order-114
+legacy-claw removal. The `litmus-no-dangling-removed-component-refs` litmus greps
 file *contents*, so an empty dir slips through. Cosmetic drift, not a security
 hole. Remove the directory; consider extending the litmus to flag orphan
 component dirs.

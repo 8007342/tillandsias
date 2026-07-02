@@ -154,12 +154,31 @@ impl WslLifecycle {
             .map_err(|e| format!("create install_root failed: {e}"))?;
 
         // Idempotent: if a prior run already imported the distro, skip the
-        // download + `wsl --import` and just (re)start it.
+        // download + `wsl --import` and just (re)start it, then connect to
+        // deliver credentials so the headless can bootstrap vault.
         if self.runtime.is_registered().await {
             progress.report_phase(ProvisionPhase::StartingVm);
             self.runtime.start().await?;
             progress.report_phase(ProvisionPhase::Connecting);
-            return Ok(());
+            const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+            let _keepalive = self.spawn_keepalive().ok();
+            let mut last_err = String::from("(no attempt)");
+            for attempt in 1..=36u32 {
+                match self.try_connect_until_ready(CW_PORT, attempt).await {
+                    Ok(VmPhase::Ready) | Ok(VmPhase::Starting) => return Ok(()),
+                    Ok(other) => {
+                        last_err = format!("VM in phase {other:?}");
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                    Err(e) => {
+                        last_err = e;
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                }
+            }
+            return Err(format!(
+                "control-wire handshake did not succeed within budget: {last_err}"
+            ));
         }
 
         let manifest = Manifest::from_toml(RECIPE_MANIFEST)
@@ -407,6 +426,46 @@ WantedBy=multi-user.target
         )
         .await?;
 
+        // 5. home-forge-src.mount — targeted drvfs mount of the HOST's
+        // `%USERPROFILE%\src` at the in-VM project bind-mount convention
+        // `/home/forge/src` (see tillandsias-headless
+        // `TILLANDSIAS_IN_VM_PROJECT_ROOT`, default `/home/forge/src`).
+        //
+        // This is the Windows half of the cross-host contract: macOS mounts
+        // the user's ~/src via virtio-fs; Windows mounts via drvfs (9p).
+        // Global automount stays DISABLED (`[automount] enabled=false` in
+        // wsl.conf, zero-trust posture) — only the src tree is exposed.
+        // Cloud checkouts (`tillandsias-headless --cloud owner/repo`) land
+        // here, i.e. directly in the host's ~/src, and the forge container
+        // volume-mounts the per-project subdir — host→VM→container, the same
+        // transparent chain as the Linux native tray's local ~/src.
+        //
+        // Unit name MUST be the systemd-escaped Where= path
+        // (/home/forge/src → home-forge-src.mount) or systemd refuses it.
+        // @trace spec:host-shell-architecture, spec:remote-projects
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            let host_src = format!("{}\\src", profile.trim_end_matches('\\'));
+            let mount_unit = format!(
+                "[Unit]\n\
+                 Description=Host ~/src (drvfs) at the in-VM project root convention\n\
+                 [Mount]\n\
+                 What={host_src}\n\
+                 Where=/home/forge/src\n\
+                 Type=drvfs\n\
+                 Options=rw,noatime,metadata\n\
+                 [Install]\n\
+                 WantedBy=multi-user.target\n"
+            );
+            self.wsl_root_write(
+                "/etc/systemd/system/home-forge-src.mount",
+                &mount_unit,
+                false,
+            )
+            .await?;
+        } else {
+            tracing::warn!("USERPROFILE not set; skipping home-forge-src.mount injection");
+        }
+
         // Enable AND start the units now. `inject_bootstrap_logic` runs after
         // `configure_recipe_distro` has already flipped wsl.conf to
         // systemd-as-PID1, so by this point systemd is up and multi-user.target
@@ -419,7 +478,8 @@ WantedBy=multi-user.target
         // in `Connecting` until the budget expires.
         // @trace plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md
         self.wsl_root_sh(
-            "systemctl daemon-reload && systemctl enable --now podman.socket tillandsias-headless-fetch.service tillandsias-headless.service",
+            "systemctl daemon-reload && systemctl enable --now podman.socket tillandsias-headless-fetch.service tillandsias-headless.service && \
+             { systemctl enable --now home-forge-src.mount 2>/dev/null || true; }",
         )
         .await?;
 

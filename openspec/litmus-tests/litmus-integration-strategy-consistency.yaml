@@ -1,0 +1,32 @@
+# @trace spec:methodology-accountability
+name: litmus:integration-strategy-consistency
+spec: methodology-accountability
+phase: source-analysis
+description: >
+  Verifies that methodology and skills documentation do not instruct agents to use
+  'rebase' for cross-branch (sibling or main) integration, which destroys commit hashes.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains methodology/
+  - workspace contains skills/
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Verify no stray rebase instructions for cross-branch integration exist"
+    command: >
+      ! grep -riE "pull-integration and rebase pass" skills/ &&
+      ! grep -riE "cross-branch.*rebase" methodology/ skills/ | grep -v "not merge, for cross-branch" &&
+      echo "ok: strategy consistent"
+    timeout_ms: 3000
+    expected_behavior: "ok: strategy consistent"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "integration strategy consistency verified"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "integration-strategy-consistency"
+    artifact: "skills/* methodology/*"

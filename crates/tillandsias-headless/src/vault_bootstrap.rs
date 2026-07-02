@@ -384,6 +384,9 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     ensure_vault_tls_leaf(&certs_dir, debug)?;
 
     if container_running(VAULT_CONTAINER_NAME) {
+        // Refresh /etc/hosts before any API probe — each podman restart can
+        // give the container a new IP from the enclave bridge IPAM.
+        update_etc_hosts_vault(debug);
         // Already up. Probe health to make sure it's serving.
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
@@ -484,7 +487,7 @@ fn wait_for_vault_api_ready(
                 "[tillandsias-vault] {last_failure}; retrying API probe ({attempt}/{MAX_API_PROBE_ATTEMPTS})"
             );
         }
-        rt.block_on(tokio::time::sleep(delay));
+        std::thread::sleep(delay);
         delay = std::cmp::min(delay.saturating_mul(2), max_delay);
     }
 
@@ -1069,7 +1072,26 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
             key.copy_from_slice(&key_vec);
             return Ok(key);
         }
-        // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
+        // Host didn't deliver a Shamir share. Try the local fallback file before
+        // deriving the dummy key — the fallback was written during the initial
+        // vault-init run and lets the headless self-recover when the Windows tray
+        // hasn't received the GetVaultHandover handover yet.
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        if fallback_file.is_file()
+            && let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
+            && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
+            && key_vec.len() == 32
+        {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered Shamir share from VM fallback file");
+            }
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&key_vec);
+            return Ok(key);
+        }
+        // No fallback share found — derive a first-boot dummy key. The vault
+        // container will generate the real share during init.
         if debug {
             eprintln!(
                 "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
@@ -1635,6 +1657,9 @@ fn wait_for_vault_ready(
     rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME))
         .map_err(|e| format!("vault container did not report healthy: {e}"))?;
 
+    // Update /etc/hosts now that the container has a stable IP.
+    update_etc_hosts_vault(debug);
+
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
     match wait_for_vault_api_ready(rt, &client, debug) {
         Ok(h) => {
@@ -1647,6 +1672,65 @@ fn wait_for_vault_ready(
             read_and_handover_root_token(debug)
         }
         Err(e) => Err(format!("vault podman health is healthy but {e}")),
+    }
+}
+
+/// Resolve the current vault container IP and update /etc/hosts so the
+/// process-local hostname `vault` always points to it. The headless process
+/// is not inside any podman network so aardvark-dns doesn't reach it; only
+/// /etc/hosts does.
+#[cfg(feature = "vault")]
+fn update_etc_hosts_vault(debug: bool) {
+    let out = match podman_cmd_sync()
+        .args([
+            "inspect",
+            VAULT_CONTAINER_NAME,
+            "--format",
+            "{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}",
+        ])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("[tillandsias-vault] /etc/hosts update skipped: podman inspect failed: {e}");
+            return;
+        }
+    };
+    if !out.status.success() {
+        eprintln!(
+            "[tillandsias-vault] /etc/hosts update skipped: podman inspect exit {}",
+            out.status
+        );
+        return;
+    }
+    let ip = match String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(str::to_owned)
+    {
+        Some(ip) => ip,
+        None => {
+            eprintln!("[tillandsias-vault] /etc/hosts update skipped: no IP from podman inspect");
+            return;
+        }
+    };
+    let hosts = fs::read_to_string("/etc/hosts").unwrap_or_default();
+    let mut new_content: String = hosts
+        .lines()
+        .filter(|l| !l.split_whitespace().any(|w| w == "vault"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !new_content.ends_with('\n') && !new_content.is_empty() {
+        new_content.push('\n');
+    }
+    new_content.push_str(&format!("{ip} vault\n"));
+    if let Err(e) = fs::write("/etc/hosts", &new_content) {
+        eprintln!("[tillandsias-vault] /etc/hosts update failed: {e}");
+        return;
+    }
+    if debug {
+        eprintln!("[tillandsias-vault] /etc/hosts: vault → {ip}");
     }
 }
 
@@ -1746,23 +1830,31 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         }
 
         // @trace spec:tillandsias-vault — Secure Artifact Cleanup
-        // Delete the handover files from tmpfs immediately. Remove the files
-        // (not the mount dir) so the unprivileged exec user can't trip on the
-        // root-owned tmpfs mount point.
+        // @trace plan/issues/security-audit-zero-trust-2026-07-01.md (P1-1)
+        // SHRED, don't just unlink. `rm` alone returns the tmpfs pages to the
+        // kernel WITHOUT zeroing them, so the root token can linger in freed RAM
+        // (readable via a forensic memory scrape or a page-reuse race) after the
+        // host has consumed it. Overwrite each file in place with zeros of its
+        // own length FIRST, then unlink — both in a single exec so the files are
+        // never left truncated-but-present. Remove the files (not the mount dir)
+        // so the unprivileged exec user can't trip on the root-owned tmpfs mount
+        // point. Best-effort: a failure here must not abort a successful init.
         let _ = podman_cmd_sync()
             .args([
                 "exec",
                 VAULT_CONTAINER_NAME,
-                "rm",
-                "-f",
-                "/run/vault-handover/root.token",
-                "/run/vault-handover/unseal.key",
+                "sh",
+                "-c",
+                "for f in /run/vault-handover/root.token /run/vault-handover/unseal.key; do \
+                   [ -f \"$f\" ] && dd if=/dev/zero of=\"$f\" bs=1 count=\"$(wc -c < \"$f\")\" conv=notrunc 2>/dev/null; \
+                 done; \
+                 rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key",
             ])
             .status();
 
         if debug {
             eprintln!(
-                "[tillandsias-vault] root token + Shamir share handover complete (deleted from tmpfs)"
+                "[tillandsias-vault] root token + Shamir share handover complete (shredded from tmpfs)"
             );
         }
         return Ok(token);
@@ -1781,6 +1873,22 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 );
             }
             return Ok(token.clone());
+        }
+        // Host didn't deliver a root token. Try the local fallback file
+        // (written by the vault-init bootstrap on first run and by any
+        // explicit `--store-vault-root-token` path). This keeps the headless
+        // self-sufficient when the Windows tray's Credential Manager hasn't
+        // received the handover yet (e.g. after a GetVaultHandover failure).
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        if fallback_file.is_file()
+            && let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
+            && !t.is_empty()
+        {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered root token from VM fallback file");
+            }
+            return Ok(t);
         }
         return Err("running in VM but no root token delivered from host".to_string());
     }
@@ -2018,6 +2126,37 @@ mod tests {
         assert!(
             !window.contains("\"--ip\""),
             "Vault service discovery should not depend on a singleton enclave IP"
+        );
+    }
+
+    #[test]
+    fn handover_token_is_shredded_before_unlink() {
+        // P1-1: the first-boot root-token handover must be OVERWRITTEN in tmpfs
+        // before it is unlinked — `rm` alone frees the RAM pages without zeroing,
+        // leaving the token recoverable. Assert the shred path zeros with dd
+        // (conv=notrunc, in place) and only then rm -f.
+        // @trace plan/issues/security-audit-zero-trust-2026-07-01.md (P1-1)
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn read_and_handover_root_token(")
+            .nth(1)
+            .expect("read_and_handover_root_token source");
+        let dd_at = window
+            .find("dd if=/dev/zero")
+            .expect("handover cleanup must overwrite the token with zeros (dd), not just unlink");
+        assert!(
+            window[dd_at..].contains("conv=notrunc"),
+            "the overwrite must be in place (conv=notrunc), not a truncation"
+        );
+        let rm_at = window
+            .find("rm -f /run/vault-handover/root.token")
+            .expect("handover cleanup must still unlink the files");
+        assert!(
+            dd_at < rm_at,
+            "the token must be overwritten (shredded) BEFORE it is unlinked"
         );
     }
 

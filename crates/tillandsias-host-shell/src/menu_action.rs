@@ -39,14 +39,34 @@ impl ProjectScope {
 pub enum MenuAction {
     Quit,
     GithubLogin,
-    OpenObservatorium,
-    OpenOpenCodeWeb,
-    SelectAgent(SelectedAgent),
-    Attach { scope: ProjectScope, name: String },
-    Maintain { scope: ProjectScope, name: String },
+    /// Per-project attach with an explicit agent (from the per-project submenu).
+    Attach {
+        scope: ProjectScope,
+        name: String,
+        agent: SelectedAgent,
+    },
+    Maintain {
+        scope: ProjectScope,
+        name: String,
+    },
+    /// OpenCode Web launched for a specific project.
+    ProjectOpenCodeWeb {
+        scope: ProjectScope,
+        name: String,
+    },
+    /// Observatorium launched for a specific project.
+    ProjectObservatorium {
+        scope: ProjectScope,
+        name: String,
+    },
     CloudOverflow,
     Retry,
     OpenLog,
+    // Legacy global-picker actions — kept so old dispatch paths compile, but
+    // no longer emitted by the menu. Will be removed in a future cleanup.
+    OpenObservatorium,
+    OpenOpenCodeWeb,
+    SelectAgent(SelectedAgent),
     Inert,
 }
 
@@ -59,6 +79,7 @@ pub fn resolve(id: &str) -> MenuAction {
     match id {
         ids::QUIT => MenuAction::Quit,
         ids::GITHUB_LOGIN => MenuAction::GithubLogin,
+        // Legacy global-picker IDs — still handled for backward compat.
         ids::OBSERVATORIUM => MenuAction::OpenObservatorium,
         ids::OPENCODE_WEB => MenuAction::OpenOpenCodeWeb,
         ids::AGENT_CLAUDE => MenuAction::SelectAgent(SelectedAgent::Claude),
@@ -79,11 +100,52 @@ fn resolve_project(id: &str) -> Option<MenuAction> {
     let rest = id.strip_prefix("project.")?;
     let (scope_str, after_scope) = rest.split_once('.')?;
     let scope = ProjectScope::parse(scope_str)?;
-    if let Some(name) = after_scope.strip_suffix(".attach") {
+
+    // Per-agent attach verbs (Linux-parity per-project leaves).
+    if let Some(name) = after_scope.strip_suffix(".claude") {
         if name.is_empty() {
             return None;
         }
         return Some(MenuAction::Attach {
+            scope,
+            name: name.to_string(),
+            agent: SelectedAgent::Claude,
+        });
+    }
+    if let Some(name) = after_scope.strip_suffix(".codex") {
+        if name.is_empty() {
+            return None;
+        }
+        return Some(MenuAction::Attach {
+            scope,
+            name: name.to_string(),
+            agent: SelectedAgent::Codex,
+        });
+    }
+    if let Some(name) = after_scope.strip_suffix(".opencode") {
+        if name.is_empty() {
+            return None;
+        }
+        return Some(MenuAction::Attach {
+            scope,
+            name: name.to_string(),
+            agent: SelectedAgent::OpenCode,
+        });
+    }
+    if let Some(name) = after_scope.strip_suffix(".opencode-web") {
+        if name.is_empty() {
+            return None;
+        }
+        return Some(MenuAction::ProjectOpenCodeWeb {
+            scope,
+            name: name.to_string(),
+        });
+    }
+    if let Some(name) = after_scope.strip_suffix(".observatorium") {
+        if name.is_empty() {
+            return None;
+        }
+        return Some(MenuAction::ProjectObservatorium {
             scope,
             name: name.to_string(),
         });
@@ -95,6 +157,17 @@ fn resolve_project(id: &str) -> Option<MenuAction> {
         return Some(MenuAction::Maintain {
             scope,
             name: name.to_string(),
+        });
+    }
+    // Legacy .attach verb — maps to Claude (default agent).
+    if let Some(name) = after_scope.strip_suffix(".attach") {
+        if name.is_empty() {
+            return None;
+        }
+        return Some(MenuAction::Attach {
+            scope,
+            name: name.to_string(),
+            agent: SelectedAgent::Claude,
         });
     }
     // A bare `project.<scope>.<name>` is the submenu header — not actionable.
@@ -136,14 +209,48 @@ mod tests {
     }
 
     #[test]
-    fn resolves_project_attach_and_maintenance() {
+    fn resolves_per_project_agent_verbs() {
+        use SelectedAgent::*;
+        for (verb, agent) in [("claude", Claude), ("codex", Codex), ("opencode", OpenCode)] {
+            assert_eq!(
+                resolve(&format!("project.local.myapp.{verb}")),
+                MenuAction::Attach {
+                    scope: ProjectScope::Local,
+                    name: "myapp".to_string(),
+                    agent
+                }
+            );
+            assert_eq!(
+                resolve(&format!("project.cloud.octocat-repo.{verb}")),
+                MenuAction::Attach {
+                    scope: ProjectScope::Cloud,
+                    name: "octocat-repo".to_string(),
+                    agent
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn resolves_per_project_web_and_observatorium() {
         assert_eq!(
-            resolve("project.local.myapp.attach"),
-            MenuAction::Attach {
+            resolve("project.local.myapp.opencode-web"),
+            MenuAction::ProjectOpenCodeWeb {
                 scope: ProjectScope::Local,
                 name: "myapp".to_string()
             }
         );
+        assert_eq!(
+            resolve("project.cloud.octocat-repo.observatorium"),
+            MenuAction::ProjectObservatorium {
+                scope: ProjectScope::Cloud,
+                name: "octocat-repo".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_per_project_maintenance() {
         assert_eq!(
             resolve("project.cloud.octocat-repo.maintenance"),
             MenuAction::Maintain {
@@ -153,14 +260,28 @@ mod tests {
         );
     }
 
+    /// Legacy .attach verb still resolves (defaults to Claude).
+    #[test]
+    fn resolves_legacy_attach_verb_as_claude() {
+        assert_eq!(
+            resolve("project.local.myapp.attach"),
+            MenuAction::Attach {
+                scope: ProjectScope::Local,
+                name: "myapp".to_string(),
+                agent: SelectedAgent::Claude,
+            }
+        );
+    }
+
     /// Project basenames can contain dots; the verb suffix must still parse.
     #[test]
     fn resolves_project_name_with_dots() {
         assert_eq!(
-            resolve("project.local.my.dotted.app.attach"),
+            resolve("project.local.my.dotted.app.claude"),
             MenuAction::Attach {
                 scope: ProjectScope::Local,
-                name: "my.dotted.app".to_string()
+                name: "my.dotted.app".to_string(),
+                agent: SelectedAgent::Claude,
             }
         );
     }
@@ -170,9 +291,9 @@ mod tests {
         // Bare submenu header (no verb) is not actionable.
         assert_eq!(resolve("project.local.myapp"), MenuAction::Inert);
         // Unknown scope.
-        assert_eq!(resolve("project.weird.myapp.attach"), MenuAction::Inert);
+        assert_eq!(resolve("project.weird.myapp.claude"), MenuAction::Inert);
         // Empty name.
-        assert_eq!(resolve("project.local..attach"), MenuAction::Inert);
+        assert_eq!(resolve("project.local..claude"), MenuAction::Inert);
         // Disabled/informational ids.
         assert_eq!(resolve(ids::STATUS), MenuAction::Inert);
         assert_eq!(resolve(ids::VERSION), MenuAction::Inert);

@@ -1,5 +1,121 @@
 # Multi-Host Coordination Loop Status
 
+LastExecutionTime: 2026-07-02T20:35Z
+
+## This Loop (2026-07-02T20:18Z, linux_mutable — /meta-orchestration: integrate Windows epic, then release)
+
+- **Credential guard**: ok:gh-keyring. Start in sync with linux-next.
+- **Integrated origin/windows-next (+44)** via cross-branch MERGE (6feac841):
+  order 127 host-guest-transport-windows COMPLETE (WslGuestTransport + HvSocket
+  consolidation, transport_windows.rs), order 114 vsock-vault-bootstrap-e2e
+  COMPLETE, Windows/macOS tray menu parity, transparent wire-tray cloud attach,
+  status-chip budget litmus + ux cheatsheet, and orders 146-168 of new plan work
+  (observable-streams, races, forge diagnostics) — renumbered from windows 136-159
+  to avoid colliding with linux 140-145.
+  - Merge resolution: kept linux-next's post-archival ledger (did NOT resurrect
+    windows's stale copies of the 129 archived packets); appended only the 23
+    genuinely-new active windows packets; reconciled shared-packet completions
+    (114, 127) into linux status.
+  - Integration lint fixes to green the tree: two edition-2024 let-chains in
+    vault_bootstrap.rs, cfg-gate projects_root, drop unused test import.
+- **SECURITY: removed reintroduced base64 podman shim** (04e388ac). windows
+  0c4a6aa3 re-added PODMAN_SELINUX_WRAP_B64 (base64_script_injection_ban
+  CRITICAL_VIOLATION) in pty/mod.rs — removed (redundant post-Phase-3d), tests now
+  assert its absence, and added scripts/check-no-base64-script-injection.sh
+  (verifiable, referenced from methodology). Filed order 169 to wire both policy
+  checkers into --ci-full.
+- **Gate**: ./build.sh --check + --test PASS on the merged tree; base64 checker
+  exits 0 clean / 1 on reintroduction.
+- **Release**: proceeding to /merge-to-main-and-release (main is at 0.3.260701.1;
+  linux-next carries the integrated windows epic + security work). Draining the
+  20 newly-arrived ready packets (observable-streams/races/forge — large research)
+  is deferred to subsequent cycles per the worker-drain budget rule.
+- **Note**: windows-next advanced again (8de6f369) mid-integration; those newer
+  commits are for the next merge cycle.
+
+## This Loop (2026-07-02T00:10Z, linux_mutable — /advance-work-from-plan, encrypted-channel slice 3)
+
+Operator asked to pull latest and complete the remaining encrypted-channel + auth
+packets.
+
+- **Pull**: fast-forwarded linux-next past 4 commits from other agents — packets
+  **134** (archived 129 closed packets; index much smaller), **135** (stale-ref
+  cleanup), **136** (integration strategy), and **139** (vsock exec authz) all done.
+  Note: a `zeroclaw`→`legacy-claw` terminology rename was applied elsewhere.
+- **Packet 139 already landed the argv allowlist** (`pty_handler.rs`: allowlist +
+  `tillandsias-{project}-forge` name validation + proxy exemption), so
+  encrypted-channel slice 5 is largely covered.
+- **Delivered — order 141 slice 3** (`7a62fabb`): `EncryptedStream<S>` in
+  `tillandsias-secure-channel/secure_stream.rs` — `NNpsk0`
+  client/server handshake over any `AsyncRead+AsyncWrite`, then a full
+  AEAD `AsyncRead+AsyncWrite` tunnel (2-byte-len ChaCha20-Poly1305 frames,
+  poll-based reassembly/staging). `snow` pure-Rust default-resolver (musl-safe).
+  11 crate tests: round-trip, multi-frame, mismatched-PSK-handshake-FAILS,
+  tampered-ciphertext-rejected. So slices 1-3 (the reusable crypto primitive both
+  sibling trays will wrap) are DONE.
+- **Delivered — order 145 filed + rejection litmus** (`1250228a`):
+  `plaintext_peer_is_rejected` proves failure-closed rejection at the primitive
+  (order 137's guarantee, VM-free). Filed order 145 (encrypted-channel-vsock-cutover)
+  as an explicit ATOMIC cross-host cutover: slice 4 (turn the channel ON for the
+  vsock hop) requires the guest responder + all THREE host initiators
+  (host-shell shared, macos diagnose.rs, windows hvsocket.rs) to flip together
+  (a half-flip bricks the others; dual-mode is a downgrade vuln) AND needs
+  host<->guest VM e2e per platform. osx/windows adopt their initiator half on
+  their branches per the deliverable's integration table.
+- **Not completable this cycle (dependency-blocked, not punted)**:
+  - **132 (OAuth login flows)** blocked on the egress-allowlist chain: it needs
+    order 130 (allowlist impl), which needs order 129 (proxy TCP_DENIED harvest).
+    129 is CLAIMED by another agent and has no confirmed-domain evidence yet;
+    building 132 against un-allowlisted auth endpoints would fail at runtime and
+    guessing domains is what 129 forbids. Root blocker = 129 (live-forge task).
+  - **141 slices 4/6** = order 145 (coordinated cutover, above).
+  - **142** (per-boot hardening) deferred behind 141; **143** (API-key entry)
+    deferred behind 132.
+- **Sibling state**: osx-next 0 ahead (integrated); windows-next +32 (large merge
+  still deferred). Order 145's table gives osx/windows their initiator sub-tasks.
+- **E2E/Release**: no VM here (SELinux-Disabled); crypto is unit/litmus-proven.
+  Latest published remains v0.3.260630.1.
+
+## This Loop (2026-07-01T23:05Z, linux_mutable — /advance-work-from-plan queue drain)
+
+Operator asked to exhaust the ready Linux queue and push work + findings so the
+macOS/Windows builders unblock on these packet implementations.
+
+- **Startup**: pulled linux-next (picked up a macOS builder's push:
+  `macos-build-findings-2026-07-01.md` — the E0425 orphan `vsock_exec::exec_interactive`
+  in macos-tray diagnose.rs was fixed by osx in `81a0478c` and is already on
+  linux-next; macos-tray compiles). Credential channel `ok:gh-keyring`.
+- **Sibling state**: osx-next **0 ahead** (fully integrated); windows-next +32
+  (large cross-branch merge still deferred to a quiet window). The
+  host-guest-transport facade (order 124) is landed in control-wire::guest_transport
+  (GuestTransport/GuestEndpoint/ExecRequest/ExecOutput) — so orders 126 (macOS) and
+  127 (Windows) are genuinely READY for the sibling terminals to implement now.
+- **Drained**:
+  - **order 140 (encrypted-control-channel-research): DONE** — design filed,
+    operator signed off O1 = build-embedded per-release secret.
+  - **order 141 (encrypted-control-channel-impl): slices 1-2 landed** (`0a7afb2c`) —
+    new crate `tillandsias-secure-channel` with `derive_psk()` (HKDF-SHA256 over
+    release_root_secret + build_version + wire_version + hop_id) and 7 unit tests
+    PROVING version binding by construction. This is the shared crypto foundation
+    the macOS/Windows transport backends will wrap. No new external deps (vendored
+    hkdf/sha2/zeroize); the `snow` Noise handshake is slice 3 (own cycle). 141 now
+    in_progress; remaining slices 3-6.
+  - **order 138 (vault-handover-token-shred): DONE** (`63b31cee`) — shred the
+    first-boot root token (in-place zero-overwrite via dd conv=notrunc, then rm, one
+    exec) before unlink; litmus `handover_token_is_shredded_before_unlink`. Corrected
+    the audit (rm already existed; the residual was the missing overwrite).
+- **Not drained (with reason — a legitimate convergence point at this bar)**:
+  order 131 (agent-login-flows-research) is operator-gated (API-key vs OAuth per
+  provider needs sign-off); orders 134/135 (ledger archival + stale-ref sweep) are
+  self-flagged do-NOT-run-during-active-concurrency (siblings live); order 137
+  superseded by 140/141; order 139's spec half overlaps 141 slice 1 (best bundled
+  there). The next actionable implementation (141 slice 3, snow handshake) is a
+  large chunk warranting its own cycle.
+- **E2E**: not run (SELinux-Disabled host; the security changes are unit/litmus-
+  proven; the Phase 3d + channel behavior validate on the enforcing macOS guest).
+- **Release**: none (latest published v0.3.260630.1). Security 137/141 should land
+  before the next release.
+
 LastExecutionTime: 2026-07-01T22:30Z
 
 ## This Loop (2026-07-01T22:17Z, linux_mutable — /meta-orchestration: audit + macOS unblock + security audit)

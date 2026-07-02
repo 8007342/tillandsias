@@ -467,6 +467,7 @@ specs:
   litmus_tests:
   - litmus:methodology-accountability-shape
   - litmus:no-duplicate-rust-item-defs
+  - litmus:integration-strategy-consistency
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: meta-orchestration
@@ -885,4 +886,3 @@ specs:
   - litmus:enclave-isolation
   - litmus:reverse-proxy-internal-shape
   coverage_ratio: 75
-  last_verified: '2026-05-30'

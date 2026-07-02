@@ -221,7 +221,7 @@ in-VM headless runs `gh repo list --json nameWithOwner,defaultBranchRef` with
 the mounted token (`/run/secrets/tillandsias-github-token`) and parses into
 `CloudProjectEntry`, degrading to an empty list when gh/token are absent.
 
-Q4 status: both transports now serve REAL backing data —
+Q4 status: superseded
 - unix tray (Linux host): `tillandsias_core::remote_projects` (containerized gh).
 - vsock (in-VM): `gh` directly with the mounted token (this commit).
 Same reply shape, host-appropriate execution context — the "unified backing
@@ -316,7 +316,7 @@ handler exists yet" — surface that gap with a descriptive Error
 referencing this packet rather than the prior generic "not handled
 by the in-VM vsock dispatcher" message.
 
-**Convergence packet status: COMPLETE.** Items 1-3 all shipped:
+**Convergence packet status: superseded
 
   1. `5c67ddb9` — pure routing matrix module (decide_route + 4
      matrix tests)

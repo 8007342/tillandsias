@@ -16,6 +16,7 @@ members = [
     "crates/tillandsias-repeat-graph",
     "crates/tillandsias-router-sidecar",
     "crates/tillandsias-scanner",
+    "crates/tillandsias-secure-channel",
     "crates/tillandsias-static-server",
     "crates/tillandsias-vault-client",
     "crates/tillandsias-vm-layer",
@@ -77,6 +78,11 @@ keyring = { version = "3", features = [
 ] }
 tokio-vsock = "0.6"
 sha2 = "0.10"
+hkdf = "0.12"
+zeroize = "1"
+# Noise Protocol Framework (pure-Rust default-resolver: chacha20poly1305 +
+# x25519-dalek + blake2 via RustCrypto — musl-static friendly, no ring/C deps).
+snow = "0.9"
 embed-resource = "3"
 tempfile = "3"
 tar = "0.4"
@@ -93,6 +99,7 @@ tillandsias-metrics = { path = "crates/tillandsias-metrics" }
 tillandsias-otp = { path = "crates/tillandsias-otp" }
 tillandsias-podman = { path = "crates/tillandsias-podman" }
 tillandsias-scanner = { path = "crates/tillandsias-scanner" }
+tillandsias-secure-channel = { path = "crates/tillandsias-secure-channel" }
 
 [profile.release]
 lto = true

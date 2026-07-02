@@ -22,12 +22,10 @@
 //!    message loop via `LocalSet`. The `WslLifecycle` task lives there,
 //!    and progress callbacks flip the global menu state via a `Mutex`
 //!    behind the window handle.
-//! 5. Win11 toasts fire at 4 edge-triggered events: provisioning success
-//!    (`spawn_provisioning` Ok branch), provisioning failure (Err branch),
-//!    wire degraded (`mark_wire_unreachable`), wire recovered
-//!    (`mark_wire_recovered`). See `WIRE_DEGRADED_NOTIFIED` for the
-//!    flag pattern that prevents repeat toasts during a single
-//!    degradation episode.
+//! 5. Tray balloon popups are suppressed (per UX decision 2026-06-30).
+//!    Status changes are reflected only in the menu's STATUS chip text.
+//!    `WIRE_DEGRADED_NOTIFIED` is kept for the edge-trigger pattern so
+//!    `mark_wire_recovered` can detect a prior degradation without a balloon.
 //!
 //! ## File structure (roughly top-to-bottom)
 //!
@@ -88,11 +86,11 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
-    GetCursorPos, GetMessageW, HMENU, IDI_APPLICATION, LoadIconW, MF_CHECKED, MF_DISABLED,
-    MF_GRAYED, MF_POPUP, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassExW,
-    RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RIGHTBUTTON,
-    TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP,
-    WNDCLASSEXW, WS_EX_TOOLWINDOW,
+    GetCursorPos, GetMessageW, HMENU, IDI_APPLICATION, KillTimer, LoadIconW, MF_CHECKED,
+    MF_DISABLED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PostMessageW, PostQuitMessage,
+    RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow, SetTimer, TPM_BOTTOMALIGN,
+    TPM_LEFTALIGN, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND,
+    WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_TOOLWINDOW,
 };
 use windows::core::{PCWSTR, w};
 
@@ -101,6 +99,10 @@ use crate::wsl_lifecycle::WslLifecycle;
 /// Our private window message; click on the tray icon routes here.
 /// `WM_APP + 1` is the conventional range for app-defined messages.
 pub const WM_TRAYICON: u32 = WM_APP + 1;
+
+/// Win32 timer ID used to periodically wake GetMessageW so tokio tasks
+/// spawned onto the LocalSet can drain even when the user is idle.
+const TOKIO_DRAIN_TIMER_ID: usize = 1;
 
 /// Unique ID assigned to the NotifyIcon — kept stable across the process
 /// lifetime so `NIM_MODIFY`/`NIM_DELETE` consistently address it.
@@ -175,12 +177,23 @@ impl ProvisionProgress for TrayProgress {
 }
 
 fn update_status_text(text: &str, hwnd: HWND) {
+    // Sanitize before storing: take the first non-empty line and hard-cap at
+    // 45 chars (menu items are one line; raw errors must not spill multi-line
+    // stack traces onto a curated UX surface).
+    let first = text.lines().find(|l| !l.trim().is_empty()).unwrap_or(text);
+    let sanitized: String = if first.chars().count() > 45 {
+        let mut s: String = first.chars().take(44).collect();
+        s.push('\u{2026}'); // …
+        s
+    } else {
+        first.to_string()
+    };
     if let Ok(mut guard) = MENU_STATE.lock() {
         if let Some(state) = guard.as_mut() {
-            state.status_text = text.to_string();
+            state.status_text = sanitized;
         } else {
             let mut state = MenuState::initial();
-            state.status_text = text.to_string();
+            state.status_text = sanitized;
             *guard = Some(state);
         }
     }
@@ -256,7 +269,17 @@ fn compose_tooltip(version: &str, status: &str) -> String {
 /// (e.g. `"\u{1F7E2} Ready \u{00B7} forge-foo created"`). Pure + testable.
 fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
     match last_event.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(evt) => format!("{base} \u{00B7} {evt}"),
+        Some(evt) => {
+            // Keep the combined chip under the UX character budget. Prefer
+            // truncating the event suffix rather than the base status word.
+            let evt_budget = 45usize.saturating_sub(base.chars().count() + 3); // +3 for " · "
+            if evt.chars().count() > evt_budget && evt_budget > 1 {
+                let short: String = evt.chars().take(evt_budget - 1).collect();
+                format!("{base} \u{00B7} {short}\u{2026}")
+            } else {
+                format!("{base} \u{00B7} {evt}")
+            }
+        }
         None => base.to_string(),
     }
 }
@@ -338,6 +361,14 @@ pub fn run() -> ! {
             update_status_text("\u{26AA} Dev mode \u{2014} VM provisioning skipped", hwnd);
         }
 
+        // Fire a recurring 100ms timer so that GetMessageW returns even
+        // when the user is idle, giving tokio tasks on the LocalSet a chance
+        // to run. Without this, spawn_local tasks are starved until the
+        // next user-generated Win32 message arrives.
+        unsafe {
+            SetTimer(hwnd, TOKIO_DRAIN_TIMER_ID, 100, None);
+        }
+
         // Pump messages until WM_QUIT.
         let mut msg = MSG::default();
         loop {
@@ -357,6 +388,10 @@ pub fn run() -> ! {
             }
             // Cooperative tokio drain.
             tokio::task::yield_now().await;
+        }
+
+        unsafe {
+            let _ = KillTimer(hwnd, TOKIO_DRAIN_TIMER_ID);
         }
 
         // Clean up the tray icon first so Quit gives instant visual feedback.
@@ -924,34 +959,22 @@ static WIRE_DEGRADED_NOTIFIED: std::sync::atomic::AtomicBool =
 /// while still degraded stay silent (the chip text already shows the state).
 fn mark_wire_unreachable(hwnd: HWND) {
     if let Ok(mut guard) = MENU_STATE.lock() {
-        guard.get_or_insert_with(MenuState::initial).podman_ready = false;
+        let state = guard.get_or_insert_with(MenuState::initial);
+        state.podman_ready = false;
+        state.login_runtime_ready = false;
     }
     update_status_text(WIRE_UNREACHABLE_CHIP_TEXT, hwnd);
-    if !WIRE_DEGRADED_NOTIFIED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-        show_balloon(
-            hwnd,
-            "Tillandsias \u{2014} wire degraded",
-            "The control wire to the in-VM headless is unreachable. The tray will keep \
-             retrying every 30 s and notify when the connection is back.",
-            BalloonSeverity::Warning,
-        );
-    }
+    // Edge-track the first transition for mark_wire_recovered's companion check.
+    // Balloon suppressed — status chip in the menu carries the same information.
+    WIRE_DEGRADED_NOTIFIED.swap(true, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Companion to [`mark_wire_unreachable`]: called from the poll-success path
 /// when a VmStatusReply arrives after a degraded interval. Resets the
-/// edge-trigger flag and fires a "wire recovered" balloon — but only if we
-/// had previously toasted a degradation, so a fresh-Ready transition
-/// (e.g. immediately after provisioning) doesn't spurious-toast.
-fn mark_wire_recovered(hwnd: HWND) {
-    if WIRE_DEGRADED_NOTIFIED.swap(false, std::sync::atomic::Ordering::SeqCst) {
-        show_balloon(
-            hwnd,
-            "Tillandsias \u{2014} wire recovered",
-            "Control wire back up. Per-project actions are available again.",
-            BalloonSeverity::Info,
-        );
-    }
+/// edge-trigger flag so the next degradation can fire another edge. Status chip
+/// in the menu already reflects the recovered state via update_status_text.
+fn mark_wire_recovered(_hwnd: HWND) {
+    WIRE_DEGRADED_NOTIFIED.swap(false, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Compose a one-line description of an `Error` reply the in-VM headless's
@@ -1097,7 +1120,13 @@ async fn refresh_vm_status(hwnd: HWND) {
             ..
         } => {
             if let Ok(mut guard) = MENU_STATE.lock() {
-                guard.get_or_insert_with(MenuState::initial).podman_ready = podman_ready;
+                let state = guard.get_or_insert_with(MenuState::initial);
+                state.podman_ready = podman_ready;
+                // Gate GitHub Login behind phase=Ready + podman up. This is the
+                // signal that vault+egress containers have had a chance to start
+                // (the headless only flips to Ready after podman is reachable).
+                state.login_runtime_ready =
+                    matches!(phase, tillandsias_control_wire::VmPhase::Ready) && podman_ready;
             }
             // status_text + tooltip (own MENU_STATE lock inside). Appends the
             // headless's `last_event` when present so the chip reflects in-VM
@@ -1881,6 +1910,7 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
 /// loop, which spawns a fresh provisioning task in the LocalSet context.
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FAST_POLL_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(5);
 
 /// True while a provisioning task is running or has succeeded (and is parked
 /// holding the VM keepalive). Guards `spawn_provisioning` so a `Retry` while
@@ -1910,20 +1940,6 @@ fn spawn_provisioning(hwnd: HWND) {
             Ok(()) => {
                 tracing::info!("VM ready — control wire established");
                 update_status_text("\u{1F7E2} Ready", hwnd);
-                // Win11 toast confirming the tray is fully operational. Users
-                // installing for the first time get visible "yes, it worked"
-                // feedback without having to right-click the menu; subsequent
-                // launches reaffirm "this tray is what you expect" by including
-                // the workspace VERSION in the title. Mirrors the failure path
-                // below; both routes call show_balloon so the user always sees
-                // a toast at the end of provisioning, success or failure.
-                show_balloon(
-                    hwnd,
-                    &format!("Tillandsias {} \u{2014} ready", env!("WORKSPACE_VERSION")),
-                    "VM is up and the control wire is established. Right-click \
-                     the tray icon for projects + actions.",
-                    BalloonSeverity::Info,
-                );
                 // Parking this task holds `_keepalive` for the tray's lifetime;
                 // on Quit the LocalSet drops the task → kill_on_drop releases the
                 // VM to idle normally again. PROVISIONING_ACTIVE stays set (Ready),
@@ -1946,7 +1962,9 @@ fn spawn_provisioning(hwnd: HWND) {
                             // walks are virtually free vs `gh repo list`, so
                             // run local first to keep the menu fresh fast.
                             // Order mirrors macOS slice 19 (`06088c41`).
-                            if tick.is_multiple_of(10) {
+                            let fast_poll =
+                                FAST_POLL_COUNT.load(std::sync::atomic::Ordering::SeqCst);
+                            if tick.is_multiple_of(10) || fast_poll > 0 {
                                 refresh_local_projects(hwnd).await;
                                 refresh_cloud_projects(hwnd).await;
                                 // Live GitHub login gate: the token lives in the
@@ -1956,6 +1974,11 @@ fn spawn_provisioning(hwnd: HWND) {
                                 // vault-flow/xplat-gating-parity). Slow cadence
                                 // — login changes rarely vs VM health.
                                 refresh_github_login(hwnd).await;
+
+                                if fast_poll > 0 {
+                                    FAST_POLL_COUNT
+                                        .store(fast_poll - 1, std::sync::atomic::Ordering::SeqCst);
+                                }
                             }
                             tick = tick.wrapping_add(1);
                             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
@@ -1970,18 +1993,9 @@ fn spawn_provisioning(hwnd: HWND) {
                 }
             }
             Err(err) => {
-                eprintln!("WSL recipe provisioning failed: {err}");
-                update_status_text("\u{1F534} Provisioning failed (Retry to try again)", hwnd);
-                // Win11 surfaces this as a toast in the Action Center, so the
-                // failure doesn't just sit invisibly in the tray icon waiting
-                // for the user to mouseover. Clicking the toast brings the
-                // tray to the foreground; the user picks Retry from the menu.
-                show_balloon(
-                    hwnd,
-                    "Tillandsias \u{2014} provisioning failed",
-                    &format!("{err}\n\nRight-click the tray icon \u{2192} Retry to try again."),
-                    BalloonSeverity::Error,
-                );
+                tracing::error!(%err, "WSL recipe provisioning failed");
+                update_status_text("\u{1F534} Provisioning failed — Retry", hwnd);
+                // Full error in the log; status chip shows the curated message.
                 // Re-enable Retry.
                 PROVISIONING_ACTIVE.store(false, SeqCst);
             }
@@ -2165,6 +2179,12 @@ unsafe fn append_item(
     next_id: &mut u16,
     table: &mut HashMap<u16, String>,
 ) -> windows::core::Result<()> {
+    // Separator — Win32 horizontal rule.
+    if item.is_separator() {
+        AppendMenuW(parent, MF_SEPARATOR, 0, PCWSTR::null())?;
+        return Ok(());
+    }
+
     let label = to_utf16(&item.label);
     let label_pcwstr = PCWSTR(label.as_ptr());
 
@@ -2292,7 +2312,10 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         // The remaining arms are resolved + handled honestly, but their real
         // effect needs plumbing that is not present on Windows yet. Each logs
         // a specific reason rather than faking behaviour (w2 work queue).
-        MenuAction::OpenObservatorium | MenuAction::OpenOpenCodeWeb => {
+        MenuAction::OpenObservatorium
+        | MenuAction::OpenOpenCodeWeb
+        | MenuAction::ProjectObservatorium { .. }
+        | MenuAction::ProjectOpenCodeWeb { .. } => {
             // ShellExecute to the observatorium / OpenCode-Web URL lands with
             // the router/VM (gui-passthrough); there is no URL until then.
             tracing::info!(
@@ -2319,6 +2342,9 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         // picks the `PtyIntent`; `launch_spec` produces the exact forge-wrapped in-VM
         // argv; then we open it in a native Windows terminal via `wsl.exe`.
         MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
+            if matches!(action, MenuAction::GithubLogin) {
+                FAST_POLL_COUNT.store(5, std::sync::atomic::Ordering::SeqCst);
+            }
             launch_open_shell_terminal(&action);
         }
         MenuAction::CloudOverflow | MenuAction::Inert => {}

@@ -76,6 +76,36 @@ pub enum PtyIntent {
     Agent(SelectedAgent),
 }
 
+/// Compose the `/bin/bash -lc <script>` argv for an orchestrated in-VM
+/// headless subcommand (`--github-login`, `--cloud <nwo> --opencode`, ...).
+///
+/// The preamble is shared by every orchestrated intent:
+///   * rebuild HOME / XDG_RUNTIME_DIR so `require_desktop_user_session`
+///     passes in a service-spawned PTY (no logind session in the VM);
+///   * pin TILLANDSIAS_VAULT_API_BASE_URL to the aardvark-dns bridge name.
+///
+/// SELinux note: on an enforcing Fedora 44 guest the vault container is launched
+/// with `--security-opt label=type:vault_container_t`; that type is loaded by
+/// `tillandsias-headless` itself (`vault_bootstrap::ensure_vault_selinux_module`
+/// via `images/selinux/vault_container.cil`, Phase 3d) BEFORE the vault launch,
+/// so no host-side podman wrapper is needed. The former base64-encoded podman
+/// shim was removed 2026-07-02: it violated the methodology
+/// `base64_script_injection_ban` (embedding an executable script in a base64
+/// literal) AND was made redundant by Phase 3d.
+///
+/// IMPORTANT: `&&` only, never bare `;` — Windows Terminal (wt.exe) treats
+/// `;` as ITS OWN argv separator and splits the script (0x80070002).
+/// See plan/issues/wt-github-login-semicolons-2026-06-30.md.
+fn vm_login_shell_argv(exec_tail: &str) -> Vec<String> {
+    let script = String::from("export HOME=\"${HOME:-/root}\"")
+        + " && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\""
+        + " && install -d -m 0700 \"$XDG_RUNTIME_DIR\""
+        + " && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\""
+        + " && "
+        + exec_tail;
+    vec!["/bin/bash".to_string(), "-lc".to_string(), script]
+}
+
 fn agent_flag(agent: SelectedAgent) -> &'static str {
     match agent {
         SelectedAgent::Claude => "--claude",
@@ -105,14 +135,17 @@ fn agent_flag(agent: SelectedAgent) -> &'static str {
 /// plan/issues/tray-convergence-coordination.md.
 ///
 /// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping)
+/// `selected_agent` is retained for backward compatibility with existing call
+/// sites (macOS tray passes it); it is IGNORED when `action` is `Attach`
+/// since per-project actions now carry the agent explicitly.
 pub fn intent_for_action(
     action: &MenuAction,
-    selected_agent: SelectedAgent,
+    _selected_agent: SelectedAgent,
 ) -> Option<(PtyIntent, Option<String>)> {
     match action {
         MenuAction::GithubLogin => Some((PtyIntent::GithubLogin, None)),
-        MenuAction::Attach { name, .. } => {
-            Some((PtyIntent::Agent(selected_agent), Some(name.clone())))
+        MenuAction::Attach { name, agent, .. } => {
+            Some((PtyIntent::Agent(*agent), Some(name.clone())))
         }
         MenuAction::Maintain { name, .. } => Some((PtyIntent::Shell, Some(name.clone()))),
         _ => None,
@@ -121,13 +154,16 @@ pub fn intent_for_action(
 
 /// Build the [`PtyOpenOpts`] for a tray PTY `intent` at the given terminal size.
 ///
-/// When `project` is `Some(p)`, the command is wrapped to run **inside that
-/// project's forge podman container** — `podman exec -it tillandsias-<p>-forge
-/// <cmd>` — the cross-host agreed target (2026-05-26): the user's files + dev
-/// tooling live in the forge, not on the bare VM rootfs. When `project` is
-/// `None` the bare command runs directly in the VM: for [`PtyIntent::Shell`]
-/// that's the deliberate VM-debug escape hatch, and `gh auth login` is
-/// user-level so it works pre-attach.
+/// When `project` is `Some(p)`, the command runs the **orchestrated in-VM
+/// launch flow** — `tillandsias-headless --cloud '<p>' --<agent>` — which
+/// resolves the project under the bind-mount root (cloning `owner/repo` on
+/// first use), brings the enclave up, and attaches the TUI inside the forge
+/// container. Same end state as the cross-host agreed target (2026-05-26:
+/// the user's files + dev tooling live in the forge, never the bare VM
+/// rootfs), but the forge is provisioned transparently instead of assumed
+/// running. When `project` is `None` the bare command runs directly in the
+/// VM: for [`PtyIntent::Shell`] that's the deliberate VM-debug escape hatch,
+/// and `gh auth login` is user-level so it works pre-attach.
 ///
 /// `env` carries only `TERM` (the in-VM handler `env_clear`s before applying it,
 /// so no host env leaks); the login shell + forge set `PATH` etc. `cwd` is left
@@ -159,33 +195,47 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // Guest binary name is `tillandsias-headless` (see
             // tillandsias-vm-layer vz.rs / wsl.rs), not `tillandsias`.
             // See plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md.
-            vec![
-                "/bin/bash".to_string(),
-                "-lc".to_string(),
-                "export HOME=\"${HOME:-/root}\"; \
-                 export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\"; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\"; \
-                 exec tillandsias-headless --github-login"
-                    .to_string(),
-            ]
+            //
+            // IMPORTANT: Use `&&` NOT `;` as statement separator. Windows Terminal
+            // (wt.exe) uses `;` as its OWN command separator in argv parsing, so
+            // a bash script passed as a `-lc` arg that contains `;` is split by
+            // wt.exe into fragments, and the last fragment (` exec ...`) is tried
+            // as a Windows executable → ERROR_FILE_NOT_FOUND (0x80070002).
+            // `&&` is NOT a wt.exe separator and behaves identically here since
+            // all exports/install succeed unconditionally.
+            // See plan/issues/wt-github-login-semicolons-2026-06-30.md
+            //
+            // SELinux: the vault_container_t type is loaded in-guest by
+            // vault_bootstrap::ensure_vault_selinux_module (Phase 3d) before the
+            // vault launch, so no host-side podman wrapper is needed. The former
+            // base64 podman shim was removed 2026-07-02 (base64_script_injection_ban).
+            vm_login_shell_argv("exec tillandsias-headless --github-login")
         }
         PtyIntent::Agent(agent) => {
             vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]
         }
     };
     let argv = match project {
-        Some(p) => {
-            // Run inside the project's forge container (cross-host agreed target).
-            let mut v = vec![
-                "podman".to_string(),
-                "exec".to_string(),
-                "-it".to_string(),
-                format!("tillandsias-{p}-forge"),
-            ];
-            v.extend(inner);
-            v
-        }
+        // Any project click runs the SAME orchestrated flow the Linux native
+        // tray runs (`tray::handle_launch_cloud_project` → launch pipeline):
+        // the in-VM headless resolves the project under the bind-mount root
+        // (cloning `owner/repo` on first use; a bare local name just
+        // resolves), brings the enclave up (proxy/git/inference/forge), and
+        // attaches the agent TUI inside the forge. A bare `podman exec` into
+        // `tillandsias-<p>-forge` is NEVER correct here: the wire trays have
+        // no forge running until this flow provisions one (e2e failure
+        // 2026-07-02: `no container with name or ID ... found`, exit 125),
+        // and cloud names (`owner/repo`) aren't even valid container names.
+        // @trace spec:remote-projects, spec:host-shell-architecture
+        Some(p) => match intent {
+            PtyIntent::Agent(agent) => vm_login_shell_argv(&format!(
+                "exec tillandsias-headless --cloud '{p}' {}",
+                agent_flag(*agent)
+            )),
+            // Maintenance shell on a project: same resolve-then-launch path,
+            // `--bash` kind (forge maintenance shell, not the bare VM).
+            _ => vm_login_shell_argv(&format!("exec tillandsias-headless --cloud '{p}' --bash")),
+        },
         // No project: bare VM (Shell = debug escape hatch; gh login = user-level).
         None => inner,
     };
@@ -690,27 +740,29 @@ mod tests {
             launch_spec(&PtyIntent::Shell, None, 24, 80).argv,
             vec!["/bin/bash", "-l"]
         );
-        // GitHub login runs the orchestrated subcommand (git/vault-container
-        // flow + Vault write) through a LOGIN shell so PATH is rebuilt and the
-        // guest `tillandsias-headless` binary resolves — NOT bare
-        // `gh auth login`, which had no `gh` in the VM rootfs and rendered a
-        // blank attach surface on macOS/Windows.
-        assert_eq!(
-            launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv,
-            vec![
-                "/bin/bash",
-                "-lc",
-                "export HOME=\"${HOME:-/root}\"; \
-                 export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\"; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\"; \
-                 exec tillandsias-headless --github-login"
-            ]
+        // GitHub login runs the orchestrated subcommand through a LOGIN shell.
+        // Exact script is tested via invariants below (wrapper b64 makes the
+        // string too long for a readable literal assert_eq!).
+        let gl = launch_spec(&PtyIntent::GithubLogin, None, 24, 80);
+        assert_eq!(gl.argv[0], "/bin/bash");
+        assert_eq!(gl.argv[1], "-lc");
+        let github_cmd = &gl.argv[2];
+        // No bare `;` — wt.exe uses `;` as its command separator; `&&` avoids the split.
+        assert!(
+            !github_cmd.contains(';'),
+            "script must not contain `;` (wt.exe separator bug)"
         );
-        let github_cmd = &launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv[2];
+        // No base64-encoded podman shim: the vault_container_t SELinux type is
+        // loaded in-guest by Phase 3d (ensure_vault_selinux_module), so no
+        // host-side wrapper is embedded. Enforces base64_script_injection_ban.
+        assert!(
+            !github_cmd.contains("podman-selinux-wrap"),
+            "login script must not embed a base64 podman shim (Phase 3d makes it redundant)"
+        );
         assert!(github_cmd.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
         assert!(github_cmd.contains("TILLANDSIAS_VAULT_API_BASE_URL"));
         assert!(github_cmd.contains("https://vault:8200"));
+        assert!(github_cmd.contains("exec tillandsias-headless --github-login"));
         assert_eq!(
             launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), None, 24, 80).argv,
             vec!["tillandsias", "--opencode"]
@@ -731,36 +783,77 @@ mod tests {
     }
 
     #[test]
-    fn launch_spec_wraps_in_forge_podman_exec_when_project_given() {
-        // Cross-host agreed target: a project click runs inside the forge.
-        assert_eq!(
-            launch_spec(&PtyIntent::Shell, Some("myapp"), 24, 80).argv,
-            vec![
-                "podman",
-                "exec",
-                "-it",
-                "tillandsias-myapp-forge",
-                "/bin/bash",
-                "-l"
-            ]
+    fn launch_spec_routes_project_clicks_through_orchestrated_launch() {
+        // Cross-host agreed END STATE: a project click lands inside the forge.
+        // The wire trays reach it via the orchestrated headless flow (resolve/
+        // clone + enclave bring-up + attach) — never a bare `podman exec` into
+        // a forge that nothing provisioned (e2e failure 2026-07-02).
+        let sh = launch_spec(&PtyIntent::Shell, Some("myapp"), 24, 80);
+        assert_eq!(&sh.argv[0..2], &["/bin/bash", "-lc"]);
+        assert!(sh.argv[2].contains("exec tillandsias-headless --cloud 'myapp' --bash"));
+        let ag = launch_spec(
+            &PtyIntent::Agent(SelectedAgent::Claude),
+            Some("octo-repo"),
+            24,
+            80,
         );
-        assert_eq!(
-            launch_spec(
-                &PtyIntent::Agent(SelectedAgent::Claude),
-                Some("octo-repo"),
-                24,
-                80
-            )
-            .argv,
-            vec![
-                "podman",
-                "exec",
-                "-it",
-                "tillandsias-octo-repo-forge",
-                "tillandsias",
-                "--claude"
-            ]
+        assert_eq!(&ag.argv[0..2], &["/bin/bash", "-lc"]);
+        assert!(
+            ag.argv[2].contains("exec tillandsias-headless --cloud 'octo-repo' --claude"),
+            "agent attach must run the orchestrated flow: {}",
+            ag.argv[2]
         );
+        assert!(!ag.argv[2].contains("podman exec"));
+        // wt.exe invariant holds for every project script.
+        assert!(!ag.argv[2].contains(';') && !sh.argv[2].contains(';'));
+    }
+
+    /// Cloud attach (`owner/repo`) must NOT podman-exec into a forge — no
+    /// forge exists yet and `owner/repo` is not a valid container name
+    /// (`Error: no container with name or ID "tillandsias-o/r-forge"`).
+    /// Instead it runs the orchestrated headless clone-then-launch, exactly
+    /// like GithubLogin runs `--github-login`.
+    #[test]
+    fn launch_spec_cloud_project_uses_orchestrated_headless_flow() {
+        let spec = launch_spec(
+            &PtyIntent::Agent(SelectedAgent::OpenCode),
+            Some("8007342/visual-chess"),
+            24,
+            80,
+        );
+        assert_eq!(spec.argv[0], "/bin/bash");
+        assert_eq!(spec.argv[1], "-lc");
+        let script = &spec.argv[2];
+        assert!(
+            !script.contains("podman exec"),
+            "cloud attach must not assume a running forge"
+        );
+        assert!(
+            script.contains("exec tillandsias-headless --cloud '8007342/visual-chess' --opencode"),
+            "cloud attach must run the orchestrated clone-then-launch: {script}"
+        );
+        // Same wt.exe + session-lane invariants as the GithubLogin script.
+        assert!(
+            !script.contains(';'),
+            "script must not contain `;` (wt.exe separator bug)"
+        );
+        assert!(!script.contains("podman-selinux-wrap"));
+        assert!(script.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
+
+        // Maintenance shell on a cloud project takes the same path, --bash kind.
+        let sh = launch_spec(&PtyIntent::Shell, Some("owner/repo"), 24, 80);
+        assert_eq!(sh.argv[1], "-lc");
+        assert!(sh.argv[2].contains("--cloud 'owner/repo' --bash"));
+
+        // Local names (no `/`) take the same orchestrated path — the headless
+        // resolves them under the bind-mount root without cloning.
+        let local = launch_spec(
+            &PtyIntent::Agent(SelectedAgent::OpenCode),
+            Some("myapp"),
+            24,
+            80,
+        );
+        assert!(local.argv[2].contains("--cloud 'myapp' --opencode"));
     }
 
     #[test]
@@ -771,21 +864,42 @@ mod tests {
             intent_for_action(&MenuAction::GithubLogin, SelectedAgent::Claude),
             Some((PtyIntent::GithubLogin, None))
         );
-        // Attach launches the *currently selected* agent in the clicked
-        // project's forge (project name threaded through).
+        // Attach uses the agent embedded in the action (per-project leaf).
         assert_eq!(
             intent_for_action(
                 &MenuAction::Attach {
                     scope: ProjectScope::Local,
                     name: "myapp".to_string(),
+                    agent: SelectedAgent::Codex,
                 },
-                SelectedAgent::Codex,
+                SelectedAgent::Claude, // _selected_agent is ignored
             ),
             Some((
                 PtyIntent::Agent(SelectedAgent::Codex),
                 Some("myapp".to_string())
             ))
         );
+        // Each per-project agent variant maps to the correct PtyIntent.
+        for (agent, intent) in [
+            (
+                SelectedAgent::Claude,
+                PtyIntent::Agent(SelectedAgent::Claude),
+            ),
+            (
+                SelectedAgent::OpenCode,
+                PtyIntent::Agent(SelectedAgent::OpenCode),
+            ),
+        ] {
+            let r = intent_for_action(
+                &MenuAction::Attach {
+                    scope: ProjectScope::Cloud,
+                    name: "repo".to_string(),
+                    agent,
+                },
+                SelectedAgent::Codex,
+            );
+            assert_eq!(r, Some((intent, Some("repo".to_string()))));
+        }
         // Maintenance opens a login shell in the clicked project's forge.
         assert_eq!(
             intent_for_action(
@@ -800,13 +914,6 @@ mod tests {
         // Non-terminal actions open no PTY.
         assert_eq!(
             intent_for_action(&MenuAction::Quit, SelectedAgent::Claude),
-            None
-        );
-        assert_eq!(
-            intent_for_action(
-                &MenuAction::SelectAgent(SelectedAgent::Codex),
-                SelectedAgent::Claude
-            ),
             None
         );
         assert_eq!(
