@@ -1143,7 +1143,10 @@ impl TrayActionHost {
                     let _ = std::process::Command::new("open").arg(&log_dir).spawn();
                 }
             }
-            MenuAction::OpenObservatorium | MenuAction::OpenOpenCodeWeb => {
+            MenuAction::OpenObservatorium
+            | MenuAction::OpenOpenCodeWeb
+            | MenuAction::ProjectObservatorium { .. }
+            | MenuAction::ProjectOpenCodeWeb { .. } => {
                 // Same gating as Windows today: no URL exists until the
                 // VM + router are up (gui-passthrough is v2 per the
                 // macos-tray spec). Log + skip; the menu items also

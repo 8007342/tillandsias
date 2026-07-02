@@ -35,6 +35,9 @@ jobs:
         with:
           use-gha-cache: disabled
 
+      - name: Verify FlakeHub Cache authentication
+        run: nix store ping --store https://cache.flakehub.com
+
       - name: Build Nix targets
         run: |
           nix build -L .#tillandsias-x86_64-musl           --no-link
