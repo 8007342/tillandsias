@@ -20,23 +20,28 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
-      id-token: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Install Determinate Nix
-        uses: DeterminateSystems/determinate-nix-action@v3.21.2
-
-      - name: FlakeHub Cache
-        # Authenticates via GitHub OIDC; no cache secret or GitHub Actions cache
-        # quota is needed once the repository is linked to FlakeHub.
-        uses: DeterminateSystems/flakehub-cache-action@v3.21.2
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
         with:
-          use-gha-cache: disabled
+          flakehub: false
 
-      - name: Verify FlakeHub Cache authentication
-        run: nix store ping --store https://cache.flakehub.com
+      - name: Nix Cache
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
+          restore-prefixes-first-match: |
+            nix-${{ runner.os }}-
+          purge: true
+          purge-primary-key: never
+          purge-prefixes: |
+            nix-Linux-
+          purge-created: 86400
+          gc-max-store-size: 8000000000
 
       - name: Build Nix targets
         run: |
