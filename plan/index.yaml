@@ -8680,6 +8680,32 @@ plan_index:
         - "Rename-based install proven on drvfs (9p) in the litmus"
         - "fetch-headless.sh temp+rename verified in provisioning injection tests"
 
+    - packet_id: keepalive-terminal-visibility
+      order: 155
+      title: "UX: hide the keepalive wsl.exe console (or make it the --debug console) + supervise it"
+      status: ready
+      kind: research+ux
+      deliverable: plan/issues/keepalive-terminal-visibility-2026-07-02.md
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, tray, vm-layer, ux]
+      estimated_hours: 4
+      outcome: >
+        The tray's keepalive `wsl --exec` child (holds the WSL2 utility VM open so the
+        HvSocket wire survives) shows as a blank, unlabeled, closable console window.
+        Operator killed it while cleaning up dead terminals — silently severing the
+        wire (plausible contributor to order-139 oscillation reports). Research filed
+        with recommendation: spawn with CREATE_NO_WINDOW (hidden by default) +
+        supervised respawn on death (WARN, wire stays up); layered enhancement — with
+        --debug or a tray menu toggle, show a TITLED live debug console streaming tray
+        tracing + in-VM journalctl. Verify a windowless session still counts toward
+        WSL utility-VM liveness; check macOS VZ path for analogous stray UI.
+      exit_criteria:
+        - "No visible console in default tray operation"
+        - "External kill of keepalive: auto-respawn within one poll cycle + one WARN"
+        - "--debug / menu toggle shows a titled live debug console"
+        - "macOS VZ path checked for analogous artifact"
+
     # NOTE (2026-07-01, windows merge): orders 137-142 below were assigned on
     # linux-next concurrently with the observable-streams block above (orders
     # 138-149, assigned on windows-next). Order numbers collide; packet_ids are
