@@ -1,0 +1,171 @@
+plan_index:
+  steps:
+    - packet_id: agent-login-flows-research
+      order: 131
+      title: "Research: --claude-login / --codex-login / --antigravity-login flows"
+      status: done
+      kind: research
+      deliverable: plan/issues/agent-login-flows-research-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, vault, podman]
+      estimated_hours: 4
+      outcome: >
+        Prepare the three interactive login flows mirroring --github-login
+        (containerized, OOB, credential stored in Vault, host never sees it). Decide
+        per service: API-key (reuse secret/<provider>/api-key + ProviderId) vs
+        OAuth/device-code (new secret/<provider>/oauth schema + refresh). Define the
+        containerized boundary, required egress endpoints, and the shared
+        run_provider_login(ProviderId, AuthModel) shape.
+      resolution: >
+        Operator decided 2026-07-01: support BOTH, on separate tracks. OAuth
+        (subscription) is the login-flow track and ships first — the three
+        --<provider>-login subcommands persist secret/<provider>/oauth
+        {access,refresh,expiry,scope} via a containerized device-code/OOB flow
+        (auth URL shown, operator authorizes on host browser, pastes code back
+        through the github-login paste pipe, CLI exchanges tokens in-container,
+        host never sees them). API keys are the AUTONOMOUS track (existing
+        secret/<provider>/api-key plumbing, order 112); a dedicated API-key ENTRY
+        flow is deferred to order 143. run_provider_login scoped to
+        AuthModel::OAuthDeviceCode; ApiKeyPaste added by 143. Full verdict +
+        Vault schema + egress + API shape in the deliverable.
+      events:
+        - type: claim
+          ts: "2026-07-01T23:35:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          host: "linux"
+          lease_id: "agent-login-flows-research-claim-1"
+          expires_at: "2026-07-02T03:35:00Z"
+        - type: completed
+          ts: "2026-07-01T23:38:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          summary: >
+            Operator auth-model decision recorded; OAuth-track verdict, Vault oauth
+            schema, OOB mechanism, egress deferral to order 129/130, and
+            run_provider_login shape all specified. API-key entry deferred to order 143.
+      exit_criteria:
+        - "Auth model decided per service (API-key vs OAuth) with operator sign-off"
+        - "Vault OAuth-token schema defined if any OAuth flow chosen"
+        - "Containerized login boundary + required egress endpoints per service"
+        - "Shared run_provider_login API shape sketched"
+
+    - packet_id: vault-handover-token-shred
+      order: 138
+      title: "Security P1: shred the first-boot Vault root-token handover from container tmpfs"
+      status: done
+      kind: security
+      deliverable: plan/issues/security-audit-zero-trust-2026-07-01.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, vault]
+      estimated_hours: 3
+      outcome: >
+        First-boot `operator init` writes $ROOT_TOKEN to /run/vault-handover/root.token
+        (images/vault/entrypoint.sh); the host reads it via `podman exec vault cat`
+        (vault_bootstrap.rs) but nothing shreds/unlinks it afterward. Chained with the
+        vsock-exec gap it is a full-privilege token readable by any host-CID peer that
+        execs into vault. Shred the handover file (overwrite + unlink) immediately after
+        the host consumes it; the XOR-envelope / durable root.token P0 is already fixed
+        (subsequent boots skip the path) — this is only the first-boot tmpfs residual.
+      audit_correction: >
+        The audit slightly overstated this: read_and_handover_root_token ALREADY
+        unlinked the files with `rm -f` (~200 lines after the read the audit cited).
+        The true residual was the missing OVERWRITE — `rm` frees tmpfs pages without
+        zeroing, so the token could linger in freed RAM. Fixed accordingly.
+      exit_criteria:
+        - "handover file is unlinked (and overwritten) right after the host reads it"
+        - "litmus asserts no root.token remains in the vault tmpfs after handover"
+        - "subsequent-boot path unaffected (no regression in auto-unseal)"
+      events:
+        - type: claim
+          ts: "2026-07-01T23:20:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          host: "linux"
+          lease_id: "vault-handover-token-shred-claim-1"
+          expires_at: "2026-07-02T03:20:00Z"
+        - type: completed
+          ts: "2026-07-01T23:22:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          summary: >
+            Replaced the `rm -f` handover cleanup with an in-place zero-overwrite
+            (dd if=/dev/zero conv=notrunc, sized by wc -c) THEN rm, in a single exec so
+            files are never left truncated-but-present. Best-effort (never aborts a
+            successful init); subsequent-boot keychain path untouched. Litmus
+            handover_token_is_shredded_before_unlink pins shred-before-unlink ordering.
+            ./build.sh --check + vault tests green.
+
+    - packet_id: vsock-exec-authz-spec-and-proxy-exemption-audit
+      order: 139
+      title: "Security P1/P2: govern the transparent-exec authz boundary + verify proxy-exemption on new vsock/exec paths"
+      status: completed
+      kind: security
+      deliverable: plan/issues/security-audit-zero-trust-2026-07-01.md
+      depends_on: [vsock-exec-chain-authn-authz]
+      pickup_role: linux
+      capability_tags: [rust, podman, docs]
+      estimated_hours: 4
+      outcome: >
+        (a) Write a governing spec for the transparent host->guest->container exec
+        authorization boundary (there is none today) and validate the project-name
+        interpolated into `tillandsias-{p}-forge` against an allowlist. (b) Confirm the
+        new vsock/exec code paths follow the established proxy-exemption pattern that the
+        orders 116/118/119 P0s established (every direct-to-enclave-service/build/exec
+        path must exempt the proxy). (c) Track the still-missing github-login->list e2e
+        gate as a named follow-up.
+      exit_criteria:
+        - "openspec spec covers the exec authz boundary; project-name allowlist-validated"
+        - "grep/litmus confirms new vsock+exec paths set the proxy exemption"
+        - "github-login->list e2e gate filed as a concrete ready packet"
+      events:
+        - type: completed
+          ts: "2026-07-02T00:00:00Z"
+          summary: >
+            Created openspec/specs/vsock-exec-authz/spec.md to govern the exec authz boundary.
+            Updated pty_handler.rs to enforce an allowlist for exec commands, including project name validation for podman exec.
+            Updated child_env in pty_handler.rs to inject NO_PROXY and no_proxy variables.
+            Added litmus test pty-open-argv-allowlisted to verify these changes.
+            Created follow-up packet 141 for github-login e2e gate.
+
+    - packet_id: encrypted-control-channel-research
+      order: 140
+      title: "Security: design an encrypted, version-bound host<->guest<->container control channel"
+      status: done
+      kind: research
+      deliverable: plan/issues/encrypted-control-channel-research-2026-07-01.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, security, vsock]
+      estimated_hours: 4
+      events:
+        - type: claim
+          ts: "2026-07-01T23:05:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          host: "linux"
+          lease_id: "encrypted-control-channel-research-claim-1"
+          expires_at: "2026-07-02T03:05:00Z"
+        - type: completed
+          ts: "2026-07-01T23:06:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          summary: >
+            Design/threat-model/alternatives/Open-Decisions filed in the deliverable;
+            operator signed off O1 = build-embedded per-release secret; all exit
+            criteria met. Impl proceeds under order 141.
+      outcome: >
+        Operator directive: encrypt the control channel from the host tray through the
+        guest tillandsias-headless (over vsock), with the SAME reusable primitive from
+        headless down to the deepest podman container. Bind host<->guest binary versions
+        by DERIVING the channel key from the build version (mismatched versions get
+        different keys and cannot complete the handshake), and combine with an argv
+        allowlist so only approved exec commands run in the innermost containers. This
+        is the design of order-137's closure. Recommendation: reusable EncryptedStream<S>
+        adapter wrapping any AsyncRead+AsyncWrite; Noise NNpsk0 via the `snow` crate
+        (PSK gate + X25519 forward secrecy + ChaCha20-Poly1305); PSK = HKDF-SHA256 over
+        release_root_secret + build_version + hop_id; failure-closed with the reserved
+        Unauthorized code; argv validated post-handshake at guest and container.
+      exit_criteria:
+        - "Crypto primitive + Noise pattern chosen with rationale (done in packet)"
+        - "Version-binding key derivation specified (HKDF over build_version + hop_id)"
+        - "Both-hops layering specified (single EncryptedStream<S> adapter)"
+        - "Allowlist gate integration + threat model specified"
+        - "Open decisions O1-O4 enumerated with recommended defaults for operator sign-off"
+
