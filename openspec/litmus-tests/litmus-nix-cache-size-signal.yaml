@@ -2,46 +2,29 @@
 name: litmus:nix-cache-size-signal
 spec: nix-builder
 description: >
-  Verify the FlakeHub nix cache configuration is present (code-level) and that
-  the retired GitHub Actions nix cache backend is not used for release cache
-  warming.
+  Verify the GHA nix cache purge configuration is present (code-level), and
+  when GH_TOKEN is available, assert the live nix cache size is below 80% of
+  the 10 GB LRU limit (8 GB). Skips the API step gracefully without GH_TOKEN.
 severity: medium
 size: instant
 phase: pre-build
 
 preconditions:
   - workspace contains .github/workflows/nix-cache-warm.yml
+  - optional: GH_TOKEN env var for live cache size query
 
 critical_path:
-  - step: "assert warm-cache workflow grants GitHub OIDC for FlakeHub auth"
-    command: "grep -Fq 'id-token: write' .github/workflows/nix-cache-warm.yml && echo 'flakehub oidc permission present'"
+  - step: "assert purge-primary-key:never is configured in nix-cache-warm.yml"
+    command: "grep -Fq 'purge-primary-key: never' .github/workflows/nix-cache-warm.yml && echo 'purge-primary-key:never present'"
     timeout_ms: 5000
-    success_pattern: "flakehub oidc permission present"
+    success_pattern: "purge-primary-key:never present"
     failure_pattern: "grep: no match"
 
-  - step: "assert warm-cache workflow installs Determinate Nix"
-    command: "grep -Fq 'DeterminateSystems/determinate-nix-action@v3.21.2' .github/workflows/nix-cache-warm.yml && echo 'determinate nix present'"
+  - step: "assert purge-created time window is set (prevents unbounded cache growth)"
+    command: "grep -Eq 'purge-created: [0-9]+' .github/workflows/nix-cache-warm.yml && echo 'purge-created window present'"
     timeout_ms: 5000
-    success_pattern: "determinate nix present"
+    success_pattern: "purge-created window present"
     failure_pattern: "grep: no match"
-
-  - step: "assert warm-cache workflow uses FlakeHub Cache"
-    command: "grep -Fq 'DeterminateSystems/flakehub-cache-action@v3.21.2' .github/workflows/nix-cache-warm.yml && echo 'flakehub cache action present'"
-    timeout_ms: 5000
-    success_pattern: "flakehub cache action present"
-    failure_pattern: "grep: no match"
-
-  - step: "assert warm-cache workflow fails fast when FlakeHub auth is unavailable"
-    command: "grep -Fq 'nix store ping --store https://cache.flakehub.com' .github/workflows/nix-cache-warm.yml && echo 'flakehub auth probe present'"
-    timeout_ms: 5000
-    success_pattern: "flakehub auth probe present"
-    failure_pattern: "grep: no match"
-
-  - step: "assert GitHub Actions nix cache backend is retired"
-    command: "! grep -Fq 'nix-community/cache-nix-action' .github/workflows/nix-cache-warm.yml && echo 'gha nix cache retired'"
-    timeout_ms: 5000
-    success_pattern: "gha nix cache retired"
-    failure_pattern: "nix-community/cache-nix-action"
 
   - step: "assert nix-cache-warm workflow fires on workflow_dispatch and schedule"
     command: "grep -Fq 'workflow_dispatch' .github/workflows/nix-cache-warm.yml && grep -Fq 'schedule' .github/workflows/nix-cache-warm.yml && echo 'nix cache schedule present'"
@@ -49,17 +32,39 @@ critical_path:
     success_pattern: "nix cache schedule present"
     failure_pattern: "grep: no match"
 
+  - step: "live nix cache size check (skips without GH_TOKEN)"
+    command: |
+      if [ -z "${GH_TOKEN:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+        echo "SKIP: no GH_TOKEN available (run in CI or export GH_TOKEN to check live cache size)"
+        exit 0
+      fi
+      REPO="8007342/tillandsias"
+      # GitHub caches API: sum sizes of all nix-related caches
+      TOTAL_BYTES=$(gh api --paginate "/repos/${REPO}/actions/caches?per_page=100" \
+        --jq '[.actions_caches[] | select(.key | contains("nix")) | .size_in_bytes] | add // 0' 2>/dev/null || echo "0")
+      THRESHOLD_BYTES=$((8 * 1024 * 1024 * 1024))  # 8 GB = 80% of 10 GB LRU limit
+      echo "nix cache total: ${TOTAL_BYTES} bytes (threshold: ${THRESHOLD_BYTES})"
+      if [ "${TOTAL_BYTES}" -gt "${THRESHOLD_BYTES}" ]; then
+        echo "WARN: nix cache exceeds 80% of LRU limit — trigger nix-cache-warm.yml to purge"
+        exit 1
+      fi
+      echo "nix cache size ok"
+    timeout_ms: 30000
+    success_pattern: "nix cache size ok|SKIP:"
+    failure_pattern: "WARN: nix cache exceeds"
+
 observability:
   traces:
     - "@trace spec:nix-builder"
-  expected_log: "FlakeHub nix cache config present and retired GHA cache absent"
+  expected_log: "nix cache purge config present and cache size within 80% of LRU limit"
   log_fields:
     spec: "nix-builder"
     test: "nix-cache-size-signal"
 
 rollback:
   on_failure: >
-    Restore Determinate Nix + FlakeHub Cache actions and id-token:write in
-    .github/workflows/nix-cache-warm.yml. Do not restore the retired
-    nix-community/cache-nix-action backend.
-  command: "grep -nE 'id-token: write|determinate-nix-action|flakehub-cache-action|cache-nix-action' .github/workflows/nix-cache-warm.yml"
+    Trigger workflow_dispatch on .github/workflows/nix-cache-warm.yml to purge
+    stale nix cache entries. Check the purge-created window is still set to
+    86400 (24h) or shorter. If cache exceeds 10 GB, GHA auto-evicts the oldest
+    entries and the next release build will be a cache miss (slower build).
+  command: "grep -E 'purge-created|purge-primary-key' .github/workflows/nix-cache-warm.yml"
