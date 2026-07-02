@@ -504,7 +504,7 @@ plan_index:
     - packet_id: methodology-integration-strategy-contradiction
       order: 136
       title: "Methodology: correct integration_strategy (cross-branch is merge, not rebase) + reconcile skills"
-      status: in_progress
+      status: completed
       kind: analysis+enhancement
       deliverable: plan/issues/methodology-integration-strategy-contradiction-2026-06-30.md
       depends_on: [methodology-concurrent-integration-duplication]
@@ -530,11 +530,18 @@ plan_index:
             Remaining: same fix in skills/multihost-orchestration; a
             litmus:integration-strategy-consistency that fails if methodology or any
             skill says "rebase" for cross-branch sibling/main integration.
+        - type: completed
+          ts: "2026-07-02T07:20Z"
+          agent_id: "linux-antigravity-20260702T0720Z"
+          summary: >
+            Added litmus:integration-strategy-consistency to guarantee the methodology
+            and skills documentation never regress to rebasing across branches. Also
+            corrected remaining drift in advance-work-from-plan skill.
       exit_criteria:
         - "methodology integration_strategy states same-branch=rebase, cross-branch=merge — DONE"
         - "advance-work §6 gate clarifies same-branch vs cross-branch — DONE"
         - "skills/coordinate-multihost-work sibling step says merge + cites strategy — DONE"
-        - "litmus:integration-strategy-consistency pinned + green — TODO (last remaining item)"
+        - "litmus:integration-strategy-consistency pinned + green — DONE"
 
     - packet_id: vsock-exec-chain-authn-authz
       order: 137
