@@ -1427,6 +1427,97 @@ fn canonical_vault_launch_tag(image_tag: &str) -> Result<&str, String> {
     Ok(image_tag)
 }
 
+/// SELinux module name reported by `semodule -l` after the CIL below loads.
+#[cfg(feature = "vault")]
+const VAULT_SELINUX_MODULE: &str = "vault_container";
+
+/// Minimal CIL declaring `vault_container_t` so the podman `label=type:` on the
+/// vault launch is a valid type on an enforcing guest. See the asset header.
+#[cfg(feature = "vault")]
+const VAULT_SELINUX_CIL: &str = include_str!("../../../images/selinux/vault_container.cil");
+
+/// Phase 3d: idempotently load the `vault_container_t` policy module before the
+/// vault container is launched with `--security-opt label=type:vault_container_t`.
+///
+/// Failure-open by design: this only removes an EINVAL on enforcing guests. If
+/// SELinux is Disabled the label is silently ignored by podman anyway, and if
+/// the load fails we let the launch proceed and surface the real podman error
+/// rather than masking it. Best-effort, never returns Err.
+/// @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+#[cfg(feature = "vault")]
+fn ensure_vault_selinux_module(debug: bool) {
+    // Only act when SELinux is Enforcing or Permissive. On Disabled systems
+    // `getenforce` prints "Disabled" (or is absent), and the label is a no-op.
+    let mode = Command::new("getenforce").output();
+    let active = match mode {
+        Ok(out) => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            let s = s.trim();
+            s.eq_ignore_ascii_case("Enforcing") || s.eq_ignore_ascii_case("Permissive")
+        }
+        Err(_) => false, // no getenforce -> SELinux tooling absent -> nothing to do
+    };
+    if !active {
+        return;
+    }
+
+    // Idempotent: skip if already loaded (semodule -l is a stable, newline-
+    // separated list of module names).
+    if let Ok(out) = Command::new("semodule").arg("-l").output()
+        && out.status.success()
+        && String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .any(|l| l.trim() == VAULT_SELINUX_MODULE)
+    {
+        if debug {
+            eprintln!("[tillandsias-vault] SELinux module {VAULT_SELINUX_MODULE} already loaded");
+        }
+        return;
+    }
+
+    // semodule -i requires the CIL to live in a file ending in `.cil`. Use a
+    // tmpfs path so it leaves nothing behind; the semodule -l guard above makes
+    // re-running across boots cheap.
+    let cil_path = std::path::Path::new("/run").join(format!("{VAULT_SELINUX_MODULE}.cil"));
+    if let Err(e) = fs::write(&cil_path, VAULT_SELINUX_CIL) {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] could not stage {} for semodule: {e} (continuing)",
+                cil_path.display()
+            );
+        }
+        return;
+    }
+    match Command::new("semodule").arg("-i").arg(&cil_path).status() {
+        Ok(s) if s.success() => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] loaded SELinux module {VAULT_SELINUX_MODULE} (permissive)"
+                );
+            }
+        }
+        Ok(s) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] semodule -i {VAULT_SELINUX_MODULE} exited {s} (continuing; podman will surface any label error)"
+                );
+            }
+        }
+        Err(e) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] semodule -i {VAULT_SELINUX_MODULE} failed to spawn: {e} (continuing)"
+                );
+            }
+        }
+    }
+    let _ = fs::remove_file(&cil_path);
+}
+
+/// Stub for builds without the `vault` feature so the call site compiles.
+#[cfg(not(feature = "vault"))]
+fn ensure_vault_selinux_module(_debug: bool) {}
+
 fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let image_tag = canonical_vault_launch_tag(image_tag)?;
 
@@ -1476,6 +1567,16 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // circuits when the network already exists (it normally does, created
     // during `run_init`, but ensure here so the bootstrap is self-sufficient).
     crate::ensure_enclave_network(debug)?;
+
+    // Phase 3d: on an SELinux-enforcing guest, `--security-opt
+    // label=type:vault_container_t` (below) is only a valid label once the
+    // `vault_container_t` type exists in the loaded policy. Ensure the minimal
+    // module is loaded first so crun does not reject the launch with EINVAL on
+    // /proc/self/attr/keycreate (the blocker that broke `--github-login` and
+    // `--list-cloud-projects` on the enforcing Fedora 44 VZ guest). No-op on
+    // Disabled systems and idempotent when the module is already loaded.
+    // @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+    ensure_vault_selinux_module(debug);
 
     if debug {
         eprintln!(
@@ -1733,23 +1834,31 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         }
 
         // @trace spec:tillandsias-vault — Secure Artifact Cleanup
-        // Delete the handover files from tmpfs immediately. Remove the files
-        // (not the mount dir) so the unprivileged exec user can't trip on the
-        // root-owned tmpfs mount point.
+        // @trace plan/issues/security-audit-zero-trust-2026-07-01.md (P1-1)
+        // SHRED, don't just unlink. `rm` alone returns the tmpfs pages to the
+        // kernel WITHOUT zeroing them, so the root token can linger in freed RAM
+        // (readable via a forensic memory scrape or a page-reuse race) after the
+        // host has consumed it. Overwrite each file in place with zeros of its
+        // own length FIRST, then unlink — both in a single exec so the files are
+        // never left truncated-but-present. Remove the files (not the mount dir)
+        // so the unprivileged exec user can't trip on the root-owned tmpfs mount
+        // point. Best-effort: a failure here must not abort a successful init.
         let _ = podman_cmd_sync()
             .args([
                 "exec",
                 VAULT_CONTAINER_NAME,
-                "rm",
-                "-f",
-                "/run/vault-handover/root.token",
-                "/run/vault-handover/unseal.key",
+                "sh",
+                "-c",
+                "for f in /run/vault-handover/root.token /run/vault-handover/unseal.key; do \
+                   [ -f \"$f\" ] && dd if=/dev/zero of=\"$f\" bs=1 count=\"$(wc -c < \"$f\")\" conv=notrunc 2>/dev/null; \
+                 done; \
+                 rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key",
             ])
             .status();
 
         if debug {
             eprintln!(
-                "[tillandsias-vault] root token + Shamir share handover complete (deleted from tmpfs)"
+                "[tillandsias-vault] root token + Shamir share handover complete (shredded from tmpfs)"
             );
         }
         return Ok(token);
@@ -2022,6 +2131,75 @@ mod tests {
         assert!(
             !window.contains("\"--ip\""),
             "Vault service discovery should not depend on a singleton enclave IP"
+        );
+    }
+
+    #[test]
+    fn handover_token_is_shredded_before_unlink() {
+        // P1-1: the first-boot root-token handover must be OVERWRITTEN in tmpfs
+        // before it is unlinked — `rm` alone frees the RAM pages without zeroing,
+        // leaving the token recoverable. Assert the shred path zeros with dd
+        // (conv=notrunc, in place) and only then rm -f.
+        // @trace plan/issues/security-audit-zero-trust-2026-07-01.md (P1-1)
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn read_and_handover_root_token(")
+            .nth(1)
+            .expect("read_and_handover_root_token source");
+        let dd_at = window
+            .find("dd if=/dev/zero")
+            .expect("handover cleanup must overwrite the token with zeros (dd), not just unlink");
+        assert!(
+            window[dd_at..].contains("conv=notrunc"),
+            "the overwrite must be in place (conv=notrunc), not a truncation"
+        );
+        let rm_at = window
+            .find("rm -f /run/vault-handover/root.token")
+            .expect("handover cleanup must still unlink the files");
+        assert!(
+            dd_at < rm_at,
+            "the token must be overwritten (shredded) BEFORE it is unlinked"
+        );
+    }
+
+    #[test]
+    fn vault_launch_ensures_selinux_module_before_labelled_run() {
+        // Phase 3d: the enforcing-guest label `label=type:vault_container_t` is
+        // only valid once the type is loaded. The launch path must load it
+        // (ensure_vault_selinux_module) BEFORE the labelled `podman run`, or the
+        // container exits 126 on crun keycreate EINVAL.
+        // @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn launch_vault_container(")
+            .nth(1)
+            .expect("launch_vault_container source");
+        let ensure_at = window
+            .find("ensure_vault_selinux_module(debug)")
+            .expect("launch must ensure the vault_container_t SELinux module");
+        let label_at = window
+            .find("\"label=type:vault_container_t\"")
+            .expect("launch must set the vault_container_t label");
+        assert!(
+            ensure_at < label_at,
+            "the SELinux module must be ensured before the labelled podman run"
+        );
+
+        // The embedded CIL must declare the type it labels with, or the load is
+        // a no-op and the EINVAL persists.
+        let cil = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/selinux/vault_container.cil"
+        ));
+        assert!(
+            cil.contains("(type vault_container_t)"),
+            "vault_container.cil must declare vault_container_t"
         );
     }
 

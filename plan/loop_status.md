@@ -1,5 +1,89 @@
 # Multi-Host Coordination Loop Status
 
+LastExecutionTime: 2026-07-01T23:25Z
+
+## This Loop (2026-07-01T23:05Z, linux_mutable — /advance-work-from-plan queue drain)
+
+Operator asked to exhaust the ready Linux queue and push work + findings so the
+macOS/Windows builders unblock on these packet implementations.
+
+- **Startup**: pulled linux-next (picked up a macOS builder's push:
+  `macos-build-findings-2026-07-01.md` — the E0425 orphan `vsock_exec::exec_interactive`
+  in macos-tray diagnose.rs was fixed by osx in `81a0478c` and is already on
+  linux-next; macos-tray compiles). Credential channel `ok:gh-keyring`.
+- **Sibling state**: osx-next **0 ahead** (fully integrated); windows-next +32
+  (large cross-branch merge still deferred to a quiet window). The
+  host-guest-transport facade (order 124) is landed in control-wire::guest_transport
+  (GuestTransport/GuestEndpoint/ExecRequest/ExecOutput) — so orders 126 (macOS) and
+  127 (Windows) are genuinely READY for the sibling terminals to implement now.
+- **Drained**:
+  - **order 140 (encrypted-control-channel-research): DONE** — design filed,
+    operator signed off O1 = build-embedded per-release secret.
+  - **order 141 (encrypted-control-channel-impl): slices 1-2 landed** (`0a7afb2c`) —
+    new crate `tillandsias-secure-channel` with `derive_psk()` (HKDF-SHA256 over
+    release_root_secret + build_version + wire_version + hop_id) and 7 unit tests
+    PROVING version binding by construction. This is the shared crypto foundation
+    the macOS/Windows transport backends will wrap. No new external deps (vendored
+    hkdf/sha2/zeroize); the `snow` Noise handshake is slice 3 (own cycle). 141 now
+    in_progress; remaining slices 3-6.
+  - **order 138 (vault-handover-token-shred): DONE** (`63b31cee`) — shred the
+    first-boot root token (in-place zero-overwrite via dd conv=notrunc, then rm, one
+    exec) before unlink; litmus `handover_token_is_shredded_before_unlink`. Corrected
+    the audit (rm already existed; the residual was the missing overwrite).
+- **Not drained (with reason — a legitimate convergence point at this bar)**:
+  order 131 (agent-login-flows-research) is operator-gated (API-key vs OAuth per
+  provider needs sign-off); orders 134/135 (ledger archival + stale-ref sweep) are
+  self-flagged do-NOT-run-during-active-concurrency (siblings live); order 137
+  superseded by 140/141; order 139's spec half overlaps 141 slice 1 (best bundled
+  there). The next actionable implementation (141 slice 3, snow handshake) is a
+  large chunk warranting its own cycle.
+- **E2E**: not run (SELinux-Disabled host; the security changes are unit/litmus-
+  proven; the Phase 3d + channel behavior validate on the enforcing macOS guest).
+- **Release**: none (latest published v0.3.260630.1). Security 137/141 should land
+  before the next release.
+
+LastExecutionTime: 2026-07-01T22:30Z
+
+## This Loop (2026-07-01T22:17Z, linux_mutable — /meta-orchestration: audit + macOS unblock + security audit)
+
+Operator asked for a state audit, to unblock the macOS builder's linux-side
+blocker, and a zero-trust security audit of the enclave.
+
+- **Start-of-cycle guards: PASS** — credential guard `ok:gh-keyring`, clean tree,
+  in sync. Sibling heads: osx-next was +6, windows-next +32.
+- **Coordinator merge (osx-next → linux-next)**: integrated the 6 new macOS
+  commits (PTY raw-mode + wire hardening, SELinux launch-spec fixes, the Phase 3d
+  packet, and the **critical base64-Python-injection violation record + removal**).
+  One conflict in `pty/mod.rs` resolved (kept linux HEAD's env-export GithubLogin
+  launch spec). Integration Verification Gate ran clean; pushed `537408fd`.
+  osx-next is now 0 ahead (fully integrated).
+- **macOS blocker RESOLVED (Phase 3d, `fe66b10d`)**: the linux-side blocker was
+  `vault_bootstrap.rs` setting `label=type:vault_container_t` (Phase 3c) while the
+  type was never loaded on the enforcing Fedora 44 VZ guest → crun EINVAL, exit
+  126, blocking `--github-login`/`--list-cloud-projects` on macOS. Fixed in-guest:
+  headless now loads a minimal `images/selinux/vault_container.cil` (base-refpolicy
+  only, typepermissive) via `ensure_vault_selinux_module()` before the labelled
+  run — idempotent, failure-open, fixes all guests (VZ/native/WSL) in one
+  linux-owned change. Supersedes the removed base64 stopgap. Litmus pinned.
+  **macOS builder: re-run `--github-login` on v-next to confirm exit 0.**
+- **Zero-trust security audit (`2a1b60b0`)**: full report in
+  `plan/issues/security-audit-zero-trust-2026-07-01.md`. Enclave NETWORK boundary
+  matches spec, but the NEW vsock host→guest→podman-exec chain is **unauthenticated
+  end to end** (verified in-tree: `vsock_server.rs` binds VMADDR_CID_ANY, accepts
+  any peer, gates only on a self-reported Hello.from; `Unauthorized` code unused).
+  Promoted P0/P1 packets **137** (authenticate vsock exec chain, failure-closed +
+  rejection litmus), **138** (shred first-boot Vault root-token tmpfs residual),
+  **139** (spec the exec authz boundary + proxy-exemption audit + missing e2e gate).
+  Removed the last dead `images/zeroclaw/` orphan dir.
+- **E2E gate**: `eligible` but NOT run — this host is SELinux-**Disabled**, so the
+  Phase 3d `label=type:` path is a podman no-op here; the fix's real validation is
+  the enforcing macOS guest. A destructive Linux local-build smoke would not
+  exercise the change. Deferred to the macOS builder's `--github-login` re-run.
+- **Release**: none this cycle (latest published remains v0.3.260630.1). Security
+  P0-137 should land before the next release given it's the top open risk.
+- **Coordinator note**: windows-next is +32 (large; shared vault/proxy/tray + facade
+  work) — cross-branch MERGE deferred to a quiet window per concurrency discipline.
+
 LastExecutionTime: 2026-06-30T21:45Z
 
 ## This Loop (2026-06-30T21:38Z, linux_mutable — /meta-orchestration SOUNDNESS VALIDATION)

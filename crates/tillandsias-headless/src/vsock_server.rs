@@ -468,8 +468,7 @@ async fn handle_connection(
                     crate::remote_projects::probe_github_username(false)
                 })
                 .await
-                .ok()
-                .flatten();
+                .unwrap_or(None);
                 let logged_in = handle.is_some();
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
