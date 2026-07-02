@@ -22,6 +22,18 @@ vanish with it — both in-forge agent diagnostics could only report
   the pull.
 - The debug container was still healthy mid-pull at +35s, so the pull path itself works.
 
+## Operator directive — reference hardware (2026-07-02)
+
+> This is quite the average laptop, so this hardware should be reference for end user runtime.
+> 16 GB of RAM on Windows means the guest will always be constrained — pick the models we load
+> very carefully, and start with something even smaller just to make sure things start.
+
+Reference envelope: 16 GB host → WSL2 VM capped ~7.3 GiB (default 50%), shared by the headless,
+vault, proxy, router, git, the forge (agent runtimes!) AND inference. Model selection must be
+budgeted against that reality, not against the model zoo. Startup-reliability beats capability:
+begin with a deliberately tiny model (≤1B class) so the pipeline provably starts on reference
+hardware, then tier upward behind an explicit opt-in (config/env), never by default.
+
 ## Fix directions for the packet
 
 1. Capture the actual death: run once without `--rm` to completion; check `podman inspect`
