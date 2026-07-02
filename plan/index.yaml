@@ -8183,7 +8183,7 @@ plan_index:
     - packet_id: vsock-exec-authz-spec-and-proxy-exemption-audit
       order: 139
       title: "Security P1/P2: govern the transparent-exec authz boundary + verify proxy-exemption on new vsock/exec paths"
-      status: ready
+      status: completed
       kind: security
       deliverable: plan/issues/security-audit-zero-trust-2026-07-01.md
       depends_on: [vsock-exec-chain-authn-authz]
@@ -8202,6 +8202,29 @@ plan_index:
         - "openspec spec covers the exec authz boundary; project-name allowlist-validated"
         - "grep/litmus confirms new vsock+exec paths set the proxy exemption"
         - "github-login->list e2e gate filed as a concrete ready packet"
+      events:
+        - type: completed
+          ts: "2026-07-02T00:00:00Z"
+          summary: >
+            Created openspec/specs/vsock-exec-authz/spec.md to govern the exec authz boundary.
+            Updated pty_handler.rs to enforce an allowlist for exec commands, including project name validation for podman exec.
+            Updated child_env in pty_handler.rs to inject NO_PROXY and no_proxy variables.
+            Added litmus test pty-open-argv-allowlisted to verify these changes.
+            Created follow-up packet 141 for github-login e2e gate.
+
+    - packet_id: github-login-e2e-gate
+      order: 141
+      title: "Add e2e gate for github-login -> list flow"
+      status: ready
+      kind: implementation
+      depends_on: [vsock-exec-authz-spec-and-proxy-exemption-audit]
+      pickup_role: any
+      capability_tags: [rust, testing]
+      estimated_hours: 2
+      outcome: >
+        Implement the missing github-login->list e2e gate to ensure end-to-end functionality of github login.
+      exit_criteria:
+        - "E2e test for github login -> list implemented and passing"
 
     - packet_id: encrypted-control-channel-research
       order: 140
