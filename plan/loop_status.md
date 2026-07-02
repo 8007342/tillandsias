@@ -1,6 +1,37 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-02T00:30Z
+LastExecutionTime: 2026-07-02T20:35Z
+
+## This Loop (2026-07-02T20:18Z, linux_mutable — /meta-orchestration: integrate Windows epic, then release)
+
+- **Credential guard**: ok:gh-keyring. Start in sync with linux-next.
+- **Integrated origin/windows-next (+44)** via cross-branch MERGE (6feac841):
+  order 127 host-guest-transport-windows COMPLETE (WslGuestTransport + HvSocket
+  consolidation, transport_windows.rs), order 114 vsock-vault-bootstrap-e2e
+  COMPLETE, Windows/macOS tray menu parity, transparent wire-tray cloud attach,
+  status-chip budget litmus + ux cheatsheet, and orders 146-168 of new plan work
+  (observable-streams, races, forge diagnostics) — renumbered from windows 136-159
+  to avoid colliding with linux 140-145.
+  - Merge resolution: kept linux-next's post-archival ledger (did NOT resurrect
+    windows's stale copies of the 129 archived packets); appended only the 23
+    genuinely-new active windows packets; reconciled shared-packet completions
+    (114, 127) into linux status.
+  - Integration lint fixes to green the tree: two edition-2024 let-chains in
+    vault_bootstrap.rs, cfg-gate projects_root, drop unused test import.
+- **SECURITY: removed reintroduced base64 podman shim** (04e388ac). windows
+  0c4a6aa3 re-added PODMAN_SELINUX_WRAP_B64 (base64_script_injection_ban
+  CRITICAL_VIOLATION) in pty/mod.rs — removed (redundant post-Phase-3d), tests now
+  assert its absence, and added scripts/check-no-base64-script-injection.sh
+  (verifiable, referenced from methodology). Filed order 169 to wire both policy
+  checkers into --ci-full.
+- **Gate**: ./build.sh --check + --test PASS on the merged tree; base64 checker
+  exits 0 clean / 1 on reintroduction.
+- **Release**: proceeding to /merge-to-main-and-release (main is at 0.3.260701.1;
+  linux-next carries the integrated windows epic + security work). Draining the
+  20 newly-arrived ready packets (observable-streams/races/forge — large research)
+  is deferred to subsequent cycles per the worker-drain budget rule.
+- **Note**: windows-next advanced again (8de6f369) mid-integration; those newer
+  commits are for the next merge cycle.
 
 ## This Loop (2026-07-02T00:10Z, linux_mutable — /advance-work-from-plan, encrypted-channel slice 3)
 
