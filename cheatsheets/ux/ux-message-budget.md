@@ -6,6 +6,7 @@ sources:
   - plan/issues/curated-status-messages-2026-06-30.md
 authority: plan-packet
 status: bundled
+tier: bundled
 ---
 
 # UX Message Budget — Tray STATUS chip
