@@ -76,6 +76,7 @@ if [ -n "$PROJECT" ]; then
         echo "[git-service] setting $PROJECT_REPO origin to $REDACTED_URL"
         git -C "$PROJECT_REPO" remote remove origin 2>/dev/null || true
         git -C "$PROJECT_REPO" remote add origin "$TILLANDSIAS_PROJECT_REMOTE_URL"
+        git -C "$PROJECT_REPO" config remote.origin.fetch "+refs/*:refs/*"
     else
         echo "[git-service] no TILLANDSIAS_PROJECT_REMOTE_URL set; post-receive hook will log and skip"
     fi
@@ -128,10 +129,11 @@ for mirror in /srv/git/*; do
     REMOTE="$(git -C "$mirror" remote get-url origin 2>/dev/null || true)"
     [ -n "$REMOTE" ] || continue
 
-    # Skip mirrors that have no refs yet (freshly seeded, nothing to push).
+    # Seed an empty mirror or skip if it has no upstream
     if ! git -C "$mirror" rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
        && [ -z "$(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null)" ]; then
-        retry_msg "[git-mirror] Startup retry-push: $mirror has no refs yet, skipping"
+        retry_msg "[git-mirror] Startup: $mirror has no refs but has origin. Fetching upstream to seed mirror."
+        FETCH_OUTPUT="$(git -C "$mirror" fetch origin 2>&1)" || retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
         continue
     fi
 

@@ -68,6 +68,7 @@
 /target/
 /target/forge-diagnostics
 Thumbs.db
+build-git.log
 cheatsheet-sources/
 images/default/.cheatsheet-sources/
 images/default/.cheatsheets-meta/
