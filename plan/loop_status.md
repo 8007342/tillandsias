@@ -1,6 +1,35 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-03T03:02Z
+LastExecutionTime: 2026-07-03T03:45Z
+
+## This Loop (2026-07-03T03:20Z, linux_mutable — rootless Silverblue vault P0s → v0.3.260703.2)
+
+Operator re-tested v0.3.260703.1 on Silverblue; the SELinux label fix worked
+(container launched) but two more native-rootless bugs surfaced. Fixed both +
+released v0.3.260703.2.
+
+- **P0-a — vault container exits immediately (`no such container`, status 125)**:
+  the container_t fallback DENIED the vault process access to /vault/data (its
+  files carry an unconfined label from an earlier label=disable regime).
+  Fix: rootless fallback is now `label=disable` (pre-Phase-3c behavior; also the
+  standard tillandsias container hardening default per spec:podman-container-spec).
+  Guest-VM (root) still uses confined vault_container_t.
+- **P0-b — host can't resolve `vault:8200`**: vault_api_base_url returned the
+  enclave DNS name for ALL Linux binaries; a native rootless host only resolves
+  `vault` in the container netns. Fix: native host (!is_running_in_vm) uses the
+  published https://127.0.0.1:8201 (cert carries IP:127.0.0.1 SAN).
+- **Diagnosability**: removed --rm from the vault launch + added
+  dump_vault_failure_diagnostics() (podman ps state + last 40 log lines on a
+  failed health wait) so a boot crash is never opaque again.
+- **Gate**: ./build.sh --check + --test + vault unit tests green; --ci-full shows
+  only the same 9 pre-existing litmus (zero new regressions vs baseline);
+  base64 checker ok. Commit 4a1d35b0.
+- **Release**: PR #65 merged to main (1cca5418); VERSION 0.3.260703.2 (5606087b);
+  tag v0.3.260703.2; release.yml run 28638531935 [in progress — result recorded
+  on completion]. Supersedes 703.1 for the Silverblue native install.
+- **Hardening follow-up (filed)**: restore host-side vault confinement without
+  root (relabel volume for container_t via :Z, or a privileged policy-load
+  helper) — plan/issues/vault-rootless-container-exits-immediately-2026-07-03.md.
 
 ## This Loop (2026-07-03T02:50Z, linux_mutable — /merge-to-main-and-release: P0 Silverblue fix)
 
