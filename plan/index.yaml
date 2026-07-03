@@ -1308,13 +1308,20 @@ plan_index:
     - packet_id: forge-agent-permission-defaults
       order: 165
       title: "Forge UX: pre-grant container-local filesystem to agents; enforce at the boundary"
-      status: ready
+      status: in_progress
       kind: research+ux
       deliverable: plan/issues/forge-agent-permission-defaults-2026-07-02.md
       depends_on: []
       pickup_role: any
       capability_tags: [forge, agents, security, ux]
       estimated_hours: 4
+      events:
+        - type: claim
+          ts: "2026-07-03T22:48:30Z"
+          agent_id: "forge-big-pickle-meta-orch-20260703T2245Z"
+          host: forge
+          lease_id: "forge-agent-permission-defaults-20260703T224830Z"
+          expires_at: "2026-07-04T02:48:30Z"
       outcome: >
         First interactive forge session prompted the operator to allow /etc, /proc,
         /tmp reads and /home/forge writes — theater inside an ephemeral, enclave-
