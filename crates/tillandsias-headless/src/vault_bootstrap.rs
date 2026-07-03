@@ -180,13 +180,26 @@ fn vault_api_base_url() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| {
-            // On Linux (the in-VM headless binary), use the direct enclave
-            // bridge URL. aardvark-dns resolves `vault` via systemd-resolved
-            // and the cert has DNS:vault as a SAN — TLS verifies cleanly.
-            // On macOS/Windows hosts, fall back to the port-forwarded loopback URL.
+            // The Linux binary runs in TWO contexts:
+            //  - In-VM headless (inside the guest, ON the enclave bridge): the
+            //    alias `vault` resolves via aardvark-dns and the cert carries
+            //    DNS:vault, so use the enclave URL (also dodges a WSL2/netavark
+            //    loopback TLS-hang).
+            //  - Native Linux HOST (e.g. rootless Fedora Silverblue `--init`):
+            //    vault bootstrap runs on the host, where `vault` does NOT resolve
+            //    — the podman network's DNS lives in the container netns, and the
+            //    /etc/hosts fallback needs root (skipped rootless). It must use
+            //    the PUBLISHED loopback port. The cert SANs include IP:127.0.0.1,
+            //    so TLS verifies. This is the P0 that made the host probe fail
+            //    with `https://vault:8200 -> dns error: Name does not resolve`.
+            // @trace plan/issues/vault-host-dns-vault-name-unresolvable-2026-07-03.md
             #[cfg(target_os = "linux")]
             {
-                vault_service_base_url()
+                if is_running_in_vm() {
+                    vault_service_base_url()
+                } else {
+                    format!("https://127.0.0.1:{VAULT_HOST_PORT}")
+                }
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -1462,22 +1475,32 @@ fn vault_selinux_label_opt(debug: bool) -> Option<String> {
         return None;
     }
 
-    // Use the custom type only if we can CONFIRM it is loaded (or load it, root
-    // only). Any uncertainty -> fall back to container_t. This is the safe
-    // direction: an undefined type is a hard crun EINVAL, container_t always works.
+    // Use the custom confined type only if we can CONFIRM it is loaded (or load
+    // it — root only, i.e. inside the guest VM).
     if vault_container_type_loaded() {
         return Some("label=type:vault_container_t".to_string());
     }
     if try_load_vault_selinux_module(debug) && vault_container_type_loaded() {
         return Some("label=type:vault_container_t".to_string());
     }
+    // Rootless native host (e.g. Fedora Silverblue): the custom type is not
+    // loadable. Fall back to `label=disable`, NOT the default `container_t`.
+    // Reason: the persistent vault data volume was created under an earlier
+    // `label=disable` regime, so its files carry an unconfined SELinux label;
+    // under `container_t` the vault process is DENIED access to /vault/data and
+    // exits immediately on boot — the container vanishes before `podman wait
+    // --condition=healthy` (seen on Silverblue as "no such container", status
+    // 125). `label=disable` runs the vault container unconfined on the host —
+    // the pre-Phase-3c behavior that worked on Silverblue. The confined
+    // vault_container_t path still applies inside the guest VM (root).
+    // @trace plan/issues/vault-rootless-container-exits-immediately-2026-07-03.md
     if debug {
         eprintln!(
-            "[tillandsias-vault] vault_container_t not loaded and not loadable \
-             (rootless host?); using podman default container_t SELinux label"
+            "[tillandsias-vault] vault_container_t not loadable (rootless host?); \
+             using label=disable for the vault container (unconfined on host)"
         );
     }
-    None
+    Some("label=disable".to_string())
 }
 
 /// True iff `semodule -l` confirms the `vault_container` module is loaded.
@@ -1625,7 +1648,12 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         volume_arg,
         "--tmpfs".into(),
         "/run/vault-handover:size=1m,mode=0777".into(),
-        "--rm".into(),
+        // NOTE: intentionally NO `--rm`. If vault crashes on boot (e.g. an
+        // SELinux denial on /vault/data), `--rm` would delete the container
+        // before we can read its logs — the "no such container" blindness seen
+        // on Silverblue. The exited container is cleaned up by the `podman rm -f`
+        // at the top of the next launch, so persisting it is safe and lets
+        // wait_for_vault_ready dump `podman logs` on failure.
         "--cap-drop".into(),
         "ALL".into(),
         "--cap-add".into(),
@@ -1658,6 +1686,48 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// On a failed health wait, surface WHY the vault container is unhealthy/gone.
+/// Since the launch no longer passes `--rm`, a crashed container persists and
+/// `podman logs` reveals the boot error (e.g. an SELinux denial on /vault/data).
+#[cfg(feature = "vault")]
+fn dump_vault_failure_diagnostics() {
+    let ps = podman_cmd_sync()
+        .args([
+            "ps",
+            "-a",
+            "--filter",
+            &format!("name={VAULT_CONTAINER_NAME}"),
+            "--format",
+            "{{.Names}} status={{.Status}} exit={{.ExitCode}}",
+        ])
+        .output();
+    if let Ok(out) = ps {
+        let s = String::from_utf8_lossy(&out.stdout);
+        let s = s.trim();
+        if !s.is_empty() {
+            eprintln!("[tillandsias-vault] container state: {s}");
+        }
+    }
+    let logs = podman_cmd_sync()
+        .args(["logs", "--tail", "40", VAULT_CONTAINER_NAME])
+        .output();
+    if let Ok(out) = logs {
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let combined = combined.trim();
+        if !combined.is_empty() {
+            eprintln!("[tillandsias-vault] --- vault container logs (last 40 lines) ---");
+            for line in combined.lines() {
+                eprintln!("[tillandsias-vault] | {line}");
+            }
+            eprintln!("[tillandsias-vault] --- end vault container logs ---");
+        }
+    }
+}
+
 fn wait_for_vault_ready(
     rt: &tokio::runtime::Runtime,
     base_url: &str,
@@ -1666,8 +1736,13 @@ fn wait_for_vault_ready(
     if debug {
         eprintln!("[tillandsias-vault] waiting for podman health status=healthy");
     }
-    rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME))
-        .map_err(|e| format!("vault container did not report healthy: {e}"))?;
+    if let Err(e) = rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME)) {
+        // The container likely crashed on boot. With no `--rm` it still exists,
+        // so dump its logs + last state to make the failure diagnosable instead
+        // of the opaque "no such container" / "did not report healthy".
+        dump_vault_failure_diagnostics();
+        return Err(format!("vault container did not report healthy: {e}"));
+    }
 
     // Update /etc/hosts now that the container has a stable IP.
     update_etc_hosts_vault(debug);
