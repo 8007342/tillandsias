@@ -2886,6 +2886,14 @@ fn forge_container_name(project_name: &str) -> String {
     format!("tillandsias-{project_name}-forge")
 }
 
+fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> String {
+    if matches!(mode, ForgeAgentMode::OpenCode) {
+        forge_container_name(project_name)
+    } else {
+        format!("tillandsias-{project_name}-forge-{}", mode.slug())
+    }
+}
+
 fn forge_hostname(project_name: &str) -> String {
     sanitize_hostname(&format!("forge-{project_name}"))
 }
@@ -2930,7 +2938,7 @@ async fn cleanup_shared_stack_if_no_running_forge(
             containers
                 .into_iter()
                 .filter(|container| {
-                    container.name.ends_with("-forge")
+                    container.name.contains("-forge")
                         && matches!(
                             container.state.to_ascii_lowercase().as_str(),
                             "running" | "up"
@@ -5620,6 +5628,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
 
     let images = ["proxy", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
 
     if debug {
         eprintln!("[tillandsias] [OpenCode] Repo root: {}", root.display());
@@ -7158,7 +7167,7 @@ pub(crate) fn build_forge_agent_run_args(
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     let spec = ContainerSpec::new(image)
-        .name(forge_container_name(project_name))
+        .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
         .pids_limit(512)
@@ -7204,15 +7213,17 @@ pub(crate) fn build_forge_agent_run_args(
     // Inject provider API keys from Vault as env vars so forge agents can call
     // LLM APIs without interactive auth inside the container.
     // @trace plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
-    for provider in [
-        crate::vault_bootstrap::ProviderId::Anthropic,
-        crate::vault_bootstrap::ProviderId::Openai,
-        crate::vault_bootstrap::ProviderId::Gemini,
-    ] {
-        if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(provider, debug)
-            && !key.is_empty()
-        {
-            spec = spec.env(provider.env_var(), key);
+    let provider_api = match mode {
+        ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
+        ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
+        ForgeAgentMode::OpenCode => Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ForgeAgentMode::Maintenance => None,
+    };
+    if let Some(p) = provider_api {
+        if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug) {
+            if !key.is_empty() {
+                spec = spec.env(p.env_var(), key);
+            }
         }
     }
 
@@ -7240,6 +7251,44 @@ pub(crate) fn build_forge_agent_run_argv(
         debug,
     ));
     argv
+}
+
+fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
+    let (oauth_prov, api_prov) = match mode {
+        ForgeAgentMode::Claude => (Some(ProviderId::Claude), Some(crate::vault_bootstrap::ProviderId::Anthropic)),
+        ForgeAgentMode::Codex => (Some(ProviderId::Codex), Some(crate::vault_bootstrap::ProviderId::Openai)),
+        ForgeAgentMode::OpenCode => (Some(ProviderId::Antigravity), Some(crate::vault_bootstrap::ProviderId::Gemini)),
+        ForgeAgentMode::Maintenance => (None, None),
+    };
+
+    if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
+        let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false);
+        if api_key_exists {
+            return Ok(());
+        }
+
+        let is_oauth_logged_in = crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false);
+        if is_oauth_logged_in {
+            return Ok(());
+        }
+
+        if debug {
+            eprintln!("[tillandsias] No auth token found for {}. Launching login flow...", op.name());
+        }
+        let token_script = get_generic_login_token_script(&op);
+        let config = ProviderLoginConfig {
+            provider: op,
+            auth_model: AuthModel::OAuthDevice,
+            image_name: "curl",
+            token_script,
+        };
+        run_provider_login(&config, debug)?;
+    }
+    Ok(())
 }
 
 fn run_forge_agent_cli_mode(
@@ -7278,6 +7327,7 @@ fn run_forge_agent_cli_mode(
 
     let version = VERSION.trim();
     let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
+    ensure_provider_auth(mode, debug)?;
     let forge_args =
         build_forge_agent_run_args(&canonical, project_name, &certs_dir, version, mode, debug);
 
@@ -7309,7 +7359,7 @@ fn run_forge_agent_cli_mode(
         let result = client
             .run_container_attached_observed(
                 mode.slug(),
-                &forge_container_name(project_name),
+                &forge_container_name_for_mode(project_name, mode),
                 &forge_args,
                 debug,
             )
