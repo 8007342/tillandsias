@@ -3144,6 +3144,16 @@ fn build_opencode_forge_args(
             format!("TILLANDSIAS_OPENCODE_PROMPT={prompt}"),
         ]);
     }
+    
+    // Inject Gemini API key for OpenCode harness
+    if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(crate::vault_bootstrap::ProviderId::Gemini, debug) {
+        if !key.is_empty() {
+            args.extend([
+                "--env".into(),
+                format!("{}={key}", crate::vault_bootstrap::ProviderId::Gemini.env_var()),
+            ]);
+        }
+    }
     if debug {
         args.extend(["--env".into(), "TILLANDSIAS_DEBUG=1".into()]);
     }
