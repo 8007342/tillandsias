@@ -20,8 +20,12 @@ LastExecutionTime: 2026-07-03T03:02Z
   plan/issues/pre-existing-litmus-debt-2026-07-03.md, not a release blocker
   (release path doesn't gate on --ci-full litmus).
 - **Release**: PR #64 merged to main (ede8738f); VERSION bumped to 0.3.260703.1
-  (15724897); tag v0.3.260703.1 pushed; release.yml dispatched (run
-  28635530855). [build result recorded on completion]
+  (15724897); tag v0.3.260703.1 pushed; release.yml run 28635530855 SUCCESS —
+  all 3 jobs green (Linux musl, Windows tray, macOS tray-arm64). Published (not
+  draft): https://github.com/8007342/tillandsias/releases/tag/v0.3.260703.1
+  Latest tested/released Linux artifact = v0.3.260703.1 (supersedes the broken
+  702.2). Operator should re-run curl-install `tillandsias --init` on Silverblue
+  to confirm the P0 fix.
 - **Recovery note**: an initial `git checkout main` was blocked by --ci-full
   generated TRACES.md churn and the VERSION bump briefly landed on linux-next;
   reset --hard to origin/linux-next (nothing pushed wrong) and redid the bump on
