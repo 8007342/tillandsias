@@ -231,6 +231,8 @@ CHECK_IDS=(
     rust-tests
     container-base-policy
     cheatsheet-tiers
+    no-python-scripts
+    no-base64-script-injection
     litmus-tests
 )
 
@@ -247,6 +249,8 @@ case "$CI_PHASE" in
                 rust-tests
                 container-base-policy
                 cheatsheet-tiers
+                no-python-scripts
+                no-base64-script-injection
             )
         else
             CHECK_IDS=(
@@ -259,6 +263,8 @@ case "$CI_PHASE" in
                 rust-tests
                 container-base-policy
                 cheatsheet-tiers
+                no-python-scripts
+                no-base64-script-injection
                 litmus-pre-build
             )
         fi
@@ -284,6 +290,8 @@ case "$CI_PHASE" in
             rust-tests
             container-base-policy
             cheatsheet-tiers
+            no-python-scripts
+            no-base64-script-injection
             litmus-pre-build
             litmus-post-build
             litmus-runtime
@@ -306,6 +314,8 @@ check_weight() {
         rust-tests) echo 80 ;;
         container-base-policy) echo 40 ;;
         cheatsheet-tiers) echo 80 ;;
+        no-python-scripts) echo 30 ;;
+        no-base64-script-injection) echo 30 ;;
         litmus-pre-build) echo 100 ;;
         litmus-post-build) echo 120 ;;
         litmus-runtime) echo 140 ;;
@@ -325,6 +335,8 @@ check_spec_ref() {
         rust-tests) echo "spec:testing" ;;
         container-base-policy) echo "spec:default-image" ;;
         cheatsheet-tiers) echo "spec:cheatsheet-source-layer" ;;
+        no-python-scripts) echo "methodology.yaml tlatoani_hard_no_python" ;;
+        no-base64-script-injection) echo "methodology.yaml base64_script_injection_ban" ;;
         litmus-pre-build) echo "spec:podman-orchestration" ;;
         litmus-post-build) echo "spec:dev-build" ;;
         litmus-runtime) echo "spec:litmus-convergence" ;;
@@ -345,6 +357,8 @@ failed_reason_for_check() {
         rust-tests) echo "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)" ;;
         container-base-policy) echo "Container base-image policy drift found (see /tmp/container-bases.log)" ;;
         cheatsheet-tiers) echo "Cheatsheet tier errors or strict warnings found (see /tmp/cheatsheet-tiers.log)" ;;
+        no-python-scripts) echo "Python scripts found in tracked files (see /tmp/no-python-check.log)" ;;
+        no-base64-script-injection) echo "Base64 script injection detected (see /tmp/no-base64-script-injection.log)" ;;
         litmus-pre-build) echo "Pre-build litmus failures detected (see /tmp/litmus-pre-build.log)" ;;
         litmus-post-build) echo "Post-build smoke failures detected (see /tmp/litmus-post-build.log)" ;;
         litmus-runtime) echo "Runtime litmus failures detected (see /tmp/litmus-runtime.log)" ;;
@@ -895,10 +909,46 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         log_skip "Cheatsheet tier validator not found"
         archive_check_log "cheatsheet-tiers" "skipped"
     fi
+
+    # ============================================================================
+    # CHECK 8: Policy checkers (Python ban + base64 script injection ban)
+    # ============================================================================
+
+    log_section "Policy Checkers"
+
+    # Sub-check 8a: Python scripts ban
+    if [[ -f "scripts/check-no-python-scripts.sh" ]]; then
+        if bash scripts/check-no-python-scripts.sh 2>&1 | tee /tmp/no-python-check.log; then
+            log_pass "No Python scripts found in tracked files"
+            archive_check_log "no-python-scripts" "pass" /tmp/no-python-check.log
+        else
+            log_fail_tracked "no-python-scripts" "Python scripts detected in tracked files (see /tmp/no-python-check.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/no-python-check.log >&2
+            archive_check_log "no-python-scripts" "fail" /tmp/no-python-check.log
+        fi
+    else
+        log_skip "Python script checker not found"
+        archive_check_log "no-python-scripts" "skipped"
+    fi
+
+    # Sub-check 8b: Base64 script injection ban
+    if [[ -f "scripts/check-no-base64-script-injection.sh" ]]; then
+        if bash scripts/check-no-base64-script-injection.sh 2>&1 | tee /tmp/no-base64-script-injection.log; then
+            log_pass "No base64 script injection detected"
+            archive_check_log "no-base64-script-injection" "pass" /tmp/no-base64-script-injection.log
+        else
+            log_fail_tracked "no-base64-script-injection" "Base64 script injection detected (see /tmp/no-base64-script-injection.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/no-base64-script-injection.log >&2
+            archive_check_log "no-base64-script-injection" "fail" /tmp/no-base64-script-injection.log
+        fi
+    else
+        log_skip "Base64 script injection checker not found"
+        archive_check_log "no-base64-script-injection" "skipped"
+    fi
 fi
 
 # ============================================================================
-# CHECK 7: Pre-build litmus
+# CHECK 9: Pre-build litmus
 # ============================================================================
 
 if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then

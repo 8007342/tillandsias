@@ -1429,7 +1429,7 @@ plan_index:
     - packet_id: wire-policy-checkers-into-ci
       order: 169
       title: "Enforce base64/python bans in CI (wire policy checkers into --ci-full)"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/base64-shim-reintroduction-removed-2026-07-02.md
       depends_on: []
@@ -1441,6 +1441,17 @@ plan_index:
         methodology checkers but run only on demand; neither fails the build. Wire both
         into ./build.sh --ci-full (or the pre-build litmus phase) so the CRITICAL bans
         (tlatoani_hard_no_python, base64_script_injection_ban) fail the gate automatically.
+      events:
+        - type: completed
+          ts: "2026-07-03T22:53:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260703T2253Z"
+          host: forge
+          summary: >
+            Added CHECK 8 (no-python-scripts + no-base64-script-injection) to the
+            pre-build phase in scripts/local-ci.sh. Both policy checkers run as part
+            of --ci-full (and --ci) and fail the build on violation. Also registered
+            both checks in the CHECK_IDS arrays, weight/spec_ref/failed_reason tables
+            for proper tracking.
       exit_criteria:
         - "both policy checkers run in --ci-full and fail the build on violation"
         - "a deliberately-injected base64 decode-to-executable makes --ci-full fail"
