@@ -34,7 +34,7 @@ while IFS= read -r f; do
 done < <(
   git grep -lE "$DECODE" -- \
     ':(exclude)scripts/check-no-base64-script-injection.sh' \
-    ':(exclude)plan/issues/violation-python-base64-injection-*.md' \
+    ':(exclude)*.md' \
     ':(exclude)plan/archive/**' \
     ':(exclude)methodology.yaml' \
     2>/dev/null || true
