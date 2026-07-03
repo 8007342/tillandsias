@@ -1,6 +1,35 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-02T20:35Z
+LastExecutionTime: 2026-07-03T03:02Z
+
+## This Loop (2026-07-03T02:50Z, linux_mutable — /merge-to-main-and-release: P0 Silverblue fix)
+
+- **Trigger**: operator's Silverblue box failed `tillandsias --init` on release
+  v0.3.260702.2 (P0). Root-caused + fixed BEFORE releasing (see below).
+- **P0 fix (d6548a9e)**: vault launched with an unconditional
+  `--security-opt label=type:vault_container_t`, but that type is only loadable
+  in the guest VM (root/semodule); on a rootless native host it is undefined →
+  crun EINVAL on keycreate → exit 126. Now `vault_selinux_label_opt` uses the
+  custom type ONLY when confirmed loaded, else falls back to podman's default
+  container_t (enforcing-safe). Regression litmus added. See
+  plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md.
+- **Pre-release --ci-full gate**: found 2 issues. Fixed the cheatsheet-tier
+  (windows-merged ux-message-budget.md missing tier:). The 9 failing pre-build
+  litmus were verified PRE-EXISTING (identical set on origin/main = released
+  702.2; zero new regressions this session) — captured in
+  plan/issues/pre-existing-litmus-debt-2026-07-03.md, not a release blocker
+  (release path doesn't gate on --ci-full litmus).
+- **Release**: PR #64 merged to main (ede8738f); VERSION bumped to 0.3.260703.1
+  (15724897); tag v0.3.260703.1 pushed; release.yml dispatched (run
+  28635530855). [build result recorded on completion]
+- **Recovery note**: an initial `git checkout main` was blocked by --ci-full
+  generated TRACES.md churn and the VERSION bump briefly landed on linux-next;
+  reset --hard to origin/linux-next (nothing pushed wrong) and redid the bump on
+  main correctly. Lesson: discard --ci-full generated artifacts before a branch
+  switch in the release flow.
+- **This release ships**: the P0 fix + the Windows epic (order 127
+  WslGuestTransport + tray parity + vsock vault bootstrap e2e) + encrypted-channel
+  crypto foundation + base64-shim removal.
 
 ## This Loop (2026-07-02T20:18Z, linux_mutable — /meta-orchestration: integrate Windows epic, then release)
 
