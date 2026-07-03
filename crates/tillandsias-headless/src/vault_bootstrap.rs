@@ -1432,87 +1432,94 @@ const VAULT_SELINUX_MODULE: &str = "vault_container";
 #[cfg(feature = "vault")]
 const VAULT_SELINUX_CIL: &str = include_str!("../../../images/selinux/vault_container.cil");
 
-/// Phase 3d: idempotently load the `vault_container_t` policy module before the
-/// vault container is launched with `--security-opt label=type:vault_container_t`.
+/// Decide the `--security-opt label=...` VALUE for the vault container, or `None`
+/// to use podman's default (`container_t`).
 ///
-/// Failure-open by design: this only removes an EINVAL on enforcing guests. If
-/// SELinux is Disabled the label is silently ignored by podman anyway, and if
-/// the load fails we let the launch proceed and surface the real podman error
-/// rather than masking it. Best-effort, never returns Err.
+/// The custom confined type `vault_container_t` is ONLY a valid label when it is
+/// actually loaded in the running SELinux policy. Loading it requires root
+/// (`semodule -i`) — which headless has INSIDE the guest VM but NOT on a rootless
+/// native-Linux host (Fedora Silverblue). If the type is neither loaded nor
+/// loadable, we MUST NOT pass it: crun rejects an undefined type with EINVAL on
+/// `/proc/self/attr/keycreate` and the container exits 126 — the P0 that broke
+/// `tillandsias --init` on Silverblue for release v0.3.260702.2. In that case we
+/// fall back to podman's default `container_t`, which is enforcing-safe and is
+/// exactly how every other tillandsias container already runs on that host.
 /// @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+/// @trace plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md
 #[cfg(feature = "vault")]
-fn ensure_vault_selinux_module(debug: bool) {
-    // Only act when SELinux is Enforcing or Permissive. On Disabled systems
-    // `getenforce` prints "Disabled" (or is absent), and the label is a no-op.
-    let mode = Command::new("getenforce").output();
-    let active = match mode {
+fn vault_selinux_label_opt(debug: bool) -> Option<String> {
+    // SELinux off/absent -> no MAC label needed; podman default is fine. On a
+    // Disabled system `getenforce` prints "Disabled" or is missing.
+    let enforcing_or_permissive = match Command::new("getenforce").output() {
         Ok(out) => {
             let s = String::from_utf8_lossy(&out.stdout);
             let s = s.trim();
             s.eq_ignore_ascii_case("Enforcing") || s.eq_ignore_ascii_case("Permissive")
         }
-        Err(_) => false, // no getenforce -> SELinux tooling absent -> nothing to do
+        Err(_) => false,
     };
-    if !active {
-        return;
+    if !enforcing_or_permissive {
+        return None;
     }
 
-    // Idempotent: skip if already loaded (semodule -l is a stable, newline-
-    // separated list of module names).
-    if let Ok(out) = Command::new("semodule").arg("-l").output()
-        && out.status.success()
-        && String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .any(|l| l.trim() == VAULT_SELINUX_MODULE)
-    {
-        if debug {
-            eprintln!("[tillandsias-vault] SELinux module {VAULT_SELINUX_MODULE} already loaded");
-        }
-        return;
+    // Use the custom type only if we can CONFIRM it is loaded (or load it, root
+    // only). Any uncertainty -> fall back to container_t. This is the safe
+    // direction: an undefined type is a hard crun EINVAL, container_t always works.
+    if vault_container_type_loaded() {
+        return Some("label=type:vault_container_t".to_string());
     }
+    if try_load_vault_selinux_module(debug) && vault_container_type_loaded() {
+        return Some("label=type:vault_container_t".to_string());
+    }
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] vault_container_t not loaded and not loadable \
+             (rootless host?); using podman default container_t SELinux label"
+        );
+    }
+    None
+}
 
-    // semodule -i requires the CIL to live in a file ending in `.cil`. Use a
-    // tmpfs path so it leaves nothing behind; the semodule -l guard above makes
-    // re-running across boots cheap.
-    let cil_path = std::path::Path::new("/run").join(format!("{VAULT_SELINUX_MODULE}.cil"));
-    if let Err(e) = fs::write(&cil_path, VAULT_SELINUX_CIL) {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] could not stage {} for semodule: {e} (continuing)",
-                cil_path.display()
-            );
-        }
-        return;
+/// True iff `semodule -l` confirms the `vault_container` module is loaded.
+/// Conservative: any failure (semodule absent, not readable on a rootless host)
+/// returns false so the caller falls back to the default label.
+#[cfg(feature = "vault")]
+fn vault_container_type_loaded() -> bool {
+    matches!(
+        Command::new("semodule").arg("-l").output(),
+        Ok(out) if out.status.success()
+            && String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .any(|l| l.trim() == VAULT_SELINUX_MODULE)
+    )
+}
+
+/// Best-effort load of the minimal `vault_container_t` CIL (root only). Returns
+/// whether `semodule -i` succeeded. Stages the CIL to a WRITABLE temp dir — NOT
+/// `/run`, which is not user-writable on a rootless host (the `os error 13`
+/// staging failure seen on Silverblue).
+#[cfg(feature = "vault")]
+fn try_load_vault_selinux_module(debug: bool) -> bool {
+    let cil_path = std::env::temp_dir().join(format!("{VAULT_SELINUX_MODULE}.cil"));
+    if fs::write(&cil_path, VAULT_SELINUX_CIL).is_err() {
+        return false;
     }
-    match Command::new("semodule").arg("-i").arg(&cil_path).status() {
-        Ok(s) if s.success() => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] loaded SELinux module {VAULT_SELINUX_MODULE} (permissive)"
-                );
-            }
-        }
-        Ok(s) => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] semodule -i {VAULT_SELINUX_MODULE} exited {s} (continuing; podman will surface any label error)"
-                );
-            }
-        }
-        Err(e) => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] semodule -i {VAULT_SELINUX_MODULE} failed to spawn: {e} (continuing)"
-                );
-            }
-        }
-    }
+    let loaded = matches!(
+        Command::new("semodule").arg("-i").arg(&cil_path).status(),
+        Ok(s) if s.success()
+    );
     let _ = fs::remove_file(&cil_path);
+    if debug && loaded {
+        eprintln!("[tillandsias-vault] loaded SELinux module {VAULT_SELINUX_MODULE} (permissive)");
+    }
+    loaded
 }
 
 /// Stub for builds without the `vault` feature so the call site compiles.
 #[cfg(not(feature = "vault"))]
-fn ensure_vault_selinux_module(_debug: bool) {}
+fn vault_selinux_label_opt(_debug: bool) -> Option<String> {
+    None
+}
 
 fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let image_tag = canonical_vault_launch_tag(image_tag)?;
@@ -1564,15 +1571,13 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // during `run_init`, but ensure here so the bootstrap is self-sufficient).
     crate::ensure_enclave_network(debug)?;
 
-    // Phase 3d: on an SELinux-enforcing guest, `--security-opt
-    // label=type:vault_container_t` (below) is only a valid label once the
-    // `vault_container_t` type exists in the loaded policy. Ensure the minimal
-    // module is loaded first so crun does not reject the launch with EINVAL on
-    // /proc/self/attr/keycreate (the blocker that broke `--github-login` and
-    // `--list-cloud-projects` on the enforcing Fedora 44 VZ guest). No-op on
-    // Disabled systems and idempotent when the module is already loaded.
-    // @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
-    ensure_vault_selinux_module(debug);
+    // Phase 3d: `--security-opt label=type:vault_container_t` is only a VALID
+    // label when that type is loaded in the policy (guest VM, root). On a
+    // rootless native host it cannot be loaded, so we fall back to the default
+    // container_t rather than crash crun with an undefined type (EINVAL, exit
+    // 126). See vault_selinux_label_opt.
+    // @trace plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md
+    let selinux_label = vault_selinux_label_opt(debug);
 
     if debug {
         eprintln!(
@@ -1595,47 +1600,54 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // @trace spec:tillandsias-vault
     let volume_arg = format!("{}:/vault/data:U", VAULT_VOLUME);
     let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
+    let mut run_args: Vec<String> = vec![
+        "run".into(),
+        "-d".into(),
+        "--name".into(),
+        VAULT_CONTAINER_NAME.into(),
+        "--hostname".into(),
+        VAULT_NETWORK_ALIAS.into(),
+        // Bridge network for the alias + enclave reachability (see
+        // launch_vault_container preamble). Must precede --network-alias.
+        "--network".into(),
+        crate::ENCLAVE_NET.into(),
+        "--network-alias".into(),
+        VAULT_NETWORK_ALIAS.into(),
+        "--secret".into(),
+        secret_arg,
+        "--secret".into(),
+        tls_cert_arg,
+        "--secret".into(),
+        tls_key_arg,
+        "--secret".into(),
+        tls_ca_arg,
+        "--volume".into(),
+        volume_arg,
+        "--tmpfs".into(),
+        "/run/vault-handover:size=1m,mode=0777".into(),
+        "--rm".into(),
+        "--cap-drop".into(),
+        "ALL".into(),
+        "--cap-add".into(),
+        "IPC_LOCK".into(),
+        "--security-opt".into(),
+        "no-new-privileges".into(),
+    ];
+    // Custom SELinux label only when the type is actually loaded; otherwise
+    // podman applies the default container_t (enforcing-safe).
+    if let Some(label) = &selinux_label {
+        run_args.push("--security-opt".into());
+        run_args.push(label.clone());
+    }
+    run_args.extend([
+        "--userns".into(),
+        "keep-id".into(),
+        "-p".into(),
+        port_arg,
+        image_tag.to_string(),
+    ]);
     let status = podman_cmd_sync()
-        .args([
-            "run",
-            "-d",
-            "--name",
-            VAULT_CONTAINER_NAME,
-            "--hostname",
-            VAULT_NETWORK_ALIAS,
-            // Bridge network for the alias + enclave reachability (see
-            // launch_vault_container preamble). Must precede --network-alias.
-            "--network",
-            crate::ENCLAVE_NET,
-            "--network-alias",
-            VAULT_NETWORK_ALIAS,
-            "--secret",
-            &secret_arg,
-            "--secret",
-            &tls_cert_arg,
-            "--secret",
-            &tls_key_arg,
-            "--secret",
-            &tls_ca_arg,
-            "--volume",
-            &volume_arg,
-            "--tmpfs",
-            "/run/vault-handover:size=1m,mode=0777",
-            "--rm",
-            "--cap-drop",
-            "ALL",
-            "--cap-add",
-            "IPC_LOCK",
-            "--security-opt",
-            "no-new-privileges",
-            "--security-opt",
-            "label=type:vault_container_t",
-            "--userns",
-            "keep-id",
-            "-p",
-            &port_arg,
-            image_tag,
-        ])
+        .args(&run_args)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
         .status()
@@ -2161,12 +2173,14 @@ mod tests {
     }
 
     #[test]
-    fn vault_launch_ensures_selinux_module_before_labelled_run() {
-        // Phase 3d: the enforcing-guest label `label=type:vault_container_t` is
-        // only valid once the type is loaded. The launch path must load it
-        // (ensure_vault_selinux_module) BEFORE the labelled `podman run`, or the
-        // container exits 126 on crun keycreate EINVAL.
-        // @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+    fn vault_launch_selinux_label_is_conditional_not_unconditional() {
+        // Regression guard for the v0.3.260702.2 Silverblue crash: the launch
+        // must NOT hard-code `--security-opt label=type:vault_container_t`. That
+        // type is undefined on a rootless native host (semodule needs root), so
+        // an unconditional label makes crun EINVAL on keycreate (exit 126). The
+        // label must come from vault_selinux_label_opt (which returns None ->
+        // default container_t when the type is not loadable).
+        // @trace plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md
         let source = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/src/vault_bootstrap.rs"
@@ -2175,19 +2189,29 @@ mod tests {
             .split("fn launch_vault_container(")
             .nth(1)
             .expect("launch_vault_container source");
-        let ensure_at = window
-            .find("ensure_vault_selinux_module(debug)")
-            .expect("launch must ensure the vault_container_t SELinux module");
-        let label_at = window
-            .find("\"label=type:vault_container_t\"")
-            .expect("launch must set the vault_container_t label");
+        // The launch body must gate the label on vault_selinux_label_opt, not
+        // push a bare vault_container_t label string.
         assert!(
-            ensure_at < label_at,
-            "the SELinux module must be ensured before the labelled podman run"
+            window.contains("vault_selinux_label_opt(debug)"),
+            "launch must derive the SELinux label from vault_selinux_label_opt"
+        );
+        assert!(
+            !window.contains("\"label=type:vault_container_t\""),
+            "launch must NOT hard-code the vault_container_t label (rootless EINVAL)"
         );
 
-        // The embedded CIL must declare the type it labels with, or the load is
-        // a no-op and the EINVAL persists.
+        // vault_selinux_label_opt must fall back (return None) when the type is
+        // not loaded/loadable, and only use the custom type when confirmed.
+        let opt = source
+            .split("fn vault_selinux_label_opt(")
+            .nth(1)
+            .expect("vault_selinux_label_opt source");
+        assert!(
+            opt.contains("vault_container_type_loaded()") && opt.contains("return None"),
+            "the label helper must confirm the type is loaded and fall back to None otherwise"
+        );
+
+        // The embedded CIL still declares the type for the guest-VM (root) path.
         let cil = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../images/selinux/vault_container.cil"

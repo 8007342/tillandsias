@@ -86,7 +86,7 @@ pub enum PtyIntent {
 ///
 /// SELinux note: on an enforcing Fedora 44 guest the vault container is launched
 /// with `--security-opt label=type:vault_container_t`; that type is loaded by
-/// `tillandsias-headless` itself (`vault_bootstrap::ensure_vault_selinux_module`
+/// `tillandsias-headless` itself (`vault_bootstrap::vault_selinux_label_opt`
 /// via `images/selinux/vault_container.cil`, Phase 3d) BEFORE the vault launch,
 /// so no host-side podman wrapper is needed. The former base64-encoded podman
 /// shim was removed 2026-07-02: it violated the methodology
@@ -206,7 +206,7 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // See plan/issues/wt-github-login-semicolons-2026-06-30.md
             //
             // SELinux: the vault_container_t type is loaded in-guest by
-            // vault_bootstrap::ensure_vault_selinux_module (Phase 3d) before the
+            // vault_bootstrap::vault_selinux_label_opt (Phase 3d) before the
             // vault launch, so no host-side podman wrapper is needed. The former
             // base64 podman shim was removed 2026-07-02 (base64_script_injection_ban).
             vm_login_shell_argv("exec tillandsias-headless --github-login")
@@ -753,7 +753,7 @@ mod tests {
             "script must not contain `;` (wt.exe separator bug)"
         );
         // No base64-encoded podman shim: the vault_container_t SELinux type is
-        // loaded in-guest by Phase 3d (ensure_vault_selinux_module), so no
+        // loaded in-guest by Phase 3d (vault_selinux_label_opt), so no
         // host-side wrapper is embedded. Enforces base64_script_injection_ban.
         assert!(
             !github_cmd.contains("podman-selinux-wrap"),
