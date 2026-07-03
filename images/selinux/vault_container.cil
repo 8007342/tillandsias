@@ -1,22 +1,33 @@
 ; vault_container.cil — Phase 3d minimal SELinux policy module.
 ;
 ; Purpose: make `podman run --security-opt label=type:vault_container_t`
-; (vault_bootstrap.rs) a VALID label on an SELinux-enforcing guest. Before this
-; module is loaded the type `vault_container_t` is unknown to the kernel, so
-; crun's write to /proc/self/attr/keycreate fails with EINVAL and the vault
-; container launch exits 126 — the blocker that broke `--github-login` and
+; (vault_bootstrap.rs) a WORKING label on an SELinux-enforcing guest. Before
+; this module is loaded the type is unknown to the kernel, so crun's write to
+; /proc/self/attr/keycreate fails with EINVAL and the vault container launch
+; exits 126 — the blocker that broke `--github-login` and
 ; `--list-cloud-projects` on the enforcing Fedora 44 VZ guest (macOS).
 ;
-; This module only DECLARES the domain and marks it permissive (audit-only) so
-; vault operations are never blocked while the confined ruleset in
-; images/selinux/tillandsias_vault.te is matured into full enforcement. It
-; intentionally depends on nothing beyond base refpolicy (`system_r`, `domain`)
-; so `semodule -i` succeeds on a stock Fedora guest with no selinux-policy-devel
-; and no container-selinux attribute names to track.
+; Declaring the type is NOT enough. Launch checks are charged to the SOURCE
+; domain container_runtime_t (which stays enforcing — `typepermissive
+; vault_container_t` only covers checks where vault_container_t is the
+; source), so without explicit allows the entrypoint exec dies:
+;   - `denied { transition } … tclass=process`   → EACCES "Permission denied"
+;   - `denied { nnp_transition } … tclass=process2` → EPERM "Operation not
+;     permitted" (the vault run sets --security-opt no-new-privileges)
+; Both AVCs observed on the enforcing Fedora 44 VZ guest, 2026-07-02.
 ;
-; Loaded idempotently by tillandsias-headless before every vault launch
-; (ensure_vault_selinux_module), so it survives ephemeral guests without a
-; provision-time compile.
+; container_domain membership is how container-selinux intends custom
+; container types to inherit the runtime↔container ruleset (udica does the
+; same); the explicit allows below are kept as belt-and-suspenders should a
+; container-selinux update reshape the attribute's rules. Depending on
+; container-selinux names (container_runtime_t, container_domain) is safe
+; wherever this module matters: container-selinux is a podman dependency on
+; Fedora.
+;
+; The module still needs no selinux-policy-devel: `semodule -i` of raw CIL
+; works on a stock guest. Loaded idempotently by tillandsias-headless before
+; every vault launch (ensure_vault_selinux_module), so it survives ephemeral
+; guests without a provision-time compile.
 ;
 ; @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
 ; @trace spec:tillandsias-vault
@@ -26,4 +37,10 @@
 (type vault_container_t)
 (roletype system_r vault_container_t)
 (typeattributeset domain (vault_container_t))
+(typeattributeset container_domain (vault_container_t))
 (typepermissive vault_container_t)
+
+; Source-domain allows for the launch path (charged to container_runtime_t,
+; which is enforcing; see header).
+(allow container_runtime_t vault_container_t (process (transition sigchld sigkill sigstop signull signal getattr)))
+(allow container_runtime_t vault_container_t (process2 (nnp_transition nosuid_transition)))

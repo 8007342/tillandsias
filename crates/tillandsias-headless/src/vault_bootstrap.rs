@@ -2096,6 +2096,28 @@ mod tests {
             cil.contains("(type vault_container_t)"),
             "vault_container.cil must declare vault_container_t"
         );
+
+        // Declaring the type is not enough: launch checks are charged to the
+        // SOURCE domain container_runtime_t, which stays enforcing (the
+        // typepermissive only covers vault_container_t-sourced checks). The
+        // CIL must grant the runtime→vault transition family — plain
+        // `transition` (EACCES on the entrypoint exec without it) and
+        // `nnp_transition` (EPERM; the vault run sets no-new-privileges) —
+        // and container_domain membership so container-selinux's own
+        // runtime↔container rules apply. AVCs observed on the enforcing
+        // Fedora 44 VZ guest, 2026-07-02.
+        assert!(
+            cil.contains("(typeattributeset container_domain (vault_container_t))"),
+            "vault_container.cil must join container_domain (container-selinux runtime rules)"
+        );
+        assert!(
+            cil.contains("(allow container_runtime_t vault_container_t (process (transition"),
+            "vault_container.cil must allow the runtime→vault process transition"
+        );
+        assert!(
+            cil.contains("(allow container_runtime_t vault_container_t (process2 (nnp_transition nosuid_transition)))"),
+            "vault_container.cil must allow nnp/nosuid transition from container_runtime_t (no-new-privileges is set on the vault run)"
+        );
     }
 
     #[test]
