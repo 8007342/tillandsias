@@ -1330,7 +1330,7 @@ plan_index:
     - packet_id: forge-git-ergonomics
       order: 166
       title: "Forge: fix git safe.directory + auto url.insteadOf + env gaps (LANG/JAVA_HOME/GOROOT/FLUTTER_ROOT)"
-      status: ready
+      status: completed
       kind: bug-fix+config
       deliverable: images/default/
       depends_on: []
@@ -1346,6 +1346,21 @@ plan_index:
         rewrite unconditionally. Also close the baseline's env gaps: LANG unset,
         JAVA_HOME unset (JRE present), GOROOT unset, FLUTTER_ROOT points at absent
         SDK (install or drop). Baseline: plan/diagnostics/diagnostics_2026-07-02-summary.md.
+      events:
+        - type: completed
+          ts: "2026-07-03T22:21:06Z"
+          agent_id: "forge-big-pickle-2026-07-03T22:21:06Z"
+          commits: []
+          summary: >
+            Added safe.directory for /home/forge/src/* in lib-common.sh to avoid
+            git "dubious ownership" on host-mounted repos. Called
+            rewrite_origin_for_enclave_push() from the network transport path and
+            as a fallback in clone_project_from_mirror() to ensure url.insteadOf
+            install always runs for host-mount projects. Filled environment gaps:
+            LANG=en_US.UTF-8 (Containerfile + runtime fallback), JAVA_HOME derived
+            from java binary, GOROOT derived from go env, FLUTTER_ROOT unset at
+            runtime when SDK absent. files: images/default/Containerfile,
+            images/default/lib-common.sh, plan/index.yaml, plan/loop_status.md.
       exit_criteria:
         - "Fresh forge: git status/commit/push on the mounted tree with no dubious-ownership and no manual git config"
         - "url.insteadOf present on first shell (litmus)"

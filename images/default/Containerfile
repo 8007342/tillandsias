@@ -49,6 +49,10 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-terminal.sh \
              /usr/local/bin/sse-keepalive-proxy.js
 
+# ── Locale ──────────────────────────────────────────────────────
+# @trace spec:forge-git-ergonomics
+ENV LANG=en_US.UTF-8
+
 # No GIT_ASKPASS helper in the forge image — forge containers have ZERO
 # credentials. The old askpass was a dead-code vector superseded by the
 # native-secrets-store model: only the git-service container receives the

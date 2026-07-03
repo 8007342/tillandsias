@@ -1,6 +1,26 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-03T03:45Z
+LastExecutionTime: 2026-07-03T22:21Z
+
+## This Loop (2026-07-03T22:21Z, forge — /meta-orchestration: forge-git-ergonomics order 166)
+
+- **Cycle type**: meta-orchestration → advance-work-from-plan (forge container).
+- **Startup**: `linux-next @ c5cbf3a8`, clean worktree. Credential channel:
+  `ok:gh-credentials-store`. Remote mirror empty (expected for fresh forge
+  container; re-populated on first push).
+- **Worker drain**: Claimed and implemented order 166 (forge-git-ergonomics):
+  Added `git config --global safe.directory /home/forge/src/*` at lib-common.sh
+  startup to avoid "dubious ownership" on host-mounted repos with different UID.
+  Added `rewrite_origin_for_enclave_push()` call to network transport path and as
+  a fallback in `clone_project_from_mirror()` to ensure `url.insteadOf` rewrite is
+  always installed for host-mount projects. Filled env gaps: `LANG` set to
+  `en_US.UTF-8` (Containerfile + runtime fallback), `JAVA_HOME` derived at runtime
+  from java binary path, `GOROOT` derived from `go env GOROOT`, `FLUTTER_ROOT`
+  unset at runtime when the SDK directory is absent.
+- **E2E gate**: `skip:no-podman-binary` (forge container — expected).
+- **Coordination**: Not applicable (forge container, not linux_mutable).
+- **Reduction engine**: 1 finding closed (order 166). No new findings this cycle.
+- **Next**: Await linux_mutable to rebuild the forge image and verify the fixes.
 
 ## This Loop (2026-07-03T03:20Z, linux_mutable — rootless Silverblue vault P0s → v0.3.260703.2)
 
