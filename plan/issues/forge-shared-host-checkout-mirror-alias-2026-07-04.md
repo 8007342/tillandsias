@@ -129,3 +129,20 @@ Implement `forge-source-mount-credential-quarantine` (plan order 170):
    `.gh-credentials`, and SSH agent sockets are absent/unreadable in the forge;
 4. prove that git operations still use the forge credential channel or a
    documented direct fallback, never host credential material.
+
+## RESOLVED (partial) 2026-07-04 — credential-guard false-positive fixed (order 173)
+
+The half of this that made the guard LIE — `scripts/check-credential-channel.sh`
+returning `ok:forge-git-mirror` merely because `TILLANDSIAS_HOST_KIND=forge` was
+set, even when the mirror was unreachable/not-exported — is now fixed. The guard
+verifies the mirror actually answers for `origin` (`git ls-remote origin`,
+`timeout 10`, fixture seam `TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1`) before
+declaring the channel present; an unreachable mirror now emits
+`missing:no-credential-channel` (rc 1) with a stderr reason, failing the cycle
+loudly instead of letting an agent accrete an unpushable commit. Pinned by two
+new steps in `litmus:credential-channel-check-shape`
+(forge-unreachable-fails-closed + forge-seam-trusts-env).
+
+This does NOT cover the credential *quarantine* (masking host creds in the
+forge) — that remains order 170. It only stops the guard from green-lighting a
+forge with a dead push channel.
