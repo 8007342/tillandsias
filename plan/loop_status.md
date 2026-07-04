@@ -33,6 +33,42 @@ latest; pull small models on inference FIRST_RUN. Multi-session; file packets.
 - **Follow-up filed inline:** the inference tier system auto-pulls qwen2.5:7b on a
   16GB laptop (RAM>=16 -> T2), conflicting with tiny-model-first.
 
+## This Loop cont. (2026-07-04 — owner handoff: recover WIP + advance-work-from-plan)
+
+Operator handed sole ownership of the workdir ("recover or delete uncommitted code"),
+then asked to drain the queue.
+
+- **Recovered the uncommitted WIP (it was a coherent feature, not junk):** wired
+  Antigravity as a first-class forge agent (--antigravity flag, ForgeAgentMode +
+  tray leaf 6->7, provider auth, .antigravity.google allow/no-bump) — closing the
+  known 'agy installed but not an agent' gap. FIXED its compile gap (a LaunchKind
+  match arm missing under --features tray, why plain --check had passed). Wiped
+  generated churn (build-proxy-progress.jsonl; gitignored build-*.log). Verified:
+  build --features vault,tray green, 243 tests pass. Committed 35ba3d3f.
+- **Order 179 DONE (advance-work-from-plan, the critical prereq 178 identified):**
+  build_forge_agent_run_args now mounts a per-project podman NAMED volume
+  tillandsias-forge-cache-<project> at /home/forge/.cache/tillandsias-project (the
+  lib-common CARGO_HOME/NPM_CONFIG_PREFIX root) — first-run installs now persist
+  across --rm. Named volume (not a ~/.cache bind) => zero host-$HOME surface, no
+  credential-leak path. Refined the launch_forge_agent_does_not_mount_user_home
+  guard to be SOURCE-scoped. +positive unit test, +litmus (forge-cache-dual). 244
+  tests pass. Committed d1838350. Promoted 180 + 181 to ready.
+
+### Queue state + next cycle
+- done: 178 (research), 179 (cache mount), 182 (research), 183 (inference models).
+- ready, NEXT CYCLE (both large + runtime-critical on the launch path — deliberately
+  NOT rushed at session end):
+  - **180 forge-firstrun-tool-migration (12h).** OPEN DESIGN QUESTION to resolve
+    first: first-run `cargo install` compiles from source (minutes x19 tools) — the
+    Containerfile used prebuilt cargo-quickinstall tarballs precisely to avoid that.
+    So the migration must pick a FAST first-run path (cargo-binstall prebuilt, or
+    fetch the same tarballs at first-run) — not naive `cargo install`. Resolve this
+    in a research sub-step before migrating tools.
+  - **181 forge-harness-every-launch-latest (6h).** Now unblocked (NPM_CONFIG_PREFIX
+    persists via 179). Slice-1 candidate: add an idempotent, offline-safe,
+    proxy-routed every-launch npm upgrade in the forge entrypoint while keeping the
+    baked baseline; slice-2 removes the Containerfile pins.
+
 ## This Loop (2026-07-04T04:02Z, forge — Codex /meta-orchestration validation)
 
 Codex ran inside the Tillandsias forge and validated the current in-forge
