@@ -1,6 +1,54 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-04T01:59Z
+LastExecutionTime: 2026-07-04T02:50Z
+
+## This Loop (2026-07-04T02:11Z, linux_mutable — /meta-orchestration: integrate Codex requests + fix Codex-connect root cause)
+
+Operator ran Codex in a local forge; it committed findings locally but couldn't
+push (mirror creds). Integrated its requests AND root-caused the "Codex can't
+connect to remote" issue with LIVE evidence on a matching host (Fedora 44,
+rootless, SELinux Enforcing).
+
+- **Pushed Codex's plan commit** (a5884965) so its 3 findings are visible.
+- **Order 173 — credential-guard false-positive FIXED** (b8b1a0bd): Codex's forge
+  cycle accreted an unpushable commit because check-credential-channel.sh returned
+  ok:forge-git-mirror merely because HOST_KIND=forge was set, without verifying the
+  mirror is reachable. Now probes `git ls-remote origin` (timeout 10, fixture seam);
+  unreachable -> missing:no-credential-channel. +2 litmus steps (7/7 green).
+- **Orders 171/172 — Codex full-auto in forge + litmus** (df96012d): entrypoint
+  execs codex --dangerously-bypass-approvals-and-sandbox, gated on HOST_KIND=forge.
+  Verified flag against the real binary (codex-cli 0.137.0). litmus:codex-forge-yolo-shape
+  (5/5, bound). Removes approval-prompt stalls + lifts Codex's inner sandbox.
+- **Order 174 — vault secret race FIXED** (de579d40): the three secret helpers did
+  a non-atomic `secret rm`+`secret create` that races under concurrent bootstraps
+  (--init while a forge launch also ensure_vault_running) -> "secret name in use".
+  Now `secret create --replace` (atomic). Found by live repro. Regression test.
+- **Order 175 — Node-proxy bypass FIXED = THE Codex-connect root cause** (784a1903):
+  LIVE-PROVED it is NOT an allowlist gap. Inside the running forge: curl-through-proxy
+  to api.openai.com -> 401 (works); node global fetch -> ENOTFOUND (Node ignores
+  HTTP_PROXY); NODE_USE_ENV_PROXY=1 node -> 401. The --internal enclave is proxy-only,
+  Node connected direct -> timed out -> died (operator's exact symptom); OpenCode
+  worked because it targets local inference. Fix: NODE_USE_ENV_PROXY=1 in both
+  apply_proxy_env + proxy_env_args (forge agents + login containers). Regression test.
+- **Login-first gate**: already exists (ensure_provider_auth, landed c5cbf3a8, wired
+  before build_forge_agent_run_args). The operator's described flow (no token -> login
+  first -> authenticated forge; token present -> direct) is implemented. Pinned with
+  forge_agent_launch_gates_on_provider_login_first (2c8d0b37). Filed an observation:
+  OpenCode maps to Antigravity/Gemini login but uses local inference — verify.
+- **Codex order 170 (credential quarantine)**: remaining; well-shaped + ready.
+- **VERIFICATION PASSED (verify-before-release)**: ran `--init --debug` with the
+  newly-built fixed binary on THIS Fedora 44 rootless SELinux-Enforcing host (matches
+  the operator's Silverblue). Vault came up healthy end-to-end:
+  `vault_container_t not loadable -> label=disable`, `vault healthy
+  (initialized=true sealed=false v=1.18.5)`, `base_url: https://127.0.0.1:8201`
+  (loopback fix, not vault:8200), secret refresh clean (no "name in use" race),
+  `bootstrap complete`, all 5 policies+AppRoles provisioned, exit 0. Only noise =
+  expected non-fatal rootless warnings (/etc/hosts + semanage Permission denied).
+  This proves the vault chain (SELinux label + loopback URL + secret --replace) is
+  fixed on matching hardware — the definitive verification that was missing before
+  the 703.1/703.2 releases.
+- **Runtime hygiene**: during live debugging I `podman secret rm`'d tls-cert; restored
+  it. The user's enclave containers exited (137/139, healthy teardown) independently.
 
 ## This Loop (2026-07-04T01:49Z, forge — shared checkout mirror alias validation)
 
