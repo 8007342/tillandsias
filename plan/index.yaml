@@ -1456,3 +1456,72 @@ plan_index:
         - "both policy checkers run in --ci-full and fail the build on violation"
         - "a deliberately-injected base64 decode-to-executable makes --ci-full fail"
         - "green on the current tree"
+
+    - packet_id: forge-source-mount-credential-quarantine
+      order: 170
+      title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
+      status: ready
+      kind: security+bug-fix
+      deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, credentials, git, security, linux]
+      estimated_hours: 4
+      outcome: >
+        When the forge source mount is the same path as Tlatoani's own host checkout,
+        startup must detect host-local GitHub credential/config surfaces and mask
+        them with forge-owned dummy override dirs/files instead of mounting or reusing
+        them. The forge should clearly tell agents that host credentials are not used
+        inside the forge and that git must use the forge credential channel/mirror (or
+        a documented direct fallback), without copying, logging, inspecting, or
+        transforming host credential material.
+      exit_criteria:
+        - "Fresh forge with host checkout source mount cannot read host ~/.gitconfig, GitHub credential stores, .gh-credentials, or SSH agent sockets"
+        - "Dummy override dirs/files are mounted or created before agent startup when source-mount collision is detected"
+        - "In-forge diagnostics state that host credentials are not used inside the forge"
+        - "Git fetch/push still works through the forge credential channel or a documented non-mutating fallback"
+        - "Litmus covers shared-host-checkout source mount and proves no host credential/config material enters the forge"
+
+    - packet_id: codex-forge-yolo-config-defaults
+      order: 171
+      title: "Codex forge config: default to full-auto / no approval prompts inside forge"
+      status: ready
+      kind: enhancement+bug-fix
+      deliverable: plan/issues/codex-forge-yolo-defaults-2026-07-04.md
+      depends_on: [forge-agent-permission-defaults]
+      pickup_role: linux
+      capability_tags: [forge, codex, config, ux, automation]
+      estimated_hours: 3
+      outcome: >
+        When TILLANDSIAS_HOST_KIND=forge, the Codex config overlay should select
+        a full-auto/YOLO profile by default: no approval prompts for normal
+        workspace filesystem, build/test, cache, or git operations inside the
+        already-contained forge. This must be scoped to forge sessions only and
+        must not import host credentials or weaken the source-mount credential
+        quarantine.
+      exit_criteria:
+        - "Fresh Codex forge session can run /meta-orchestration without approval prompts for cargo/git/filesystem operations"
+        - "Codex config overlay is selected by TILLANDSIAS_HOST_KIND=forge"
+        - "Non-forge Codex sessions retain their normal approval/sandbox defaults"
+        - "Forge diagnostics state that Codex is running full-auto inside the container boundary"
+
+    - packet_id: codex-forge-yolo-regression-litmus
+      order: 172
+      title: "Codex forge litmus: fail if approval prompts are enabled in forge profile"
+      status: ready
+      kind: test+guardrail
+      deliverable: plan/issues/codex-forge-yolo-defaults-2026-07-04.md
+      depends_on: [codex-forge-yolo-config-defaults]
+      pickup_role: linux
+      capability_tags: [forge, codex, testing, litmus, automation]
+      estimated_hours: 2
+      outcome: >
+        Add an executable litmus that inspects or renders the Codex forge config
+        profile and fails if ordinary in-forge command execution would require
+        user approval. The litmus should be credential-safe: it must assert config
+        shape and environment selection without reading or printing secrets.
+      exit_criteria:
+        - "Litmus fails on a Codex forge config with approval prompts enabled"
+        - "Litmus passes on the intended full-auto forge profile"
+        - "Litmus proves the behavior is gated to TILLANDSIAS_HOST_KIND=forge"
+        - "Litmus is wired into the appropriate local CI or policy-check phase"
