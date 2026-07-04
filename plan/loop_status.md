@@ -1,6 +1,26 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-04T02:50Z
+LastExecutionTime: 2026-07-04T03:05Z
+
+## Release v0.3.260704.1 (2026-07-04T03:00Z, linux_mutable — merge-to-main-and-release)
+
+Cut after the Codex-request integration + Node-proxy root-cause fix, with
+--init verified end-to-end on rootless SELinux-enforcing (the verify-before-release
+discipline).
+
+- Pre-release reconcile: merged origin/main (703.1/703.2 release history +
+  release-CI changes) back into linux-next; resolved a formatting-only main.rs
+  conflict in the provider-auth code (kept linux-next's rustfmt form; Node-proxy
+  fix intact), VERSION=704.1, CI-infra→theirs. --check + 110 headless tests green.
+- PR #66 linux-next→main merged (f01c2ee8); VERSION already 704.1 (no bump needed);
+  tag v0.3.260704.1 pushed; release.yml run 28692716478 dispatched [result on
+  completion]. Ships: NODE_USE_ENV_PROXY (Codex/Claude connect), vault secret
+  --replace race fix, + the 703.2 SELinux/DNS fixes. Supersedes the broken 703.2
+  for the operator's Silverblue re-test.
+- After release: operator does the human-in-loop verification — curl-install
+  704.1, --init, then a Codex session reaching remote (login-first gate + Node
+  proxy). Remaining open: Codex order 170 (credential quarantine, ready);
+  OpenCode→Antigravity mapping observation; ws-package proxy coverage probe.
 
 ## This Loop (2026-07-04T02:11Z, linux_mutable — /meta-orchestration: integrate Codex requests + fix Codex-connect root cause)
 
