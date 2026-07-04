@@ -859,6 +859,11 @@ fn proxy_env_args() -> Vec<String> {
         format!("no_proxy={no_proxy}"),
         "--env".into(),
         format!("NO_PROXY={no_proxy}"),
+        // Route Node fetch/undici through the proxy (Node ignores HTTP_PROXY by
+        // default). See apply_proxy_env for the full rationale + live evidence.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        "--env".into(),
+        "NODE_USE_ENV_PROXY=1".into(),
     ]
 }
 
@@ -872,6 +877,17 @@ fn apply_proxy_env(spec: ContainerSpec) -> ContainerSpec {
         .env("HTTPS_PROXY", "http://proxy:3128")
         .env("no_proxy", no_proxy.clone())
         .env("NO_PROXY", no_proxy)
+        // Node's global fetch/undici does NOT honor HTTP(S)_PROXY by default, so
+        // Node-based agents (Codex, Claude Code) tried to connect DIRECTLY to
+        // api.openai.com / chatgpt.com / websocket endpoints — which the
+        // --internal enclave (proxy-only egress, no external DNS) cannot resolve,
+        // producing the "times out then dies" remote-connect failure the operator
+        // hit while curl (which uses the env proxy) worked. NODE_USE_ENV_PROXY=1
+        // makes undici's EnvHttpProxyAgent route Node egress through the proxy.
+        // Verified live in the forge: without it, node fetch -> ENOTFOUND; with
+        // it -> HTTP 401 (reaches api.openai.com through the proxy).
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        .env("NODE_USE_ENV_PROXY", "1")
 }
 
 // @trace spec:init-incremental-builds
@@ -8492,6 +8508,33 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn proxy_env_routes_node_through_the_proxy() {
+        // Node's global fetch/undici ignores HTTP_PROXY by default, so on the
+        // --internal enclave (proxy-only egress, no external DNS) Node agents
+        // (Codex, Claude Code) cannot reach api.openai.com/etc. — they time out
+        // and die while curl works. NODE_USE_ENV_PROXY=1 makes undici honor the
+        // env proxy. Both proxy-env injection paths MUST set it.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        let args = proxy_env_args();
+        assert!(
+            args.iter().any(|a| a == "NODE_USE_ENV_PROXY=1"),
+            "proxy_env_args must route Node through the proxy (NODE_USE_ENV_PROXY=1)"
+        );
+        // apply_proxy_env is the ContainerSpec twin — pin it by source so it can't
+        // drift out of sync with proxy_env_args.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("fn apply_proxy_env(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("apply_proxy_env source");
+        assert!(
+            window.contains("\"NODE_USE_ENV_PROXY\""),
+            "apply_proxy_env must also set NODE_USE_ENV_PROXY for forge agents"
+        );
+    }
 
     #[test]
     #[cfg(target_os = "linux")]

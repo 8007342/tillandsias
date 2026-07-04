@@ -1587,3 +1587,34 @@ plan_index:
           summary: >
             --replace applied to create_unseal_secret / create_token_podman_secret /
             create_file_podman_secret; regression test added; --check + vault tests green.
+
+    - packet_id: forge-node-agents-bypass-proxy
+      order: 175
+      title: "Forge: route Node agents (Codex/Claude) through the proxy (NODE_USE_ENV_PROXY)"
+      status: done
+      kind: bug
+      deliverable: plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, podman, proxy, forge, agents]
+      estimated_hours: 2
+      outcome: >
+        Codex/Claude (Node) could not reach remote APIs: Node's global fetch/undici
+        ignores HTTP_PROXY, so on the --internal proxy-only enclave they connected
+        directly and timed out (operator's "times out then dies"). Live-proved it is
+        NOT an allowlist gap: curl-through-proxy to api.openai.com returns 401, node
+        fetch returns ENOTFOUND, and NODE_USE_ENV_PROXY=1 flips node to 401. Fixed by
+        setting NODE_USE_ENV_PROXY=1 in both apply_proxy_env and proxy_env_args (covers
+        forge agents + login containers). Regression test pins both sites.
+      exit_criteria:
+        - "NODE_USE_ENV_PROXY=1 set in apply_proxy_env and proxy_env_args"
+        - "proxy_env_routes_node_through_the_proxy test green; ./build.sh --check passes"
+        - "live: node fetch in the forge reaches api.openai.com through the proxy (was ENOTFOUND)"
+      events:
+        - type: completed
+          ts: "2026-07-04T02:40:00Z"
+          agent_id: "linux-yoga-fable5-20260704T0211Z"
+          summary: >
+            NODE_USE_ENV_PROXY=1 added at both proxy-env chokepoints; verified live
+            (ENOTFOUND -> HTTP 401); regression test + finding filed. Residuals: ws
+            package proxy coverage + login-first gating filed as follow-ups.
