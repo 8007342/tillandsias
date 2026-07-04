@@ -1668,12 +1668,19 @@ plan_index:
         fix the smallest approved slices: HOME-bind false-positive, missing
         openssl CLI or CA-bundle fallback, explicit forge validation profile,
         basic network diagnostics tools, ACTIVE.md doc drift, and startup
-        branch snapshot clarity.
+        branch snapshot clarity. It also records that the forge git mirror
+        forwarded a push to GitHub successfully while continuing to advertise a
+        stale local linux-next ref afterward.
+        A follow-up amended push also returned client exit 0 even though the
+        mirror log showed GitHub rejected upstream forwarding as
+        non-fast-forward.
       exit_criteria:
         - "cargo test -p tillandsias-headless --bin tillandsias passes inside the forge"
         - "fresh forge has openssl and basic diagnostic network tools, or tests skip/route around their absence intentionally"
         - "forge validation emits a stable PASS/SKIP/FAIL report including e2e eligibility"
         - "plan active-work references either restore plan/issues/ACTIVE.md or stop pointing at it"
+        - "after a forge mirror push, mirror ls-remote and direct GitHub ls-remote agree on linux-next"
+        - "if upstream forwarding fails, git push from the forge returns non-zero"
       events:
         - type: filed
           ts: "2026-07-04T04:18:00Z"
@@ -1682,4 +1689,6 @@ plan_index:
             Filed consolidated findings after in-forge meta-orchestration:
             credential guard ok, push dry-run ok, cargo check ok, e2e skip
             no-podman, Vault/inference/proxy reachable, but headless bin tests
-            fail on HOME bind false-positive and missing openssl CLI.
+            fail on HOME bind false-positive and missing openssl CLI. Push
+            forwarding reached GitHub, but the forge mirror kept serving a stale
+            linux-next ref afterward.

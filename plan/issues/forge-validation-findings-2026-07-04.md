@@ -19,6 +19,11 @@ host-ineligible.
 
 - `scripts/check-credential-channel.sh`: `ok:forge-git-mirror`
 - `git push --dry-run origin linux-next`: `Everything up-to-date`
+- `git push origin linux-next`: mirror reported successful upstream forwarding
+- Direct GitHub ref after push:
+  `refs/heads/linux-next = 5458caef6fb3bbab9396a33a738cab66b7c544dd`
+- Forge mirror ref after push/fetch:
+  `refs/heads/linux-next = 9a25b74ac1856fb1626cbeba3d250d9fd0be1186`
 - `scripts/e2e-preflight.sh eligibility`: `skip:no-podman-binary`
 - `cargo check --workspace`: PASS
 - `cargo test --workspace --no-fail-fast`: FAIL, one failed target:
@@ -154,6 +159,39 @@ Verifiable closure: a forge session launched on `main` then switched to
 `linux-next` either updates `.forge-startup-context.md` or records the branch
 field as `startup_branch`.
 
+### 7. Forge git mirror forwards push upstream but keeps serving a stale branch ref
+
+This cycle pushed commit `5458caef` through `git://tillandsias-git/tillandsias`.
+The mirror reported:
+
+```
+[git-mirror] Push to origin (https://github.com/8007342/tillandsias.git): success
+```
+
+Direct GitHub verification showed `linux-next` at `5458caef`, but an immediate
+`git fetch origin --prune` from inside the forge reset `origin/linux-next` back
+to `9a25b74a`, leaving the local checkout `ahead 1`. `git ls-remote origin
+refs/heads/linux-next` also advertised `9a25b74a`, while
+`GIT_CONFIG_GLOBAL=/dev/null git ls-remote https://github.com/8007342/tillandsias.git
+refs/heads/linux-next` advertised `5458caef`.
+
+Smallest next action: after the mirror forwards a successful push, update the
+mirror's exported ref to the pushed SHA, or force a post-push fetch that cannot
+overwrite the just-pushed ref with stale state.
+
+Verifiable closure: push a probe commit through the forge mirror, then
+immediately verify `git ls-remote origin refs/heads/linux-next` and direct
+GitHub `ls-remote` return the same SHA.
+
+Additional evidence from the same cycle: after amending the local commit, the
+mirror accepted `git push --force-with-lease origin linux-next` and returned exit
+0 to the client, while its own upstream forwarding log reported GitHub rejected
+the update as non-fast-forward. That left the forge mirror advertising the
+rejected SHA and GitHub advertising the previously accepted SHA. The mirror
+should fail the client push when upstream forwarding fails, or clearly separate
+"accepted into local mirror" from "published upstream" with a non-zero status for
+the meta-orchestration contract.
+
 ## Nice-To-Have Improvements
 
 - Add a single `scripts/forge-validate.sh` that runs the eligible validation set:
@@ -165,4 +203,3 @@ field as `startup_branch`.
 - Keep `/opt/cheatsheets` populated or remove/redirect
   `TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets`; this path was empty while
   `/opt/cheatsheets-image` had content.
-

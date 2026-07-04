@@ -10,6 +10,10 @@ runtime/config surface without using host credentials.
 - **Branch + credentials**: started on `main`, switched to `linux-next` for plan
   writes. `scripts/check-credential-channel.sh` returned `ok:forge-git-mirror`;
   `git push --dry-run origin linux-next` returned `Everything up-to-date`.
+  Real push forwarding reached GitHub, but the forge mirror continued to
+  advertise stale `origin/linux-next` afterward. A follow-up amended push
+  returned client exit 0 while the mirror log showed upstream GitHub rejected the
+  forwarded update as non-fast-forward; filed in the validation packet.
 - **Eligible gates**: `scripts/e2e-preflight.sh eligibility` returned
   `skip:no-podman-binary`, so destructive local-build e2e was not eligible in
   this forge.
