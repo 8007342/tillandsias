@@ -80,6 +80,24 @@ inject_startup_context "$PROJECT_DIR"
 show_banner "codex"
 
 # ── Launch Codex ────────────────────────────────────────────
+# @trace plan/issues/codex-forge-yolo-defaults-2026-07-04.md (order 171)
+# Full-auto inside the forge. The forge container IS the containment boundary
+# (--cap-drop=ALL, --security-opt=no-new-privileges, --userns=keep-id,
+# proxy-only egress on the --internal enclave network), so Codex's own approval
+# prompts and inner seccomp/landlock sandbox add no meaningful security — they
+# only stall unattended /meta-orchestration loops and (because the default inner
+# sandbox can restrict egress) can block the agent's own network calls.
+# `--dangerously-bypass-approvals-and-sandbox` is documented by Codex 0.137.0 as
+# "intended solely for running in environments that are externally sandboxed",
+# which is exactly this forge. Gated on TILLANDSIAS_HOST_KIND=forge so it can
+# only ever engage inside the forge; a non-forge invocation keeps Codex's normal
+# approval/sandbox posture. Does NOT weaken the host credential boundary (that is
+# the source-mount quarantine, order 170) — it governs command execution and the
+# inner sandbox only.
+codex_forge_args=()
+if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+    codex_forge_args+=(--dangerously-bypass-approvals-and-sandbox)
+fi
 trace_lifecycle "entrypoint" "codex launching"
 trace_lifecycle "exec" "launching codex"
-exec codex "$@"
+exec codex "${codex_forge_args[@]}" "$@"

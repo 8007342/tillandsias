@@ -72,3 +72,32 @@ Order 165 (`forge-agent-permission-defaults`) covers broader agent filesystem
 permission defaults. This packet is Codex-specific because this cycle observed
 Codex itself prompting for tool approval in the forge, including commands needed
 to validate and commit the plan.
+
+## RESOLVED 2026-07-04 (orders 171 + 172)
+
+Implemented via the codex forge entrypoint rather than a config.toml, verified
+against the real binary (`@openai/codex@0.137.0` in the built forge image):
+
+- `images/default/entrypoint-forge-codex.sh` now builds a `codex_forge_args`
+  array that appends **`--dangerously-bypass-approvals-and-sandbox`** only when
+  `TILLANDSIAS_HOST_KIND=forge`, and execs `codex "${codex_forge_args[@]}" "$@"`.
+  Codex 0.137.0 documents that flag as "intended solely for running in
+  environments that are externally sandboxed" — exactly the Tillandsias forge
+  (`--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`,
+  proxy-only egress on the `--internal` enclave). This removes the approval
+  prompts that stalled the `/meta-orchestration` loop AND lifts Codex's inner
+  seccomp/landlock sandbox, which can otherwise restrict the agent's own egress.
+- The entrypoint is forge-only, and the flag is additionally gated on
+  `TILLANDSIAS_HOST_KIND=forge`, so a non-forge invocation keeps Codex's normal
+  approval/sandbox posture (exit criterion satisfied by construction).
+- Regression litmus `litmus:codex-forge-yolo-shape` (order 172) pins: the flag is
+  present, gated on forge, threaded into the exec line, no bare ungated
+  `exec codex "$@"` remains, and the gate behaves (flag under forge, empty
+  otherwise). 5/5 steps green; bound under spec `codex-tray-launcher` in
+  `openspec/litmus-bindings.yaml`.
+
+Does NOT weaken the host credential boundary — that is the source-mount
+quarantine (order 170), still open.
+
+Verifies-live: the built forge image `localhost/tillandsias-forge:v0.3.260704.2`
+was used to confirm the flag exists in codex-cli 0.137.0 (`codex --help`).

@@ -141,6 +141,12 @@ specs:
   - litmus:ci-release-toolchain-shape
   coverage_ratio: 67
   last_verified: '2026-05-29'
+- spec_id: codex-tray-launcher
+  status: active
+  litmus_tests:
+  - litmus:codex-forge-yolo-shape
+  coverage_ratio: 100
+  last_verified: '2026-07-04'
 - spec_id: cli-bash-mode
   status: obsolete
   litmus_tests: []

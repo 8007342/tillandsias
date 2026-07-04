@@ -1485,7 +1485,7 @@ plan_index:
     - packet_id: codex-forge-yolo-config-defaults
       order: 171
       title: "Codex forge config: default to full-auto / no approval prompts inside forge"
-      status: ready
+      status: done
       kind: enhancement+bug-fix
       deliverable: plan/issues/codex-forge-yolo-defaults-2026-07-04.md
       depends_on: [forge-agent-permission-defaults]
@@ -1508,7 +1508,7 @@ plan_index:
     - packet_id: codex-forge-yolo-regression-litmus
       order: 172
       title: "Codex forge litmus: fail if approval prompts are enabled in forge profile"
-      status: ready
+      status: done
       kind: test+guardrail
       deliverable: plan/issues/codex-forge-yolo-defaults-2026-07-04.md
       depends_on: [codex-forge-yolo-config-defaults]
