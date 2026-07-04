@@ -5718,15 +5718,27 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         };
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
-        client
-            .run_container_observed(
-                "opencode-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
+        // See the forge-launch-proxy site for the full rationale.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] OpenCode: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "opencode-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
+        }
         let git_container_name = format!("tillandsias-git-{project_name}");
         let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
@@ -6737,15 +6749,27 @@ pub(crate) fn run_opencode_web_mode(
 
         cleanup_stack_containers(&client, project_name).await;
 
-        client
-            .run_container_observed(
-                "opencode-web-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode Web] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
+        // See the forge-launch-proxy site for the full rationale.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] OpenCode Web: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "opencode-web-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode Web] failed to start proxy: {e}"))?;
+        }
         emit_opencode_web_event(
             project_name,
             "proxy",
@@ -7131,15 +7155,34 @@ pub(crate) fn ensure_enclave_for_project(
         };
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
-        client
-            .run_container_observed(
-                "forge-launch-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up (mirrors ensure_router_running above and
+        // ensure_proxy_running): REUSE a running proxy, and clear any stale/exited
+        // one so `podman run --name tillandsias-proxy` does not fail "name already
+        // in use". Without this, a forge launch fails at the proxy stage whenever
+        // a tillandsias-proxy already exists (started by --init, or left by a prior
+        // / crashed session) — which blocks launching a Codex/Claude/OpenCode
+        // session even though the proxy is fine. (ensure_proxy_running itself
+        // runs its own tokio runtime, so it cannot be called from inside this
+        // block_on; inline the same guard.)
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] forge-launch: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "forge-launch-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
+        }
         let git_container_name = format!("tillandsias-git-{project_name}");
         let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
@@ -8508,6 +8551,32 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn forge_launch_proxy_bringup_is_idempotent() {
+        // A forge launch must REUSE a running enclave proxy (and clear a stale
+        // one), not blindly `podman run --name tillandsias-proxy` — which fails
+        // "name already in use" and blocks launching a Codex/Claude/OpenCode
+        // session whenever a proxy already exists (from --init or a prior/crashed
+        // session). Every raw proxy run_container_observed site must be guarded by
+        // a container_running("tillandsias-proxy") check. Found via the released
+        // 704.1 curl-install smoke.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        for site in ["forge-launch-proxy", "opencode-proxy", "opencode-web-proxy"] {
+            let idx = source
+                .find(&format!("\"{site}\""))
+                .unwrap_or_else(|| panic!("proxy launch site {site} must exist"));
+            // The 600 chars preceding the raw launch must contain the idempotency
+            // guard (the container_running check that reuses/skips a live proxy).
+            let start = idx.saturating_sub(600);
+            let preamble = &source[start..idx];
+            assert!(
+                preamble.contains("container_running(\"tillandsias-proxy\")"),
+                "proxy launch site {site} must be guarded by container_running (idempotent bring-up)"
+            );
+        }
+    }
 
     #[test]
     fn forge_agent_launch_gates_on_provider_login_first() {

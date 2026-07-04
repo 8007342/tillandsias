@@ -1618,3 +1618,34 @@ plan_index:
             NODE_USE_ENV_PROXY=1 added at both proxy-env chokepoints; verified live
             (ENOTFOUND -> HTTP 401); regression test + finding filed. Residuals: ws
             package proxy coverage + login-first gating filed as follow-ups.
+
+    - packet_id: forge-launch-proxy-not-idempotent
+      order: 176
+      title: "Forge: idempotent proxy bring-up at all forge-launch sites (fix 'name already in use')"
+      status: done
+      kind: bug
+      deliverable: plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, podman, forge]
+      estimated_hours: 2
+      outcome: >
+        Forge launch failed at the proxy stage with "container name tillandsias-proxy
+        already in use" whenever a proxy already existed (from --init or a prior
+        session), blocking Codex/Claude/OpenCode session launch. The three forge-launch
+        proxy sites (ensure_enclave_for_project, opencode, opencode-web) ran
+        `podman run --name tillandsias-proxy` raw, without the reuse/clear-stale guard
+        that ensure_proxy_running has. Fixed by inlining the container_running guard at
+        all three. Found by the released 704.1 curl-install smoke; live-verified the
+        forge now launches + Node reaches api.openai.com (NODE_USE_ENV_PROXY, HTTP 401).
+      exit_criteria:
+        - "all three forge-launch proxy sites guard on container_running(tillandsias-proxy)"
+        - "forge_launch_proxy_bringup_is_idempotent test green; ./build.sh --check passes"
+        - "live: forge launches with a proxy already running; node reaches remote"
+      events:
+        - type: completed
+          ts: "2026-07-04T03:35:00Z"
+          agent_id: "linux-yoga-fable5-20260704T0211Z"
+          summary: >
+            Inlined idempotent proxy guard at ensure_enclave_for_project + opencode +
+            opencode-web; regression test; live-verified end-to-end (forge up, node → 401).
