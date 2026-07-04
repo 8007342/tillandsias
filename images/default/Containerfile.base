@@ -20,7 +20,8 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
         just \
         gdb lldb strace ltrace valgrind heaptrack delve \
         shellcheck shfmt \
-        gcc gcc-c++ make cmake openssl-devel pkgconfig unzip \
+        gcc gcc-c++ make cmake pkgconfig unzip \
+        iproute iputils socat nmap-ncat sqlite \
     && git lfs install --system \
     && microdnf clean all
 
@@ -30,6 +31,10 @@ RUN npm install -g --prefix /usr/local \
         @fission-ai/openspec@1.4.1 \
         @anthropic-ai/claude-code@2.1.168 \
         @openai/codex@0.137.0
+
+# ── Antigravity CLI ─────────────────────────────────────────────
+RUN export ANTIGRAVITY_BIN="/usr/local/bin/agy" \
+    && curl -fsSL https://antigravity.google/cli/install.sh | bash
 
 # ── marksman Markdown LSP server ────────────────────────────────
 # Single self-contained .NET binary from GitHub releases.

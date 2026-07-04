@@ -133,7 +133,9 @@ fn main() {
     let codex = user_args.iter().any(|a| a == "--codex");
     let claude = user_args.iter().any(|a| a == "--claude");
     let bash = user_args.iter().any(|a| a == "--bash");
+    let antigravity = user_args.iter().any(|a| a == "--antigravity");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
+
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
@@ -252,6 +254,7 @@ fn main() {
         "--codex",
         "--claude",
         "--bash",
+        "--antigravity",
         "--opencode-web",
         "--observatorium",
         "--port",
@@ -486,12 +489,14 @@ fn main() {
         }
     }
 
-    if codex || claude || bash {
+    if codex || claude || bash || antigravity {
         maybe_spawn_detached_tray_for_cli(tray, debug);
         let (mode, flag) = if codex {
             (ForgeAgentMode::Codex, "--codex")
         } else if claude {
             (ForgeAgentMode::Claude, "--claude")
+        } else if antigravity {
+            (ForgeAgentMode::Antigravity, "--antigravity")
         } else {
             (ForgeAgentMode::Maintenance, "--bash")
         };
@@ -680,6 +685,7 @@ fn print_usage(version: &str) {
     println!("  --opencode     Enable LLM code analysis mode");
     println!("  --codex        Launch Codex inside the forge for a project");
     println!("  --claude       Launch Claude Code inside the forge for a project");
+    println!("  --antigravity  Launch Antigravity inside the forge for a project");
     println!("  --bash         Launch the forge welcome shell for a project");
     println!("  --opencode-web Launch OpenCode Web plus isolated browser");
     println!("  --observatorium Launch the project Observatorium viewer");
@@ -1804,6 +1810,12 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
+
+    if std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge") {
+        // The forge environment does not have openssl CLI and is not responsible
+        // for generating CAs. The CA is injected by the host.
+        return Ok(certs_dir);
+    }
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     std::fs::create_dir_all(&certs_dir)
@@ -6937,6 +6949,7 @@ pub(crate) enum ForgeAgentMode {
     Claude,
     Codex,
     OpenCode,
+    Antigravity,
     Maintenance,
 }
 
@@ -6946,6 +6959,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Claude => "/usr/local/bin/entrypoint-forge-claude.sh",
             ForgeAgentMode::Codex => "/usr/local/bin/entrypoint-forge-codex.sh",
             ForgeAgentMode::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
+            ForgeAgentMode::Antigravity => "/usr/local/bin/entrypoint-forge-antigravity.sh",
             ForgeAgentMode::Maintenance => "/usr/local/bin/entrypoint-terminal.sh",
         }
     }
@@ -6955,6 +6969,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Claude => "claude",
             ForgeAgentMode::Codex => "codex",
             ForgeAgentMode::OpenCode => "opencode",
+            ForgeAgentMode::Antigravity => "antigravity",
             ForgeAgentMode::Maintenance => "maintenance",
         }
     }
@@ -7290,7 +7305,9 @@ pub(crate) fn build_forge_agent_run_args(
     let provider_api = match mode {
         ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
         ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
-        ForgeAgentMode::OpenCode => Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity => {
+            Some(crate::vault_bootstrap::ProviderId::Gemini)
+        }
         ForgeAgentMode::Maintenance => None,
     };
     if let Some(p) = provider_api
@@ -7337,6 +7354,10 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             Some(crate::vault_bootstrap::ProviderId::Openai),
         ),
         ForgeAgentMode::OpenCode => (
+            Some(ProviderId::Antigravity),
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ),
+        ForgeAgentMode::Antigravity => (
             Some(ProviderId::Antigravity),
             Some(crate::vault_bootstrap::ProviderId::Gemini),
         ),
@@ -8962,7 +8983,17 @@ mod tests {
                 // We're guarding against the *host* $HOME leaking in as a bind source.
                 for arg in &argv {
                     if arg.contains(&home_str) && !arg.starts_with("HOME=") {
-                        panic!("argv contains host $HOME ({home_str}) outside of HOME env: {arg}");
+                        let is_target_only = if arg.contains(':') {
+                            let parts: Vec<&str> = arg.split(':').collect();
+                            !parts[0].contains(&home_str) && parts.len() > 1
+                        } else {
+                            false
+                        };
+                        if !is_target_only {
+                            panic!(
+                                "argv contains host $HOME ({home_str}) outside of HOME env: {arg}"
+                            );
+                        }
                     }
                 }
             }
