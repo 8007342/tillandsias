@@ -1,6 +1,31 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-04T03:40Z
+LastExecutionTime: 2026-07-04T04:18Z
+
+## This Loop (2026-07-04T04:02Z, forge — Codex /meta-orchestration validation)
+
+Codex ran inside the Tillandsias forge and validated the current in-forge
+runtime/config surface without using host credentials.
+
+- **Branch + credentials**: started on `main`, switched to `linux-next` for plan
+  writes. `scripts/check-credential-channel.sh` returned `ok:forge-git-mirror`;
+  `git push --dry-run origin linux-next` returned `Everything up-to-date`.
+- **Eligible gates**: `scripts/e2e-preflight.sh eligibility` returned
+  `skip:no-podman-binary`, so destructive local-build e2e was not eligible in
+  this forge.
+- **Build/test validation**: `cargo check --workspace` PASS. Full
+  `cargo test --workspace --no-fail-fast` FAIL only on
+  `-p tillandsias-headless --bin tillandsias`; targeted rerun produced 109 pass,
+  2 fail, 1 ignored. Failures: `launch_forge_agent_does_not_mount_user_home`
+  false-positives on the in-container target `/home/forge/src/...`, and
+  `source_built_init_and_status_check_smoke_uses_fake_podman` cannot find the
+  `openssl` CLI used by `ensure_ca_bundle`.
+- **Services/network**: Vault healthy at `https://vault:8200` (initialized,
+  unsealed, v1.18.5); inference healthy at `http://inference:11434/api/tags`
+  with `llama3.2:3b` + `qwen2.5:0.5b`; outbound HTTPS via proxy env reached
+  `https://api.github.com/rate_limit`.
+- **Findings filed**: `plan/issues/forge-validation-findings-2026-07-04.md`;
+  plan order 177 added as pending for Tlatoani approval.
 
 ## Release v0.3.260704.2 (2026-07-04T03:38Z — completes the Codex-connect chain)
 
