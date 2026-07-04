@@ -1558,3 +1558,32 @@ plan_index:
           summary: >
             Fixed the forge-mirror false-positive in check-credential-channel.sh +
             pinned with 2 litmus steps. All 7 credential-channel-check-shape steps green.
+
+    - packet_id: vault-secret-refresh-concurrent-race
+      order: 174
+      title: "Vault: atomic secret create --replace (fix concurrent-init 'secret name in use' race)"
+      status: done
+      kind: bug
+      deliverable: plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, vault, podman, concurrency]
+      estimated_hours: 1
+      outcome: >
+        The three vault secret helpers did a non-atomic `secret rm` then `secret
+        create`, which races when two bootstraps run concurrently (--init while a
+        forge launch also ensure_vault_running): the second create fails "secret
+        name in use" even though vault is healthy. Found by live rootless-enforcing
+        reproduction. Fixed to `podman secret create --replace` (atomic, idempotent)
+        in all three helpers; legit AppRole-lease cleanup rm calls unchanged.
+      exit_criteria:
+        - "all three secret-create helpers use --replace; racy rm-preamble removed"
+        - "vault_secret_create_uses_atomic_replace_not_racy_rm_create test green"
+        - "./build.sh --check passes"
+      events:
+        - type: completed
+          ts: "2026-07-04T02:30:00Z"
+          agent_id: "linux-yoga-fable5-20260704T0211Z"
+          summary: >
+            --replace applied to create_unseal_secret / create_token_podman_secret /
+            create_file_podman_secret; regression test added; --check + vault tests green.
