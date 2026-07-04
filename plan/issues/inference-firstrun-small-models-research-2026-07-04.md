@@ -54,3 +54,21 @@ Keep the default set SMALL (the operator said "a few"); the list is a config kno
   allowlist verified/filed (O3).
 - Impl packet (inference-firstrun-small-models-impl) shaped with the chosen set +
   an idempotency litmus (second launch pulls nothing).
+
+## RESOLVED 2026-07-04 (research done)
+
+- **O1 (model set):** the operator delegated the pick ("pick a few"). Finalized:
+  `qwen2.5:0.5b qwen2.5:1.5b llama3.2:1b qwen2.5-coder:1.5b` — all 0.3-1.5B, three
+  general-purpose + one code model for the build-test-diagnostics use case.
+- **O2 (pull policy):** first-run, idempotent (`ollama list` cached-guard),
+  overridable via `TILLANDSIAS_DEFAULT_MODELS`, non-fatal per model.
+- **O3 (egress):** `.ollama.ai` AND `.ollama.com` are already in
+  `images/proxy/allowlist.txt` — no delta needed.
+- **Persistence CONFIRMED (code):** `build_inference_run_args` bind-mounts
+  `~/.cache/tillandsias/models -> /home/ollama/.ollama/models:rw`, and inference gets
+  `proxy_env_args()` egress — so `ollama pull` reaches the (allowlisted) registry and
+  persists. (Unlike the forge, whose cache mount is MISSING — order 179.)
+
+Impl landed under order 183 (entrypoint replaces the 3B baseline with the 0.3-1.5B
+default set). Followed-up: the tier system auto-pulls qwen2.5:7b on a 16GB laptop
+(RAM>=16 -> T2), conflicting with tiny-model-first — flagged for a separate packet.

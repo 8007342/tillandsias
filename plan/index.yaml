@@ -1787,7 +1787,7 @@ plan_index:
     - packet_id: inference-firstrun-small-models-research
       order: 182
       title: "Research: default small models (0.3-1.5B) to pull on inference FIRST_RUN"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/inference-firstrun-small-models-research-2026-07-04.md
       depends_on: []
@@ -1809,7 +1809,7 @@ plan_index:
     - packet_id: inference-firstrun-small-models-impl
       order: 183
       title: "Impl: pull default small models on inference FIRST_RUN (idempotent, async, persistent)"
-      status: pending
+      status: done
       kind: enhancement
       deliverable: plan/issues/inference-firstrun-small-models-impl-2026-07-04.md
       depends_on: [inference-firstrun-small-models-research]

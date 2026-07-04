@@ -35,3 +35,21 @@ mounted), idempotently and off the critical path:
 - Second launch pulls nothing (idempotency litmus).
 - Serving is not blocked by the pulls (async).
 - `./build.sh --check` passes; a forge agent can invoke a default local model.
+
+## DONE 2026-07-04
+
+`images/inference/entrypoint.sh` now pulls the default 0.3-1.5B set on FIRST_RUN
+via a config-driven idempotent loop:
+`DEFAULT_MODELS="${TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b qwen2.5:1.5b llama3.2:1b qwen2.5-coder:1.5b}"`
+— replacing the old hardcoded baseline that pulled `llama3.2:3b` (3B, out of
+envelope). Idempotent (`ollama list` cached-guard → skip), non-fatal per model,
+into the persistent host-mounted models cache. Pinned by
+`litmus:inference-firstrun-default-models-shape` (4/4: config-overridable +
+idempotent-guard + default-set-in-0.3-1.5B-envelope + coder-model-present) and
+updated the stale `inference-container-implementation-shape` STEP 7 (which pinned
+the old T0/T1 label structure) to the loop-based non-fatal handler.
+
+Verify at runtime (next inference launch): fresh cache pulls the set; second launch
+pulls nothing; `ollama list` shows all four. NOTE: the pre-existing
+`inference-container-implementation-shape` STEP 8 (build_inference_run_args proxy
+env) remains red — pre-existing debt on the WIP-dirty main.rs, unrelated to this.
