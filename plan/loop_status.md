@@ -13,8 +13,10 @@ discipline).
   conflict in the provider-auth code (kept linux-next's rustfmt form; Node-proxy
   fix intact), VERSION=704.1, CI-infra→theirs. --check + 110 headless tests green.
 - PR #66 linux-next→main merged (f01c2ee8); VERSION already 704.1 (no bump needed);
-  tag v0.3.260704.1 pushed; release.yml run 28692716478 dispatched [result on
-  completion]. Ships: NODE_USE_ENV_PROXY (Codex/Claude connect), vault secret
+  tag v0.3.260704.1 pushed; release.yml run 28692716478 SUCCESS — all 3 jobs green
+  (Linux musl, macOS arm64, Windows). Published (not draft):
+  https://github.com/8007342/tillandsias/releases/tag/v0.3.260704.1
+  Ships: NODE_USE_ENV_PROXY (Codex/Claude connect), vault secret
   --replace race fix, + the 703.2 SELinux/DNS fixes. Supersedes the broken 703.2
   for the operator's Silverblue re-test.
 - After release: operator does the human-in-loop verification — curl-install
