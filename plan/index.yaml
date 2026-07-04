@@ -1308,13 +1308,20 @@ plan_index:
     - packet_id: forge-agent-permission-defaults
       order: 165
       title: "Forge UX: pre-grant container-local filesystem to agents; enforce at the boundary"
-      status: ready
+      status: in_progress
       kind: research+ux
       deliverable: plan/issues/forge-agent-permission-defaults-2026-07-02.md
       depends_on: []
       pickup_role: any
       capability_tags: [forge, agents, security, ux]
       estimated_hours: 4
+      events:
+        - type: claim
+          ts: "2026-07-03T22:48:30Z"
+          agent_id: "forge-big-pickle-meta-orch-20260703T2245Z"
+          host: forge
+          lease_id: "forge-agent-permission-defaults-20260703T224830Z"
+          expires_at: "2026-07-04T02:48:30Z"
       outcome: >
         First interactive forge session prompted the operator to allow /etc, /proc,
         /tmp reads and /home/forge writes — theater inside an ephemeral, enclave-
@@ -1330,7 +1337,7 @@ plan_index:
     - packet_id: forge-git-ergonomics
       order: 166
       title: "Forge: fix git safe.directory + auto url.insteadOf + env gaps (LANG/JAVA_HOME/GOROOT/FLUTTER_ROOT)"
-      status: ready
+      status: completed
       kind: bug-fix+config
       deliverable: images/default/
       depends_on: []
@@ -1346,6 +1353,21 @@ plan_index:
         rewrite unconditionally. Also close the baseline's env gaps: LANG unset,
         JAVA_HOME unset (JRE present), GOROOT unset, FLUTTER_ROOT points at absent
         SDK (install or drop). Baseline: plan/diagnostics/diagnostics_2026-07-02-summary.md.
+      events:
+        - type: completed
+          ts: "2026-07-03T22:21:06Z"
+          agent_id: "forge-big-pickle-2026-07-03T22:21:06Z"
+          commits: []
+          summary: >
+            Added safe.directory for /home/forge/src/* in lib-common.sh to avoid
+            git "dubious ownership" on host-mounted repos. Called
+            rewrite_origin_for_enclave_push() from the network transport path and
+            as a fallback in clone_project_from_mirror() to ensure url.insteadOf
+            install always runs for host-mount projects. Filled environment gaps:
+            LANG=en_US.UTF-8 (Containerfile + runtime fallback), JAVA_HOME derived
+            from java binary, GOROOT derived from go env, FLUTTER_ROOT unset at
+            runtime when SDK absent. files: images/default/Containerfile,
+            images/default/lib-common.sh, plan/index.yaml, plan/loop_status.md.
       exit_criteria:
         - "Fresh forge: git status/commit/push on the mounted tree with no dubious-ownership and no manual git config"
         - "url.insteadOf present on first shell (litmus)"
@@ -1407,7 +1429,7 @@ plan_index:
     - packet_id: wire-policy-checkers-into-ci
       order: 169
       title: "Enforce base64/python bans in CI (wire policy checkers into --ci-full)"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/base64-shim-reintroduction-removed-2026-07-02.md
       depends_on: []
@@ -1419,7 +1441,180 @@ plan_index:
         methodology checkers but run only on demand; neither fails the build. Wire both
         into ./build.sh --ci-full (or the pre-build litmus phase) so the CRITICAL bans
         (tlatoani_hard_no_python, base64_script_injection_ban) fail the gate automatically.
+      events:
+        - type: completed
+          ts: "2026-07-03T22:53:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260703T2253Z"
+          host: forge
+          summary: >
+            Added CHECK 8 (no-python-scripts + no-base64-script-injection) to the
+            pre-build phase in scripts/local-ci.sh. Both policy checkers run as part
+            of --ci-full (and --ci) and fail the build on violation. Also registered
+            both checks in the CHECK_IDS arrays, weight/spec_ref/failed_reason tables
+            for proper tracking.
       exit_criteria:
         - "both policy checkers run in --ci-full and fail the build on violation"
         - "a deliberately-injected base64 decode-to-executable makes --ci-full fail"
         - "green on the current tree"
+
+    - packet_id: forge-source-mount-credential-quarantine
+      order: 170
+      title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
+      status: ready
+      kind: security+bug-fix
+      deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, credentials, git, security, linux]
+      estimated_hours: 4
+      outcome: >
+        When the forge source mount is the same path as Tlatoani's own host checkout,
+        startup must detect host-local GitHub credential/config surfaces and mask
+        them with forge-owned dummy override dirs/files instead of mounting or reusing
+        them. The forge should clearly tell agents that host credentials are not used
+        inside the forge and that git must use the forge credential channel/mirror (or
+        a documented direct fallback), without copying, logging, inspecting, or
+        transforming host credential material.
+      exit_criteria:
+        - "Fresh forge with host checkout source mount cannot read host ~/.gitconfig, GitHub credential stores, .gh-credentials, or SSH agent sockets"
+        - "Dummy override dirs/files are mounted or created before agent startup when source-mount collision is detected"
+        - "In-forge diagnostics state that host credentials are not used inside the forge"
+        - "Git fetch/push still works through the forge credential channel or a documented non-mutating fallback"
+        - "Litmus covers shared-host-checkout source mount and proves no host credential/config material enters the forge"
+
+    - packet_id: codex-forge-yolo-config-defaults
+      order: 171
+      title: "Codex forge config: default to full-auto / no approval prompts inside forge"
+      status: done
+      kind: enhancement+bug-fix
+      deliverable: plan/issues/codex-forge-yolo-defaults-2026-07-04.md
+      depends_on: [forge-agent-permission-defaults]
+      pickup_role: linux
+      capability_tags: [forge, codex, config, ux, automation]
+      estimated_hours: 3
+      outcome: >
+        When TILLANDSIAS_HOST_KIND=forge, the Codex config overlay should select
+        a full-auto/YOLO profile by default: no approval prompts for normal
+        workspace filesystem, build/test, cache, or git operations inside the
+        already-contained forge. This must be scoped to forge sessions only and
+        must not import host credentials or weaken the source-mount credential
+        quarantine.
+      exit_criteria:
+        - "Fresh Codex forge session can run /meta-orchestration without approval prompts for cargo/git/filesystem operations"
+        - "Codex config overlay is selected by TILLANDSIAS_HOST_KIND=forge"
+        - "Non-forge Codex sessions retain their normal approval/sandbox defaults"
+        - "Forge diagnostics state that Codex is running full-auto inside the container boundary"
+
+    - packet_id: codex-forge-yolo-regression-litmus
+      order: 172
+      title: "Codex forge litmus: fail if approval prompts are enabled in forge profile"
+      status: done
+      kind: test+guardrail
+      deliverable: plan/issues/codex-forge-yolo-defaults-2026-07-04.md
+      depends_on: [codex-forge-yolo-config-defaults]
+      pickup_role: linux
+      capability_tags: [forge, codex, testing, litmus, automation]
+      estimated_hours: 2
+      outcome: >
+        Add an executable litmus that inspects or renders the Codex forge config
+        profile and fails if ordinary in-forge command execution would require
+        user approval. The litmus should be credential-safe: it must assert config
+        shape and environment selection without reading or printing secrets.
+      exit_criteria:
+        - "Litmus fails on a Codex forge config with approval prompts enabled"
+        - "Litmus passes on the intended full-auto forge profile"
+        - "Litmus proves the behavior is gated to TILLANDSIAS_HOST_KIND=forge"
+        - "Litmus is wired into the appropriate local CI or policy-check phase"
+
+    - packet_id: forge-credential-guard-mirror-reachability
+      order: 173
+      title: "Credential guard: verify forge mirror reachability (stop ok:forge-git-mirror false-positive)"
+      status: done
+      kind: bug+guardrail
+      deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, git, testing, litmus, automation]
+      estimated_hours: 2
+      outcome: >
+        scripts/check-credential-channel.sh returned ok:forge-git-mirror merely
+        because TILLANDSIAS_HOST_KIND=forge was set, without verifying the mirror
+        could reach the repo. That false-positive made a Codex forge cycle accrete
+        a commit it could never push (the exact velocity-killer the guard exists to
+        prevent). Now the forge branch probes the mirror (git ls-remote origin,
+        timeout 10, fixture seam TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1); an
+        unreachable mirror emits missing:no-credential-channel (rc 1) with a stderr
+        reason. Two new steps in litmus:credential-channel-check-shape pin it
+        (forge-unreachable-fails-closed + forge-seam-trusts-env). Distinct from the
+        credential QUARANTINE (order 170), which masks host creds in the forge.
+      exit_criteria:
+        - "forge + unreachable mirror -> missing:no-credential-channel, rc 1 (litmus green)"
+        - "forge + reachable mirror (or fixture seam) -> ok:forge-git-mirror, rc 0"
+        - "existing grammar + no-channel branch litmus steps still pass"
+      events:
+        - type: completed
+          ts: "2026-07-04T02:15:00Z"
+          agent_id: "linux-yoga-fable5-20260704T0211Z"
+          summary: >
+            Fixed the forge-mirror false-positive in check-credential-channel.sh +
+            pinned with 2 litmus steps. All 7 credential-channel-check-shape steps green.
+
+    - packet_id: vault-secret-refresh-concurrent-race
+      order: 174
+      title: "Vault: atomic secret create --replace (fix concurrent-init 'secret name in use' race)"
+      status: done
+      kind: bug
+      deliverable: plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, vault, podman, concurrency]
+      estimated_hours: 1
+      outcome: >
+        The three vault secret helpers did a non-atomic `secret rm` then `secret
+        create`, which races when two bootstraps run concurrently (--init while a
+        forge launch also ensure_vault_running): the second create fails "secret
+        name in use" even though vault is healthy. Found by live rootless-enforcing
+        reproduction. Fixed to `podman secret create --replace` (atomic, idempotent)
+        in all three helpers; legit AppRole-lease cleanup rm calls unchanged.
+      exit_criteria:
+        - "all three secret-create helpers use --replace; racy rm-preamble removed"
+        - "vault_secret_create_uses_atomic_replace_not_racy_rm_create test green"
+        - "./build.sh --check passes"
+      events:
+        - type: completed
+          ts: "2026-07-04T02:30:00Z"
+          agent_id: "linux-yoga-fable5-20260704T0211Z"
+          summary: >
+            --replace applied to create_unseal_secret / create_token_podman_secret /
+            create_file_podman_secret; regression test added; --check + vault tests green.
+
+    - packet_id: forge-node-agents-bypass-proxy
+      order: 175
+      title: "Forge: route Node agents (Codex/Claude) through the proxy (NODE_USE_ENV_PROXY)"
+      status: done
+      kind: bug
+      deliverable: plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, podman, proxy, forge, agents]
+      estimated_hours: 2
+      outcome: >
+        Codex/Claude (Node) could not reach remote APIs: Node's global fetch/undici
+        ignores HTTP_PROXY, so on the --internal proxy-only enclave they connected
+        directly and timed out (operator's "times out then dies"). Live-proved it is
+        NOT an allowlist gap: curl-through-proxy to api.openai.com returns 401, node
+        fetch returns ENOTFOUND, and NODE_USE_ENV_PROXY=1 flips node to 401. Fixed by
+        setting NODE_USE_ENV_PROXY=1 in both apply_proxy_env and proxy_env_args (covers
+        forge agents + login containers). Regression test pins both sites.
+      exit_criteria:
+        - "NODE_USE_ENV_PROXY=1 set in apply_proxy_env and proxy_env_args"
+        - "proxy_env_routes_node_through_the_proxy test green; ./build.sh --check passes"
+        - "live: node fetch in the forge reaches api.openai.com through the proxy (was ENOTFOUND)"
+      events:
+        - type: completed
+          ts: "2026-07-04T02:40:00Z"
+          agent_id: "linux-yoga-fable5-20260704T0211Z"
+          summary: >
+            NODE_USE_ENV_PROXY=1 added at both proxy-env chokepoints; verified live
+            (ENOTFOUND -> HTTP 401); regression test + finding filed. Residuals: ws
+            package proxy coverage + login-first gating filed as follow-ups.

@@ -859,6 +859,11 @@ fn proxy_env_args() -> Vec<String> {
         format!("no_proxy={no_proxy}"),
         "--env".into(),
         format!("NO_PROXY={no_proxy}"),
+        // Route Node fetch/undici through the proxy (Node ignores HTTP_PROXY by
+        // default). See apply_proxy_env for the full rationale + live evidence.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        "--env".into(),
+        "NODE_USE_ENV_PROXY=1".into(),
     ]
 }
 
@@ -872,6 +877,17 @@ fn apply_proxy_env(spec: ContainerSpec) -> ContainerSpec {
         .env("HTTPS_PROXY", "http://proxy:3128")
         .env("no_proxy", no_proxy.clone())
         .env("NO_PROXY", no_proxy)
+        // Node's global fetch/undici does NOT honor HTTP(S)_PROXY by default, so
+        // Node-based agents (Codex, Claude Code) tried to connect DIRECTLY to
+        // api.openai.com / chatgpt.com / websocket endpoints — which the
+        // --internal enclave (proxy-only egress, no external DNS) cannot resolve,
+        // producing the "times out then dies" remote-connect failure the operator
+        // hit while curl (which uses the env proxy) worked. NODE_USE_ENV_PROXY=1
+        // makes undici's EnvHttpProxyAgent route Node egress through the proxy.
+        // Verified live in the forge: without it, node fetch -> ENOTFOUND; with
+        // it -> HTTP 401 (reaches api.openai.com through the proxy).
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        .env("NODE_USE_ENV_PROXY", "1")
 }
 
 // @trace spec:init-incremental-builds
@@ -3142,6 +3158,21 @@ fn build_opencode_forge_args(
         args.extend([
             "--env".into(),
             format!("TILLANDSIAS_OPENCODE_PROMPT={prompt}"),
+        ]);
+    }
+
+    // Inject Gemini API key for OpenCode harness
+    if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(
+        crate::vault_bootstrap::ProviderId::Gemini,
+        debug,
+    ) && !key.is_empty()
+    {
+        args.extend([
+            "--env".into(),
+            format!(
+                "{}={key}",
+                crate::vault_bootstrap::ProviderId::Gemini.env_var()
+            ),
         ]);
     }
     if debug {
@@ -7219,12 +7250,11 @@ pub(crate) fn build_forge_agent_run_args(
         ForgeAgentMode::OpenCode => Some(crate::vault_bootstrap::ProviderId::Gemini),
         ForgeAgentMode::Maintenance => None,
     };
-    if let Some(p) = provider_api {
-        if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug) {
-            if !key.is_empty() {
-                spec = spec.env(p.env_var(), key);
-            }
-        }
+    if let Some(p) = provider_api
+        && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
+        && !key.is_empty()
+    {
+        spec = spec.env(p.env_var(), key);
     }
 
     spec.build_run_args()
@@ -7255,9 +7285,18 @@ pub(crate) fn build_forge_agent_run_argv(
 
 fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
     let (oauth_prov, api_prov) = match mode {
-        ForgeAgentMode::Claude => (Some(ProviderId::Claude), Some(crate::vault_bootstrap::ProviderId::Anthropic)),
-        ForgeAgentMode::Codex => (Some(ProviderId::Codex), Some(crate::vault_bootstrap::ProviderId::Openai)),
-        ForgeAgentMode::OpenCode => (Some(ProviderId::Antigravity), Some(crate::vault_bootstrap::ProviderId::Gemini)),
+        ForgeAgentMode::Claude => (
+            Some(ProviderId::Claude),
+            Some(crate::vault_bootstrap::ProviderId::Anthropic),
+        ),
+        ForgeAgentMode::Codex => (
+            Some(ProviderId::Codex),
+            Some(crate::vault_bootstrap::ProviderId::Openai),
+        ),
+        ForgeAgentMode::OpenCode => (
+            Some(ProviderId::Antigravity),
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ),
         ForgeAgentMode::Maintenance => (None, None),
     };
 
@@ -7269,15 +7308,19 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             return Ok(());
         }
 
-        let is_oauth_logged_in = crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
-            .map(|v| !v.is_empty())
-            .unwrap_or(false);
+        let is_oauth_logged_in =
+            crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
+                .map(|v| !v.is_empty())
+                .unwrap_or(false);
         if is_oauth_logged_in {
             return Ok(());
         }
 
         if debug {
-            eprintln!("[tillandsias] No auth token found for {}. Launching login flow...", op.name());
+            eprintln!(
+                "[tillandsias] No auth token found for {}. Launching login flow...",
+                op.name()
+            );
         }
         let token_script = get_generic_login_token_script(&op);
         let config = ProviderLoginConfig {
@@ -8465,6 +8508,71 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn forge_agent_launch_gates_on_provider_login_first() {
+        // Operator contract: launching a Codex/Claude/Antigravity session must run
+        // the provider login flow FIRST when no auth token is stored, then launch
+        // the authenticated forge; when a token is present, launch directly.
+        // ensure_provider_auth implements that gate (api-key present -> ok; oauth
+        // token present -> ok; else run_provider_login). This pins that the forge
+        // launch path CALLS the gate BEFORE building the run args, so it cannot
+        // drift back to launching an unauthenticated forge.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md (login-first residual)
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("fn run_forge_agent_cli_mode(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("run_forge_agent_cli_mode source");
+        let gate_at = window
+            .find("ensure_provider_auth(mode, debug)")
+            .expect("forge launch must gate on ensure_provider_auth (login-first)");
+        let build_at = window
+            .find("build_forge_agent_run_args(")
+            .expect("forge launch must build run args");
+        assert!(
+            gate_at < build_at,
+            "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args"
+        );
+        // The gate itself must implement token-presence-then-login, not blind login.
+        let gate = source
+            .split("fn ensure_provider_auth(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("ensure_provider_auth source");
+        assert!(
+            gate.contains("read_provider_api_key") && gate.contains("run_provider_login"),
+            "ensure_provider_auth must check a stored token before running the login flow"
+        );
+    }
+
+    #[test]
+    fn proxy_env_routes_node_through_the_proxy() {
+        // Node's global fetch/undici ignores HTTP_PROXY by default, so on the
+        // --internal enclave (proxy-only egress, no external DNS) Node agents
+        // (Codex, Claude Code) cannot reach api.openai.com/etc. — they time out
+        // and die while curl works. NODE_USE_ENV_PROXY=1 makes undici honor the
+        // env proxy. Both proxy-env injection paths MUST set it.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        let args = proxy_env_args();
+        assert!(
+            args.iter().any(|a| a == "NODE_USE_ENV_PROXY=1"),
+            "proxy_env_args must route Node through the proxy (NODE_USE_ENV_PROXY=1)"
+        );
+        // apply_proxy_env is the ContainerSpec twin — pin it by source so it can't
+        // drift out of sync with proxy_env_args.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("fn apply_proxy_env(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("apply_proxy_env source");
+        assert!(
+            window.contains("\"NODE_USE_ENV_PROXY\""),
+            "apply_proxy_env must also set NODE_USE_ENV_PROXY for forge agents"
+        );
+    }
 
     #[test]
     #[cfg(target_os = "linux")]

@@ -1,6 +1,142 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-03T03:45Z
+LastExecutionTime: 2026-07-04T02:50Z
+
+## This Loop (2026-07-04T02:11Z, linux_mutable — /meta-orchestration: integrate Codex requests + fix Codex-connect root cause)
+
+Operator ran Codex in a local forge; it committed findings locally but couldn't
+push (mirror creds). Integrated its requests AND root-caused the "Codex can't
+connect to remote" issue with LIVE evidence on a matching host (Fedora 44,
+rootless, SELinux Enforcing).
+
+- **Pushed Codex's plan commit** (a5884965) so its 3 findings are visible.
+- **Order 173 — credential-guard false-positive FIXED** (b8b1a0bd): Codex's forge
+  cycle accreted an unpushable commit because check-credential-channel.sh returned
+  ok:forge-git-mirror merely because HOST_KIND=forge was set, without verifying the
+  mirror is reachable. Now probes `git ls-remote origin` (timeout 10, fixture seam);
+  unreachable -> missing:no-credential-channel. +2 litmus steps (7/7 green).
+- **Orders 171/172 — Codex full-auto in forge + litmus** (df96012d): entrypoint
+  execs codex --dangerously-bypass-approvals-and-sandbox, gated on HOST_KIND=forge.
+  Verified flag against the real binary (codex-cli 0.137.0). litmus:codex-forge-yolo-shape
+  (5/5, bound). Removes approval-prompt stalls + lifts Codex's inner sandbox.
+- **Order 174 — vault secret race FIXED** (de579d40): the three secret helpers did
+  a non-atomic `secret rm`+`secret create` that races under concurrent bootstraps
+  (--init while a forge launch also ensure_vault_running) -> "secret name in use".
+  Now `secret create --replace` (atomic). Found by live repro. Regression test.
+- **Order 175 — Node-proxy bypass FIXED = THE Codex-connect root cause** (784a1903):
+  LIVE-PROVED it is NOT an allowlist gap. Inside the running forge: curl-through-proxy
+  to api.openai.com -> 401 (works); node global fetch -> ENOTFOUND (Node ignores
+  HTTP_PROXY); NODE_USE_ENV_PROXY=1 node -> 401. The --internal enclave is proxy-only,
+  Node connected direct -> timed out -> died (operator's exact symptom); OpenCode
+  worked because it targets local inference. Fix: NODE_USE_ENV_PROXY=1 in both
+  apply_proxy_env + proxy_env_args (forge agents + login containers). Regression test.
+- **Login-first gate**: already exists (ensure_provider_auth, landed c5cbf3a8, wired
+  before build_forge_agent_run_args). The operator's described flow (no token -> login
+  first -> authenticated forge; token present -> direct) is implemented. Pinned with
+  forge_agent_launch_gates_on_provider_login_first (2c8d0b37). Filed an observation:
+  OpenCode maps to Antigravity/Gemini login but uses local inference — verify.
+- **Codex order 170 (credential quarantine)**: remaining; well-shaped + ready.
+- **VERIFICATION PASSED (verify-before-release)**: ran `--init --debug` with the
+  newly-built fixed binary on THIS Fedora 44 rootless SELinux-Enforcing host (matches
+  the operator's Silverblue). Vault came up healthy end-to-end:
+  `vault_container_t not loadable -> label=disable`, `vault healthy
+  (initialized=true sealed=false v=1.18.5)`, `base_url: https://127.0.0.1:8201`
+  (loopback fix, not vault:8200), secret refresh clean (no "name in use" race),
+  `bootstrap complete`, all 5 policies+AppRoles provisioned, exit 0. Only noise =
+  expected non-fatal rootless warnings (/etc/hosts + semanage Permission denied).
+  This proves the vault chain (SELinux label + loopback URL + secret --replace) is
+  fixed on matching hardware — the definitive verification that was missing before
+  the 703.1/703.2 releases.
+- **Runtime hygiene**: during live debugging I `podman secret rm`'d tls-cert; restored
+  it. The user's enclave containers exited (137/139, healthy teardown) independently.
+
+## This Loop (2026-07-04T01:49Z, forge — shared checkout mirror alias validation)
+
+Operator noted this forge is using the same `/home/forge/src/tillandsias`
+checkout path as Tlatoani's original host checkout, so the container inherited
+the host checkout plus global git mirror mapping. Validated the forge without
+destructively changing credentials or mappings.
+
+- **Start state**: `TILLANDSIAS_HOST_KIND=forge`, branch `linux-next`, initial
+  worktree clean at `a67a97ad`.
+- **Credential guard**: `scripts/check-credential-channel.sh` returned
+  `ok:forge-git-mirror`.
+- **Transparent mirror path broken in this shared-checkout case**:
+  `git fetch origin --prune` failed with `remote error: access denied or
+  repository not exported: /tillandsias`; normal git URL rewriting also tried
+  `tillandsias-git:9418` and DNS failed from this container.
+- **Non-destructive direct git workaround verified**: without editing host
+  config, repo remotes, or credentials, `GIT_CONFIG_GLOBAL=/dev/null git
+  ls-remote https://github.com/8007342/tillandsias.git HEAD` succeeded against
+  GitHub. The same per-command override allowed `git fetch origin --prune` and
+  fast-forwarded `linux-next` to `ca4deb46` (`origin/main` now `e8e92a9f`).
+- **Filed observation**:
+  `plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md`.
+- **Detailed push report**:
+  `plan/issues/forge-push-failure-full-report-2026-07-04.md` records every
+  fetch/push attempt, the exact failure outputs, credential-channel checks, and
+  a host-agent resolution checklist.
+- **Refined fix packet**: added order 170
+  `forge-source-mount-credential-quarantine` for source-mount detection plus
+  dummy override dirs/files so host GitHub credentials/config are not mounted,
+  copied, logged, or reused inside the forge. The forge should instruct agents
+  that host credentials are not used inside the forge and git must use the forge
+  credential channel/mirror or documented fallback.
+- **Codex forge defaults packets**: added orders 171 and 172 so Codex's own
+  forge config defaults to full-auto/YOLO mode under
+  `TILLANDSIAS_HOST_KIND=forge`, with a regression litmus that fails if ordinary
+  in-forge git/build/filesystem operations prompt for approval again.
+- **Forge validation**: `scripts/e2e-preflight.sh eligibility` returned
+  `skip:no-podman-binary`, so destructive Podman e2e was not eligible in this
+  forge. `cargo check --workspace` PASS with normal host networking. `cargo
+  build -p tillandsias-headless --bin tillandsias` PASS, and the built binary
+  reports `Tillandsias v0.3.260704.1`.
+- **Residual**: normal transparent mirror routing is not trustworthy for this
+  shared-host-checkout topology; direct global git with
+  `GIT_CONFIG_GLOBAL=/dev/null` is the verified non-mutating path for fetch from
+  this session. Push is blocked: mirror push fails `repository not exported:
+  /tillandsias`; direct HTTPS push reaches GitHub but no non-interactive
+  credential channel is present; `gh auth status` is not logged in; repo-local
+  `.git/.gh-credentials` and token env vars are absent.
+
+## This Loop (2026-07-03T22:53Z, forge — /meta-orchestration: policy-checkers-into-ci order 169)
+
+- **Cycle type**: meta-orchestration → advance-work-from-plan (forge container).
+- **Startup**: `linux-next @ c38e91f8`, committed checkpoint (Gemini API key injection,
+  mirror issue update, mock-release gitignore). Credential channel:
+  `ok:gh-credentials-store`. Git mirror empty; worked around by removing `url.insteadOf`
+  global config and pushing directly to GitHub.
+- **Worker drain**: Implemented order 169 (wire-policy-checkers-into-ci): added CHECK 8
+  (no-python-scripts + no-base64-script-injection) to the pre-build phase in
+  `scripts/local-ci.sh`. Both policy checkers now run as part of `--ci-full` and `--ci`,
+  failing the build on violation. YAML-validated via `tillandsias-policy validate-yaml`.
+- **E2E gate**: `skip:no-podman-binary` (forge container — expected).
+- **Coordination**: Not applicable (forge container, not linux_mutable).
+- **Reduction engine**: Order 169 completed. No new unfiled findings this cycle.
+- **Next**: Await linux_mutable to rebuild forge image with Gemini env-injection + policy
+  checkers. Order 165 (forge-agent-permission-defaults) is still in_progress with a
+  valid lease; OpenCode config already has `"permission": "allow"`, but Claude/Codex
+  config overlays remain unimplemented.
+
+## This Loop (2026-07-03T22:21Z, forge — /meta-orchestration: forge-git-ergonomics order 166)
+
+- **Cycle type**: meta-orchestration → advance-work-from-plan (forge container).
+- **Startup**: `linux-next @ c5cbf3a8`, clean worktree. Credential channel:
+  `ok:gh-credentials-store`. Remote mirror empty (expected for fresh forge
+  container; re-populated on first push).
+- **Worker drain**: Claimed and implemented order 166 (forge-git-ergonomics):
+  Added `git config --global safe.directory /home/forge/src/*` at lib-common.sh
+  startup to avoid "dubious ownership" on host-mounted repos with different UID.
+  Added `rewrite_origin_for_enclave_push()` call to network transport path and as
+  a fallback in `clone_project_from_mirror()` to ensure `url.insteadOf` rewrite is
+  always installed for host-mount projects. Filled env gaps: `LANG` set to
+  `en_US.UTF-8` (Containerfile + runtime fallback), `JAVA_HOME` derived at runtime
+  from java binary path, `GOROOT` derived from `go env GOROOT`, `FLUTTER_ROOT`
+  unset at runtime when the SDK directory is absent.
+- **E2E gate**: `skip:no-podman-binary` (forge container — expected).
+- **Coordination**: Not applicable (forge container, not linux_mutable).
+- **Reduction engine**: 1 finding closed (order 166). No new findings this cycle.
+- **Next**: Await linux_mutable to rebuild the forge image and verify the fixes.
 
 ## This Loop (2026-07-03T03:20Z, linux_mutable — rootless Silverblue vault P0s → v0.3.260703.2)
 

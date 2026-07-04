@@ -7,10 +7,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-litmus-rust/src/lib.rs#L1](../../../crates/tillandsias-litmus-rust/src/lib.rs#L1)
 - [scripts/check-cheatsheet-refs.sh#L23](../../../scripts/check-cheatsheet-refs.sh#L23)
-- [scripts/github-actions-convergence.sh#L2](../../../scripts/github-actions-convergence.sh#L2)
 - [scripts/hooks/pre-commit-openspec.sh#L3](../../../scripts/hooks/pre-commit-openspec.sh#L3)
 - [scripts/install-hooks.sh#L3](../../../scripts/install-hooks.sh#L3)
 - [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
+- [scripts/release-preflight-local.sh#L3](../../../scripts/release-preflight-local.sh#L3)
 - [scripts/run-litmus-test.sh#L2](../../../scripts/run-litmus-test.sh#L2)
 - [scripts/run-litmus-test.sh#L139](../../../scripts/run-litmus-test.sh#L139)
 - [scripts/run-litmus-test.sh#L387](../../../scripts/run-litmus-test.sh#L387)

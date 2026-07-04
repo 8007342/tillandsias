@@ -1281,13 +1281,14 @@ fn read_machine_id() -> Result<String, String> {
 }
 
 fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
-    // Best-effort remove any prior secret.
+    // Atomic replace, NOT rm+create. A separate `secret rm` then `secret create`
+    // races when two vault bootstraps run concurrently (e.g. `--init` while a
+    // forge launch also calls ensure_vault_running): process B's rm can land
+    // between A's rm and A's create, then A's create fails "secret name in use"
+    // — a spurious bootstrap failure observed on Silverblue under concurrent
+    // forge activity. `--replace` is server-side atomic + idempotent.
     // @trace spec:ephemeral-secret-refresh
-    let _ = podman_cmd_sync()
-        .args(["secret", "rm", VAULT_UNSEAL_SECRET])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
     if debug {
         eprintln!(
             "[tillandsias-vault] creating podman secret {VAULT_UNSEAL_SECRET} (32 bytes from HKDF)"
@@ -1297,6 +1298,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
         .args([
             "secret",
             "create",
+            "--replace",
             "--driver=file",
             VAULT_UNSEAL_SECRET,
             "-",
@@ -1328,12 +1330,9 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
 /// Create (or replace) a podman secret holding the supplied token bytes.
 /// Mode `0400`, file driver. Used for per-container AppRole tokens.
 fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<(), String> {
+    // Atomic replace, not the racy rm+create (see create_unseal_secret).
     // @trace spec:ephemeral-secret-refresh
-    let _ = podman_cmd_sync()
-        .args(["secret", "rm", name])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
     if debug {
         eprintln!(
             "[tillandsias-vault] creating podman secret {name} ({} chars)",
@@ -1341,7 +1340,7 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
         );
     }
     let mut child = podman_cmd_sync()
-        .args(["secret", "create", "--driver=file", name, "-"])
+        .args(["secret", "create", "--replace", "--driver=file", name, "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -1373,11 +1372,8 @@ fn create_file_podman_secret(
 ) -> Result<(), String> {
     let contents =
         fs::read(path).map_err(|e| format!("read podman secret source {}: {e}", path.display()))?;
-    let _ = podman_cmd_sync()
-        .args(["secret", "rm", name])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    // Atomic replace, not the racy rm+create (see create_unseal_secret).
+    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
     if debug {
         eprintln!(
             "[tillandsias-vault] refreshing podman secret {name} from {}",
@@ -1385,7 +1381,7 @@ fn create_file_podman_secret(
         );
     }
     let mut child = podman_cmd_sync()
-        .args(["secret", "create", "--driver=file", name, "-"])
+        .args(["secret", "create", "--replace", "--driver=file", name, "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -2214,6 +2210,41 @@ mod tests {
             !window.contains("\"--ip\""),
             "Vault service discovery should not depend on a singleton enclave IP"
         );
+    }
+
+    #[test]
+    fn vault_secret_create_uses_atomic_replace_not_racy_rm_create() {
+        // Regression guard for the concurrent-init secret race: a `secret rm`
+        // then `secret create` is NOT atomic — a second concurrent vault
+        // bootstrap can create the secret between this process's rm and create,
+        // making create fail "secret name in use" (spurious --init failure under
+        // concurrent forge activity, seen on Silverblue). Each of the three
+        // secret-create helpers must use `podman secret create --replace` and
+        // must NOT carry a racy `["secret", "rm", …]` preamble in its own body.
+        // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        for func in [
+            "fn create_unseal_secret(",
+            "fn create_token_podman_secret(",
+            "fn create_file_podman_secret(",
+        ] {
+            let after = source.split(func).nth(1).unwrap_or_else(|| {
+                panic!("{func} must exist");
+            });
+            // Window = this function body up to the next top-level `fn `.
+            let window = after.split("\nfn ").next().unwrap_or(after);
+            assert!(
+                window.contains("\"--replace\""),
+                "{func} must create its podman secret with --replace (atomic idempotent)"
+            );
+            assert!(
+                !window.contains("[\"secret\", \"rm\""),
+                "{func} must NOT do a racy `secret rm` before `secret create` — use --replace"
+            );
+        }
     }
 
     #[test]

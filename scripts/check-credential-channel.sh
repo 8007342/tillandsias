@@ -60,8 +60,30 @@ credential_channel_verdict() {
     return 0
   fi
   if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
-    echo "ok:forge-git-mirror"
-    return 0
+    # The forge uses a transparent git mirror service for authenticated pushes.
+    # But HOST_KIND=forge being SET does not prove the mirror is REACHABLE for
+    # this checkout: a shared-host-checkout or misconfigured-DNS forge can have
+    # the env var set while every fetch/push through the mirror fails ("access
+    # denied or repository not exported", "unable to look up tillandsias-git").
+    # That false-positive made a Codex forge cycle accrete a commit it could
+    # never push — the exact velocity-killer this guard exists to prevent. See
+    # plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md. So VERIFY
+    # the mirror actually answers for `origin` before declaring the channel
+    # present. Unlike a direct anonymous GitHub read, an ls-remote THROUGH the
+    # mirror exercises the same rewrite path a push takes and proves the mirror
+    # sidecar is up for this repo; a failure is definitive evidence it is unusable.
+    if [ "${TILLANDSIAS_CRED_SKIP_MIRROR_PROBE:-0}" = "1" ]; then
+      # Fixture seam: trust the env var without a network probe (deterministic).
+      echo "ok:forge-git-mirror"
+      return 0
+    fi
+    if timeout 10 git ls-remote origin HEAD >/dev/null 2>&1; then
+      echo "ok:forge-git-mirror"
+      return 0
+    fi
+    echo "[check-credential-channel] TILLANDSIAS_HOST_KIND=forge but the git mirror is unreachable for this checkout (git ls-remote origin failed): no usable push channel. Fix the mirror export/DNS or provide a forge credential channel; do NOT import host credentials." >&2
+    echo "missing:no-credential-channel"
+    return 1
   fi
   echo "missing:no-credential-channel"
   return 1

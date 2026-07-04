@@ -143,11 +143,11 @@ failures gate the litmus before the critical path runs.
 - **Failure isolation**: Rollback actions prevent cascading failures
 - **Meaningful signals**: Success/failure criteria are unambiguous
 
-## Running via CI/CD
+## Running for Release
 
-See `.github/workflows/litmus-tests.yml` for hosted metadata validation. Runtime
-litmus execution is local or dedicated-runtime only because many tests require a
-real Podman session.
+Run `scripts/release-preflight-local.sh` before dispatching the hosted release.
+Runtime litmus execution is local or dedicated-runtime only because many tests
+require a real Podman session.
 
 ## Related Documentation
 
