@@ -77,3 +77,8 @@ images/router/tillandsias-router-sidecar
 mock-release/
 result
 vendor/debug/
+images/default/skills/
+images/default/cheatsheets/
+images/default/cheatsheet-sources/
+# Generated per-image build logs (build-image.sh writes build-<IMAGE>.log)
+build-*.log

@@ -84,6 +84,8 @@
 .anthropic.com
 .chatgpt.com
 .claude.com
+# Antigravity CLI product surface (not a subdomain of google.com; uses .google gTLD).
+.antigravity.google
 .together.ai
 .groq.com
 .fireworks.ai

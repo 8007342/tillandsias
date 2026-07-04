@@ -445,6 +445,7 @@ _podman_rootless_diagnostic() {
 # Image builds do NOT go through the proxy — SSL bump requires CA trust
 # that build containers don't have. Proxy is for runtime containers only.
 # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
+BUILD_ARGS+=(--http-proxy=false)
 
 BUILD_LOG="$ROOT/build-${IMAGE_NAME}.log"
 BUILD_PROGRESS_LOG="$ROOT/build-${IMAGE_NAME}-progress.jsonl"

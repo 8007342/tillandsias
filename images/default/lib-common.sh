@@ -1379,7 +1379,8 @@ inject_startup_context() {
 # Forge Startup Context
 
 **Project**: ${project_name}
-**Branch**: ${branch}
+**Startup branch**: ${branch}
+> Note: Branch is a startup snapshot; agents may switch branches during orchestration.
 **Version**: ${version}
 **Agent**: ${agent_name}
 **Generated**: $(date -u +%Y-%m-%dT%H:%MZ)
@@ -1395,7 +1396,7 @@ You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA
 
 ## Plan entry points
 
-- **Active work queue**: \`plan/issues/ACTIVE.md\`
+- **Active work queue**: \`plan/index.yaml\`
 - **Full plan index**: \`plan/index.yaml\`
 - **Loop status**: \`plan/loop_status.md\`
 

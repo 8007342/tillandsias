@@ -37,3 +37,33 @@ any tool is migrated to first-run.
 - A litmus asserts `build_forge_agent_run_args` mounts the persistent cache to the
   path lib-common points `$CARGO_HOME` / `$NPM_CONFIG_PREFIX` at.
 - No HOT/tmpfs regression; `./build.sh --check` + `--test` pass.
+
+## DONE 2026-07-04
+
+`build_forge_agent_run_args` now mounts a per-project podman NAMED volume
+`tillandsias-forge-cache-<project>` (via `forge_tool_cache_volume`) at
+`/home/forge/.cache/tillandsias-project` — the exact path lib-common points
+`$CARGO_HOME`/`$NPM_CONFIG_PREFIX` at. So FIRST_RUN tool/harness installs (orders
+180/181) now survive the forge's `--rm`.
+
+**Design decision (locked):** a NAMED volume, not a host bind-mount. Podman
+auto-creates it on run and does not remove it on `--rm` (persistence), and it
+carries ZERO host-`$HOME` reference — so it can never become a credential/config
+leak path (strictly safer than a `~/.cache` bind-mount, and it dodges the
+`launch_forge_agent_does_not_mount_user_home` guard by construction). Per-project
+so caches never cross project boundaries.
+
+Guard test refined: the blanket `joined.contains(".cache"/".config")` asserts (which
+wrongly flagged the container-side TARGET `/home/forge/.cache/...`) are now
+SOURCE-scoped — they still forbid a host `.cache`/`.config` mount source, but allow
+the legitimate container target + named volumes.
+
+Verified: `cargo build --features vault,tray` green, `./build.sh --check` green, full
+headless suite 244 passed / 0 failed (incl. new
+`forge_agent_mounts_persistent_tool_cache_named_volume` + the refined guard), and
+`litmus:forge-persistent-tool-cache-mount-shape` (4/4). Promoted 180 + 181 to ready.
+
+Follow-ups (noted, not blocking): (1) a shared cross-project tools cache (cargo tool
+binaries are project-independent — a shared volume would avoid re-installing per
+project); (2) named-volume pruning on `--cache-clear`; (3) the OpenCode launch path
+(build_opencode_forge_args) if it needs the same persistence.

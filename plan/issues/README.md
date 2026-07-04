@@ -2,9 +2,9 @@
 
 Use this directory for task-specific refinement notes, blockers, and ambiguity follow-ups.
 
-Start with `ACTIVE.md`. Most dated files in this directory are historical
+Start with `plan/index.yaml`. Most dated files in this directory are historical
 evidence or archived handoff notes; do not infer that a task is current from an
-old `status:` line without checking `ACTIVE.md` and `plan/index.yaml`.
+old `status:` line without checking `plan/index.yaml`.
 
 Guidelines:
 - Write an initial issue note as soon as a task is claimed so the live tree can show active work immediately.
