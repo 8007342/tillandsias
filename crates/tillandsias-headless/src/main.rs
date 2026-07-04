@@ -9093,6 +9093,10 @@ mod tests {
             "/usr/local/bin/entrypoint-forge-opencode.sh"
         );
         assert_eq!(
+            ForgeAgentMode::Antigravity.entrypoint(),
+            "/usr/local/bin/entrypoint-forge-antigravity.sh"
+        );
+        assert_eq!(
             ForgeAgentMode::Maintenance.entrypoint(),
             "/usr/local/bin/entrypoint-terminal.sh"
         );

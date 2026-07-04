@@ -1750,13 +1750,19 @@ plan_index:
       capability_tags: [forge, images, podman]
       estimated_hours: 12
       outcome: >
-        Delete the exploded curl/tar install_archive block (+ wasmtime/dart/marksman)
-        from Containerfile.base and ollama from images/inference/Containerfile;
-        replace with idempotent FIRST_RUN install-if-missing (cargo install / official
-        installers) into the persistent cache. Small slices, one tool-group per commit,
-        each behind an idempotency litmus (2nd launch is a no-op). Fail-soft.
+        CORRECTED (operator 2026-07-04): migrate "manual curl-install of PREBUILT at
+        CREATION" -> "manual curl-install of PREBUILT at FIRST_RUN, latest version".
+        KEEP the prebuilt binaries (NOT source compilation / NOT `cargo install`); the
+        problem is the finicky curl/tar/zip/chmod/mkdir/chown/rm chains + hardcoded
+        version/SHA constants baked into container CREATION. Delete those blocks from
+        Containerfile.base (install_archive + wasmtime/dart/marksman) + ollama from
+        images/inference/Containerfile; replace with ONE reusable idempotent
+        install_prebuilt helper at FIRST_RUN into the persistent cache, resolving LATEST
+        (de-hardcoded). Small slices, one tool-group per commit, each behind an
+        idempotency litmus (2nd launch is a no-op). Fail-soft.
       exit_criteria:
-        - "named curl/tar blocks removed; image builds faster + smaller"
+        - "curl/tar/chmod/mkdir chains + ARG _VERSION/_SHA256 constants removed; image builds faster + smaller"
+        - "tools stay PREBUILT (no source compile), fetched first-run, resolved to latest"
         - "each migrated tool installs on first launch into the persistent cache, present on PATH"
         - "second launch reuses (no reinstall); forge e2e first-attach-installs/second-attach-reuses"
         - "--check + --test pass"
@@ -1825,3 +1831,98 @@ plan_index:
         - "fresh inference container ends with the default set available (ollama list); persists across restart"
         - "second launch pulls nothing (idempotency litmus); serving not blocked by pulls"
         - "a forge agent can invoke a default local model; --check passes"
+
+    - packet_id: secure-channel-maturity-ladder
+      order: 184
+      title: "Master plan: e2e encrypted control channel — staged maturity ladder (M0-M4 gates, all platforms)"
+      status: active
+      kind: master-plan
+      deliverable: plan/issues/secure-channel-maturity-ladder-2026-07-04.md
+      depends_on: [encrypted-control-channel-impl, encrypted-channel-vsock-cutover]
+      pickup_role: linux
+      capability_tags: [security, secure-channel, cross-host, coordination]
+      estimated_hours: 6
+      outcome: >
+        Operator directive: implement the e2e encrypted socket channel in ALL places,
+        enable at runtime with a flag, then advance through STABLE VERIFIABLE MATURITY
+        GATES to secure-by-default and finally remove the insecure path. Primitive
+        exists (141: EncryptedStream + version-bound PSK); not wired/flagged/flipped.
+        Ladder: M0 primitive ready -> M1 wired everywhere behind TILLANDSIAS_SECURE_
+        CONTROL_WIRE (default OFF) -> M2 opt-in soak -> M3 secure-by-default (insecure
+        via escape hatch) -> M4 remove insecure (downgrade impossible). Key design: the
+        flag is a BOOT-TIME enclave-wide coordinated setting (not per-connection) so a
+        gradual ladder never opens a downgrade hole. Reframes 145 as the M1 rung;
+        spawns 185 (flag+metrics research) + 186 (windows transport).
+      exit_criteria:
+        - "every rung has objective gate metrics + a green litmus"
+        - "channel advances M0->M4 over multiple releases, one gate at a time, all platforms green, rollback-able until M4"
+        - "at M4 the insecure path is gone and downgrade is impossible by construction"
+
+    - packet_id: secure-channel-flag-and-maturity-metrics
+      order: 185
+      title: "Research: secure-channel flag propagation (boot-time, fail-closed) + maturity-gate metrics"
+      status: ready
+      kind: research
+      deliverable: plan/issues/secure-channel-flag-and-maturity-metrics-2026-07-04.md
+      depends_on: [secure-channel-maturity-ladder]
+      pickup_role: linux
+      capability_tags: [security, secure-channel, research, metrics]
+      estimated_hours: 4
+      outcome: >
+        Nail the runtime-flag mechanism (TILLANDSIAS_SECURE_CONTROL_WIRE read once at
+        bring-up, propagated enclave-wide, pre-flight agreement check so guest+all
+        initiators share one value per boot; fail-closed on disagreement; never
+        per-connection). Ratify the ladder's gate metrics (N/D releases/days for M2/M3)
+        + define how each is measured (soak counters, escape-hatch telemetry, per-hop
+        handshake-success logs). A gate that can't be measured can't be a gate.
+      exit_criteria:
+        - "flag propagation + pre-flight fail-closed agreement check specified"
+        - "N/D/M/E ratified with a measurement method each; telemetry gaps filed as sub-packets"
+        - "master ladder updated with ratified numbers + observability plan"
+
+    - packet_id: secure-channel-windows-transport-wiring
+      order: 186
+      title: "Impl (windows-owned): Windows transport stubs -> real, then wrap the secure handshake behind the flag (M1)"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/secure-channel-windows-transport-wiring-2026-07-04.md
+      depends_on: [secure-channel-maturity-ladder, encrypted-control-channel-impl]
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [security, secure-channel, windows, transport]
+      estimated_hours: 10
+      outcome: >
+        Operator: Windows transport is only stubs, blocking the ladder's gate M1 (needs
+        ALL platforms wired). Make the Windows hvsocket/WSL initiator real, then wrap
+        client_handshake(channel_psk(VERSION,WIRE_VERSION,HostGuest)) behind
+        TILLANDSIAS_SECURE_CONTROL_WIRE (default OFF), matching the linux/macOS
+        initiators. VM-smoke --github-login over the encrypted wire on a real WSL2 guest
+        = Windows' M1->M2 gate evidence. Windows-owned; do NOT flip the default here.
+      exit_criteria:
+        - "Windows hvsocket/WSL initiator is real (not a stub); flag OFF = no regression"
+        - "flag ON completes the Noise handshake + streams over the tunnel; plaintext/wrong-version rejected"
+        - "Windows VM-smoke evidence recorded (satisfies Windows half of gate M1->M2)"
+
+    - packet_id: antigravity-agent-finish-up
+      order: 187
+      title: "Impl: finish the Antigravity (agy) forge agent — forge flags, install assert, e2e"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/antigravity-agent-finish-up-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, agents, antigravity]
+      estimated_hours: 3
+      outcome: >
+        The Antigravity agent wired agy into the tray but ran out of tokens; WIP
+        recovered + compile-completed (35ba3d3f). DONE: --antigravity flag + mode +
+        entrypoint + tray leaf + --antigravity-login (token-paste -> vault) +
+        ensure_provider_auth gating + drift-pin test (this cycle). REMAINING: (1)
+        forge-specific agy flag mirroring codex's HOST_KIND=forge bypass (needs agy CLI
+        docs — do NOT guess); (2) assert agy is actually on PATH (no silent exec fail;
+        reconcile with 181 every-launch install); (3) human-in-the-loop e2e with real
+        Antigravity/Gemini creds.
+      exit_criteria:
+        - "agy launches non-interactively in the forge (confirmed forge flag, no approval hang)"
+        - "agy presence asserted (no silent exec failure)"
+        - "drift test pins Antigravity->entrypoint (done this cycle); one human e2e run recorded"

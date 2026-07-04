@@ -58,12 +58,14 @@ then asked to drain the queue.
 - done: 178 (research), 179 (cache mount), 182 (research), 183 (inference models).
 - ready, NEXT CYCLE (both large + runtime-critical on the launch path — deliberately
   NOT rushed at session end):
-  - **180 forge-firstrun-tool-migration (12h).** OPEN DESIGN QUESTION to resolve
-    first: first-run `cargo install` compiles from source (minutes x19 tools) — the
-    Containerfile used prebuilt cargo-quickinstall tarballs precisely to avoid that.
-    So the migration must pick a FAST first-run path (cargo-binstall prebuilt, or
-    fetch the same tarballs at first-run) — not naive `cargo install`. Resolve this
-    in a research sub-step before migrating tools.
+  - **180 forge-firstrun-tool-migration (12h). CORRECTED by operator:** the path is
+    "curl-install PREBUILT at CREATION" -> "curl-install PREBUILT at FIRST_RUN, latest
+    version" — KEEP prebuilt binaries (NOT source compile / NOT cargo install). The
+    problem is the finicky curl/tar/zip/chmod/mkdir/chown/rm chains + hardcoded
+    version/SHA constants in CREATION. First slice: a reusable install_prebuilt helper
+    (fetch latest prebuilt -> extract -> place on cache PATH, idempotent) + migrate the
+    cargo-tool group. (My earlier "must pick binstall vs compile" framing was wrong —
+    prebuilt-at-first-run was always the answer.)
   - **181 forge-harness-every-launch-latest (6h).** Now unblocked (NPM_CONFIG_PREFIX
     persists via 179). Slice-1 candidate: add an idempotent, offline-safe,
     proxy-routed every-launch npm upgrade in the forge entrypoint while keeping the
