@@ -1692,3 +1692,136 @@ plan_index:
             fail on HOME bind false-positive and missing openssl CLI. Push
             forwarding reached GitHub, but the forge mirror kept serving a stale
             linux-next ref afterward.
+
+    - packet_id: forge-image-creation-vs-firstrun-split-research
+      order: 178
+      title: "Research: split forge image into CREATION_TIME (dnf) / FIRST_RUN (persistent cache) / EVERY_LAUNCH (npm harnesses)"
+      status: ready
+      kind: research
+      deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, images, podman, research]
+      estimated_hours: 4
+      outcome: >
+        Operator directive: remove finicky curl/tar installers from Containerfile
+        CREATION and move them to idempotent FIRST_RUN flows on the persistent cache;
+        harnesses (codex/claude/opencode/antigravity) reinstalled EVERY_LAUNCH for
+        latest (fixes "newer version available" on a fresh forge). Full audit of
+        images/default/Containerfile.base + images/inference/Containerfile done +
+        classification table. THE blocking open question: does the persistent cache
+        actually mount on the live forge path (build_forge_agent_run_args mounts none;
+        --rm) — must be answered with `podman inspect` before any migration.
+      exit_criteria:
+        - "persistence question answered with podman inspect evidence (what survives --rm)"
+        - "per-tool decision recorded: CREATION_TIME / FIRST_RUN / EVERY_LAUNCH"
+        - "impl packets 179-181 shaped with idempotency litmus each"
+
+    - packet_id: forge-persistent-tool-cache-mount
+      order: 179
+      title: "Impl (prereq): guarantee a persistent writable tool cache mount on forge launch"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+      depends_on: [forge-image-creation-vs-firstrun-split-research]
+      pickup_role: linux
+      capability_tags: [forge, podman, cache]
+      estimated_hours: 4
+      outcome: >
+        First-run installs only make sense if they persist across --rm. Ensure a
+        persistent, writable cache backs $CARGO_HOME/$NPM_CONFIG_PREFIX
+        (/home/forge/.cache/tillandsias-project) — add the host bind-mount/named
+        volume in build_forge_agent_run_args if the research shows it's missing.
+        Consider a shared tools/ cache (project-independent binaries) + per-project
+        target/. COLD only, never HOT/tmpfs.
+      exit_criteria:
+        - "forge relaunch: tool/package cache persists (podman inspect evidence)"
+        - "litmus: build_forge_agent_run_args mounts the cache lib-common points CARGO_HOME/NPM_CONFIG_PREFIX at"
+        - "no tmpfs regression; --check + --test pass"
+
+    - packet_id: forge-firstrun-tool-migration
+      order: 180
+      title: "Impl: migrate curl/tar Containerfile installers to idempotent FIRST_RUN (cargo tools, wasmtime, dart, marksman, ollama)"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/forge-firstrun-tool-migration-2026-07-04.md
+      depends_on: [forge-persistent-tool-cache-mount]
+      pickup_role: linux
+      capability_tags: [forge, images, podman]
+      estimated_hours: 12
+      outcome: >
+        Delete the exploded curl/tar install_archive block (+ wasmtime/dart/marksman)
+        from Containerfile.base and ollama from images/inference/Containerfile;
+        replace with idempotent FIRST_RUN install-if-missing (cargo install / official
+        installers) into the persistent cache. Small slices, one tool-group per commit,
+        each behind an idempotency litmus (2nd launch is a no-op). Fail-soft.
+      exit_criteria:
+        - "named curl/tar blocks removed; image builds faster + smaller"
+        - "each migrated tool installs on first launch into the persistent cache, present on PATH"
+        - "second launch reuses (no reinstall); forge e2e first-attach-installs/second-attach-reuses"
+        - "--check + --test pass"
+
+    - packet_id: forge-harness-every-launch-latest
+      order: 181
+      title: "Impl: install agent harnesses (codex/claude/opencode/antigravity) fresh EVERY_LAUNCH (always latest)"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/forge-harness-every-launch-latest-2026-07-04.md
+      depends_on: [forge-persistent-tool-cache-mount]
+      pickup_role: linux
+      capability_tags: [forge, images, npm, agents]
+      estimated_hours: 6
+      outcome: >
+        Remove the harness npm-pins + the (duplicated) Antigravity curl block from
+        Containerfile.base; add an EVERY_LAUNCH entrypoint step that npm-installs the
+        latest codex/claude/opencode into the persistent $NPM_CONFIG_PREFIX (routes
+        through the proxy via NODE_USE_ENV_PROXY) + updates Antigravity. Offline/denied
+        launch falls back to the cached version (no hard fail). Fixes "newer version
+        available" on a fresh forge.
+      exit_criteria:
+        - "no harness version pinned in Containerfile; Antigravity dedup removed"
+        - "fresh forge runs latest harnesses; no 'newer version available' on fresh forge"
+        - "registry-denied launch still starts from cache; npm egress allowlisted (delta if needed)"
+        - "litmus: entrypoint has the every-launch harness update; --check passes"
+
+    - packet_id: inference-firstrun-small-models-research
+      order: 182
+      title: "Research: default small models (0.3-1.5B) to pull on inference FIRST_RUN"
+      status: ready
+      kind: research
+      deliverable: plan/issues/inference-firstrun-small-models-research-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, models, research]
+      estimated_hours: 3
+      outcome: >
+        Pick a few 0.3-1.5B general-purpose free open-source models to pull by default
+        on first inference run (foundation for fine-tuning + forge-diagnostics agents).
+        Recommendation: qwen2.5:0.5b, qwen2.5:1.5b, llama3.2:1b, qwen2.5-coder:1.5b (all
+        ollama-pullable; ~3-4GB Q4). Persistence already exists (models cache mounted
+        from ~/.cache/tillandsias/models/). Open: O1 exact set/count, O2 pull policy
+        (first-run/async/config-override), O3 ollama-registry egress allowlist.
+      exit_criteria:
+        - "persistence confirmed (podman inspect models cache mount)"
+        - "default set chosen with operator sign-off (O1); pull policy decided (O2); egress verified (O3)"
+        - "impl packet 183 shaped with the chosen set + idempotency litmus"
+
+    - packet_id: inference-firstrun-small-models-impl
+      order: 183
+      title: "Impl: pull default small models on inference FIRST_RUN (idempotent, async, persistent)"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/inference-firstrun-small-models-impl-2026-07-04.md
+      depends_on: [inference-firstrun-small-models-research]
+      pickup_role: linux
+      capability_tags: [inference, models, podman]
+      estimated_hours: 4
+      outcome: >
+        On first inference run, ollama-pull the operator-approved default small models
+        into the persistent models cache, idempotently (list|grep -> skip) and async
+        (serving not blocked). Config-overridable via TILLANDSIAS_DEFAULT_MODELS.
+        Fail-soft per model. Egress through the proxy.
+      exit_criteria:
+        - "fresh inference container ends with the default set available (ollama list); persists across restart"
+        - "second launch pulls nothing (idempotency litmus); serving not blocked by pulls"
+        - "a forge agent can invoke a default local model; --check passes"
