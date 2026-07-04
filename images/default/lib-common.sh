@@ -81,6 +81,38 @@ mkdir -p "$HOME/.config/fish"
 CACHE="$HOME/.cache/tillandsias"
 export PATH="$CACHE/openspec/bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
+# ── Standard environment variable setup ─────────────────────
+# @trace spec:forge-git-ergonomics
+# Set locale if not already set, to avoid locale-sensitive tool warnings.
+export LANG="${LANG:-en_US.UTF-8}"
+
+# Derive JAVA_HOME from the java binary path if available.
+if [ -z "${JAVA_HOME:-}" ] && command -v java &>/dev/null; then
+    _java_home="$(readlink -f "$(command -v java)" 2>/dev/null || true)"
+    _java_home="${_java_home%/bin/java}"
+    if [ -n "$_java_home" ] && [ -d "$_java_home" ]; then
+        export JAVA_HOME="$_java_home"
+    fi
+    unset _java_home
+fi
+
+# Derive GOROOT from go if available.
+if [ -z "${GOROOT:-}" ] && command -v go &>/dev/null; then
+    _go_root="$(go env GOROOT 2>/dev/null || true)"
+    if [ -n "$_go_root" ]; then
+        export GOROOT="$_go_root"
+    fi
+    unset _go_root
+fi
+
+# Unset FLUTTER_ROOT if the Flutter SDK directory does not exist.
+if [ -n "${FLUTTER_ROOT:-}" ] && [ ! -d "$FLUTTER_ROOT" ]; then
+    unset FLUTTER_ROOT
+fi
+
+# Avoid git "dubious ownership" on host-mounted repos with different UID.
+git config --global --add safe.directory /home/forge/src/\* 2>/dev/null || true
+
 # ── External-logs consumer path ─────────────────────────────
 # @trace spec:external-logs-layer
 # Canonical path where external logs from enclave service containers are
@@ -442,6 +474,7 @@ clone_project_from_mirror() {
                 git remote set-url --push origin "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
                     echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
                 configure_git_identity
+                rewrite_origin_for_enclave_push
                 echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
                 return 0
             fi
@@ -456,6 +489,10 @@ clone_project_from_mirror() {
         echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
         exit 1
     fi
+
+    # Fallback rewrite attempt for any remaining transport or edge case
+    # where TILLANDSIAS_PROJECT_HOST_MOUNT may not have been propagated.
+    rewrite_origin_for_enclave_push
     return 0
 }
 

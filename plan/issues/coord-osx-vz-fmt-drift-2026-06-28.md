@@ -50,7 +50,7 @@ A re-attempted coordinator merge now hits real conflicts beyond the fmt drift:
   order-120 `ensure_proxy_running` cleanup block; resolves "keep linux"),
 - `plan/index.yaml` — **8 conflict regions** (both branches added packets; osx
   carries *older copies* of linux-authored issues with stale statuses),
-- add/add on `init-dns-systemd-resolved`, `zeroclaw-image-orphan-cleanup`,
+- add/add on `init-dns-systemd-resolved`, `legacy-claw-image-orphan-cleanup`,
   `container-dependency-graph-research` (osx has older copies; linux is authoritative).
 
 Force-resolving an 8-region ledger merge risks corrupting `plan/index.yaml` and

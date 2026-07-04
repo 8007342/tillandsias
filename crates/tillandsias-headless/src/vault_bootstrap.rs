@@ -180,13 +180,26 @@ fn vault_api_base_url() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| {
-            // On Linux (the in-VM headless binary), use the direct enclave
-            // bridge URL. aardvark-dns resolves `vault` via systemd-resolved
-            // and the cert has DNS:vault as a SAN — TLS verifies cleanly.
-            // On macOS/Windows hosts, fall back to the port-forwarded loopback URL.
+            // The Linux binary runs in TWO contexts:
+            //  - In-VM headless (inside the guest, ON the enclave bridge): the
+            //    alias `vault` resolves via aardvark-dns and the cert carries
+            //    DNS:vault, so use the enclave URL (also dodges a WSL2/netavark
+            //    loopback TLS-hang).
+            //  - Native Linux HOST (e.g. rootless Fedora Silverblue `--init`):
+            //    vault bootstrap runs on the host, where `vault` does NOT resolve
+            //    — the podman network's DNS lives in the container netns, and the
+            //    /etc/hosts fallback needs root (skipped rootless). It must use
+            //    the PUBLISHED loopback port. The cert SANs include IP:127.0.0.1,
+            //    so TLS verifies. This is the P0 that made the host probe fail
+            //    with `https://vault:8200 -> dns error: Name does not resolve`.
+            // @trace plan/issues/vault-host-dns-vault-name-unresolvable-2026-07-03.md
             #[cfg(target_os = "linux")]
             {
-                vault_service_base_url()
+                if is_running_in_vm() {
+                    vault_service_base_url()
+                } else {
+                    format!("https://127.0.0.1:{VAULT_HOST_PORT}")
+                }
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -384,6 +397,9 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     ensure_vault_tls_leaf(&certs_dir, debug)?;
 
     if container_running(VAULT_CONTAINER_NAME) {
+        // Refresh /etc/hosts before any API probe — each podman restart can
+        // give the container a new IP from the enclave bridge IPAM.
+        update_etc_hosts_vault(debug);
         // Already up. Probe health to make sure it's serving.
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
@@ -484,7 +500,7 @@ fn wait_for_vault_api_ready(
                 "[tillandsias-vault] {last_failure}; retrying API probe ({attempt}/{MAX_API_PROBE_ATTEMPTS})"
             );
         }
-        rt.block_on(tokio::time::sleep(delay));
+        std::thread::sleep(delay);
         delay = std::cmp::min(delay.saturating_mul(2), max_delay);
     }
 
@@ -1069,7 +1085,26 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
             key.copy_from_slice(&key_vec);
             return Ok(key);
         }
-        // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
+        // Host didn't deliver a Shamir share. Try the local fallback file before
+        // deriving the dummy key — the fallback was written during the initial
+        // vault-init run and lets the headless self-recover when the Windows tray
+        // hasn't received the GetVaultHandover handover yet.
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        if fallback_file.is_file()
+            && let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
+            && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
+            && key_vec.len() == 32
+        {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered Shamir share from VM fallback file");
+            }
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&key_vec);
+            return Ok(key);
+        }
+        // No fallback share found — derive a first-boot dummy key. The vault
+        // container will generate the real share during init.
         if debug {
             eprintln!(
                 "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
@@ -1246,13 +1281,14 @@ fn read_machine_id() -> Result<String, String> {
 }
 
 fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
-    // Best-effort remove any prior secret.
+    // Atomic replace, NOT rm+create. A separate `secret rm` then `secret create`
+    // races when two vault bootstraps run concurrently (e.g. `--init` while a
+    // forge launch also calls ensure_vault_running): process B's rm can land
+    // between A's rm and A's create, then A's create fails "secret name in use"
+    // — a spurious bootstrap failure observed on Silverblue under concurrent
+    // forge activity. `--replace` is server-side atomic + idempotent.
     // @trace spec:ephemeral-secret-refresh
-    let _ = podman_cmd_sync()
-        .args(["secret", "rm", VAULT_UNSEAL_SECRET])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
     if debug {
         eprintln!(
             "[tillandsias-vault] creating podman secret {VAULT_UNSEAL_SECRET} (32 bytes from HKDF)"
@@ -1262,6 +1298,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
         .args([
             "secret",
             "create",
+            "--replace",
             "--driver=file",
             VAULT_UNSEAL_SECRET,
             "-",
@@ -1293,12 +1330,9 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
 /// Create (or replace) a podman secret holding the supplied token bytes.
 /// Mode `0400`, file driver. Used for per-container AppRole tokens.
 fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<(), String> {
+    // Atomic replace, not the racy rm+create (see create_unseal_secret).
     // @trace spec:ephemeral-secret-refresh
-    let _ = podman_cmd_sync()
-        .args(["secret", "rm", name])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
     if debug {
         eprintln!(
             "[tillandsias-vault] creating podman secret {name} ({} chars)",
@@ -1306,7 +1340,7 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
         );
     }
     let mut child = podman_cmd_sync()
-        .args(["secret", "create", "--driver=file", name, "-"])
+        .args(["secret", "create", "--replace", "--driver=file", name, "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -1338,11 +1372,8 @@ fn create_file_podman_secret(
 ) -> Result<(), String> {
     let contents =
         fs::read(path).map_err(|e| format!("read podman secret source {}: {e}", path.display()))?;
-    let _ = podman_cmd_sync()
-        .args(["secret", "rm", name])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    // Atomic replace, not the racy rm+create (see create_unseal_secret).
+    // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
     if debug {
         eprintln!(
             "[tillandsias-vault] refreshing podman secret {name} from {}",
@@ -1350,7 +1381,7 @@ fn create_file_podman_secret(
         );
     }
     let mut child = podman_cmd_sync()
-        .args(["secret", "create", "--driver=file", name, "-"])
+        .args(["secret", "create", "--replace", "--driver=file", name, "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -1410,87 +1441,104 @@ const VAULT_SELINUX_MODULE: &str = "vault_container";
 #[cfg(feature = "vault")]
 const VAULT_SELINUX_CIL: &str = include_str!("../../../images/selinux/vault_container.cil");
 
-/// Phase 3d: idempotently load the `vault_container_t` policy module before the
-/// vault container is launched with `--security-opt label=type:vault_container_t`.
+/// Decide the `--security-opt label=...` VALUE for the vault container, or `None`
+/// to use podman's default (`container_t`).
 ///
-/// Failure-open by design: this only removes an EINVAL on enforcing guests. If
-/// SELinux is Disabled the label is silently ignored by podman anyway, and if
-/// the load fails we let the launch proceed and surface the real podman error
-/// rather than masking it. Best-effort, never returns Err.
+/// The custom confined type `vault_container_t` is ONLY a valid label when it is
+/// actually loaded in the running SELinux policy. Loading it requires root
+/// (`semodule -i`) — which headless has INSIDE the guest VM but NOT on a rootless
+/// native-Linux host (Fedora Silverblue). If the type is neither loaded nor
+/// loadable, we MUST NOT pass it: crun rejects an undefined type with EINVAL on
+/// `/proc/self/attr/keycreate` and the container exits 126 — the P0 that broke
+/// `tillandsias --init` on Silverblue for release v0.3.260702.2. In that case we
+/// fall back to podman's default `container_t`, which is enforcing-safe and is
+/// exactly how every other tillandsias container already runs on that host.
 /// @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+/// @trace plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md
 #[cfg(feature = "vault")]
-fn ensure_vault_selinux_module(debug: bool) {
-    // Only act when SELinux is Enforcing or Permissive. On Disabled systems
-    // `getenforce` prints "Disabled" (or is absent), and the label is a no-op.
-    let mode = Command::new("getenforce").output();
-    let active = match mode {
+fn vault_selinux_label_opt(debug: bool) -> Option<String> {
+    // SELinux off/absent -> no MAC label needed; podman default is fine. On a
+    // Disabled system `getenforce` prints "Disabled" or is missing.
+    let enforcing_or_permissive = match Command::new("getenforce").output() {
         Ok(out) => {
             let s = String::from_utf8_lossy(&out.stdout);
             let s = s.trim();
             s.eq_ignore_ascii_case("Enforcing") || s.eq_ignore_ascii_case("Permissive")
         }
-        Err(_) => false, // no getenforce -> SELinux tooling absent -> nothing to do
+        Err(_) => false,
     };
-    if !active {
-        return;
+    if !enforcing_or_permissive {
+        return None;
     }
 
-    // Idempotent: skip if already loaded (semodule -l is a stable, newline-
-    // separated list of module names).
-    if let Ok(out) = Command::new("semodule").arg("-l").output()
-        && out.status.success()
-        && String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .any(|l| l.trim() == VAULT_SELINUX_MODULE)
-    {
-        if debug {
-            eprintln!("[tillandsias-vault] SELinux module {VAULT_SELINUX_MODULE} already loaded");
-        }
-        return;
+    // Use the custom confined type only if we can CONFIRM it is loaded (or load
+    // it — root only, i.e. inside the guest VM).
+    if vault_container_type_loaded() {
+        return Some("label=type:vault_container_t".to_string());
     }
+    if try_load_vault_selinux_module(debug) && vault_container_type_loaded() {
+        return Some("label=type:vault_container_t".to_string());
+    }
+    // Rootless native host (e.g. Fedora Silverblue): the custom type is not
+    // loadable. Fall back to `label=disable`, NOT the default `container_t`.
+    // Reason: the persistent vault data volume was created under an earlier
+    // `label=disable` regime, so its files carry an unconfined SELinux label;
+    // under `container_t` the vault process is DENIED access to /vault/data and
+    // exits immediately on boot — the container vanishes before `podman wait
+    // --condition=healthy` (seen on Silverblue as "no such container", status
+    // 125). `label=disable` runs the vault container unconfined on the host —
+    // the pre-Phase-3c behavior that worked on Silverblue. The confined
+    // vault_container_t path still applies inside the guest VM (root).
+    // @trace plan/issues/vault-rootless-container-exits-immediately-2026-07-03.md
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] vault_container_t not loadable (rootless host?); \
+             using label=disable for the vault container (unconfined on host)"
+        );
+    }
+    Some("label=disable".to_string())
+}
 
-    // semodule -i requires the CIL to live in a file ending in `.cil`. Use a
-    // tmpfs path so it leaves nothing behind; the semodule -l guard above makes
-    // re-running across boots cheap.
-    let cil_path = std::path::Path::new("/run").join(format!("{VAULT_SELINUX_MODULE}.cil"));
-    if let Err(e) = fs::write(&cil_path, VAULT_SELINUX_CIL) {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] could not stage {} for semodule: {e} (continuing)",
-                cil_path.display()
-            );
-        }
-        return;
+/// True iff `semodule -l` confirms the `vault_container` module is loaded.
+/// Conservative: any failure (semodule absent, not readable on a rootless host)
+/// returns false so the caller falls back to the default label.
+#[cfg(feature = "vault")]
+fn vault_container_type_loaded() -> bool {
+    matches!(
+        Command::new("semodule").arg("-l").output(),
+        Ok(out) if out.status.success()
+            && String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .any(|l| l.trim() == VAULT_SELINUX_MODULE)
+    )
+}
+
+/// Best-effort load of the minimal `vault_container_t` CIL (root only). Returns
+/// whether `semodule -i` succeeded. Stages the CIL to a WRITABLE temp dir — NOT
+/// `/run`, which is not user-writable on a rootless host (the `os error 13`
+/// staging failure seen on Silverblue).
+#[cfg(feature = "vault")]
+fn try_load_vault_selinux_module(debug: bool) -> bool {
+    let cil_path = std::env::temp_dir().join(format!("{VAULT_SELINUX_MODULE}.cil"));
+    if fs::write(&cil_path, VAULT_SELINUX_CIL).is_err() {
+        return false;
     }
-    match Command::new("semodule").arg("-i").arg(&cil_path).status() {
-        Ok(s) if s.success() => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] loaded SELinux module {VAULT_SELINUX_MODULE} (permissive)"
-                );
-            }
-        }
-        Ok(s) => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] semodule -i {VAULT_SELINUX_MODULE} exited {s} (continuing; podman will surface any label error)"
-                );
-            }
-        }
-        Err(e) => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] semodule -i {VAULT_SELINUX_MODULE} failed to spawn: {e} (continuing)"
-                );
-            }
-        }
-    }
+    let loaded = matches!(
+        Command::new("semodule").arg("-i").arg(&cil_path).status(),
+        Ok(s) if s.success()
+    );
     let _ = fs::remove_file(&cil_path);
+    if debug && loaded {
+        eprintln!("[tillandsias-vault] loaded SELinux module {VAULT_SELINUX_MODULE} (permissive)");
+    }
+    loaded
 }
 
 /// Stub for builds without the `vault` feature so the call site compiles.
 #[cfg(not(feature = "vault"))]
-fn ensure_vault_selinux_module(_debug: bool) {}
+fn vault_selinux_label_opt(_debug: bool) -> Option<String> {
+    None
+}
 
 fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let image_tag = canonical_vault_launch_tag(image_tag)?;
@@ -1542,15 +1590,13 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // during `run_init`, but ensure here so the bootstrap is self-sufficient).
     crate::ensure_enclave_network(debug)?;
 
-    // Phase 3d: on an SELinux-enforcing guest, `--security-opt
-    // label=type:vault_container_t` (below) is only a valid label once the
-    // `vault_container_t` type exists in the loaded policy. Ensure the minimal
-    // module is loaded first so crun does not reject the launch with EINVAL on
-    // /proc/self/attr/keycreate (the blocker that broke `--github-login` and
-    // `--list-cloud-projects` on the enforcing Fedora 44 VZ guest). No-op on
-    // Disabled systems and idempotent when the module is already loaded.
-    // @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
-    ensure_vault_selinux_module(debug);
+    // Phase 3d: `--security-opt label=type:vault_container_t` is only a VALID
+    // label when that type is loaded in the policy (guest VM, root). On a
+    // rootless native host it cannot be loaded, so we fall back to the default
+    // container_t rather than crash crun with an undefined type (EINVAL, exit
+    // 126). See vault_selinux_label_opt.
+    // @trace plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md
+    let selinux_label = vault_selinux_label_opt(debug);
 
     if debug {
         eprintln!(
@@ -1573,47 +1619,59 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // @trace spec:tillandsias-vault
     let volume_arg = format!("{}:/vault/data:U", VAULT_VOLUME);
     let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
+    let mut run_args: Vec<String> = vec![
+        "run".into(),
+        "-d".into(),
+        "--name".into(),
+        VAULT_CONTAINER_NAME.into(),
+        "--hostname".into(),
+        VAULT_NETWORK_ALIAS.into(),
+        // Bridge network for the alias + enclave reachability (see
+        // launch_vault_container preamble). Must precede --network-alias.
+        "--network".into(),
+        crate::ENCLAVE_NET.into(),
+        "--network-alias".into(),
+        VAULT_NETWORK_ALIAS.into(),
+        "--secret".into(),
+        secret_arg,
+        "--secret".into(),
+        tls_cert_arg,
+        "--secret".into(),
+        tls_key_arg,
+        "--secret".into(),
+        tls_ca_arg,
+        "--volume".into(),
+        volume_arg,
+        "--tmpfs".into(),
+        "/run/vault-handover:size=1m,mode=0777".into(),
+        // NOTE: intentionally NO `--rm`. If vault crashes on boot (e.g. an
+        // SELinux denial on /vault/data), `--rm` would delete the container
+        // before we can read its logs — the "no such container" blindness seen
+        // on Silverblue. The exited container is cleaned up by the `podman rm -f`
+        // at the top of the next launch, so persisting it is safe and lets
+        // wait_for_vault_ready dump `podman logs` on failure.
+        "--cap-drop".into(),
+        "ALL".into(),
+        "--cap-add".into(),
+        "IPC_LOCK".into(),
+        "--security-opt".into(),
+        "no-new-privileges".into(),
+    ];
+    // Custom SELinux label only when the type is actually loaded; otherwise
+    // podman applies the default container_t (enforcing-safe).
+    if let Some(label) = &selinux_label {
+        run_args.push("--security-opt".into());
+        run_args.push(label.clone());
+    }
+    run_args.extend([
+        "--userns".into(),
+        "keep-id".into(),
+        "-p".into(),
+        port_arg,
+        image_tag.to_string(),
+    ]);
     let status = podman_cmd_sync()
-        .args([
-            "run",
-            "-d",
-            "--name",
-            VAULT_CONTAINER_NAME,
-            "--hostname",
-            VAULT_NETWORK_ALIAS,
-            // Bridge network for the alias + enclave reachability (see
-            // launch_vault_container preamble). Must precede --network-alias.
-            "--network",
-            crate::ENCLAVE_NET,
-            "--network-alias",
-            VAULT_NETWORK_ALIAS,
-            "--secret",
-            &secret_arg,
-            "--secret",
-            &tls_cert_arg,
-            "--secret",
-            &tls_key_arg,
-            "--secret",
-            &tls_ca_arg,
-            "--volume",
-            &volume_arg,
-            "--tmpfs",
-            "/run/vault-handover:size=1m,mode=0777",
-            "--rm",
-            "--cap-drop",
-            "ALL",
-            "--cap-add",
-            "IPC_LOCK",
-            "--security-opt",
-            "no-new-privileges",
-            "--security-opt",
-            "label=type:vault_container_t",
-            "--userns",
-            "keep-id",
-            "-p",
-            &port_arg,
-            image_tag,
-        ])
+        .args(&run_args)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
         .status()
@@ -1624,6 +1682,48 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// On a failed health wait, surface WHY the vault container is unhealthy/gone.
+/// Since the launch no longer passes `--rm`, a crashed container persists and
+/// `podman logs` reveals the boot error (e.g. an SELinux denial on /vault/data).
+#[cfg(feature = "vault")]
+fn dump_vault_failure_diagnostics() {
+    let ps = podman_cmd_sync()
+        .args([
+            "ps",
+            "-a",
+            "--filter",
+            &format!("name={VAULT_CONTAINER_NAME}"),
+            "--format",
+            "{{.Names}} status={{.Status}} exit={{.ExitCode}}",
+        ])
+        .output();
+    if let Ok(out) = ps {
+        let s = String::from_utf8_lossy(&out.stdout);
+        let s = s.trim();
+        if !s.is_empty() {
+            eprintln!("[tillandsias-vault] container state: {s}");
+        }
+    }
+    let logs = podman_cmd_sync()
+        .args(["logs", "--tail", "40", VAULT_CONTAINER_NAME])
+        .output();
+    if let Ok(out) = logs {
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let combined = combined.trim();
+        if !combined.is_empty() {
+            eprintln!("[tillandsias-vault] --- vault container logs (last 40 lines) ---");
+            for line in combined.lines() {
+                eprintln!("[tillandsias-vault] | {line}");
+            }
+            eprintln!("[tillandsias-vault] --- end vault container logs ---");
+        }
+    }
+}
+
 fn wait_for_vault_ready(
     rt: &tokio::runtime::Runtime,
     base_url: &str,
@@ -1632,8 +1732,16 @@ fn wait_for_vault_ready(
     if debug {
         eprintln!("[tillandsias-vault] waiting for podman health status=healthy");
     }
-    rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME))
-        .map_err(|e| format!("vault container did not report healthy: {e}"))?;
+    if let Err(e) = rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME)) {
+        // The container likely crashed on boot. With no `--rm` it still exists,
+        // so dump its logs + last state to make the failure diagnosable instead
+        // of the opaque "no such container" / "did not report healthy".
+        dump_vault_failure_diagnostics();
+        return Err(format!("vault container did not report healthy: {e}"));
+    }
+
+    // Update /etc/hosts now that the container has a stable IP.
+    update_etc_hosts_vault(debug);
 
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
     match wait_for_vault_api_ready(rt, &client, debug) {
@@ -1647,6 +1755,65 @@ fn wait_for_vault_ready(
             read_and_handover_root_token(debug)
         }
         Err(e) => Err(format!("vault podman health is healthy but {e}")),
+    }
+}
+
+/// Resolve the current vault container IP and update /etc/hosts so the
+/// process-local hostname `vault` always points to it. The headless process
+/// is not inside any podman network so aardvark-dns doesn't reach it; only
+/// /etc/hosts does.
+#[cfg(feature = "vault")]
+fn update_etc_hosts_vault(debug: bool) {
+    let out = match podman_cmd_sync()
+        .args([
+            "inspect",
+            VAULT_CONTAINER_NAME,
+            "--format",
+            "{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}",
+        ])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("[tillandsias-vault] /etc/hosts update skipped: podman inspect failed: {e}");
+            return;
+        }
+    };
+    if !out.status.success() {
+        eprintln!(
+            "[tillandsias-vault] /etc/hosts update skipped: podman inspect exit {}",
+            out.status
+        );
+        return;
+    }
+    let ip = match String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(str::to_owned)
+    {
+        Some(ip) => ip,
+        None => {
+            eprintln!("[tillandsias-vault] /etc/hosts update skipped: no IP from podman inspect");
+            return;
+        }
+    };
+    let hosts = fs::read_to_string("/etc/hosts").unwrap_or_default();
+    let mut new_content: String = hosts
+        .lines()
+        .filter(|l| !l.split_whitespace().any(|w| w == "vault"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !new_content.ends_with('\n') && !new_content.is_empty() {
+        new_content.push('\n');
+    }
+    new_content.push_str(&format!("{ip} vault\n"));
+    if let Err(e) = fs::write("/etc/hosts", &new_content) {
+        eprintln!("[tillandsias-vault] /etc/hosts update failed: {e}");
+        return;
+    }
+    if debug {
+        eprintln!("[tillandsias-vault] /etc/hosts: vault → {ip}");
     }
 }
 
@@ -1789,6 +1956,22 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 );
             }
             return Ok(token.clone());
+        }
+        // Host didn't deliver a root token. Try the local fallback file
+        // (written by the vault-init bootstrap on first run and by any
+        // explicit `--store-vault-root-token` path). This keeps the headless
+        // self-sufficient when the Windows tray's Credential Manager hasn't
+        // received the handover yet (e.g. after a GetVaultHandover failure).
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        if fallback_file.is_file()
+            && let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
+            && !t.is_empty()
+        {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered root token from VM fallback file");
+            }
+            return Ok(t);
         }
         return Err("running in VM but no root token delivered from host".to_string());
     }
@@ -2030,6 +2213,41 @@ mod tests {
     }
 
     #[test]
+    fn vault_secret_create_uses_atomic_replace_not_racy_rm_create() {
+        // Regression guard for the concurrent-init secret race: a `secret rm`
+        // then `secret create` is NOT atomic — a second concurrent vault
+        // bootstrap can create the secret between this process's rm and create,
+        // making create fail "secret name in use" (spurious --init failure under
+        // concurrent forge activity, seen on Silverblue). Each of the three
+        // secret-create helpers must use `podman secret create --replace` and
+        // must NOT carry a racy `["secret", "rm", …]` preamble in its own body.
+        // @trace plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        for func in [
+            "fn create_unseal_secret(",
+            "fn create_token_podman_secret(",
+            "fn create_file_podman_secret(",
+        ] {
+            let after = source.split(func).nth(1).unwrap_or_else(|| {
+                panic!("{func} must exist");
+            });
+            // Window = this function body up to the next top-level `fn `.
+            let window = after.split("\nfn ").next().unwrap_or(after);
+            assert!(
+                window.contains("\"--replace\""),
+                "{func} must create its podman secret with --replace (atomic idempotent)"
+            );
+            assert!(
+                !window.contains("[\"secret\", \"rm\""),
+                "{func} must NOT do a racy `secret rm` before `secret create` — use --replace"
+            );
+        }
+    }
+
+    #[test]
     fn handover_token_is_shredded_before_unlink() {
         // P1-1: the first-boot root-token handover must be OVERWRITTEN in tmpfs
         // before it is unlinked — `rm` alone frees the RAM pages without zeroing,
@@ -2061,12 +2279,14 @@ mod tests {
     }
 
     #[test]
-    fn vault_launch_ensures_selinux_module_before_labelled_run() {
-        // Phase 3d: the enforcing-guest label `label=type:vault_container_t` is
-        // only valid once the type is loaded. The launch path must load it
-        // (ensure_vault_selinux_module) BEFORE the labelled `podman run`, or the
-        // container exits 126 on crun keycreate EINVAL.
-        // @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+    fn vault_launch_selinux_label_is_conditional_not_unconditional() {
+        // Regression guard for the v0.3.260702.2 Silverblue crash: the launch
+        // must NOT hard-code `--security-opt label=type:vault_container_t`. That
+        // type is undefined on a rootless native host (semodule needs root), so
+        // an unconditional label makes crun EINVAL on keycreate (exit 126). The
+        // label must come from vault_selinux_label_opt (which returns None ->
+        // default container_t when the type is not loadable).
+        // @trace plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md
         let source = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/src/vault_bootstrap.rs"
@@ -2075,19 +2295,29 @@ mod tests {
             .split("fn launch_vault_container(")
             .nth(1)
             .expect("launch_vault_container source");
-        let ensure_at = window
-            .find("ensure_vault_selinux_module(debug)")
-            .expect("launch must ensure the vault_container_t SELinux module");
-        let label_at = window
-            .find("\"label=type:vault_container_t\"")
-            .expect("launch must set the vault_container_t label");
+        // The launch body must gate the label on vault_selinux_label_opt, not
+        // push a bare vault_container_t label string.
         assert!(
-            ensure_at < label_at,
-            "the SELinux module must be ensured before the labelled podman run"
+            window.contains("vault_selinux_label_opt(debug)"),
+            "launch must derive the SELinux label from vault_selinux_label_opt"
+        );
+        assert!(
+            !window.contains("\"label=type:vault_container_t\""),
+            "launch must NOT hard-code the vault_container_t label (rootless EINVAL)"
         );
 
-        // The embedded CIL must declare the type it labels with, or the load is
-        // a no-op and the EINVAL persists.
+        // vault_selinux_label_opt must fall back (return None) when the type is
+        // not loaded/loadable, and only use the custom type when confirmed.
+        let opt = source
+            .split("fn vault_selinux_label_opt(")
+            .nth(1)
+            .expect("vault_selinux_label_opt source");
+        assert!(
+            opt.contains("vault_container_type_loaded()") && opt.contains("return None"),
+            "the label helper must confirm the type is loaded and fall back to None otherwise"
+        );
+
+        // The embedded CIL still declares the type for the guest-VM (root) path.
         let cil = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../images/selinux/vault_container.cil"

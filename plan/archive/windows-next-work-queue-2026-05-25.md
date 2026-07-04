@@ -1,5 +1,34 @@
 # windows-next work queue — 2026-05-25
 
+## 2026-06-30T00:00Z — YIELD: no Windows-eligible ready work after order 127
+
+- **Agent**: `windows-sonnet46-20260630T0000Z`
+- **Status**: YIELD — no claimable Windows packets in queue.
+- **Blocking**: order 129 (egress allowlist research, `claimed` by linux) → 130 (impl, `pending`)
+  → 132 (agent-login-flows-impl, `pending`). Order 131 (login flows research) is `ready` but
+  `pickup_role: linux`.
+- **Next Windows action**: when orders 129+130+131 complete, claim order 132
+  (agent-login-flows-impl) which has Windows tray leaf work for --claude-login/--codex-login.
+- **Pushed**: `origin/windows-next` at `b5b1fffc`.
+
+## 2026-06-30T00:00Z — order 127 COMPLETED: WslGuestTransport + HvSocket consolidation
+
+- **Agent**: `windows-sonnet46-20260630T0000Z`
+- **Scope**: order 127 — host-guest-transport-windows
+- `85c1de70` refactor(tray): re-export HvSocket primitives from vm-layer (order 127)
+- `3a54cf77` chore(plan): order 127 complete
+- **What**: Created `crates/tillandsias-vm-layer/src/transport_windows.rs` with `WslGuestTransport`
+  implementing the `GuestTransport` facade (open_stream / exec / exec_streaming). All HvSocket
+  connection primitives (vsock_service_guid, parse_wsl_vm_id, parse_guid, wsl_utility_vm_id,
+  wsa_startup, connect_control_wire, open_hvsocket_stream) moved here from the tray's hvsocket.rs.
+  Tray re-exports them; ~220 lines of duplicate code eliminated. Also fixed vsock_exec
+  exec_over_stream_with_input_streaming to accept FnMut (was Fn). cargo check clean, 0 errors.
+- **Remaining (cleanup, not blocking)**: migrate notify_icon.rs + wsl_lifecycle.rs call sites
+  from `crate::hvsocket::open_hvsocket_stream` to `WslGuestTransport::open_stream`; add
+  no-cfg-selection drift litmus.
+- **Next Windows work**: order 132 (agent-login-flows-impl) pending linux completing 130+131.
+  Push windows-next to remote for CI visibility.
+
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
 ## 2026-06-05 — NEW WAVE queued (pre-Vault audit)
@@ -1471,3 +1500,15 @@ Ready, step-32-independent packet for this host: **keyring persistent-backend ve
 - **CI**: Run 28408139744 in_progress on `ace36998`; 2 prior CI runs failed on clippy (collapsible_if, dead_code). All issues now fixed.
 - **Blocked on**: CI pass → release workflow → new musl binary → VM deploy → e2e test.
 - **Next**: When CI green, trigger `release.yml --ref main` after PR #57 merges, or build musl locally via `./build.sh --ci-full --install` if linux host is available.
+
+## 2026-06-29T05:00Z — order 114 COMPLETED + 4 follow-up fixes shipped
+
+- **Agent**: `windows-sonnet46-20260629T0500Z`
+- **Scope**: post-order-114 hardening — vault reliability, tray liveness, credential delivery
+- **Order 114 EXIT CRITERIA MET**: 23 real GitHub repos listed via vsock-triggered vault bootstrap (validated prior session). Three vault_bootstrap.rs bugs fixed (sleep fix, root-token fallback, Shamir fallback), headless deployed to Fedora VM with `--features listen-vsock`.
+- `a033ee75` fix(vault): auto-update /etc/hosts with vault container IP on every start
+- `3d321ea0` fix(proxy): heal intermediate.key permissions so squid can read it (640→644 + heal on every ensure_ca_bundle call)
+- `b56a2064` fix(tray): SetTimer 100ms to drain tokio tasks without user interaction (eliminates spawn_local starvation when user is idle)
+- `ddf1f3b3` fix(tray): deliver credentials in already-registered VM fast-path (was returning Ok(()) after start() without handshake+credential delivery)
+- **All pushed to windows-next** (`29732cea`..`ddf1f3b3`)
+- **Pending**: CI musl build → release binary → VM redeploy with built-in /etc/hosts healing

@@ -1,0 +1,57 @@
+# @trace plan/issues/inference-firstrun-small-models-impl-2026-07-04.md
+#
+# Order 183: the inference container pulls a few 0.3-1.5B general-purpose models on
+# FIRST_RUN into the persistent models cache — idempotently, config-overridably, and
+# within the operator's tiny-model-first envelope (nothing >1.5B in the DEFAULT set;
+# larger models are opt-in tier pulls, not the default). Falsifies drift back to a
+# 3B+ default (llama3.2:3b) or a non-idempotent pull.
+name: litmus:inference-firstrun-default-models-shape
+spec: inference-container
+phase: pre-build
+description: >
+  Pin images/inference/entrypoint.sh: a TILLANDSIAS_DEFAULT_MODELS-overridable
+  default set pulled first-run with an `ollama list` cached-guard (idempotent), the
+  default set entirely within 0.3-1.5B (no :3b/:7b/:14b/:32b tag), and the
+  qwen2.5-coder:1.5b diagnostics model included.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/inference/entrypoint.sh
+
+critical_path:
+  - step: "default model set is config-overridable via TILLANDSIAS_DEFAULT_MODELS"
+    command: "grep -qF 'TILLANDSIAS_DEFAULT_MODELS' images/inference/entrypoint.sh && echo 'ok: config-overridable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: config-overridable"
+
+  - step: "first-run pull is idempotent (ollama list cached-guard before pull)"
+    command: "grep -qF 'ollama list' images/inference/entrypoint.sh && grep -qF 'ollama pull' images/inference/entrypoint.sh && echo 'ok: idempotent-guard'"
+    timeout_ms: 3000
+    expected_behavior: "ok: idempotent-guard"
+
+  - step: "the DEFAULT_MODELS default value is entirely 0.3-1.5B (no 3b/7b/14b/32b in the default set)"
+    command: "line=$(grep -F 'DEFAULT_MODELS=' images/inference/entrypoint.sh | grep -F 'TILLANDSIAS_DEFAULT_MODELS'); echo \"$line\" | grep -qE ':(3b|7b|14b|32b)' && { echo 'FAIL: default set has a >1.5B model'; exit 1; } || echo 'ok: default-set-in-envelope'"
+    timeout_ms: 3000
+    expected_behavior: "ok: default-set-in-envelope"
+
+  - step: "the code/diagnostics model qwen2.5-coder:1.5b is in the default set"
+    command: "grep -F 'DEFAULT_MODELS=' images/inference/entrypoint.sh | grep -qF 'qwen2.5-coder:1.5b' && echo 'ok: coder-model-present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: coder-model-present"
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+  expected_log: "inference first-run default small-model set pinned (config-overridable + idempotent + 0.3-1.5B envelope)"
+  log_fields:
+    spec: "inference-container"
+    test: "inference-firstrun-default-models-shape"
+    artifact: "images/inference/entrypoint.sh"
+
+rollback:
+  on_failure: >
+    The inference first-run default model set drifted. Restore
+    images/inference/entrypoint.sh to pull a TILLANDSIAS_DEFAULT_MODELS-overridable
+    set (default qwen2.5:0.5b qwen2.5:1.5b llama3.2:1b qwen2.5-coder:1.5b) first-run,
+    guarded by `ollama list` (idempotent), with no >1.5B model in the default set.

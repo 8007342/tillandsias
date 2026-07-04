@@ -13,3 +13,8 @@ description = "Encrypted, version-bound control channel (PSK derivation + AEAD s
 hkdf = { workspace = true }
 sha2 = { workspace = true }
 zeroize = { workspace = true }
+snow = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "rt", "macros"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util", "rt", "macros", "rt-multi-thread"] }

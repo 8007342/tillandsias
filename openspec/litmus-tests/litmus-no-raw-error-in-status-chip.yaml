@@ -1,0 +1,72 @@
+# @trace spec:windows-native-tray, spec:macos-native-tray
+# Static guard: ensures that update_status_text in both trays is never called
+# with a raw format!("{err}") or format!("{:?}", ...) as its argument.
+#
+# The STATUS chip is the first menu item — always visible to non-technical
+# users. Raw Rust error strings and stack traces are never acceptable there.
+# update_status_text internally sanitizes to first-line + 45-char cap, but
+# the defence-in-depth rule is that callers must pass curated strings, not
+# raw errors.
+#
+# Curated rule (authoritative — cheatsheets/ux/ux-message-budget.md):
+#   STATUS chip: 45-char hard cap, 30-char preferred.
+#   No raw error types, no format!("{err}"), no format!("{:?}", err).
+#
+# This litmus greps for the two danger patterns:
+#   1. update_status_text(&format!("{err}") or format!("{:?}", ...) without
+#      a prior curated wrapper — catches direct raw-error pass-throughs.
+#   2. Calls where the argument starts with "{" (interpolated error).
+#
+# A "passing" state is: zero grep matches (grep exits 1 = no match = step exits 0
+# after the negation wrapper). If a developer adds a new update_status_text call
+# with a raw format! error, this litmus surfaces it before build.
+#
+# Provenance:
+#   curated-status-messages-2026-06-30 (order 139); landed 2026-07-01
+#   sanitizer in update_status_text: notify_icon.rs:179
+#   compose_chip_text budget clamping: notify_icon.rs:564
+
+name: litmus:no-raw-error-in-status-chip
+spec: windows-native-tray
+phase: pre-build
+description: "Assert that update_status_text is never called with a raw format!(\"{err}\") or format!(\"{:?}\", ...) argument in either tray — raw Rust error strings must never reach the STATUS chip."
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/notify_icon.rs
+  - workspace contains crates/tillandsias-macos-tray/src/action_host.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  # Pattern: update_status_text called with a bare format!("{err}") or
+  # format!("{:?}", anything). We look for the call combined with "{err}"
+  # or "{:?}" on the same source line. Negation: step PASSES when grep
+  # finds zero matches (exit 1). Wrapped with "! grep" so the step exits 0
+  # on no-match (good) and exits non-zero if a match is found (bad).
+
+  - step: "windows-tray: no raw format-error passed to update_status_text"
+    command: >
+      ! grep -nE 'update_status_text\s*\(\s*&\s*format!\s*\(\s*".*\{.*err.*\}|update_status_text\s*\(\s*&\s*format!\s*\(\s*".*\{.*:.*\?.*\}' crates/tillandsias-windows-tray/src/notify_icon.rs
+    expected_behavior: "succeeds"
+    timeout_ms: 3000
+
+  - step: "windows-tray: update_status_text exists (guard against file rename hiding the check)"
+    command: "grep -F 'fn update_status_text' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "fn update_status_text"
+    timeout_ms: 3000
+
+  - step: "windows-tray: sanitizer first-line guard present"
+    command: "grep -F 'find(|l| !l.trim().is_empty())' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "find"
+    timeout_ms: 3000
+
+  - step: "windows-tray: hard-cap at 45 chars present"
+    command: "grep -F '> 45' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "> 45"
+    timeout_ms: 3000
+
+  - step: "windows-tray: compose_chip_text budget guard present (evt_budget)"
+    command: "grep -F 'evt_budget' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "evt_budget"
+    timeout_ms: 3000

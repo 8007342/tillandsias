@@ -138,6 +138,25 @@ fn main() {
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
 
+    // @trace spec:remote-projects, spec:host-shell-architecture
+    // `--cloud <owner/repo | name>` — project-attach companion to the agent
+    // mode flags (`--opencode` / `--claude` / `--codex` / `--bash`). Resolves
+    // the project to a checkout under the project bind-mount root, cloning on
+    // first use via the containerized gh flow, so the wire trays get the same
+    // transparent clone-then-launch behaviour as the Linux native tray's
+    // `handle_launch_cloud_project`. A bare `name` that already exists under
+    // the root is a pure resolve (local-project attach path).
+    let cloud_repo: Option<String> = match user_args.iter().position(|a| a == "--cloud") {
+        Some(i) => match user_args.get(i + 1) {
+            Some(v) if !v.starts_with('-') && !v.is_empty() => Some(v.to_string()),
+            _ => {
+                eprintln!("Error: --cloud requires an <owner/repo> (or local project name) value");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
+
     let port_override = match user_args.iter().position(|a| a == "--port") {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
             Some(port) => Some(port),
@@ -240,6 +259,7 @@ fn main() {
         "--cache-clear",
         "--cache-verify",
         "--listen-vsock",
+        "--cloud",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -299,10 +319,9 @@ fn main() {
         if a.starts_with('-') {
             return None;
         }
-        if user_args
-            .get(i.saturating_sub(1))
-            .is_some_and(|prev| prev == "--prompt" || prev == "--port" || prev == "--listen-vsock")
-        {
+        if user_args.get(i.saturating_sub(1)).is_some_and(|prev| {
+            prev == "--prompt" || prev == "--port" || prev == "--listen-vsock" || prev == "--cloud"
+        }) {
             return None;
         }
         Some(a.to_string())
@@ -436,6 +455,22 @@ fn main() {
         println!("status-check completed");
         return;
     }
+
+    // Cloud attach: turn `--cloud owner/repo` into a concrete project path
+    // under the bind-mount root, cloning on first use. Must run before the
+    // agent-mode dispatch so all four kinds (--opencode/--claude/--codex/
+    // --bash) pick the resolved path up as their positional project arg.
+    // An explicit positional path wins over the derived one.
+    let config_path = match &cloud_repo {
+        Some(nwo) if config_path.is_none() => match resolve_cloud_project_checkout(nwo, debug) {
+            Ok(path) => Some(path),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        _ => config_path,
+    };
 
     if opencode {
         maybe_spawn_detached_tray_for_cli(tray, debug);
@@ -664,6 +699,10 @@ fn print_usage(version: &str) {
     println!(
         "  --list-cloud-projects  List remote GitHub repos via the saved Vault token (diagnostic)"
     );
+    println!("  --cloud O/R    With an agent mode flag: resolve GitHub repo <owner>/<repo> to a");
+    println!(
+        "                 checkout under the project root (cloning on first use), then launch"
+    );
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!(
         "  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)"
@@ -820,6 +859,11 @@ fn proxy_env_args() -> Vec<String> {
         format!("no_proxy={no_proxy}"),
         "--env".into(),
         format!("NO_PROXY={no_proxy}"),
+        // Route Node fetch/undici through the proxy (Node ignores HTTP_PROXY by
+        // default). See apply_proxy_env for the full rationale + live evidence.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        "--env".into(),
+        "NODE_USE_ENV_PROXY=1".into(),
     ]
 }
 
@@ -833,6 +877,17 @@ fn apply_proxy_env(spec: ContainerSpec) -> ContainerSpec {
         .env("HTTPS_PROXY", "http://proxy:3128")
         .env("no_proxy", no_proxy.clone())
         .env("NO_PROXY", no_proxy)
+        // Node's global fetch/undici does NOT honor HTTP(S)_PROXY by default, so
+        // Node-based agents (Codex, Claude Code) tried to connect DIRECTLY to
+        // api.openai.com / chatgpt.com / websocket endpoints — which the
+        // --internal enclave (proxy-only egress, no external DNS) cannot resolve,
+        // producing the "times out then dies" remote-connect failure the operator
+        // hit while curl (which uses the env proxy) worked. NODE_USE_ENV_PROXY=1
+        // makes undici's EnvHttpProxyAgent route Node egress through the proxy.
+        // Verified live in the forge: without it, node fetch -> ENOTFOUND; with
+        // it -> HTTP 401 (reaches api.openai.com through the proxy).
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        .env("NODE_USE_ENV_PROXY", "1")
 }
 
 // @trace spec:init-incremental-builds
@@ -1858,7 +1913,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                     format!("Failed to set cert permissions: {e}")
                 },
             )?;
-            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o640)).map_err(
+            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o644)).map_err(
                 |e| {
                     error!(
                         accountability = true,
@@ -1893,6 +1948,16 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         if debug {
             eprintln!("[tillandsias] refreshed CA bundle at {}", crt.display());
         }
+    }
+
+    // Squid runs as a non-root user inside the container and needs read
+    // access to the key file mounted via bind-mount. Upgrade mode to 644
+    // every call so that keys generated before this fix (mode 640) are also
+    // healed without requiring a CA rotation.
+    #[cfg(unix)]
+    if key.is_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644));
     }
 
     Ok(certs_dir)
@@ -2021,8 +2086,9 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())
     })?;
     if debug {
-        eprintln!("[tillandsias] enclave proxy started");
+        eprintln!("[tillandsias] enclave proxy started, waiting for initialization...");
     }
+    std::thread::sleep(std::time::Duration::from_secs(3));
     Ok(())
 }
 
@@ -2765,8 +2831,83 @@ pub(crate) fn sanitize_hostname(raw: &str) -> String {
     }
 }
 
+/// Root under which cloud checkouts land and local projects are enumerated.
+///
+/// Resolution order mirrors `vsock_server::in_vm_project_root` and the
+/// Linux tray's `~/src` convention:
+///   1. `TILLANDSIAS_IN_VM_PROJECT_ROOT` (operator override)
+///   2. `/home/forge/src` when it exists — the in-VM bind-mount convention
+///      (macOS virtio-fs / Windows drvfs mount of the host's `~/src`)
+///   3. `$HOME/src` — Linux native fallback
+///
+/// @trace spec:host-shell-architecture, spec:remote-projects
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+fn projects_root() -> PathBuf {
+    if let Ok(root) = std::env::var("TILLANDSIAS_IN_VM_PROJECT_ROOT") {
+        return PathBuf::from(root);
+    }
+    let convention = PathBuf::from("/home/forge/src");
+    if convention.is_dir() {
+        return convention;
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    PathBuf::from(home).join("src")
+}
+
+/// Resolve `--cloud owner/repo` to an on-disk checkout under
+/// [`projects_root`], cloning through the containerized `gh` flow on first
+/// use. 1:1 with the Linux tray's `handle_launch_cloud_project`: idempotent
+/// clone, then the standard agent launch pipeline takes the path from here.
+///
+/// The VM rootfs deliberately ships no `git`, so the "refresh if present"
+/// step the Linux tray does (`git fetch`, best-effort) is skipped here; the
+/// forge's git mirror handles freshness once the container is up.
+///
+/// @trace spec:remote-projects, spec:host-shell-architecture
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, String> {
+    let short_name = nwo
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| format!("--cloud value has no repo name: {nwo}"))?;
+    let target = projects_root().join(short_name);
+    if !target.exists() {
+        eprintln!(
+            "[tillandsias] cloud: cloning {} into {} ...",
+            nwo,
+            target.display()
+        );
+        // Proxy bring-up lives INSIDE clone_project_from_github (after the
+        // Vault lease acquire — vault churn can tear the proxy down), so the
+        // clone works even right after a VM restart when only Vault has been
+        // auto-restarted. Observed 2026-07-02: `Could not resolve proxy`.
+        remote_projects::clone_project_from_github_with_debug(nwo, &target, debug)?;
+        eprintln!("[tillandsias] cloud: clone complete");
+    } else if debug {
+        eprintln!(
+            "[tillandsias] cloud: checkout already present at {}",
+            target.display()
+        );
+    }
+    Ok(target.to_string_lossy().into_owned())
+}
+
+#[cfg(not(any(feature = "tray", feature = "listen-vsock")))]
+fn resolve_cloud_project_checkout(_nwo: &str, _debug: bool) -> Result<String, String> {
+    Err("--cloud requires a build with the tray or listen-vsock feature".to_string())
+}
+
 fn forge_container_name(project_name: &str) -> String {
     format!("tillandsias-{project_name}-forge")
+}
+
+fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> String {
+    if matches!(mode, ForgeAgentMode::OpenCode) {
+        forge_container_name(project_name)
+    } else {
+        format!("tillandsias-{project_name}-forge-{}", mode.slug())
+    }
 }
 
 fn forge_hostname(project_name: &str) -> String {
@@ -2813,7 +2954,7 @@ async fn cleanup_shared_stack_if_no_running_forge(
             containers
                 .into_iter()
                 .filter(|container| {
-                    container.name.ends_with("-forge")
+                    container.name.contains("-forge")
                         && matches!(
                             container.state.to_ascii_lowercase().as_str(),
                             "running" | "up"
@@ -3017,6 +3158,21 @@ fn build_opencode_forge_args(
         args.extend([
             "--env".into(),
             format!("TILLANDSIAS_OPENCODE_PROMPT={prompt}"),
+        ]);
+    }
+
+    // Inject Gemini API key for OpenCode harness
+    if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(
+        crate::vault_bootstrap::ProviderId::Gemini,
+        debug,
+    ) && !key.is_empty()
+    {
+        args.extend([
+            "--env".into(),
+            format!(
+                "{}={key}",
+                crate::vault_bootstrap::ProviderId::Gemini.env_var()
+            ),
         ]);
     }
     if debug {
@@ -5503,6 +5659,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
 
     let images = ["proxy", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
 
     if debug {
         eprintln!("[tillandsias] [OpenCode] Repo root: {}", root.display());
@@ -5561,15 +5718,27 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         };
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
-        client
-            .run_container_observed(
-                "opencode-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
+        // See the forge-launch-proxy site for the full rationale.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] OpenCode: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "opencode-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
+        }
         let git_container_name = format!("tillandsias-git-{project_name}");
         let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
@@ -6580,15 +6749,27 @@ pub(crate) fn run_opencode_web_mode(
 
         cleanup_stack_containers(&client, project_name).await;
 
-        client
-            .run_container_observed(
-                "opencode-web-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode Web] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
+        // See the forge-launch-proxy site for the full rationale.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] OpenCode Web: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "opencode-web-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode Web] failed to start proxy: {e}"))?;
+        }
         emit_opencode_web_event(
             project_name,
             "proxy",
@@ -6974,15 +7155,34 @@ pub(crate) fn ensure_enclave_for_project(
         };
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
-        client
-            .run_container_observed(
-                "forge-launch-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up (mirrors ensure_router_running above and
+        // ensure_proxy_running): REUSE a running proxy, and clear any stale/exited
+        // one so `podman run --name tillandsias-proxy` does not fail "name already
+        // in use". Without this, a forge launch fails at the proxy stage whenever
+        // a tillandsias-proxy already exists (started by --init, or left by a prior
+        // / crashed session) — which blocks launching a Codex/Claude/OpenCode
+        // session even though the proxy is fine. (ensure_proxy_running itself
+        // runs its own tokio runtime, so it cannot be called from inside this
+        // block_on; inline the same guard.)
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] forge-launch: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "forge-launch-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
+        }
         let git_container_name = format!("tillandsias-git-{project_name}");
         let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
@@ -7041,7 +7241,7 @@ pub(crate) fn build_forge_agent_run_args(
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     let spec = ContainerSpec::new(image)
-        .name(forge_container_name(project_name))
+        .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
         .pids_limit(512)
@@ -7087,16 +7287,17 @@ pub(crate) fn build_forge_agent_run_args(
     // Inject provider API keys from Vault as env vars so forge agents can call
     // LLM APIs without interactive auth inside the container.
     // @trace plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
-    for provider in [
-        crate::vault_bootstrap::ProviderId::Anthropic,
-        crate::vault_bootstrap::ProviderId::Openai,
-        crate::vault_bootstrap::ProviderId::Gemini,
-    ] {
-        if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(provider, debug)
-            && !key.is_empty()
-        {
-            spec = spec.env(provider.env_var(), key);
-        }
+    let provider_api = match mode {
+        ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
+        ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
+        ForgeAgentMode::OpenCode => Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ForgeAgentMode::Maintenance => None,
+    };
+    if let Some(p) = provider_api
+        && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
+        && !key.is_empty()
+    {
+        spec = spec.env(p.env_var(), key);
     }
 
     spec.build_run_args()
@@ -7123,6 +7324,57 @@ pub(crate) fn build_forge_agent_run_argv(
         debug,
     ));
     argv
+}
+
+fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
+    let (oauth_prov, api_prov) = match mode {
+        ForgeAgentMode::Claude => (
+            Some(ProviderId::Claude),
+            Some(crate::vault_bootstrap::ProviderId::Anthropic),
+        ),
+        ForgeAgentMode::Codex => (
+            Some(ProviderId::Codex),
+            Some(crate::vault_bootstrap::ProviderId::Openai),
+        ),
+        ForgeAgentMode::OpenCode => (
+            Some(ProviderId::Antigravity),
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ),
+        ForgeAgentMode::Maintenance => (None, None),
+    };
+
+    if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
+        let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false);
+        if api_key_exists {
+            return Ok(());
+        }
+
+        let is_oauth_logged_in =
+            crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
+                .map(|v| !v.is_empty())
+                .unwrap_or(false);
+        if is_oauth_logged_in {
+            return Ok(());
+        }
+
+        if debug {
+            eprintln!(
+                "[tillandsias] No auth token found for {}. Launching login flow...",
+                op.name()
+            );
+        }
+        let token_script = get_generic_login_token_script(&op);
+        let config = ProviderLoginConfig {
+            provider: op,
+            auth_model: AuthModel::OAuthDevice,
+            image_name: "curl",
+            token_script,
+        };
+        run_provider_login(&config, debug)?;
+    }
+    Ok(())
 }
 
 fn run_forge_agent_cli_mode(
@@ -7161,6 +7413,7 @@ fn run_forge_agent_cli_mode(
 
     let version = VERSION.trim();
     let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
+    ensure_provider_auth(mode, debug)?;
     let forge_args =
         build_forge_agent_run_args(&canonical, project_name, &certs_dir, version, mode, debug);
 
@@ -7192,7 +7445,7 @@ fn run_forge_agent_cli_mode(
         let result = client
             .run_container_attached_observed(
                 mode.slug(),
-                &forge_container_name(project_name),
+                &forge_container_name_for_mode(project_name, mode),
                 &forge_args,
                 debug,
             )
@@ -8298,6 +8551,97 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn forge_launch_proxy_bringup_is_idempotent() {
+        // A forge launch must REUSE a running enclave proxy (and clear a stale
+        // one), not blindly `podman run --name tillandsias-proxy` — which fails
+        // "name already in use" and blocks launching a Codex/Claude/OpenCode
+        // session whenever a proxy already exists (from --init or a prior/crashed
+        // session). Every raw proxy run_container_observed site must be guarded by
+        // a container_running("tillandsias-proxy") check. Found via the released
+        // 704.1 curl-install smoke.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        for site in ["forge-launch-proxy", "opencode-proxy", "opencode-web-proxy"] {
+            let idx = source
+                .find(&format!("\"{site}\""))
+                .unwrap_or_else(|| panic!("proxy launch site {site} must exist"));
+            // The 600 chars preceding the raw launch must contain the idempotency
+            // guard (the container_running check that reuses/skips a live proxy).
+            let start = idx.saturating_sub(600);
+            let preamble = &source[start..idx];
+            assert!(
+                preamble.contains("container_running(\"tillandsias-proxy\")"),
+                "proxy launch site {site} must be guarded by container_running (idempotent bring-up)"
+            );
+        }
+    }
+
+    #[test]
+    fn forge_agent_launch_gates_on_provider_login_first() {
+        // Operator contract: launching a Codex/Claude/Antigravity session must run
+        // the provider login flow FIRST when no auth token is stored, then launch
+        // the authenticated forge; when a token is present, launch directly.
+        // ensure_provider_auth implements that gate (api-key present -> ok; oauth
+        // token present -> ok; else run_provider_login). This pins that the forge
+        // launch path CALLS the gate BEFORE building the run args, so it cannot
+        // drift back to launching an unauthenticated forge.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md (login-first residual)
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("fn run_forge_agent_cli_mode(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("run_forge_agent_cli_mode source");
+        let gate_at = window
+            .find("ensure_provider_auth(mode, debug)")
+            .expect("forge launch must gate on ensure_provider_auth (login-first)");
+        let build_at = window
+            .find("build_forge_agent_run_args(")
+            .expect("forge launch must build run args");
+        assert!(
+            gate_at < build_at,
+            "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args"
+        );
+        // The gate itself must implement token-presence-then-login, not blind login.
+        let gate = source
+            .split("fn ensure_provider_auth(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("ensure_provider_auth source");
+        assert!(
+            gate.contains("read_provider_api_key") && gate.contains("run_provider_login"),
+            "ensure_provider_auth must check a stored token before running the login flow"
+        );
+    }
+
+    #[test]
+    fn proxy_env_routes_node_through_the_proxy() {
+        // Node's global fetch/undici ignores HTTP_PROXY by default, so on the
+        // --internal enclave (proxy-only egress, no external DNS) Node agents
+        // (Codex, Claude Code) cannot reach api.openai.com/etc. — they time out
+        // and die while curl works. NODE_USE_ENV_PROXY=1 makes undici honor the
+        // env proxy. Both proxy-env injection paths MUST set it.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        let args = proxy_env_args();
+        assert!(
+            args.iter().any(|a| a == "NODE_USE_ENV_PROXY=1"),
+            "proxy_env_args must route Node through the proxy (NODE_USE_ENV_PROXY=1)"
+        );
+        // apply_proxy_env is the ContainerSpec twin — pin it by source so it can't
+        // drift out of sync with proxy_env_args.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("fn apply_proxy_env(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("apply_proxy_env source");
+        assert!(
+            window.contains("\"NODE_USE_ENV_PROXY\""),
+            "apply_proxy_env must also set NODE_USE_ENV_PROXY for forge agents"
+        );
+    }
 
     #[test]
     #[cfg(target_os = "linux")]

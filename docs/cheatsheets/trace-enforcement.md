@@ -155,11 +155,8 @@ https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Ainit-system-chec
 The trace enforcer runs as part of the build pipeline:
 
 ```bash
-# In CI (manually triggered):
-gh workflow run ci.yml
-
 # Locally before pushing:
-cargo test --workspace && bash scripts/validate-traces.sh --enforce-presence
+scripts/release-preflight-local.sh --fast
 ```
 
 **Exit codes:**

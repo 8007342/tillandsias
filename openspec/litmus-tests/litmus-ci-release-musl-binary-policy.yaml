@@ -2,12 +2,13 @@
 name: litmus:ci-release-musl-binary-policy
 spec: ci-release
 phase: pre-build
-description: Verify CI and release workflows publish the Linux musl binary and keep hosted checks static-only
+description: Verify release publishes the Linux musl binary and keeps litmus/runtime checks local
 severity: high
 size: instant
 
 preconditions:
-  - repository contains .github/workflows/ci.yml and .github/workflows/release.yml
+  - repository contains .github/workflows/release.yml
+  - repository contains scripts/release-preflight-local.sh
   - grep is available in PATH
 
 critical_path:
@@ -15,18 +16,18 @@ critical_path:
     command: "grep -F 'tillandsias-linux-x86_64' .github/workflows/release.yml && grep -F 'statically linked' .github/workflows/release.yml && grep -F 'cosign sign-blob' .github/workflows/release.yml"
     timeout_ms: 5000
 
-  - step: "verify hosted litmus workflow is metadata-only"
-    command: "! grep -F 'scripts/run-litmus-test.sh' .github/workflows/litmus-tests.yml && ! grep -F 'podman' .github/workflows/litmus-tests.yml"
+  - step: "verify litmus/runtime execution is local-only"
+    command: "! grep -F 'scripts/run-litmus-test.sh' .github/workflows/release.yml && grep -F 'scripts/local-ci.sh' scripts/release-preflight-local.sh"
     timeout_ms: 5000
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "Release workflow publishes a signed Linux musl binary and hosted litmus stays static"
+  expected_log: "Release workflow publishes a signed Linux musl binary and litmus stays local"
   log_fields:
     spec: "ci-release"
     test: "ci-release-musl-binary-policy"
 
 rollback:
-  on_failure: "inspect release and litmus workflows for stale Tauri/AppImage/Node/runtime-test drift"
-  command: "grep -n 'tillandsias-linux-x86_64\\|AppImage\\|Tauri\\|node-version' .github/workflows/release.yml; grep -n 'scripts/run-litmus-test.sh\\|podman' .github/workflows/litmus-tests.yml"
+  on_failure: "inspect release workflow and local preflight for stale Tauri/AppImage/Node/runtime-test drift"
+  command: "grep -n 'tillandsias-linux-x86_64\\|AppImage\\|Tauri\\|node-version\\|scripts/run-litmus-test.sh' .github/workflows/release.yml scripts/release-preflight-local.sh"

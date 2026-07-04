@@ -15,22 +15,23 @@ tier: bundled
 - Internal documentation
 - **Last updated:** 2026-05-19
 
-## Hosted CI Boundary
+## Local Validation Boundary
 
-GitHub-hosted workflows are for static validation only:
+Verification runs locally before a release dispatch:
 
-- `github-actions-convergence.yml` runs automatically on `main` and covers formatting, clippy, unit tests, spec-code drift, spec-cheatsheet binding, and cheatsheet tiers.
-- `ci.yml` is manual and uses the same static boundary plus focused binary unit tests.
-- `litmus-tests.yml` validates litmus metadata and coverage only.
+- `scripts/release-preflight-local.sh` fetches tags, checks version monotonicity, runs `scripts/local-ci.sh`, and optionally probes the Nix release targets.
+- `scripts/local-ci.sh` owns formatting, clippy, unit tests, spec-code drift, spec-cheatsheet binding, cheatsheet tiers, litmus, and dashboard generation.
 
-Do not run real Podman runtime tests, browser e2e tests, or `scripts/run-litmus-test.sh` on GitHub-hosted runners. Those belong in local release recovery or a dedicated runtime environment.
+Do not run Podman runtime tests, browser e2e tests, dashboard refreshes, branch
+merges, or cache warm jobs on GitHub-hosted runners. Those consume cloud minutes
+and belong in the local release gate.
 
 ## Release Boundary
 
-The release workflow builds and publishes the Linux musl artifact:
+The hosted release workflow builds, signs, and publishes platform artifacts:
 
 ```bash
 target/x86_64-unknown-linux-musl/release/tillandsias
 ```
 
-The published asset name is `tillandsias-linux-x86_64`. AppImage/Tauri/Node release steps are obsolete for v0.2 Linux releases.
+The published Linux asset name is `tillandsias-linux-x86_64`. AppImage/Tauri/Node release steps are obsolete for v0.2 Linux releases.

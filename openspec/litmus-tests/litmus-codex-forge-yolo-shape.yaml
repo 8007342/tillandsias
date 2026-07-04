@@ -1,0 +1,68 @@
+# @trace plan/issues/codex-forge-yolo-defaults-2026-07-04.md
+#
+# Order 172: fail if the Codex forge entrypoint would prompt for approval /
+# enable its inner sandbox. Inside the forge (the real containment boundary),
+# Codex must run full-auto so unattended /meta-orchestration loops are not
+# stalled by per-command approval prompts, and the agent's own network calls are
+# not blocked by Codex's inner seccomp/landlock sandbox. Codex 0.137.0's
+# `--dangerously-bypass-approvals-and-sandbox` is the purpose-built flag ("for
+# environments that are externally sandboxed"). This litmus falsifies drift back
+# to a prompting/sandboxed forge launch, and proves the behavior is gated to
+# TILLANDSIAS_HOST_KIND=forge (non-forge sessions keep their normal posture).
+name: litmus:codex-forge-yolo-shape
+spec: codex-tray-launcher
+phase: pre-build
+description: >
+  Pin the Codex forge full-auto launch: entrypoint-forge-codex.sh must exec codex
+  with --dangerously-bypass-approvals-and-sandbox, gated on
+  TILLANDSIAS_HOST_KIND=forge, threaded through the exec line via the
+  codex_forge_args array — and must NOT contain a bare, ungated `exec codex "$@"`.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/entrypoint-forge-codex.sh
+
+critical_path:
+  - step: "the forge codex entrypoint uses the full-auto bypass flag"
+    command: "grep -q -- '--dangerously-bypass-approvals-and-sandbox' images/default/entrypoint-forge-codex.sh && echo 'ok: bypass-flag-present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: bypass-flag-present"
+
+  - step: "the bypass flag is gated on TILLANDSIAS_HOST_KIND=forge (not unconditional)"
+    command: "E=images/default/entrypoint-forge-codex.sh; grep -qF 'codex_forge_args+=(--dangerously-bypass-approvals-and-sandbox)' \"$E\" && grep -qF '\"${TILLANDSIAS_HOST_KIND:-}\" = \"forge\"' \"$E\" && echo 'ok: gated-on-forge' || { echo 'FAIL: flag-append not gated on forge'; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: gated-on-forge"
+
+  - step: "the gated args array is threaded into the codex exec line"
+    command: "grep -qF 'exec codex \"${codex_forge_args[@]}\" \"$@\"' images/default/entrypoint-forge-codex.sh && echo 'ok: args-in-exec'"
+    timeout_ms: 3000
+    expected_behavior: "ok: args-in-exec"
+
+  - step: "no ungated bare 'exec codex \"$@\"' whole line remains (drift back to prompting launch)"
+    command: "grep -qxF 'exec codex \"$@\"' images/default/entrypoint-forge-codex.sh && { echo 'FAIL: bare ungated exec codex present'; exit 1; } || echo 'ok: no-bare-exec'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no-bare-exec"
+
+  - step: "behavioral: the gate adds the flag under forge and nothing under non-forge"
+    command: "add(){ a=(); [ \"${1:-}\" = forge ] && a+=(--dangerously-bypass-approvals-and-sandbox); printf '%s' \"${a[*]:-}\"; }; f=$(add forge); n=$(add host); [ \"$f\" = '--dangerously-bypass-approvals-and-sandbox' ] && [ -z \"$n\" ] && echo 'ok: gate-behaves' || { echo \"FAIL: forge=[$f] nonforge=[$n]\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: gate-behaves"
+
+observability:
+  traces:
+    - "@trace spec:codex-tray-launcher"
+  expected_log: "codex forge full-auto launch pinned (bypass flag + forge gate + exec threading)"
+  log_fields:
+    spec: "codex-tray-launcher"
+    test: "codex-forge-yolo-shape"
+    artifact: "images/default/entrypoint-forge-codex.sh"
+
+rollback:
+  on_failure: >
+    The Codex forge full-auto launch drifted. Restore
+    images/default/entrypoint-forge-codex.sh so it builds a codex_forge_args array
+    that appends --dangerously-bypass-approvals-and-sandbox only when
+    TILLANDSIAS_HOST_KIND=forge, and execs `codex "${codex_forge_args[@]}" "$@"`.
+    Do not revert to a bare `exec codex "$@"` (re-enables approval prompts and the
+    inner sandbox inside the already-contained forge).

@@ -446,7 +446,9 @@ async fn handle_connection(
                 //
                 // @trace spec:host-shell-architecture, spec:tillandsias-vault,
                 //        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                let projects = fetch_cloud_projects();
+                let projects = tokio::task::spawn_blocking(fetch_cloud_projects)
+                    .await
+                    .unwrap_or_default();
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
