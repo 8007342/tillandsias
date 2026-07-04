@@ -1,6 +1,37 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-04T04:18Z
+LastExecutionTime: 2026-07-04T21:00Z
+
+## This Loop (2026-07-04 — CREATION_TIME->FIRST_RUN container refactor: research + inference impl)
+
+Operator directive: strip finicky curl/tar installers out of forge image CREATION,
+move to idempotent FIRST_RUN on the persistent cache; harnesses EVERY_LAUNCH for
+latest; pull small models on inference FIRST_RUN. Multi-session; file packets.
+
+- **Filed 6 packets (178-183)** with a full Containerfile audit (evidence-backed):
+  CREATION (keep dnf: node/rust/go/java/python bases) vs FIRST_RUN (migrate the
+  install_archive block: ~19 cargo tools + wasmtime/dart/marksman + ollama) vs
+  EVERY_LAUNCH (codex/claude/opencode/antigravity via npm/latest — fixes "newer
+  version available" on a fresh forge).
+- **178 research DONE (the crux answered, code-definitive):** NO live forge-launch
+  path mounts a persistent cache for $CARGO_HOME/$NPM_CONFIG_PREFIX
+  (build_forge_agent_run_args + build_opencode_forge_args mount only project+CA+tmpfs;
+  ContainerProfile's rich cache is unused dead code; forge runs --rm). So first-run
+  installs would NOT persist today -> order 179 (add the cache mount) is a HARD
+  PREREQUISITE for 180/181. Promoted 179 ready.
+- **182 research DONE + 183 impl DONE (self-contained win):** inference already did
+  idempotent first-run ollama pulls into the persistent models cache, but pulled
+  llama3.2:3b (3B, out of the operator's 0.3-1.5B envelope). Replaced with a
+  config-driven default set (qwen2.5:0.5b, qwen2.5:1.5b, llama3.2:1b,
+  qwen2.5-coder:1.5b) via TILLANDSIAS_DEFAULT_MODELS; idempotent+non-fatal; pinned by
+  litmus:inference-firstrun-default-models-shape (4/4) + fixed the stale STEP 7.
+- **NOT touched (respected):** the operator's uncommitted WIP on main.rs /
+  Containerfile.base / lib-common.sh / proxy allowlist etc. — including a DUPLICATED
+  antigravity curl block. The forge tool migration (180) lives in Containerfile.base
+  (WIP-dirty) + needs 179 (persistent mount, in WIP-dirty main.rs), so it is
+  next-session work once the WIP settles. Flagged the duplication in packet 181.
+- **Follow-up filed inline:** the inference tier system auto-pulls qwen2.5:7b on a
+  16GB laptop (RAM>=16 -> T2), conflicting with tiny-model-first.
 
 ## This Loop (2026-07-04T04:02Z, forge — Codex /meta-orchestration validation)
 
