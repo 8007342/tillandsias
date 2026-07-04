@@ -1,0 +1,61 @@
+# @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+#
+# Order 179: the forge must mount a PERSISTENT tool/package cache so FIRST_RUN
+# tool installs (orders 180/181 — cargo tools, npm harnesses) survive the forge's
+# --rm. lib-common points $CARGO_HOME/$NPM_CONFIG_PREFIX at
+# /home/forge/.cache/tillandsias-project; a per-project podman NAMED volume backs
+# it (container-managed, no host-$HOME surface -> no credential-leak path).
+# Falsifies a regression that drops the mount (installs would re-run every launch)
+# or swaps it for a host-$HOME bind-mount (a credential-leak surface).
+name: litmus:forge-persistent-tool-cache-mount-shape
+spec: forge-cache-dual
+phase: pre-build
+description: >
+  Pin build_forge_agent_run_args: a per-project named volume
+  (tillandsias-forge-cache-<project>) is mounted at
+  /home/forge/.cache/tillandsias-project so first-run tool/package installs persist
+  across --rm, and the source is a NAMED volume (not a host .cache/.config/$HOME
+  bind-mount).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+
+critical_path:
+  - step: "a forge_tool_cache_volume helper names the per-project cache volume"
+    command: "grep -qF 'fn forge_tool_cache_volume' crates/tillandsias-headless/src/main.rs && grep -qF 'tillandsias-forge-cache-' crates/tillandsias-headless/src/main.rs && echo 'ok: named-volume helper present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: named-volume helper present"
+
+  - step: "the cache is mounted at the lib-common CARGO_HOME/NPM_CONFIG_PREFIX root"
+    command: "grep -qF '/home/forge/.cache/tillandsias-project' crates/tillandsias-headless/src/main.rs && echo 'ok: mount target matches lib-common PROJECT_CACHE'"
+    timeout_ms: 3000
+    expected_behavior: "ok: mount target matches lib-common PROJECT_CACHE"
+
+  - step: "the guard test still forbids a host .cache/.config mount SOURCE (no credential-leak bind)"
+    command: "grep -qF 'must not mount a host .cache dir into the forge' crates/tillandsias-headless/src/main.rs && echo 'ok: host-cache-source guard intact'"
+    timeout_ms: 3000
+    expected_behavior: "ok: host-cache-source guard intact"
+
+  - step: "a unit test pins the persistent tool-cache named volume mount"
+    command: "grep -qF 'forge_agent_mounts_persistent_tool_cache_named_volume' crates/tillandsias-headless/src/main.rs && echo 'ok: positive mount test present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: positive mount test present"
+
+observability:
+  traces:
+    - "@trace spec:forge-cache-dual"
+  expected_log: "forge persistent per-project tool-cache named volume mount pinned (survives --rm, no host-$HOME surface)"
+  log_fields:
+    spec: "forge-cache-dual"
+    test: "forge-persistent-tool-cache-mount-shape"
+    artifact: "crates/tillandsias-headless/src/main.rs"
+
+rollback:
+  on_failure: >
+    The forge persistent tool-cache mount drifted. Restore
+    build_forge_agent_run_args to mount the per-project named volume
+    tillandsias-forge-cache-<project> at /home/forge/.cache/tillandsias-project
+    (via forge_tool_cache_volume), keep the source-scoped host .cache/.config guard,
+    and keep the forge_agent_mounts_persistent_tool_cache_named_volume unit test.

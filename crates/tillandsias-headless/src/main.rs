@@ -7246,6 +7246,19 @@ pub(crate) fn ensure_enclave_for_project(
 /// `/home/forge/src/<project>/`, CA cert at `/etc/tillandsias/ca.crt`.
 /// @trace spec:forge-as-only-runtime
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
+/// Name of the podman named volume backing a project's persistent forge tool/
+/// package cache. `$CARGO_HOME` and `$NPM_CONFIG_PREFIX` (set by lib-common to
+/// `/home/forge/.cache/tillandsias-project/...`) live here, so FIRST_RUN tool
+/// installs survive the forge's `--rm`. A named volume — not a host bind-mount —
+/// keeps this container-managed with no host-$HOME surface, so it cannot become a
+/// credential-leak path (preserves the one-way boundary). Per-project so caches
+/// never cross project boundaries. Reuses `project_name`, which is already
+/// constrained to valid container/volume-name characters by the container name.
+/// @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+fn forge_tool_cache_volume(project_name: &str) -> String {
+    format!("tillandsias-forge-cache-{project_name}")
+}
+
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
     project_name: &str,
@@ -7268,6 +7281,19 @@ pub(crate) fn build_forge_agent_run_args(
         .volume(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),
+            MountMode::ReadWrite,
+        )
+        // Persistent per-project tool/package cache (order 179). lib-common points
+        // $CARGO_HOME and $NPM_CONFIG_PREFIX at /home/forge/.cache/tillandsias-project;
+        // without a persistent backing this lives in the --rm overlay and is lost
+        // every launch, so FIRST_RUN tool installs (orders 180/181) would re-run
+        // each attach. A podman NAMED volume gives container-managed persistence
+        // across --rm with ZERO host-$HOME reference (safer than a bind-mount — it
+        // cannot leak host credentials, preserving the one-way boundary).
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        .volume(
+            forge_tool_cache_volume(project_name),
+            "/home/forge/.cache/tillandsias-project".to_string(),
             MountMode::ReadWrite,
         );
     let mut spec = apply_proxy_env(spec)
@@ -8966,15 +8992,25 @@ mod tests {
             false,
         );
 
-        let joined = argv.join(" ");
-        assert!(
-            !joined.contains(".config"),
-            "must not mount user .config dirs into the forge; got: {joined}"
-        );
-        assert!(
-            !joined.contains(".cache"),
-            "must not mount user .cache dirs into the forge; got: {joined}"
-        );
+        // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
+        // SOURCE (left of ':'), but allow the container-side TARGET
+        // /home/forge/.cache/tillandsias-project (the persistent tool cache, order
+        // 179) and podman NAMED volumes (tillandsias-forge-cache-*, no host path).
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        for arg in &argv {
+            if arg.starts_with("HOME=") {
+                continue;
+            }
+            let source = arg.split(':').next().unwrap_or("");
+            assert!(
+                !source.contains("/.config"),
+                "must not mount a host .config dir into the forge; got source in: {arg}"
+            );
+            assert!(
+                !source.contains("/.cache"),
+                "must not mount a host .cache dir into the forge; got source in: {arg}"
+            );
+        }
 
         if let Some(home) = std::env::var_os("HOME") {
             let home_str = home.to_string_lossy().into_owned();
@@ -8998,6 +9034,27 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn forge_agent_mounts_persistent_tool_cache_named_volume() {
+        // Order 179: FIRST_RUN tool installs ($CARGO_HOME/$NPM_CONFIG_PREFIX, which
+        // lib-common points at /home/forge/.cache/tillandsias-project) must survive
+        // the forge's --rm. A per-project podman NAMED volume backs that path.
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+        let joined = argv.join(" ");
+        assert!(
+            joined.contains("tillandsias-forge-cache-alpha:/home/forge/.cache/tillandsias-project"),
+            "forge must mount the persistent tool-cache named volume (order 179); got: {joined}"
+        );
     }
 
     #[test]

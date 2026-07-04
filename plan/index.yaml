@@ -1720,7 +1720,7 @@ plan_index:
     - packet_id: forge-persistent-tool-cache-mount
       order: 179
       title: "Impl (prereq): guarantee a persistent writable tool cache mount on forge launch"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
       depends_on: [forge-image-creation-vs-firstrun-split-research]
@@ -1742,7 +1742,7 @@ plan_index:
     - packet_id: forge-firstrun-tool-migration
       order: 180
       title: "Impl: migrate curl/tar Containerfile installers to idempotent FIRST_RUN (cargo tools, wasmtime, dart, marksman, ollama)"
-      status: pending
+      status: ready
       kind: enhancement
       deliverable: plan/issues/forge-firstrun-tool-migration-2026-07-04.md
       depends_on: [forge-persistent-tool-cache-mount]
@@ -1764,7 +1764,7 @@ plan_index:
     - packet_id: forge-harness-every-launch-latest
       order: 181
       title: "Impl: install agent harnesses (codex/claude/opencode/antigravity) fresh EVERY_LAUNCH (always latest)"
-      status: pending
+      status: ready
       kind: enhancement
       deliverable: plan/issues/forge-harness-every-launch-latest-2026-07-04.md
       depends_on: [forge-persistent-tool-cache-mount]
