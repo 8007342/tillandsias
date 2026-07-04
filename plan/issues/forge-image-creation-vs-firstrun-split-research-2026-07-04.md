@@ -96,6 +96,37 @@ cache surviving the forge's `--rm`. Evidence is contradictory:
    (host bind-mount `~/.cache/tillandsias/<project>/` or a named volume) — without
    it, first-run migration makes the forge SLOWER, not faster.
 
+## ANSWER (2026-07-04, code-definitive) — the persistent cache does NOT mount today
+
+Traced every live forge-launch arg builder:
+- `build_forge_agent_run_args` (Claude/Codex/Maintenance) and
+  `build_opencode_forge_args` (OpenCode / status-check) mount ONLY the project
+  (`/home/forge/src/<project>`), the CA cert, and tmpfs — **no** volume/bind for
+  `/home/forge/.cache/tillandsias-project`, `$CARGO_HOME`, or `$NPM_CONFIG_PREFIX`.
+- `ContainerSpec::build_run_args` (`crates/tillandsias-podman/src/container_spec.rs`)
+  auto-injects no cache volume — it only serializes explicitly-added mounts.
+- A whole-crate grep for any `.cache/tillandsias/(tools|project|cargo|npm)` volume
+  mount returns NOTHING.
+- `ContainerProfile` (`container_profile.rs`, the rich tools-overlay/model-cache
+  architecture) is NOT referenced by any live launch path in headless/podman —
+  it is dead/aspirational relative to the actual forge launch.
+
+Therefore, with the forge running `--rm`, the `$CARGO_HOME`/`$NPM_CONFIG_PREFIX`
+that lib-common exports live in the **ephemeral overlay upper-dir and are destroyed
+on exit**. First-run tool installs do NOT persist across launches today.
+
+**Consequence for sequencing (locked):** order 179 (add the persistent cache
+mount) is a HARD PREREQUISITE for 180/181. Migrating tools to first-run BEFORE
+179 lands would make the forge reinstall everything on every attach — a
+regression. A `podman inspect <forge>` will confirm at runtime, but the code is
+unambiguous (there is no mount to inspect). The inference models cache is a
+separate question (container_profile.rs claims a dynamic mount; verify for 182).
+
+Per-tool classification: delivered in the audit table above, and it follows the
+operator's explicit directive (curl/tar → FIRST_RUN; harnesses → EVERY_LAUNCH), so
+no further sign-off is needed for the forge split. Model-set sign-off (O1-O3) lives
+in the inference research packet (182).
+
 ## Verifiable closure (research done-when)
 - Audit table above confirmed against the current Containerfiles (done).
 - The persistence question answered with `podman inspect` evidence: exactly which

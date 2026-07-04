@@ -1696,7 +1696,7 @@ plan_index:
     - packet_id: forge-image-creation-vs-firstrun-split-research
       order: 178
       title: "Research: split forge image into CREATION_TIME (dnf) / FIRST_RUN (persistent cache) / EVERY_LAUNCH (npm harnesses)"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
       depends_on: []
@@ -1720,7 +1720,7 @@ plan_index:
     - packet_id: forge-persistent-tool-cache-mount
       order: 179
       title: "Impl (prereq): guarantee a persistent writable tool cache mount on forge launch"
-      status: pending
+      status: ready
       kind: enhancement
       deliverable: plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
       depends_on: [forge-image-creation-vs-firstrun-split-research]
