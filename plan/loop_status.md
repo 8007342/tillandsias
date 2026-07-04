@@ -20,7 +20,7 @@ value of verify-before-release: forge launch failed at the proxy stage
   → --init (vault healthy) → forge launches → Node reaches the model API through the
   proxy. A Codex session with a valid token now connects.
 - PR #67 merged (main ac608247→4b9a4376); VERSION 704.2; tag v0.3.260704.2;
-  release.yml run 28693745435 dispatched [result on completion].
+  release.yml run 28693745435 SUCCESS (all 3 jobs green); published https://github.com/8007342/tillandsias/releases/tag/v0.3.260704.2
 - Net across this session: fixed the ACTUAL Codex-connect root cause (Node bypassing
   proxy, order 175) + forge-launch proxy idempotency (176) + vault secret race (174),
   integrated Codex's forge findings (171/172/173), and verified the whole chain live.
