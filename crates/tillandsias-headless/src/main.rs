@@ -3144,15 +3144,20 @@ fn build_opencode_forge_args(
             format!("TILLANDSIAS_OPENCODE_PROMPT={prompt}"),
         ]);
     }
-    
+
     // Inject Gemini API key for OpenCode harness
-    if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(crate::vault_bootstrap::ProviderId::Gemini, debug) {
-        if !key.is_empty() {
-            args.extend([
-                "--env".into(),
-                format!("{}={key}", crate::vault_bootstrap::ProviderId::Gemini.env_var()),
-            ]);
-        }
+    if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(
+        crate::vault_bootstrap::ProviderId::Gemini,
+        debug,
+    ) && !key.is_empty()
+    {
+        args.extend([
+            "--env".into(),
+            format!(
+                "{}={key}",
+                crate::vault_bootstrap::ProviderId::Gemini.env_var()
+            ),
+        ]);
     }
     if debug {
         args.extend(["--env".into(), "TILLANDSIAS_DEBUG=1".into()]);
@@ -7229,12 +7234,11 @@ pub(crate) fn build_forge_agent_run_args(
         ForgeAgentMode::OpenCode => Some(crate::vault_bootstrap::ProviderId::Gemini),
         ForgeAgentMode::Maintenance => None,
     };
-    if let Some(p) = provider_api {
-        if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug) {
-            if !key.is_empty() {
-                spec = spec.env(p.env_var(), key);
-            }
-        }
+    if let Some(p) = provider_api
+        && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
+        && !key.is_empty()
+    {
+        spec = spec.env(p.env_var(), key);
     }
 
     spec.build_run_args()
@@ -7265,9 +7269,18 @@ pub(crate) fn build_forge_agent_run_argv(
 
 fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
     let (oauth_prov, api_prov) = match mode {
-        ForgeAgentMode::Claude => (Some(ProviderId::Claude), Some(crate::vault_bootstrap::ProviderId::Anthropic)),
-        ForgeAgentMode::Codex => (Some(ProviderId::Codex), Some(crate::vault_bootstrap::ProviderId::Openai)),
-        ForgeAgentMode::OpenCode => (Some(ProviderId::Antigravity), Some(crate::vault_bootstrap::ProviderId::Gemini)),
+        ForgeAgentMode::Claude => (
+            Some(ProviderId::Claude),
+            Some(crate::vault_bootstrap::ProviderId::Anthropic),
+        ),
+        ForgeAgentMode::Codex => (
+            Some(ProviderId::Codex),
+            Some(crate::vault_bootstrap::ProviderId::Openai),
+        ),
+        ForgeAgentMode::OpenCode => (
+            Some(ProviderId::Antigravity),
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ),
         ForgeAgentMode::Maintenance => (None, None),
     };
 
@@ -7279,15 +7292,19 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             return Ok(());
         }
 
-        let is_oauth_logged_in = crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
-            .map(|v| !v.is_empty())
-            .unwrap_or(false);
+        let is_oauth_logged_in =
+            crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
+                .map(|v| !v.is_empty())
+                .unwrap_or(false);
         if is_oauth_logged_in {
             return Ok(());
         }
 
         if debug {
-            eprintln!("[tillandsias] No auth token found for {}. Launching login flow...", op.name());
+            eprintln!(
+                "[tillandsias] No auth token found for {}. Launching login flow...",
+                op.name()
+            );
         }
         let token_script = get_generic_login_token_script(&op);
         let config = ProviderLoginConfig {

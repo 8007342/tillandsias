@@ -7,7 +7,7 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/github-actions-convergence.sh
+  - workspace contains scripts/release-preflight-local.sh
   - workspace contains scripts/update-convergence-dashboard.sh
   - workspace contains docs/convergence/centicolon-dashboard.md
   - workspace contains docs/convergence/centicolon-dashboard.json
@@ -15,7 +15,7 @@ preconditions:
 
 critical_path:
   - step: "verify convergence instrumentation remains annotated and the convergence score machinery is present in the spec"
-    command: "grep -F '@trace spec:observability-convergence' scripts/github-actions-convergence.sh && grep -F '@trace spec:observability-convergence' scripts/update-convergence-dashboard.sh && grep -F 'convergence_score' openspec/specs/observability-convergence/spec.md"
+    command: "grep -F '@trace spec:observability-convergence' scripts/release-preflight-local.sh && grep -F '@trace spec:observability-convergence' scripts/update-convergence-dashboard.sh && grep -F 'convergence_score' openspec/specs/observability-convergence/spec.md"
     timeout_ms: 5000
     expected_behavior: "observability-convergence"
 
@@ -38,11 +38,11 @@ critical_path:
 observability:
   traces:
     - "@trace spec:observability-convergence"
-  expected_log: "Convergence instrumentation remains tied to the dashboard scripts; dashboard contract and source-of-truth integration are present in spec body and rendered artefacts"
+  expected_log: "Convergence instrumentation remains tied to local preflight/dashboard scripts; dashboard contract and source-of-truth integration are present in spec body and rendered artefacts"
   log_fields:
     spec: "observability-convergence"
     test: "observability-convergence-shape"
 
 rollback:
-  on_failure: "inspect scripts/github-actions-convergence.sh, scripts/update-convergence-dashboard.sh, and docs/convergence/ for drift; re-run scripts/update-convergence-dashboard.sh if the rendered artefacts are missing the contract sections"
+  on_failure: "inspect scripts/release-preflight-local.sh, scripts/update-convergence-dashboard.sh, and docs/convergence/ for drift; re-run scripts/update-convergence-dashboard.sh if the rendered artefacts are missing the contract sections"
   command: "sed -n '1,40p' scripts/update-convergence-dashboard.sh && printf '\\n---\\n' && sed -n '1,40p' docs/convergence/centicolon-dashboard.md && printf '\\n---\\n' && jq '.dashboard_contract // \"missing\"' docs/convergence/centicolon-dashboard.json"

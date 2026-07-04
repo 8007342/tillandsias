@@ -2,51 +2,50 @@
 name: litmus:nix-cache-size-signal
 spec: nix-builder
 description: >
-  Verify the FlakeHub nix cache configuration is present (code-level) and that
-  the retired GitHub Actions nix cache backend is not used for release cache
-  warming.
+  Verify the release workflow uses FlakeHub-backed Nix builds and that the
+  retired hosted cache-warm workflow/GitHub Actions cache backend stay absent.
 severity: medium
 size: instant
 phase: pre-build
 
 preconditions:
-  - workspace contains .github/workflows/nix-cache-warm.yml
+  - workspace contains .github/workflows/release.yml
 
 critical_path:
-  - step: "assert warm-cache workflow grants GitHub OIDC for FlakeHub auth"
-    command: "grep -Fq 'id-token: write' .github/workflows/nix-cache-warm.yml && echo 'flakehub oidc permission present'"
+  - step: "assert release workflow grants GitHub OIDC for FlakeHub auth"
+    command: "grep -Fq 'id-token: write' .github/workflows/release.yml && echo 'flakehub oidc permission present'"
     timeout_ms: 5000
     success_pattern: "flakehub oidc permission present"
     failure_pattern: "grep: no match"
 
-  - step: "assert warm-cache workflow installs Determinate Nix"
-    command: "grep -Fq 'DeterminateSystems/determinate-nix-action@v3.21.2' .github/workflows/nix-cache-warm.yml && echo 'determinate nix present'"
+  - step: "assert release workflow installs Determinate Nix"
+    command: "grep -Fq 'DeterminateSystems/determinate-nix-action@v3.21.2' .github/workflows/release.yml && echo 'determinate nix present'"
     timeout_ms: 5000
     success_pattern: "determinate nix present"
     failure_pattern: "grep: no match"
 
-  - step: "assert warm-cache workflow uses FlakeHub Cache"
-    command: "grep -Fq 'DeterminateSystems/flakehub-cache-action@v3.21.2' .github/workflows/nix-cache-warm.yml && echo 'flakehub cache action present'"
+  - step: "assert release workflow uses FlakeHub Cache"
+    command: "grep -Fq 'DeterminateSystems/flakehub-cache-action@v3.21.2' .github/workflows/release.yml && echo 'flakehub cache action present'"
     timeout_ms: 5000
     success_pattern: "flakehub cache action present"
     failure_pattern: "grep: no match"
 
   - step: "assert GitHub Actions nix cache backend is retired"
-    command: "! grep -Fq 'nix-community/cache-nix-action' .github/workflows/nix-cache-warm.yml && echo 'gha nix cache retired'"
+    command: "! grep -R 'nix-community/cache-nix-action' .github/workflows && echo 'gha nix cache retired'"
     timeout_ms: 5000
     success_pattern: "gha nix cache retired"
     failure_pattern: "nix-community/cache-nix-action"
 
-  - step: "assert nix-cache-warm workflow fires on workflow_dispatch and schedule"
-    command: "grep -Fq 'workflow_dispatch' .github/workflows/nix-cache-warm.yml && grep -Fq 'schedule' .github/workflows/nix-cache-warm.yml && echo 'nix cache schedule present'"
+  - step: "assert hosted nix cache warm workflow is retired"
+    command: "test ! -e .github/workflows/nix-cache-warm.yml && echo 'nix cache warm workflow retired'"
     timeout_ms: 5000
-    success_pattern: "nix cache schedule present"
-    failure_pattern: "grep: no match"
+    success_pattern: "nix cache warm workflow retired"
+    failure_pattern: "nix-cache-warm.yml"
 
 observability:
   traces:
     - "@trace spec:nix-builder"
-  expected_log: "FlakeHub nix cache config present and retired GHA cache absent"
+  expected_log: "FlakeHub release cache config present and retired hosted warm/GHA cache absent"
   log_fields:
     spec: "nix-builder"
     test: "nix-cache-size-signal"
@@ -54,6 +53,6 @@ observability:
 rollback:
   on_failure: >
     Restore Determinate Nix + FlakeHub Cache actions and id-token:write in
-    .github/workflows/nix-cache-warm.yml. Do not restore the retired
+    release.yml. Do not restore the retired hosted cache-warm workflow or
     nix-community/cache-nix-action backend.
-  command: "grep -nE 'id-token: write|determinate-nix-action|flakehub-cache-action|cache-nix-action' .github/workflows/nix-cache-warm.yml"
+  command: "grep -nE 'id-token: write|determinate-nix-action|flakehub-cache-action|cache-nix-action' .github/workflows/release.yml"

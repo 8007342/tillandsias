@@ -4,13 +4,10 @@
 # `litmus:ci-release-musl-binary-policy` doesn't pin.
 #
 # The existing litmus covers the publish step (musl-binary,
-# statically-linked validation, cosign sign-blob) + the hosted
-# litmus workflow being metadata-only. The spec's "Litmus Chain"
-# section explicitly lists `musl-tools` install as a separate
-# pinnable boundary, and the spec's "Main branch convergence"
-# scenario references the static convergence workflow + the sibling
-# `local-ci.sh --ci-mode` script. None of these are currently
-# grep-pinned.
+# statically-linked validation, cosign sign-blob). This companion pins
+# the cloud-minute policy: hosted release is manual, release.yml owns
+# only build/sign/publish work, and local scripts own verification and
+# dashboard generation before dispatch.
 #
 # Plus: release.yml is
 # workflow_dispatch-only by design — a regression flipping it
@@ -22,29 +19,23 @@ name: litmus:ci-release-toolchain-shape
 spec: ci-release
 phase: pre-build
 description: >
-  Pin musl-tools install + workflow_dispatch-only triggers on
-  release.yml + the static convergence
-  workflow + sibling local-ci.sh / github-actions-convergence.sh
-  scripts. Companion to the existing musl-binary-policy litmus.
+  Pin workflow_dispatch-only triggers on release.yml + the local
+  release preflight/local-ci scripts that replace hosted convergence,
+  litmus metadata, and cache-warm workflows.
 severity: medium
 size: instant
 
 preconditions:
   - workspace contains .github/workflows/release.yml
-  - workspace contains .github/workflows/github-actions-convergence.yml
   - workspace contains scripts/local-ci.sh
-  - workspace contains scripts/github-actions-convergence.sh
+  - workspace contains scripts/release-preflight-local.sh
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "release workflow installs musl-tools before the build step"
-    # Spec mandates: "The hosted runner MUST install the native musl
-    # C toolchain required by crates with C build scripts before
-    # compiling the musl target." A refactor that drops musl-tools
-    # would silently break the next release on a fresh runner.
-    command: "grep -F 'musl-tools' .github/workflows/release.yml"
+  - step: "release workflow uses FlakeHub-backed Nix builds"
+    command: "grep -F 'DeterminateSystems/determinate-nix-action@v3.21.2' .github/workflows/release.yml && grep -F 'DeterminateSystems/flakehub-cache-action@v3.21.2' .github/workflows/release.yml && grep -F 'nix build -L .#tillandsias-x86_64-musl' .github/workflows/release.yml"
     timeout_ms: 3000
-    expected_behavior: "musl-tools"
+    expected_behavior: "tillandsias-x86_64-musl"
 
   - step: "release workflow is workflow_dispatch-only (manual trigger)"
     # The merge-to-main-and-release skill carries the trigger
@@ -56,13 +47,10 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "workflow_dispatch:"
 
-  - step: "static convergence workflow exists + carries the ci-release trace"
-    # The "Main branch convergence" spec scenario references the
-    # static convergence workflow as the on-push handler. Drift
-    # that drops the trace would lose the spec→workflow mapping.
-    command: "grep -F '@trace spec:observability-convergence, spec:ci-release' .github/workflows/github-actions-convergence.yml"
+  - step: "hosted verification workflows are absent"
+    command: "test ! -e .github/workflows/ci.yml && test ! -e .github/workflows/litmus-tests.yml && test ! -e .github/workflows/github-actions-convergence.yml && test ! -e .github/workflows/nix-cache-warm.yml && echo 'ok: hosted verification retired'"
     timeout_ms: 3000
-    expected_behavior: "spec:ci-release"
+    expected_behavior: "ok: hosted verification retired"
 
   - step: "sibling local-ci.sh script exists and is executable"
     # The spec's "Litmus Chain" section names `scripts/local-ci.sh
@@ -71,28 +59,24 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: local-ci.sh executable"
 
-  - step: "sibling github-actions-convergence.sh script exists and is executable"
-    command: "test -x scripts/github-actions-convergence.sh && echo 'ok: convergence script executable'"
+  - step: "local release preflight script exists and is executable"
+    command: "test -x scripts/release-preflight-local.sh && grep -F 'scripts/local-ci.sh' scripts/release-preflight-local.sh && echo 'ok: release preflight executable'"
     timeout_ms: 3000
-    expected_behavior: "ok: convergence script executable"
+    expected_behavior: "ok: release preflight executable"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "Release + convergence workflow surfaces pinned per ci-release spec"
+  expected_log: "Release workflow and local preflight surfaces pinned per ci-release spec"
   log_fields:
     spec: "ci-release"
     test: "ci-release-toolchain-shape"
     release_workflow: ".github/workflows/release.yml"
-    convergence_workflow: ".github/workflows/github-actions-convergence.yml"
+    local_preflight: "scripts/release-preflight-local.sh"
 
 rollback:
   on_failure: >
-    A ci-release toolchain / workflow surface drifted. Restore:
-    `musl-tools` install in release.yml; `workflow_dispatch:`
-    trigger on release.yml (NEVER auto-
-    trigger via push:tags); the `@trace spec:ci-release` line at
-    the head of github-actions-convergence.yml; and the executable
-    bit on local-ci.sh + github-actions-convergence.sh sibling
-    scripts.
-  command: "grep -nE 'musl-tools|workflow_dispatch:' .github/workflows/release.yml && head -3 .github/workflows/github-actions-convergence.yml && ls -la scripts/local-ci.sh scripts/github-actions-convergence.sh"
+    A ci-release workflow surface drifted. Restore manual-only release.yml,
+    FlakeHub-backed Nix release builds, absence of hosted verification workflows,
+    and executable local-ci.sh + release-preflight-local.sh scripts.
+  command: "grep -nE 'workflow_dispatch:|flakehub-cache-action|nix build -L' .github/workflows/release.yml && ls -la scripts/local-ci.sh scripts/release-preflight-local.sh"

@@ -5,7 +5,7 @@
 # Purpose: Run ALL convergence checks locally before pushing.
 # This avoids wasting cloud minutes on failures.
 #
-# All checks that run in cloud workflows ALSO run here:
+# Release-blocking checks run locally here before the hosted release workflow:
 #   - Spec-cheatsheet binding validation (threshold 90%)
 #   - Spec-code drift detection (ghost traces, zero-trace specs)
 #   - Version monotonicity enforcement
@@ -1155,7 +1155,7 @@ printf '%b Results:%b %d passed, %d failed, %d skipped\n' "${BOLD}" "${NC}" \
 
 if [[ $CHECKS_FAILED -eq 0 ]]; then
     printf '%b%s%b\n' "${GREEN}${BOLD}" "✓ ALL CHECKS PASSED — Safe to push!" "${NC}"
-    printf '%b%s%b\n' "" "Cloud workflows will re-verify these guarantees as a safety net." "${NC}"
+    printf '%b%s%b\n' "" "Dispatch the hosted release only for platform builds, signing, and publishing." "${NC}"
     echo ""
     exit 0
 else

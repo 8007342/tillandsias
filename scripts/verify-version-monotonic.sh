@@ -114,8 +114,11 @@ check_tag="${1:-}"
 if [[ -n "$check_tag" ]]; then
     latest_tag="$check_tag"
 else
-    # Find latest tag matching v*
-    latest_tag="$(git tag -l 'v*' --sort=-version:refname --merged HEAD 2>/dev/null | head -1)" || true
+    # Find latest release tag matching v* across all fetched tags. Do not limit
+    # this to tags merged into HEAD: release branches can lag main while remote
+    # release tags continue moving, and publishing an older VERSION from such a
+    # branch would regress the global artifact stream.
+    latest_tag="$(git tag -l 'v*' --sort=-version:refname 2>/dev/null | head -1)" || true
 fi
 
 # If no tags exist, current version is automatically monotonic

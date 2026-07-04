@@ -74,6 +74,7 @@ Native Win32 NotifyIcon tray. Uses WSL2 to run a Fedora-based utility VM. Suppor
 ## All Downloads
 
 See the [latest release](https://github.com/8007342/tillandsias/releases/latest) for all platform binaries, checksums, and Cosign signatures.
+Release operators should run the [local release gate](docs/RELEASING.md) before dispatching the hosted signing and publishing workflow.
 
 | File | Description |
 |------|-------------|
