@@ -70,3 +70,21 @@ flips node fetch from `ENOTFOUND` to `http=401`. Regression test
 - `./build.sh --check` + `proxy_env_routes_node_through_the_proxy` test green.
 - Live: `NODE_USE_ENV_PROXY=1` flips node fetch ENOTFOUND -> HTTP 401 in the forge.
 - Ships next release; operator re-tests a Codex session reaching remote.
+
+## Observation 2026-07-04 — login-first gate exists; OpenCode→Antigravity mapping to verify
+
+The login-first gate the operator described ALREADY EXISTS (landed c5cbf3a8): the
+forge launch calls `ensure_provider_auth(mode)` before building run args, which
+launches `run_provider_login` only when no stored token is found (api-key OR
+oauth). Now pinned by `forge_agent_launch_gates_on_provider_login_first`. So the
+operator's "can't connect" was the Node-proxy bypass (this packet), not a missing
+login gate.
+
+To verify (not changed — no evidence it is wrong, and OpenCode ran fine): the gate
+maps `ForgeAgentMode::OpenCode -> (ProviderId::Antigravity oauth, Gemini api-key)`.
+OpenCode primarily targets the LOCAL inference container (no egress/login needed),
+so gating an OpenCode launch on an Antigravity/Gemini login could force an
+unwanted login when the user only wants local inference. Confirm whether OpenCode
+is intended to require a Google/Gemini credential, or whether Maintenance-style
+(no gate) is correct for the local-inference path. Owner to verify with a live
+OpenCode launch that has no Gemini key stored.

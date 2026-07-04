@@ -8510,6 +8510,44 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn forge_agent_launch_gates_on_provider_login_first() {
+        // Operator contract: launching a Codex/Claude/Antigravity session must run
+        // the provider login flow FIRST when no auth token is stored, then launch
+        // the authenticated forge; when a token is present, launch directly.
+        // ensure_provider_auth implements that gate (api-key present -> ok; oauth
+        // token present -> ok; else run_provider_login). This pins that the forge
+        // launch path CALLS the gate BEFORE building the run args, so it cannot
+        // drift back to launching an unauthenticated forge.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md (login-first residual)
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("fn run_forge_agent_cli_mode(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("run_forge_agent_cli_mode source");
+        let gate_at = window
+            .find("ensure_provider_auth(mode, debug)")
+            .expect("forge launch must gate on ensure_provider_auth (login-first)");
+        let build_at = window
+            .find("build_forge_agent_run_args(")
+            .expect("forge launch must build run args");
+        assert!(
+            gate_at < build_at,
+            "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args"
+        );
+        // The gate itself must implement token-presence-then-login, not blind login.
+        let gate = source
+            .split("fn ensure_provider_auth(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("ensure_provider_auth source");
+        assert!(
+            gate.contains("read_provider_api_key") && gate.contains("run_provider_login"),
+            "ensure_provider_auth must check a stored token before running the login flow"
+        );
+    }
+
+    #[test]
     fn proxy_env_routes_node_through_the_proxy() {
         // Node's global fetch/undici ignores HTTP_PROXY by default, so on the
         // --internal enclave (proxy-only egress, no external DNS) Node agents
