@@ -1,6 +1,31 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-04T03:05Z
+LastExecutionTime: 2026-07-04T03:40Z
+
+## Release v0.3.260704.2 (2026-07-04T03:38Z — completes the Codex-connect chain)
+
+The 704.1 curl-install smoke (run on the host) FOUND a new blocker, proving the
+value of verify-before-release: forge launch failed at the proxy stage
+("tillandsias-proxy already in use") whenever a proxy was already running
+(from --init or a prior session) — blocking Codex/Claude/OpenCode launch.
+
+- **Order 176 — forge-launch proxy idempotency FIXED**: the three forge-launch
+  proxy sites (ensure_enclave_for_project [tray+CLI], opencode, opencode-web) ran
+  `podman run --name tillandsias-proxy` raw. Now guarded by
+  container_running(tillandsias-proxy) (reuse) + rm --ignore (clear stale), matching
+  ensure_proxy_running. Regression test forge_launch_proxy_bringup_is_idempotent.
+- **FULL CHAIN LIVE-VERIFIED with the fixed binary**: proxy already running (the
+  failing case) → forge launches cleanly → inside the forge NODE_USE_ENV_PROXY=1 +
+  `node fetch https://api.openai.com → HTTP 401 (REACHED REMOTE)`. So: curl-install
+  → --init (vault healthy) → forge launches → Node reaches the model API through the
+  proxy. A Codex session with a valid token now connects.
+- PR #67 merged (main ac608247→4b9a4376); VERSION 704.2; tag v0.3.260704.2;
+  release.yml run 28693745435 dispatched [result on completion].
+- Net across this session: fixed the ACTUAL Codex-connect root cause (Node bypassing
+  proxy, order 175) + forge-launch proxy idempotency (176) + vault secret race (174),
+  integrated Codex's forge findings (171/172/173), and verified the whole chain live.
+  Remaining: order 170 (credential quarantine, ready); the human-in-loop step
+  (operator logs in with real Codex/Claude creds and confirms a session).
 
 ## Release v0.3.260704.1 (2026-07-04T03:00Z, linux_mutable — merge-to-main-and-release)
 
