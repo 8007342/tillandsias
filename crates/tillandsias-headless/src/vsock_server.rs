@@ -85,7 +85,11 @@ async fn maybe_secure_stream(
     match secure_control_wire_mode().map_err(io::Error::other)? {
         SecureControlWireMode::Off => Ok(stream),
         SecureControlWireMode::On => {
-            let psk = channel_psk(env!("CARGO_PKG_VERSION"), WIRE_VERSION, HopId::HostGuest);
+            let psk = channel_psk(
+                tillandsias_secure_channel::workspace_version(),
+                WIRE_VERSION,
+                HopId::HostGuest,
+            );
             let secure = server_handshake(stream, &psk).await?;
             Ok(Box::new(secure))
         }

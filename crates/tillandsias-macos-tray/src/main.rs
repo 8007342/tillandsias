@@ -20,6 +20,8 @@ mod action_host;
 #[cfg(target_os = "macos")]
 mod diagnose;
 #[cfg(target_os = "macos")]
+mod guest_binary;
+#[cfg(target_os = "macos")]
 mod installation_uuid;
 #[cfg(target_os = "macos")]
 mod main_thread;
@@ -100,7 +102,7 @@ fn main() {
         // --exec-guest "ls -la" or --exec-guest tillandsias --debug --init
         // without needing to pre-split argv themselves.
         let shell_cmd = args[idx + 1..].join(" ");
-        let guest_argv = vec!["/bin/sh".to_string(), "-c".to_string(), shell_cmd];
+        let guest_argv = vec!["/bin/bash".to_string(), "-lc".to_string(), shell_cmd];
         std::process::exit(diagnose::exec_guest_main(guest_argv));
     }
     // Headless GitHub login: boot the VM and drive the guest --github-login over

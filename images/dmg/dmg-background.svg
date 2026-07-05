@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  dmg-background.svg — source for the styled macOS release DMG background.
+
+  Rendered to dmg-background.png (1320x800 px @144dpi = 660x400 pt, matching
+  create-dmg "window-size 660 440" minus the title bar) by
+  scripts/build-macos-dmg.sh maintainers; the PNG is committed so CI needs no
+  SVG renderer.
+
+  Layout contract with scripts/build-macos-dmg.sh:
+    - Tillandsias.app icon centred at (165, 205), 128 pt icons
+    - /Applications drop link centred at (495, 205)
+    - the arrow below spans the gap between those two icon slots
+
+  Watermark: a light (7%) stylised Templo Mayor of Tenochtitlan — twin-shrine
+  step pyramid with its double stairway — above the lake of Texcoco.
+-->
+<svg width="660" height="400" viewBox="0 0 660 400" xmlns="http://www.w3.org/2000/svg">
+  <!-- warm near-white backdrop -->
+  <rect width="660" height="400" fill="#fbfaf7"/>
+
+  <!-- ══ Tenochtitlan watermark (Templo Mayor), all at low opacity ══ -->
+  <g fill="#1a1a1a" opacity="0.07">
+    <!-- pyramid tiers, base to top -->
+    <polygon points="90,360 570,360 540,320 120,320"/>
+    <polygon points="130,318 530,318 502,283 158,283"/>
+    <polygon points="170,281 490,281 464,248 196,248"/>
+    <polygon points="210,246 450,246 428,213 232,213"/>
+    <!-- twin shrines -->
+    <rect x="243" y="168" width="54" height="45"/>
+    <rect x="363" y="168" width="54" height="45"/>
+    <!-- shrine roof slabs -->
+    <rect x="236" y="156" width="68" height="14"/>
+    <rect x="356" y="156" width="68" height="14"/>
+    <!-- double stairway balustrades -->
+    <polygon points="300,360 312,213 320,213 312,360"/>
+    <polygon points="348,360 340,213 348,213 360,360"/>
+    <polygon points="325,360 327,213 333,213 335,360"/>
+  </g>
+  <!-- stair treads -->
+  <g stroke="#1a1a1a" stroke-width="1.5" opacity="0.05">
+    <line x1="313" y1="235" x2="347" y2="235"/>
+    <line x1="312" y1="255" x2="348" y2="255"/>
+    <line x1="311" y1="275" x2="349" y2="275"/>
+    <line x1="310" y1="295" x2="350" y2="295"/>
+    <line x1="309" y1="315" x2="351" y2="315"/>
+    <line x1="308" y1="335" x2="352" y2="335"/>
+  </g>
+  <!-- lake of Texcoco -->
+  <g stroke="#1a1a1a" stroke-width="2" fill="none" opacity="0.05">
+    <path d="M120,372 q 30,-8 60,0 t 60,0 t 60,0 t 60,0 t 60,0 t 60,0 t 60,0"/>
+    <path d="M150,382 q 30,-8 60,0 t 60,0 t 60,0 t 60,0 t 60,0 t 60,0"/>
+    <path d="M190,392 q 30,-8 60,0 t 60,0 t 60,0 t 60,0 t 60,0"/>
+  </g>
+
+  <!-- ══ the big drag arrow ══ -->
+  <g fill="#4a4a4a" opacity="0.82">
+    <rect x="240" y="198" width="145" height="14" rx="7"/>
+    <polygon points="385,180 427,205 385,230"/>
+  </g>
+  <text x="330" y="258" font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+        font-size="15" fill="#6b6b6b" opacity="0.85" text-anchor="middle">drag to Applications</text>
+</svg>

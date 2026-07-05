@@ -52,6 +52,8 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
 
+use crate::guest_binary::stage_embedded_guest_binary;
+
 /// Manifest bundled at build time so the binary doesn't need the repo or
 /// network to know its artifact-URL template + pinned SHAs. Same constant
 /// pattern as `action_host::BUNDLED_MANIFEST_TOML` — both the tray UI and
@@ -149,7 +151,7 @@ async fn open_control_wire_stream(
         SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
         SecureControlWireMode::On => {
             let psk = channel_psk(
-                env!("CARGO_PKG_VERSION"),
+                tillandsias_secure_channel::workspace_version(),
                 tillandsias_control_wire::WIRE_VERSION,
                 HopId::HostGuest,
             );
@@ -324,6 +326,10 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 ///   * `0` — provisioned (or already provisioned)
 ///   * `1` — hard failure (manifest parse, network, conversion, SHA)
 pub fn provision_main() -> i32 {
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let image_root = image_root();
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root);
 
@@ -395,6 +401,10 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
     if argv.is_empty() {
         eprintln!("--exec-guest requires a command, e.g. --exec-guest /bin/echo HELLO");
         return 2;
+    }
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
     }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
@@ -537,6 +547,10 @@ fn prompt_line(label: &str, hidden: bool) -> String {
 pub fn github_login_main() -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
     if !vz.is_provisioned() {
@@ -718,6 +732,10 @@ pub fn github_login_main() -> i32 {
 pub fn list_cloud_projects_main() -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true);
     if !vz.is_provisioned() {
@@ -824,6 +842,10 @@ pub fn list_cloud_projects_main() -> i32 {
 pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true);
     if !vz.is_provisioned() {

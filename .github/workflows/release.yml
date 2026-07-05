@@ -328,10 +328,26 @@ jobs:
               | grep -q 'com.apple.security.virtualization'
           ls -la dist/
 
+      # Styled drag-to-Applications disk image for manual installs (the
+      # README's "MACOS — MANUAL INSTALL" path). Stable asset name
+      # Tillandsias.dmg so the releases/latest/download/ link never goes
+      # stale. Appends its own line to dist/SHA256SUMS before staging.
+      - name: Build styled DMG (drag to Applications)
+        run: scripts/build-macos-dmg.sh
+
+      - name: Verify DMG contents
+        run: |
+          hdiutil attach dist/Tillandsias.dmg -readonly -nobrowse
+          test -d /Volumes/Tillandsias/Tillandsias.app
+          test -L /Volumes/Tillandsias/Applications
+          test -f /Volumes/Tillandsias/.background/dmg-background.png
+          hdiutil detach /Volumes/Tillandsias
+
       - name: Stage release artifacts
         run: |
           mkdir -p release-artifacts
           cp dist/tillandsias-tray-*-macos-arm64.tar.gz release-artifacts/
+          cp dist/Tillandsias.dmg release-artifacts/
           install -m 0755 scripts/install-macos.sh release-artifacts/install-macos.sh
           # The macOS SHA256SUMS uses a distinct filename so it doesn't
           # collide with the Linux job's SHA256SUMS in the GitHub release.
@@ -344,7 +360,7 @@ jobs:
       - name: Sign macOS artifacts with Cosign bundles
         run: |
           cd release-artifacts
-          for artifact in tillandsias-tray-*-macos-arm64.tar.gz install-macos.sh; do
+          for artifact in tillandsias-tray-*-macos-arm64.tar.gz Tillandsias.dmg install-macos.sh; do
             echo "::group::Signing ${artifact}"
             cosign sign-blob \
               --yes \

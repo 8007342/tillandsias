@@ -2,6 +2,28 @@
 
 LastExecutionTime: 2026-07-04T21:00Z
 
+### Cycle 2026-07-05T21:22Z (macos — meta-orchestration)
+- Recovered dirty macOS packaging work: styled DMG script/assets, release workflow
+  DMG staging/signing, and packaged `.app` guest-binary embedding for
+  `aarch64-unknown-linux-musl` + `x86_64-unknown-linux-musl`.
+- Fixed macOS secure-control PSK drift by deriving both tray/headless from repo
+  `VERSION`, and fixed `--exec-guest` to use the guest PTY allowlisted
+  `/bin/bash -lc` wrapper.
+- Verified: `cargo fmt --all -- --check`; `cargo test -p tillandsias-macos-tray`;
+  `cargo test -p tillandsias-secure-channel`; `scripts/build-macos-tray.sh`;
+  `scripts/build-macos-dmg.sh`; read-only DMG contents; packaged app
+  `--exec-guest /bin/echo TILLANDSIAS_GUEST_OK` returned exit 0.
+- Residual blocker filed in
+  `plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md`:
+  `--list-cloud-projects` reaches the guest but Vault startup fails with
+  `Operation not permitted`. Next action is to merge latest `origin/linux-next`
+  Vault/SELinux + guest-binary builder work into `osx-next`, rebuild, and rerun
+  list-projects plus agent-launch smoke.
+- Integration gate note: `./build.sh --check` does not reach cargo on this
+  macOS host because `scripts/common.sh` wraps Homebrew Podman with Linux-only
+  `--root/--runroot` flags. Filed
+  `plan/issues/macos-build-check-podman-wrapper-2026-07-05.md`.
+
 ### Cycle 2026-07-05T00:0XZ (macos — meta-orchestration)
 - Merged origin/linux-next 7ab86309 into osx-next (9614d32f); built + installed
   tray v0.3.260704.1; control wire E2E green (--exec-guest → Podman hello-world ok).
