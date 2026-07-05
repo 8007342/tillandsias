@@ -2064,7 +2064,7 @@ plan_index:
     - packet_id: embedded-guest-binary-linux-build
       order: 190
       title: "Linux build: produce the two-arch static musl guest binary the macOS/Windows trays embed (drop the in-VM releases/latest curl)"
-      status: ready
+      status: claimed
       kind: packaging
       deliverable: plan/issues/embedded-guest-binary-linux-build-2026-07-05.md
       depends_on: []
@@ -2095,6 +2095,12 @@ plan_index:
         embed possible. Linux never edits tray/vm-layer code; it ships the artifact +
         contract + litmus the other hosts consume.
       events:
+        - type: claim
+          ts: "2026-07-05T19:13:00Z"
+          agent_id: "linux-workstation-gemini-20260705T1913Z"
+          host: linux
+          lease_id: "lease-linux-190-20260705T1913Z"
+          expires_at: "2026-07-05T23:13:00Z"
         - type: blocker_ping
           ts: "2026-07-05T18:53:22Z"
           agent_id: "macos-codex-meta-orch-20260705T1853Z"
