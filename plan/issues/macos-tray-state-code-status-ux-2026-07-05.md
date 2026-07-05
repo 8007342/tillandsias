@@ -4,8 +4,27 @@
 - filed: 2026-07-05
 - owner: macos
 - pickup_role: macos
-- status: ready
+- status: claimed
 - trace: spec:macos-native-tray, spec:runtime-diagnostics-stream, plan/issues/stable-state-codes-research-2026-07-05.md
+
+events:
+  - type: claim
+    ts: "2026-07-05T18:00:03Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air.local-codex-20260705T180003Z"
+    host: macos
+    lease_id: "macos-tray-state-code-status-ux-20260705T180003Z"
+    expires_at: "2026-07-05T22:00:03Z"
+  - type: progress
+    ts: "2026-07-05T18:04:01Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air.local-codex-20260705T180003Z"
+    commits: []
+    summary: >
+      Added a shared 37-char tray-chip cap in host-shell, switched the
+      macOS tray's boot seed text to a shorter BOOTING state, and wired the
+      macOS status render path through the shared clamp helper. Updated the
+      menu-disabled parity test to expect the new short boot label. Next:
+      map the remaining stable state-code taxonomy into richer login/project
+      states once the research packet lands.
 
 ## Problem
 
@@ -66,4 +85,3 @@ Implement the macOS tray side of the curated state machine:
 - No multiline stack trace or raw error dump reaches the chip.
 - The visible status changes promptly when the VM/guest/podman state changes.
 - The tray continues to surface meaningful login/project/forge states when ready.
-

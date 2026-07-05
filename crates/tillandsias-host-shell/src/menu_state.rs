@@ -72,6 +72,30 @@ pub mod ids {
     pub const WSLG_DISABLED_REASON: &str = "Requires Windows 11 + WSLg";
 }
 
+/// Hard cap for the tray chip. The UI backends should never surface a
+/// longer string than this in the status row.
+pub const TRAY_STATUS_CHIP_MAX_CHARS: usize = 37;
+
+/// Short boot label used before the VM has emitted a richer state.
+pub const BOOT_STATUS_TEXT: &str = "\u{1F535} Booting\u{2026}";
+
+/// Clamp a tray chip string to the visible budget. Keeps the string
+/// readable without allowing a long event payload to push the chip past
+/// the intended 37-character menu-bar budget.
+pub fn clamp_tray_status_chip(text: impl AsRef<str>) -> String {
+    let text = text.as_ref();
+    if text.chars().count() <= TRAY_STATUS_CHIP_MAX_CHARS {
+        return text.to_string();
+    }
+
+    let mut out = String::with_capacity(TRAY_STATUS_CHIP_MAX_CHARS);
+    for ch in text.chars().take(TRAY_STATUS_CHIP_MAX_CHARS - 1) {
+        out.push(ch);
+    }
+    out.push('\u{2026}');
+    out
+}
+
 /// A single menu node.
 ///
 /// The `enabled` flag plus `disabled_reason` lets either backend render a
@@ -263,7 +287,7 @@ impl MenuState {
     /// not ready, target=WindowsTray.
     pub fn initial() -> Self {
         Self {
-            status_text: "Setting up Fedora Linux\u{2026}".to_string(),
+            status_text: BOOT_STATUS_TEXT.to_string(),
             version: crate::version().to_string(),
             login: GithubLoginState::LoggedOut,
             local_projects: Vec::new(),
@@ -298,11 +322,7 @@ impl MenuStructure {
     pub fn initial_provisioning() -> Self {
         MenuStructure::Provisioning {
             items: vec![
-                MenuItem::disabled(
-                    ids::STATUS,
-                    "\u{1F535} Setting up Fedora Linux\u{2026}",
-                    "VM is provisioning",
-                ),
+                MenuItem::disabled(ids::STATUS, BOOT_STATUS_TEXT, "VM is provisioning"),
                 MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"),
             ],
         }
@@ -382,7 +402,7 @@ pub fn build(state: &MenuState) -> MenuStructure {
     // (1) Status — always disabled, always first.
     items.push(MenuItem::disabled(
         ids::STATUS,
-        state.status_text.clone(),
+        clamp_tray_status_chip(&state.status_text),
         "current status",
     ));
 
@@ -835,6 +855,33 @@ mod tests {
             }
             other => panic!("expected Provisioning, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn tray_status_chip_clamps_to_37_chars() {
+        let raw = format!("🟢 Ready · {}", "x".repeat(80));
+        let clamped = clamp_tray_status_chip(&raw);
+        assert!(
+            clamped.chars().count() <= TRAY_STATUS_CHIP_MAX_CHARS,
+            "chip should stay within the 37-char budget: {clamped:?}"
+        );
+        assert!(
+            clamped.ends_with('…'),
+            "overlong chip should be ellipsized, got {clamped:?}"
+        );
+    }
+
+    #[test]
+    fn initial_menu_uses_short_boot_status() {
+        let state = MenuState::initial();
+        assert_eq!(state.status_text, BOOT_STATUS_TEXT);
+        let menu = build(&state);
+        let items = match menu {
+            MenuStructure::Ready { items } => items,
+            other => panic!("expected Ready, got {other:?}"),
+        };
+        assert_eq!(items[0].label, BOOT_STATUS_TEXT);
+        assert!(items[0].label.chars().count() <= TRAY_STATUS_CHIP_MAX_CHARS);
     }
 
     #[test]

@@ -38,7 +38,7 @@ use objc2_foundation::{MainThreadMarker, NSString};
 
 use crate::action_host::TrayActionHost;
 use crate::menu_disabled_v2::{MacMenuItemSpec, render};
-use tillandsias_host_shell::menu_state::{MenuStructure, ids};
+use tillandsias_host_shell::menu_state::{BOOT_STATUS_TEXT, MenuStructure, ids};
 
 /// Entry point invoked from `main`. Blocks until the user picks "Quit" on
 /// the menu; returns never (`!`) because the AppKit run loop owns the
@@ -106,7 +106,7 @@ pub fn run() -> ! {
     let initial_state = {
         let mut s = tillandsias_host_shell::menu_state::MenuState::initial();
         s.target = tillandsias_host_shell::menu_state::TargetSurface::MacosTray;
-        s.status_text = "\u{1F535} Setting up Fedora Linux\u{2026}".to_string();
+        s.status_text = BOOT_STATUS_TEXT.to_string();
         s
     };
     let initial = tillandsias_host_shell::menu_state::build(&initial_state);

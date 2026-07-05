@@ -69,7 +69,9 @@ use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_han
 use tillandsias_vm_layer::VmRuntime;
 use tillandsias_vm_layer::vz::VzRuntime;
 
+use crate::guest_binary::stage_embedded_guest_binary;
 use crate::main_thread::dispatch_to_main_thread;
+use tillandsias_host_shell::menu_state::{BOOT_STATUS_TEXT, clamp_tray_status_chip};
 
 /// Send/Sync wrappers around AppKit `Retained<…>` handles so they can
 /// sit in the action-host's ivars (the host is `MainThreadOnly`, but
@@ -234,10 +236,11 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
 /// (commit 8992652a) byte-for-byte so both trays produce identical
 /// chip strings for identical `VmStatusReply` payloads.
 fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
-    match last_event.map(str::trim).filter(|s| !s.is_empty()) {
+    let text = match last_event.map(str::trim).filter(|s| !s.is_empty()) {
         Some(evt) => format!("{base} \u{00B7} {evt}"),
         None => base.to_string(),
-    }
+    };
+    clamp_tray_status_chip(text)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -321,7 +324,7 @@ async fn open_control_wire_stream(
         SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
         SecureControlWireMode::On => {
             let psk = channel_psk(
-                env!("CARGO_PKG_VERSION"),
+                tillandsias_secure_channel::workspace_version(),
                 tillandsias_control_wire::WIRE_VERSION,
                 HopId::HostGuest,
             );
@@ -1106,6 +1109,22 @@ async fn run_start(
     vm_slot: Arc<Mutex<Option<Arc<VzRuntime>>>>,
     on_phase: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<(), String> {
+    match stage_embedded_guest_binary() {
+        Ok(Some(dest)) => {
+            eprintln!(
+                "[tillandsias-tray] staged embedded guest binary at {}",
+                dest.display()
+            );
+        }
+        Ok(None) => {
+            eprintln!(
+                "[tillandsias-tray] no embedded guest binary resource found; falling back to fetch"
+            );
+        }
+        Err(err) => {
+            return Err(format!("stage embedded guest binary: {err}"));
+        }
+    }
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
 
     // First-launch flow (m9 Fedora pivot): if no rootfs.img is present
@@ -1176,9 +1195,7 @@ impl TrayActionHost {
                 s
             })),
             self_handle: Arc::new(Mutex::new(None)),
-            status_text: Arc::new(Mutex::new(
-                "\u{1F535} Setting up Fedora Linux\u{2026}".to_string(),
-            )),
+            status_text: Arc::new(Mutex::new(BOOT_STATUS_TEXT.to_string())),
         };
         // SAFETY: `mtm` proves main-thread; allocation + init is the
         // standard ObjC two-step. `set_ivars` populates the declared
@@ -1371,7 +1388,7 @@ impl TrayActionHost {
     /// subscription), those will feed into the same path.
     pub fn set_status_text(&self, text: impl Into<String>) {
         let ivars = self.ivars();
-        let text = text.into();
+        let text = clamp_tray_status_chip(text.into());
         *ivars.status_text.lock().unwrap() = text.clone();
         let status_item = ivars.status_item.clone();
         let status_menu_item = ivars.status_menu_item.clone();
@@ -1425,7 +1442,7 @@ impl TrayActionHost {
         // in-VM headless's vsock handshake completes (slice gates on
         // that signal). Granularity will increase when we wire
         // `download_verified::on_progress` (next slice).
-        self.set_status_text("\u{1F535} Setting up Fedora Linux\u{2026}");
+        self.set_status_text(BOOT_STATUS_TEXT);
 
         // Clone the Arc-based status handles so the completion callback
         // can update the chip from the main-thread dispatch without
@@ -1492,7 +1509,7 @@ impl TrayActionHost {
                     // out is logged + ignored, the chip is the
                     // authoritative surface.
                     notify_provisioning_failed(e);
-                    format!("\u{1F534} {e}")
+                    clamp_tray_status_chip(format!("\u{1F534} {e}"))
                 }
             };
 
@@ -1959,6 +1976,18 @@ mod tests {
             compose_chip_text(base, Some("  forge-bar started  ")),
             "\u{1F7E2} Ready \u{00B7} forge-bar started"
         );
+    }
+
+    #[test]
+    fn compose_chip_text_caps_overlong_payloads() {
+        let base = "\u{1F7E2} Ready";
+        let long_event = "x".repeat(200);
+        let text = compose_chip_text(base, Some(&long_event));
+        assert!(
+            text.chars().count() <= tillandsias_host_shell::menu_state::TRAY_STATUS_CHIP_MAX_CHARS,
+            "chip must stay within budget: {text:?}"
+        );
+        assert!(text.ends_with('…'), "long event should ellipsize: {text:?}");
     }
 
     /// `local_entry_to_menu` translates a Linux-side
