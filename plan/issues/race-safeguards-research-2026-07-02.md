@@ -83,3 +83,25 @@ These are not hypothetical — each happened during one afternoon of interactive
 - Orders 142–149 (observable streams) replace polling with push — R6's phase-awareness
   should be designed into the push refactor rather than bolted onto polls.
 - The headless `SingletonGuard` (spec:singleton-guard) is prior art for R2.
+
+## Dispositions & Decisions (2026-07-05)
+
+### Shared-Container Ownership Model
+**Decision**: **Supervisor Ownership** via the vsock headless service.
+- The `tillandsias-headless` daemon is the natural owner of shared resources (proxy, inference, vault, router) because its lifespan maps exactly to the utility VM's `Ready` phase.
+- Individual orchestrator flows (`run_*_mode`) will **never** stop or remove shared containers. They will only clean up their own per-project ephemeral containers.
+- The headless daemon will ensure shared containers are stopped cleanly during its own `Draining`/`Stopping` shutdown phases.
+
+### R1-R9 Dispositions
+- **R1 (Quit/relaunch)**: Assigned to Packet 161 (Windows/macOS host). The tray will use a lockfile/event to observe drain progress and block relaunch until teardown is complete. Start pokes get a retry-with-backoff.
+- **R2 (Concurrent tray)**: Assigned to Packet 161. The tray will implement a `SingletonGuard` (similar to headless) to fail fast if another instance is already running.
+- **R3 (Concurrent PTY)**: Mitigated by the Supervisor Ownership model (see R5). Parallel orchestrated flows will no longer destroy each other's shared dependencies.
+- **R4 (ensure_* idempotency)**: Assigned to Packet 162 (Headless containers). We will adopt **advisory file locks** (`flock` on `/run/tillandsias/locks/<resource>.lock`) for TOCTOU safety during check-then-act container launches.
+- **R5 (cleanup_stack_containers vs shared)**: Assigned to Packet 162. Implementation of Supervisor Ownership. `cleanup_stack_containers` will be restricted to per-project/ephemeral labels only.
+- **R6 (drain vs self-heal)**: Assigned to Packet 162 / Streams Refactor. Self-healing logic will be explicitly gated on `VmPhase == Ready`.
+- **R7 (vault lifecycle)**: Assigned to Packet 162. Vault rebuilds will use the advisory file lock as an exclusive write lock, while lease acquisitions take a shared read lock (or just standard flock exclusion). Health checks will get retry-with-backoff for "container is stopped".
+- **R8 (clone collisions)**: Assigned to Packet 163 (Fetch atomicity). Resolving via atomic clone-to-temp-then-rename directory swaps.
+- **R9 (binary fetch collisions)**: Assigned to Packet 163. Resolving via atomic fetch-to-temp-then-rename.
+
+### Scope Adjustments
+- The implementation packets (originally noted as 151-154) have shifted in the plan index. The actual implementation is correctly split across Orders **161 (Host Lifecycle)**, **162 (Headless Container Lifecycle)**, and **163 (Headless Atomicity)**. Their scopes in the plan YAML fully align with these dispositions.
