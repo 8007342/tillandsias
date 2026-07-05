@@ -2,7 +2,7 @@
 #
 # Drift-protection for the observability-convergence computation
 # surfaces: convergence velocity checker shell wrapper, evidence
-# bundle generator, CI convergence script, dashboard test harness, and
+# bundle generator, local release preflight, dashboard test harness, and
 # dashboard renderer. The existing litmus
 # (litmus:observability-convergence-shape) covers the rendered
 # dashboard artefacts and spec-body dashboard contract; this litmus
@@ -16,7 +16,7 @@ phase: pre-build
 description: >
   Pin the observability-convergence script surfaces: convergence
   velocity shell wrapper trace and explicit no-Python retirement
-  stub, evidence bundle generator exit codes, CI convergence trace,
+  stub, evidence bundle generator exit codes, local release preflight trace,
   dashboard test harness group count, dashboard renderer trace, and
   spec-body convergence score formula + staleness threshold + alert
   thresholds.
@@ -26,7 +26,7 @@ size: instant
 preconditions:
   - workspace contains scripts/check-convergence-velocity.sh
   - workspace contains scripts/generate-evidence-bundle.sh
-  - workspace contains scripts/github-actions-convergence.sh
+  - workspace contains scripts/release-preflight-local.sh
   - workspace contains scripts/test-convergence-dashboard.sh
   - workspace contains scripts/update-convergence-dashboard.sh
   - workspace contains openspec/specs/observability-convergence/spec.md
@@ -36,7 +36,7 @@ critical_path:
   - step: "Req trace: @trace spec:observability-convergence on all 5 scripts"
     # Spec § Observability mandates each convergence script carry
     # the spec trace. Pin all 5 active shell surfaces.
-    command: "for f in scripts/check-convergence-velocity.sh scripts/generate-evidence-bundle.sh scripts/github-actions-convergence.sh scripts/test-convergence-dashboard.sh scripts/update-convergence-dashboard.sh; do grep -Fq 'spec:observability-convergence' \"$f\" || { echo \"FAIL: $f missing@trace\"; exit 1; }; done && echo \"ok: 5 scripts traced\""
+    command: "for f in scripts/check-convergence-velocity.sh scripts/generate-evidence-bundle.sh scripts/release-preflight-local.sh scripts/test-convergence-dashboard.sh scripts/update-convergence-dashboard.sh; do grep -Fq 'spec:observability-convergence' \"$f\" || { echo \"FAIL: $f missing@trace\"; exit 1; }; done && echo \"ok: 5 scripts traced\""
     timeout_ms: 5000
     expected_behavior: "ok: 5 scripts traced"
 
@@ -94,7 +94,7 @@ rollback:
     A `spec:observability-convergence` script surface drifted.
     Restore: @trace spec:observability-convergence on all 5 active
     shell scripts (check-convergence-velocity.sh, generate-
-    evidence-bundle.sh, github-actions-convergence.sh, test-
+    evidence-bundle.sh, release-preflight-local.sh, test-
     convergence-dashboard.sh, update-convergence-dashboard.sh);
     explicit check-convergence-velocity no-op/Python-retired warning;
     generate-evidence-bundle.sh 4 exit codes; >=6 test groups in

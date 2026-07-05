@@ -118,11 +118,6 @@ proximity:
       machine_summary: "docs/convergence/centicolon-dashboard.json"
       per_release_summary: "target/convergence/summary.md"
       canonical_signature: "target/convergence/centicolon-signature.jsonl"
-      github_actions_dashboard: "docs/convergence/github-actions-dashboard.md"
-      github_actions_summary: "docs/convergence/github-actions-dashboard.json"
-      github_actions_signature: "target/convergence/github-actions-signature.jsonl"
-      github_actions_delta: "target/convergence/github-actions-delta.json"
-      github_actions_evidence_bundle: "target/convergence/github-actions-evidence-bundle.json"
     renderer:
       command: "scripts/update-convergence-dashboard.sh"
       inputs:

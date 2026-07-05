@@ -298,6 +298,7 @@ enum LaunchKind {
     /// Codex CLI agent — launches `entrypoint-forge-codex.sh` in the host
     /// terminal. @trace spec:tray-ux
     Codex,
+    Antigravity,
     Maintenance,
 }
 
@@ -1334,6 +1335,7 @@ fn action_slug(kind: LaunchKind) -> &'static str {
         LaunchKind::Observatorium => "observatorium",
         LaunchKind::Claude => "claude",
         LaunchKind::Codex => "codex",
+        LaunchKind::Antigravity => "antigravity",
         LaunchKind::Maintenance => "terminal",
     }
 }
@@ -1455,6 +1457,10 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
             .interactive()
             .tty()
             .entrypoint("/usr/local/bin/entrypoint-forge-codex.sh"),
+        LaunchKind::Antigravity => spec
+            .interactive()
+            .tty()
+            .entrypoint("/usr/local/bin/entrypoint-forge-antigravity.sh"),
         LaunchKind::Maintenance => spec
             .interactive()
             .tty()
@@ -1563,7 +1569,11 @@ fn launch_project_action(
             let project_path = project.path.display().to_string();
             super::run_observatorium_mode(&project_path, None, debug)
         }
-        LaunchKind::Claude | LaunchKind::Codex | LaunchKind::OpenCode | LaunchKind::Maintenance => {
+        LaunchKind::Claude
+        | LaunchKind::Codex
+        | LaunchKind::OpenCode
+        | LaunchKind::Antigravity
+        | LaunchKind::Maintenance => {
             // @trace spec:tray-ux, spec:browser-isolation-tray-integration
             // Interactive forge launches go through the host's default
             // terminal emulator. The enclave (proxy + git + inference) is
@@ -1574,6 +1584,7 @@ fn launch_project_action(
                 LaunchKind::Claude => super::ForgeAgentMode::Claude,
                 LaunchKind::Codex => super::ForgeAgentMode::Codex,
                 LaunchKind::OpenCode => super::ForgeAgentMode::OpenCode,
+                LaunchKind::Antigravity => super::ForgeAgentMode::Antigravity,
                 LaunchKind::Maintenance => super::ForgeAgentMode::Maintenance,
                 _ => unreachable!("non-interactive kinds branched above"),
             };
@@ -2104,10 +2115,11 @@ fn build_separator_item(id: i32) -> MenuNode {
 // | +0     | Claude          | 👾      |
 // | +1     | Codex           | 🏗️      |
 // | +2     | OpenCode        | 💻      |
-// | +3     | OpenCode Web    | 📐      |
-// | +4     | Observatorium   | 🔭      |
-// | +5     | Maintenance     | 🔧      |
-// | +6     | (submenu node)  | —       |
+// | +3     | Antigravity     | 🪐      |
+// | +4     | OpenCode Web    | 📐      |
+// | +5     | Observatorium   | 🔭      |
+// | +6     | Maintenance     | 🔧      |
+// | +7     | (submenu node)  | —       |
 //
 // Helpers: [`local_project_base`], [`cloud_project_base`], and
 // [`project_action_from_id`] are the only place this layout is encoded.
@@ -2116,16 +2128,18 @@ enum LeafAction {
     Claude,
     Codex,
     OpenCode,
+    Antigravity,
     OpenCodeWeb,
     Observatorium,
     Maintenance,
 }
 
 impl LeafAction {
-    const ALL: [LeafAction; 6] = [
+    const ALL: [LeafAction; 7] = [
         LeafAction::Claude,
         LeafAction::Codex,
         LeafAction::OpenCode,
+        LeafAction::Antigravity,
         LeafAction::OpenCodeWeb,
         LeafAction::Observatorium,
         LeafAction::Maintenance,
@@ -2136,9 +2150,10 @@ impl LeafAction {
             LeafAction::Claude => 0,
             LeafAction::Codex => 1,
             LeafAction::OpenCode => 2,
-            LeafAction::OpenCodeWeb => 3,
-            LeafAction::Observatorium => 4,
-            LeafAction::Maintenance => 5,
+            LeafAction::Antigravity => 3,
+            LeafAction::OpenCodeWeb => 4,
+            LeafAction::Observatorium => 5,
+            LeafAction::Maintenance => 6,
         }
     }
 
@@ -2147,6 +2162,7 @@ impl LeafAction {
             LeafAction::Claude => "\u{1F47E} Claude",
             LeafAction::Codex => "\u{1F3D7}\u{FE0F} Codex",
             LeafAction::OpenCode => "\u{1F4BB} OpenCode",
+            LeafAction::Antigravity => "\u{1FA90} Antigravity",
             LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
             LeafAction::Observatorium => "\u{1F52D} Observatorium",
             LeafAction::Maintenance => "\u{1F527} Maintenance",
@@ -2177,8 +2193,8 @@ const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
 /// `handle_cloud_overflow_click`); a future GtkWindow picker would replace
 /// that fallback in place. @trace spec:tray-ux
 const CLOUD_OVERFLOW_ID: i32 = 0x7FFF_FFFC;
-const PROJECT_LEAF_COUNT: i32 = 6;
-const PROJECT_SUBMENU_OFFSET: i32 = 6;
+const PROJECT_LEAF_COUNT: i32 = 7;
+const PROJECT_SUBMENU_OFFSET: i32 = 7;
 
 /// Maximum number of cloud projects rendered as top-level entries inside the
 /// `☁️ Cloud >` submenu before an overflow item replaces the tail.
@@ -3113,6 +3129,7 @@ impl DbusMenuIface {
                         let kind = match action {
                             LeafAction::Claude => LaunchKind::Claude,
                             LeafAction::OpenCode => LaunchKind::OpenCode,
+                            LeafAction::Antigravity => LaunchKind::Antigravity,
                             LeafAction::OpenCodeWeb => LaunchKind::OpenCodeWeb,
                             LeafAction::Observatorium => LaunchKind::Observatorium,
                             LeafAction::Maintenance => LaunchKind::Maintenance,
@@ -4336,9 +4353,9 @@ mod tests {
     }
 
     #[test]
-    fn project_submenu_has_six_leaves_in_order() {
-        // Per-project submenus are 6-leaf flat menus: Claude, Codex,
-        // OpenCode, OpenCode Web, Observatorium, Maintenance.
+    fn project_submenu_has_seven_leaves_in_order() {
+        // Per-project submenus are 7-leaf flat menus: Claude, Codex,
+        // OpenCode, Antigravity, OpenCode Web, Observatorium, Maintenance.
         // Order is locked by `LeafAction::offset`.
         let project = ProjectEntry {
             name: "alpha".to_string(),
@@ -4353,18 +4370,19 @@ mod tests {
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
 
-        // Six leaves, no sub-submenus.
-        assert_eq!(submenu.2.len(), 6);
+        // Seven leaves, no sub-submenus.
+        assert_eq!(submenu.2.len(), 7);
         let leaf_labels = labels(&submenu);
         // labels() walks the layout depth-first; index 0 is the submenu
-        // container, indices 1..=6 are the leaves in offset order.
+        // container, indices 1..=7 are the leaves in offset order.
         assert_eq!(leaf_labels[0], "alpha");
         assert!(leaf_labels[1].contains("Claude"));
         assert!(leaf_labels[2].contains("Codex"));
         assert!(leaf_labels[3].contains("OpenCode") && !leaf_labels[3].contains("Web"));
-        assert!(leaf_labels[4].contains("OpenCode Web"));
-        assert!(leaf_labels[5].contains("Observatorium"));
-        assert!(leaf_labels[6].contains("Maintenance"));
+        assert!(leaf_labels[4].contains("Antigravity"));
+        assert!(leaf_labels[5].contains("OpenCode Web"));
+        assert!(leaf_labels[6].contains("Observatorium"));
+        assert!(leaf_labels[7].contains("Maintenance"));
     }
 
     #[test]

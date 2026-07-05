@@ -141,6 +141,12 @@ specs:
   - litmus:ci-release-toolchain-shape
   coverage_ratio: 67
   last_verified: '2026-05-29'
+- spec_id: codex-tray-launcher
+  status: active
+  litmus_tests:
+  - litmus:codex-forge-yolo-shape
+  coverage_ratio: 100
+  last_verified: '2026-07-04'
 - spec_id: cli-bash-mode
   status: obsolete
   litmus_tests: []
@@ -178,8 +184,9 @@ specs:
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-30'
+  - litmus:forge-firstrun-prebuilt-tools-arch-shape
+  coverage_ratio: 80
+  last_verified: '2026-07-05'
 - spec_id: dev-build
   status: active
   litmus_tests:
@@ -282,8 +289,9 @@ specs:
   litmus_tests:
   - litmus:forge-cache-dual-shape
   - litmus:forge-cache-dual-tmpfs-caps
-  coverage_ratio: 67
-  last_verified: '2026-05-29'
+  - litmus:forge-persistent-tool-cache-mount-shape
+  coverage_ratio: 75
+  last_verified: '2026-07-04'
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
@@ -397,8 +405,9 @@ specs:
   - litmus:inference-readiness-probe-shape
   - litmus:inference-deferred-model-pulls
   - litmus:inference-container-implementation-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-31'
+  - litmus:inference-firstrun-default-models-shape
+  coverage_ratio: 80
+  last_verified: '2026-07-04'
 - spec_id: inference-host-side-pull
   status: obsolete
   litmus_tests: null

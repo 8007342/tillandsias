@@ -46,20 +46,17 @@ build version, generates traces, compiles
 validates the binary is statically linked, installs it to `~/.local/bin`, and
 runs local static plus runtime checks.
 
-## Hosted CI Boundary
+## Hosted Release Boundary
 
-GitHub-hosted workflows are intentionally small:
+GitHub-hosted workflows are reserved for release publication:
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `github-actions-convergence.yml` | push to `main`, manual | static convergence metrics |
-| `ci.yml` | manual | static Rust/spec/cheatsheet validation |
-| `litmus-tests.yml` | manual | litmus metadata and coverage only |
-| `release.yml` | manual | build, sign, and publish the musl binary |
+| `release.yml` | manual | platform builds, Cosign signing, GitHub Release upload, rolling tags |
 
-Do not run real Podman runtime tests, browser e2e tests, or container-backed
-litmus execution on GitHub-hosted runners. Those consume cloud minutes and need
-a real local runtime boundary.
+Run `scripts/release-preflight-local.sh` before dispatch. Do not run Podman
+runtime tests, browser e2e tests, dashboard refreshes, branch merges, cache
+warm jobs, or container-backed litmus execution on GitHub-hosted runners.
 
 ## Release Artifact
 

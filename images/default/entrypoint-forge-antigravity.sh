@@ -24,6 +24,11 @@ export TILLANDSIAS_HOST_KIND="forge"
 # The --tmpfs mount is already in place (podman establishes it before exec).
 populate_hot_paths
 
+# @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
+# FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
+# so it never blocks the agent launch, and fail-soft.
+ensure_forge_prebuilt_tools &
+
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
 CA_CHAIN="/run/tillandsias/ca-chain.crt"
@@ -67,6 +72,23 @@ inject_startup_context "$PROJECT_DIR"
 
 # ── Banner ──────────────────────────────────────────────────
 show_banner "antigravity"
+
+# ── Ensure the Antigravity CLI (agy) — EVERY_LAUNCH, latest ─────
+# @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+# Installed at launch (not baked): download the official installer WITH A TIMEOUT
+# then run it (NOT a `curl | bash` pipe — that pipes an unbounded fetch straight to
+# a shell). Fail-soft: if the install fails, exec below surfaces a clear error.
+if ! command -v agy >/dev/null 2>&1; then
+    trace_lifecycle "tools" "installing Antigravity CLI (agy) at launch"
+    _agy_installer="$(mktemp 2>/dev/null)"
+    if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 https://antigravity.google/cli/install.sh -o "$_agy_installer" 2>/dev/null; then
+        ANTIGRAVITY_BIN="/usr/local/bin/agy" bash "$_agy_installer" 2>/dev/null \
+            || trace_lifecycle "tools" "agy install failed (non-fatal)"
+    else
+        trace_lifecycle "tools" "agy installer fetch failed (non-fatal)"
+    fi
+    rm -f "$_agy_installer" 2>/dev/null || true
+fi
 
 # ── Launch Antigravity ──────────────────────────────────────
 trace_lifecycle "entrypoint" "antigravity launching"

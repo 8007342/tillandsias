@@ -36,10 +36,7 @@ tier: bundled
 
 - `docs/convergence/centicolon-dashboard.md`
 - `docs/convergence/centicolon-dashboard.json`
-- `docs/convergence/github-actions-dashboard.md`
-- `docs/convergence/github-actions-dashboard.json`
 - `target/convergence/summary.md`
-- `target/convergence/github-actions-summary.md`
 
 ## Visual Contract
 
@@ -60,7 +57,6 @@ scripts/update-convergence-dashboard.sh
 - Local CI may regenerate the dashboard after every metrics-producing run.
 - Main-branch merges should refresh the dashboard and append a new signature record.
 - Release runs should publish the dashboard, signature log, delta JSON, and evidence bundle together.
-- GitHub Actions should regenerate its own hosted-only dashboard against committed code and upload the artifacts separately from local development metrics.
 
 ## Tail Compression
 
@@ -75,14 +71,8 @@ scripts/update-convergence-dashboard.sh
 - `Residual` is remaining named obligation debt, not line count or confidence.
 - `Worst spec` and `Worst reason` name the main blocker for the current release row.
 - Trend glyphs should be read left to right, oldest to newest.
-- Local development and GitHub Actions histories are separate series. Compare them, but do not collapse them into one log.
-
-## Hosted Accountability
-
-- The local series is the high-fidelity development loop.
-- The GitHub Actions series is the committed-code accountability loop.
-- The hosted series should stay lighter by omitting local-only expensive checks such as podman-backed litmus runs.
-- A stable comparison means both series should keep the same residual naming conventions even if their denominators differ.
+- Local development is the high-fidelity development loop. Hosted release runs
+  consume committed dashboard evidence but do not regenerate it.
 
 ## Anti-Gaming Rules
 

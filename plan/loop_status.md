@@ -1,6 +1,391 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-02T00:30Z
+LastExecutionTime: 2026-07-04T21:00Z
+
+### Cycle 2026-07-05T00:0XZ (macos — meta-orchestration)
+- Merged origin/linux-next 7ab86309 into osx-next (9614d32f); built + installed
+  tray v0.3.260704.1; control wire E2E green (--exec-guest → Podman hello-world ok).
+- macOS evidence for the CREATION_TIME→FIRST_RUN split: forge-base is absent and
+  built at runtime in the **aarch64** guest from Containerfile.base via a long
+  x86_64 curl/tar chain → the "stuck initializing VM" symptom + wrong-arch tools.
+- Filed 2 ready packets (`macos-forge-base-build-arch-and-fragility-2026-07-05`,
+  `podman-stale-volume-locks-2026-07-05`) + added arch-awareness requirement to
+  `forge-firstrun-tool-migration`. No tray-side change needed; osx re-verifies once
+  linux lands the arch-aware first-run migration.
+
+## This Loop (2026-07-04 — CREATION_TIME->FIRST_RUN container refactor: research + inference impl)
+
+Operator directive: strip finicky curl/tar installers out of forge image CREATION,
+move to idempotent FIRST_RUN on the persistent cache; harnesses EVERY_LAUNCH for
+latest; pull small models on inference FIRST_RUN. Multi-session; file packets.
+
+- **Filed 6 packets (178-183)** with a full Containerfile audit (evidence-backed):
+  CREATION (keep dnf: node/rust/go/java/python bases) vs FIRST_RUN (migrate the
+  install_archive block: ~19 cargo tools + wasmtime/dart/marksman + ollama) vs
+  EVERY_LAUNCH (codex/claude/opencode/antigravity via npm/latest — fixes "newer
+  version available" on a fresh forge).
+- **178 research DONE (the crux answered, code-definitive):** NO live forge-launch
+  path mounts a persistent cache for $CARGO_HOME/$NPM_CONFIG_PREFIX
+  (build_forge_agent_run_args + build_opencode_forge_args mount only project+CA+tmpfs;
+  ContainerProfile's rich cache is unused dead code; forge runs --rm). So first-run
+  installs would NOT persist today -> order 179 (add the cache mount) is a HARD
+  PREREQUISITE for 180/181. Promoted 179 ready.
+- **182 research DONE + 183 impl DONE (self-contained win):** inference already did
+  idempotent first-run ollama pulls into the persistent models cache, but pulled
+  llama3.2:3b (3B, out of the operator's 0.3-1.5B envelope). Replaced with a
+  config-driven default set (qwen2.5:0.5b, qwen2.5:1.5b, llama3.2:1b,
+  qwen2.5-coder:1.5b) via TILLANDSIAS_DEFAULT_MODELS; idempotent+non-fatal; pinned by
+  litmus:inference-firstrun-default-models-shape (4/4) + fixed the stale STEP 7.
+- **NOT touched (respected):** the operator's uncommitted WIP on main.rs /
+  Containerfile.base / lib-common.sh / proxy allowlist etc. — including a DUPLICATED
+  antigravity curl block. The forge tool migration (180) lives in Containerfile.base
+  (WIP-dirty) + needs 179 (persistent mount, in WIP-dirty main.rs), so it is
+  next-session work once the WIP settles. Flagged the duplication in packet 181.
+- **Follow-up filed inline:** the inference tier system auto-pulls qwen2.5:7b on a
+  16GB laptop (RAM>=16 -> T2), conflicting with tiny-model-first.
+
+## This Loop cont. (2026-07-04 — owner handoff: recover WIP + advance-work-from-plan)
+
+Operator handed sole ownership of the workdir ("recover or delete uncommitted code"),
+then asked to drain the queue.
+
+- **Recovered the uncommitted WIP (it was a coherent feature, not junk):** wired
+  Antigravity as a first-class forge agent (--antigravity flag, ForgeAgentMode +
+  tray leaf 6->7, provider auth, .antigravity.google allow/no-bump) — closing the
+  known 'agy installed but not an agent' gap. FIXED its compile gap (a LaunchKind
+  match arm missing under --features tray, why plain --check had passed). Wiped
+  generated churn (build-proxy-progress.jsonl; gitignored build-*.log). Verified:
+  build --features vault,tray green, 243 tests pass. Committed 35ba3d3f.
+- **Order 179 DONE (advance-work-from-plan, the critical prereq 178 identified):**
+  build_forge_agent_run_args now mounts a per-project podman NAMED volume
+  tillandsias-forge-cache-<project> at /home/forge/.cache/tillandsias-project (the
+  lib-common CARGO_HOME/NPM_CONFIG_PREFIX root) — first-run installs now persist
+  across --rm. Named volume (not a ~/.cache bind) => zero host-$HOME surface, no
+  credential-leak path. Refined the launch_forge_agent_does_not_mount_user_home
+  guard to be SOURCE-scoped. +positive unit test, +litmus (forge-cache-dual). 244
+  tests pass. Committed d1838350. Promoted 180 + 181 to ready.
+
+### Queue state + next cycle
+- done: 178 (research), 179 (cache mount), 182 (research), 183 (inference models).
+- ready, NEXT CYCLE (both large + runtime-critical on the launch path — deliberately
+  NOT rushed at session end):
+  - **180 forge-firstrun-tool-migration (12h). CORRECTED by operator:** the path is
+    "curl-install PREBUILT at CREATION" -> "curl-install PREBUILT at FIRST_RUN, latest
+    version" — KEEP prebuilt binaries (NOT source compile / NOT cargo install). The
+    problem is the finicky curl/tar/zip/chmod/mkdir/chown/rm chains + hardcoded
+    version/SHA constants in CREATION. First slice: a reusable install_prebuilt helper
+    (fetch latest prebuilt -> extract -> place on cache PATH, idempotent) + migrate the
+    cargo-tool group. (My earlier "must pick binstall vs compile" framing was wrong —
+    prebuilt-at-first-run was always the answer.)
+  - **181 forge-harness-every-launch-latest (6h).** Now unblocked (NPM_CONFIG_PREFIX
+    persists via 179). Slice-1 candidate: add an idempotent, offline-safe,
+    proxy-routed every-launch npm upgrade in the forge entrypoint while keeping the
+    baked baseline; slice-2 removes the Containerfile pins.
+
+## This Loop (2026-07-04T04:02Z, forge — Codex /meta-orchestration validation)
+
+Codex ran inside the Tillandsias forge and validated the current in-forge
+runtime/config surface without using host credentials.
+
+- **Branch + credentials**: started on `main`, switched to `linux-next` for plan
+  writes. `scripts/check-credential-channel.sh` returned `ok:forge-git-mirror`;
+  `git push --dry-run origin linux-next` returned `Everything up-to-date`.
+  Real push forwarding reached GitHub, but the forge mirror continued to
+  advertise stale `origin/linux-next` afterward. A follow-up amended push
+  returned client exit 0 while the mirror log showed upstream GitHub rejected the
+  forwarded update as non-fast-forward; filed in the validation packet.
+- **Eligible gates**: `scripts/e2e-preflight.sh eligibility` returned
+  `skip:no-podman-binary`, so destructive local-build e2e was not eligible in
+  this forge.
+- **Build/test validation**: `cargo check --workspace` PASS. Full
+  `cargo test --workspace --no-fail-fast` FAIL only on
+  `-p tillandsias-headless --bin tillandsias`; targeted rerun produced 109 pass,
+  2 fail, 1 ignored. Failures: `launch_forge_agent_does_not_mount_user_home`
+  false-positives on the in-container target `/home/forge/src/...`, and
+  `source_built_init_and_status_check_smoke_uses_fake_podman` cannot find the
+  `openssl` CLI used by `ensure_ca_bundle`.
+- **Services/network**: Vault healthy at `https://vault:8200` (initialized,
+  unsealed, v1.18.5); inference healthy at `http://inference:11434/api/tags`
+  with `llama3.2:3b` + `qwen2.5:0.5b`; outbound HTTPS via proxy env reached
+  `https://api.github.com/rate_limit`.
+- **Findings filed**: `plan/issues/forge-validation-findings-2026-07-04.md`;
+  plan order 177 added as pending for Tlatoani approval.
+
+## Release v0.3.260704.2 (2026-07-04T03:38Z — completes the Codex-connect chain)
+
+The 704.1 curl-install smoke (run on the host) FOUND a new blocker, proving the
+value of verify-before-release: forge launch failed at the proxy stage
+("tillandsias-proxy already in use") whenever a proxy was already running
+(from --init or a prior session) — blocking Codex/Claude/OpenCode launch.
+
+- **Order 176 — forge-launch proxy idempotency FIXED**: the three forge-launch
+  proxy sites (ensure_enclave_for_project [tray+CLI], opencode, opencode-web) ran
+  `podman run --name tillandsias-proxy` raw. Now guarded by
+  container_running(tillandsias-proxy) (reuse) + rm --ignore (clear stale), matching
+  ensure_proxy_running. Regression test forge_launch_proxy_bringup_is_idempotent.
+- **FULL CHAIN LIVE-VERIFIED with the fixed binary**: proxy already running (the
+  failing case) → forge launches cleanly → inside the forge NODE_USE_ENV_PROXY=1 +
+  `node fetch https://api.openai.com → HTTP 401 (REACHED REMOTE)`. So: curl-install
+  → --init (vault healthy) → forge launches → Node reaches the model API through the
+  proxy. A Codex session with a valid token now connects.
+- PR #67 merged (main ac608247→4b9a4376); VERSION 704.2; tag v0.3.260704.2;
+  release.yml run 28693745435 SUCCESS (all 3 jobs green); published https://github.com/8007342/tillandsias/releases/tag/v0.3.260704.2
+- Net across this session: fixed the ACTUAL Codex-connect root cause (Node bypassing
+  proxy, order 175) + forge-launch proxy idempotency (176) + vault secret race (174),
+  integrated Codex's forge findings (171/172/173), and verified the whole chain live.
+  Remaining: order 170 (credential quarantine, ready); the human-in-loop step
+  (operator logs in with real Codex/Claude creds and confirms a session).
+
+## Release v0.3.260704.1 (2026-07-04T03:00Z, linux_mutable — merge-to-main-and-release)
+
+Cut after the Codex-request integration + Node-proxy root-cause fix, with
+--init verified end-to-end on rootless SELinux-enforcing (the verify-before-release
+discipline).
+
+- Pre-release reconcile: merged origin/main (703.1/703.2 release history +
+  release-CI changes) back into linux-next; resolved a formatting-only main.rs
+  conflict in the provider-auth code (kept linux-next's rustfmt form; Node-proxy
+  fix intact), VERSION=704.1, CI-infra→theirs. --check + 110 headless tests green.
+- PR #66 linux-next→main merged (f01c2ee8); VERSION already 704.1 (no bump needed);
+  tag v0.3.260704.1 pushed; release.yml run 28692716478 SUCCESS — all 3 jobs green
+  (Linux musl, macOS arm64, Windows). Published (not draft):
+  https://github.com/8007342/tillandsias/releases/tag/v0.3.260704.1
+  Ships: NODE_USE_ENV_PROXY (Codex/Claude connect), vault secret
+  --replace race fix, + the 703.2 SELinux/DNS fixes. Supersedes the broken 703.2
+  for the operator's Silverblue re-test.
+- After release: operator does the human-in-loop verification — curl-install
+  704.1, --init, then a Codex session reaching remote (login-first gate + Node
+  proxy). Remaining open: Codex order 170 (credential quarantine, ready);
+  OpenCode→Antigravity mapping observation; ws-package proxy coverage probe.
+
+## This Loop (2026-07-04T02:11Z, linux_mutable — /meta-orchestration: integrate Codex requests + fix Codex-connect root cause)
+
+Operator ran Codex in a local forge; it committed findings locally but couldn't
+push (mirror creds). Integrated its requests AND root-caused the "Codex can't
+connect to remote" issue with LIVE evidence on a matching host (Fedora 44,
+rootless, SELinux Enforcing).
+
+- **Pushed Codex's plan commit** (a5884965) so its 3 findings are visible.
+- **Order 173 — credential-guard false-positive FIXED** (b8b1a0bd): Codex's forge
+  cycle accreted an unpushable commit because check-credential-channel.sh returned
+  ok:forge-git-mirror merely because HOST_KIND=forge was set, without verifying the
+  mirror is reachable. Now probes `git ls-remote origin` (timeout 10, fixture seam);
+  unreachable -> missing:no-credential-channel. +2 litmus steps (7/7 green).
+- **Orders 171/172 — Codex full-auto in forge + litmus** (df96012d): entrypoint
+  execs codex --dangerously-bypass-approvals-and-sandbox, gated on HOST_KIND=forge.
+  Verified flag against the real binary (codex-cli 0.137.0). litmus:codex-forge-yolo-shape
+  (5/5, bound). Removes approval-prompt stalls + lifts Codex's inner sandbox.
+- **Order 174 — vault secret race FIXED** (de579d40): the three secret helpers did
+  a non-atomic `secret rm`+`secret create` that races under concurrent bootstraps
+  (--init while a forge launch also ensure_vault_running) -> "secret name in use".
+  Now `secret create --replace` (atomic). Found by live repro. Regression test.
+- **Order 175 — Node-proxy bypass FIXED = THE Codex-connect root cause** (784a1903):
+  LIVE-PROVED it is NOT an allowlist gap. Inside the running forge: curl-through-proxy
+  to api.openai.com -> 401 (works); node global fetch -> ENOTFOUND (Node ignores
+  HTTP_PROXY); NODE_USE_ENV_PROXY=1 node -> 401. The --internal enclave is proxy-only,
+  Node connected direct -> timed out -> died (operator's exact symptom); OpenCode
+  worked because it targets local inference. Fix: NODE_USE_ENV_PROXY=1 in both
+  apply_proxy_env + proxy_env_args (forge agents + login containers). Regression test.
+- **Login-first gate**: already exists (ensure_provider_auth, landed c5cbf3a8, wired
+  before build_forge_agent_run_args). The operator's described flow (no token -> login
+  first -> authenticated forge; token present -> direct) is implemented. Pinned with
+  forge_agent_launch_gates_on_provider_login_first (2c8d0b37). Filed an observation:
+  OpenCode maps to Antigravity/Gemini login but uses local inference — verify.
+- **Codex order 170 (credential quarantine)**: remaining; well-shaped + ready.
+- **VERIFICATION PASSED (verify-before-release)**: ran `--init --debug` with the
+  newly-built fixed binary on THIS Fedora 44 rootless SELinux-Enforcing host (matches
+  the operator's Silverblue). Vault came up healthy end-to-end:
+  `vault_container_t not loadable -> label=disable`, `vault healthy
+  (initialized=true sealed=false v=1.18.5)`, `base_url: https://127.0.0.1:8201`
+  (loopback fix, not vault:8200), secret refresh clean (no "name in use" race),
+  `bootstrap complete`, all 5 policies+AppRoles provisioned, exit 0. Only noise =
+  expected non-fatal rootless warnings (/etc/hosts + semanage Permission denied).
+  This proves the vault chain (SELinux label + loopback URL + secret --replace) is
+  fixed on matching hardware — the definitive verification that was missing before
+  the 703.1/703.2 releases.
+- **Runtime hygiene**: during live debugging I `podman secret rm`'d tls-cert; restored
+  it. The user's enclave containers exited (137/139, healthy teardown) independently.
+
+## This Loop (2026-07-04T01:49Z, forge — shared checkout mirror alias validation)
+
+Operator noted this forge is using the same `/home/forge/src/tillandsias`
+checkout path as Tlatoani's original host checkout, so the container inherited
+the host checkout plus global git mirror mapping. Validated the forge without
+destructively changing credentials or mappings.
+
+- **Start state**: `TILLANDSIAS_HOST_KIND=forge`, branch `linux-next`, initial
+  worktree clean at `a67a97ad`.
+- **Credential guard**: `scripts/check-credential-channel.sh` returned
+  `ok:forge-git-mirror`.
+- **Transparent mirror path broken in this shared-checkout case**:
+  `git fetch origin --prune` failed with `remote error: access denied or
+  repository not exported: /tillandsias`; normal git URL rewriting also tried
+  `tillandsias-git:9418` and DNS failed from this container.
+- **Non-destructive direct git workaround verified**: without editing host
+  config, repo remotes, or credentials, `GIT_CONFIG_GLOBAL=/dev/null git
+  ls-remote https://github.com/8007342/tillandsias.git HEAD` succeeded against
+  GitHub. The same per-command override allowed `git fetch origin --prune` and
+  fast-forwarded `linux-next` to `ca4deb46` (`origin/main` now `e8e92a9f`).
+- **Filed observation**:
+  `plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md`.
+- **Detailed push report**:
+  `plan/issues/forge-push-failure-full-report-2026-07-04.md` records every
+  fetch/push attempt, the exact failure outputs, credential-channel checks, and
+  a host-agent resolution checklist.
+- **Refined fix packet**: added order 170
+  `forge-source-mount-credential-quarantine` for source-mount detection plus
+  dummy override dirs/files so host GitHub credentials/config are not mounted,
+  copied, logged, or reused inside the forge. The forge should instruct agents
+  that host credentials are not used inside the forge and git must use the forge
+  credential channel/mirror or documented fallback.
+- **Codex forge defaults packets**: added orders 171 and 172 so Codex's own
+  forge config defaults to full-auto/YOLO mode under
+  `TILLANDSIAS_HOST_KIND=forge`, with a regression litmus that fails if ordinary
+  in-forge git/build/filesystem operations prompt for approval again.
+- **Forge validation**: `scripts/e2e-preflight.sh eligibility` returned
+  `skip:no-podman-binary`, so destructive Podman e2e was not eligible in this
+  forge. `cargo check --workspace` PASS with normal host networking. `cargo
+  build -p tillandsias-headless --bin tillandsias` PASS, and the built binary
+  reports `Tillandsias v0.3.260704.1`.
+- **Residual**: normal transparent mirror routing is not trustworthy for this
+  shared-host-checkout topology; direct global git with
+  `GIT_CONFIG_GLOBAL=/dev/null` is the verified non-mutating path for fetch from
+  this session. Push is blocked: mirror push fails `repository not exported:
+  /tillandsias`; direct HTTPS push reaches GitHub but no non-interactive
+  credential channel is present; `gh auth status` is not logged in; repo-local
+  `.git/.gh-credentials` and token env vars are absent.
+
+## This Loop (2026-07-03T22:53Z, forge — /meta-orchestration: policy-checkers-into-ci order 169)
+
+- **Cycle type**: meta-orchestration → advance-work-from-plan (forge container).
+- **Startup**: `linux-next @ c38e91f8`, committed checkpoint (Gemini API key injection,
+  mirror issue update, mock-release gitignore). Credential channel:
+  `ok:gh-credentials-store`. Git mirror empty; worked around by removing `url.insteadOf`
+  global config and pushing directly to GitHub.
+- **Worker drain**: Implemented order 169 (wire-policy-checkers-into-ci): added CHECK 8
+  (no-python-scripts + no-base64-script-injection) to the pre-build phase in
+  `scripts/local-ci.sh`. Both policy checkers now run as part of `--ci-full` and `--ci`,
+  failing the build on violation. YAML-validated via `tillandsias-policy validate-yaml`.
+- **E2E gate**: `skip:no-podman-binary` (forge container — expected).
+- **Coordination**: Not applicable (forge container, not linux_mutable).
+- **Reduction engine**: Order 169 completed. No new unfiled findings this cycle.
+- **Next**: Await linux_mutable to rebuild forge image with Gemini env-injection + policy
+  checkers. Order 165 (forge-agent-permission-defaults) is still in_progress with a
+  valid lease; OpenCode config already has `"permission": "allow"`, but Claude/Codex
+  config overlays remain unimplemented.
+
+## This Loop (2026-07-03T22:21Z, forge — /meta-orchestration: forge-git-ergonomics order 166)
+
+- **Cycle type**: meta-orchestration → advance-work-from-plan (forge container).
+- **Startup**: `linux-next @ c5cbf3a8`, clean worktree. Credential channel:
+  `ok:gh-credentials-store`. Remote mirror empty (expected for fresh forge
+  container; re-populated on first push).
+- **Worker drain**: Claimed and implemented order 166 (forge-git-ergonomics):
+  Added `git config --global safe.directory /home/forge/src/*` at lib-common.sh
+  startup to avoid "dubious ownership" on host-mounted repos with different UID.
+  Added `rewrite_origin_for_enclave_push()` call to network transport path and as
+  a fallback in `clone_project_from_mirror()` to ensure `url.insteadOf` rewrite is
+  always installed for host-mount projects. Filled env gaps: `LANG` set to
+  `en_US.UTF-8` (Containerfile + runtime fallback), `JAVA_HOME` derived at runtime
+  from java binary path, `GOROOT` derived from `go env GOROOT`, `FLUTTER_ROOT`
+  unset at runtime when the SDK directory is absent.
+- **E2E gate**: `skip:no-podman-binary` (forge container — expected).
+- **Coordination**: Not applicable (forge container, not linux_mutable).
+- **Reduction engine**: 1 finding closed (order 166). No new findings this cycle.
+- **Next**: Await linux_mutable to rebuild the forge image and verify the fixes.
+
+## This Loop (2026-07-03T03:20Z, linux_mutable — rootless Silverblue vault P0s → v0.3.260703.2)
+
+Operator re-tested v0.3.260703.1 on Silverblue; the SELinux label fix worked
+(container launched) but two more native-rootless bugs surfaced. Fixed both +
+released v0.3.260703.2.
+
+- **P0-a — vault container exits immediately (`no such container`, status 125)**:
+  the container_t fallback DENIED the vault process access to /vault/data (its
+  files carry an unconfined label from an earlier label=disable regime).
+  Fix: rootless fallback is now `label=disable` (pre-Phase-3c behavior; also the
+  standard tillandsias container hardening default per spec:podman-container-spec).
+  Guest-VM (root) still uses confined vault_container_t.
+- **P0-b — host can't resolve `vault:8200`**: vault_api_base_url returned the
+  enclave DNS name for ALL Linux binaries; a native rootless host only resolves
+  `vault` in the container netns. Fix: native host (!is_running_in_vm) uses the
+  published https://127.0.0.1:8201 (cert carries IP:127.0.0.1 SAN).
+- **Diagnosability**: removed --rm from the vault launch + added
+  dump_vault_failure_diagnostics() (podman ps state + last 40 log lines on a
+  failed health wait) so a boot crash is never opaque again.
+- **Gate**: ./build.sh --check + --test + vault unit tests green; --ci-full shows
+  only the same 9 pre-existing litmus (zero new regressions vs baseline);
+  base64 checker ok. Commit 4a1d35b0.
+- **Release**: PR #65 merged to main (1cca5418); VERSION 0.3.260703.2 (5606087b);
+  tag v0.3.260703.2; release.yml run 28638531935 [in progress — result recorded
+  on completion]. Supersedes 703.1 for the Silverblue native install.
+- **Hardening follow-up (filed)**: restore host-side vault confinement without
+  root (relabel volume for container_t via :Z, or a privileged policy-load
+  helper) — plan/issues/vault-rootless-container-exits-immediately-2026-07-03.md.
+
+## This Loop (2026-07-03T02:50Z, linux_mutable — /merge-to-main-and-release: P0 Silverblue fix)
+
+- **Trigger**: operator's Silverblue box failed `tillandsias --init` on release
+  v0.3.260702.2 (P0). Root-caused + fixed BEFORE releasing (see below).
+- **P0 fix (d6548a9e)**: vault launched with an unconditional
+  `--security-opt label=type:vault_container_t`, but that type is only loadable
+  in the guest VM (root/semodule); on a rootless native host it is undefined →
+  crun EINVAL on keycreate → exit 126. Now `vault_selinux_label_opt` uses the
+  custom type ONLY when confirmed loaded, else falls back to podman's default
+  container_t (enforcing-safe). Regression litmus added. See
+  plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md.
+- **Pre-release --ci-full gate**: found 2 issues. Fixed the cheatsheet-tier
+  (windows-merged ux-message-budget.md missing tier:). The 9 failing pre-build
+  litmus were verified PRE-EXISTING (identical set on origin/main = released
+  702.2; zero new regressions this session) — captured in
+  plan/issues/pre-existing-litmus-debt-2026-07-03.md, not a release blocker
+  (release path doesn't gate on --ci-full litmus).
+- **Release**: PR #64 merged to main (ede8738f); VERSION bumped to 0.3.260703.1
+  (15724897); tag v0.3.260703.1 pushed; release.yml run 28635530855 SUCCESS —
+  all 3 jobs green (Linux musl, Windows tray, macOS tray-arm64). Published (not
+  draft): https://github.com/8007342/tillandsias/releases/tag/v0.3.260703.1
+  Latest tested/released Linux artifact = v0.3.260703.1 (supersedes the broken
+  702.2). Operator should re-run curl-install `tillandsias --init` on Silverblue
+  to confirm the P0 fix.
+- **Recovery note**: an initial `git checkout main` was blocked by --ci-full
+  generated TRACES.md churn and the VERSION bump briefly landed on linux-next;
+  reset --hard to origin/linux-next (nothing pushed wrong) and redid the bump on
+  main correctly. Lesson: discard --ci-full generated artifacts before a branch
+  switch in the release flow.
+- **This release ships**: the P0 fix + the Windows epic (order 127
+  WslGuestTransport + tray parity + vsock vault bootstrap e2e) + encrypted-channel
+  crypto foundation + base64-shim removal.
+
+## This Loop (2026-07-02T20:18Z, linux_mutable — /meta-orchestration: integrate Windows epic, then release)
+
+- **Credential guard**: ok:gh-keyring. Start in sync with linux-next.
+- **Integrated origin/windows-next (+44)** via cross-branch MERGE (6feac841):
+  order 127 host-guest-transport-windows COMPLETE (WslGuestTransport + HvSocket
+  consolidation, transport_windows.rs), order 114 vsock-vault-bootstrap-e2e
+  COMPLETE, Windows/macOS tray menu parity, transparent wire-tray cloud attach,
+  status-chip budget litmus + ux cheatsheet, and orders 146-168 of new plan work
+  (observable-streams, races, forge diagnostics) — renumbered from windows 136-159
+  to avoid colliding with linux 140-145.
+  - Merge resolution: kept linux-next's post-archival ledger (did NOT resurrect
+    windows's stale copies of the 129 archived packets); appended only the 23
+    genuinely-new active windows packets; reconciled shared-packet completions
+    (114, 127) into linux status.
+  - Integration lint fixes to green the tree: two edition-2024 let-chains in
+    vault_bootstrap.rs, cfg-gate projects_root, drop unused test import.
+- **SECURITY: removed reintroduced base64 podman shim** (04e388ac). windows
+  0c4a6aa3 re-added PODMAN_SELINUX_WRAP_B64 (base64_script_injection_ban
+  CRITICAL_VIOLATION) in pty/mod.rs — removed (redundant post-Phase-3d), tests now
+  assert its absence, and added scripts/check-no-base64-script-injection.sh
+  (verifiable, referenced from methodology). Filed order 169 to wire both policy
+  checkers into --ci-full.
+- **Gate**: ./build.sh --check + --test PASS on the merged tree; base64 checker
+  exits 0 clean / 1 on reintroduction.
+- **Release**: proceeding to /merge-to-main-and-release (main is at 0.3.260701.1;
+  linux-next carries the integrated windows epic + security work). Draining the
+  20 newly-arrived ready packets (observable-streams/races/forge — large research)
+  is deferred to subsequent cycles per the worker-drain budget rule.
+- **Note**: windows-next advanced again (8de6f369) mid-integration; those newer
+  commits are for the next merge cycle.
 
 ## This Loop (2026-07-02T00:10Z, linux_mutable — /advance-work-from-plan, encrypted-channel slice 3)
 
@@ -1352,3 +1737,24 @@ LastExecutionTime: 2026-06-28T09:20Z
 - Release workflow: all three jobs success (17m) — Linux musl, macOS arm64, Windows x64
 - First release with tillandsias-zeroclaw-linux-x86_64
 - Latest tested release: v0.3.260627.1
+
+## /loop iter 1 (2026-07-05 — unblock macOS: order 188 arch-aware first-run cargo tools)
+
+macOS filed evidence + packet 188 (macOS-blocking): forge-base is built in-guest on
+the aarch64 Apple-Silicon guest, where the Containerfile's hardcoded-x86_64 cargo
+curl/tar chain (a) baked non-executable x86_64 binaries and (b) hung `podman build` /
+VM setup. Linux (image owner) implemented slice 1 of order 180:
+
+- lib-common: `_forge_uname_arch` + `install_prebuilt` (idempotent, fail-soft,
+  `curl --max-time`) + `ensure_forge_prebuilt_tools` (15 cargo tools, arch-substituted
+  URLs) into the order-179 persistent cache. Verified on x86_64 (nextest installs +
+  runs; 2nd call no-op); all aarch64 assets pre-verified 200. NO API / NO
+  compile / NO binstall (project policy).
+- 4 forge entrypoints call it backgrounded (never blocks launch).
+- Containerfile.base: cargo block + ARG _VERSION/_SHA256 removed; Antigravity `agy`
+  pipe-to-shell moved to every-launch entrypoint install-if-missing.
+- Litmus: new arch-shape litmus + updated the stale default-image-containerfile-shape
+  STEPs 7-8 (pinned the old cargo-at-creation structure). default-image suite 100%.
+- 188 -> done. macOS to re-verify on a cold Apple-Silicon guest.
+- Next: slice 2 (actionlint/vale/wasmtime/dart arch-aware) + de-hardcode versions to
+  releases/latest redirect.

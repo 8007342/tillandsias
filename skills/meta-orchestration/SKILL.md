@@ -267,7 +267,7 @@ Before exit:
    from this cycle is filed in `plan/issues/` (classified `research/`,
    `exploration/`, `enhancement/`, or `optimization/`) and, where reduced,
    promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit.
-2. Refresh `plan/issues/ACTIVE.md` and `plan/loop_status.md` if this cycle
+2. Refresh `plan/index.yaml` and `plan/loop_status.md` if this cycle
    changed active work, blockers, tested release, or host assignments.
 3. Validate touched YAML with a parser. The approved validator is
    `tillandsias-policy validate-yaml <files>` where built, with

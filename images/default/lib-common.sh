@@ -81,6 +81,38 @@ mkdir -p "$HOME/.config/fish"
 CACHE="$HOME/.cache/tillandsias"
 export PATH="$CACHE/openspec/bin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
+# ── Standard environment variable setup ─────────────────────
+# @trace spec:forge-git-ergonomics
+# Set locale if not already set, to avoid locale-sensitive tool warnings.
+export LANG="${LANG:-en_US.UTF-8}"
+
+# Derive JAVA_HOME from the java binary path if available.
+if [ -z "${JAVA_HOME:-}" ] && command -v java &>/dev/null; then
+    _java_home="$(readlink -f "$(command -v java)" 2>/dev/null || true)"
+    _java_home="${_java_home%/bin/java}"
+    if [ -n "$_java_home" ] && [ -d "$_java_home" ]; then
+        export JAVA_HOME="$_java_home"
+    fi
+    unset _java_home
+fi
+
+# Derive GOROOT from go if available.
+if [ -z "${GOROOT:-}" ] && command -v go &>/dev/null; then
+    _go_root="$(go env GOROOT 2>/dev/null || true)"
+    if [ -n "$_go_root" ]; then
+        export GOROOT="$_go_root"
+    fi
+    unset _go_root
+fi
+
+# Unset FLUTTER_ROOT if the Flutter SDK directory does not exist.
+if [ -n "${FLUTTER_ROOT:-}" ] && [ ! -d "$FLUTTER_ROOT" ]; then
+    unset FLUTTER_ROOT
+fi
+
+# Avoid git "dubious ownership" on host-mounted repos with different UID.
+git config --global --add safe.directory /home/forge/src/\* 2>/dev/null || true
+
 # ── External-logs consumer path ─────────────────────────────
 # @trace spec:external-logs-layer
 # Canonical path where external logs from enclave service containers are
@@ -442,6 +474,7 @@ clone_project_from_mirror() {
                 git remote set-url --push origin "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
                     echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
                 configure_git_identity
+                rewrite_origin_for_enclave_push
                 echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
                 return 0
             fi
@@ -456,6 +489,10 @@ clone_project_from_mirror() {
         echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
         exit 1
     fi
+
+    # Fallback rewrite attempt for any remaining transport or edge case
+    # where TILLANDSIAS_PROJECT_HOST_MOUNT may not have been propagated.
+    rewrite_origin_for_enclave_push
     return 0
 }
 
@@ -597,6 +634,106 @@ export DART_ROOT="/opt/dart-sdk"
 export FLUTTER_ROOT="/opt/flutter"
 export TILLANDSIAS_CHEATSHEETS="/opt/cheatsheets"
 export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PNPM_HOME:$HOME/.cargo/bin:$HOME/go/bin:/usr/local/cargo/bin:/opt/dart-sdk/bin:$PATH"
+
+
+# ── FIRST_RUN prebuilt dev-tool install (arch-aware) ────────────
+# @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
+# @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180)
+#
+# Moves the prebuilt cargo dev-tools OUT of container CREATION (the fragile
+# hardcoded curl/tar chain in Containerfile.base that (a) baked non-executable
+# x86_64 binaries on the aarch64 macOS guest and (b) hung `podman build` / VM
+# setup on any stalled fetch) INTO an idempotent, fail-soft, timeout-guarded
+# FIRST_RUN install into the persistent CARGO_HOME (order 179 named volume).
+# Policy: prebuilt release-asset CDN URLs only — NO GitHub API, NO cargo install
+# (source compile), NO cargo binstall (rate-limited API). See
+# cheatsheets/build/nix-ci-incremental-release.md.
+
+# Map the running machine arch to the release-asset arch token. Empty = unsupported.
+_forge_uname_arch() {
+    case "$(uname -m)" in
+        x86_64 | amd64) echo "x86_64" ;;
+        aarch64 | arm64) echo "aarch64" ;;
+        *) echo "" ;;
+    esac
+}
+
+# install_prebuilt <check_bin> <url>
+# Idempotent (skip if $CARGO_HOME/bin/<check_bin> already executable), fail-soft
+# (a fetch/extract miss is logged and RETRIED next launch — never fatal), and
+# timeout-guarded (--max-time so a stalled fetch can NEVER hang the launch the way
+# the CREATION-time chain hung the build). Extracts the archive's binaries into
+# $CARGO_HOME/bin. The caller has already substituted the arch into <url>.
+install_prebuilt() {
+    local check_bin="$1" url="$2"
+    local bindir="${CARGO_HOME:-/usr/local/cargo}/bin"
+    [ -x "$bindir/$check_bin" ] && return 0
+    mkdir -p "$bindir" 2>/dev/null || true
+    local tmp archive
+    tmp="$(mktemp -d 2>/dev/null)" || return 0
+    archive="$tmp/asset"
+    if ! curl -fsSL --max-time 120 --retry 2 --retry-delay 3 "$url" -o "$archive" 2>/dev/null; then
+        trace_lifecycle "tools" "prebuilt fetch failed (non-fatal, retry next launch): $check_bin"
+        rm -rf "$tmp"
+        return 0
+    fi
+    case "$url" in
+        *.tar.gz | *.tgz) tar -xzf "$archive" -C "$tmp" 2>/dev/null || true ;;
+        *.tar.xz) tar -xJf "$archive" -C "$tmp" 2>/dev/null || true ;;
+        *.zip) unzip -qo "$archive" -d "$tmp" 2>/dev/null || true ;;
+    esac
+    # Install every regular executable the archive carries (these are bare binary
+    # distributions). basename-placed onto the persistent cache PATH.
+    find "$tmp" -type f -perm -u+x ! -name asset 2>/dev/null | while read -r f; do
+        install -m 0755 "$f" "$bindir/$(basename "$f")" 2>/dev/null || true
+    done
+    if [ -x "$bindir/$check_bin" ]; then
+        trace_lifecycle "tools" "installed prebuilt $check_bin ($(uname -m))"
+    else
+        trace_lifecycle "tools" "prebuilt install incomplete (non-fatal, retry next launch): $check_bin"
+    fi
+    rm -rf "$tmp"
+    return 0
+}
+
+# ensure_forge_prebuilt_tools: FIRST_RUN, ARCH-AWARE install of the cargo dev-tool
+# group into the persistent CARGO_HOME. Idempotent + fail-soft; safe to call every
+# launch (installed tools are skipped instantly). Intended to be backgrounded by
+# the forge entrypoints so it never blocks the agent launch.
+# NOTE: versions are a centralized pinned FLOOR (moved out of Containerfile.base);
+# de-hardcoding to `releases/latest` (via the web redirect, NOT the API) is the
+# next slice of order 180. This slice's job is the arch-correctness + de-fragiling
+# that unblocks the aarch64 macOS guest.
+ensure_forge_prebuilt_tools() {
+    local arch
+    arch="$(_forge_uname_arch)"
+    if [ -z "$arch" ]; then
+        trace_lifecycle "tools" "unsupported arch $(uname -m); skipping prebuilt dev-tools"
+        return 0
+    fi
+    local gnu="${arch}-unknown-linux-gnu"
+    local musl="${arch}-unknown-linux-musl"
+    local qi="https://github.com/cargo-bins/cargo-quickinstall/releases/download"
+    trace_lifecycle "tools" "ensuring prebuilt cargo dev-tools (arch=${arch}) in ${CARGO_HOME}/bin"
+
+    install_prebuilt cargo-nextest "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.137/cargo-nextest-0.9.137-${gnu}.tar.gz"
+    install_prebuilt cargo-chef "${qi}/cargo-chef-0.1.77/cargo-chef-0.1.77-${gnu}.tar.gz"
+    install_prebuilt cargo-watch "${qi}/cargo-watch-8.5.3/cargo-watch-8.5.3-${gnu}.tar.gz"
+    install_prebuilt cargo-audit "${qi}/cargo-audit-0.22.2/cargo-audit-0.22.2-${gnu}.tar.gz"
+    install_prebuilt wasm-pack "${qi}/wasm-pack-0.15.0/wasm-pack-0.15.0-${gnu}.tar.gz"
+    install_prebuilt typos "${qi}/typos-cli-1.47.2/typos-cli-1.47.2-${gnu}.tar.gz"
+    install_prebuilt watchexec "${qi}/watchexec-cli-2.5.1/watchexec-cli-2.5.1-${gnu}.tar.gz"
+    install_prebuilt cargo-upgrade "${qi}/cargo-edit-0.13.11/cargo-edit-0.13.11-${musl}.tar.gz"
+    install_prebuilt cargo-expand "${qi}/cargo-expand-1.0.122/cargo-expand-1.0.122-${gnu}.tar.gz"
+    install_prebuilt cargo-criterion "${qi}/cargo-criterion-1.1.0/cargo-criterion-1.1.0-${gnu}.tar.gz"
+    install_prebuilt cargo-wasi "${qi}/cargo-wasi-0.1.28/cargo-wasi-0.1.28-${gnu}.tar.gz"
+    install_prebuilt cargo-outdated "${qi}/cargo-outdated-0.19.0/cargo-outdated-0.19.0-${gnu}.tar.gz"
+    install_prebuilt trunk "https://github.com/trunk-rs/trunk/releases/download/v0.22.0-beta.1/trunk-${gnu}.tar.gz"
+    install_prebuilt cargo-llvm-cov "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.8.7/cargo-llvm-cov-${gnu}.tar.gz"
+    install_prebuilt cargo-semver-checks "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.48.0/cargo-semver-checks-${gnu}.tar.gz"
+
+    trace_lifecycle "tools" "prebuilt cargo dev-tools ensured (arch=${arch})"
+}
 
 
 # ── Update-check rate-limiting ──────────────────────────────
@@ -1342,7 +1479,8 @@ inject_startup_context() {
 # Forge Startup Context
 
 **Project**: ${project_name}
-**Branch**: ${branch}
+**Startup branch**: ${branch}
+> Note: Branch is a startup snapshot; agents may switch branches during orchestration.
 **Version**: ${version}
 **Agent**: ${agent_name}
 **Generated**: $(date -u +%Y-%m-%dT%H:%MZ)
@@ -1358,7 +1496,7 @@ You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA
 
 ## Plan entry points
 
-- **Active work queue**: \`plan/issues/ACTIVE.md\`
+- **Active work queue**: \`plan/index.yaml\`
 - **Full plan index**: \`plan/index.yaml\`
 - **Loop status**: \`plan/loop_status.md\`
 

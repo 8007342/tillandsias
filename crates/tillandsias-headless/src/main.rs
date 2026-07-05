@@ -133,7 +133,9 @@ fn main() {
     let codex = user_args.iter().any(|a| a == "--codex");
     let claude = user_args.iter().any(|a| a == "--claude");
     let bash = user_args.iter().any(|a| a == "--bash");
+    let antigravity = user_args.iter().any(|a| a == "--antigravity");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
+
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
@@ -252,6 +254,7 @@ fn main() {
         "--codex",
         "--claude",
         "--bash",
+        "--antigravity",
         "--opencode-web",
         "--observatorium",
         "--port",
@@ -486,12 +489,14 @@ fn main() {
         }
     }
 
-    if codex || claude || bash {
+    if codex || claude || bash || antigravity {
         maybe_spawn_detached_tray_for_cli(tray, debug);
         let (mode, flag) = if codex {
             (ForgeAgentMode::Codex, "--codex")
         } else if claude {
             (ForgeAgentMode::Claude, "--claude")
+        } else if antigravity {
+            (ForgeAgentMode::Antigravity, "--antigravity")
         } else {
             (ForgeAgentMode::Maintenance, "--bash")
         };
@@ -680,6 +685,7 @@ fn print_usage(version: &str) {
     println!("  --opencode     Enable LLM code analysis mode");
     println!("  --codex        Launch Codex inside the forge for a project");
     println!("  --claude       Launch Claude Code inside the forge for a project");
+    println!("  --antigravity  Launch Antigravity inside the forge for a project");
     println!("  --bash         Launch the forge welcome shell for a project");
     println!("  --opencode-web Launch OpenCode Web plus isolated browser");
     println!("  --observatorium Launch the project Observatorium viewer");
@@ -859,6 +865,11 @@ fn proxy_env_args() -> Vec<String> {
         format!("no_proxy={no_proxy}"),
         "--env".into(),
         format!("NO_PROXY={no_proxy}"),
+        // Route Node fetch/undici through the proxy (Node ignores HTTP_PROXY by
+        // default). See apply_proxy_env for the full rationale + live evidence.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        "--env".into(),
+        "NODE_USE_ENV_PROXY=1".into(),
     ]
 }
 
@@ -872,6 +883,17 @@ fn apply_proxy_env(spec: ContainerSpec) -> ContainerSpec {
         .env("HTTPS_PROXY", "http://proxy:3128")
         .env("no_proxy", no_proxy.clone())
         .env("NO_PROXY", no_proxy)
+        // Node's global fetch/undici does NOT honor HTTP(S)_PROXY by default, so
+        // Node-based agents (Codex, Claude Code) tried to connect DIRECTLY to
+        // api.openai.com / chatgpt.com / websocket endpoints — which the
+        // --internal enclave (proxy-only egress, no external DNS) cannot resolve,
+        // producing the "times out then dies" remote-connect failure the operator
+        // hit while curl (which uses the env proxy) worked. NODE_USE_ENV_PROXY=1
+        // makes undici's EnvHttpProxyAgent route Node egress through the proxy.
+        // Verified live in the forge: without it, node fetch -> ENOTFOUND; with
+        // it -> HTTP 401 (reaches api.openai.com through the proxy).
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        .env("NODE_USE_ENV_PROXY", "1")
 }
 
 // @trace spec:init-incremental-builds
@@ -1788,6 +1810,12 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
+
+    if std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge") {
+        // The forge environment does not have openssl CLI and is not responsible
+        // for generating CAs. The CA is injected by the host.
+        return Ok(certs_dir);
+    }
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     std::fs::create_dir_all(&certs_dir)
@@ -2886,6 +2914,14 @@ fn forge_container_name(project_name: &str) -> String {
     format!("tillandsias-{project_name}-forge")
 }
 
+fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> String {
+    if matches!(mode, ForgeAgentMode::OpenCode) {
+        forge_container_name(project_name)
+    } else {
+        format!("tillandsias-{project_name}-forge-{}", mode.slug())
+    }
+}
+
 fn forge_hostname(project_name: &str) -> String {
     sanitize_hostname(&format!("forge-{project_name}"))
 }
@@ -2930,7 +2966,7 @@ async fn cleanup_shared_stack_if_no_running_forge(
             containers
                 .into_iter()
                 .filter(|container| {
-                    container.name.ends_with("-forge")
+                    container.name.contains("-forge")
                         && matches!(
                             container.state.to_ascii_lowercase().as_str(),
                             "running" | "up"
@@ -3134,6 +3170,21 @@ fn build_opencode_forge_args(
         args.extend([
             "--env".into(),
             format!("TILLANDSIAS_OPENCODE_PROMPT={prompt}"),
+        ]);
+    }
+
+    // Inject Gemini API key for OpenCode harness
+    if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(
+        crate::vault_bootstrap::ProviderId::Gemini,
+        debug,
+    ) && !key.is_empty()
+    {
+        args.extend([
+            "--env".into(),
+            format!(
+                "{}={key}",
+                crate::vault_bootstrap::ProviderId::Gemini.env_var()
+            ),
         ]);
     }
     if debug {
@@ -5620,6 +5671,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
 
     let images = ["proxy", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
+    ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
 
     if debug {
         eprintln!("[tillandsias] [OpenCode] Repo root: {}", root.display());
@@ -5678,15 +5730,27 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         };
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
-        client
-            .run_container_observed(
-                "opencode-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
+        // See the forge-launch-proxy site for the full rationale.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] OpenCode: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "opencode-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
+        }
         let git_container_name = format!("tillandsias-git-{project_name}");
         let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
@@ -6697,15 +6761,27 @@ pub(crate) fn run_opencode_web_mode(
 
         cleanup_stack_containers(&client, project_name).await;
 
-        client
-            .run_container_observed(
-                "opencode-web-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode Web] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
+        // See the forge-launch-proxy site for the full rationale.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] OpenCode Web: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "opencode-web-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode Web] failed to start proxy: {e}"))?;
+        }
         emit_opencode_web_event(
             project_name,
             "proxy",
@@ -6873,6 +6949,7 @@ pub(crate) enum ForgeAgentMode {
     Claude,
     Codex,
     OpenCode,
+    Antigravity,
     Maintenance,
 }
 
@@ -6882,6 +6959,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Claude => "/usr/local/bin/entrypoint-forge-claude.sh",
             ForgeAgentMode::Codex => "/usr/local/bin/entrypoint-forge-codex.sh",
             ForgeAgentMode::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
+            ForgeAgentMode::Antigravity => "/usr/local/bin/entrypoint-forge-antigravity.sh",
             ForgeAgentMode::Maintenance => "/usr/local/bin/entrypoint-terminal.sh",
         }
     }
@@ -6891,6 +6969,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Claude => "claude",
             ForgeAgentMode::Codex => "codex",
             ForgeAgentMode::OpenCode => "opencode",
+            ForgeAgentMode::Antigravity => "antigravity",
             ForgeAgentMode::Maintenance => "maintenance",
         }
     }
@@ -7091,15 +7170,34 @@ pub(crate) fn ensure_enclave_for_project(
         };
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
-        client
-            .run_container_observed(
-                "forge-launch-proxy",
-                "tillandsias-proxy",
-                &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
+        // Idempotent proxy bring-up (mirrors ensure_router_running above and
+        // ensure_proxy_running): REUSE a running proxy, and clear any stale/exited
+        // one so `podman run --name tillandsias-proxy` does not fail "name already
+        // in use". Without this, a forge launch fails at the proxy stage whenever
+        // a tillandsias-proxy already exists (started by --init, or left by a prior
+        // / crashed session) — which blocks launching a Codex/Claude/OpenCode
+        // session even though the proxy is fine. (ensure_proxy_running itself
+        // runs its own tokio runtime, so it cannot be called from inside this
+        // block_on; inline the same guard.)
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+            if debug {
+                eprintln!("[tillandsias] forge-launch: reusing already-running enclave proxy");
+            }
+        } else {
+            let _ = podman_cmd_sync()
+                .args(["rm", "--ignore", "tillandsias-proxy"])
+                .output();
+            client
+                .run_container_observed(
+                    "forge-launch-proxy",
+                    "tillandsias-proxy",
+                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
+        }
         let git_container_name = format!("tillandsias-git-{project_name}");
         let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
@@ -7148,6 +7246,19 @@ pub(crate) fn ensure_enclave_for_project(
 /// `/home/forge/src/<project>/`, CA cert at `/etc/tillandsias/ca.crt`.
 /// @trace spec:forge-as-only-runtime
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
+/// Name of the podman named volume backing a project's persistent forge tool/
+/// package cache. `$CARGO_HOME` and `$NPM_CONFIG_PREFIX` (set by lib-common to
+/// `/home/forge/.cache/tillandsias-project/...`) live here, so FIRST_RUN tool
+/// installs survive the forge's `--rm`. A named volume — not a host bind-mount —
+/// keeps this container-managed with no host-$HOME surface, so it cannot become a
+/// credential-leak path (preserves the one-way boundary). Per-project so caches
+/// never cross project boundaries. Reuses `project_name`, which is already
+/// constrained to valid container/volume-name characters by the container name.
+/// @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+fn forge_tool_cache_volume(project_name: &str) -> String {
+    format!("tillandsias-forge-cache-{project_name}")
+}
+
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
     project_name: &str,
@@ -7158,7 +7269,7 @@ pub(crate) fn build_forge_agent_run_args(
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     let spec = ContainerSpec::new(image)
-        .name(forge_container_name(project_name))
+        .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
         .pids_limit(512)
@@ -7170,6 +7281,19 @@ pub(crate) fn build_forge_agent_run_args(
         .volume(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),
+            MountMode::ReadWrite,
+        )
+        // Persistent per-project tool/package cache (order 179). lib-common points
+        // $CARGO_HOME and $NPM_CONFIG_PREFIX at /home/forge/.cache/tillandsias-project;
+        // without a persistent backing this lives in the --rm overlay and is lost
+        // every launch, so FIRST_RUN tool installs (orders 180/181) would re-run
+        // each attach. A podman NAMED volume gives container-managed persistence
+        // across --rm with ZERO host-$HOME reference (safer than a bind-mount — it
+        // cannot leak host credentials, preserving the one-way boundary).
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        .volume(
+            forge_tool_cache_volume(project_name),
+            "/home/forge/.cache/tillandsias-project".to_string(),
             MountMode::ReadWrite,
         );
     let mut spec = apply_proxy_env(spec)
@@ -7204,16 +7328,19 @@ pub(crate) fn build_forge_agent_run_args(
     // Inject provider API keys from Vault as env vars so forge agents can call
     // LLM APIs without interactive auth inside the container.
     // @trace plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
-    for provider in [
-        crate::vault_bootstrap::ProviderId::Anthropic,
-        crate::vault_bootstrap::ProviderId::Openai,
-        crate::vault_bootstrap::ProviderId::Gemini,
-    ] {
-        if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(provider, debug)
-            && !key.is_empty()
-        {
-            spec = spec.env(provider.env_var(), key);
+    let provider_api = match mode {
+        ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
+        ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity => {
+            Some(crate::vault_bootstrap::ProviderId::Gemini)
         }
+        ForgeAgentMode::Maintenance => None,
+    };
+    if let Some(p) = provider_api
+        && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
+        && !key.is_empty()
+    {
+        spec = spec.env(p.env_var(), key);
     }
 
     spec.build_run_args()
@@ -7240,6 +7367,61 @@ pub(crate) fn build_forge_agent_run_argv(
         debug,
     ));
     argv
+}
+
+fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
+    let (oauth_prov, api_prov) = match mode {
+        ForgeAgentMode::Claude => (
+            Some(ProviderId::Claude),
+            Some(crate::vault_bootstrap::ProviderId::Anthropic),
+        ),
+        ForgeAgentMode::Codex => (
+            Some(ProviderId::Codex),
+            Some(crate::vault_bootstrap::ProviderId::Openai),
+        ),
+        ForgeAgentMode::OpenCode => (
+            Some(ProviderId::Antigravity),
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ),
+        ForgeAgentMode::Antigravity => (
+            Some(ProviderId::Antigravity),
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ),
+        ForgeAgentMode::Maintenance => (None, None),
+    };
+
+    if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
+        let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false);
+        if api_key_exists {
+            return Ok(());
+        }
+
+        let is_oauth_logged_in =
+            crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
+                .map(|v| !v.is_empty())
+                .unwrap_or(false);
+        if is_oauth_logged_in {
+            return Ok(());
+        }
+
+        if debug {
+            eprintln!(
+                "[tillandsias] No auth token found for {}. Launching login flow...",
+                op.name()
+            );
+        }
+        let token_script = get_generic_login_token_script(&op);
+        let config = ProviderLoginConfig {
+            provider: op,
+            auth_model: AuthModel::OAuthDevice,
+            image_name: "curl",
+            token_script,
+        };
+        run_provider_login(&config, debug)?;
+    }
+    Ok(())
 }
 
 fn run_forge_agent_cli_mode(
@@ -7278,6 +7460,7 @@ fn run_forge_agent_cli_mode(
 
     let version = VERSION.trim();
     let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
+    ensure_provider_auth(mode, debug)?;
     let forge_args =
         build_forge_agent_run_args(&canonical, project_name, &certs_dir, version, mode, debug);
 
@@ -7309,7 +7492,7 @@ fn run_forge_agent_cli_mode(
         let result = client
             .run_container_attached_observed(
                 mode.slug(),
-                &forge_container_name(project_name),
+                &forge_container_name_for_mode(project_name, mode),
                 &forge_args,
                 debug,
             )
@@ -8417,6 +8600,97 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn forge_launch_proxy_bringup_is_idempotent() {
+        // A forge launch must REUSE a running enclave proxy (and clear a stale
+        // one), not blindly `podman run --name tillandsias-proxy` — which fails
+        // "name already in use" and blocks launching a Codex/Claude/OpenCode
+        // session whenever a proxy already exists (from --init or a prior/crashed
+        // session). Every raw proxy run_container_observed site must be guarded by
+        // a container_running("tillandsias-proxy") check. Found via the released
+        // 704.1 curl-install smoke.
+        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        for site in ["forge-launch-proxy", "opencode-proxy", "opencode-web-proxy"] {
+            let idx = source
+                .find(&format!("\"{site}\""))
+                .unwrap_or_else(|| panic!("proxy launch site {site} must exist"));
+            // The 600 chars preceding the raw launch must contain the idempotency
+            // guard (the container_running check that reuses/skips a live proxy).
+            let start = idx.saturating_sub(600);
+            let preamble = &source[start..idx];
+            assert!(
+                preamble.contains("container_running(\"tillandsias-proxy\")"),
+                "proxy launch site {site} must be guarded by container_running (idempotent bring-up)"
+            );
+        }
+    }
+
+    #[test]
+    fn forge_agent_launch_gates_on_provider_login_first() {
+        // Operator contract: launching a Codex/Claude/Antigravity session must run
+        // the provider login flow FIRST when no auth token is stored, then launch
+        // the authenticated forge; when a token is present, launch directly.
+        // ensure_provider_auth implements that gate (api-key present -> ok; oauth
+        // token present -> ok; else run_provider_login). This pins that the forge
+        // launch path CALLS the gate BEFORE building the run args, so it cannot
+        // drift back to launching an unauthenticated forge.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md (login-first residual)
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("fn run_forge_agent_cli_mode(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("run_forge_agent_cli_mode source");
+        let gate_at = window
+            .find("ensure_provider_auth(mode, debug)")
+            .expect("forge launch must gate on ensure_provider_auth (login-first)");
+        let build_at = window
+            .find("build_forge_agent_run_args(")
+            .expect("forge launch must build run args");
+        assert!(
+            gate_at < build_at,
+            "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args"
+        );
+        // The gate itself must implement token-presence-then-login, not blind login.
+        let gate = source
+            .split("fn ensure_provider_auth(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("ensure_provider_auth source");
+        assert!(
+            gate.contains("read_provider_api_key") && gate.contains("run_provider_login"),
+            "ensure_provider_auth must check a stored token before running the login flow"
+        );
+    }
+
+    #[test]
+    fn proxy_env_routes_node_through_the_proxy() {
+        // Node's global fetch/undici ignores HTTP_PROXY by default, so on the
+        // --internal enclave (proxy-only egress, no external DNS) Node agents
+        // (Codex, Claude Code) cannot reach api.openai.com/etc. — they time out
+        // and die while curl works. NODE_USE_ENV_PROXY=1 makes undici honor the
+        // env proxy. Both proxy-env injection paths MUST set it.
+        // @trace plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
+        let args = proxy_env_args();
+        assert!(
+            args.iter().any(|a| a == "NODE_USE_ENV_PROXY=1"),
+            "proxy_env_args must route Node through the proxy (NODE_USE_ENV_PROXY=1)"
+        );
+        // apply_proxy_env is the ContainerSpec twin — pin it by source so it can't
+        // drift out of sync with proxy_env_args.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source
+            .split("fn apply_proxy_env(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("apply_proxy_env source");
+        assert!(
+            window.contains("\"NODE_USE_ENV_PROXY\""),
+            "apply_proxy_env must also set NODE_USE_ENV_PROXY for forge agents"
+        );
+    }
+
+    #[test]
     #[cfg(target_os = "linux")]
     fn test_ensure_pasta_options_ipv4_only() {
         let temp_dir = tempfile::tempdir().unwrap();
@@ -8718,15 +8992,25 @@ mod tests {
             false,
         );
 
-        let joined = argv.join(" ");
-        assert!(
-            !joined.contains(".config"),
-            "must not mount user .config dirs into the forge; got: {joined}"
-        );
-        assert!(
-            !joined.contains(".cache"),
-            "must not mount user .cache dirs into the forge; got: {joined}"
-        );
+        // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
+        // SOURCE (left of ':'), but allow the container-side TARGET
+        // /home/forge/.cache/tillandsias-project (the persistent tool cache, order
+        // 179) and podman NAMED volumes (tillandsias-forge-cache-*, no host path).
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        for arg in &argv {
+            if arg.starts_with("HOME=") {
+                continue;
+            }
+            let source = arg.split(':').next().unwrap_or("");
+            assert!(
+                !source.contains("/.config"),
+                "must not mount a host .config dir into the forge; got source in: {arg}"
+            );
+            assert!(
+                !source.contains("/.cache"),
+                "must not mount a host .cache dir into the forge; got source in: {arg}"
+            );
+        }
 
         if let Some(home) = std::env::var_os("HOME") {
             let home_str = home.to_string_lossy().into_owned();
@@ -8735,11 +9019,42 @@ mod tests {
                 // We're guarding against the *host* $HOME leaking in as a bind source.
                 for arg in &argv {
                     if arg.contains(&home_str) && !arg.starts_with("HOME=") {
-                        panic!("argv contains host $HOME ({home_str}) outside of HOME env: {arg}");
+                        let is_target_only = if arg.contains(':') {
+                            let parts: Vec<&str> = arg.split(':').collect();
+                            !parts[0].contains(&home_str) && parts.len() > 1
+                        } else {
+                            false
+                        };
+                        if !is_target_only {
+                            panic!(
+                                "argv contains host $HOME ({home_str}) outside of HOME env: {arg}"
+                            );
+                        }
                     }
                 }
             }
         }
+    }
+
+    #[test]
+    fn forge_agent_mounts_persistent_tool_cache_named_volume() {
+        // Order 179: FIRST_RUN tool installs ($CARGO_HOME/$NPM_CONFIG_PREFIX, which
+        // lib-common points at /home/forge/.cache/tillandsias-project) must survive
+        // the forge's --rm. A per-project podman NAMED volume backs that path.
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+        let joined = argv.join(" ");
+        assert!(
+            joined.contains("tillandsias-forge-cache-alpha:/home/forge/.cache/tillandsias-project"),
+            "forge must mount the persistent tool-cache named volume (order 179); got: {joined}"
+        );
     }
 
     #[test]
@@ -8776,6 +9091,10 @@ mod tests {
         assert_eq!(
             ForgeAgentMode::OpenCode.entrypoint(),
             "/usr/local/bin/entrypoint-forge-opencode.sh"
+        );
+        assert_eq!(
+            ForgeAgentMode::Antigravity.entrypoint(),
+            "/usr/local/bin/entrypoint-forge-antigravity.sh"
         );
         assert_eq!(
             ForgeAgentMode::Maintenance.entrypoint(),
