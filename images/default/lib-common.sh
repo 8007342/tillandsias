@@ -732,7 +732,20 @@ ensure_forge_prebuilt_tools() {
     install_prebuilt cargo-llvm-cov "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.8.7/cargo-llvm-cov-${gnu}.tar.gz"
     install_prebuilt cargo-semver-checks "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.48.0/cargo-semver-checks-${gnu}.tar.gz"
 
-    trace_lifecycle "tools" "prebuilt cargo dev-tools ensured (arch=${arch})"
+    # actionlint / vale / wasmtime — prebuilt, arch-aware (order 180 slice 2). These
+    # use DIFFERENT arch tokens than the cargo `-unknown-linux-gnu` triple. Installed
+    # onto the persistent cache PATH by install_prebuilt (dart's SDK is a separate
+    # sub-slice — it unpacks to /opt/dart-sdk, not a single binary).
+    local actionlint_arch vale_arch
+    case "$arch" in
+        x86_64) actionlint_arch="amd64"; vale_arch="64-bit" ;;
+        aarch64) actionlint_arch="arm64"; vale_arch="arm64" ;;
+    esac
+    install_prebuilt actionlint "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_${actionlint_arch}.tar.gz"
+    install_prebuilt vale "https://github.com/errata-ai/vale/releases/download/v3.14.2/vale_3.14.2_Linux_${vale_arch}.tar.gz"
+    install_prebuilt wasmtime "https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-${arch}-linux.tar.xz"
+
+    trace_lifecycle "tools" "prebuilt dev-tools ensured (arch=${arch})"
 }
 
 

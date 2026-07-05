@@ -103,3 +103,16 @@ container). Remove the corresponding Containerfile lines + their pinned
   reuses them thereafter.
 - `./build.sh --check` + `--test` pass; forge e2e smoke: first attach installs,
   second attach reuses.
+
+## SLICE 2 DONE 2026-07-05 (actionlint/vale/wasmtime)
+
+actionlint/vale/wasmtime now install at arch-aware FIRST_RUN via lib-common
+`ensure_forge_prebuilt_tools` (their arch tokens differ from the cargo triple:
+actionlint linux_amd64|arm64, vale Linux_64-bit|arm64, wasmtime x86_64|aarch64-linux).
+Removed from Containerfile.base along with the now-unused `install_archive` helper +
+their ARG _VERSION/_SHA256; only **dart** remains build-time (a full SDK to
+/opt/dart-sdk — its own later sub-slice). Verified on x86_64 (actionlint 1.7.12 +
+wasmtime 45.0.0 install + run; wasmtime's nested tar.xz extracts correctly); aarch64
+assets pre-verified 200. default-image litmus suite 100% (STEP 7 now 2 sha256sum
+sites; arch-shape litmus gains a slice-2 step). Remaining: dart sub-slice + version
+de-hardcoding via the releases/latest web redirect.

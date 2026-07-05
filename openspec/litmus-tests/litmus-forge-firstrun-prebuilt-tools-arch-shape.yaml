@@ -53,6 +53,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: cargo chain removed from creation"
 
+  - step: "slice 2: actionlint/vale/wasmtime also arch-aware first-run, and gone from creation"
+    # @trace order 180 slice 2: actionlint/vale/wasmtime moved to first-run
+    # install_prebuilt (arch tokens differ from the cargo triple); the whole
+    # install_archive helper is gone from Containerfile.base (only dart remains).
+    command: "for t in actionlint vale wasmtime; do grep -qF \"install_prebuilt $t \" images/default/lib-common.sh || { echo \"FAIL: $t not first-run\"; exit 1; }; done; if grep -qF 'install_archive' images/default/Containerfile.base; then echo 'FAIL: install_archive still at build'; exit 1; fi; echo 'ok: actionlint/vale/wasmtime first-run, install_archive gone'"
+    timeout_ms: 3000
+    expected_behavior: "ok: actionlint/vale/wasmtime first-run, install_archive gone"
+
 observability:
   traces:
     - "@trace spec:default-image"

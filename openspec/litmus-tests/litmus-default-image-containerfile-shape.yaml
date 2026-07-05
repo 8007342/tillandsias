@@ -78,12 +78,12 @@ critical_path:
     expected_behavior: "ok:"
 
   - step: "Req Direct assets: every retained build-time archive has an adjacent SHA-256 check"
-    # @trace order 188: the cargo dev-tools + nextest moved to arch-aware FIRST_RUN
-    # (lib-common ensure_forge_prebuilt_tools), so their CREATION-time ARG _SHA256s
-    # are gone. Only actionlint/vale/wasmtime/dart (Containerfile.base) + ollama
-    # (inference) remain build-time; 4 sha256sum sites remain (nextest's inline
-    # check went with it).
-    command: "for variable in ACTIONLINT_SHA256 VALE_SHA256 WASMTIME_SHA256 DART_SHA256 OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile.base images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile | wc -l); [ \"$checks\" -eq 4 ] || { echo \"FAIL: expected 4 checksum-verification sites, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
+    # @trace order 188 + 180 slice 2: the cargo dev-tools + nextest (188) AND
+    # actionlint/vale/wasmtime (slice 2) moved to arch-aware FIRST_RUN (lib-common
+    # ensure_forge_prebuilt_tools), so their CREATION-time ARG _SHA256s are gone.
+    # Only dart (Containerfile.base, a full SDK) + ollama (inference) remain
+    # build-time; 2 sha256sum sites remain.
+    command: "for variable in DART_SHA256 OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile.base images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile | wc -l); [ \"$checks\" -eq 2 ] || { echo \"FAIL: expected 2 checksum-verification sites, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
