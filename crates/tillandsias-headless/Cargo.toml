@@ -34,6 +34,7 @@ tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 tempfile = "3"
 reqwest = { workspace = true }
+tillandsias-secure-channel = { workspace = true }
 
 # @trace spec:tillandsias-vault — Phase 6: Vault is now the default secrets
 # backend for Linux. The `vault` feature is enabled by default.
