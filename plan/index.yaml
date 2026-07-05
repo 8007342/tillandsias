@@ -1117,6 +1117,55 @@ plan_index:
         - "Event bus uses tokio::sync::broadcast or watch, not mpsc::unbounded"
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
 
+    - packet_id: stable-state-codes-research
+      order: 160
+      title: "Research: stable finite state codes for host/vm/guest/podman status"
+      status: ready
+      kind: research
+      deliverable: plan/issues/stable-state-codes-research-2026-07-05.md
+      depends_on: [socket-protocol-push-variants, vm-headless-persistent-listener]
+      pickup_role: any
+      capability_tags: [any, research, ux, streams, state-machine, observability]
+      estimated_hours: 4
+      outcome: >
+        Define the canonical finite-state taxonomy for Tillandsias status
+        surfaces. The result should cover host, VM, guest, podman, transport,
+        auth, and forge states with stable codes and a one-way mapping to short
+        curated menu messages. The taxonomy must be event-driven: state changes
+        are delivered through observable streams, not repeated probes. The
+        deliverable should make the implementation packet deterministic.
+      exit_criteria:
+        - "Finite state machine taxonomy proposed for host/vm/guest/podman"
+        - "Stable error-code naming scheme proposed"
+        - "Events, not polling, are the primary state transport"
+        - "Short-message mapping strategy fits the 37-char tray budget"
+      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+
+    - packet_id: macos-tray-state-code-status-ux
+      order: 161
+      title: "macOS Tray: 37-char curated state messages from stable codes"
+      status: ready
+      kind: enhancement+refactor
+      deliverable: crates/tillandsias-macos-tray/src/
+      depends_on: [stable-state-codes-research, vm-headless-persistent-listener]
+      pickup_role: macos
+      capability_tags: [macos, tray, ux, streams, state-machine, observability]
+      estimated_hours: 8
+      outcome: >
+        Replace coarse setup labels with curated, event-driven status messages
+        derived from stable state codes. The tray chip must obey a 37-character
+        hard cap, avoid multiline stack traces entirely, and surface meaningful
+        VM/guest/podman/auth/forge states as the runtime evolves. Status updates
+        must be driven by observable events and watch-like state channels, not
+        polling loops. Curated strings should be concise, teachable, and
+        consistent across hosts.
+      exit_criteria:
+        - "Chip text hard-capped at 37 characters"
+        - "No raw stack traces or multiline errors reach the chip"
+        - "Stable state-code to message mapping is implemented"
+        - "Tray status changes are event-driven, not timer-polled"
+        - "Login/project/forge states become visible when ready"
+      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
     - packet_id: headless-podman-unix-streams
       order: 157
       title: "Headless ↔ Podman: Unix socket async streams (replace podman exec + HTTP poll)"
