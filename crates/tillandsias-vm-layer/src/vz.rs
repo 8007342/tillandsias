@@ -411,6 +411,10 @@ impl VzRuntime {
         }
         std::fs::create_dir_all(&temp_dir)
             .map_err(|e| format!("failed to create cidata temp dir: {e}"))?;
+        let secure_control_wire = match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
+            Ok(value) if value.eq_ignore_ascii_case("on") => "on",
+            _ => "off",
+        };
 
         // 1. Write user-data
         let user_data_content = r#"#!/bin/bash
@@ -515,19 +519,28 @@ StandardError=journal+console
 WantedBy=multi-user.target
 EOF
 
+mkdir -p /etc/systemd/system/tillandsias-headless.service.d
+cat > /etc/systemd/system/tillandsias-headless.service.d/10-control-wire.conf << 'EOF'
+[Service]
+Environment=TILLANDSIAS_SECURE_CONTROL_WIRE=__SECURE_CONTROL_WIRE__
+EOF
+
 # Reload and enable services
 systemctl daemon-reload
 systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service
 systemctl start tillandsias-headless-fetch.service tillandsias-headless.service
-"#;
+"#
+        .replace("__SECURE_CONTROL_WIRE__", secure_control_wire);
 
         std::fs::write(temp_dir.join("user-data"), user_data_content)
             .map_err(|e| format!("failed to write user-data: {e}"))?;
 
         // 2. Write meta-data
-        let meta_data_content = r#"instance-id: tillandsias-vm-1
+        let meta_data_content = format!(
+            "instance-id: tillandsias-vm-secure-{secure_control_wire}\n\
 local-hostname: tillandsias-vm
-"#;
+"
+        );
 
         std::fs::write(temp_dir.join("meta-data"), meta_data_content)
             .map_err(|e| format!("failed to write meta-data: {e}"))?;

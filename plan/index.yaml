@@ -369,6 +369,19 @@ plan_index:
             `tillandsias-headless/src/vsock_server.rs` behind the same boot-time
             flag. Secure host login smoke now fails only because the deployed VM
             image is stale and still serves the plaintext-only listener.
+        - type: progress
+          ts: "2026-07-04T17:24:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
+          host: "macos"
+          lease_id: "36fec584e55d"
+          note: >
+            Switched the macOS VM cloud-init generator to propagate
+            `TILLANDSIAS_SECURE_CONTROL_WIRE` into the guest service unit and
+            versioned the cloud-init instance id by secure mode so the guest can
+            re-provision when the flag flips. Filed new research and
+            implementation packets for embedding matching guest binaries inside
+            the macOS/Windows trays so the wrapper and guest can stay on the
+            same source revision without a network fetch.
       outcome: >
         macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
         connect/exec helpers replaced by open_stream/exec; supersedes the macOS
