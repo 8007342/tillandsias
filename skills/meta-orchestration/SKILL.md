@@ -48,8 +48,7 @@ Canonical branches:
 - Windows code: `windows-next`
 - Release: `main` through PR only
 
-All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` writes go to
-`linux-next`.
+All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `linux-next` their canonical home. However, agents working on platform branches (`windows-next`, `osx-next`) MUST commit and push all edits (including plan updates) directly to their active platform branch. The Linux coordinator will merge these branches back into `linux-next` during the `/multihost-orchestration` pass.
 
 ## Start Of Cycle
 

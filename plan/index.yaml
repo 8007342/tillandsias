@@ -2488,7 +2488,7 @@ plan_index:
     - packet_id: audit-plan-cross-branch-writes
       order: 196
       title: "Audit: clarify advance-work-from-plan cross-branch write instructions"
-      status: claimed
+      status: done
       events:
         - type: claim
           ts: "2026-07-05T22:45:00Z"
@@ -2496,6 +2496,12 @@ plan_index:
           host: "windows"
           lease_id: "audit-plan-cross-branch-writes-claim-1"
           expires_at: "2026-07-06T02:45:00Z"
+        - type: completed
+          ts: "2026-07-05T22:48:00Z"
+          agent_id: "windows-workstation-hvsock-20260705T2248Z"
+          host: "windows"
+          lease_id: "audit-plan-cross-branch-writes-claim-1"
+          evidence: "skills/advance-work-from-plan/SKILL.md and skills/meta-orchestration/SKILL.md updated to clarify that plan changes are pushed to the active branch. Deliverable written."
       kind: research
       deliverable: plan/issues/audit-plan-cross-branch-writes-2026-07-05.md
       depends_on: []
