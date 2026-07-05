@@ -31,7 +31,12 @@ pub async fn open_and_wrap_hvsocket_stream(
         );
         let encrypted = tillandsias_secure_channel::client_handshake(stream, &psk)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("secure handshake failed: {e}")))?;
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("secure handshake failed: {e}"),
+                )
+            })?;
         Ok(Box::new(encrypted))
     } else {
         Ok(Box::new(stream))

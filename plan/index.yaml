@@ -2008,7 +2008,8 @@ plan_index:
         - "slice 1 (order 188, done): arch-aware install_prebuilt helper + cargo-tools group -> FIRST_RUN"
         - "slice 2 (2026-07-05, done): actionlint/vale/wasmtime -> FIRST_RUN; install_archive helper removed from Containerfile.base"
         - "dart sub-slice (2026-07-05, done): Dart SDK -> arch-aware FIRST_RUN via lib-common ensure_dart_sdk (x64|arm64) into the order-179 cache; DART_VERSION/DART_SHA256 + curl/unzip RUN block + ENV /opt/dart-sdk/bin removed. Forge-base CREATION is now microdnf-only — NO curl/tar/unzip archive-extraction chains remain (single-binary marksman curl + ollama-in-inference are the only build-time direct assets left)."
-        - "remaining: marksman single-binary + ollama (inference container) -> FIRST_RUN; de-hardcode versions to releases/latest"
+        - "marksman sub-slice (2026-07-05, done): marksman single-binary -> FIRST_RUN in ensure_forge_prebuilt_tools (arch-aware, de-hardcoded via GitHub latest redirect); MARKSMAN_VERSION ARG + RUN curl block removed from Containerfile.base"
+        - "remaining: ollama (inference container) -> FIRST_RUN; de-hardcode versions to releases/latest"
       exit_criteria:
         - "ARCH-AWARE (macOS-blocking): install_prebuilt resolves $(uname -m) (x86_64|aarch64), never a hardcoded x86_64 URL — tools are executable on the aarch64 macOS guest; first slice = order 188; see macos-forge-base-build-arch-and-fragility-2026-07-05"
         - "curl/tar/chmod/mkdir chains + ARG _VERSION/_SHA256 constants removed; image builds faster + smaller"
