@@ -43,6 +43,7 @@ macOS guest and rerun the secure login/list/forge smoke.
 - Secure remote-project listing and forge launch succeed over the same wire.
 - The guest image is known to match the source tree carrying the secure responder.
 
+
 ## LINUX INTEGRATION 2026-07-05 (loop iter 3)
 
 The guest secure-control-wire responder is now on **linux-next**

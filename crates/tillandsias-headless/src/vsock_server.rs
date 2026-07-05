@@ -63,10 +63,6 @@ enum SecureControlWireMode {
     On,
 }
 
-// Pure parser for the boot-time secure-control-wire flag, split out so the
-// security-critical behaviour (default OFF; FAIL-CLOSED on an unrecognized value
-// rather than a silent downgrade to plaintext) is unit-testable independent of the
-// process-wide OnceLock cache below. @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
 fn parse_secure_control_wire_mode(
     raw: Result<String, std::env::VarError>,
 ) -> Result<SecureControlWireMode, String> {

@@ -85,3 +85,6 @@ images/default/cheatsheets/
 images/default/cheatsheet-sources/
 # Generated per-image build logs (build-image.sh writes build-<IMAGE>.log)
 build-*.log
+
+# Generated headless binaries for Windows tray embed
+crates/tillandsias-windows-tray/assets/tillandsias-headless-*

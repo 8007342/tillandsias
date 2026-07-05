@@ -1572,6 +1572,88 @@ plan_index:
     # 138-149, assigned on windows-next). Order numbers collide; packet_ids are
     # unique and remain the authoritative key.
 
+    # ── Guest-OS migration research — Orders 160-161 ──────────────────────────
+    # Source: operator directive 2026-07-02 ("Microsoft Linux 4.0 for cloud
+    # containers" — resolved to Azure Linux 4.0). Researched by a windows
+    # subagent; files written uncommitted for primary-agent review.
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - packet_id: microsoft-linux-guest-research
+      order: 160
+      title: "Research: Azure Linux 4.0 ('Microsoft Linux') as WSL2 guest — footprint, podman/SELinux parity, memory-model reality check"
+      status: completed
+      kind: research
+      deliverable: plan/issues/microsoft-linux-guest-migration-research-2026-07-02.md
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, research]
+      estimated_hours: 4
+      outcome: >
+        "Microsoft Linux 4.0" = Azure Linux 4.0 (Build 2026 public preview,
+        2026-06-02): now Fedora-derived (Fedora 43 snapshot), kernel 6.18 LTS,
+        dnf5, systemd 258, SELinux on every image. Verdict: DEFER with
+        conditions. The operator's memory hypothesis does not hold — all WSL2
+        distros share one utility VM + one Microsoft kernel with dynamic
+        ballooning up to the .wslconfig cap (default 50% of host); a distro
+        swap changes nothing about RAM, and vsock is kernel-side, distro-
+        independent. Real wins are modest: base image 42.6 MB vs Fedora 44's
+        68.2 MB compressed, Microsoft servicing, first-class SELinux; full
+        package parity for our Recipefile stack VERIFIED against
+        packages.microsoft.com (podman 5.8, netavark, crun, container-selinux,
+        selinux-policy-targeted 43.4, dbus-broker, socat, ...). Blockers today:
+        not-for-production preview, beta MCR namespace, official WSL distro
+        announced but unshipped, Fedora-43-era userland. 16 GB-host relief
+        belongs in .wslconfig tuning + order-159 inference footprint instead.
+        Migration packet filed at order 161 gated on GA + WSL-distro ship.
+      exit_criteria:
+        - "Product identified with citations (name discrepancy resolved prominently)"
+        - "Package parity for the Recipefile dnf set verified against the 4.0 repo"
+        - "Memory-model hypothesis reality-checked against WSL2 docs with citations"
+        - "GO/NO-GO/DEFER verdict with migration outline and effort/risk estimate"
+      events:
+        - type: completed
+          ts: "2026-07-02T00:00:00Z"
+          agent_id: "windows-research-subagent-20260702"
+          summary: >
+            DEFER with conditions. Azure Linux 4.0 (the real product behind
+            "Microsoft Linux 4.0") is a credible future guest — smaller base,
+            Microsoft servicing, SELinux-ready, full package parity verified —
+            but it is a not-for-production preview with no shipped WSL distro,
+            and the hoped-for memory-sharing win is structurally impossible
+            (WSL2 memory model is identical across distros). Re-evaluate at GA;
+            conditions and migration outline in the deliverable.
+
+    - packet_id: microsoft-linux-guest-migration
+      order: 161
+      title: "Migrate WSL2 guest base from Fedora 44 Container Base to Azure Linux 4.0 (post-GA)"
+      status: pending
+      kind: migration
+      deliverable: images/vm/Recipefile
+      depends_on: [microsoft-linux-guest-research]
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, selinux, podman]
+      estimated_hours: 12
+      deferred_note: >
+        Do NOT start until the order-160 conditions hold: Azure Linux 4.0 GA
+        (non-beta MCR namespace + production support statement) AND the
+        official WSL distro ships (wsl --install -d AzureLinux), evidencing
+        Microsoft tests the systemd/WSL path we depend on. Spike-import first.
+      outcome: >
+        Swap the guest base: Recipefile FROM registry.fedoraproject.org/fedora:44
+        -> mcr.microsoft.com/azurelinux/base/core:4.0 (post-GA namespace); repin
+        images/vm/manifest.toml digests and retire the Fedora-Container-Base
+        artifact URLs (MCR pull path); fix recipe tests asserting Fedora URLs;
+        validate images/selinux/ staged policies against azl4's selinux-policy
+        (43.4-era, older than Fedora 44's); dnf lines unchanged (dnf5 provides
+        dnf). Container images (vault/proxy/git/inference/forge) are distro-
+        independent OCI and unchanged. Enclave e2e must be green on an imported
+        azl4 guest before the Fedora path is removed.
+      exit_criteria:
+        - "Spike: flattened azl4 MCR image imports via wsl --import; systemd PID1 + vsock wire (42420) + rootful podman green"
+        - "Recipefile + manifest.toml on GA azurelinux namespace with pinned digests; recipe tests updated"
+        - "images/selinux/ policies build + apply against azl4 selinux-policy toolchain"
+        - "litmus instant pre-build + full e2e forge launch green on the azl4 guest"
+        - "guest VHD/base footprint reduction recorded in the deliverable vs Fedora 44 baseline"
 
     - packet_id: wire-policy-checkers-into-ci
       order: 169
@@ -2112,7 +2194,7 @@ plan_index:
     - packet_id: secure-channel-windows-transport-wiring
       order: 186
       title: "Impl (windows-owned): Windows transport stubs -> real, then wrap the secure handshake behind the flag (M1)"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/secure-channel-windows-transport-wiring-2026-07-04.md
       depends_on: [secure-channel-maturity-ladder, encrypted-control-channel-impl]
