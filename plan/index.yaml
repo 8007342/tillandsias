@@ -2478,3 +2478,43 @@ plan_index:
         - "Toolbx Containerfile and scripts setup-toolbx.sh are written and working"
         - "build.sh automatically detects Toolbx/Distrobox environments"
         - "Nix/cross-compilation for both architectures succeeds inside Toolbx on Silverblue"
+
+    - packet_id: audit-plan-cross-branch-writes
+      order: 196
+      title: "Audit: clarify advance-work-from-plan cross-branch write instructions"
+      status: ready
+      kind: research
+      deliverable: plan/issues/audit-plan-cross-branch-writes-2026-07-05.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [research, methodology, documentation]
+      estimated_hours: 1
+      outcome: >
+        The advance-work-from-plan skill currently instructs agents to checkout linux-next,
+        which fails if linux-next is checked out in a separate worktree. Audit the skill
+        and methodology to ensure instructions around plan edits and cross-branch pushes
+        are unambiguous and safe for all hosts.
+      exit_criteria:
+        - "Audit completed and deliverable written"
+        - "Skill and methodology files updated to resolve ambiguity"
+
+    - packet_id: audit-credential-guard-windows
+      order: 197
+      title: "Audit: fix check-credential-channel.sh invocation context on Windows"
+      status: ready
+      kind: bug-fix
+      deliverable: plan/issues/audit-credential-guard-windows-2026-07-05.md
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, bash, credentials]
+      estimated_hours: 1
+      outcome: >
+        When run on Windows via PowerShell, bash scripts often default to a WSL session
+        where host credentials (like the gh CLI keyring) are isolated. Modify the meta-orchestration
+        skill or check-credential-channel.sh to ensure it runs in the proper context (e.g. Git Bash)
+        on Windows so it correctly detects host credentials.
+      exit_criteria:
+        - "Credential guard runs successfully on Windows without false negatives"
+        - "Deliverable written with root cause and fix details"
