@@ -2038,3 +2038,42 @@ plan_index:
         - "guest responder on linux-next: no-op flag-OFF, version-bound handshake ON, fail-closed (DONE)"
         - "operator cuts a release containing the responder"
         - "macOS re-provisions guest + secure login/list/forge smoke passes with the flag ON (M1->M2 gate evidence)"
+
+    - packet_id: embedded-guest-binary-linux-build
+      order: 190
+      title: "Linux build: produce the two-arch static musl guest binary the macOS/Windows trays embed (drop the in-VM releases/latest curl)"
+      status: ready
+      kind: packaging
+      deliverable: plan/issues/embedded-guest-binary-linux-build-2026-07-05.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [packaging, guest-binary, musl, cross-compile, vsock, nix, vm]
+      estimated_hours: 4
+      outcome: >
+        macOS/Windows trays boot an in-VM tillandsias-headless (feature listen-vsock)
+        that must match the host wrapper's source rev; skew breaks the control wire
+        (secure responder 'early eof'). Operator's shape: the host app EMBEDS the
+        cross-compiled Linux guest binary (x86_64 + aarch64) and injects it, so local
+        smokes never need Wi-Fi or a release. FEASIBILITY (from the tree, not guessed):
+        YES, already implemented — flake.nix ships tillandsias-headless-{x86_64,aarch64}-musl
+        (crane + pkgsCross, rustls/ring, no OpenSSL), and release.yml already builds +
+        validates both as tillandsias-headless-{x86_64,aarch64}-unknown-linux-musl.
+        Needs only Nix (no rustup/cross — which is why the macOS host can't self-produce
+        them). ROLE SPLIT: step 1 LINUX (scripts/build-guest-binaries.sh runs the two
+        `nix build`s, stages result-h{x,ha}/bin/tillandsias under the canonical names,
+        asserts static + VERSION-stamp match; publish the naming/staging contract; do
+        NOT commit the ELFs); step 2 MACOS+WINDOWS (embed both in the bundle, select by
+        host arch into ProvisionManifest.tillandsias_binary — guest arch == host CPU
+        arch under native virt); step 3 MACOS (vz.rs) + WINDOWS (wsl_lifecycle.rs) drop
+        the in-VM fetch-headless.sh/tillandsias-headless-fetch.service curl of
+        releases/latest, keep a transitional fallback only if the embedded asset is
+        absent. Litmus: both guest binaries build, are `file`-static per arch, and their
+        --version equals the host wrapper's `Tillandsias v$(cat VERSION)` — no cross-rev
+        embed possible. Linux never edits tray/vm-layer code; it ships the artifact +
+        contract + litmus the other hosts consume.
+      exit_criteria:
+        - "cross-compile feasibility answered from the tree (YES; Nix-only) with flake.nix/release.yml evidence"
+        - "exact `nix build` commands, artifact paths, canonical names, and the host-arch inject-time selector documented"
+        - "staged plan with per-step linux/macos/windows ownership (step1 linux, step2 macos+windows, step3 macos vz.rs + windows wsl_lifecycle.rs)"
+        - "a litmus that proves both guest binaries build, are static per arch, and version-stamp-match the host wrapper"
