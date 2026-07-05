@@ -1944,7 +1944,8 @@ fn spawn_provisioning(hwnd: HWND) {
                 // on Quit the LocalSet drops the task → kill_on_drop releases the
                 // VM to idle normally again. PROVISIONING_ACTIVE stays set (Ready),
                 // so Retry is a no-op while the VM is up.
-                match lifecycle.spawn_keepalive() {
+                let is_debug = std::env::args().any(|a| a == "--debug");
+                match lifecycle.spawn_keepalive(is_debug) {
                     Ok(_keepalive) => {
                         tracing::info!("VM keepalive holding the control wire warm");
                         // Live status: poll VmStatus every tick (30 s) so the

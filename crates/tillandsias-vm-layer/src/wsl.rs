@@ -162,18 +162,33 @@ impl WslRuntime {
     /// to idle normally (and `stop`/Quit terminates the VM regardless).
     ///
     /// @trace spec:vm-idiomatic-layer, plan/issues/tray-convergence-coordination.md (w9)
-    pub fn spawn_keepalive(&self) -> Result<tokio::process::Child, VmError> {
-        tokio::process::Command::new("wsl")
-            .arg("--distribution")
+    pub fn spawn_keepalive(&self, debug: bool) -> Result<tokio::process::Child, VmError> {
+        let mut cmd = tokio::process::Command::new("wsl");
+        cmd.arg("--distribution")
             .arg(&self.distro_name)
-            .arg("--exec")
-            .arg("sleep")
-            .arg("infinity")
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .kill_on_drop(true)
-            .spawn()
+            .kill_on_drop(true);
+
+        if debug {
+            cmd.arg("--exec")
+                .arg("bash")
+                .arg("-c")
+                .arg("echo -ne '\\033]0;Tillandsias debug console\\007'; exec journalctl -fu tillandsias-headless");
+        } else {
+            cmd.arg("--exec")
+                .arg("sleep")
+                .arg("infinity")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+
+            #[cfg(target_os = "windows")]
+            {
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                cmd.creation_flags(CREATE_NO_WINDOW);
+            }
+        }
+
+        cmd.spawn()
             .map_err(|e| format!("spawn WSL keepalive failed: {e}"))
     }
 }
