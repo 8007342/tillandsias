@@ -358,6 +358,17 @@ plan_index:
             guest headless image in the current VM is still plaintext-only.
           blocker_refs:
             - plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md
+        - type: checkpoint
+          ts: "2026-07-05T01:28:42Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
+          host: "macos"
+          lease_id: "36fec584e55d"
+          commit_sha: "c6c56981"
+          summary: >
+            Added the guest-side secure-control-wire responder gate in
+            `tillandsias-headless/src/vsock_server.rs` behind the same boot-time
+            flag. Secure host login smoke now fails only because the deployed VM
+            image is stale and still serves the plaintext-only listener.
       outcome: >
         macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
         connect/exec helpers replaced by open_stream/exec; supersedes the macOS
