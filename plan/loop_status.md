@@ -1758,3 +1758,20 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - 188 -> done. macOS to re-verify on a cold Apple-Silicon guest.
 - Next: slice 2 (actionlint/vale/wasmtime/dart arch-aware) + de-hardcode versions to
   releases/latest redirect.
+
+## /loop iter 3 (2026-07-05 — integrate guest secure responder, order 189)
+
+Cleared the #1 macOS-blocking linux packet. Integrated macOS's guest secure-control-wire
+responder (osx-next c6c56981) onto linux-next as the headless-crate owner: vsock_server.rs
+maybe_secure_stream (no-op flag-OFF; version-bound server_handshake HopId::HostGuest when
+ON; FAIL-CLOSED on error) + a fail-closed parse unit test + litmus
+(secure-control-wire-guest-responder-shape, host-guest-transport, 4/4). Green under
+vault,listen-vsock. Commit a6b4d5d7. Order 189 = code DONE; BLOCKED on operator release +
+macOS re-verify.
+
+>>> OPERATOR ACTION NEEDED: cut a release so the macOS guest image ships the responder
+(release.yml is workflow_dispatch-only; safe — flag defaults OFF, M1 no behavior change).
+
+Loop queue next: tool-migration slice 2 (actionlint/vale/wasmtime → arch-aware first-run
+via install_prebuilt; dart SDK is the outlier, own sub-slice); podman-stale-volume-locks
+(verify 179 volume lifecycle); 187 antigravity agy forge-flag.
