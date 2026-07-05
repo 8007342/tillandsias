@@ -2508,7 +2508,14 @@ plan_index:
     - packet_id: audit-credential-guard-windows
       order: 197
       title: "Audit: fix check-credential-channel.sh invocation context on Windows"
-      status: ready
+      status: claimed
+      events:
+        - type: claim
+          ts: "2026-07-05T22:38:00Z"
+          agent_id: "windows-workstation-hvsock-20260705T2238Z"
+          host: "windows"
+          lease_id: "audit-credential-guard-windows-claim-1"
+          expires_at: "2026-07-06T02:38:00Z"
       kind: bug-fix
       deliverable: plan/issues/audit-credential-guard-windows-2026-07-05.md
       depends_on: []
