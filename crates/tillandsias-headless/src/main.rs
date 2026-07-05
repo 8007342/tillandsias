@@ -2291,7 +2291,6 @@ fn build_inference_run_args(
 
     let mut args = vec![
         "--detach".into(),
-        "--rm".into(),
         "--name".into(),
         "tillandsias-inference".into(),
         "--hostname".into(),

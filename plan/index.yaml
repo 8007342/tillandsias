@@ -1413,11 +1413,24 @@ plan_index:
     - packet_id: inference-container-startup-failure
       order: 168
       title: "Investigate: inference (Ollama) container dies ~30s after launch and self-removes"
-      status: ready
+      status: completed
       kind: investigation+bug-fix
       deliverable: plan/issues/inference-container-startup-failure-2026-07-02.md
       depends_on: []
-      pickup_role: any
+      pickup_role: linux
+      events:
+        - type: completed
+          ts: "2026-07-05T02:30:00Z"
+          agent_id: "linux-big-pickle-20260705T0200Z"
+          summary: >
+            Fixed inference container death-on-launch: (1) removed --rm from all
+            3 launch sites (main.rs, orchestrate-enclave.sh, test-inference.sh)
+            so post-mortem logs survive; (2) reduced default models from 4
+            tiny models (2GB total) to just qwen2.5:0.5b (400MB); (3) added
+            OLLAMA_NUM_PARALLEL=1 and OLLAMA_MAX_LOADED_MODELS=1 to prevent
+            ollama from loading models concurrently and OOM-ing constrained
+            hosts. Model cache volume mount was already present. Documented
+            remaining Windows-specific OOM confirmation as follow-up.
       capability_tags: [inference, podman, headless, observability]
       estimated_hours: 4
       outcome: >

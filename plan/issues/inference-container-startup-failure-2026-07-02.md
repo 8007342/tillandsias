@@ -22,6 +22,26 @@ vanish with it — both in-forge agent diagnostics could only report
   the pull.
 - The debug container was still healthy mid-pull at +35s, so the pull path itself works.
 
+## Fix applied — 2026-07-05 (order 168, linux/big-pickle)
+
+- **`--rm` removed** from all three inference launch sites:
+  - `crates/tillandsias-headless/src/main.rs` (`build_inference_run_args`)
+  - `scripts/orchestrate-enclave.sh`
+  - `scripts/test-inference.sh`
+  - Post-mortem logs now survive crash/OOM-kill; `podman logs tillandsias-inference` works after death.
+- **Default models reduced** to `qwen2.5:0.5b` only (was `qwen2.5:0.5b qwen2.5:1.5b llama3.2:1b qwen2.5-coder:1.5b`):
+  - Eliminates ~1.5GB of unnecessary model pulls on reference hardware (16GB host → 7.3GB WSL2 VM).
+  - Overridable via `TILLANDSIAS_DEFAULT_MODELS` env var for hosts with more headroom.
+- **Ollama resource limits** set in entrypoint:
+  - `OLLAMA_NUM_PARALLEL=1` — only one model loaded at a time
+  - `OLLAMA_MAX_LOADED_MODELS=1` — unload models from memory when not in use
+  - Prevents ollama from loading multiple models concurrently and hitting the memory ceiling.
+- **Model cache** (`~/.cache/tillandsias/models` → `/home/ollama/.ollama/models:rw`) was already persisted via volume mount and is unchanged.
+
+The model cache volume mount was already present on all launch sites — fix focuses on what was wrong: `--rm` (lost evidence), model count (4→1, 2GB→400MB default pull), and concurrency limits (ollama unloading).
+
+**Remaining per-platform**: capture the actual death cause on Windows (run without `--rm`, `podman inspect` OOMKilled flag, `podman logs`). The Linux-native changes make the container more resilient but the WSL2-specific OOM root cause (kernel oom-killer vs 7.3GB ceiling) can only be confirmed on the Windows host.
+
 ## Operator directive — reference hardware (2026-07-02)
 
 > This is quite the average laptop, so this hardware should be reference for end user runtime.
