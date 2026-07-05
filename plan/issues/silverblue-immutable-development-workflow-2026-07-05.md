@@ -20,8 +20,8 @@ This document inventories the findings from native building and container bootst
 
 ### A. Guest Binary Cross-Compilation (x86_64 → aarch64)
 * **Status**: BLOCKED (Host-Native) / SOLVED (via Nix/Container)
-* **Detail**: The tray bundles both `x86_64` and `aarch64` static Linux binaries. Compiling `aarch64` on an `x86_64` host requires a cross-toolchain (`gcc-aarch64-linux-gnu`) or Nix. Installing cross-compilers via `rpm-ostree` on the host requires a system reboot.
-* **Impact**: Developers on Silverblue cannot natively build the matching `aarch64` guest binary contract for macOS hosts unless they delegate to Nix or a mutable builder container.
+* **Detail**: The tray bundles both `x86_64` and `aarch64` static Linux binaries. Compiling `aarch64` on an `x86_64` host requires a cross-toolchain (`gcc-aarch64-linux-gnu`) or Nix. Note that even after layering `gcc-aarch64-linux-gnu` via `rpm-ostree` and rebooting, host-native compilation still fails on C-based library dependencies (such as `ring`) with `assert.h` missing errors. This is because Fedora's official cross-compiler package is designed for bare-metal/kernel builds and does not include standard target C library (glibc) headers or development files.
+* **Impact**: Developers on Silverblue cannot natively build the matching `aarch64` guest binary contract for macOS hosts unless they manually maintain a custom sysroot/header path on the host, or delegate to a mutable builder container (Toolbx/Distrobox) where cross-compilation toolchains with headers can be safely configured.
 
 ### B. Rootless SELinux Constraints
 * **Status**: SOLVED (Graceful Fallback)
