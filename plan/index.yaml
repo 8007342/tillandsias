@@ -1907,7 +1907,7 @@ plan_index:
     - packet_id: secure-channel-flag-and-maturity-metrics
       order: 185
       title: "Research: secure-channel flag propagation (boot-time, fail-closed) + maturity-gate metrics"
-      status: ready
+      status: claimed
       kind: research
       deliverable: plan/issues/secure-channel-flag-and-maturity-metrics-2026-07-04.md
       depends_on: [secure-channel-maturity-ladder]
@@ -1921,6 +1921,13 @@ plan_index:
         per-connection). Ratify the ladder's gate metrics (N/D releases/days for M2/M3)
         + define how each is measured (soak counters, escape-hatch telemetry, per-hop
         handshake-success logs). A gate that can't be measured can't be a gate.
+      events:
+        - type: claim
+          ts: "2026-07-04T23:00:00Z"
+          agent_id: "linux-antigravity-20260704T2300Z"
+          host: linux
+          lease_id: "secure-channel-flag-and-maturity-metrics-claim-1"
+          expires_at: "2026-07-05T03:00:00Z"
       exit_criteria:
         - "flag propagation + pre-flight fail-closed agreement check specified"
         - "N/D/M/E ratified with a measurement method each; telemetry gaps filed as sub-packets"
