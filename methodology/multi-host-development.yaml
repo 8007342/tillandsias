@@ -314,3 +314,21 @@ multi_host_development:
       `plan/` and use the defined communication protocols (agent_status_packet)
       to report the completion of entire waves, avoiding unnecessary stalls
       while waiting for central unblocking.
+
+  fedora_silverblue_immutable_builders:
+    rule: >
+      On Fedora Silverblue (and other immutable Linux hosts), native cross-compilation
+      to target guest architectures (like aarch64 musl) requires standard C library headers
+      that are missing from the host's minimal bare-metal toolchains. To build without
+      rebooting or polluting the host's immutable /usr layer, all compilation MUST be
+      standardized inside a local Toolbx container (e.g. tillandsias-builder).
+    setup_and_execution:
+      - "Create the Toolbx container: toolbox create -y tillandsias-builder"
+      - "Enable the cross-compiler COPR repo inside Toolbx: toolbox run --container tillandsias-builder sudo dnf copr enable -y lantw44/aarch64-linux-gnu-toolchain"
+      - "Install compilation tools inside Toolbx: toolbox run --container tillandsias-builder sudo dnf install -y gcc aarch64-linux-gnu-gcc aarch64-linux-gnu-glibc"
+      - "Build targets via Toolbx wrapper: toolbox run --container tillandsias-builder env CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS='-C link-self-contained=yes' cargo build --release --target aarch64-unknown-linux-musl --features listen-vsock"
+    rootless_dns_recommendation: >
+      Since rootless users cannot write to /etc/hosts, the launcher automatically falls
+      back to published port loopback routing (https://127.0.0.1:<port>) on host runs. All
+      enclave containers and toolboxes must configure working public resolvers (like 1.1.1.1) in
+      ~/.config/containers/containers.conf to bypass broken system-resolved defaults.

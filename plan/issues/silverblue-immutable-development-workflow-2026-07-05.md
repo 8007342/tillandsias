@@ -3,7 +3,7 @@
 - class: research+infra
 - filed: 2026-07-05
 - owner: linux
-- status: ready
+- status: done
 - related:
   - plan/issues/embedded-guest-binary-linux-build-2026-07-05.md (done)
   - plan/issues/vault-selinux-label-rootless-crash-2026-07-02.md (done)

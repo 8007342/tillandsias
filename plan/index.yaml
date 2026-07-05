@@ -2250,7 +2250,7 @@ plan_index:
     - packet_id: silverblue-immutable-development-workflow
       order: 195
       title: "Research: achieve 100% development workflow parity on immutable Fedora Silverblue hosts"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/silverblue-immutable-development-workflow-2026-07-05.md
       depends_on: []
