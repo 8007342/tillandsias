@@ -7,6 +7,24 @@ convergence_engine:
     + Δ(cheatsheet ↔ reality)
     + Δ(litmus_binding ↔ spec)
 
+  product_alignment:
+    target: >
+      An ephemeral portable cloud region with a frozen control plane: host
+      terminal/tray launches a same-revision Fedora 44 guest, initializes the
+      Podman service stack, and runs agent harnesses only inside the deepest
+      forge container.
+    uncertainty_reduction_rule: >
+      Every plan or methodology edit should reduce uncertainty about one named
+      boundary: version identity, transport authentication, credential isolation,
+      runtime provenance, or user-visible launch behavior. Historical intake that
+      no longer reduces one of those uncertainties should be archived or
+      tombstoned.
+    forbidden_shortcuts:
+      - "release-latest guest fetches when a source-matching embedded guest binary is available"
+      - "host credential/config mounts into a forge container"
+      - "dual plaintext+secure acceptance in the same boot"
+      - "dashboard zeros without source provenance"
+
   constraints:
     - compilation_success: "Code must compile without errors"
     - spec_compliance: "Code must satisfy all MUST requirements from its specs"
@@ -416,4 +434,3 @@ bar_raise_governance:
     bar-raise is a deliberate scope decision the operator owns, keeping the
     convergence point clear instead of letting an ever-rising bar make "done"
     unreachable by construction.
-

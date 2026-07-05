@@ -2052,11 +2052,13 @@ plan_index:
         (vsock_server.rs maybe_secure_stream: no-op when TILLANDSIAS_SECURE_CONTROL_WIRE
         OFF, version-bound server_handshake on HopId::HostGuest when ON, FAIL-CLOSED on
         error) + a fail-closed unit test + litmus. Builds/tests green under
-        vault,listen-vsock. Now BLOCKED on the operator cutting a release so the macOS
-        guest image ships it (safe: flag defaults OFF, M1 = no behavior change).
+        vault,listen-vsock. Operator clarified that macOS embeds a cross-compiled
+        linux guest binary from the source tree, not a released artifact, so this is
+        NOT release-blocked. The remaining work is macOS-side rebuild/reprovision
+        with the embedded current guest and flag-ON login/list/forge smoke evidence.
       exit_criteria:
         - "guest responder on linux-next: no-op flag-OFF, version-bound handshake ON, fail-closed (DONE)"
-        - "operator cuts a release containing the responder"
+        - "macOS embeds a current linux-next guest binary rather than fetching releases/latest"
         - "macOS re-provisions guest + secure login/list/forge smoke passes with the flag ON (M1->M2 gate evidence)"
 
     - packet_id: embedded-guest-binary-linux-build
@@ -2097,3 +2099,94 @@ plan_index:
         - "exact `nix build` commands, artifact paths, canonical names, and the host-arch inject-time selector documented"
         - "staged plan with per-step linux/macos/windows ownership (step1 linux, step2 macos+windows, step3 macos vz.rs + windows wsl_lifecycle.rs)"
         - "a litmus that proves both guest binaries build, are static per arch, and version-stamp-match the host wrapper"
+
+    - packet_id: multi-host-secure-wire-integration-freeze
+      order: 191
+      title: "Coordination: freeze sibling drift and integrate secure-wire + embedded-guest branches by merge"
+      status: ready
+      kind: integration
+      deliverable: plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md
+      depends_on: [secure-channel-maturity-ladder, embedded-guest-binary-linux-build]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [coordination, security, secure-channel, guest-binary, branch-integration]
+      estimated_hours: 3
+      outcome: >
+        `origin/osx-next` is 12 commits ahead of `origin/linux-next` and
+        `origin/windows-next` is 6 ahead, both over Dmax=5. Freeze new platform
+        feature leases until each sibling branch merges `origin/linux-next`, preserves
+        its platform code, and records smoke evidence or exact conflicts. Cross-branch
+        integration must use merge commits only; no cherry-picking or rebasing of
+        published sibling commits into linux-next.
+      exit_criteria:
+        - "osx-next and windows-next have each merged origin/linux-next after this audit"
+        - "secure-control-wire and embedded-guest-binary commits are either merged to linux-next or blocked by named conflict packets"
+        - "macOS and Windows each record flag-OFF no-regression and flag-ON handshake evidence, or the exact failing boundary"
+
+    - packet_id: semantic-distillation-and-ledger-pruning
+      order: 192
+      title: "Housekeeping: prune stale active ledgers and refresh dashboard provenance"
+      status: ready
+      kind: housekeeping
+      deliverable: plan/issues/semantic-distillation-and-ledger-pruning-2026-07-05.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [docs, plan, methodology, metrics, distillation]
+      estimated_hours: 4
+      outcome: >
+        Collapse duplicate or stale active Markdown into canonical plan packets,
+        tombstone superseded intake files, and refresh dashboards so empty cached
+        metrics cannot masquerade as live evidence. Preserve historical notes in
+        plan/archive or as tombstones, but remove them from the active claim surface.
+      exit_criteria:
+        - "active plan/issues contains only live blockers or explicit tombstones"
+        - "superseded embedded-binary and old branch-drift notes point at orders 190/191"
+        - "metrics dashboard states its source timestamp/provenance and fails closed when no metrics input exists"
+
+    - packet_id: macos-vz-home-src-mount
+      order: 193
+      title: "macOS P0: mount host ~/src into Fedora 44 guest at /home/forge/src via VZ virtio-fs"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/macos-vz-home-src-mount-2026-07-05.md
+      depends_on: [embedded-guest-binary-linux-build]
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, vm-layer, vz, virtiofs, guest-binary, cloud-projects]
+      estimated_hours: 6
+      outcome: >
+        The macOS path assumes `/home/forge/src` exists in the Fedora 44 guest for
+        staged guest binaries, local project enumeration, cloud checkout persistence,
+        and project mounts into forge containers. Audit evidence found comments and
+        features claiming virtio-fs, but no VZ virtio-fs device in the VM config.
+        Add the real VZ virtio-fs share and guest mount, then prove embedded-binary
+        injection and project attach work without a network fetch.
+      exit_criteria:
+        - "VZ config includes the virtio-fs device/share for host ~/src"
+        - "guest mounts it at /home/forge/src before headless service start"
+        - "staged embedded headless installs without releases/latest fetch"
+        - "EnumerateLocalProjects sees host projects and a cloud attach reaches the forge"
+
+    - packet_id: secure-channel-release-and-probe-hardening
+      order: 194
+      title: "Security: harden secure-channel PSK parity, release-secret requirement, and readiness probes"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+      depends_on: [secure-channel-maturity-ladder]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [security, secure-channel, release, macos, vm-layer]
+      estimated_hours: 5
+      outcome: >
+        Before advancing secure-wire maturity, all host initiators and probes must
+        derive the same PSK input, release artifacts must fail closed without a
+        release secret, and readiness probes must not bypass secure mode. Fix
+        macOS diagnostic/version drift, secure-wrap VM phase probes, and add release
+        CI evidence that `TILLANDSIAS_RELEASE_SECRET` is present for shipped artifacts.
+      exit_criteria:
+        - "all macOS secure openers use the workspace VERSION, not CARGO_PKG_VERSION drift"
+        - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"
+        - "release CI fails if release artifacts would use the public dev seed"
+        - "litmus coverage: psk-input-parity, secure-wait-phase-ready, release-secret-required"

@@ -86,6 +86,29 @@ multi_host_development:
       check fails, another host has independent work; stop and coordinate
       through `plan/` before pushing.
 
+  sibling_drift_guard:
+    max_unintegrated_commits: 5
+    rule: >
+      If `git rev-list --count origin/linux-next..origin/<sibling>` exceeds 5
+      for `osx-next` or `windows-next`, that sibling is in branch-drift alert.
+      Freeze new platform feature leases on that sibling until it merges
+      `origin/linux-next`, records the observed conflicts or smoke evidence, and
+      the coordinator creates or updates a named integration packet.
+    rationale: >
+      The product-critical path crosses shared secure-wire, embedded guest
+      binary, VM provisioning, Podman, and forge-launch boundaries. Long sibling
+      drift turns implementation progress into hidden uncertainty because branch
+      heads can each be locally correct but globally incompatible.
+    allowed_work_while_frozen:
+      - "merge origin/linux-next into the platform branch"
+      - "resolve platform-owned conflicts"
+      - "run and record focused no-regression/e2e evidence"
+      - "write shared-state plan/methodology updates directly on linux-next"
+    prohibited_work_while_frozen:
+      - "new platform feature scope unrelated to the integration blocker"
+      - "rebasing or cherry-picking published sibling commits across branches"
+      - "overwriting linux-next plan/methodology state with stale sibling copies"
+
   pull_merge_cadence:
     before_start: true
     before_long_verification: true
@@ -182,6 +205,19 @@ multi_host_development:
       - "Do not exit a skill successfully with local-only commits or uncommitted tracked changes."
       - "Incomplete but coherent work must be checkpoint-committed, pushed, and recorded in the owning plan item."
       - "Prefer separate `git worktree` directories for concurrent platform branches instead of switching branches with dirty state."
+
+  product_topology_invariant:
+    rule: >
+      The target runtime is an ephemeral portable cloud region with a frozen
+      control plane: top host terminal -> platform tray/launcher -> Fedora 44
+      guest -> Podman service stack -> deepest forge container running the
+      selected agent harness. Requirements that do not preserve this topology
+      must be tombstoned or rewritten before implementation.
+    verification_boundary: >
+      A packet is not product-complete until it states which hop it proves
+      (host, guest, Podman service stack, or deepest forge) and records evidence
+      that credentials, version identity, and transport mode did not silently
+      cross an unintended boundary.
 
   branch_canon:
     rule: >

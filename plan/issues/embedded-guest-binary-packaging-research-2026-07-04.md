@@ -4,7 +4,12 @@
 - filed: 2026-07-04
 - owner: any
 - pickup_role: any
-- status: ready
+- status: obsoleted
+- superseded_by: plan/issues/embedded-guest-binary-linux-build-2026-07-05.md
+
+> TOMBSTONE 2026-07-05: research intake is preserved here, but the active
+> implementation packet is order 190. New agents should not treat this file as a
+> claimable ready item.
 
 ## Question
 
@@ -56,4 +61,3 @@ The intended overhead is acceptable: each wrapper can include both Linux
 - This host does not currently have `rustup`/cross targets available on PATH,
   so cross-compiling Linux guest binaries from the macOS checkout is blocked
   until the Rust toolchain is installed or provided another way.
-
