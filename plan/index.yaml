@@ -1442,7 +1442,7 @@ plan_index:
     - packet_id: forge-agent-permission-defaults
       order: 165
       title: "Forge UX: pre-grant container-local filesystem to agents; enforce at the boundary"
-      status: in_progress
+      status: completed
       kind: research+ux
       deliverable: plan/issues/forge-agent-permission-defaults-2026-07-02.md
       depends_on: []
@@ -1456,6 +1456,23 @@ plan_index:
           host: forge
           lease_id: "forge-agent-permission-defaults-20260703T224830Z"
           expires_at: "2026-07-04T02:48:30Z"
+        - type: completed
+          ts: "2026-07-05T23:25:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260705T2325Z"
+          host: forge
+          summary: >
+            Exit criteria verified: (1) OpenCode config.json already has
+            "permission":"allow" and entrypoint uses
+            --dangerously-skip-permissions; Codex entrypoint uses
+            --dangerously-bypass-approvals-and-sandbox gated on
+            TILLANDSIAS_HOST_KIND=forge, so fresh forge sessions run with
+            zero filesystem permission prompts. (2) Boundary-enforcement
+            rationale added to openspec/specs/default-image/spec.md —
+            documents why default-grant is safe inside the forge (nine
+            containment boundaries: cap-drop, no-new-privs, user-ns,
+            proxy egress, credential indirection, source-mount quarantine,
+            encrypted control channel, SELinux Phase 6, ephemeral
+            single-project container).
       outcome: >
         First interactive forge session prompted the operator to allow /etc, /proc,
         /tmp reads and /home/forge writes — theater inside an ephemeral, enclave-
@@ -1463,7 +1480,7 @@ plan_index:
         SELinux Phase 6, mirror-mediated credentials). Operator-ratified direction:
         default-grant the container-local filesystem in the forge agent config
         overlays; strengthen the boundary, not the prompts. Deliverable holds the
-        position + rationale for ratification.
+        position + rationale for ratification. Both exit criteria satisfied.
       exit_criteria:
         - "Fresh forge session runs diagnostics with zero filesystem permission prompts"
         - "Boundary-enforcement rationale written into the spec (why default-grant is safe)"
