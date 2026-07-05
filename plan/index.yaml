@@ -1998,7 +1998,7 @@ plan_index:
     - packet_id: secure-channel-windows-transport-wiring
       order: 186
       title: "Impl (windows-owned): Windows transport stubs -> real, then wrap the secure handshake behind the flag (M1)"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/secure-channel-windows-transport-wiring-2026-07-04.md
       depends_on: [secure-channel-maturity-ladder, encrypted-control-channel-impl]

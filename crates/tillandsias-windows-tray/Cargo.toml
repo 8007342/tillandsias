@@ -20,6 +20,7 @@ tillandsias-host-shell = { path = "../tillandsias-host-shell" }
 # Windows target below — keeps the linux-next integration build lean.
 tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
+tillandsias-secure-channel = { path = "../tillandsias-secure-channel" }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 # Machine-readable `--diagnose --json` output for installed-tray support tooling.

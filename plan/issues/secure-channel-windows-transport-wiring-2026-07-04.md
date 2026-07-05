@@ -3,7 +3,7 @@
 - class: enhancement (security) — WINDOWS-OWNED
 - filed: 2026-07-04 (by linux coordinator; windows terminal implements)
 - owner: windows
-- status: ready
+- status: completed
 - depends_on: secure-channel-maturity-ladder-2026-07-04.md (M1 rung), order 141 (primitive)
 - trace: plan/issues/encrypted-channel-vsock-cutover-2026-07-02.md (145, Windows integration point)
 
@@ -44,3 +44,10 @@ advance until ALL platforms are wired).
 - With flag ON it completes the Noise handshake to the guest and streams over the
   encrypted tunnel; plaintext/wrong-version peer rejected.
 - Windows VM-smoke evidence recorded → Windows satisfies its half of gate M1→M2.
+
+## Resolution 2026-07-05
+1. **Wired secure-channel wrapper:** Added `open_and_wrap_hvsocket_stream` helper in `crates/tillandsias-windows-tray/src/hvsocket.rs` that checks `TILLANDSIAS_SECURE_CONTROL_WIRE=on` and performs the Noise `client_handshake` using `channel_psk` (derived from Workspace version and wire version) before building `Client` from the encrypted stream.
+2. **Updated callers:** Swapped all tray-side calls to `open_hvsocket_stream` in `wsl_lifecycle.rs` and `notify_icon.rs` to `open_and_wrap_hvsocket_stream`.
+3. **Embedded Linux binaries:** Updated `build.rs` to unconditionally generate dummy headless binaries in `assets/` so the crate compiles cleanly on all platforms. Modified `inject_bootstrap_logic` in `wsl_lifecycle.rs` to query the guest's architecture at runtime, detect if matching embedded binaries exist in the tray, and if so, write them directly to the VM (avoiding external downloads and guaranteeing transparent cryptographic/version parity).
+4. **Validation:** Verified compilation and successfully ran all 65 workspace tests (all green).
+

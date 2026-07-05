@@ -320,11 +320,46 @@ for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_se
             })?
     }
 
-    /// Inject the `fetch-headless.sh` script and systemd units into the
-    /// official Fedora image via `wsl --exec`.
     async fn inject_bootstrap_logic(&self) -> Result<(), String> {
-        // 1. fetch-headless.sh
-        let fetch_script = r#"#!/usr/bin/env bash
+        // Detect guest architecture
+        let arch_output = tokio::process::Command::new("wsl")
+            .arg("-d")
+            .arg(DISTRO_NAME)
+            .arg("-u")
+            .arg("root")
+            .arg("--")
+            .arg("uname")
+            .arg("-m")
+            .output()
+            .await
+            .map_err(|e| format!("failed to detect guest architecture: {e}"))?;
+        let arch = String::from_utf8_lossy(&arch_output.stdout).trim().to_string();
+
+        let embedded_bin: &[u8] = match arch.as_str() {
+            "x86_64" => include_bytes!("../assets/tillandsias-headless-x86_64-unknown-linux-musl"),
+            "aarch64" => include_bytes!("../assets/tillandsias-headless-aarch64-unknown-linux-musl"),
+            _ => &[],
+        };
+
+        if !embedded_bin.is_empty() {
+            tracing::info!(%arch, "Injecting embedded tillandsias-headless binary");
+            self.wsl_root_write_bytes(
+                "/usr/local/bin/tillandsias-headless",
+                embedded_bin,
+                true,
+            )
+            .await?;
+
+            // Write a no-op fetch-headless.sh so the fetch systemd service compiles and runs cleanly
+            self.wsl_root_write(
+                "/usr/local/lib/tillandsias/fetch-headless.sh",
+                "#!/usr/bin/env bash\nexit 0\n",
+                true,
+            )
+            .await?;
+        } else {
+            // 1. fetch-headless.sh
+            let fetch_script = r#"#!/usr/bin/env bash
 set -euo pipefail
 DEST="/usr/local/bin/tillandsias-headless"
 if [[ -x "$DEST" ]]; then exit 0; fi
@@ -333,12 +368,13 @@ URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias
 curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$DEST" "$URL"
 chmod 0755 "$DEST"
 "#;
-        self.wsl_root_write(
-            "/usr/local/lib/tillandsias/fetch-headless.sh",
-            fetch_script,
-            true,
-        )
-        .await?;
+            self.wsl_root_write(
+                "/usr/local/lib/tillandsias/fetch-headless.sh",
+                fetch_script,
+                true,
+            )
+            .await?;
+        }
 
         // 2. headless-preflight.sh
         let preflight_script = r#"#!/usr/bin/env bash
@@ -575,6 +611,45 @@ fi"#,
         Ok(())
     }
 
+    async fn wsl_root_write_bytes(
+        &self,
+        path: &str,
+        content: &[u8],
+        make_executable: bool,
+    ) -> Result<(), String> {
+        let mut child = tokio::process::Command::new("wsl")
+            .arg("-d")
+            .arg(DISTRO_NAME)
+            .arg("-u")
+            .arg("root")
+            .arg("--")
+            .arg("sh")
+            .arg("-c")
+            .arg(format!(
+                "cat > {path} && if [ \"{make_executable}\" = \"true\" ]; then chmod +x {path}; fi"
+            ))
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("wsl write {path} failed: {e}"))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            stdin
+                .write_all(content)
+                .await
+                .map_err(|e| format!("write stdin to {path} failed: {e}"))?;
+        }
+
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| format!("wait for wsl write {path} failed: {e}"))?;
+        if !status.success() {
+            return Err(format!("wsl write {path} exited {status}"));
+        }
+        Ok(())
+    }
+
     async fn wsl_root_sh(&self, script: &str) -> Result<(), String> {
         let status = tokio::process::Command::new("wsl")
             .arg("-d")
@@ -613,11 +688,11 @@ fi"#,
             // Open the HvSocket transport, then drive the standard host-shell Client
             // (same Hello/HelloAck + request path the macOS tray uses over its
             // VZVirtioSocketConnection stream — slice 4 `80d9196e`).
-            let stream = crate::hvsocket::open_hvsocket_stream(port)
+            let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(port)
                 .await
                 .map_err(|e| format!("hvsocket open: {e}"))?;
             let mut client =
-                Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
+                Client::from_stream(stream, Transport::Vsock { cid: 0, port });
             let wire_version = client
                 .handshake()
                 .await
