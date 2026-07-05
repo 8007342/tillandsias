@@ -1761,10 +1761,43 @@ plan_index:
         (de-hardcoded). Small slices, one tool-group per commit, each behind an
         idempotency litmus (2nd launch is a no-op). Fail-soft.
       exit_criteria:
+        - "ARCH-AWARE (macOS-blocking): install_prebuilt resolves $(uname -m) (x86_64|aarch64), never a hardcoded x86_64 URL — tools are executable on the aarch64 macOS guest; first slice = order 188; see macos-forge-base-build-arch-and-fragility-2026-07-05"
         - "curl/tar/chmod/mkdir chains + ARG _VERSION/_SHA256 constants removed; image builds faster + smaller"
         - "tools stay PREBUILT (no source compile), fetched first-run, resolved to latest"
         - "each migrated tool installs on first launch into the persistent cache, present on PATH"
         - "second launch reuses (no reinstall); forge e2e first-attach-installs/second-attach-reuses"
+        - "--check + --test pass"
+
+    - packet_id: forge-firstrun-installer-arch-aware
+      order: 188
+      title: "Impl (slice 1 of 180, macOS-blocking): arch-aware install_prebuilt helper + migrate cargo-tools group to FIRST_RUN"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md
+      depends_on: [forge-persistent-tool-cache-mount]
+      pickup_role: linux
+      capability_tags: [forge, images, podman, arch]
+      estimated_hours: 5
+      outcome: >
+        The first + macOS-critical slice of order 180 (forge-firstrun-tool-migration).
+        Add the reusable idempotent `install_prebuilt <name> <latest-resolver>` helper
+        to images/default/lib-common.sh, resolving the release asset for $(uname -m)
+        (x86_64|aarch64) — NEVER a hardcoded x86_64 URL. Migrate the cargo-tools group
+        (nextest/chef/watch/audit/edit/llvm-cov/semver-checks/expand/criterion/wasi/
+        outdated + wasm-pack/trunk/typos-cli/watchexec) out of the Containerfile.base
+        install_archive block into a FIRST_RUN entrypoint step installing into the
+        order-179 persistent cache; remove those lines + their ARG _VERSION/_SHA256
+        constants. Fail-soft (a failed install logs + continues, retries next launch).
+        WHY macOS-blocking: forge-base is built at runtime in the aarch64 macOS guest;
+        today it bakes non-executable x86_64 tools and the long sequential build chain
+        hangs VM setup (evidence: the deliverable finding). Ship this arch-aware pattern
+        first; then 180/181 migrate the remaining groups the same way.
+      exit_criteria:
+        - "install_prebuilt resolves $(uname -m); first-run log shows NO x86_64 asset fetched on an aarch64 guest"
+        - "cargo-tools install at FIRST_RUN into the 179 cache; present + EXECUTABLE on PATH on BOTH x86_64 and aarch64 (e.g. cargo-nextest --version succeeds in-guest)"
+        - "idempotency litmus: second forge launch reinstalls nothing (no-op)"
+        - "Containerfile.base cargo-tools install_archive block + their ARG _VERSION/_SHA256 removed; base build no longer fetches them"
+        - "macOS acceptance: cold Apple-Silicon guest builds forge-base without hanging on the tool chain; --opencode reaches the forge"
         - "--check + --test pass"
 
     - packet_id: forge-harness-every-launch-latest
