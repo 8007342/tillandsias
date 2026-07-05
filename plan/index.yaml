@@ -1410,7 +1410,14 @@ plan_index:
     - packet_id: keepalive-terminal-visibility
       order: 164
       title: "UX: hide the keepalive wsl.exe console (or make it the --debug console) + supervise it"
-      status: ready
+      status: claimed
+      events:
+        - type: claim
+          ts: "2026-07-05T22:32:00Z"
+          agent_id: "windows-workstation-hvsock-20260705T2232Z"
+          host: "windows"
+          lease_id: "keepalive-terminal-visibility-claim-1"
+          expires_at: "2026-07-06T02:32:00Z"
       kind: research+ux
       deliverable: plan/issues/keepalive-terminal-visibility-2026-07-02.md
       depends_on: []
