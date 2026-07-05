@@ -26,11 +26,10 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
     && microdnf clean all
 
 # ── Agent binaries ─────────────────────────────────────────────
-RUN npm install -g --prefix /usr/local \
-        opencode-ai@1.16.2 \
-        @fission-ai/openspec@1.4.1 \
-        @anthropic-ai/claude-code@2.1.168 \
-        @openai/codex@0.137.0
+# Agent harnesses are installed EVERY_LAUNCH by ensure_forge_harnesses
+# (see lib-common.sh) — always latest, fail-soft to the persistent npm
+# cache. No pinned versions at CREATION.
+# @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 
 # ── Antigravity CLI (agy) ───────────────────────────────────────
 # NOT installed at build: the upstream installer is a pipe-to-shell with a floating
@@ -38,12 +37,6 @@ RUN npm install -g --prefix /usr/local \
 # aarch64 macOS guest). agy installs EVERY_LAUNCH from the Antigravity forge
 # entrypoint instead (install-if-missing, timeout-guarded, latest).
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
-
-# ── marksman Markdown LSP server ────────────────────────────────
-# Single self-contained .NET binary from GitHub releases.
-ARG MARKSMAN_VERSION=2026-02-08
-RUN curl -LsSf "https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman-linux-x64" -o /usr/local/bin/marksman \
-    && chmod +x /usr/local/bin/marksman
 
 # ── Python packages and developer tools ─────────────────────────
 RUN pip3 install --timeout 120 --no-cache-dir \
@@ -65,5 +58,7 @@ ENV CARGO_HOME=/usr/local/cargo \
 # all moved to an arch-aware, idempotent, fail-soft FIRST_RUN install (lib-common
 # `ensure_forge_prebuilt_tools` + `ensure_dart_sdk`) into the order-179 persistent
 # cache. This fixes the aarch64 macOS guest baking non-executable x86_64 binaries + the
-# sequential-fetch build hang, and leaves forge-base CREATION microdnf + npm + a couple
-# single-binary curls (marksman) ONLY — no curl/tar/unzip archive-extraction chains.
+# sequential-fetch build hang, and leaves forge-base CREATION microdnf + npm ONLY —
+# no curl/tar/unzip archive-extraction chains remain. marksman (the last single-binary
+# curl) also moved to FIRST_RUN in ensure_forge_prebuilt_tools (order 180 marksman
+# sub-slice); Containerfile.base now contains zero asset download commands.
