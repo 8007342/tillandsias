@@ -1315,7 +1315,14 @@ plan_index:
     - packet_id: race-safeguards-research
       order: 160
       title: "Research: race-surface inventory + safeguard strategy (concurrent launches, lifecycle churn)"
-      status: ready
+      status: claimed
+      events:
+        - type: claim
+          ts: "2026-07-05T22:50:00Z"
+          agent_id: "windows-workstation-hvsock-20260705T2250Z"
+          host: "windows"
+          lease_id: "race-safeguards-research-claim-1"
+          expires_at: "2026-07-06T02:50:00Z"
       kind: research
       deliverable: plan/issues/race-safeguards-research-2026-07-02.md
       depends_on: []
