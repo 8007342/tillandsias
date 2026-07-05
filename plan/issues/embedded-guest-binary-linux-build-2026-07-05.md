@@ -199,3 +199,19 @@ cache, `nix-cache-warm.yml`).
 - Staged plan with per-step linux/macos/windows ownership.
 - A litmus that proves both guest binaries build, are static per arch, and
   version-stamp-match the host wrapper (no cross-rev embed possible).
+
+## macOS blocker ping 2026-07-05T18:53Z
+
+`/meta-orchestration` on macOS selected order 193 as the top macOS implementation
+packet, then stopped before code work because the macOS checkout is dirty and
+this Linux-owned artifact contract is still unresolved.
+
+Linux should pick this packet before expecting macOS packaged cold-boot evidence.
+The smallest Linux slice is:
+
+1. add `scripts/build-guest-binaries.sh`;
+2. stage `tillandsias-headless-x86_64-unknown-linux-musl` and
+   `tillandsias-headless-aarch64-unknown-linux-musl` into a non-committed build
+   output directory;
+3. verify `file` static/arch evidence and `VERSION` stamp evidence;
+4. record the staging path contract for macOS/Windows consumers.

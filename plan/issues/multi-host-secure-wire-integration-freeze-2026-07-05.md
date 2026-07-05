@@ -62,3 +62,10 @@ Linux/coordinator:
   explicitly assigned.
 - Embedded guest binary work is aligned around order 190 as the Linux artifact
   contract consumed by macOS and Windows.
+
+## macOS run result 2026-07-05T18:53Z
+
+MacOS meta-orchestration did not merge or implement because the local `osx-next`
+worktree has uncommitted tracked and untracked implementation/package changes.
+This is a local macOS blocker, not a Linux blocker. Linux should continue with
+order 190 while macOS checkpoints/cleans WIP before attempting the merge.

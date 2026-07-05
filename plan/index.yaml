@@ -2094,6 +2094,17 @@ plan_index:
         --version equals the host wrapper's `Tillandsias v$(cat VERSION)` — no cross-rev
         embed possible. Linux never edits tray/vm-layer code; it ships the artifact +
         contract + litmus the other hosts consume.
+      events:
+        - type: blocker_ping
+          ts: "2026-07-05T18:53:22Z"
+          agent_id: "macos-codex-meta-orch-20260705T1853Z"
+          host: macos
+          summary: >
+            macOS worker drain found orders 191/193 cannot safely proceed yet:
+            local osx-next is dirty, branch drift is above Dmax, and 193 needs the
+            Linux-staged guest-binary contract. Linux should pick this packet first
+            and produce scripts/build-guest-binaries.sh + static/version litmus
+            evidence before macOS reruns package/reprovision smokes.
       exit_criteria:
         - "cross-compile feasibility answered from the tree (YES; Nix-only) with flake.nix/release.yml evidence"
         - "exact `nix build` commands, artifact paths, canonical names, and the host-arch inject-time selector documented"
@@ -2147,7 +2158,7 @@ plan_index:
     - packet_id: macos-vz-home-src-mount
       order: 193
       title: "macOS P0: mount host ~/src into Fedora 44 guest at /home/forge/src via VZ virtio-fs"
-      status: ready
+      status: blocked
       kind: bugfix
       deliverable: plan/issues/macos-vz-home-src-mount-2026-07-05.md
       depends_on: [embedded-guest-binary-linux-build]
@@ -2162,6 +2173,24 @@ plan_index:
         features claiming virtio-fs, but no VZ virtio-fs device in the VM config.
         Add the real VZ virtio-fs share and guest mount, then prove embedded-binary
         injection and project attach work without a network fetch.
+      events:
+        - type: blocked
+          ts: "2026-07-05T18:53:22Z"
+          agent_id: "macos-codex-meta-orch-20260705T1853Z"
+          host: macos
+          reason: >
+            /meta-orchestration -> /advance-work-from-plan on macOS identified this
+            as the top macOS-owned packet, but did not claim implementation because
+            the osx-next worktree is dirty at startup and branch drift is above Dmax.
+            The packet also depends on Linux order 190 for the staged two-arch guest
+            binary contract.
+          blocker_refs:
+            - embedded-guest-binary-linux-build
+            - multi-host-secure-wire-integration-freeze
+          smallest_next_action: >
+            Linux completes order 190; macOS owner checkpoints or cleans the existing
+            osx-next WIP, merges origin/linux-next into osx-next, then claims this
+            packet and implements the VZ virtio-fs mount.
       exit_criteria:
         - "VZ config includes the virtio-fs device/share for host ~/src"
         - "guest mounts it at /home/forge/src before headless service start"
@@ -2185,6 +2214,16 @@ plan_index:
         release secret, and readiness probes must not bypass secure mode. Fix
         macOS diagnostic/version drift, secure-wrap VM phase probes, and add release
         CI evidence that `TILLANDSIAS_RELEASE_SECRET` is present for shipped artifacts.
+      events:
+        - type: blocker_ping
+          ts: "2026-07-05T18:53:22Z"
+          agent_id: "macos-codex-meta-orch-20260705T1853Z"
+          host: macos
+          summary: >
+            macOS can own the PSK parity and VZ readiness-probe slices after its dirty
+            worktree is checkpointed. Linux/release workers should pick the
+            release-secret-required slice because release CI enforcement is outside
+            macOS's primary code scope and blocks secure-channel maturity.
       exit_criteria:
         - "all macOS secure openers use the workspace VERSION, not CARGO_PKG_VERSION drift"
         - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"

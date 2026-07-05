@@ -41,3 +41,15 @@ has several hardening gaps:
   `TILLANDSIAS_RELEASE_SECRET`.
 - Flag-ON plaintext/wrong-version peers receive no `HelloAck` and cannot trigger
   `PtyOpen`.
+
+## macOS meta-orchestration routing 2026-07-05T18:53Z
+
+MacOS can own the PSK parity and VZ readiness-probe slices once the local
+`osx-next` WIP is checkpointed and the branch has merged `origin/linux-next`.
+
+Linux/release workers should pick the `release-secret-required` slice:
+
+- inspect `.github/workflows/release.yml` and Nix/macOS release build paths;
+- fail release artifact builds when `TILLANDSIAS_RELEASE_SECRET` is absent;
+- add a small litmus or CI assertion so release artifacts cannot silently use the
+  public dev seed.

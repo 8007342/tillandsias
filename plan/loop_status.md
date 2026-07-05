@@ -58,6 +58,17 @@ Reason: Branch drift is above Dmax and the secure-wire/embedded-guest path is th
   issues, update dashboard provenance, and close PSK/release/probe ambiguity before
   secure-channel maturity advances.
 
+## macOS Worker Drain 2026-07-05T18:53Z
+
+- Host: macOS arm64, `osx-next`, credential guard `ok:gh-keyring`.
+- Result: no macOS code work started. The checkout is dirty with tracked/untracked
+  tray/VM/package changes, so meta-orchestration cannot merge `origin/linux-next`
+  or claim new implementation work without risking user work.
+- Eligible packet order 193 is blocked until Linux completes order 190's staged
+  guest-binary contract, then macOS checkpoints/cleans WIP and merges linux-next.
+- Linux follow-up: order 190 remains the top blocker; order 194 has a Linux/release
+  CI sub-slice for `TILLANDSIAS_RELEASE_SECRET` enforcement.
+
 ## Next Loop Expected Outcomes
 
 - Sibling branches report merge evidence or exact conflicts for the 12/6 commit drift.
