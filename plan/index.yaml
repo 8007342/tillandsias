@@ -637,6 +637,19 @@ plan_index:
             vsock_server::handle_connection before Hello, failure-closed Unauthorized;
             host initiator side) and slice 6 (guest<->container hop reuse). Slice 5
             (argv allowlist) already landed via order 139.
+        - type: progress
+          ts: "2026-07-04T22:00:00Z"
+          agent_id: "linux-antigravity-20260704T2200Z"
+          host: linux
+          summary: >
+            Slice 4 landed (TILLANDSIAS_SECURE_CONTROL_WIRE=on gate, off by default
+            for coordinated cutover): handle_connection wraps stream with
+            server_handshake before Hello (failure-closed); connect_with_handshake
+            wraps stream with client_handshake before Hello/HelloAck. Dep added:
+            tillandsias-secure-channel to host-shell Cargo.toml (headless already
+            had it on origin). All 73 affected tests green. Remaining: slice 6
+            (guest<->container hop reuse) + coordinated cutover (order 145) to flip
+            the gate on across all hosts.
       outcome: >
         Land the EncryptedStream<S> primitive (Noise, snow) wrapping the vsock host<->guest
         hop and the guest<->innermost-container hop; key derived from build_version so only

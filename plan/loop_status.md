@@ -1,6 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-04T21:00Z
+LastExecutionTime: 2026-07-04T22:00Z
+
+## This Loop (2026-07-04T22:00Z, linux — encrypted control channel slice 4: wire host↔guest integration)
+
+- **Order 141 slice 4 DONE** (encrypted-control-channel-impl): wired the Noise NNpsk0
+  handshake into both ends of the vsock control wire. On the server side,
+  `handle_connection` runs `server_handshake` before reading any `Hello` (failure-closed,
+  plaintext/unauthenticated peers never reach `HelloAck`). On the client side,
+  `connect_with_handshake` runs `client_handshake` before the control-wire Hello/HelloAck
+  exchange. Gated behind `TILLANDSIAS_ENCRYPTED_CHANNEL=1` (off by default) for the
+  coordinated cross-host cutover (order 145). Deps added: `tillandsias-secure-channel`
+  to both headless and host-shell Cargo.toml. 12 vsock tests + 12 secure-channel tests
+  + 49 host-shell tests all green; `./build.sh --check + --test` pass.
+- **Remaining:** slice 6 (guest↔container hop reuse) + order 145 coordinated cutover
+  to flip the gate on across all hosts (windows-tray hvsocket initiator, macos-tray
+  vsock initiator).
 
 ### Cycle 2026-07-05T00:0XZ (macos — meta-orchestration)
 - Merged origin/linux-next 7ab86309 into osx-next (9614d32f); built + installed

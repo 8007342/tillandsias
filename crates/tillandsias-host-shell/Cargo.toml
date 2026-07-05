@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
+tillandsias-secure-channel = { path = "../tillandsias-secure-channel" }
 tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
 # tillandsias-vault-client is wired in Phase 6 when vault gets surfaced in the
 # tray UI. Until then it stays out of the host-shell dep graph so the Windows
