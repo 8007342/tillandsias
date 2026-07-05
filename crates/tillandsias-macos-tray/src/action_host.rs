@@ -50,8 +50,12 @@
 
 #![cfg(target_os = "macos")]
 
+use std::io;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use objc2::rc::Retained;
@@ -59,7 +63,9 @@ use objc2::runtime::{AnyObject, NSObject};
 use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, mutability};
 use objc2_app_kit::{NSMenuItem, NSStatusItem};
 use objc2_foundation::MainThreadMarker;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
 use tillandsias_vm_layer::VmRuntime;
 use tillandsias_vm_layer::vz::VzRuntime;
 
@@ -234,6 +240,99 @@ fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SecureControlWireMode {
+    Off,
+    On,
+}
+
+fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
+    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(|| match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
+        Ok(raw) if raw.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
+        Ok(raw) if raw.eq_ignore_ascii_case("off") || raw.is_empty() => {
+            Ok(SecureControlWireMode::Off)
+        }
+        Ok(raw) => Err(format!(
+            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {raw:?})"
+        )),
+        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
+        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
+    })
+    .clone()
+}
+
+enum ControlWireStream {
+    Plain(tillandsias_vm_layer::transport_macos::VsockStream),
+    Secure(EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>),
+}
+
+impl AsyncRead for ControlWireStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        out: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_read(cx, out),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_read(cx, out),
+        }
+    }
+}
+
+impl AsyncWrite for ControlWireStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_write(cx, buf),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_flush(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_shutdown(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
+    }
+}
+
+async fn open_control_wire_stream(
+    vz: &VzRuntime,
+    port: u32,
+    timeout: Duration,
+) -> Result<ControlWireStream, String> {
+    let stream = vz
+        .open_vsock_stream(port, timeout)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    match secure_control_wire_mode()? {
+        SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
+        SecureControlWireMode::On => {
+            let psk = channel_psk(
+                env!("CARGO_PKG_VERSION"),
+                tillandsias_control_wire::WIRE_VERSION,
+                HopId::HostGuest,
+            );
+            let secure = client_handshake(stream, &psk)
+                .await
+                .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
+            Ok(ControlWireStream::Secure(secure))
+        }
+    }
+}
+
 /// One-shot VmStatus poll over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_vm_status` but
 /// drives the macOS-specific vsock path:
@@ -262,10 +361,7 @@ async fn poll_vm_status_once(
     use tillandsias_host_shell::vsock_client::Client;
 
     let connect_timeout = Duration::from_secs(5);
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -345,10 +441,7 @@ async fn request_vm_shutdown(vz: &VzRuntime, drain_timeout: Duration) -> Result<
 
     const RTT_BUDGET: Duration = Duration::from_secs(3);
 
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -426,10 +519,7 @@ async fn poll_local_projects_once(
     use tillandsias_host_shell::vsock_client::Client;
 
     let connect_timeout = Duration::from_secs(5);
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -517,10 +607,7 @@ async fn poll_cloud_projects_once(
     use tillandsias_host_shell::vsock_client::Client;
 
     let connect_timeout = Duration::from_secs(5);
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -983,10 +1070,8 @@ async fn run_pty_attach(
         PtyRouter, PtySession, SessionIdAllocator, launch_spec, pump_io,
     };
 
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream =
+        open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30)).await?;
 
     let router = Arc::new(PtyRouter::new());
     let alloc = SessionIdAllocator::default();
@@ -1988,6 +2073,7 @@ mod tests {
         let action = MenuAction::Attach {
             scope: ProjectScope::Local,
             name: "myproj".to_string(),
+            agent: SelectedAgent::OpenCode,
         };
         let (intent, project) = intent_for_action(&action, SelectedAgent::OpenCode)
             .expect("Attach must yield Some((intent, project))");

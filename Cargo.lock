@@ -3210,6 +3210,7 @@ dependencies = [
  "tempfile",
  "tillandsias-control-wire",
  "tillandsias-host-shell",
+ "tillandsias-secure-channel",
  "tillandsias-vm-layer",
  "tokio",
  "tracing",

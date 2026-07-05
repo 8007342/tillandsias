@@ -42,7 +42,15 @@
 
 #![cfg(target_os = "macos")]
 
+use std::io;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::OnceLock;
+use std::task::{Context, Poll};
+
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
 
 /// Manifest bundled at build time so the binary doesn't need the repo or
 /// network to know its artifact-URL template + pinned SHAs. Same constant
@@ -58,6 +66,99 @@ fn image_root() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/tmp"));
     home.join("Library/Application Support/tillandsias")
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SecureControlWireMode {
+    Off,
+    On,
+}
+
+fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
+    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(|| match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
+        Ok(raw) if raw.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
+        Ok(raw) if raw.eq_ignore_ascii_case("off") || raw.is_empty() => {
+            Ok(SecureControlWireMode::Off)
+        }
+        Ok(raw) => Err(format!(
+            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {raw:?})"
+        )),
+        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
+        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
+    })
+    .clone()
+}
+
+enum ControlWireStream {
+    Plain(tillandsias_vm_layer::transport_macos::VsockStream),
+    Secure(EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>),
+}
+
+impl AsyncRead for ControlWireStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        out: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_read(cx, out),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_read(cx, out),
+        }
+    }
+}
+
+impl AsyncWrite for ControlWireStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_write(cx, buf),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_flush(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_shutdown(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
+    }
+}
+
+async fn open_control_wire_stream(
+    vz: &tillandsias_vm_layer::vz::VzRuntime,
+    port: u32,
+    timeout: std::time::Duration,
+) -> Result<ControlWireStream, String> {
+    let stream = vz
+        .open_vsock_stream_current_thread(port, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match secure_control_wire_mode()? {
+        SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
+        SecureControlWireMode::On => {
+            let psk = channel_psk(
+                env!("CARGO_PKG_VERSION"),
+                tillandsias_control_wire::WIRE_VERSION,
+                HopId::HostGuest,
+            );
+            let secure = client_handshake(stream, &psk)
+                .await
+                .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
+            Ok(ControlWireStream::Secure(secure))
+        }
+    }
 }
 
 /// Output format selected via `--diagnose` (default) or
@@ -349,17 +450,17 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
         // the connect completion on the main dispatch queue, which is only
         // serviced while the main thread pumps the CFRunLoop. open_vsock_stream
         // (spawn_blocking) hangs headless; the current-thread variant pumps it.
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
+        let stream =
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                    let _ = vz.stop(Duration::from_secs(10)).await;
+                    return 1;
+                }
+            };
         // Stream output chunk-by-chunk so long-running commands (curl, --init,
         // forge) show progress live instead of buffering until exit.
         let result = {
@@ -471,17 +572,17 @@ pub fn github_login_main() -> i32 {
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
+        let stream =
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                    let _ = vz.stop(Duration::from_secs(10)).await;
+                    return 1;
+                }
+            };
         eprintln!(
             "[github-login] control wire ready; guest auth preflight runs before credential prompts"
         );
@@ -653,17 +754,17 @@ pub fn list_cloud_projects_main() -> i32 {
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
+        let stream =
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                    let _ = vz.stop(Duration::from_secs(10)).await;
+                    return 1;
+                }
+            };
         eprintln!("[list-cloud-projects] control wire ready; fetching remote projects…");
 
         // Same CA cert + exited-proxy workaround as github_login_main.
@@ -759,17 +860,17 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
+        let stream =
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                    let _ = vz.stop(Duration::from_secs(10)).await;
+                    return 1;
+                }
+            };
         eprintln!("[opencode] control wire ready; launching forge in guest…");
 
         // Build the shell command for the guest: set required env vars and
@@ -905,7 +1006,7 @@ mod tests {
             .find("vz.wait_phase_ready(Duration::from_secs(300)).await")
             .expect("github login must wait for the VM phase Ready");
         let stream_idx = window
-            .find("open_vsock_stream_current_thread")
+            .find("open_control_wire_stream(")
             .expect("github login must open the control-wire stream");
         let prompt_idx = window
             .find("prompt_line(\"Git author name\"")

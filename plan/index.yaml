@@ -297,7 +297,7 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: ready
+      status: claimed
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
@@ -310,6 +310,31 @@ plan_index:
       pickup_role: macos
       owner_host: macos
       estimated_hours: 8
+      lease:
+        lease_id: "36fec584e55d"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
+        host: "macos"
+        acquired_at: "2026-07-05T00:52:56Z"
+        expires_at: "2026-07-05T04:52:56Z"
+      events:
+        - type: claim
+          ts: "2026-07-05T00:52:56Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
+          host: "macos"
+          lease_id: "36fec584e55d"
+        - type: progress
+          ts: "2026-07-05T01:01:45Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
+          host: "macos"
+          lease_id: "36fec584e55d"
+          note: >
+            Wired a reusable macOS control-wire opener that can upgrade the VZ
+            socket to `tillandsias-secure-channel::client_handshake` behind
+            `TILLANDSIAS_SECURE_CONTROL_WIRE` (default OFF) and threaded it
+            through the tray CLI entry points plus the live tray socket helpers.
+            `cargo check` and `cargo test -p tillandsias-macos-tray` pass.
+            Local `cargo run` smoke still fails before VM boot with the missing
+            virtualization entitlement, so a dedicated blocker packet was filed.
       outcome: >
         macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
         connect/exec helpers replaced by open_stream/exec; supersedes the macOS
