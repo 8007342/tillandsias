@@ -7339,7 +7339,10 @@ pub(crate) fn build_forge_agent_run_args(
         && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
         && !key.is_empty()
     {
-        spec = spec.env(p.env_var(), key);
+        spec = spec.env(p.env_var(), &key);
+        if p.env_var() == "GEMINI_API_KEY" {
+            spec = spec.env("GOOGLE_GENERATIVE_AI_API_KEY", key);
+        }
     }
 
     spec.build_run_args()
@@ -7415,7 +7418,7 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
         let config = ProviderLoginConfig {
             provider: op,
             auth_model: AuthModel::OAuthDevice,
-            image_name: "curl",
+            image_name: "forge",
             token_script,
         };
         run_provider_login(&config, debug)?;

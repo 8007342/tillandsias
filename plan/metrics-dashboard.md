@@ -2,11 +2,6 @@
 
 Auto-generated metrics tracking the build performance and size of the forge image.
 
-> Current provenance: stale/cache-empty. This file contains no live metrics input
-> for 2026-07-05 and must not be used as evidence for current forge build
-> performance. Order 192 owns refreshing the generator so empty input fails closed
-> with a source timestamp instead of rendering zero/blank charts.
-
 ## Build Duration Over Time
 
 ```mermaid

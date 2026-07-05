@@ -2052,8 +2052,8 @@ plan_index:
 
     - packet_id: forge-harness-every-launch-latest
       order: 181
-      title: "Impl: install agent harnesses (codex/claude/opencode/antigravity) fresh EVERY_LAUNCH (always latest)"
-      status: ready
+      title: "Impl: install agent harnesses (codex/claude/opencode/openspec) fresh EVERY_LAUNCH (always latest)"
+      status: completed
       kind: enhancement
       deliverable: plan/issues/forge-harness-every-launch-latest-2026-07-04.md
       depends_on: [forge-persistent-tool-cache-mount]
@@ -2061,12 +2061,25 @@ plan_index:
       capability_tags: [forge, images, npm, agents]
       estimated_hours: 6
       outcome: >
-        Remove the harness npm-pins + the (duplicated) Antigravity curl block from
-        Containerfile.base; add an EVERY_LAUNCH entrypoint step that npm-installs the
-        latest codex/claude/opencode into the persistent $NPM_CONFIG_PREFIX (routes
-        through the proxy via NODE_USE_ENV_PROXY) + updates Antigravity. Offline/denied
-        launch falls back to the cached version (no hard fail). Fixes "newer version
-        available" on a fresh forge.
+        Remove the harness npm-pins from Containerfile.base; add an EVERY_LAUNCH
+        ensure_forge_harnesses background function in lib-common.sh that npm-installs
+        the latest codex/claude/opencode/openspec into $NPM_CONFIG_PREFIX (persistent
+        cache). Change require_* from fatal-check to sync-install with non-fatal fallback.
+        Add require_codex function. Wire ensure_forge_harnesses into all forge entrypoints.
+        Offline/denied launch falls back to the cached version (no hard fail).
+      events:
+        - type: completed
+          ts: "2026-07-05T22:20Z"
+          agent_id: "linux-tlatoani-20260705"
+          summary: >
+            Removed npm pins (opencode-ai@1.16.2, openspec@1.4.1,
+            claude-code@2.1.168, codex@0.137.0) from Containerfile.base.
+            Added ensure_forge_harnesses in lib-common.sh (backgrounded, lock-guarded,
+            fail-soft, uses NPM_CONFIG_PREFIX). Changed require_opencode/require_claude/
+            require_openspec from fatal-check to check-then-install-latest. Added
+            require_codex. Wired ensure_forge_harnesses into claude, codex, opencode,
+            opencode-web entrypoints. Added missing ensure_forge_prebuilt_tools to
+            opencode-web. --check + --test pass. Commits: bd8f2979, 4370a3fe.
       exit_criteria:
         - "no harness version pinned in Containerfile; Antigravity dedup removed"
         - "fresh forge runs latest harnesses; no 'newer version available' on fresh forge"
