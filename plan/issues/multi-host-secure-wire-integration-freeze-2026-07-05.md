@@ -69,3 +69,11 @@ MacOS meta-orchestration did not merge or implement because the local `osx-next`
 worktree has uncommitted tracked and untracked implementation/package changes.
 This is a local macOS blocker, not a Linux blocker. Linux should continue with
 order 190 while macOS checkpoints/cleans WIP before attempting the merge.
+
+## macOS merge result 2026-07-05T22:25Z
+
+- `origin/linux-next` merged into `osx-next` (34 commit catch-up, no feature loss)
+- 3 conflicts resolved (vsock_server.rs, 2 plan files — linux-next authoritative)
+- `cargo fmt --all --check`, `cargo check -p tillandsias-macos-tray`, all 53+12 tests green
+- Pushed to `origin/osx-next` at `39e9df27`
+- Branch drift from linux-next resolved. Order 193 (macos-vz-home-src-mount) unblocked.

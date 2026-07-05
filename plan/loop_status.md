@@ -1,16 +1,33 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-05T18:21:57Z
+LastExecutionTime: 2026-07-05T22:27:00Z
+
+## Cycle 2026-07-05T22:23Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, `osx-next` branch, clean worktree after WIP checkpoint.
+- **Credential guard**: `ok:gh-keyring`.
+- **Worker drain — order 191 (multi-host-secure-wire-integration-freeze)**:
+  - Merged `origin/linux-next` (49ab501d) into `osx-next` (34 commit catch-up).
+  - 3 conflicts resolved: `vsock_server.rs`, `plan/loop_status.md`,
+    `plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md` —
+    all resolved with `linux-next` as authoritative per coordination policy.
+  - `cargo fmt --all --check`, `cargo check -p tillandsias-macos-tray` clean.
+  - `cargo test -p tillandsias-macos-tray`: **53/53 pass** (1 ignored, slow e2e).
+  - `cargo test -p tillandsias-secure-channel`: **12/12 pass**.
+  - All touched YAML validated via `ruby -ryaml -e YAML.load_file`.
+  - Branch drift from linux-next resolved (osx-next now at parity).
+  - Pushed `39e9df27` to `origin/osx-next`.
+- **Remaining macOS work**: Order 193 (`macos-vz-home-src-mount`) is now
+  unblocked — linux-next merge complete, order 190 (guest binary contract) done.
+  Next: implement VZ virtio-fs share for host `~/src` → `/home/forge/src`.
+- **E2E gate**: Not run this cycle (merge verification only; no destructive
+  substrate reset). Ready for full local-build e2e on next cycle once order 193
+  implementation is in place.
+- **Finding filed**: `./build.sh --check` requires podman which isn't available
+  on this macOS dev path — noted in existing
+  `plan/issues/macos-build-check-podman-wrapper-2026-07-05.md`.
 
 ## This Loop (coordination audit — secure wire / embedded guest / ledger pruning)
-
-- Ran from a clean `linux-next` worktree at `6bc7171c` after fetching origin.
-- Branch drift exceeds the coordination threshold:
-  - `origin/linux-next..origin/osx-next`: 12 commits.
-  - `origin/linux-next..origin/windows-next`: 6 commits.
-  - Both exceed Dmax=5, so new platform code leases should pause until each
-    platform first merges `origin/linux-next`, records conflict/e2e evidence, and
-    the integration loop either merges or files the exact blocker.
 - Current product target distilled for the next agents: macOS tray boots Fedora 44,
   injects a source-matching Linux headless binary for the guest arch, initializes
   the Podman control plane, and launches Codex/Claude/OpenCode/Antigravity inside
@@ -35,17 +52,17 @@ secure_channel_soak:
   subpackets_landed: { "185-A": false, "185-B": true, "185-C": false, "185-D": false }
 
 HighVelocityAlignmentEvent: Active
-Reason: Branch drift is above Dmax and the secure-wire/embedded-guest path is the
-  critical product blocker.
+Reason: Secure-wire/embedded-guest path remains the critical product blocker.
+  Branch drift is resolved for osx-next (merged at parity); windows-next still
+  needs integration.
 
 ## Active Assignment Board
 
 - Linux primary: order 190 `embedded-guest-binary-linux-build` — COMPLETED (added scripts/build-guest-binaries.sh and litmus matching version test). Next focus: order 180 continuation for remaining FIRST_RUN migration/de-hardcoding.
-- macOS primary: order 193 `macos-vz-home-src-mount` plus order 191 integration —
-  prove `/home/forge/src` is actually mounted in the Fedora 44 guest, merge
-  `origin/linux-next` into `osx-next`, rebuild with embedded guest assets, and
-  record secure login/list/forge smoke evidence. Fallback: order 188/180 macOS
-  cold-guest acceptance logs.
+- macOS primary: order 193 `macos-vz-home-src-mount` — integration merge (order 191)
+  DONE; now implement VZ virtio-fs share for host `~/src` → `/home/forge/src`,
+  rebuild with embedded guest assets, and record secure login/list/forge smoke
+  evidence. Fallback: order 188/180 macOS cold-guest acceptance logs.
 - Windows primary: order 186 plus order 191 — merge `origin/linux-next` into
   `windows-next`, preserve the real hvsocket secure-wrapper + embedded-binary work,
   and record WSL2 flag-off/flag-on smoke evidence. Fallback: order 190 consumer
