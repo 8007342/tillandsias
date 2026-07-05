@@ -1471,11 +1471,10 @@ fn vault_selinux_label_opt(debug: bool) -> Option<String> {
         return None;
     }
 
-    // Use the custom confined type only if we can CONFIRM it is loaded (or load
-    // it — root only, i.e. inside the guest VM).
-    if vault_container_type_loaded() {
-        return Some("label=type:vault_container_t".to_string());
-    }
+    // Use the custom confined type only after loading the bundled CIL for this
+    // exact binary. Existing VMs may have an older `vault_container` module
+    // loaded; trusting presence alone preserves stale policy and keeps denying
+    // the no-new-privileges transition.
     if try_load_vault_selinux_module(debug) && vault_container_type_loaded() {
         return Some("label=type:vault_container_t".to_string());
     }
@@ -1524,7 +1523,12 @@ fn try_load_vault_selinux_module(debug: bool) -> bool {
         return false;
     }
     let loaded = matches!(
-        Command::new("semodule").arg("-i").arg(&cil_path).status(),
+        Command::new("semodule")
+            .arg("-i")
+            .arg(&cil_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status(),
         Ok(s) if s.success()
     );
     let _ = fs::remove_file(&cil_path);
@@ -1764,6 +1768,18 @@ fn wait_for_vault_ready(
 /// /etc/hosts does.
 #[cfg(feature = "vault")]
 fn update_etc_hosts_vault(debug: bool) {
+    #[cfg(unix)]
+    let is_root = unsafe { libc::geteuid() == 0 };
+    #[cfg(not(unix))]
+    let is_root = false;
+
+    if !is_root {
+        if debug {
+            eprintln!("[tillandsias-vault] skipping /etc/hosts update: not root");
+        }
+        return;
+    }
+
     let out = match podman_cmd_sync()
         .args([
             "inspect",

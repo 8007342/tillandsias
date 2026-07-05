@@ -709,6 +709,19 @@ plan_index:
             vsock_server::handle_connection before Hello, failure-closed Unauthorized;
             host initiator side) and slice 6 (guest<->container hop reuse). Slice 5
             (argv allowlist) already landed via order 139.
+        - type: progress
+          ts: "2026-07-04T22:00:00Z"
+          agent_id: "linux-antigravity-20260704T2200Z"
+          host: linux
+          summary: >
+            Slice 4 landed (TILLANDSIAS_SECURE_CONTROL_WIRE=on gate, off by default
+            for coordinated cutover): handle_connection wraps stream with
+            server_handshake before Hello (failure-closed); connect_with_handshake
+            wraps stream with client_handshake before Hello/HelloAck. Dep added:
+            tillandsias-secure-channel to host-shell Cargo.toml (headless already
+            had it on origin). All 73 affected tests green. Remaining: slice 6
+            (guest<->container hop reuse) + coordinated cutover (order 145) to flip
+            the gate on across all hosts.
       outcome: >
         Land the EncryptedStream<S> primitive (Noise, snow) wrapping the vsock host<->guest
         hop and the guest<->innermost-container hop; key derived from build_version so only
@@ -1521,11 +1534,24 @@ plan_index:
     - packet_id: inference-container-startup-failure
       order: 168
       title: "Investigate: inference (Ollama) container dies ~30s after launch and self-removes"
-      status: ready
+      status: completed
       kind: investigation+bug-fix
       deliverable: plan/issues/inference-container-startup-failure-2026-07-02.md
       depends_on: []
-      pickup_role: any
+      pickup_role: linux
+      events:
+        - type: completed
+          ts: "2026-07-05T02:30:00Z"
+          agent_id: "linux-big-pickle-20260705T0200Z"
+          summary: >
+            Fixed inference container death-on-launch: (1) removed --rm from all
+            3 launch sites (main.rs, orchestrate-enclave.sh, test-inference.sh)
+            so post-mortem logs survive; (2) reduced default models from 4
+            tiny models (2GB total) to just qwen2.5:0.5b (400MB); (3) added
+            OLLAMA_NUM_PARALLEL=1 and OLLAMA_MAX_LOADED_MODELS=1 to prevent
+            ollama from loading models concurrently and OOM-ing constrained
+            hosts. Model cache volume mount was already present. Documented
+            remaining Windows-specific OOM confirmation as follow-up.
       capability_tags: [inference, podman, headless, observability]
       estimated_hours: 4
       outcome: >
@@ -1581,7 +1607,7 @@ plan_index:
     - packet_id: forge-source-mount-credential-quarantine
       order: 170
       title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
-      status: ready
+      status: in_progress
       kind: security+bug-fix
       deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
       depends_on: []
@@ -1602,6 +1628,21 @@ plan_index:
         - "In-forge diagnostics state that host credentials are not used inside the forge"
         - "Git fetch/push still works through the forge credential channel or a documented non-mutating fallback"
         - "Litmus covers shared-host-checkout source mount and proves no host credential/config material enters the forge"
+      events:
+        - type: claim
+          ts: "2026-07-05T18:14:47Z"
+          agent_id: "linux-worker-cred-quarantine-20260705T1814Z"
+          host: linux
+          summary: >
+            Claimed order 170 on linux-next. Implementing argv-level credential
+            quarantine in build_forge_agent_run_args: empty forge-owned tmpfs
+            overlays at /home/forge/.ssh, /home/forge/.config/gh, and
+            /home/forge/.config/git, plus a GIT_CONFIG_GLOBAL redirect off any
+            host ~/.gitconfig onto the masked tmpfs. Refining the
+            does_not_mount_user_home guard to allow forge-owned container-side
+            targets while still forbidding host .cache/.config bind SOURCES,
+            adding a positive quarantine unit test, and a new shape litmus
+            (litmus:forge-credential-quarantine-shape).
 
     - packet_id: codex-forge-yolo-config-defaults
       order: 171
@@ -1881,6 +1922,11 @@ plan_index:
         install_prebuilt helper at FIRST_RUN into the persistent cache, resolving LATEST
         (de-hardcoded). Small slices, one tool-group per commit, each behind an
         idempotency litmus (2nd launch is a no-op). Fail-soft.
+      progress:
+        - "slice 1 (order 188, done): arch-aware install_prebuilt helper + cargo-tools group -> FIRST_RUN"
+        - "slice 2 (2026-07-05, done): actionlint/vale/wasmtime -> FIRST_RUN; install_archive helper removed from Containerfile.base"
+        - "dart sub-slice (2026-07-05, done): Dart SDK -> arch-aware FIRST_RUN via lib-common ensure_dart_sdk (x64|arm64) into the order-179 cache; DART_VERSION/DART_SHA256 + curl/unzip RUN block + ENV /opt/dart-sdk/bin removed. Forge-base CREATION is now microdnf-only — NO curl/tar/unzip archive-extraction chains remain (single-binary marksman curl + ollama-in-inference are the only build-time direct assets left)."
+        - "remaining: marksman single-binary + ollama (inference container) -> FIRST_RUN; de-hardcode versions to releases/latest"
       exit_criteria:
         - "ARCH-AWARE (macOS-blocking): install_prebuilt resolves $(uname -m) (x86_64|aarch64), never a hardcoded x86_64 URL — tools are executable on the aarch64 macOS guest; first slice = order 188; see macos-forge-base-build-arch-and-fragility-2026-07-05"
         - "curl/tar/chmod/mkdir chains + ARG _VERSION/_SHA256 constants removed; image builds faster + smaller"
@@ -2015,7 +2061,7 @@ plan_index:
     - packet_id: secure-channel-flag-and-maturity-metrics
       order: 185
       title: "Research: secure-channel flag propagation (boot-time, fail-closed) + maturity-gate metrics"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/secure-channel-flag-and-maturity-metrics-2026-07-04.md
       depends_on: [secure-channel-maturity-ladder]
@@ -2029,6 +2075,35 @@ plan_index:
         per-connection). Ratify the ladder's gate metrics (N/D releases/days for M2/M3)
         + define how each is measured (soak counters, escape-hatch telemetry, per-hop
         handshake-success logs). A gate that can't be measured can't be a gate.
+      events:
+        - type: claim
+          ts: "2026-07-04T23:00:00Z"
+          agent_id: "linux-antigravity-20260704T2300Z"
+          host: linux
+          lease_id: "secure-channel-flag-and-maturity-metrics-claim-1"
+          expires_at: "2026-07-05T03:00:00Z"
+        - type: completion
+          ts: "2026-07-04T23:30:00Z"
+          agent_id: "linux-antigravity-20260704T2300Z"
+          host: linux
+          summary: >
+            Q1 (flag propagation): mapped per-platform env injection paths.
+            No centralized propagation needed at M1 (default OFF); at M3 prep
+            inject TILLANDSIAS_SECURE_CONTROL_WIRE into VM systemd units (vz.rs,
+            wsl_lifecycle.rs) + forge container env. Pre-flight Hello field
+            agreement check specified for M3 (ErrorCode::ProtocolViolation on
+            mismatch). Fail-closed property confirmed: Noise handshake rejects
+            flag mismatch without explicit agreement check.
+            Q2 (gate metrics): N=3 releases / D=14 days (M2→M3); M=4 releases
+            / E=30 days (M3→M4) ratified. Measurement methods defined: soak
+            counter in loop_status.md, Prometheus counters for handshake
+            outcomes. 4 sub-packets filed (185-A/B/C/D).
+            Q3 (observability): telemetry gaps identified; handshake-success
+            info! log, Prometheus counters outlined. Ladder updated with
+            ratified numbers + observability prerequisites per gate.
+            Files: plan/issues/secure-channel-flag-and-maturity-metrics-2026-07-04.md,
+            plan/issues/secure-channel-maturity-ladder-2026-07-04.md,
+            plan/loop_status.md.
       exit_criteria:
         - "flag propagation + pre-flight fail-closed agreement check specified"
         - "N/D/M/E ratified with a measurement method each; telemetry gaps filed as sub-packets"
@@ -2080,3 +2155,237 @@ plan_index:
         - "agy launches non-interactively in the forge (confirmed forge flag, no approval hang)"
         - "agy presence asserted (no silent exec failure)"
         - "drift test pins Antigravity->entrypoint (done this cycle); one human e2e run recorded"
+
+    - packet_id: headless-secure-control-wire-image-refresh
+      order: 189
+      title: "Integrate the guest secure-control-wire responder onto linux-next (release-ready) — unblock macOS M1"
+      status: done
+      kind: enhancement
+      deliverable: plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md
+      depends_on: [secure-channel-maturity-ladder]
+      pickup_role: linux
+      capability_tags: [security, secure-channel, vsock, headless]
+      estimated_hours: 3
+      outcome: >
+        macOS wired the host opener + guest responder (osx-next) but its VM boots a
+        stale plaintext-only guest image (secure --github-login -> 'handshake failed:
+        early eof'). Linux integrated the guest responder onto linux-next
+        (vsock_server.rs maybe_secure_stream: no-op when TILLANDSIAS_SECURE_CONTROL_WIRE
+        OFF, version-bound server_handshake on HopId::HostGuest when ON, FAIL-CLOSED on
+        error) + a fail-closed unit test + litmus. Builds/tests green under
+        vault,listen-vsock. Operator clarified that macOS embeds a cross-compiled
+        linux guest binary from the source tree, not a released artifact, so this is
+        NOT release-blocked. The remaining work is macOS-side rebuild/reprovision
+        with the embedded current guest and flag-ON login/list/forge smoke evidence.
+      exit_criteria:
+        - "guest responder on linux-next: no-op flag-OFF, version-bound handshake ON, fail-closed (DONE)"
+        - "macOS embeds a current linux-next guest binary rather than fetching releases/latest"
+        - "macOS re-provisions guest + secure login/list/forge smoke passes with the flag ON (M1->M2 gate evidence)"
+
+    - packet_id: embedded-guest-binary-linux-build
+      order: 190
+      title: "Linux build: produce the two-arch static musl guest binary the macOS/Windows trays embed (drop the in-VM releases/latest curl)"
+      status: done
+      kind: packaging
+      deliverable: plan/issues/embedded-guest-binary-linux-build-2026-07-05.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [packaging, guest-binary, musl, cross-compile, vsock, nix, vm]
+      estimated_hours: 4
+      outcome: >
+        macOS/Windows trays boot an in-VM tillandsias-headless (feature listen-vsock)
+        that must match the host wrapper's source rev; skew breaks the control wire
+        (secure responder 'early eof'). Operator's shape: the host app EMBEDS the
+        cross-compiled Linux guest binary (x86_64 + aarch64) and injects it, so local
+        smokes never need Wi-Fi or a release. FEASIBILITY (from the tree, not guessed):
+        YES, already implemented — flake.nix ships tillandsias-headless-{x86_64,aarch64}-musl
+        (crane + pkgsCross, rustls/ring, no OpenSSL), and release.yml already builds +
+        validates both as tillandsias-headless-{x86_64,aarch64}-unknown-linux-musl.
+        Needs only Nix (no rustup/cross — which is why the macOS host can't self-produce
+        them). ROLE SPLIT: step 1 LINUX (scripts/build-guest-binaries.sh runs the two
+        `nix build`s, stages result-h{x,ha}/bin/tillandsias under the canonical names,
+        asserts static + VERSION-stamp match; publish the naming/staging contract; do
+        NOT commit the ELFs); step 2 MACOS+WINDOWS (embed both in the bundle, select by
+        host arch into ProvisionManifest.tillandsias_binary — guest arch == host CPU
+        arch under native virt); step 3 MACOS (vz.rs) + WINDOWS (wsl_lifecycle.rs) drop
+        the in-VM fetch-headless.sh/tillandsias-headless-fetch.service curl of
+        releases/latest, keep a transitional fallback only if the embedded asset is
+        absent. Litmus: both guest binaries build, are `file`-static per arch, and their
+        --version equals the host wrapper's `Tillandsias v$(cat VERSION)` — no cross-rev
+        embed possible. Linux never edits tray/vm-layer code; it ships the artifact +
+        contract + litmus the other hosts consume.
+      events:
+        - type: claim
+          ts: "2026-07-05T19:13:00Z"
+          agent_id: "linux-workstation-gemini-20260705T1913Z"
+          host: linux
+          lease_id: "lease-linux-190-20260705T1913Z"
+          expires_at: "2026-07-05T23:13:00Z"
+        - type: blocker_ping
+          ts: "2026-07-05T18:53:22Z"
+          agent_id: "macos-codex-meta-orch-20260705T1853Z"
+          host: macos
+          summary: >
+            macOS worker drain found orders 191/193 cannot safely proceed yet:
+            local osx-next is dirty, branch drift is above Dmax, and 193 needs the
+            Linux-staged guest-binary contract. Linux should pick this packet first
+            and produce scripts/build-guest-binaries.sh + static/version litmus
+            evidence before macOS reruns package/reprovision smokes.
+        - type: completed
+          ts: "2026-07-05T19:19:00Z"
+          agent_id: "linux-workstation-gemini-20260705T1913Z"
+          host: linux
+          commits: ["5af98306"]
+          evidence: "litmus:guest-binary-embed-integrity passes"
+      exit_criteria:
+        - "cross-compile feasibility answered from the tree (YES; Nix-only) with flake.nix/release.yml evidence"
+        - "exact `nix build` commands, artifact paths, canonical names, and the host-arch inject-time selector documented"
+        - "staged plan with per-step linux/macos/windows ownership (step1 linux, step2 macos+windows, step3 macos vz.rs + windows wsl_lifecycle.rs)"
+        - "a litmus that proves both guest binaries build, are static per arch, and version-stamp-match the host wrapper"
+
+    - packet_id: multi-host-secure-wire-integration-freeze
+      order: 191
+      title: "Coordination: freeze sibling drift and integrate secure-wire + embedded-guest branches by merge"
+      status: ready
+      kind: integration
+      deliverable: plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md
+      depends_on: [secure-channel-maturity-ladder, embedded-guest-binary-linux-build]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [coordination, security, secure-channel, guest-binary, branch-integration]
+      estimated_hours: 3
+      outcome: >
+        `origin/osx-next` is 12 commits ahead of `origin/linux-next` and
+        `origin/windows-next` is 6 ahead, both over Dmax=5. Freeze new platform
+        feature leases until each sibling branch merges `origin/linux-next`, preserves
+        its platform code, and records smoke evidence or exact conflicts. Cross-branch
+        integration must use merge commits only; no cherry-picking or rebasing of
+        published sibling commits into linux-next.
+      exit_criteria:
+        - "osx-next and windows-next have each merged origin/linux-next after this audit"
+        - "secure-control-wire and embedded-guest-binary commits are either merged to linux-next or blocked by named conflict packets"
+        - "macOS and Windows each record flag-OFF no-regression and flag-ON handshake evidence, or the exact failing boundary"
+
+    - packet_id: semantic-distillation-and-ledger-pruning
+      order: 192
+      title: "Housekeeping: prune stale active ledgers and refresh dashboard provenance"
+      status: ready
+      kind: housekeeping
+      deliverable: plan/issues/semantic-distillation-and-ledger-pruning-2026-07-05.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [docs, plan, methodology, metrics, distillation]
+      estimated_hours: 4
+      outcome: >
+        Collapse duplicate or stale active Markdown into canonical plan packets,
+        tombstone superseded intake files, and refresh dashboards so empty cached
+        metrics cannot masquerade as live evidence. Preserve historical notes in
+        plan/archive or as tombstones, but remove them from the active claim surface.
+      exit_criteria:
+        - "active plan/issues contains only live blockers or explicit tombstones"
+        - "superseded embedded-binary and old branch-drift notes point at orders 190/191"
+        - "metrics dashboard states its source timestamp/provenance and fails closed when no metrics input exists"
+
+    - packet_id: macos-vz-home-src-mount
+      order: 193
+      title: "macOS P0: mount host ~/src into Fedora 44 guest at /home/forge/src via VZ virtio-fs"
+      status: blocked
+      kind: bugfix
+      deliverable: plan/issues/macos-vz-home-src-mount-2026-07-05.md
+      depends_on: [embedded-guest-binary-linux-build]
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, vm-layer, vz, virtiofs, guest-binary, cloud-projects]
+      estimated_hours: 6
+      outcome: >
+        The macOS path assumes `/home/forge/src` exists in the Fedora 44 guest for
+        staged guest binaries, local project enumeration, cloud checkout persistence,
+        and project mounts into forge containers. Audit evidence found comments and
+        features claiming virtio-fs, but no VZ virtio-fs device in the VM config.
+        Add the real VZ virtio-fs share and guest mount, then prove embedded-binary
+        injection and project attach work without a network fetch.
+      events:
+        - type: blocked
+          ts: "2026-07-05T18:53:22Z"
+          agent_id: "macos-codex-meta-orch-20260705T1853Z"
+          host: macos
+          reason: >
+            /meta-orchestration -> /advance-work-from-plan on macOS identified this
+            as the top macOS-owned packet, but did not claim implementation because
+            the osx-next worktree is dirty at startup and branch drift is above Dmax.
+            The packet also depends on Linux order 190 for the staged two-arch guest
+            binary contract.
+          blocker_refs:
+            - embedded-guest-binary-linux-build
+            - multi-host-secure-wire-integration-freeze
+          smallest_next_action: >
+            Linux completes order 190; macOS owner checkpoints or cleans the existing
+            osx-next WIP, merges origin/linux-next into osx-next, then claims this
+            packet and implements the VZ virtio-fs mount.
+        - type: unblocked_prereq
+          ts: "2026-07-05T19:19:00Z"
+          agent_id: "linux-workstation-gemini-20260705T1913Z"
+          host: linux
+          summary: "Linux completed order 190 (embedded-guest-binary-linux-build) and staged the binaries contract."
+      exit_criteria:
+        - "VZ config includes the virtio-fs device/share for host ~/src"
+        - "guest mounts it at /home/forge/src before headless service start"
+        - "staged embedded headless installs without releases/latest fetch"
+        - "EnumerateLocalProjects sees host projects and a cloud attach reaches the forge"
+
+    - packet_id: secure-channel-release-and-probe-hardening
+      order: 194
+      title: "Security: harden secure-channel PSK parity, release-secret requirement, and readiness probes"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+      depends_on: [secure-channel-maturity-ladder]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [security, secure-channel, release, macos, vm-layer]
+      estimated_hours: 5
+      outcome: >
+        Before advancing secure-wire maturity, all host initiators and probes must
+        derive the same PSK input, release artifacts must fail closed without a
+        release secret, and readiness probes must not bypass secure mode. Fix
+        macOS diagnostic/version drift, secure-wrap VM phase probes, and add release
+        CI evidence that `TILLANDSIAS_RELEASE_SECRET` is present for shipped artifacts.
+      events:
+        - type: blocker_ping
+          ts: "2026-07-05T18:53:22Z"
+          agent_id: "macos-codex-meta-orch-20260705T1853Z"
+          host: macos
+          summary: >
+            macOS can own the PSK parity and VZ readiness-probe slices after its dirty
+            worktree is checkpointed. Linux/release workers should pick the
+            release-secret-required slice because release CI enforcement is outside
+            macOS's primary code scope and blocks secure-channel maturity.
+      exit_criteria:
+        - "all macOS secure openers use the workspace VERSION, not CARGO_PKG_VERSION drift"
+        - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"
+        - "release CI fails if release artifacts would use the public dev seed"
+        - "litmus coverage: psk-input-parity, secure-wait-phase-ready, release-secret-required"
+
+    - packet_id: silverblue-immutable-development-workflow
+      order: 195
+      title: "Research: achieve 100% development workflow parity on immutable Fedora Silverblue hosts"
+      status: done
+      kind: research
+      deliverable: plan/issues/silverblue-immutable-development-workflow-2026-07-05.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [research, infra, silverblue, immutable, toolbx, distrobox, cross-compile, dns]
+      estimated_hours: 4
+      outcome: >
+        Standardize the full dev and compile loop inside Toolbx/Distrobox to support
+        cross-compilation (aarch64 guest) and debug tooling on immutable hosts without system
+        pollution. Resolve rootless host-to-container DNS mapping so host CLI commands can
+        directly query enclave services.
+      events: []
+      exit_criteria:
+        - "Toolbx Containerfile and scripts setup-toolbx.sh are written and working"
+        - "build.sh automatically detects Toolbx/Distrobox environments"
+        - "Nix/cross-compilation for both architectures succeeds inside Toolbx on Silverblue"

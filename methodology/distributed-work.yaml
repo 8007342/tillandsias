@@ -85,6 +85,10 @@ distributed_work:
           hours) and an expires_at. An agent that intends to keep working
           past expires_at MUST renew by re-emitting the claim event.
           Other agents MAY reclaim an expired lease.
+        heartbeat_note: >
+          Agent observability may mark active work stale after 10 minutes without
+          a heartbeat, but that is a display/fresh-read signal, not permission to
+          reclaim the lease before expires_at.
         why: >
           Agents die (process killed, laptop sleeps, network drops).
           Without TTL, dead agents would block forever.

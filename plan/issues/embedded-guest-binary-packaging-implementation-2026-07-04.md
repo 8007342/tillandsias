@@ -4,7 +4,13 @@
 - filed: 2026-07-04
 - owner: any
 - pickup_role: linux
-- status: ready
+- status: obsoleted
+- superseded_by: plan/issues/embedded-guest-binary-linux-build-2026-07-05.md
+
+> TOMBSTONE 2026-07-05: this was an early macOS-filed implementation intake note.
+> The active implementation path is order 190 for the Linux/Nix guest-binary
+> artifact contract, then orders 191 and 193 for sibling branch integration and
+> macOS VZ mount evidence. Do not claim this file as a ready packet.
 
 ## Goal
 
@@ -45,7 +51,7 @@ host should pick the correct one at runtime.
 2. Wire the launcher to prefer embedded assets before any network fetch.
 3. Add plan evidence for the resulting local smoke.
 
-## Current blocker
+## Historical blocker
 
 The host-side code path is in place to consume a `ProvisionManifest`
 `tillandsias_binary`, but this checkout cannot yet stage Linux guest binaries
@@ -53,10 +59,12 @@ locally because the macOS host shell does not currently have `rustup` or the
 Linux cross targets installed. A local attempt to build
 `x86_64-unknown-linux-musl` failed immediately with `rustup: command not found`.
 
-## Next diagnostic
+## Historical next diagnostic
 
 Install or expose a Rust toolchain with cross targets on this host, then build
 `tillandsias-headless` for `x86_64-unknown-linux-musl` and
 `aarch64-unknown-linux-musl` so the tray bundle can stage matching guest
 binaries into the shared host directory before VM boot.
 
+Superseded verdict: do not require the macOS host to self-produce these binaries
+with rustup/cross. Linux owns the Nix build/staging contract in order 190.

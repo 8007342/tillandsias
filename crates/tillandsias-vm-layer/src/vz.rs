@@ -441,6 +441,12 @@ dnf install -y podman
 systemctl enable podman.socket
 systemctl start podman.socket
 
+# Mount host ~/src via virtio-fs when the VZ config provides the home-src tag.
+mkdir -p /home/forge/src
+if ! mountpoint -q /home/forge/src; then
+  mount -t virtiofs home-src /home/forge/src || true
+fi
+
 # Create directory
 mkdir -p /usr/local/lib/tillandsias
 
@@ -579,13 +585,18 @@ local-hostname: tillandsias-vm
 }
 
 #[cfg(target_os = "macos")]
+fn home_src_dir() -> std::path::PathBuf {
+    std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("src")
+}
+
+#[cfg(target_os = "macos")]
 fn guest_binary_fingerprint() -> Result<String, String> {
     use sha2::{Digest, Sha256};
 
-    let path = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("src/.tillandsias/guest-bin/tillandsias-headless");
+    let path = home_src_dir().join(".tillandsias/guest-bin/tillandsias-headless");
     let bytes = std::fs::read(&path)
         .map_err(|e| format!("read staged guest binary {}: {e}", path.display()))?;
     let digest = Sha256::digest(&bytes);
@@ -868,16 +879,18 @@ pub mod boot {
     use objc2::rc::Retained;
     use objc2_foundation::{NSArray, NSFileHandle, NSString, NSURL};
     use objc2_virtualization::{
-        VZBootLoader, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader, VZEFIVariableStore,
+        VZBootLoader, VZDirectoryShare, VZDirectorySharingDeviceConfiguration,
+        VZDiskImageStorageDeviceAttachment, VZEFIBootLoader, VZEFIVariableStore,
         VZEFIVariableStoreInitializationOptions, VZEntropyDeviceConfiguration,
         VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration,
         VZMemoryBalloonDeviceConfiguration, VZNATNetworkDeviceAttachment,
         VZNetworkDeviceConfiguration, VZPlatformConfiguration, VZSerialPortAttachment,
-        VZSerialPortConfiguration, VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
+        VZSerialPortConfiguration, VZSharedDirectory, VZSingleDirectoryShare,
+        VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
         VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
-        VZVirtioEntropyDeviceConfiguration, VZVirtioNetworkDeviceConfiguration,
-        VZVirtioSocketDeviceConfiguration, VZVirtioTraditionalMemoryBalloonDeviceConfiguration,
-        VZVirtualMachineConfiguration,
+        VZVirtioEntropyDeviceConfiguration, VZVirtioFileSystemDeviceConfiguration,
+        VZVirtioNetworkDeviceConfiguration, VZVirtioSocketDeviceConfiguration,
+        VZVirtioTraditionalMemoryBalloonDeviceConfiguration, VZVirtualMachineConfiguration,
     };
 
     /// Inputs to [`build_vm_configuration`]. The builder consumes a borrow
@@ -895,6 +908,10 @@ pub mod boot {
         pub root_disk: Option<PathBuf>,
         /// Optional cloud-init CIDATA ISO path.
         pub cidata_iso: Option<PathBuf>,
+        /// Optional host directory exposed to the guest over virtio-fs.
+        pub shared_host_dir: Option<PathBuf>,
+        /// virtio-fs tag used by the guest mount command.
+        pub share_tag: String,
         /// Persistent EFI variable store path. `None` skips NVRAM, which
         /// makes the EFI bootloader invalid; callers should always pass
         /// `Some(...)` for a bootable VM (the file is created if missing).
@@ -915,6 +932,8 @@ pub mod boot {
                 memory_bytes: 2 * 1024 * 1024 * 1024,
                 root_disk: None,
                 cidata_iso: None,
+                shared_host_dir: None,
+                share_tag: "home-src".to_string(),
                 nvram: None,
                 serial_writer_fd: None,
             }
@@ -1054,6 +1073,32 @@ pub mod boot {
             let arr_b: Retained<NSArray<VZMemoryBalloonDeviceConfiguration>> =
                 NSArray::from_id_slice(&[Retained::cast(balloon)]);
             cfg.setMemoryBalloonDevices(&arr_b);
+
+            // virtio-fs host source share. cloud-init mounts this tag at
+            // /home/forge/src before installing the staged headless binary.
+            if let Some(shared_host_dir) = &spec.shared_host_dir {
+                let url = ns_url_for_path(shared_host_dir);
+                let shared_dir = VZSharedDirectory::initWithURL_readOnly(
+                    VZSharedDirectory::alloc(),
+                    &url,
+                    false,
+                );
+                let share = VZSingleDirectoryShare::initWithDirectory(
+                    VZSingleDirectoryShare::alloc(),
+                    &shared_dir,
+                );
+                let fs = VZVirtioFileSystemDeviceConfiguration::initWithTag(
+                    VZVirtioFileSystemDeviceConfiguration::alloc(),
+                    &NSString::from_str(&spec.share_tag),
+                );
+                let share_super: &VZDirectoryShare = &share;
+                fs.setShare(Some(share_super));
+                let fs_super: Retained<VZDirectorySharingDeviceConfiguration> =
+                    Retained::into_super(fs);
+                let arr_fs: Retained<NSArray<VZDirectorySharingDeviceConfiguration>> =
+                    NSArray::from_id_slice(&[fs_super]);
+                cfg.setDirectorySharingDevices(&arr_fs);
+            }
 
             // virtio-vsock — host connects later via VZVirtioSocketDevice
             // (see crates/tillandsias-vm-layer/src/transport_macos.rs, TBD).
@@ -1283,6 +1328,8 @@ impl VmRuntime for VzRuntime {
             memory_bytes: 4 * 1024 * 1024 * 1024,
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
+            shared_host_dir: Some(home_src_dir()),
+            share_tag: "home-src".to_string(),
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd,
         };

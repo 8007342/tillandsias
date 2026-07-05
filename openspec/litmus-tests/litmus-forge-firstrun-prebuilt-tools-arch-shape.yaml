@@ -53,6 +53,24 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: cargo chain removed from creation"
 
+  - step: "slice 2: actionlint/vale/wasmtime also arch-aware first-run, and gone from creation"
+    # @trace order 180 slice 2: actionlint/vale/wasmtime moved to first-run
+    # install_prebuilt (arch tokens differ from the cargo triple); the whole
+    # install_archive helper is gone from Containerfile.base (dart followed in the
+    # dart sub-slice below).
+    command: "for t in actionlint vale wasmtime; do grep -qF \"install_prebuilt $t \" images/default/lib-common.sh || { echo \"FAIL: $t not first-run\"; exit 1; }; done; if grep -qF 'install_archive' images/default/Containerfile.base; then echo 'FAIL: install_archive still at build'; exit 1; fi; echo 'ok: actionlint/vale/wasmtime first-run, install_archive gone'"
+    timeout_ms: 3000
+    expected_behavior: "ok: actionlint/vale/wasmtime first-run, install_archive gone"
+
+  - step: "dart sub-slice: Dart SDK installs arch-aware at FIRST_RUN (ensure_dart_sdk), gone from creation"
+    # @trace order 180 dart sub-slice: dart migrated from a CREATION-time curl+unzip of
+    # an x86_64 SDK to /opt/dart-sdk into an arch-aware, fail-soft FIRST_RUN install
+    # (lib-common ensure_dart_sdk, x64|arm64) into the order-179 persistent cache. This
+    # COMPLETES forge-base CREATION becoming microdnf-only (no curl/tar/unzip chains).
+    command: "grep -qF 'ensure_dart_sdk' images/default/lib-common.sh || { echo 'FAIL: ensure_dart_sdk missing'; exit 1; }; if grep -qF 'dartsdk-linux' images/default/Containerfile.base; then echo 'FAIL: dart SDK still fetched at build'; exit 1; fi; echo 'ok: dart SDK first-run, gone from creation'"
+    timeout_ms: 3000
+    expected_behavior: "ok: dart SDK first-run, gone from creation"
+
 observability:
   traces:
     - "@trace spec:default-image"

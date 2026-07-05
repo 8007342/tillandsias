@@ -56,47 +56,14 @@ RUN pip3 install --timeout 120 --no-cache-dir \
         eslint@10.4.1 \
         markdownlint-cli@0.48.0
 
-# ── Toolchains (Rust, Go, Dart, etc) ───────────────────────────
+# ── Rust toolchain env (cargo dev-tools install at FIRST_RUN — see lib-common) ──
 ENV CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
 
-# Cargo dev-tools + nextest are NO LONGER installed at build — they moved to an
-# arch-aware idempotent FIRST_RUN install (lib-common `ensure_forge_prebuilt_tools`,
-# order 188), which fixes the aarch64 macOS guest baking non-executable x86_64
-# binaries + the sequential-fetch build hang. actionlint/vale/wasmtime/dart remain
-# here for now (next migration slice of order 180).
-ARG WASMTIME_VERSION=45.0.0
-ARG ACTIONLINT_VERSION=1.7.12
-ARG VALE_VERSION=3.14.2
-ARG DART_VERSION=3.12.1
-
-ARG ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-ARG VALE_SHA256=469cf88ec58a374dca14b2564c4391d2c9a1c632210aa0b642758b794082e05f
-ARG WASMTIME_SHA256=9d92e6dc04630f617e0e5d532327a5a917ac4898587e07f4fb7a5fc7fffef760
-ARG DART_SHA256=6a2bbf64a133c9c86a62a532dbd3e0b4db4ac365abd456e9f9d1c5df61fcdbf8
-
-RUN set -eux; \
-    install_archive() { \
-        name="$1"; url="$2"; checksum="$3"; \
-        archive="/tmp/${name}.tar.gz"; \
-        curl -LsSf "$url" -o "$archive"; \
-        echo "${checksum}  ${archive}" | sha256sum -c -; \
-        tar -xzf "$archive" -C /usr/local/bin; \
-        rm -f "$archive"; \
-    }; \
-    mkdir -p /usr/local/cargo/bin \
-    # NOTE: the cargo dev-tools + cargo-nextest that used to install here moved to
-    # an arch-aware idempotent FIRST_RUN step (lib-common ensure_forge_prebuilt_tools,
-    # order 188). Only actionlint/vale/wasmtime/dart remain at build for now.
-    && install_archive actionlint "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" "${ACTIONLINT_SHA256}" \
-    && install_archive vale "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" "${VALE_SHA256}" \
-    # Wasmtime and Dart
-    && curl -LsSf "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz \
-    && echo "${WASMTIME_SHA256}  /tmp/wasmtime.tar.xz" | sha256sum -c - \
-    && tar -xJf /tmp/wasmtime.tar.xz --strip-components=1 -C /usr/local/bin "wasmtime-v${WASMTIME_VERSION}-x86_64-linux/wasmtime" \
-    && curl -LsSf "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dart.zip \
-    && echo "${DART_SHA256}  /tmp/dart.zip" | sha256sum -c - \
-    && mkdir -p /opt && unzip -q /tmp/dart.zip -d /opt \
-    && rm -f /tmp/wasmtime.tar.xz /tmp/dart.zip
-
-ENV PATH=/opt/dart-sdk/bin:$PATH
+# Cargo dev-tools + nextest (order 188), actionlint/vale/wasmtime (order 180 slice 2),
+# AND the Dart SDK (order 180 dart sub-slice) are NO LONGER installed at build — they
+# all moved to an arch-aware, idempotent, fail-soft FIRST_RUN install (lib-common
+# `ensure_forge_prebuilt_tools` + `ensure_dart_sdk`) into the order-179 persistent
+# cache. This fixes the aarch64 macOS guest baking non-executable x86_64 binaries + the
+# sequential-fetch build hang, and leaves forge-base CREATION microdnf + npm + a couple
+# single-binary curls (marksman) ONLY — no curl/tar/unzip archive-extraction chains.

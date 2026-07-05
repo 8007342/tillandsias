@@ -42,3 +42,38 @@ macOS guest and rerun the secure login/list/forge smoke.
   secure flag enabled.
 - Secure remote-project listing and forge launch succeed over the same wire.
 - The guest image is known to match the source tree carrying the secure responder.
+
+## LINUX INTEGRATION 2026-07-05 (loop iter 3)
+
+The guest secure-control-wire responder is now on **linux-next**
+(`crates/tillandsias-headless/src/vsock_server.rs` + Cargo.toml dep on
+`tillandsias-secure-channel`), integrated from macOS's osx-next work (c6c56981),
+reviewed as the linux owner of the headless crate. Applied as identical content (not
+a cross-branch cherry-pick) so it converges cleanly when the branches next merge.
+
+Security review (PASS):
+- `maybe_secure_stream` is a genuine NO-OP when `TILLANDSIAS_SECURE_CONTROL_WIRE` is
+  OFF/absent/empty (plaintext exactly as before — the flip is opt-in, off changes
+  nothing).
+- When ON it runs `server_handshake(stream, channel_psk(VERSION, WIRE_VERSION,
+  HopId::HostGuest))` — same PSK inputs as the host initiator, so a version mismatch
+  or a plaintext peer is rejected (anti-downgrade).
+- FAIL-CLOSED: a handshake error closes the connection (returns before any envelope
+  is read → no PtyOpen served). An unrecognized flag value is an Err, not a silent
+  downgrade — pinned by the new unit test
+  `secure_control_wire_flag_defaults_off_and_fails_closed` + litmus
+  `secure-control-wire-guest-responder-shape`.
+- Builds + tests green under `--features vault,listen-vsock` (the in-VM guest build).
+
+## AVAILABLE NOW — no release needed (operator clarification 2026-07-05)
+
+macOS embeds the **cross-compiled linux guest binary** into the macOS app (the same
+way the tray embeds Containerfiles) and injects it into the VM — it does NOT boot a
+released artifact. So the responder is available to macOS the moment it lands on
+`linux-next` (commit a6b4d5d7); no `release.yml` dispatch is required, and macOS is
+NOT blocked on linux.
+
+Status: **linux code DONE + on linux-next**. Remaining is macOS-side only: rebuild
+with the current linux-next source embedded, then rerun the secure login/list/forge
+smoke with `TILLANDSIAS_SECURE_CONTROL_WIRE=on` (the M1→M2 gate evidence for the
+host↔guest hop on macOS).

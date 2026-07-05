@@ -2291,7 +2291,6 @@ fn build_inference_run_args(
 
     let mut args = vec![
         "--detach".into(),
-        "--rm".into(),
         "--name".into(),
         "tillandsias-inference".into(),
         "--hostname".into(),
@@ -3567,6 +3566,7 @@ fn auto_detect_and_configure_dns(debug: bool) {
 // so forge containers and other containers that bypass the Rust launcher also
 // get HTTP_PROXY / HTTPS_PROXY without per-container injection.
 // @trace cheatsheets/runtime/enclave-proxy-patterns.md, spec:proxy-container
+#[cfg(target_os = "linux")]
 fn ensure_containers_conf_proxy_env(path: &std::path::Path) -> Result<(), String> {
     let no_proxy = enclave_no_proxy();
     let proxy_url = "http://proxy:3128";
@@ -3651,14 +3651,17 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     // Write proxy env to containers.conf so Podman injects it into every
     // container on this host, including forge containers that bypass the Rust
     // launcher. Idempotent — only writes when the [engine] env block is absent.
-    if let Some(conf_path) = get_user_containers_conf() {
-        if let Err(e) = ensure_containers_conf_proxy_env(&conf_path) {
-            eprintln!("[tillandsias] init: failed to configure proxy in containers.conf: {e}");
-        } else if debug {
-            eprintln!(
-                "[tillandsias] init: proxy env written to {}",
-                conf_path.display()
-            );
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(conf_path) = get_user_containers_conf() {
+            if let Err(e) = ensure_containers_conf_proxy_env(&conf_path) {
+                eprintln!("[tillandsias] init: failed to configure proxy in containers.conf: {e}");
+            } else if debug {
+                eprintln!(
+                    "[tillandsias] init: proxy env written to {}",
+                    conf_path.display()
+                );
+            }
         }
     }
 

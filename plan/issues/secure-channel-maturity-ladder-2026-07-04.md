@@ -81,9 +81,10 @@ objective, checkable condition, not a vibe.
 
 ### M2 — Opt-in SOAK (flag works ON, still OFF by default)
 - Operators / CI run flag-ON across all platforms for a defined soak window.
-- **GATE M2→M3 (maturity metrics — see 185):**
-  - flag-ON e2e green on ALL THREE platforms across **≥ N consecutive releases** and
-    **≥ D days** (target: N=3, D=14 — ratify in 185);
+- **GATE M2→M3 (maturity metrics — ratified by order 185):**
+  - flag-ON e2e green on ALL THREE platforms across **≥ 3 tagged releases** and
+    **≥ 14 days with qualifying linux-next commits** (tracked in loop_status.md);
+  - soak-start and soak-so-far tracked in loop_status.md (`secure_channel_soak` block);
   - **zero** handshake failures / wire-oscillation regressions attributable to the
     encrypted path in that window;
   - a rollback rehearsal proves flipping the flag OFF cleanly restores plaintext.
@@ -91,11 +92,10 @@ objective, checkable condition, not a vibe.
 ### M3 — Secure by DEFAULT (insecure still reachable via flag=OFF)
 - Flip the DEFAULT to ON on all platforms in one coordinated wave. Insecure remains a
   runtime ESCAPE HATCH (`TILLANDSIAS_SECURE_CONTROL_WIRE=off`) for emergency rollback.
-- **GATE M3→M4 (deprecation soak):**
-  - default-ON releases ship on all platforms and stay stable for **≥ M releases**
-    and **≥ E days** (target: M=4, E=30 — ratify in 185);
-  - the escape hatch is NOT invoked in production in that window (telemetry / operator
-    attestation);
+- **GATE M3→M4 (deprecation soak — ratified by order 185):**
+  - default-ON releases ship on all platforms and stay stable for **≥ 4 consecutive
+    releases** and **≥ 30 days** with zero escape-hatch invocations;
+  - escape-hatch counter (`tillandsias_secure_control_wire_off_total`) stays at zero;
   - a deprecation notice for the plaintext path has shipped for ≥ one release.
 
 ### M4 — Remove insecure support (no dual-mode, downgrade impossible)
@@ -103,6 +103,30 @@ objective, checkable condition, not a vibe.
 - **GATE (closure):** no plaintext code remains; a litmus proves a plaintext peer
   cannot connect on ANY hop/platform; WIRE_VERSION bumped to mark the break; all three
   platforms build + e2e green with the plaintext path gone.
+
+## Observability prerequisites per gate (ratified by order 185)
+
+### M1 (wired behind flag, default OFF)
+- No telemetry required beyond existing tracing logs.
+
+### M2 (opt-in soak)
+Before the M2→M3 soak counter starts, land sub-packets 185-A/B/C:
+- **185-A:** `tillandsias_handshake_total{hop,platform,result}` Prometheus counter
+- **185-B:** `info!` log on handshake success (server + client)
+- **185-C:** `tillandsias_secure_control_wire_off_total` counter
+- Soak start: first day when all three platforms have a green flag-ON VM-smoke
+  recorded AND all three sub-packets are deployed.
+
+### M3 (secure by default)
+Before flipping the default ON, land sub-packet 185-D:
+- **185-D:** Pre-flight `secure_wire` field in Hello/HelloAck + explicit
+  agreement check with `ErrorCode::ProtocolViolation` on mismatch.
+- `tillandsias_handshake_version_mismatch_total` counter live.
+
+### M4 (insecure removed)
+- All four sub-packets are live and have reported steady data through M3.
+- Escape-hatch counter (`tillandsias_secure_control_wire_off_total`) at zero
+  for ≥ 30 days.
 
 ## Rollback discipline (every rung)
 Advancing is coordinated + reversible until M4. Any gate failure on any platform

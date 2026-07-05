@@ -11,6 +11,7 @@
 #![allow(dead_code)]
 
 use std::io;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -22,6 +23,8 @@ use tillandsias_control_wire::transport::{
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };
+use tillandsias_secure_channel::{HopId, channel_psk, client_handshake};
+use tracing::info;
 
 /// Default duration the client gives the in-VM headless to ack a `Hello`
 /// before treating the VM as unreachable. Matches the
@@ -44,6 +47,44 @@ pub const STANDARD_HOST_CAPABILITIES: &[&str] = &[
     "CloudRefreshRequest",
     "pty.attach@v1",
 ];
+
+/// Runtime gate env var for the secure control wire. Matches the server-side
+/// convention in vsock_server.rs — set to `"on"` to enable Noise NNpsk0
+/// handshake before Hello/HelloAck, `"off"` or absent for plaintext. Any
+/// unrecognized value is an error (fail-closed) so a typo never silently
+/// downgrades security.
+///
+/// Default: Off. Flip to `"on"` for the coordinated cross-host cutover
+/// (order 145).
+///
+/// @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
+const SECURE_CONTROL_WIRE_ENV: &str = "TILLANDSIAS_SECURE_CONTROL_WIRE";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SecureControlWireMode {
+    Off,
+    On,
+}
+
+fn parse_secure_control_wire_mode(
+    raw: Result<String, std::env::VarError>,
+) -> Result<SecureControlWireMode, String> {
+    match raw {
+        Ok(v) if v.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
+        Ok(v) if v.eq_ignore_ascii_case("off") || v.is_empty() => Ok(SecureControlWireMode::Off),
+        Ok(v) => Err(format!(
+            "{SECURE_CONTROL_WIRE_ENV} must be 'on' or 'off' (got {v:?})"
+        )),
+        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
+        Err(err) => Err(format!("{SECURE_CONTROL_WIRE_ENV}: {err}")),
+    }
+}
+
+fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
+    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(|| parse_secure_control_wire_mode(std::env::var(SECURE_CONTROL_WIRE_ENV)))
+        .clone()
+}
 
 /// Backoff schedule for the reconnect loop. Mirrors the spec's
 /// `250ms / 500ms / 1s / 2s / 4s` cap.
@@ -195,10 +236,32 @@ impl Client {
 /// Try `connect + handshake` once, with the given timeout for the whole
 /// operation. Returns `Ok(Client)` on success, an `io::Error` otherwise.
 ///
+/// When `TILLANDSIAS_SECURE_CONTROL_WIRE=on` is set, wraps the transport
+/// stream with a Noise NNpsk0 handshake (version-bound PSK) before the
+/// control-wire Hello/HelloAck exchange. Off by default — gated for the
+/// coordinated cross-host cutover (order 145). Fail-closed on unrecognized
+/// values.
+///
 /// @trace spec:host-shell-architecture.transport.vsock-client-lifecycle@v1
+/// @trace plan/issues/encrypted-control-channel-impl-2026-07-01.md (slice 4)
 pub async fn connect_with_handshake(transport: Transport, timeout: Duration) -> io::Result<Client> {
     match tokio::time::timeout(timeout, async {
-        let mut client = Client::connect(transport).await?;
+        let raw = transport::connect(&transport).await?;
+        let wrapped: Box<dyn AsyncReadWrite + Unpin + Send> = match secure_control_wire_mode()
+            .map_err(io::Error::other)?
+        {
+            SecureControlWireMode::Off => raw,
+            SecureControlWireMode::On => {
+                let psk = channel_psk(crate::version(), WIRE_VERSION, HopId::HostGuest);
+                let encrypted = client_handshake(raw, &psk).await?;
+                info!(
+                    spec = "vsock-transport",
+                    "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
+                );
+                Box::new(encrypted)
+            }
+        };
+        let mut client = Client::from_stream(wrapped, transport);
         client.handshake().await?;
         Ok::<_, io::Error>(client)
     })

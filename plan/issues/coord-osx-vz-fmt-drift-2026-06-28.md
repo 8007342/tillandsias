@@ -1,6 +1,12 @@
 # Coord: osx-next vz.rs rustfmt drift blocks linux-next integration
 
-**Status:** `blocked` (owner: osx terminal)
+**Status:** `obsoleted` (superseded by 2026-07-05 branch-drift packet)
+**Superseded by:** `plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md`
+
+> TOMBSTONE 2026-07-05: this specific 2026-06-28 rustfmt drift blocker is no
+> longer the active branch-integration packet. A historical copy already exists
+> under `plan/archive/coord-osx-vz-fmt-drift-2026-06-28.md`. Current drift is
+> tracked by order 191.
 **Filed by:** linux (coordinator) 2026-06-28
 **Kind:** coordination
 **Trace:** multi-host integration

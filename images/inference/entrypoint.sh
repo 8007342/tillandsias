@@ -23,6 +23,10 @@ fi
 # Bind to all interfaces — reachable from other containers in the enclave.
 export OLLAMA_HOST=0.0.0.0:11434
 
+# Resource limits — prevent OOM on constrained hosts.
+export OLLAMA_NUM_PARALLEL=1
+export OLLAMA_MAX_LOADED_MODELS=1
+
 # Shared model cache — persisted via volume mount.
 export OLLAMA_MODELS=/home/ollama/.ollama/models/
 
@@ -122,7 +126,7 @@ echo "[inference] tier=$TIER (RAM ${RAM_GB}GB, VRAM ${VRAM_GB}GB)"
 # pull degrades gracefully + retries next launch; Squid SSL-bump can EOF big
 # manifests — see project memory project_squid_ollama_eof.md), and overridable via
 # TILLANDSIAS_DEFAULT_MODELS (space-separated ollama tags).
-DEFAULT_MODELS="${TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b qwen2.5:1.5b llama3.2:1b qwen2.5-coder:1.5b}"
+DEFAULT_MODELS="${TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b}"
 for _model in $DEFAULT_MODELS; do
     if ollama list 2>/dev/null | grep -q "$_model"; then
         echo "[inference] default model $_model ready (cached)"

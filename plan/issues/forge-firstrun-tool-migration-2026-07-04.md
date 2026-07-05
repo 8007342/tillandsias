@@ -103,3 +103,39 @@ container). Remove the corresponding Containerfile lines + their pinned
   reuses them thereafter.
 - `./build.sh --check` + `--test` pass; forge e2e smoke: first attach installs,
   second attach reuses.
+
+## SLICE 2 DONE 2026-07-05 (actionlint/vale/wasmtime)
+
+actionlint/vale/wasmtime now install at arch-aware FIRST_RUN via lib-common
+`ensure_forge_prebuilt_tools` (their arch tokens differ from the cargo triple:
+actionlint linux_amd64|arm64, vale Linux_64-bit|arm64, wasmtime x86_64|aarch64-linux).
+Removed from Containerfile.base along with the now-unused `install_archive` helper +
+their ARG _VERSION/_SHA256; only **dart** remains build-time (a full SDK to
+/opt/dart-sdk — its own later sub-slice). Verified on x86_64 (actionlint 1.7.12 +
+wasmtime 45.0.0 install + run; wasmtime's nested tar.xz extracts correctly); aarch64
+assets pre-verified 200. default-image litmus suite 100% (STEP 7 now 2 sha256sum
+sites; arch-shape litmus gains a slice-2 step). Remaining: dart sub-slice + version
+de-hardcoding via the releases/latest web redirect.
+
+## DART SUB-SLICE DONE 2026-07-05 (dart SDK — forge base now microdnf-only)
+
+The Dart SDK now installs at arch-aware FIRST_RUN via lib-common `ensure_dart_sdk`
+(x86_64 -> x64, aarch64 -> arm64) into the order-179 persistent cache at
+`$PROJECT_CACHE/dart/dart-sdk`, called (backgrounded) from `ensure_forge_prebuilt_tools`.
+Idempotent (skip if `$PROJECT_CACHE/dart/dart-sdk/bin/dart` is executable), fail-soft
+(a failed fetch logs + retries next launch), timeout-guarded (`curl --max-time 300`).
+Unlike the cargo dev-tools (single binaries via `install_prebuilt`), Dart ships as a
+full SDK that unpacks a top-level `dart-sdk/` dir, so it gets its own helper.
+
+Removed from `Containerfile.base`: the `ARG DART_VERSION` + `ARG DART_SHA256`, the
+curl/unzip `RUN` block, and the `ENV PATH=/opt/dart-sdk/bin`. lib-common's PATH now
+points at `$PROJECT_CACHE/dart/dart-sdk/bin`.
+
+**This COMPLETES forge-base CREATION becoming microdnf-only** — `Containerfile.base`
+has NO curl/tar/unzip archive-extraction tool chain left (creation is microdnf + npm +
+a couple single-binary curls like marksman only). Verified on x86_64: `ensure_dart_sdk`
+fetches + unzips the SDK and `dart-sdk/bin/dart --version` reports Dart 3.12.1; both the
+x64 + arm64 release zips were pre-verified HTTP 200. default-image litmus suite 100%
+(Req Direct assets now expects 1 sha256sum site — only ollama; arch-shape litmus gains
+an `ensure_dart_sdk` step). Remaining for order 180: marksman single-binary + ollama
+(inference) -> FIRST_RUN, and version de-hardcoding via releases/latest.
