@@ -72,7 +72,8 @@ work. The Cowork scheduled-task runtime can inherit dangling session sockets
 fails for lack of a credential. See
 `plan/issues/cowork-headless-credential-isolation-2026-06-20.md`.
 
-Run the executable guard instead of re-deriving the check in prose:
+Run the executable guard instead of re-deriving the check in prose. 
+*(On Windows: ensure you run this via Git Bash, e.g. `& "C:\Program Files\Git\bin\bash.exe" scripts/check-credential-channel.sh`. PowerShell's `bash` alias defaults to an isolated WSL session that lacks host credentials).*
 
 ```bash
 scripts/check-credential-channel.sh
