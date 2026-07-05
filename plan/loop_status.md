@@ -40,10 +40,7 @@ Reason: Branch drift is above Dmax and the secure-wire/embedded-guest path is th
 
 ## Active Assignment Board
 
-- Linux primary: order 190 `embedded-guest-binary-linux-build` — add the Nix build
-  script/litmus that stages x86_64+aarch64 static headless binaries and proves
-  version match. Fallback: order 180 continuation for remaining FIRST_RUN
-  migration/de-hardcoding.
+- Linux primary: order 190 `embedded-guest-binary-linux-build` — COMPLETED (added scripts/build-guest-binaries.sh and litmus matching version test). Next focus: order 180 continuation for remaining FIRST_RUN migration/de-hardcoding.
 - macOS primary: order 193 `macos-vz-home-src-mount` plus order 191 integration —
   prove `/home/forge/src` is actually mounted in the Fedora 44 guest, merge
   `origin/linux-next` into `osx-next`, rebuild with embedded guest assets, and
@@ -64,10 +61,8 @@ Reason: Branch drift is above Dmax and the secure-wire/embedded-guest path is th
 - Result: no macOS code work started. The checkout is dirty with tracked/untracked
   tray/VM/package changes, so meta-orchestration cannot merge `origin/linux-next`
   or claim new implementation work without risking user work.
-- Eligible packet order 193 is blocked until Linux completes order 190's staged
-  guest-binary contract, then macOS checkpoints/cleans WIP and merges linux-next.
-- Linux follow-up: order 190 remains the top blocker; order 194 has a Linux/release
-  CI sub-slice for `TILLANDSIAS_RELEASE_SECRET` enforcement.
+- Eligible packet order 193 is unblocked on the Linux guest-binary contract (order 190 completed). macOS owner can now checkpoint/clean WIP, merge linux-next, and claim/implement VZ virtio-fs.
+- Linux follow-up: order 194 has a Linux/release CI sub-slice for `TILLANDSIAS_RELEASE_SECRET` enforcement.
 
 ## Next Loop Expected Outcomes
 
