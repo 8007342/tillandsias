@@ -2246,3 +2246,25 @@ plan_index:
         - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"
         - "release CI fails if release artifacts would use the public dev seed"
         - "litmus coverage: psk-input-parity, secure-wait-phase-ready, release-secret-required"
+
+    - packet_id: silverblue-immutable-development-workflow
+      order: 195
+      title: "Research: achieve 100% development workflow parity on immutable Fedora Silverblue hosts"
+      status: ready
+      kind: research
+      deliverable: plan/issues/silverblue-immutable-development-workflow-2026-07-05.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [research, infra, silverblue, immutable, toolbx, distrobox, cross-compile, dns]
+      estimated_hours: 4
+      outcome: >
+        Standardize the full dev and compile loop inside Toolbx/Distrobox to support
+        cross-compilation (aarch64 guest) and debug tooling on immutable hosts without system
+        pollution. Resolve rootless host-to-container DNS mapping so host CLI commands can
+        directly query enclave services.
+      events: []
+      exit_criteria:
+        - "Toolbx Containerfile and scripts setup-toolbx.sh are written and working"
+        - "build.sh automatically detects Toolbx/Distrobox environments"
+        - "Nix/cross-compilation for both architectures succeeds inside Toolbx on Silverblue"
