@@ -24,6 +24,7 @@ use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, client_handshake};
+use tracing::info;
 
 /// Default duration the client gives the in-VM headless to ack a `Hello`
 /// before treating the VM as unreachable. Matches the
@@ -246,15 +247,20 @@ impl Client {
 pub async fn connect_with_handshake(transport: Transport, timeout: Duration) -> io::Result<Client> {
     match tokio::time::timeout(timeout, async {
         let raw = transport::connect(&transport).await?;
-        let wrapped: Box<dyn AsyncReadWrite + Unpin + Send> =
-            match secure_control_wire_mode().map_err(io::Error::other)? {
-                SecureControlWireMode::Off => raw,
-                SecureControlWireMode::On => {
-                    let psk = channel_psk(crate::version(), WIRE_VERSION, HopId::HostGuest);
-                    let encrypted = client_handshake(raw, &psk).await?;
-                    Box::new(encrypted)
-                }
-            };
+        let wrapped: Box<dyn AsyncReadWrite + Unpin + Send> = match secure_control_wire_mode()
+            .map_err(io::Error::other)?
+        {
+            SecureControlWireMode::Off => raw,
+            SecureControlWireMode::On => {
+                let psk = channel_psk(crate::version(), WIRE_VERSION, HopId::HostGuest);
+                let encrypted = client_handshake(raw, &psk).await?;
+                info!(
+                    spec = "vsock-transport",
+                    "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
+                );
+                Box::new(encrypted)
+            }
+        };
         let mut client = Client::from_stream(wrapped, transport);
         client.handshake().await?;
         Ok::<_, io::Error>(client)

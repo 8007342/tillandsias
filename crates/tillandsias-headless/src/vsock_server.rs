@@ -294,7 +294,13 @@ async fn handle_connection(
     state: VmStateHandle,
 ) {
     match maybe_secure_stream(stream).await {
-        Ok(secured) => stream = secured,
+        Ok(secured) => {
+            info!(
+                spec = "vsock-transport",
+                "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
+            );
+            stream = secured;
+        }
         Err(err) => {
             warn!(spec = "vsock-transport", error = %err, "secure control wire handshake failed");
             return;

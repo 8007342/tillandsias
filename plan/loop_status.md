@@ -8,7 +8,7 @@ secure_channel_soak:
   qualifying_commits: 0
   first_release_tag: null
   third_release_tag: null
-  subpackets_landed: { "185-A": false, "185-B": false, "185-C": false, "185-D": false }
+  subpackets_landed: { "185-A": false, "185-B": true, "185-C": false, "185-D": false }
 
 ## This Loop (2026-07-04T22:00Z, linux — encrypted control channel slice 4: wire host↔guest integration)
 
