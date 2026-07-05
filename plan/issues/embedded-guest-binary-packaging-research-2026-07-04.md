@@ -42,3 +42,18 @@ The intended overhead is acceptable: each wrapper can include both Linux
 - The source of truth for guest-binary selection is identified.
 - The implementation packet has a clear, minimal first slice.
 
+## Findings so far
+
+- `ProvisionManifest` already carries `tillandsias_binary`, so the tray
+  provisioning path does not need a new API to point at an embedded guest
+  binary.
+- The macOS guest already exposes the shared host tree at `/home/forge/src`,
+  and the Windows guest already mounts the host source tree under the same
+  project-root convention. That makes a host-staged guest payload feasible.
+- `tillandsias-headless` already embeds its runtime containerfiles and related
+  assets via `runtime_assets.rs`, so the release packaging goal is aligned with
+  an existing pattern.
+- This host does not currently have `rustup`/cross targets available on PATH,
+  so cross-compiling Linux guest binaries from the macOS checkout is blocked
+  until the Rust toolchain is installed or provided another way.
+
