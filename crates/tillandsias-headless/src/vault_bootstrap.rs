@@ -1769,6 +1769,18 @@ fn wait_for_vault_ready(
 /// /etc/hosts does.
 #[cfg(feature = "vault")]
 fn update_etc_hosts_vault(debug: bool) {
+    #[cfg(unix)]
+    let is_root = unsafe { libc::geteuid() == 0 };
+    #[cfg(not(unix))]
+    let is_root = false;
+
+    if !is_root {
+        if debug {
+            eprintln!("[tillandsias-vault] skipping /etc/hosts update: not root");
+        }
+        return;
+    }
+
     let out = match podman_cmd_sync()
         .args([
             "inspect",
