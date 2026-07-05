@@ -1524,7 +1524,12 @@ fn try_load_vault_selinux_module(debug: bool) -> bool {
         return false;
     }
     let loaded = matches!(
-        Command::new("semodule").arg("-i").arg(&cil_path).status(),
+        Command::new("semodule")
+            .arg("-i")
+            .arg(&cil_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status(),
         Ok(s) if s.success()
     );
     let _ = fs::remove_file(&cil_path);
