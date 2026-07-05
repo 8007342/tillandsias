@@ -77,13 +77,22 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req Direct assets: every retained archive has an adjacent SHA-256 check"
-    command: "for variable in CARGO_NEXTEST_SHA256 CARGO_CHEF_SHA256 CARGO_WATCH_SHA256 CARGO_AUDIT_SHA256 WASM_PACK_SHA256 TRUNK_SHA256 TYPOS_CLI_SHA256 WATCHEXEC_CLI_SHA256 CARGO_EDIT_SHA256 CARGO_LLVM_COV_SHA256 CARGO_SEMVER_CHECKS_SHA256 CARGO_EXPAND_SHA256 CARGO_CRITERION_SHA256 CARGO_WASI_SHA256 CARGO_OUTDATED_SHA256 ACTIONLINT_SHA256 VALE_SHA256 DART_SHA256 OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile.base images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile | wc -l); [ \"$checks\" -eq 5 ] || { echo \"FAIL: expected 5 checksum-verification sites, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
+  - step: "Req Direct assets: every retained build-time archive has an adjacent SHA-256 check"
+    # @trace order 188: the cargo dev-tools + nextest moved to arch-aware FIRST_RUN
+    # (lib-common ensure_forge_prebuilt_tools), so their CREATION-time ARG _SHA256s
+    # are gone. Only actionlint/vale/wasmtime/dart (Containerfile.base) + ollama
+    # (inference) remain build-time; 4 sha256sum sites remain (nextest's inline
+    # check went with it).
+    command: "for variable in ACTIONLINT_SHA256 VALE_SHA256 WASMTIME_SHA256 DART_SHA256 OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile.base images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile | wc -l); [ \"$checks\" -eq 4 ] || { echo \"FAIL: expected 4 checksum-verification sites, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req User-runtime assembly: cargo tools use immutable archives without API installers or compilation"
-    command: "if grep -En 'cargo (binstall|install)|go install' images/default/Containerfile.base; then echo 'FAIL: user --init must assemble prebuilt tools without API installers or compilation'; exit 1; fi; for tool in cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli cargo-edit cargo-llvm-cov cargo-semver-checks cargo-expand cargo-criterion cargo-wasi cargo-outdated; do grep -Fq \"install_archive $tool \" images/default/Containerfile.base || { echo \"FAIL: pinned archive missing for $tool\"; exit 1; }; done; echo 'ok: cargo tools use immutable release archives'"
+  - step: "Req User-runtime assembly: cargo tools are prebuilt archives at FIRST_RUN (arch-aware), not compiled and not baked at creation"
+    # @trace order 188: cargo tools install at arch-aware FIRST_RUN via lib-common
+    # install_prebuilt (prebuilt archives, NO compilation / NO cargo install /
+    # binstall), NOT the CREATION-time install_archive chain (which hung the aarch64
+    # macOS VM build + baked x86_64 binaries).
+    command: "if grep -En 'cargo (binstall|install)|go install' images/default/Containerfile.base; then echo 'FAIL: no API installers/compilation at build'; exit 1; fi; if grep -Fq 'install_archive cargo-chef' images/default/Containerfile.base; then echo 'FAIL: cargo tools still baked at creation'; exit 1; fi; for tool in cargo-nextest cargo-chef cargo-watch cargo-audit wasm-pack cargo-llvm-cov cargo-semver-checks cargo-expand cargo-criterion cargo-wasi cargo-outdated trunk; do grep -Fq \"install_prebuilt $tool \" images/default/lib-common.sh || { echo \"FAIL: first-run prebuilt install missing for $tool\"; exit 1; }; done; echo 'ok: cargo tools install as prebuilt archives at arch-aware FIRST_RUN'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

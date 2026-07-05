@@ -1771,7 +1771,7 @@ plan_index:
     - packet_id: forge-firstrun-installer-arch-aware
       order: 188
       title: "Impl (slice 1 of 180, macOS-blocking): arch-aware install_prebuilt helper + migrate cargo-tools group to FIRST_RUN"
-      status: in_progress
+      status: done
       kind: enhancement
       deliverable: plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md
       depends_on: [forge-persistent-tool-cache-mount]

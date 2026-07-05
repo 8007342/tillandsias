@@ -184,8 +184,9 @@ specs:
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-30'
+  - litmus:forge-firstrun-prebuilt-tools-arch-shape
+  coverage_ratio: 80
+  last_verified: '2026-07-05'
 - spec_id: dev-build
   status: active
   litmus_tests:

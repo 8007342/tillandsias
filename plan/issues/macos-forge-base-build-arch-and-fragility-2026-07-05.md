@@ -92,3 +92,39 @@ Linux owns `images/default/Containerfile.base` + `lib-common.sh` + the
 tray needs **no tray-side code change** to benefit — it triggers the shared
 in-guest build/first-run path — so the fix lands linux-side and osx re-verifies via
 `--opencode`/`--exec-guest` once the migration ships.
+
+## LINUX RESOLUTION 2026-07-05 (order 188, slice 1 of 180) — cargo-tools group
+
+Linux implemented the arch-aware FIRST_RUN migration for the cargo-tools group:
+
+- `images/default/lib-common.sh`: new `_forge_uname_arch` (x86_64|aarch64 from
+  `uname -m`), `install_prebuilt <bin> <url>` (idempotent, fail-soft, `curl
+  --max-time` so a stalled fetch can never hang launch, extracts to
+  `$CARGO_HOME/bin`), and `ensure_forge_prebuilt_tools` (15 cargo tools, arch token
+  substituted into every URL — NO hardcoded x86_64). Installs into the order-179
+  persistent named-volume cache.
+- The 4 forge entrypoints call `ensure_forge_prebuilt_tools &` (backgrounded — never
+  blocks the agent launch).
+- `images/default/Containerfile.base`: the cargo-tools `install_archive` block +
+  cargo-nextest + all their `ARG _VERSION/_SHA256` constants REMOVED (creation is
+  much shorter now). Also moved the Antigravity `agy` install out of the Containerfile
+  (it was a pipe-to-shell) into an every-launch install-if-missing in its entrypoint.
+- Verified on x86_64: `install_prebuilt cargo-nextest` downloads + extracts +
+  `cargo-nextest --version` succeeds; second call is an instant no-op (idempotent).
+  All aarch64 asset URLs pre-verified to exist (HTTP 200). Policy-compliant: direct
+  release-asset CDN URLs, NO GitHub API, NO cargo install/binstall.
+- Litmus: `forge-firstrun-prebuilt-tools-arch-shape` (new) + updated the stale
+  `default-image-containerfile-shape` STEPs 7-8 to the first-run structure. default-
+  image litmus suite 100%.
+
+**Still baked (next slice, order 180 continuation):** actionlint / vale / wasmtime /
+dart remain build-time x86_64 in Containerfile.base — same arch treatment needed to
+reach the "microdnf-only creation" end state. cargo tool VERSIONS are a centralized
+pinned floor in lib-common; de-hardcoding to `releases/latest` (web redirect, not the
+API) is the follow-up.
+
+**macOS acceptance (please re-verify on a cold Apple-Silicon guest):** forge-base
+build no longer runs the cargo curl/tar chain (shorter, should not hang); first
+`--opencode`/`--codex` launch background-installs the cargo tools as aarch64 binaries
+into the persistent cache (`cargo-nextest --version` etc. should succeed); no x86_64
+cargo asset fetched (grep the trace log for `installed prebuilt … (aarch64)`).

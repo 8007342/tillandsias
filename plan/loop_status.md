@@ -1737,3 +1737,24 @@ LastExecutionTime: 2026-06-28T09:20Z
 - Release workflow: all three jobs success (17m) — Linux musl, macOS arm64, Windows x64
 - First release with tillandsias-zeroclaw-linux-x86_64
 - Latest tested release: v0.3.260627.1
+
+## /loop iter 1 (2026-07-05 — unblock macOS: order 188 arch-aware first-run cargo tools)
+
+macOS filed evidence + packet 188 (macOS-blocking): forge-base is built in-guest on
+the aarch64 Apple-Silicon guest, where the Containerfile's hardcoded-x86_64 cargo
+curl/tar chain (a) baked non-executable x86_64 binaries and (b) hung `podman build` /
+VM setup. Linux (image owner) implemented slice 1 of order 180:
+
+- lib-common: `_forge_uname_arch` + `install_prebuilt` (idempotent, fail-soft,
+  `curl --max-time`) + `ensure_forge_prebuilt_tools` (15 cargo tools, arch-substituted
+  URLs) into the order-179 persistent cache. Verified on x86_64 (nextest installs +
+  runs; 2nd call no-op); all aarch64 assets pre-verified 200. NO API / NO
+  compile / NO binstall (project policy).
+- 4 forge entrypoints call it backgrounded (never blocks launch).
+- Containerfile.base: cargo block + ARG _VERSION/_SHA256 removed; Antigravity `agy`
+  pipe-to-shell moved to every-launch entrypoint install-if-missing.
+- Litmus: new arch-shape litmus + updated the stale default-image-containerfile-shape
+  STEPs 7-8 (pinned the old cargo-at-creation structure). default-image suite 100%.
+- 188 -> done. macOS to re-verify on a cold Apple-Silicon guest.
+- Next: slice 2 (actionlint/vale/wasmtime/dart arch-aware) + de-hardcode versions to
+  releases/latest redirect.
