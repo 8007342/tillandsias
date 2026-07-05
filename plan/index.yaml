@@ -1907,7 +1907,7 @@ plan_index:
     - packet_id: secure-channel-flag-and-maturity-metrics
       order: 185
       title: "Research: secure-channel flag propagation (boot-time, fail-closed) + maturity-gate metrics"
-      status: claimed
+      status: done
       kind: research
       deliverable: plan/issues/secure-channel-flag-and-maturity-metrics-2026-07-04.md
       depends_on: [secure-channel-maturity-ladder]
@@ -1928,6 +1928,28 @@ plan_index:
           host: linux
           lease_id: "secure-channel-flag-and-maturity-metrics-claim-1"
           expires_at: "2026-07-05T03:00:00Z"
+        - type: completion
+          ts: "2026-07-04T23:30:00Z"
+          agent_id: "linux-antigravity-20260704T2300Z"
+          host: linux
+          summary: >
+            Q1 (flag propagation): mapped per-platform env injection paths.
+            No centralized propagation needed at M1 (default OFF); at M3 prep
+            inject TILLANDSIAS_SECURE_CONTROL_WIRE into VM systemd units (vz.rs,
+            wsl_lifecycle.rs) + forge container env. Pre-flight Hello field
+            agreement check specified for M3 (ErrorCode::ProtocolViolation on
+            mismatch). Fail-closed property confirmed: Noise handshake rejects
+            flag mismatch without explicit agreement check.
+            Q2 (gate metrics): N=3 releases / D=14 days (M2→M3); M=4 releases
+            / E=30 days (M3→M4) ratified. Measurement methods defined: soak
+            counter in loop_status.md, Prometheus counters for handshake
+            outcomes. 4 sub-packets filed (185-A/B/C/D).
+            Q3 (observability): telemetry gaps identified; handshake-success
+            info! log, Prometheus counters outlined. Ladder updated with
+            ratified numbers + observability prerequisites per gate.
+            Files: plan/issues/secure-channel-flag-and-maturity-metrics-2026-07-04.md,
+            plan/issues/secure-channel-maturity-ladder-2026-07-04.md,
+            plan/loop_status.md.
       exit_criteria:
         - "flag propagation + pre-flight fail-closed agreement check specified"
         - "N/D/M/E ratified with a measurement method each; telemetry gaps filed as sub-packets"
