@@ -65,6 +65,7 @@
 /smoke*.err
 /smoke*.log
 /target-musl/
+/target-guest/
 /target/
 /target/forge-diagnostics
 Thumbs.db

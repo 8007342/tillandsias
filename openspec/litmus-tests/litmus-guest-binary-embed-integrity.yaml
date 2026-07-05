@@ -1,0 +1,32 @@
+# @trace spec:ci-release
+name: litmus:guest-binary-embed-integrity
+spec: ci-release
+phase: pre-build
+description: Verify staged guest binaries are built, static, and match current VERSION
+severity: high
+size: instant
+
+preconditions:
+  - file exists target-guest/tillandsias-headless-x86_64-unknown-linux-musl
+  - file exists target-guest/tillandsias-headless-aarch64-unknown-linux-musl
+  - file exists VERSION
+  - file exists scripts/build-guest-binaries.sh
+  - file is executable scripts/build-guest-binaries.sh
+
+critical_path:
+  - step: "verify staged guest binaries with build-guest-binaries.sh --verify"
+    command: "bash scripts/build-guest-binaries.sh --verify"
+    success_pattern: "Verification SUCCESS"
+    timeout_ms: 10000
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "Verification SUCCESS: both binaries are correct and match VERSION"
+  log_fields:
+    spec: "ci-release"
+    test: "guest-binary-embed-integrity"
+
+rollback:
+  on_failure: "run scripts/build-guest-binaries.sh to rebuild and stage matching guest binaries using Nix"
+  command: "echo 'Rebuild required: run scripts/build-guest-binaries.sh'"
