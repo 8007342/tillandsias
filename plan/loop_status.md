@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-04T23:00Z
+## This Loop (2026-07-05T02:00Z, linux — order 168 inference container fix)
+
+- **Order 168 (inference-container-startup-failure) COMPLETED**:
+  - Removed `--rm` from all 3 launch sites (main.rs, orchestrate-enclave.sh, test-inference.sh) — post-mortem logs survive crash/OOM.
+  - Reduced default models from 4 (qwen2.5:0.5b qwen2.5:1.5b llama3.2:1b qwen2.5-coder:1.5b, ~2GB) to just qwen2.5:0.5b (~400MB) — first-pull completes within the ~32s death window on constrained hosts.
+  - Added `OLLAMA_NUM_PARALLEL=1` and `OLLAMA_MAX_LOADED_MODELS=1` to prevent concurrent model loading from OOM-ing the 7.3GB WSL2 VM.
+  - Model cache volume mount (`~/.cache/tillandsias/models` → `/home/ollama/.ollama/models:rw`) was already present and is unchanged.
+- **Remaining (Windows-only):** run without `--rm`, capture actual death cause via `podman inspect` OOMKilled flag + `podman logs`.
+- Also committed: leftover WIP from prior session (run_smoke.sh, vault login HCL policies).
+
+LastExecutionTime: 2026-07-05T02:30Z
 
 secure_channel_soak:
   start_date: null
