@@ -1775,3 +1775,17 @@ macOS re-verify.
 Loop queue next: tool-migration slice 2 (actionlint/vale/wasmtime → arch-aware first-run
 via install_prebuilt; dart SDK is the outlier, own sub-slice); podman-stale-volume-locks
 (verify 179 volume lifecycle); 187 antigravity agy forge-flag.
+
+## /loop iter 4 (2026-07-05 — drain, no release/host dependency)
+
+Operator clarified macOS embeds the cross-compiled linux binary into the VM (like the
+tray embeds Containerfiles) — no release needed, macOS/windows not blocked on linux. So
+draining freely + pushing everything. This iteration:
+- Order 189 corrected -> done (macOS pulls the guest responder from linux-next source;
+  no release gate). Commit 91095ae3.
+- Order 180 slice 2: actionlint/vale/wasmtime -> arch-aware FIRST_RUN via install_prebuilt;
+  removed from Containerfile.base + the now-unused install_archive helper + their ARGs.
+  Verified x86_64; aarch64 assets 200. default-image litmus 100%. Commit 8331863e.
+  Containerfile.base RUN block is now JUST dart — the forge base is nearly microdnf-only.
+Next: dart sub-slice (finish microdnf-only creation; dart is an SDK to /opt/dart-sdk,
+needs an install_prebuilt SDK variant); then podman-stale-volume-locks; then 187 agy flag.
