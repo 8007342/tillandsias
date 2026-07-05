@@ -38,9 +38,18 @@ install_prebuilt <name> <url-template-or-latest-resolver> [<archive-member>]
   # 1. present in the persistent cache?  -> skip (idempotent)
   # 2. resolve LATEST version (GitHub releases /latest, or the tool's stable
   #    channel) — NO hardcoded version/SHA in the image
+  # 2b. resolve the asset for THIS host's arch via $(uname -m) (x86_64 | aarch64)
+  #    — NO hardcoded x86_64 URL (see macos-forge-base-build-arch-and-fragility)
   # 3. curl the prebuilt asset -> extract -> place the binary on the cache PATH
   # 4. all the mkdir/tar/chmod/rm finickiness lives ONCE here, not per tool
 ```
+
+> **Arch-awareness (added 2026-07-05, macOS evidence).** The current
+> `Containerfile.base` install_archive URLs are hardcoded `x86_64-unknown-linux-gnu`
+> and the base image builds with no `--platform`, so on the **aarch64** macOS/Apple-
+> Silicon guest they bake non-executable x86_64 binaries. Moving the same x86_64 URLs
+> to first-run just relocates that bug — the helper MUST resolve the asset for the
+> running arch. See `plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md`.
 
 Tools (all stay PREBUILT — just fetched first-run, latest):
 
