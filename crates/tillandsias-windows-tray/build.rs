@@ -18,6 +18,21 @@
 //! @trace spec:windows-native-tray
 
 fn main() {
+    let manifest_dir_path =
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
+
+    // Generate dummy headless binaries if they do not exist so include_bytes! compiles
+    let assets_dir = manifest_dir_path.join("assets");
+    let _ = std::fs::create_dir_all(&assets_dir);
+    let x86_bin = assets_dir.join("tillandsias-headless-x86_64-unknown-linux-musl");
+    if !x86_bin.exists() {
+        let _ = std::fs::write(&x86_bin, b"");
+    }
+    let arm_bin = assets_dir.join("tillandsias-headless-aarch64-unknown-linux-musl");
+    if !arm_bin.exists() {
+        let _ = std::fs::write(&arm_bin, b"");
+    }
+
     // Read the workspace VERSION file and expose it as WORKSPACE_VERSION so
     // `--diagnose --json` reports the release version (`0.2.260528.1`) rather
     // than the crate's static `Cargo.toml` `version = "0.1.0"`. The crate
@@ -25,8 +40,6 @@ fn main() {
     // the single source of truth (the install/build scripts already quote
     // it). This is set UNCONDITIONALLY (before the windows-target gate)
     // so cross-checks from Linux also have the env var available.
-    let manifest_dir_path =
-        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
     let version_file = manifest_dir_path.join("../../VERSION");
     let workspace_version = std::fs::read_to_string(&version_file)
         .map(|s| s.trim().to_string())

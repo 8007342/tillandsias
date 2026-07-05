@@ -19,6 +19,26 @@ pub use tillandsias_vm_layer::transport_windows::{
 };
 
 #[cfg(target_os = "windows")]
+pub async fn open_and_wrap_hvsocket_stream(
+    port: u32,
+) -> std::io::Result<Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>> {
+    let stream = open_hvsocket_stream(port).await?;
+    if std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE").as_deref() == Ok("on") {
+        let psk = tillandsias_secure_channel::channel_psk(
+            env!("WORKSPACE_VERSION"),
+            tillandsias_control_wire::WIRE_VERSION,
+            tillandsias_secure_channel::HopId::HostGuest,
+        );
+        let encrypted = tillandsias_secure_channel::client_handshake(stream, &psk)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("secure handshake failed: {e}")))?;
+        Ok(Box::new(encrypted))
+    } else {
+        Ok(Box::new(stream))
+    }
+}
+
+#[cfg(target_os = "windows")]
 pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpStream, u16)> {
     use std::io::{Error, ErrorKind};
     use tillandsias_control_wire::{
