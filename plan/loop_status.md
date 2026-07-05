@@ -2,6 +2,17 @@
 
 LastExecutionTime: 2026-07-04T21:00Z
 
+### Cycle 2026-07-05T00:0XZ (macos — meta-orchestration)
+- Merged origin/linux-next 7ab86309 into osx-next (9614d32f); built + installed
+  tray v0.3.260704.1; control wire E2E green (--exec-guest → Podman hello-world ok).
+- macOS evidence for the CREATION_TIME→FIRST_RUN split: forge-base is absent and
+  built at runtime in the **aarch64** guest from Containerfile.base via a long
+  x86_64 curl/tar chain → the "stuck initializing VM" symptom + wrong-arch tools.
+- Filed 2 ready packets (`macos-forge-base-build-arch-and-fragility-2026-07-05`,
+  `podman-stale-volume-locks-2026-07-05`) + added arch-awareness requirement to
+  `forge-firstrun-tool-migration`. No tray-side change needed; osx re-verifies once
+  linux lands the arch-aware first-run migration.
+
 ## This Loop (2026-07-04 — CREATION_TIME->FIRST_RUN container refactor: research + inference impl)
 
 Operator directive: strip finicky curl/tar installers out of forge image CREATION,
