@@ -1486,7 +1486,7 @@ plan_index:
     - packet_id: forge-source-mount-credential-quarantine
       order: 170
       title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
-      status: ready
+      status: in_progress
       kind: security+bug-fix
       deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
       depends_on: []
@@ -1507,6 +1507,21 @@ plan_index:
         - "In-forge diagnostics state that host credentials are not used inside the forge"
         - "Git fetch/push still works through the forge credential channel or a documented non-mutating fallback"
         - "Litmus covers shared-host-checkout source mount and proves no host credential/config material enters the forge"
+      events:
+        - type: claim
+          ts: "2026-07-05T18:14:47Z"
+          agent_id: "linux-worker-cred-quarantine-20260705T1814Z"
+          host: linux
+          summary: >
+            Claimed order 170 on linux-next. Implementing argv-level credential
+            quarantine in build_forge_agent_run_args: empty forge-owned tmpfs
+            overlays at /home/forge/.ssh, /home/forge/.config/gh, and
+            /home/forge/.config/git, plus a GIT_CONFIG_GLOBAL redirect off any
+            host ~/.gitconfig onto the masked tmpfs. Refining the
+            does_not_mount_user_home guard to allow forge-owned container-side
+            targets while still forbidding host .cache/.config bind SOURCES,
+            adding a positive quarantine unit test, and a new shape litmus
+            (litmus:forge-credential-quarantine-shape).
 
     - packet_id: codex-forge-yolo-config-defaults
       order: 171
