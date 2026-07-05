@@ -7330,10 +7330,7 @@ pub(crate) fn build_forge_agent_run_args(
     let provider_api = match mode {
         ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
         ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity => {
-            Some(crate::vault_bootstrap::ProviderId::Gemini)
-        }
-        ForgeAgentMode::Maintenance => None,
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity | ForgeAgentMode::Maintenance => None,
     };
     if let Some(p) = provider_api
         && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
@@ -7381,15 +7378,7 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             Some(ProviderId::Codex),
             Some(crate::vault_bootstrap::ProviderId::Openai),
         ),
-        ForgeAgentMode::OpenCode => (
-            Some(ProviderId::Antigravity),
-            Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ),
-        ForgeAgentMode::Antigravity => (
-            Some(ProviderId::Antigravity),
-            Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ),
-        ForgeAgentMode::Maintenance => (None, None),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity | ForgeAgentMode::Maintenance => (None, None),
     };
 
     if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
