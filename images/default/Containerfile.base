@@ -56,24 +56,14 @@ RUN pip3 install --timeout 120 --no-cache-dir \
         eslint@10.4.1 \
         markdownlint-cli@0.48.0
 
-# ── Toolchains (Rust, Go, Dart, etc) ───────────────────────────
+# ── Rust toolchain env (cargo dev-tools install at FIRST_RUN — see lib-common) ──
 ENV CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
 
-# Cargo dev-tools + nextest (order 188) AND actionlint/vale/wasmtime (order 180
-# slice 2) are NO LONGER installed at build — they moved to an arch-aware idempotent
-# FIRST_RUN install (lib-common `ensure_forge_prebuilt_tools`), which fixes the
-# aarch64 macOS guest baking non-executable x86_64 binaries + the sequential-fetch
-# build hang. Only Dart (a full SDK unpacked to /opt/dart-sdk, not a single binary)
-# remains build-time for now — its arch-aware first-run migration is a later sub-slice.
-ARG DART_VERSION=3.12.1
-ARG DART_SHA256=6a2bbf64a133c9c86a62a532dbd3e0b4db4ac365abd456e9f9d1c5df61fcdbf8
-
-RUN set -eux; \
-    mkdir -p /usr/local/cargo/bin \
-    && curl -LsSf "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dart.zip \
-    && echo "${DART_SHA256}  /tmp/dart.zip" | sha256sum -c - \
-    && mkdir -p /opt && unzip -q /tmp/dart.zip -d /opt \
-    && rm -f /tmp/dart.zip
-
-ENV PATH=/opt/dart-sdk/bin:$PATH
+# Cargo dev-tools + nextest (order 188), actionlint/vale/wasmtime (order 180 slice 2),
+# AND the Dart SDK (order 180 dart sub-slice) are NO LONGER installed at build — they
+# all moved to an arch-aware, idempotent, fail-soft FIRST_RUN install (lib-common
+# `ensure_forge_prebuilt_tools` + `ensure_dart_sdk`) into the order-179 persistent
+# cache. This fixes the aarch64 macOS guest baking non-executable x86_64 binaries + the
+# sequential-fetch build hang, and leaves forge-base CREATION microdnf + npm + a couple
+# single-binary curls (marksman) ONLY — no curl/tar/unzip archive-extraction chains.

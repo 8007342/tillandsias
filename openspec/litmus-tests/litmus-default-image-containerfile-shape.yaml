@@ -78,12 +78,13 @@ critical_path:
     expected_behavior: "ok:"
 
   - step: "Req Direct assets: every retained build-time archive has an adjacent SHA-256 check"
-    # @trace order 188 + 180 slice 2: the cargo dev-tools + nextest (188) AND
-    # actionlint/vale/wasmtime (slice 2) moved to arch-aware FIRST_RUN (lib-common
-    # ensure_forge_prebuilt_tools), so their CREATION-time ARG _SHA256s are gone.
-    # Only dart (Containerfile.base, a full SDK) + ollama (inference) remain
-    # build-time; 2 sha256sum sites remain.
-    command: "for variable in DART_SHA256 OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile.base images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile | wc -l); [ \"$checks\" -eq 2 ] || { echo \"FAIL: expected 2 checksum-verification sites, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
+    # @trace order 188 + 180 (slice 2 + dart sub-slice): the cargo dev-tools + nextest
+    # (188), actionlint/vale/wasmtime (slice 2), AND the Dart SDK (dart sub-slice) all
+    # moved to arch-aware FIRST_RUN (lib-common ensure_forge_prebuilt_tools +
+    # ensure_dart_sdk), so their CREATION-time ARG _SHA256s are gone. Forge-base
+    # CREATION is now microdnf-only (no archive-extraction chains); only ollama
+    # (inference) remains a build-time direct asset — 1 sha256sum site remains.
+    command: "for variable in OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile.base images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile | wc -l); [ \"$checks\" -eq 1 ] || { echo \"FAIL: expected 1 checksum-verification site, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

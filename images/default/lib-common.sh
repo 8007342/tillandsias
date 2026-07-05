@@ -633,7 +633,7 @@ export RUSTUP_HOME="/usr/local/rustup"
 export DART_ROOT="/opt/dart-sdk"
 export FLUTTER_ROOT="/opt/flutter"
 export TILLANDSIAS_CHEATSHEETS="/opt/cheatsheets"
-export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PNPM_HOME:$HOME/.cargo/bin:$HOME/go/bin:/usr/local/cargo/bin:/opt/dart-sdk/bin:$PATH"
+export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PNPM_HOME:$HOME/.cargo/bin:$HOME/go/bin:/usr/local/cargo/bin:$PROJECT_CACHE/dart/dart-sdk/bin:$PATH"
 
 
 # ── FIRST_RUN prebuilt dev-tool install (arch-aware) ────────────
@@ -696,6 +696,50 @@ install_prebuilt() {
     return 0
 }
 
+# ensure_dart_sdk: FIRST_RUN, ARCH-AWARE install of the Dart SDK into the order-179
+# persistent PROJECT_CACHE. Unlike the cargo dev-tools (single binaries handled by
+# install_prebuilt), Dart ships as a FULL SDK that unpacks to a top-level `dart-sdk/`
+# directory, so it gets its own helper. Idempotent (skip if the SDK's `dart` binary is
+# already executable), fail-soft (a failed fetch is logged and RETRIED next launch —
+# NEVER fatal), and timeout-guarded (--max-time so a stalled fetch can NEVER hang the
+# launch the way the CREATION-time curl/unzip chain hung the aarch64 macOS VM build,
+# where the baked x86_64 SDK was also non-executable). Dart's arch token differs from
+# the cargo triple: x86_64 -> x64, aarch64 -> arm64.
+# @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180 dart sub-slice)
+ensure_dart_sdk() {
+    local arch zarch
+    arch="$(_forge_uname_arch)"
+    case "$arch" in
+        x86_64) zarch="x64" ;;
+        aarch64) zarch="arm64" ;;
+        *)
+            trace_lifecycle "tools" "unsupported arch $(uname -m); skipping dart SDK"
+            return 0
+            ;;
+    esac
+    local sdk_bin="$PROJECT_CACHE/dart/dart-sdk/bin/dart"
+    [ -x "$sdk_bin" ] && return 0
+    mkdir -p "$PROJECT_CACHE/dart" 2>/dev/null || true
+    local tmp archive url
+    tmp="$(mktemp -d 2>/dev/null)" || return 0
+    archive="$tmp/dart-sdk.zip"
+    url="https://storage.googleapis.com/dart-archive/channels/stable/release/3.12.1/sdk/dartsdk-linux-${zarch}-release.zip"
+    if ! curl -fsSL --max-time 300 "$url" -o "$archive" 2>/dev/null; then
+        trace_lifecycle "tools" "dart SDK fetch failed (non-fatal, retry next launch): ${zarch}"
+        rm -rf "$tmp"
+        return 0
+    fi
+    # The zip carries a top-level dart-sdk/ dir; unzip -o overwrites a partial prior try.
+    unzip -qo "$archive" -d "$PROJECT_CACHE/dart" 2>/dev/null || true
+    if [ -x "$sdk_bin" ]; then
+        trace_lifecycle "tools" "installed dart SDK ($(uname -m))"
+    else
+        trace_lifecycle "tools" "dart SDK install incomplete (non-fatal, retry next launch): ${zarch}"
+    fi
+    rm -rf "$tmp"
+    return 0
+}
+
 # ensure_forge_prebuilt_tools: FIRST_RUN, ARCH-AWARE install of the cargo dev-tool
 # group into the persistent CARGO_HOME. Idempotent + fail-soft; safe to call every
 # launch (installed tools are skipped instantly). Intended to be backgrounded by
@@ -744,6 +788,11 @@ ensure_forge_prebuilt_tools() {
     install_prebuilt actionlint "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_${actionlint_arch}.tar.gz"
     install_prebuilt vale "https://github.com/errata-ai/vale/releases/download/v3.14.2/vale_3.14.2_Linux_${vale_arch}.tar.gz"
     install_prebuilt wasmtime "https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-${arch}-linux.tar.xz"
+
+    # Dart ships as a full SDK (unpacks a top-level dart-sdk/ dir), so it has its own
+    # arch-aware first-run helper rather than install_prebuilt (single binaries). Runs
+    # in this same backgrounded context. @trace order 180 dart sub-slice.
+    ensure_dart_sdk
 
     trace_lifecycle "tools" "prebuilt dev-tools ensured (arch=${arch})"
 }
