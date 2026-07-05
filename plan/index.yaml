@@ -335,6 +335,17 @@ plan_index:
             `cargo check` and `cargo test -p tillandsias-macos-tray` pass.
             Local `cargo run` smoke still fails before VM boot with the missing
             virtualization entitlement, so a dedicated blocker packet was filed.
+        - type: checkpoint
+          ts: "2026-07-05T01:09:44Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
+          host: "macos"
+          lease_id: "36fec584e55d"
+          commit_sha: "007c57e5"
+          summary: >
+            Secure-or-raw control-wire helper threaded through the macOS tray
+            CLI entry points and tray live-socket helpers; `cargo check` and
+            `cargo test -p tillandsias-macos-tray` pass. `cargo run` smoke still
+            hits the missing virtualization entitlement, filed separately.
       outcome: >
         macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
         connect/exec helpers replaced by open_stream/exec; supersedes the macOS
