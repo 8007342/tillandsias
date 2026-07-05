@@ -4,7 +4,7 @@
 - filed: 2026-07-05
 - owner: linux
 - pickup_role: linux (step 1); macos + windows (steps 2/3)
-- status: ready
+- status: done
 - related:
   - plan/issues/embedded-guest-binary-packaging-research-2026-07-04.md (osx-filed)
   - plan/issues/embedded-guest-binary-packaging-implementation-2026-07-04.md (osx-filed)

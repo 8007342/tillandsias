@@ -2064,7 +2064,7 @@ plan_index:
     - packet_id: embedded-guest-binary-linux-build
       order: 190
       title: "Linux build: produce the two-arch static musl guest binary the macOS/Windows trays embed (drop the in-VM releases/latest curl)"
-      status: claimed
+      status: done
       kind: packaging
       deliverable: plan/issues/embedded-guest-binary-linux-build-2026-07-05.md
       depends_on: []
@@ -2111,6 +2111,12 @@ plan_index:
             Linux-staged guest-binary contract. Linux should pick this packet first
             and produce scripts/build-guest-binaries.sh + static/version litmus
             evidence before macOS reruns package/reprovision smokes.
+        - type: completed
+          ts: "2026-07-05T19:19:00Z"
+          agent_id: "linux-workstation-gemini-20260705T1913Z"
+          host: linux
+          commits: ["5af98306"]
+          evidence: "litmus:guest-binary-embed-integrity passes"
       exit_criteria:
         - "cross-compile feasibility answered from the tree (YES; Nix-only) with flake.nix/release.yml evidence"
         - "exact `nix build` commands, artifact paths, canonical names, and the host-arch inject-time selector documented"
@@ -2197,6 +2203,11 @@ plan_index:
             Linux completes order 190; macOS owner checkpoints or cleans the existing
             osx-next WIP, merges origin/linux-next into osx-next, then claims this
             packet and implements the VZ virtio-fs mount.
+        - type: unblocked_prereq
+          ts: "2026-07-05T19:19:00Z"
+          agent_id: "linux-workstation-gemini-20260705T1913Z"
+          host: linux
+          summary: "Linux completed order 190 (embedded-guest-binary-linux-build) and staged the binaries contract."
       exit_criteria:
         - "VZ config includes the virtio-fs device/share for host ~/src"
         - "guest mounts it at /home/forge/src before headless service start"
