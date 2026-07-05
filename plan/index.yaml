@@ -2373,7 +2373,7 @@ plan_index:
     - packet_id: macos-vz-home-src-mount
       order: 193
       title: "macOS P0: mount host ~/src into Fedora 44 guest at /home/forge/src via VZ virtio-fs"
-      status: blocked
+      status: completed
       kind: bugfix
       deliverable: plan/issues/macos-vz-home-src-mount-2026-07-05.md
       depends_on: [embedded-guest-binary-linux-build]
@@ -2411,6 +2411,27 @@ plan_index:
           agent_id: "linux-workstation-gemini-20260705T1913Z"
           host: linux
           summary: "Linux completed order 190 (embedded-guest-binary-linux-build) and staged the binaries contract."
+        - type: claim
+          ts: "2026-07-05T22:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-opencode-20260705T2245Z"
+          host: macos
+          lease_id: "macos-vz-home-src-mount-claim-1"
+        - type: completed
+          ts: "2026-07-05T22:46:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-opencode-20260705T2245Z"
+          host: macos
+          summary: >
+            VZ virtio-fs share wired: build_vm_configuration creates
+            VZVirtioFileSystemDeviceConfiguration with tag "home-src" pointing at
+            host ~/src. Cloud-init mounts /home/forge/src via mount -t virtiofs
+            before headless service start. fetch-headless.sh prefers staged binary
+            at /home/forge/src/.tillandsias/guest-bin/tillandsias-headless over
+            network curl fallback. home_src_dir() helper extracted.
+            `cargo test -p tillandsias-vm-layer`: 24/24 pass (new tests:
+            vz_fetch_script_prefers_staged_binary_over_network).
+            `cargo test -p tillandsias-macos-tray`: 53/53 pass.
+          commits:
+            - "810cb742"
       exit_criteria:
         - "VZ config includes the virtio-fs device/share for host ~/src"
         - "guest mounts it at /home/forge/src before headless service start"

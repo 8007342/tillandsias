@@ -1843,6 +1843,29 @@ mod tests {
         );
     }
 
+    /// The fetch script must prefer the staged host-provided binary over the
+    /// network fallback (virtio-fs /home/forge/src → staged guest binary).
+    ///
+    /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
+    #[test]
+    fn vz_fetch_script_prefers_staged_binary_over_network() {
+        let source = include_str!("vz.rs");
+
+        assert!(
+            source
+                .contains("STAGED=\"/home/forge/src/.tillandsias/guest-bin/tillandsias-headless\""),
+            "fetch script must define the staged binary path under /home/forge/src"
+        );
+        assert!(
+            source.contains("if [[ -x \"$STAGED\" ]]; then"),
+            "fetch script must check staged binary executability before curl"
+        );
+        assert!(
+            source.contains("install -D -m 0755 \"$STAGED\" \"$DEST\""),
+            "fetch script must install the staged binary when present and executable"
+        );
+    }
+
     /// The guest service should fail early for missing control-wire primitives
     /// while only recording Podman socket state. Podman readiness is reported
     /// over the control wire; making it a hard ExecStartPre dependency would

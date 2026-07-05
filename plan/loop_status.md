@@ -2,6 +2,23 @@
 
 LastExecutionTime: 2026-07-05T22:27:00Z
 
+## Cycle 2026-07-05T22:44Z (macos — meta-orchestration, round 2)
+
+- **Host**: macOS arm64, `osx-next` (clean, in sync with `origin/linux-next`).
+- **Credential guard**: `ok:gh-keyring`.
+- **Worker drain — order 193 (macos-vz-home-src-mount)**:
+  - Claimed and completed. VZ virtio-fs share already wired in previous WIP
+    (checkpointed). Implemented: `VZVirtioFileSystemDeviceConfiguration` with
+    `home-src` tag in `build_vm_configuration`; cloud-init mounts `/home/forge/src`
+    via `mount -t virtiofs` before headless service; `fetch-headless.sh` prefers
+    staged binary at `/home/forge/src/.tillandsias/guest-bin/` over curl fallback.
+  - **New test**: `vz_fetch_script_prefers_staged_binary_over_network` verifies the
+    staged binary path and install-instead-of-curl logic.
+  - `cargo test -p tillandsias-vm-layer`: **24/24 pass**.
+  - `cargo test -p tillandsias-macos-tray`: **53/53 pass**.
+- **Next macOS work**: order 194 (secure-channel-release-and-probe-hardening) has
+  macOS-relevant slices (PSK parity, VZ readiness probes) — ready for pickup.
+
 ## Cycle 2026-07-05T22:23Z (macos — meta-orchestration)
 
 - **Host**: macOS arm64, `osx-next` branch, clean worktree after WIP checkpoint.
@@ -59,10 +76,10 @@ Reason: Secure-wire/embedded-guest path remains the critical product blocker.
 ## Active Assignment Board
 
 - Linux primary: order 190 `embedded-guest-binary-linux-build` — COMPLETED (added scripts/build-guest-binaries.sh and litmus matching version test). Next focus: order 180 continuation for remaining FIRST_RUN migration/de-hardcoding.
-- macOS primary: order 193 `macos-vz-home-src-mount` — integration merge (order 191)
-  DONE; now implement VZ virtio-fs share for host `~/src` → `/home/forge/src`,
-  rebuild with embedded guest assets, and record secure login/list/forge smoke
-  evidence. Fallback: order 188/180 macOS cold-guest acceptance logs.
+- macOS primary: order 193 `macos-vz-home-src-mount` — **COMPLETED**. VZ virtio-fs
+  share wired, cloud-init mount added, staged binary fallback tested (24/24 vm-layer
+  tests). Next: order 194 (secure-channel-release-and-probe-hardening) — macOS PSK
+  parity and VZ readiness-probe slices.
 - Windows primary: order 186 plus order 191 — merge `origin/linux-next` into
   `windows-next`, preserve the real hvsocket secure-wrapper + embedded-binary work,
   and record WSL2 flag-off/flag-on smoke evidence. Fallback: order 190 consumer
