@@ -17,6 +17,7 @@
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -28,6 +29,7 @@ use tillandsias_control_wire::{
     CAP_PTY_ATTACH_V1, CloudProjectEntry, ControlEnvelope, ControlMessage, ErrorCode,
     LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
 };
+use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
@@ -54,6 +56,41 @@ const IN_VM_PROJECT_ROOT_DEFAULT: &str = "/home/forge/src";
 /// Default in-VM podman socket path. Used by `VmStateHandle::podman_ready`
 /// to decide whether containers can actually start.
 const IN_VM_PODMAN_SOCKET_DEFAULT: &str = "/run/podman/podman.sock";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SecureControlWireMode {
+    Off,
+    On,
+}
+
+fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
+    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(|| match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
+        Ok(raw) if raw.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
+        Ok(raw) if raw.eq_ignore_ascii_case("off") || raw.is_empty() => {
+            Ok(SecureControlWireMode::Off)
+        }
+        Ok(raw) => Err(format!(
+            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {raw:?})"
+        )),
+        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
+        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
+    })
+    .clone()
+}
+
+async fn maybe_secure_stream(
+    stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
+    match secure_control_wire_mode().map_err(io::Error::other)? {
+        SecureControlWireMode::Off => Ok(stream),
+        SecureControlWireMode::On => {
+            let psk = channel_psk(env!("CARGO_PKG_VERSION"), WIRE_VERSION, HopId::HostGuest);
+            let secure = server_handshake(stream, &psk).await?;
+            Ok(Box::new(secure))
+        }
+    }
+}
 
 /// Shared lifecycle state that the in-VM headless updates as it progresses
 /// through provisioning → ready → drain. The vsock listener reads from this
@@ -246,6 +283,14 @@ async fn handle_connection(
     mut stream: Box<dyn AsyncReadWrite + Unpin + Send>,
     state: VmStateHandle,
 ) {
+    match maybe_secure_stream(stream).await {
+        Ok(secured) => stream = secured,
+        Err(err) => {
+            warn!(spec = "vsock-transport", error = %err, "secure control wire handshake failed");
+            return;
+        }
+    }
+
     let first = match read_envelope(&mut stream).await {
         Ok(env) => env,
         Err(err) => {

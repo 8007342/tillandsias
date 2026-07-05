@@ -297,7 +297,7 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: claimed
+      status: blocked
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
@@ -346,6 +346,18 @@ plan_index:
             CLI entry points and tray live-socket helpers; `cargo check` and
             `cargo test -p tillandsias-macos-tray` pass. `cargo run` smoke still
             hits the missing virtualization entitlement, filed separately.
+        - type: blocked
+          ts: "2026-07-05T01:20:18Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
+          host: "macos"
+          lease_id: "36fec584e55d"
+          reason: >
+            Secure `--github-login` smoke on the packaged app now reaches the
+            control wire, but `TILLANDSIAS_SECURE_CONTROL_WIRE=on` fails with
+            `secure control wire handshake failed: early eof`, which means the
+            guest headless image in the current VM is still plaintext-only.
+          blocker_refs:
+            - plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md
       outcome: >
         macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
         connect/exec helpers replaced by open_stream/exec; supersedes the macOS

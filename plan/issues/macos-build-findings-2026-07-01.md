@@ -105,3 +105,17 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 
 **Follow-up filed**:
 - `plan/issues/macos-dev-launch-entitlement-2026-07-05.md`
+
+### 20260705T012018Z — secure control wire blocked by stale guest image
+
+- Packaged `Tillandsias.app` launches and auto-boots the VM.
+- `--github-login` without the secure flag reaches the credential prompts.
+- `TILLANDSIAS_SECURE_CONTROL_WIRE=on ./dist/Tillandsias.app/Contents/MacOS/tillandsias-tray --github-login`
+  fails with `secure control wire handshake failed: early eof` after the host
+  reaches the control wire.
+- This indicates the guest image currently in the VM is still plaintext-only
+  and must be refreshed to a headless build that includes the secure responder
+  path.
+
+**Follow-up filed**:
+- `plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md`
