@@ -60,6 +60,8 @@
 /out*.log
 /out-cache
 /release-artifacts
+/research/images/
+/research/vfr-spike/.build/
 /result
 /result-*
 /smoke*.err

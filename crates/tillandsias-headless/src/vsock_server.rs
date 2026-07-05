@@ -63,10 +63,6 @@ enum SecureControlWireMode {
     On,
 }
 
-// Pure parser for the boot-time secure-control-wire flag, split out so the
-// security-critical behaviour (default OFF; FAIL-CLOSED on an unrecognized value
-// rather than a silent downgrade to plaintext) is unit-testable independent of the
-// process-wide OnceLock cache below. @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
 fn parse_secure_control_wire_mode(
     raw: Result<String, std::env::VarError>,
 ) -> Result<SecureControlWireMode, String> {
@@ -95,7 +91,11 @@ async fn maybe_secure_stream(
     match secure_control_wire_mode().map_err(io::Error::other)? {
         SecureControlWireMode::Off => Ok(stream),
         SecureControlWireMode::On => {
-            let psk = channel_psk(env!("CARGO_PKG_VERSION"), WIRE_VERSION, HopId::HostGuest);
+            let psk = channel_psk(
+                tillandsias_secure_channel::workspace_version(),
+                WIRE_VERSION,
+                HopId::HostGuest,
+            );
             let secure = server_handshake(stream, &psk).await?;
             Ok(Box::new(secure))
         }

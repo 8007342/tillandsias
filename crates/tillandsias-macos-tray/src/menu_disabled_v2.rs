@@ -78,8 +78,8 @@ pub fn render(structure: &MenuStructure) -> Vec<MacMenuItemSpec> {
 mod tests {
     use super::*;
     use tillandsias_host_shell::menu_state::{
-        GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent, TargetSurface,
-        build, ids,
+        BOOT_STATUS_TEXT, GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
+        TargetSurface, build, ids,
     };
 
     fn macos_ready_menu() -> MenuStructure {
@@ -110,7 +110,7 @@ mod tests {
         let specs = render(&MenuStructure::initial_provisioning());
         assert_eq!(specs[0].id, ids::STATUS);
         assert!(!specs[0].enabled);
-        assert!(specs[0].label.contains("Setting up Fedora"));
+        assert_eq!(specs[0].label, BOOT_STATUS_TEXT);
     }
 
     /// @trace spec:macos-native-tray.ui.gui-passthrough-v2@v1

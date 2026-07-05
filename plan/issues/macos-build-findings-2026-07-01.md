@@ -88,3 +88,34 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 - Cut a release containing `fe66b10d` (macOS host is running
   /merge-to-main-and-release this session), then refetch guest headless and
   re-verify the vault path end-to-end on the enforcing VZ guest.
+
+### 20260705T010145Z — secure-wire helper OK, dev-launch blocked by missing entitlement
+
+- `cargo check -p tillandsias-macos-tray`: pass.
+- `cargo test -p tillandsias-macos-tray`: pass.
+- `cargo run -p tillandsias-macos-tray`: launches the binary, then auto-boot
+  fails with `Invalid virtual machine configuration. The process doesn’t have
+  the “com.apple.security.virtualization” entitlement.` after `Auto-boot:
+  spawning worker`.
+- The macOS tray now routes the GitHub login, list-cloud-projects, opencode,
+  status poller, shutdown request, and PTY attach control-wire opens through a
+  reusable secure-or-raw helper. Flag `TILLANDSIAS_SECURE_CONTROL_WIRE=on`
+  upgrades the socket with `tillandsias-secure-channel` once the guest side is
+  ready; default remains OFF.
+
+**Follow-up filed**:
+- `plan/issues/macos-dev-launch-entitlement-2026-07-05.md`
+
+### 20260705T012018Z — secure control wire blocked by stale guest image
+
+- Packaged `Tillandsias.app` launches and auto-boots the VM.
+- `--github-login` without the secure flag reaches the credential prompts.
+- `TILLANDSIAS_SECURE_CONTROL_WIRE=on ./dist/Tillandsias.app/Contents/MacOS/tillandsias-tray --github-login`
+  fails with `secure control wire handshake failed: early eof` after the host
+  reaches the control wire.
+- This indicates the guest image currently in the VM is still plaintext-only
+  and must be refreshed to a headless build that includes the secure responder
+  path.
+
+**Follow-up filed**:
+- `plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md`

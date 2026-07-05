@@ -86,6 +86,15 @@ pub fn release_root_secret() -> &'static [u8] {
     }
 }
 
+/// Workspace release version used to bind both ends of the control channel.
+///
+/// This comes from the repo-root `VERSION` file rather than each crate's
+/// `CARGO_PKG_VERSION`, because the host tray and guest headless are released
+/// as separate crates with different package versions.
+pub fn workspace_version() -> &'static str {
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../VERSION")).trim()
+}
+
 /// Derive the 32-byte control-channel PSK from an explicit root secret.
 ///
 /// Kept root-explicit (rather than always reading [`release_root_secret`]) so

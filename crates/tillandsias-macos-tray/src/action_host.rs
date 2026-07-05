@@ -50,8 +50,12 @@
 
 #![cfg(target_os = "macos")]
 
+use std::io;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use objc2::rc::Retained;
@@ -59,11 +63,15 @@ use objc2::runtime::{AnyObject, NSObject};
 use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, mutability};
 use objc2_app_kit::{NSMenuItem, NSStatusItem};
 use objc2_foundation::MainThreadMarker;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
 use tillandsias_vm_layer::VmRuntime;
 use tillandsias_vm_layer::vz::VzRuntime;
 
+use crate::guest_binary::stage_embedded_guest_binary;
 use crate::main_thread::dispatch_to_main_thread;
+use tillandsias_host_shell::menu_state::{BOOT_STATUS_TEXT, clamp_tray_status_chip};
 
 /// Send/Sync wrappers around AppKit `Retained<…>` handles so they can
 /// sit in the action-host's ivars (the host is `MainThreadOnly`, but
@@ -228,9 +236,103 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
 /// (commit 8992652a) byte-for-byte so both trays produce identical
 /// chip strings for identical `VmStatusReply` payloads.
 fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
-    match last_event.map(str::trim).filter(|s| !s.is_empty()) {
+    let text = match last_event.map(str::trim).filter(|s| !s.is_empty()) {
         Some(evt) => format!("{base} \u{00B7} {evt}"),
         None => base.to_string(),
+    };
+    clamp_tray_status_chip(text)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SecureControlWireMode {
+    Off,
+    On,
+}
+
+fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
+    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(|| match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
+        Ok(raw) if raw.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
+        Ok(raw) if raw.eq_ignore_ascii_case("off") || raw.is_empty() => {
+            Ok(SecureControlWireMode::Off)
+        }
+        Ok(raw) => Err(format!(
+            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {raw:?})"
+        )),
+        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
+        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
+    })
+    .clone()
+}
+
+enum ControlWireStream {
+    Plain(tillandsias_vm_layer::transport_macos::VsockStream),
+    Secure(EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>),
+}
+
+impl AsyncRead for ControlWireStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        out: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_read(cx, out),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_read(cx, out),
+        }
+    }
+}
+
+impl AsyncWrite for ControlWireStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_write(cx, buf),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_flush(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_shutdown(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
+    }
+}
+
+async fn open_control_wire_stream(
+    vz: &VzRuntime,
+    port: u32,
+    timeout: Duration,
+) -> Result<ControlWireStream, String> {
+    let stream = vz
+        .open_vsock_stream(port, timeout)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    match secure_control_wire_mode()? {
+        SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
+        SecureControlWireMode::On => {
+            let psk = channel_psk(
+                tillandsias_secure_channel::workspace_version(),
+                tillandsias_control_wire::WIRE_VERSION,
+                HopId::HostGuest,
+            );
+            let secure = client_handshake(stream, &psk)
+                .await
+                .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
+            Ok(ControlWireStream::Secure(secure))
+        }
     }
 }
 
@@ -262,10 +364,7 @@ async fn poll_vm_status_once(
     use tillandsias_host_shell::vsock_client::Client;
 
     let connect_timeout = Duration::from_secs(5);
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -345,10 +444,7 @@ async fn request_vm_shutdown(vz: &VzRuntime, drain_timeout: Duration) -> Result<
 
     const RTT_BUDGET: Duration = Duration::from_secs(3);
 
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -426,10 +522,7 @@ async fn poll_local_projects_once(
     use tillandsias_host_shell::vsock_client::Client;
 
     let connect_timeout = Duration::from_secs(5);
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -517,10 +610,7 @@ async fn poll_cloud_projects_once(
     use tillandsias_host_shell::vsock_client::Client;
 
     let connect_timeout = Duration::from_secs(5);
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -983,10 +1073,8 @@ async fn run_pty_attach(
         PtyRouter, PtySession, SessionIdAllocator, launch_spec, pump_io,
     };
 
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream =
+        open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30)).await?;
 
     let router = Arc::new(PtyRouter::new());
     let alloc = SessionIdAllocator::default();
@@ -1021,6 +1109,22 @@ async fn run_start(
     vm_slot: Arc<Mutex<Option<Arc<VzRuntime>>>>,
     on_phase: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<(), String> {
+    match stage_embedded_guest_binary() {
+        Ok(Some(dest)) => {
+            eprintln!(
+                "[tillandsias-tray] staged embedded guest binary at {}",
+                dest.display()
+            );
+        }
+        Ok(None) => {
+            eprintln!(
+                "[tillandsias-tray] no embedded guest binary resource found; falling back to fetch"
+            );
+        }
+        Err(err) => {
+            return Err(format!("stage embedded guest binary: {err}"));
+        }
+    }
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
 
     // First-launch flow (m9 Fedora pivot): if no rootfs.img is present
@@ -1091,9 +1195,7 @@ impl TrayActionHost {
                 s
             })),
             self_handle: Arc::new(Mutex::new(None)),
-            status_text: Arc::new(Mutex::new(
-                "\u{1F535} Setting up Fedora Linux\u{2026}".to_string(),
-            )),
+            status_text: Arc::new(Mutex::new(BOOT_STATUS_TEXT.to_string())),
         };
         // SAFETY: `mtm` proves main-thread; allocation + init is the
         // standard ObjC two-step. `set_ivars` populates the declared
@@ -1286,7 +1388,7 @@ impl TrayActionHost {
     /// subscription), those will feed into the same path.
     pub fn set_status_text(&self, text: impl Into<String>) {
         let ivars = self.ivars();
-        let text = text.into();
+        let text = clamp_tray_status_chip(text.into());
         *ivars.status_text.lock().unwrap() = text.clone();
         let status_item = ivars.status_item.clone();
         let status_menu_item = ivars.status_menu_item.clone();
@@ -1340,7 +1442,7 @@ impl TrayActionHost {
         // in-VM headless's vsock handshake completes (slice gates on
         // that signal). Granularity will increase when we wire
         // `download_verified::on_progress` (next slice).
-        self.set_status_text("\u{1F535} Setting up Fedora Linux\u{2026}");
+        self.set_status_text(BOOT_STATUS_TEXT);
 
         // Clone the Arc-based status handles so the completion callback
         // can update the chip from the main-thread dispatch without
@@ -1407,7 +1509,7 @@ impl TrayActionHost {
                     // out is logged + ignored, the chip is the
                     // authoritative surface.
                     notify_provisioning_failed(e);
-                    format!("\u{1F534} {e}")
+                    clamp_tray_status_chip(format!("\u{1F534} {e}"))
                 }
             };
 
@@ -1876,6 +1978,18 @@ mod tests {
         );
     }
 
+    #[test]
+    fn compose_chip_text_caps_overlong_payloads() {
+        let base = "\u{1F7E2} Ready";
+        let long_event = "x".repeat(200);
+        let text = compose_chip_text(base, Some(&long_event));
+        assert!(
+            text.chars().count() <= tillandsias_host_shell::menu_state::TRAY_STATUS_CHIP_MAX_CHARS,
+            "chip must stay within budget: {text:?}"
+        );
+        assert!(text.ends_with('…'), "long event should ellipsize: {text:?}");
+    }
+
     /// `local_entry_to_menu` translates a Linux-side
     /// `LocalProjectEntry` (commit `05cc3a7d` — label + guest_path +
     /// last_seen_unix) into the shared menu `ProjectEntry`
@@ -1988,6 +2102,7 @@ mod tests {
         let action = MenuAction::Attach {
             scope: ProjectScope::Local,
             name: "myproj".to_string(),
+            agent: SelectedAgent::OpenCode,
         };
         let (intent, project) = intent_for_action(&action, SelectedAgent::OpenCode)
             .expect("Attach must yield Some((intent, project))");

@@ -411,6 +411,14 @@ impl VzRuntime {
         }
         std::fs::create_dir_all(&temp_dir)
             .map_err(|e| format!("failed to create cidata temp dir: {e}"))?;
+        let secure_control_wire = match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
+            Ok(value) if value.eq_ignore_ascii_case("on") => "on",
+            _ => "off",
+        };
+        let guest_binary_fingerprint = guest_binary_fingerprint().unwrap_or_else(|err| {
+            eprintln!("[vz] guest binary fingerprint unavailable: {err}");
+            "missing".to_string()
+        });
 
         // 1. Write user-data
         let user_data_content = r#"#!/bin/bash
@@ -441,6 +449,11 @@ cat > /usr/local/lib/tillandsias/fetch-headless.sh << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 DEST="/usr/local/bin/tillandsias-headless"
+STAGED="/home/forge/src/.tillandsias/guest-bin/tillandsias-headless"
+if [[ -x "$STAGED" ]]; then
+  install -D -m 0755 "$STAGED" "$DEST"
+  exit 0
+fi
 if [[ -x "$DEST" ]]; then exit 0; fi
 ARCH="$(uname -m)"
 URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-${ARCH}-unknown-linux-musl"
@@ -506,6 +519,7 @@ Requires=tillandsias-headless-fetch.service
 Type=exec
 ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
+Environment=TILLANDSIAS_SECURE_CONTROL_WIRE=__SECURE_CONTROL_WIRE__
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
@@ -519,15 +533,18 @@ EOF
 systemctl daemon-reload
 systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service
 systemctl start tillandsias-headless-fetch.service tillandsias-headless.service
-"#;
+"#
+        .replace("__SECURE_CONTROL_WIRE__", secure_control_wire);
 
         std::fs::write(temp_dir.join("user-data"), user_data_content)
             .map_err(|e| format!("failed to write user-data: {e}"))?;
 
         // 2. Write meta-data
-        let meta_data_content = r#"instance-id: tillandsias-vm-1
+        let meta_data_content = format!(
+            "instance-id: tillandsias-vm-secure-{secure_control_wire}-{guest_binary_fingerprint}\n\
 local-hostname: tillandsias-vm
-"#;
+"
+        );
 
         std::fs::write(temp_dir.join("meta-data"), meta_data_content)
             .map_err(|e| format!("failed to write meta-data: {e}"))?;
@@ -559,6 +576,20 @@ local-hostname: tillandsias-vm
 
         Ok(())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn guest_binary_fingerprint() -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+
+    let path = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("src/.tillandsias/guest-bin/tillandsias-headless");
+    let bytes = std::fs::read(&path)
+        .map_err(|e| format!("read staged guest binary {}: {e}", path.display()))?;
+    let digest = Sha256::digest(&bytes);
+    Ok(format!("{:x}", digest))
 }
 
 #[cfg(all(feature = "recipe", feature = "download"))]
