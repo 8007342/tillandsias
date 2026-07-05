@@ -1963,14 +1963,13 @@ plan_index:
     - packet_id: headless-secure-control-wire-image-refresh
       order: 189
       title: "Integrate the guest secure-control-wire responder onto linux-next (release-ready) — unblock macOS M1"
-      status: blocked
+      status: done
       kind: enhancement
       deliverable: plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder]
       pickup_role: linux
       capability_tags: [security, secure-channel, vsock, headless]
       estimated_hours: 3
-      blocked_on: "operator release (release.yml is workflow_dispatch-only) + macOS guest re-provision/re-verify"
       outcome: >
         macOS wired the host opener + guest responder (osx-next) but its VM boots a
         stale plaintext-only guest image (secure --github-login -> 'handshake failed:

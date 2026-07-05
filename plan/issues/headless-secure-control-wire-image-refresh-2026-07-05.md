@@ -65,13 +65,15 @@ Security review (PASS):
   `secure-control-wire-guest-responder-shape`.
 - Builds + tests green under `--features vault,listen-vsock` (the in-VM guest build).
 
-## STILL NEEDS (not linux-implementable)
-- **A RELEASE** so the macOS guest image ships this binary — `release.yml` is
-  workflow_dispatch-only; the OPERATOR must cut it. Safe: flag defaults OFF (M1, no
-  behavior change).
-- macOS re-provisions the guest with the new release, then reruns the secure
-  login/list/forge smoke with `TILLANDSIAS_SECURE_CONTROL_WIRE=on` (the M1→M2 gate
-  evidence for the host↔guest hop on macOS).
+## AVAILABLE NOW — no release needed (operator clarification 2026-07-05)
 
-Status: linux code DONE + on linux-next; BLOCKED on the operator release + macOS
-re-verify.
+macOS embeds the **cross-compiled linux guest binary** into the macOS app (the same
+way the tray embeds Containerfiles) and injects it into the VM — it does NOT boot a
+released artifact. So the responder is available to macOS the moment it lands on
+`linux-next` (commit a6b4d5d7); no `release.yml` dispatch is required, and macOS is
+NOT blocked on linux.
+
+Status: **linux code DONE + on linux-next**. Remaining is macOS-side only: rebuild
+with the current linux-next source embedded, then rerun the secure login/list/forge
+smoke with `TILLANDSIAS_SECURE_CONTROL_WIRE=on` (the M1→M2 gate evidence for the
+host↔guest hop on macOS).
