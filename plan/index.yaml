@@ -1878,7 +1878,7 @@ plan_index:
     - packet_id: forge-source-mount-credential-quarantine
       order: 170
       title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
-      status: ready
+      status: completed
       kind: security+bug-fix
       deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
       depends_on: []
@@ -1919,6 +1919,19 @@ plan_index:
           agent_id: "linux-bigp pickle-20260706T0500Z"
           host: linux
           summary: "Lease expired; packet returned to ready."
+        - type: completed
+          ts: "2026-07-06T07:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0700Z"
+          host: linux
+          summary: >
+            Implemented credential quarantine in build_forge_agent_run_args:
+            three new tmpfs overlays at /home/forge/.ssh, /home/forge/.config/gh,
+            /home/forge/.config/git (size=1m,mode=0700) + GIT_CONFIG_GLOBAL env
+            pointing to /home/forge/.config/git/config. Refined
+            does_not_mount_user_home guard to skip container-side /home/forge/
+            paths (host-path-only check preserved). Added positive
+            forge_credential_quarantine_mounts_present test asserting all three
+            overlays and env are present. All 12 forge unit tests pass.
 
     - packet_id: codex-forge-yolo-config-defaults
       order: 171
