@@ -28,6 +28,13 @@ Linux is the reference backend (AF_VSOCK via tokio-vsock + Unix same-host).
 
 macOS VZ virtio-vsock backend (`transport_macos.rs`, `vz.rs`).
 
+Status 2026-07-06T18:17Z: claimed by
+`macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z`
+(`host-guest-transport-macos-20260706T1817Z`) for the first coherent slice:
+add the macOS `GuestTransport` backend over the existing VZ `VsockStream` and
+pin compile-time conformance tests. Broader call-site migration can continue in
+subsequent slices if needed.
+
 - Implement the facade backend over `VZVirtioSocketDevice`; remove bespoke
   per-call connect logic in favor of `open_stream` / `exec`.
 - Replace the macOS exec-guest helpers with the `ExecOneShot` facade (supersedes

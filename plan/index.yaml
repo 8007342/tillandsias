@@ -302,7 +302,7 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: ready
+      status: claimed
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
@@ -316,12 +316,24 @@ plan_index:
       pickup_role: macos
       owner_host: macos
       estimated_hours: 8
+      lease:
+        lease_id: "host-guest-transport-macos-20260706T1817Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+        host: macos
+        acquired_at: "2026-07-06T18:17:01Z"
+        expires_at: "2026-07-06T22:17:01Z"
       events:
         - type: claim
           ts: "2026-07-05T00:52:56Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
           host: "macos"
           lease_id: "36fec584e55d"
+        - type: claim
+          ts: "2026-07-06T18:17:01Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          expires_at: "2026-07-06T22:17:01Z"
         - type: progress
           ts: "2026-07-05T01:01:45Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
