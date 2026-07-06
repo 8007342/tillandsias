@@ -1366,6 +1366,17 @@ plan_index:
             (after CLI fast-paths) and a second instance fails fast. Remaining:
             R1 (observable drain lock + start-poke retries), R3 (PTY launch
             serialization), the macOS analog, and the N=10 quit/relaunch litmus.
+        - type: progress
+          ts: "2026-07-06T18:15:00Z"
+          agent_id: "windows-antigravity-20260706T1815Z"
+          host: windows
+          commits: ["244a6797"]
+          summary: >
+            Windows R1 and R3 safeguards completed: provision_via_recipe waits for
+            observable install_root/drain.lock (written/removed by graceful_shutdown);
+            start() preflights with is_wsl_service_sane() and retries with exponential backoff,
+            falling back to perform_wsl_shutdown_recovery() on wedge status (-1);
+            launch_open_shell_terminal debounces concurrent PTY launch clicks within 1500ms.
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]

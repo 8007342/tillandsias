@@ -1,8 +1,17 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-05T23:28:00Z
+LastExecutionTime: 2026-07-06T18:15:00Z
 
-## This Loop (coordination audit — secure wire / embedded guest / ledger pruning)
+## This Loop (2026-07-06 windows — meta-orchestration)
+
+- Staged and verified the Windows/WSL host-lifecycle race safeguards (order 161).
+- Implemented:
+  - **R1 (Quit/relaunch)**: added an observable `drain.lock` in the VM install root to coordinate teardown; `WslRuntime::start` now checks `is_wsl_service_sane()` and retries with backoff, automatically executing `wsl --shutdown` (guided recovery) on E_UNEXPECTED / unhealthy service state.
+  - **R3 (PTY Click serialization)**: debounced duplicate terminal launches within 1.5s in `launch_open_shell_terminal`.
+- Verified `cargo check` and `cargo test` clean on Windows host for both `tillandsias-windows-tray` and `tillandsias-vm-layer`. Formatting verified.
+- E2E preflight verdict this cycle: `skip:no-podman-binary` (local-build e2e skipped).
+
+## Prior Loop (coordination audit — secure wire / embedded guest / ledger pruning)
 
 - Ran from a clean `linux-next` worktree at `6bc7171c` after fetching origin.
 - Branch drift exceeds the coordination threshold:
