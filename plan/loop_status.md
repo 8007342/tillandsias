@@ -1,6 +1,41 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-05T23:28:00Z
+LastExecutionTime: 2026-07-06T16:10:00Z
+
+## Cycle 2026-07-06T15:16Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, `osx-next` (clean, credential guard `ok:gh-keyring`).
+- Merged `origin/linux-next` (49ab501d..c50bdf3a, 1 conflict in
+  `plan/loop_status.md` resolved keeping both cycle logs) into `osx-next`;
+  `cargo test -p tillandsias-vm-layer` 24/24, `-p tillandsias-macos-tray`
+  53/53 green post-merge. Pushed `23b00572`.
+- **Worker drain — order 194 (secure-channel-release-and-probe-hardening),
+  claimed and COMPLETED all remaining slices 1/2/4** (linux's slice 3 was
+  already done):
+  - Slice 1: audited all 5 `channel_psk` call sites — no live
+    `CARGO_PKG_VERSION` drift (already fixed by a prior commit). Added
+    `litmus:psk-input-parity-shape` to pin it.
+  - Slice 2: `VzRuntime::wait_phase_ready` (vm-layer, secure-channel-agnostic
+    by design) now takes a caller-supplied `probe_once` closure instead of
+    connecting raw internally; `diagnose.rs`'s 4 call sites pass a new
+    `probe_phase_secure_or_plain()` helper reusing the existing
+    `open_control_wire_stream()` secure-or-plain opener. Added a source-pin
+    test covering `litmus:secure-wait-phase-ready`.
+  - Slice 4: corrected the M1 gate wording in
+    `secure-channel-maturity-ladder-2026-07-04.md` — failure-closed means no
+    `HelloAck`/`PtyOpen` + stream close, not a literal `Unauthorized` frame.
+  - Evidence: `cargo test -p tillandsias-vm-layer` 44/44,
+    `-p tillandsias-macos-tray` 54/54 (1 ignored), clippy 0 new warnings.
+  - Code commit `9126986b` → `osx-next`; plan/ledger commit `626cc2e2` →
+    `linux-next` (order 194 now `done`; 2 new ready packets filed: order 196
+    macOS litmus-runner bash-3.2 gap, order 197 macOS-tray clippy cleanup).
+  - Merged `linux-next` (626cc2e2) back into `osx-next` (clean, no conflicts);
+    pushed `1a87fc61`.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-user-session`
+  (known macOS-host limitation, already tracked); local-build e2e skipped
+  this cycle per protocol.
+- **Next macOS work**: order 196 (litmus runner bash version) and order 197
+  (clippy cleanup) are ready and macOS-owned; both are small (~1h) follow-ups.
 
 ## Cycle 2026-07-05T22:44Z (macos — meta-orchestration, round 2)
 
