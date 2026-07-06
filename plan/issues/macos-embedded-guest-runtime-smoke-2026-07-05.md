@@ -56,3 +56,40 @@ The guest cross-compile emits pre-existing headless warnings for
 block this macOS packaging slice, but they should be reduced in a Linux-owned
 cleanup packet if the current scan bar starts treating build warnings as
 findings.
+
+## Update 2026-07-06T17:25Z — old next-action done, NEW blocker found (local machine, not code)
+
+`osx-next` has since merged `origin/linux-next` many times over (most recently
+`5a4985d1`), so the "merge linux-next" next-action above is stale/satisfied.
+But re-running the smoke itself is not currently possible on this dev
+machine: there is no way to get a Podman connection at all right now.
+
+- `podman machine list` shows `podman-machine-default` exists (created 6 days
+  ago) but has **never been started** ("LAST UP: Never").
+- `podman machine start` fails: `Error: exec: "krunkit": executable file not
+  found in $PATH`. `krunkit` (the libkrun hypervisor helper Homebrew Podman's
+  `libkrun` provider needs on this Mac) is not installed and is not in
+  Homebrew core (`brew search krunkit` finds nothing) — it ships via a
+  third-party tap (e.g. `slp/krunkit`) or Podman Desktop, neither of which is
+  installed here.
+- This is the same root cause behind `scripts/e2e-preflight.sh eligibility`
+  returning `skip:no-podman-user-session` all cycle, and behind
+  `cargo test -p tillandsias-headless`'s `test_missing_image_error_handling`
+  failure (see order 201) — every macOS finding this cycle that needed a live
+  Podman connection hit this same wall.
+
+**This is a one-time local dev-machine setup gap, not a repo bug.** Installing
+a third-party Homebrew tap to get a hypervisor backend running is outside
+what an unattended agent cycle should do unprompted (adding an unofficial
+tap + a system-level hypervisor component). Left `status: blocked` with the
+precise next action for whoever has hands-on access to this machine:
+
+```bash
+brew tap slp/krunkit   # or install Podman Desktop, which bundles krunkit
+brew install krunkit
+podman machine start
+# then re-run the smoke commands in "Residual blocker" above
+```
+
+No code or plan changes needed here beyond this note — this ticket stays
+blocked until a human runs the krunkit bootstrap once on this machine.
