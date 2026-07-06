@@ -1551,13 +1551,19 @@ plan_index:
     - packet_id: host-lifecycle-race-safeguards
       order: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
-      status: ready
+      status: in_progress
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]
       pickup_role: windows
       capability_tags: [windows, macos, tray, vm-layer, concurrency]
       estimated_hours: 8
+      lease:
+        lease_id: "host-lifecycle-race-safeguards-macos-r2-20260706T1849Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1849Z"
+        host: macos
+        acquired_at: "2026-07-06T18:49:58Z"
+        expires_at: "2026-07-06T22:49:58Z"
       outcome: >
         (R1) Start poke retries with backoff + WSL-service-sane preflight; drain is
         observable (lock/marker) so a relaunch waits for teardown instead of racing it;
@@ -1601,6 +1607,16 @@ plan_index:
           reason: >
             Released after completing the macOS R9 slice; packet remains ready
             for the Windows owner to claim the remaining lifecycle safeguards.
+        - type: claim
+          ts: "2026-07-06T18:49:58Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1849Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r2-20260706T1849Z"
+          expires_at: "2026-07-06T22:49:58Z"
+          note: >
+            Claiming only the macOS R2 sub-slice: add a single-instance guard
+            for the no-flag AppKit tray path while leaving CLI utility modes
+            (`--diagnose`, `--exec-guest`, `--github-login`, etc.) runnable.
       exit_criteria:
         - "Quit then immediate relaunch converges to Ready without manual wsl --shutdown"
         - "Second tray instance exits gracefully pointing at the first"
