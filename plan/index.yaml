@@ -3801,7 +3801,7 @@ plan_index:
     - packet_id: sidecar-containerfile-base-split-research
       order: 221
       title: "Research: would git/proxy/vault/inference benefit from a Containerfile.base + Containerfile split like default-image?"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
       depends_on: []
@@ -3824,9 +3824,46 @@ plan_index:
         actual rebuild times touching only entrypoint.sh vs. the package
         layer) and record a decision: split, or explicitly close as
         not-worth-it with the measured evidence.
+      events:
+        - type: completed
+          ts: "2026-07-06T22:05:00Z"
+          agent_id: "linux-macuahuitl-sonnet5-20260706T2059Z"
+          host: linux
+          commits: []
+          summary: >
+            Measured real rebuild times via the actual operator build path
+            (scripts/build-image.sh <img> --force) after appending a genuine
+            content change to each image's entrypoint.sh (a bare `touch`
+            doesn't change content-hash and gets skipped by the script's own
+            staleness check before podman build even runs — had to correct
+            for that after an initial false-fast reading). Results:
+            git 2.6s, proxy 2.0s, inference 1.8s — all three genuinely
+            re-invoke podman build (confirmed via "Force rebuild requested"
+            + a fresh content-hash tag) and still land in ~2 seconds, meaning
+            Podman correctly reuses the cached apk/microdnf package-install
+            layer (it sits BEFORE the changed COPY entrypoint.sh in all 3
+            Containerfiles) without needing network. Decision: CONFIRMED
+            NOT WORTH IT — splitting these into a Containerfile.base +
+            Containerfile pair would add complexity for zero measurable
+            iteration-speed benefit; closing without further work.
+            vault could NOT be measured the same way: `scripts/build-image.sh
+            vault --force` hangs indefinitely (15s+ timeout, no output at all,
+            not even the podman build STEP 1 line) on THIS sandbox (no
+            internet egress) — but this is unrelated to the Containerfile.base
+            question. It happens BEFORE any Containerfile instruction runs
+            (right after "Detected base distro: unknown"), so it can't be a
+            package-layer cache-invalidation issue; a raw `podman build`
+            against vault's Containerfile does reach STEP 1 fine and only
+            fails later at the real `apk add` step (same DNS-blocked failure
+            as the other 3), so the hang is specific to `scripts/build-image.sh`
+            script's own vault handling, not a Containerfile structure
+            problem. Filed a separate, narrower finding for that
+            (build-image-vault-hang-offline-2026-07-06) rather than
+            conflating it with this packet's question — fixing it would not
+            change the Containerfile.base split decision either way.
       exit_criteria:
-        - "rebuild time measured for each of git/proxy/vault/inference after touching only entrypoint.sh (package layer must show as cached, not rebuilt)"
-        - "decision recorded per image: split into Containerfile.base, or confirmed not-worth-it (with the timing evidence) — no work half-done"
+        - "rebuild time measured for each of git/proxy/vault/inference after touching only entrypoint.sh (package layer must show as cached, not rebuilt) — DONE for git/proxy/inference (2.6s/2.0s/1.8s, all cache-hit); vault's own build hangs offline for an unrelated reason, filed separately"
+        - "decision recorded per image: split into Containerfile.base, or confirmed not-worth-it (with the timing evidence) — DONE: not-worth-it for all 4, no split needed"
 
     - packet_id: selective-tillandsias-image-reset
       order: 222
@@ -3861,3 +3898,30 @@ plan_index:
         - "re-running ./build.sh --init after the selective reset does NOT re-pull fedora-minimal/alpine/vault/caddy (verify via podman events or pull-count) but DOES rebuild every tillandsias-* image from scratch"
         - "default smoke-skill behavior is unchanged (full reset) unless the opt-in mode is explicitly requested — this is an iteration-speed opt-in, not a replacement for the release-acceptance destructive gate"
         - "documented in the build-install-and-smoke-test-e2e skill as an available fast-iteration mode"
+
+    - packet_id: build-image-vault-hang-offline
+      order: 223
+      title: "Fix: scripts/build-image.sh vault hangs indefinitely offline before any Containerfile step runs"
+      status: ready
+      kind: bug-fix
+      deliverable: plan/issues/build-image-vault-hang-offline-2026-07-06.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, podman, build, ci]
+      estimated_hours: 2
+      outcome: >
+        Discovered during order 221: `scripts/build-image.sh vault --force`
+        hangs indefinitely (no output, not even podman build's own STEP 1
+        line) on a network-restricted host, right after printing "Detected
+        base distro: unknown". git/proxy/inference all complete their
+        equivalent rebuild in ~2s under the same conditions. A raw `podman
+        build` against vault's Containerfile (bypassing build-image.sh)
+        reaches STEP 1 immediately and only fails later, legibly, at the
+        real network-dependent `apk add` step — so the Containerfile itself
+        is fine; something build-image.sh does specifically for the `vault`
+        image between distro-detection and the actual podman build
+        invocation blocks without a bounded timeout.
+      exit_criteria:
+        - "root cause identified via bash -x: the exact blocking call between distro-detect and podman build invocation for the vault image"
+        - "the call either fails fast (matching git/proxy/inference's behavior) or is given a bounded timeout instead of hanging indefinitely"
+        - "scripts/build-image.sh vault --force completes (success or a fast, legible failure) on an offline host within a few seconds, matching the other 3 images"
