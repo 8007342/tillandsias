@@ -1236,13 +1236,58 @@ plan_index:
         all connected clients immediately. Remove all request-response patterns for
         status queries — replace with Subscribe + Push. PTY sessions remain
         multiplexed on the same connection.
+      events:
+        - type: progress
+          ts: "2026-07-06T20:05:00Z"
+          agent_id: "linux-macuahuitl-sonnet5-20260706T1903Z"
+          host: linux
+          commits: []
+          summary: >
+            Slice 1 (VmStatus topic only) landed. Discovered the premise was
+            partly stale: vsock_server.rs's connection loop already stays
+            open after every reply (SC-08 was already true — no one-shot
+            close) and already select!s over PTY-outbound + inbound frames;
+            the real gap was that Subscribe/SubscribeAck/*Push (added by
+            order 152) fell through control_dispatch's catch-all to
+            Unsupported, so no client could ever subscribe. Fixed: (1)
+            control_dispatch.rs routes Subscribe -> Handle and
+            SubscribeAck/VmStatusPush/LoginStatePush/CloudProjectsPush ->
+            ResponseOnly on both transports (all 4 routing-matrix tests
+            updated); (2) VmStateHandle gained a bounded (16-capacity,
+            documented) tokio::sync::broadcast channel + subscribe_vm_status();
+            set_phase() now pushes VmStatusPush only on an actual phase
+            change (no redundant-push spam); (3) handle_connection handles
+            Subscribe{VmStatus} (records the receiver, replies SubscribeAck)
+            and adds a 3rd select! branch that forwards pushes, treating
+            RecvError::Lagged as skip-and-continue (not a disconnect) —
+            broadcast's per-receiver buffers give SC-10 (slow client doesn't
+            block a fast one) for free. 4 new unit tests
+            (set_phase_pushes_vm_status_on_change,
+            set_phase_does_not_push_when_unchanged,
+            multiple_subscribers_each_receive_pushes,
+            slow_subscriber_lags_instead_of_blocking); all 16
+            vsock_server::tests + all 4 control_dispatch matrix tests green;
+            `cargo clippy -p tillandsias-headless --features listen-vsock
+            --all-targets -D warnings` shows zero new warnings in either
+            touched file (7 pre-existing warnings in pty_handler.rs/
+            remote_projects.rs are unrelated, confirmed present on
+            unmodified linux-next too); `./build.sh --check`/`--test` green.
+            Remaining for this packet: LoginStatePush (vault_bootstrap.rs
+            token-change source) and CloudProjectsPush (gh repo list
+            refresh source) still don't push anything — SubscribeAck is
+            sent for those topics but no broadcast exists yet; "all
+            in-memory channels bounded" only covers the new VmStatus
+            channel (the pre-existing PTY mpsc channel is still
+            intentionally unbounded, unchanged by this slice). Not
+            claiming/blocking the packet — releasing for the next slice
+            (LoginState or CloudProjects push, whichever host picks it up).
       exit_criteria:
-        - "Connection persists after VmStatusRequest reply (SC-08)"
-        - "VmStatusPush sent to all clients on VmPhase change (SC-09, <500ms)"
-        - "LoginStatePush sent on Vault token change"
-        - "CloudProjectsPush sent when gh repo list result changes"
-        - "Per-client reader task uses select! over message type + shutdown signal"
-        - "All in-memory channels bounded; documented capacity in code"
+        - "Connection persists after VmStatusRequest reply (SC-08) — DONE (was already true before this packet)"
+        - "VmStatusPush sent to all clients on VmPhase change (SC-09, <500ms) — DONE"
+        - "LoginStatePush sent on Vault token change — TODO"
+        - "CloudProjectsPush sent when gh repo list result changes — TODO"
+        - "Per-client reader task uses select! over message type + shutdown signal — DONE"
+        - "All in-memory channels bounded; documented capacity in code — DONE for VmStatus; PTY mpsc channel remains unbounded (pre-existing, out of this slice's scope)"
         - "Slow client (simulated 1000ms lag) does not affect fast client (SC-10)"
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
 

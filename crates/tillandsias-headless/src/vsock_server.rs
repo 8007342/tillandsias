@@ -31,7 +31,7 @@ use tillandsias_control_wire::{
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, info, warn};
 
 #[cfg(unix)]
@@ -114,28 +114,77 @@ async fn maybe_secure_stream(
 /// `Draining` is set by the per-connection drain path.
 ///
 /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle, plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 6)
+/// @trace plan/issues/vm-headless-persistent-listener-2026-07-06.md (order 153, slice 1)
 #[derive(Debug, Clone)]
 pub struct VmStateHandle {
     phase: Arc<RwLock<VmPhase>>,
     podman_socket: PathBuf,
+    /// Broadcast fan-out for `VmStatusPush`: every subscribed connection gets
+    /// its own receiver, so one slow/lagging client cannot block delivery to
+    /// the others (order 153 SC-10). Bounded capacity (documented below) so a
+    /// receiver that never polls just lags and drops old frames instead of
+    /// growing memory unboundedly.
+    vm_status_tx: broadcast::Sender<ControlMessage>,
+    /// Monotonic counter for the `seq` field carried inside each push
+    /// message (distinct from the per-request `ControlEnvelope.seq`, which
+    /// pushes don't have a request to reply to).
+    push_seq: Arc<std::sync::atomic::AtomicU64>,
 }
+
+/// Bounded capacity of the `VmStatusPush` broadcast channel. VmPhase changes
+/// are infrequent (a handful over a VM's lifetime), so this only needs to
+/// cover the gap between two pushes for the slowest realistic subscriber.
+const VM_STATUS_PUSH_CAPACITY: usize = 16;
 
 impl VmStateHandle {
     /// Construct with default `Starting` phase and the conventional podman
     /// socket path. Tests and lifecycle hooks may use [`set_phase`] /
     /// [`set_podman_socket`] to drive transitions.
     pub fn new() -> Self {
+        let (vm_status_tx, _) = broadcast::channel(VM_STATUS_PUSH_CAPACITY);
         Self {
             phase: Arc::new(RwLock::new(VmPhase::Starting)),
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
+            vm_status_tx,
+            push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
+    /// Subscribe to the `VmStatus` push topic. Each call returns an
+    /// independent receiver (tokio broadcast semantics): a lagging
+    /// subscriber only affects its own receiver, never other subscribers or
+    /// the sender.
+    pub fn subscribe_vm_status(&self) -> broadcast::Receiver<ControlMessage> {
+        self.vm_status_tx.subscribe()
+    }
+
     /// Update the reported phase. The vsock handler reads this on every
-    /// `VmStatusRequest`. Safe to call from any task.
+    /// `VmStatusRequest`. Safe to call from any task. Also pushes a
+    /// `VmStatusPush` to every `VmStatus`-subscribed connection when the
+    /// phase actually changes (order 153 SC-09) — a no-op write (same phase
+    /// set twice) does not spam subscribers with redundant pushes.
     pub fn set_phase(&self, phase: VmPhase) {
-        if let Ok(mut guard) = self.phase.write() {
-            *guard = phase;
+        let changed = match self.phase.write() {
+            Ok(mut guard) => {
+                let changed = *guard != phase;
+                *guard = phase;
+                changed
+            }
+            Err(_) => false,
+        };
+        if changed {
+            let seq = self
+                .push_seq
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1;
+            // No receivers is not an error — pushes are fire-and-forget to
+            // whoever is currently subscribed.
+            let _ = self.vm_status_tx.send(ControlMessage::VmStatusPush {
+                seq,
+                phase,
+                podman_ready: self.podman_ready(),
+                last_event: Some(SERVER_NAME.to_string()),
+            });
         }
     }
 
@@ -371,6 +420,11 @@ async fn handle_connection(
     // close pty_rx).
     let _pty_tx_keepalive = pty_tx;
 
+    // Order 153 slice 1: set once `Subscribe{VmStatus}` arrives. `None` means
+    // not subscribed — the branch below is disabled entirely (never polled)
+    // via the `if` guard, so an unsubscribed connection pays zero cost.
+    let mut vm_status_rx: Option<broadcast::Receiver<ControlMessage>> = None;
+
     loop {
         tokio::select! {
             // Outbound PTY frame (PtyData{ToHost} from a pump or PtyClose
@@ -381,6 +435,43 @@ async fn handle_connection(
                     #[cfg(unix)]
                     pty_store.shutdown_all().await;
                     return;
+                }
+                continue;
+            }
+            // Server-push: VmStatusPush, once subscribed. Lagged receivers
+            // (a slow client that fell behind the broadcast buffer) skip the
+            // missed frames and keep going rather than disconnecting — the
+            // next push still carries the current phase, so no state is
+            // permanently lost, just intermediate transitions (order 153
+            // SC-10: a slow client never blocks or drops a fast one, since
+            // each subscriber has its own independent broadcast receiver).
+            push = async {
+                loop {
+                    match vm_status_rx.as_mut()?.recv().await {
+                        Ok(msg) => return Some(msg),
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(spec = "vsock-transport", skipped, "VmStatus push receiver lagged; skipping to latest");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            }, if vm_status_rx.is_some() => {
+                match push {
+                    Some(body) => {
+                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
+                        if write_envelope(&mut stream, &env).await.is_err() {
+                            debug!(spec = "vsock-transport", "vsock write failed during VmStatusPush; closing connection");
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                    }
+                    None => {
+                        // Sender dropped (should not happen — VmStateHandle
+                        // outlives connections) — stop polling this branch.
+                        vm_status_rx = None;
+                    }
                 }
                 continue;
             }
@@ -479,6 +570,24 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope(&mut stream, &reply).await.is_err() {
+                    return;
+                }
+            }
+            // Order 153 slice 1: only the VmStatus topic is wired to a real
+            // push source so far; LoginState/CloudProjects subscriptions are
+            // accepted (SubscribeAck) but don't yet deliver pushes — those
+            // land in follow-on slices once the vault/cloud-refresh call
+            // sites gain their own broadcast sources.
+            ControlMessage::Subscribe { topics } => {
+                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::VmStatus) {
+                    vm_status_rx = Some(state.subscribe_vm_status());
+                }
+                let ack = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::SubscribeAck,
+                };
+                if write_envelope(&mut stream, &ack).await.is_err() {
                     return;
                 }
             }
@@ -889,6 +998,66 @@ mod tests {
         let b = a.clone();
         a.set_phase(VmPhase::Stopping);
         assert_eq!(b.current_phase(), VmPhase::Stopping);
+    }
+
+    /// Order 153 slice 1 SC-09: a real phase change pushes a VmStatusPush
+    /// to a subscribed receiver.
+    #[tokio::test]
+    async fn set_phase_pushes_vm_status_on_change() {
+        let state = VmStateHandle::new();
+        let mut rx = state.subscribe_vm_status();
+        state.set_phase(VmPhase::Ready);
+        let msg = rx.try_recv().expect("push should be immediately available");
+        match msg {
+            ControlMessage::VmStatusPush { phase, .. } => assert_eq!(phase, VmPhase::Ready),
+            other => panic!("expected VmStatusPush, got {other:?}"),
+        }
+    }
+
+    /// Setting the SAME phase twice must not spam subscribers with a
+    /// redundant push — only a real transition is push-worthy.
+    #[tokio::test]
+    async fn set_phase_does_not_push_when_unchanged() {
+        let state = VmStateHandle::new();
+        state.set_phase(VmPhase::Ready);
+        let mut rx = state.subscribe_vm_status();
+        state.set_phase(VmPhase::Ready); // no-op: already Ready
+        assert!(matches!(
+            rx.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
+    }
+
+    /// Order 153 SC-10: multiple subscribers each get their own
+    /// independent stream of pushes — one is not starved by another.
+    #[tokio::test]
+    async fn multiple_subscribers_each_receive_pushes() {
+        let state = VmStateHandle::new();
+        let mut rx_a = state.subscribe_vm_status();
+        let mut rx_b = state.subscribe_vm_status();
+        state.set_phase(VmPhase::Ready);
+        assert!(rx_a.try_recv().is_ok());
+        assert!(rx_b.try_recv().is_ok());
+    }
+
+    /// A subscriber that never polls falls behind the bounded broadcast
+    /// buffer and gets `Lagged`, not a hang or a panic — the connection
+    /// loop's `RecvError::Lagged` arm (see `handle_connection`'s select!)
+    /// is what turns this into "skip to latest" instead of dropping the
+    /// client.
+    #[tokio::test]
+    async fn slow_subscriber_lags_instead_of_blocking() {
+        let state = VmStateHandle::new();
+        let mut rx = state.subscribe_vm_status();
+        // Overflow the bounded channel capacity without ever calling recv().
+        for _ in 0..(VM_STATUS_PUSH_CAPACITY + 2) {
+            state.set_phase(VmPhase::Starting);
+            state.set_phase(VmPhase::Ready);
+        }
+        match rx.try_recv() {
+            Err(broadcast::error::TryRecvError::Lagged(_)) => {}
+            other => panic!("expected Lagged, got {other:?}"),
+        }
     }
 
     #[test]
