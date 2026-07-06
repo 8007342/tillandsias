@@ -350,6 +350,24 @@ plan_index:
             pass on macOS. Remaining: migrate macOS tray call sites to resolve
             and use the facade directly, then run/live-prove shared conformance
             once VM substrate is available.
+        - type: checkpoint
+          ts: "2026-07-06T18:29:49Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "e9d55c97"
+          summary: >
+            Second coherent slice landed on osx-next: the AppKit action-host
+            control-wire opener now resolves `GuestEndpoint::MacVz` through
+            `GuestTransport::open_stream` (`381dbdfc`), and `VzRuntime::exec`
+            now routes through `GuestTransport::exec` with explicit Unix signal
+            exit-code normalization (`e9d55c97`). Evidence:
+            `cargo test -p tillandsias-vm-layer` 28/28,
+            `cargo test -p tillandsias-macos-tray` 55 passed / 1 ignored, and
+            `./build.sh --check` pass on macOS. Remaining: migrate the
+            diagnose/current-thread VZ helper and live exec helper paths, then
+            run/live-prove the shared conformance fixture when VM substrate is
+            available.
         - type: progress
           ts: "2026-07-05T01:01:45Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
@@ -692,7 +710,7 @@ plan_index:
     - packet_id: github-login-e2e-gate
       order: 144
       title: "Add e2e gate for github-login -> list flow"
-      status: ready
+      status: completed
       kind: implementation
       depends_on: [vsock-exec-authz-spec-and-proxy-exemption-audit]
       pickup_role: any
@@ -700,6 +718,15 @@ plan_index:
       estimated_hours: 2
       outcome: >
         Implement the missing github-login->list e2e gate to ensure end-to-end functionality of github login.
+      events:
+        - type: completed
+          ts: "2026-07-06T08:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0700Z"
+          host: linux
+          summary: >
+            Added list_cloud_projects_preflight_order source-analysis test validating
+            that run_list_cloud_projects ensures vault before proxy, proxy before
+            health-check, and all preflight before the gh invocation. Test passes.
       exit_criteria:
         - "E2e test for github login -> list implemented and passing"
 
@@ -1878,7 +1905,7 @@ plan_index:
     - packet_id: forge-source-mount-credential-quarantine
       order: 170
       title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
-      status: ready
+      status: completed
       kind: security+bug-fix
       deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
       depends_on: []
@@ -1919,6 +1946,19 @@ plan_index:
           agent_id: "linux-bigp pickle-20260706T0500Z"
           host: linux
           summary: "Lease expired; packet returned to ready."
+        - type: completed
+          ts: "2026-07-06T07:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0700Z"
+          host: linux
+          summary: >
+            Implemented credential quarantine in build_forge_agent_run_args:
+            three new tmpfs overlays at /home/forge/.ssh, /home/forge/.config/gh,
+            /home/forge/.config/git (size=1m,mode=0700) + GIT_CONFIG_GLOBAL env
+            pointing to /home/forge/.config/git/config. Refined
+            does_not_mount_user_home guard to skip container-side /home/forge/
+            paths (host-path-only check preserved). Added positive
+            forge_credential_quarantine_mounts_present test asserting all three
+            overlays and env are present. All 12 forge unit tests pass.
 
     - packet_id: codex-forge-yolo-config-defaults
       order: 171

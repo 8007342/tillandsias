@@ -7309,6 +7309,19 @@ pub(crate) fn build_forge_agent_run_args(
         .tmpfs("/tmp:size=256m,mode=1777")
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
+        // Credential quarantine (order 170): empty tmpfs overlays at
+        // credential-surface paths prevent host ~/.ssh, ~/.config/gh,
+        // and ~/.config/git from leaking into the forge even when the
+        // host checkout IS the source mount. These are FORGE-OWNED empty
+        // directories that mask any host material Podman would otherwise
+        // resolve from the host filesystem (Podman does NOT auto-bind
+        // host $HOME, but the --volume source mount of Tllatoani's
+        // ~/src/tillandsias is the host's own checkout, so its child
+        // .ssh/.config would be visible). The tmpfs prevents that.
+        .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
+        .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
+        .tmpfs("/home/forge/.config/git:size=1m,mode=0700")
+        .env("GIT_CONFIG_GLOBAL", "/home/forge/.config/git/config")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     if debug {
@@ -8994,10 +9007,18 @@ mod tests {
         // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
         // SOURCE (left of ':'), but allow the container-side TARGET
         // /home/forge/.cache/tillandsias-project (the persistent tool cache, order
-        // 179) and podman NAMED volumes (tillandsias-forge-cache-*, no host path).
+        // 179), podman NAMED volumes (tillandsias-forge-cache-*, no host path), and
+        // credential-quarantine tmpfs overlays at /home/forge/.ssh/.config/... (order
+        // 170) which are FORGE-OWNED surfaces, not host leaks.
         // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
         for arg in &argv {
             if arg.starts_with("HOME=") {
+                continue;
+            }
+            // tmpfs spec args (/home/forge/.config/gh:size=1m,...) are
+            // container-side overlay mountpoints — never host paths.
+            if arg.contains("/home/forge/") {
                 continue;
             }
             let source = arg.split(':').next().unwrap_or("");
@@ -9033,6 +9054,58 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn forge_credential_quarantine_mounts_present() {
+        // Verify the credential quarantine tmpfs overlays (order 170) are
+        // present in the forge agent mount args. These mask host credential
+        // surfaces when the source mount overlaps the host checkout.
+        // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+
+        let mut found_ssh = false;
+        let mut found_gh_config = false;
+        let mut found_git_config = false;
+        for arg in &argv {
+            if arg.contains("/home/forge/.ssh") && arg.contains("size=1m") {
+                found_ssh = true;
+            }
+            if arg.contains("/home/forge/.config/gh") && arg.contains("size=1m") {
+                found_gh_config = true;
+            }
+            if arg.contains("/home/forge/.config/git") && arg.contains("size=1m") {
+                found_git_config = true;
+            }
+        }
+        assert!(
+            found_ssh,
+            "must mount credential-quarantine tmpfs at /home/forge/.ssh"
+        );
+        assert!(
+            found_gh_config,
+            "must mount credential-quarantine tmpfs at /home/forge/.config/gh"
+        );
+        assert!(
+            found_git_config,
+            "must mount credential-quarantine tmpfs at /home/forge/.config/git"
+        );
+
+        // Verify GIT_CONFIG_GLOBAL redirects inside the quarantine zone.
+        let has_git_config_global = argv.iter().any(|a| {
+            a.starts_with("GIT_CONFIG_GLOBAL=") && a.contains("/home/forge/.config/git/config")
+        });
+        assert!(
+            has_git_config_global,
+            "must set GIT_CONFIG_GLOBAL to quarantined path"
+        );
     }
 
     #[test]
@@ -9241,6 +9314,41 @@ mod tests {
         assert!(
             login_window.contains("container.as_str()"),
             "github login health preflight must target the ephemeral login helper container"
+        );
+    }
+
+    /// E2e gate (order 144): verify preflight order in run_list_cloud_projects.
+    /// Every standalone flow that uses the GitHub token (list projects, future
+    /// cloud operations) must ensure vault+proxy are up before dispatching any
+    /// containerized `gh` invocation, or the token-read and egress both fail.
+    #[test]
+    fn list_cloud_projects_preflight_order() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_list_cloud_projects(debug: bool)");
+        let vault_idx = window
+            .find("ensure_vault_running(debug)?")
+            .expect("run_list_cloud_projects must preflight Vault");
+        let proxy_idx = window
+            .find("ensure_proxy_running(debug)?")
+            .expect("run_list_cloud_projects must preflight proxy");
+        let health_idx = window
+            .find("check_auth_required_services(&[\"tillandsias-proxy\"], debug)?")
+            .expect("run_list_cloud_projects must health-check the proxy");
+        let fetch_idx = window
+            .find("discover_github_projects_result_with_debug(debug)?")
+            .expect("run_list_cloud_projects must call the fetch function");
+
+        assert!(
+            vault_idx < proxy_idx,
+            "Vault must be ensured before proxy: run_list_cloud_projects"
+        );
+        assert!(
+            proxy_idx < health_idx,
+            "Proxy must be ensured before health-check: run_list_cloud_projects"
+        );
+        assert!(
+            health_idx < fetch_idx,
+            "All preflight must complete before the gh invocation: run_list_cloud_projects"
         );
     }
 
