@@ -2422,7 +2422,27 @@ plan_index:
     - packet_id: multi-host-secure-wire-integration-freeze
       order: 191
       title: "Coordination: freeze sibling drift and integrate secure-wire + embedded-guest branches by merge"
-      status: ready
+      status: claimed
+      events:
+        - type: claim
+          ts: "2026-07-06T05:45:00Z"
+          agent_id: "windows-bullo-fable5-20260706T0535Z"
+          host: windows
+          lease_id: "multi-host-secure-wire-integration-freeze-win-20260706T0545Z"
+          expires_at: "2026-07-06T09:45:00Z"
+          scope_note: >
+            Windows evidence slice only (merge + flag-OFF/flag-ON smoke). The macOS
+            slice and the linux coordinator merge remain open for their owners.
+        - type: progress
+          ts: "2026-07-06T05:45:00Z"
+          agent_id: "windows-bullo-fable5-20260706T0535Z"
+          host: windows
+          summary: >
+            windows-next merged origin/linux-next (merge commit 0794510a, pushed);
+            hvsocket secure-wrapper (open_and_wrap_hvsocket_stream, gated by
+            TILLANDSIAS_SECURE_CONTROL_WIRE) verified intact post-merge; tray crate
+            cargo check --locked green on the merged tree. Next: WSL2 flag-OFF and
+            flag-ON smoke evidence.
       kind: integration
       deliverable: plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder, embedded-guest-binary-linux-build]
