@@ -2378,6 +2378,20 @@ fn selected_agent() -> SelectedAgent {
 ///
 /// @trace plan/issues/tray-convergence-coordination.md (Open Shell — per-OS terminal, shared argv)
 fn launch_open_shell_terminal(action: &MenuAction) {
+    // R3: Host-side serialization / safe-queueing of concurrent PTY launch clicks (debounce clicks within 1.5s)
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static LAST_PTY_LAUNCH_MS: AtomicU64 = AtomicU64::new(0);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let last = LAST_PTY_LAUNCH_MS.load(Ordering::SeqCst);
+    if now_ms.saturating_sub(last) < 1500 {
+        tracing::warn!("PTY launch clicked too quickly; ignoring duplicate to prevent race");
+        return;
+    }
+    LAST_PTY_LAUNCH_MS.store(now_ms, Ordering::SeqCst);
+
     let Some((intent, project)) = intent_for_action(action, selected_agent()) else {
         tracing::warn!(?action, "no PTY intent for action (unexpected in this arm)");
         return;

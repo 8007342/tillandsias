@@ -84,6 +84,37 @@ impl WslRuntime {
             Err(_) => false,
         }
     }
+
+    pub async fn is_wsl_service_sane() -> bool {
+        match tokio::time::timeout(Duration::from_secs(5), Self::wsl_list_quiet()).await {
+            Ok(Ok(_)) => true,
+            Ok(Err(e)) => {
+                let err_str = e.to_string();
+                if err_str.contains("WSL/Service") || err_str.contains("E_UNEXPECTED") {
+                    false
+                } else {
+                    !err_str.contains("WSL/Service") && !err_str.contains("E_UNEXPECTED")
+                }
+            }
+            Err(_) => false,
+        }
+    }
+
+    pub async fn perform_wsl_shutdown_recovery() -> Result<(), String> {
+        tracing::warn!("WSL service appears wedged. Attempting recovery via wsl --shutdown...");
+        let status = tokio::process::Command::new("wsl")
+            .arg("--shutdown")
+            .status()
+            .await
+            .map_err(|e| format!("wsl --shutdown failed to spawn: {e}"))?;
+        if status.success() {
+            tracing::info!("wsl --shutdown completed successfully");
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            Ok(())
+        } else {
+            Err(format!("wsl --shutdown exited with status {status}"))
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -340,20 +371,71 @@ impl VmRuntime for WslRuntime {
     }
 
     async fn start(&self) -> Result<(), VmError> {
-        // WSL distros auto-start on the first command; just poke `echo ready`.
-        let status = tokio::process::Command::new("wsl")
-            .arg("--distribution")
-            .arg(&self.distro_name)
-            .arg("--exec")
-            .arg("echo")
-            .arg("ready")
-            .status()
-            .await
-            .map_err(|e| format!("wsl --exec echo failed: {e}"))?;
-        if !status.success() {
-            return Err(format!("wsl start poke exited {status}"));
+        // 1. Preflight check: is WSL service sane?
+        if !Self::is_wsl_service_sane().await {
+            tracing::warn!("WSL service preflight check failed. Attempting auto-recovery...");
+            let _ = Self::perform_wsl_shutdown_recovery().await;
         }
-        Ok(())
+
+        // 2. Retry start poke with backoff
+        let mut backoff = Duration::from_millis(500);
+        for attempt in 1..=5 {
+            tracing::info!("WSL start poke: attempt {}/5", attempt);
+
+            // Check preflight again if we're retrying after a failure
+            if attempt > 1 && !Self::is_wsl_service_sane().await {
+                tracing::warn!(
+                    "WSL service unhealthy on retry attempt {}. Running wsl --shutdown...",
+                    attempt
+                );
+                let _ = Self::perform_wsl_shutdown_recovery().await;
+            }
+
+            let status_res = tokio::time::timeout(
+                Duration::from_secs(10),
+                tokio::process::Command::new("wsl")
+                    .arg("--distribution")
+                    .arg(&self.distro_name)
+                    .arg("--exec")
+                    .arg("echo")
+                    .arg("ready")
+                    .status(),
+            )
+            .await;
+
+            match status_res {
+                Ok(Ok(status)) => {
+                    if status.success() {
+                        tracing::info!("WSL start poke succeeded");
+                        return Ok(());
+                    } else {
+                        tracing::warn!(
+                            "WSL start poke attempt {} failed with status: {}",
+                            attempt,
+                            status
+                        );
+                        // If E_UNEXPECTED (-1) or similar error occurs, try to recover
+                        if status.code() == Some(-1) {
+                            let _ = Self::perform_wsl_shutdown_recovery().await;
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("WSL start poke attempt {} failed to spawn: {}", attempt, e);
+                }
+                Err(_) => {
+                    tracing::warn!("WSL start poke attempt {} timed out", attempt);
+                }
+            }
+
+            if attempt < 5 {
+                tracing::info!("Waiting {:?} before retrying start poke...", backoff);
+                tokio::time::sleep(backoff).await;
+                backoff *= 2;
+            }
+        }
+
+        Err("WSL start poke failed after 5 attempts".to_string())
     }
 
     async fn stop(&self, _drain_timeout: Duration) -> Result<(), VmError> {

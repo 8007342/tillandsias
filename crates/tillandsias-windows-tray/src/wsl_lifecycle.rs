@@ -163,7 +163,13 @@ impl WslLifecycle {
     /// `VmLifecycle::stop` is the production entry point; this wrapper
     /// exists for callers that don't want the full `VmLifecycle` machinery.
     pub async fn graceful_shutdown(&self) -> Result<(), String> {
-        self.runtime.stop(Duration::from_secs(30)).await
+        let lock_path = Self::install_root().join("drain.lock");
+        if let Err(e) = tokio::fs::write(&lock_path, b"draining").await {
+            tracing::warn!("Failed to write drain lock: {e}");
+        }
+        let res = self.runtime.stop(Duration::from_secs(30)).await;
+        let _ = tokio::fs::remove_file(&lock_path).await;
+        res
     }
 
     /// Recipe-path first-run provisioning — the **w11 Fedora pivot**. Supersedes the
@@ -183,6 +189,20 @@ impl WslLifecycle {
         &self,
         progress: Arc<dyn ProvisionProgress>,
     ) -> Result<(), String> {
+        // R1: observe drain path (wait for drain.lock if it exists)
+        let lock_path = Self::install_root().join("drain.lock");
+        if lock_path.exists() {
+            tracing::info!("WSL VM is currently draining, waiting for teardown to finish...");
+            let start_time = std::time::Instant::now();
+            while lock_path.exists() {
+                if start_time.elapsed().as_secs() > 20 {
+                    tracing::warn!("Drain lock timed out, proceeding anyway");
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        }
+
         progress.report_phase(ProvisionPhase::SettingUp);
         tokio::fs::create_dir_all(Self::cache_root())
             .await
