@@ -3652,14 +3652,16 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     // container on this host, including forge containers that bypass the Rust
     // launcher. Idempotent — only writes when the [engine] env block is absent.
     #[cfg(target_os = "linux")]
-    if let Some(conf_path) = get_user_containers_conf() {
-        if let Err(e) = ensure_containers_conf_proxy_env(&conf_path) {
-            eprintln!("[tillandsias] init: failed to configure proxy in containers.conf: {e}");
-        } else if debug {
-            eprintln!(
-                "[tillandsias] init: proxy env written to {}",
-                conf_path.display()
-            );
+    {
+        if let Some(conf_path) = get_user_containers_conf() {
+            if let Err(e) = ensure_containers_conf_proxy_env(&conf_path) {
+                eprintln!("[tillandsias] init: failed to configure proxy in containers.conf: {e}");
+            } else if debug {
+                eprintln!(
+                    "[tillandsias] init: proxy env written to {}",
+                    conf_path.display()
+                );
+            }
         }
     }
 

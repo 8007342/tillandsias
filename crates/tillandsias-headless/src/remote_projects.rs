@@ -106,6 +106,22 @@ fn git_image_tag() -> String {
     })
 }
 
+fn ensure_git_image_available(image: &str, debug: bool) -> Result<(), String> {
+    #[cfg(test)]
+    {
+        let _ = image;
+        let _ = debug;
+        Ok(())
+    }
+    #[cfg(not(test))]
+    {
+        let root = crate::resolve_runtime_asset_root(RUNTIME_VERSION.trim(), debug)?;
+        crate::ensure_image_exists(&root, "git", image, debug).map_err(|err| {
+            format!("required git image {image} is absent and failed to build on demand: {err}")
+        })
+    }
+}
+
 /// Truncate a script body to a single-line preview suitable for an
 /// `eprintln!` debug trace. Keeps roughly 80 chars so the diagnostic stays
 /// glanceable.
@@ -278,6 +294,7 @@ fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Result<O
 
 fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result<String, String> {
     let image = git_image_tag();
+    ensure_git_image_available(&image, debug)?;
     let vault_lease = RemoteVaultLease::acquire(debug)?;
     let vault_mount = vault_lease.mount_arg();
     // The gh call egresses through squid; self-heal a dead proxy (VM restart,
@@ -367,7 +384,13 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
 pub fn probe_github_username(debug: bool) -> Option<String> {
     let script = r#"
 set -eu
-vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+export GH_PROMPT_DISABLED=1
+TOKEN="$(vault-cli read -field=token secret/github/token)"
+if [ -z "$TOKEN" ]; then
+  echo "github token missing in Vault; run tillandsias --github-login" >&2
+  exit 2
+fi
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 gh api user --jq .login
 "#;
     match run_git_image_shell(script, &[], debug) {
@@ -397,7 +420,13 @@ fn fetch_github_projects(debug: bool) -> Result<Vec<GitHubProject>, String> {
     let script = r#"
 set -eu
 export GH_PAGER=cat
-vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+export GH_PROMPT_DISABLED=1
+TOKEN="$(vault-cli read -field=token secret/github/token)"
+if [ -z "$TOKEN" ]; then
+  echo "github token missing in Vault; run tillandsias --github-login" >&2
+  exit 2
+fi
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 exec gh api user/repos?per_page=100\&sort=pushed\&type=owner
 "#;
 
@@ -556,9 +585,16 @@ pub fn clone_project_from_github_with_debug(
     let script = r#"
 set -eu
 export GH_PAGER=cat
-vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+export GH_PROMPT_DISABLED=1
+TOKEN="$(vault-cli read -field=token secret/github/token)"
+if [ -z "$TOKEN" ]; then
+  echo "github token missing in Vault; run tillandsias --github-login" >&2
+  exit 2
+fi
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 exec gh repo clone "$1" "$2"
 "#;
+    ensure_git_image_available(&image, debug)?;
     let vault_lease = RemoteVaultLease::acquire(debug)?;
     let vault_mount = vault_lease.mount_arg();
 
@@ -719,6 +755,34 @@ mod tests {
         // Versioned: must match what `tillandsias --init` produces.
         assert_ne!(tag, "localhost/tillandsias-git:v", "missing version suffix");
         assert_ne!(tag, "tillandsias-git:latest", "regressed to short name");
+    }
+
+    #[test]
+    fn remote_project_git_runner_preflights_git_image() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/remote_projects.rs"
+        ));
+        let runner = source
+            .split("fn run_git_image_shell")
+            .nth(1)
+            .expect("run_git_image_shell source")
+            .split("fn run_command_with_timeout")
+            .next()
+            .unwrap_or("");
+        assert!(
+            runner.contains("ensure_git_image_available(&image, debug)?"),
+            "remote project listing must build the git image before podman run"
+        );
+
+        let clone = source
+            .split("pub fn clone_project_from_github_with_debug")
+            .nth(1)
+            .expect("clone_project_from_github_with_debug source");
+        assert!(
+            clone.contains("ensure_git_image_available(&image, debug)?"),
+            "cloud attach clone must build the git image before podman run"
+        );
     }
 
     #[test]

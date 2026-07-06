@@ -330,6 +330,11 @@ jobs:
         with:
           workspaces: . -> target
 
+      - name: Install guest cross-build tools
+        run: |
+          brew install zig
+          cargo install cargo-zigbuild --locked
+
       - name: Resolve version (same as Linux job)
         id: version
         run: |

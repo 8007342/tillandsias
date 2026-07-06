@@ -1481,11 +1481,10 @@ fn vault_selinux_label_opt(debug: bool) -> Option<String> {
         return None;
     }
 
-    // Use the custom confined type only if we can CONFIRM it is loaded (or load
-    // it — root only, i.e. inside the guest VM).
-    if vault_container_type_loaded() {
-        return Some("label=type:vault_container_t".to_string());
-    }
+    // Use the custom confined type only after loading the bundled CIL for this
+    // exact binary. Existing VMs may have an older `vault_container` module
+    // loaded; trusting presence alone preserves stale policy and keeps denying
+    // the no-new-privileges transition.
     if try_load_vault_selinux_module(debug) && vault_container_type_loaded() {
         return Some("label=type:vault_container_t".to_string());
     }
