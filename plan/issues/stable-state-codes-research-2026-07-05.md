@@ -4,8 +4,16 @@
 - filed: 2026-07-05
 - owner: any
 - pickup_role: any
-- status: ready
+- status: claimed
 - trace: spec:runtime-diagnostics-stream, spec:headless-mode, spec:macos-native-tray, spec:podman-idiomatic-patterns
+
+events:
+  - type: claim
+    ts: "2026-07-06T18:07:02Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+    host: macos
+    lease_id: "stable-state-codes-research-20260706T1807Z"
+    expires_at: "2026-07-06T22:07:02Z"
 
 ## Problem
 
@@ -73,4 +81,3 @@ The research needs to identify:
 - The proposal specifies how the tray converts codes into <=37-char messages.
 - The proposal calls out any states that should remain internal-only.
 - A follow-on implementation packet can consume the result without guessing.
-

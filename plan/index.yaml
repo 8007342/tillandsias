@@ -1143,13 +1143,26 @@ plan_index:
     - packet_id: stable-state-codes-research
       order: 160
       title: "Research: stable finite state codes for host/vm/guest/podman status"
-      status: ready
+      status: claimed
       kind: research
       deliverable: plan/issues/stable-state-codes-research-2026-07-05.md
       depends_on: [socket-protocol-push-variants, vm-headless-persistent-listener]
       pickup_role: any
       capability_tags: [any, research, ux, streams, state-machine, observability]
       estimated_hours: 4
+      lease:
+        lease_id: "stable-state-codes-research-20260706T1807Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+        host: macos
+        acquired_at: "2026-07-06T18:07:02Z"
+        expires_at: "2026-07-06T22:07:02Z"
+      events:
+        - type: claim
+          ts: "2026-07-06T18:07:02Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+          host: macos
+          lease_id: "stable-state-codes-research-20260706T1807Z"
+          expires_at: "2026-07-06T22:07:02Z"
       outcome: >
         Define the canonical finite-state taxonomy for Tillandsias status
         surfaces. The result should cover host, VM, guest, podman, transport,
