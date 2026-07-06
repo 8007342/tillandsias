@@ -3699,7 +3699,7 @@ plan_index:
     - packet_id: forge-image-split-live-verification
       order: 220
       title: "Verify (live): forge CREATION/FIRST_RUN/EVERY_LAUNCH split actually works end-to-end"
-      status: ready
+      status: claimed
       kind: research+verification
       deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
       depends_on: []
@@ -3731,6 +3731,13 @@ plan_index:
         OpenCode, OpenCode Web, Antigravity) launches cleanly with the full
         combined tool stack (dnf base + FIRST_RUN cache tools + EVERY_LAUNCH
         harness) all visible on PATH inside the container.
+      events:
+        - type: claim
+          ts: "2026-07-06T20:59:00Z"
+          agent_id: "linux-macuahuitl-sonnet5-20260706T2059Z"
+          host: linux
+          lease_id: "forge-image-split-live-verification-claim-1"
+          expires_at: "2026-07-07T00:59:00Z"
       exit_criteria:
         - "podman inspect on a live forge container shows the persistent cache volume mounted at /home/forge/.cache/tillandsias-project"
         - "a FIRST_RUN tool (e.g. cargo-nextest) installs on launch 1 and is confirmed present-and-skipped (not reinstalled) on launch 2 of the same project"
