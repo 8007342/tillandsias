@@ -2383,7 +2383,7 @@ plan_index:
     - packet_id: semantic-distillation-and-ledger-pruning
       order: 192
       title: "Housekeeping: prune stale active ledgers and refresh dashboard provenance"
-      status: ready
+      status: claimed
       kind: housekeeping
       deliverable: plan/issues/semantic-distillation-and-ledger-pruning-2026-07-05.md
       depends_on: []
@@ -2400,6 +2400,13 @@ plan_index:
         - "active plan/issues contains only live blockers or explicit tombstones"
         - "superseded embedded-binary and old branch-drift notes point at orders 190/191"
         - "metrics dashboard states its source timestamp/provenance and fails closed when no metrics input exists"
+      events:
+        - type: claim
+          ts: "2026-07-06T00:08:39Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T000839Z"
+          host: linux
+          lease_id: "lease-192-20260706T000839Z"
+          expires_at: "2026-07-06T04:08:39Z"
 
     - packet_id: macos-vz-home-src-mount
       order: 193
