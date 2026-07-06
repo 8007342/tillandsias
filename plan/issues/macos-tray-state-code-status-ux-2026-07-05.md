@@ -4,7 +4,7 @@
 - filed: 2026-07-05
 - owner: macos
 - pickup_role: macos
-- status: claimed
+- status: pending (blocked on vm-headless-persistent-listener)
 - trace: spec:macos-native-tray, spec:runtime-diagnostics-stream, plan/issues/stable-state-codes-research-2026-07-05.md
 
 events:
@@ -25,6 +25,15 @@ events:
       menu-disabled parity test to expect the new short boot label. Next:
       map the remaining stable state-code taxonomy into richer login/project
       states once the research packet lands.
+  - type: blocked
+    ts: "2026-07-06T18:47:14Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1847Z"
+    host: macos
+    summary: >
+      Queue reconciliation: stable-state-codes-research is done, but the
+      implementation still depends on `vm-headless-persistent-listener`, which
+      is not complete. Leave this pending until the observable stream path lands
+      so state-code rendering is event-driven instead of polling.
 
 ## Problem
 

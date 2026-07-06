@@ -202,3 +202,37 @@ the stream packets were filed. The actual implementation packets are:
 Safeguard vocabulary items 1-6 (advisory flocks, ensure-only ownership,
 phase-aware side effects, retry-with-backoff+classify-transient, atomic fs ops,
 one provoking litmus per fixed race) are ratified unchanged.
+
+## Implementation checkpoint — macOS R9 slice 2026-07-06
+
+macOS residual R9 is complete on `osx-next@3e1637ad`: the VZ cloud-init
+`fetch-headless.sh` network fallback now downloads to `mktemp`, cleans it with a
+trap, and `install -D -m 0755`s into `/usr/local/bin/tillandsias-headless`
+instead of curling directly onto the live binary. Added
+`vz_fetch_script_installs_download_via_temp_file` to pin the behavior. Evidence:
+`cargo test -p tillandsias-vm-layer` 30/30 and `./build.sh --check` passed on
+macOS. Windows residual R9 (`wsl_lifecycle.rs`) remains for the Windows owner.
+
+## Implementation checkpoint — macOS R2 slice 2026-07-06
+
+macOS concurrent tray instance guard is complete on `osx-next@64676548`: added a
+non-destructive `SingletonGuard::try_acquire` helper in core and wired the
+no-flag AppKit tray path to exit cleanly when another `tillandsias-macos-tray`
+instance already owns the lock. CLI utility modes (`--diagnose`, `--exec-guest`,
+`--github-login`, etc.) still run before the guard. Evidence:
+`cargo test -p tillandsias-core singleton`,
+`cargo test -p tillandsias-macos-tray`, and `./build.sh --check` passed on macOS.
+macOS R3 launch serialization and Windows lifecycle/R1-R3/R9 remain.
+
+## Implementation checkpoint — macOS R3 slice 2026-07-06
+
+macOS concurrent project launch serialization is complete on
+`osx-next@bb72efc2`: `TrayActionHost::attach_pty` now takes a per-project
+in-memory launch lease for project-bearing Attach/Maintain actions, so a
+same-project double-click is ignored while the first guest launch flow is in
+flight. Root shell and GitHub login remain project-less and unaffected. Added
+`project_launch_lease_rejects_duplicate_until_released` to pin duplicate
+rejection and retry-after-release behavior. Evidence:
+`cargo test -p tillandsias-macos-tray` 58 passed / 1 ignored and
+`./build.sh --check` passed on macOS. All macOS R2/R3/R9 slices in order 161
+are complete; Windows lifecycle/R1-R3/R9 remains for the Windows owner.

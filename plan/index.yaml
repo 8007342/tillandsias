@@ -302,7 +302,7 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: in_progress
+      status: blocked
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
@@ -316,12 +316,6 @@ plan_index:
       pickup_role: macos
       owner_host: macos
       estimated_hours: 8
-      lease:
-        lease_id: "host-guest-transport-macos-20260706T1817Z"
-        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
-        host: macos
-        acquired_at: "2026-07-06T18:17:01Z"
-        expires_at: "2026-07-06T22:17:01Z"
       events:
         - type: claim
           ts: "2026-07-05T00:52:56Z"
@@ -350,6 +344,74 @@ plan_index:
             pass on macOS. Remaining: migrate macOS tray call sites to resolve
             and use the facade directly, then run/live-prove shared conformance
             once VM substrate is available.
+        - type: checkpoint
+          ts: "2026-07-06T18:29:49Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "e9d55c97"
+          summary: >
+            Second coherent slice landed on osx-next: the AppKit action-host
+            control-wire opener now resolves `GuestEndpoint::MacVz` through
+            `GuestTransport::open_stream` (`381dbdfc`), and `VzRuntime::exec`
+            now routes through `GuestTransport::exec` with explicit Unix signal
+            exit-code normalization (`e9d55c97`). Evidence:
+            `cargo test -p tillandsias-vm-layer` 28/28,
+            `cargo test -p tillandsias-macos-tray` 55 passed / 1 ignored, and
+            `./build.sh --check` pass on macOS. Remaining: migrate the
+            diagnose/current-thread VZ helper and live exec helper paths, then
+            run/live-prove the shared conformance fixture when VM substrate is
+            available.
+        - type: checkpoint
+          ts: "2026-07-06T18:36:01Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "8e9f586d"
+          summary: >
+            Third coherent slice landed on osx-next: `diagnose.rs` no longer
+            names the raw macOS `VsockStream` type or calls
+            `open_vsock_stream_current_thread` directly. It constructs
+            `GuestEndpoint::MacVz` and delegates current-thread connection
+            details to a vm-layer endpoint-shaped helper that preserves the
+            per-attempt timeout needed by headless CLI readiness probes.
+            Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
+            `cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
+            `./build.sh --check` pass on macOS. Remaining: secure/expect-style
+            live exec helper calls still use `vsock_exec` over the secured boxed
+            stream, and shared conformance still needs a live VM run.
+        - type: blocked
+          ts: "2026-07-06T18:40:03Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          reason: >
+            Mac-side backend and caller migration slices are checkpointed, but
+            order 126 cannot be truthfully completed from this host path. The
+            upstream normalization packet still lacks the shared conformance
+            harness/litmus, secure/expect-style exec flows need a facade-contract
+            decision before `vsock_exec` can be removed without losing secure
+            handshakes or signal/expect semantics, and live Darwin conformance
+            requires a packaged/entitled VM substrate not available here
+            (`scripts/e2e-preflight.sh eligibility` => `skip:no-podman-user-session`).
+          blocker_refs:
+            - host-guest-transport-normalization-spec
+            - plan/issues/macos-dev-launch-entitlement-2026-07-05.md
+            - plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md
+          smallest_next_action: >
+            Linux/order124: land the shared conformance harness/litmus and decide
+            the secure/expect/signal shape for ExecOneShot. macOS with the
+            packaged app/VM substrate: rerun the shared conformance fixture on
+            `osx-next@8e9f586d` or newer.
+        - type: released
+          ts: "2026-07-06T18:40:03Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          reason: >
+            Released the active lease after recording the blocker so the macOS
+            queue can advance to other ready packets instead of spinning on an
+            unprovable completion gate.
         - type: progress
           ts: "2026-07-05T01:01:45Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
@@ -1145,7 +1207,7 @@ plan_index:
     - packet_id: macos-tray-stream-refactor
       order: 155
       title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
-      status: ready
+      status: pending
       kind: refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [vm-headless-persistent-listener]
@@ -1159,6 +1221,17 @@ plan_index:
         or equivalent. The two trays MUST end up with equivalent stream architectures
         (share a common reader-task implementation in tillandsias-host-shell if
         possible to avoid divergence).
+      events:
+        - type: blocked
+          ts: "2026-07-06T18:47:14Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1847Z"
+          host: macos
+          reason: >
+            Queue reconciliation: packet was marked ready, but its dependency
+            `vm-headless-persistent-listener` is still not complete. Return to
+            pending until the persistent listener/server-push stream lands.
+          blocker_refs:
+            - vm-headless-persistent-listener
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
@@ -1239,7 +1312,7 @@ plan_index:
     - packet_id: macos-tray-state-code-status-ux
       order: 161
       title: "macOS Tray: 37-char curated state messages from stable codes"
-      status: ready
+      status: pending
       kind: enhancement+refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [stable-state-codes-research, vm-headless-persistent-listener]
@@ -1254,6 +1327,19 @@ plan_index:
         must be driven by observable events and watch-like state channels, not
         polling loops. Curated strings should be concise, teachable, and
         consistent across hosts.
+      events:
+        - type: blocked
+          ts: "2026-07-06T18:47:14Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1847Z"
+          host: macos
+          reason: >
+            Queue reconciliation: stable-state-codes-research is done, but this
+            implementation packet also depends on
+            `vm-headless-persistent-listener`, which is still not complete.
+            Return to pending until status updates can be driven by the
+            observable stream path instead of polling.
+          blocker_refs:
+            - vm-headless-persistent-listener
       exit_criteria:
         - "Chip text hard-capped at 37 characters"
         - "No raw stack traces or multiline errors reach the chip"
@@ -1487,15 +1573,121 @@ plan_index:
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]
       pickup_role: windows
-      capability_tags: [windows, macos, tray, vm-layer, concurrency]
+      capability_tags: [windows, tray, vm-layer, concurrency]
       estimated_hours: 8
       outcome: >
-        (R1) Start poke retries with backoff + WSL-service-sane preflight; drain is
-        observable (lock/marker) so a relaunch waits for teardown instead of racing it;
-        automatic or one-click recovery from WSL/Service/E_UNEXPECTED (guided
-        wsl --shutdown). (R2) Single-instance guard for the tray (mutex), matching the
-        headless SingletonGuard. (R3) Host-side serialization or safe queueing of
-        concurrent PTY launch clicks. macOS analog for the VZ lifecycle.
+        Remaining Windows scope: (R1) start poke retries with backoff +
+        WSL-service-sane preflight; drain is observable (lock/marker) so a
+        relaunch waits for teardown instead of racing it; automatic or one-click
+        recovery from WSL/Service/E_UNEXPECTED (guided wsl --shutdown). (R2)
+        single-instance guard for the Windows tray, matching the headless
+        SingletonGuard. (R3) host-side serialization or safe queueing of
+        concurrent Windows PTY launch clicks. (R9) Windows embedded fetch script
+        atomicity. macOS R2/R3/R9 analog slices are complete on osx-next.
+      events:
+        - type: claim
+          ts: "2026-07-06T18:42:33Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r9-20260706T1842Z"
+          expires_at: "2026-07-06T22:42:33Z"
+          note: >
+            Claiming only the macOS R9 sub-slice from the ratified race
+            safeguards research: `crates/tillandsias-vm-layer/src/vz.rs` still
+            embeds a `fetch-headless.sh` path that curls directly onto the live
+            binary. Scope is atomic temp+install behavior for the macOS embedded
+            script; Windows lifecycle/R1-R3 remain for a Windows owner.
+        - type: checkpoint
+          ts: "2026-07-06T18:45:15Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r9-20260706T1842Z"
+          commit_sha: "3e1637ad"
+          summary: >
+            macOS R9 sub-slice complete on osx-next: the VZ cloud-init
+            `fetch-headless.sh` network fallback now downloads to `mktemp`,
+            cleans it with a trap, and `install -D -m 0755`s into the live
+            binary path instead of curling directly onto `$DEST`. Added a
+            source-pin test for the temp/install behavior. Evidence:
+            `cargo test -p tillandsias-vm-layer` 30/30 and `./build.sh --check`
+            pass on macOS. Remaining in this packet: Windows R1-R3/R9 lifecycle
+            safeguards.
+        - type: released
+          ts: "2026-07-06T18:45:15Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r9-20260706T1842Z"
+          reason: >
+            Released after completing the macOS R9 slice; packet remains ready
+            for the Windows owner to claim the remaining lifecycle safeguards.
+        - type: claim
+          ts: "2026-07-06T18:49:58Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1849Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r2-20260706T1849Z"
+          expires_at: "2026-07-06T22:49:58Z"
+          note: >
+            Claiming only the macOS R2 sub-slice: add a single-instance guard
+            for the no-flag AppKit tray path while leaving CLI utility modes
+            (`--diagnose`, `--exec-guest`, `--github-login`, etc.) runnable.
+        - type: checkpoint
+          ts: "2026-07-06T18:52:38Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1849Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r2-20260706T1849Z"
+          commit_sha: "64676548"
+          summary: >
+            macOS R2 sub-slice complete on osx-next: added a non-destructive
+            `SingletonGuard::try_acquire` helper and wired the no-flag AppKit
+            tray path to exit cleanly when another tray instance already holds
+            `tillandsias-macos-tray`. CLI utility modes still run before the
+            guard. Evidence: `cargo test -p tillandsias-core singleton`,
+            `cargo test -p tillandsias-macos-tray`, and `./build.sh --check`
+            pass on macOS. Remaining in this packet: macOS R3 launch
+            serialization plus Windows lifecycle/R1-R3/R9 safeguards.
+        - type: released
+          ts: "2026-07-06T18:52:38Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1849Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r2-20260706T1849Z"
+          reason: >
+            Released after completing the macOS R2 slice; packet remains ready
+            for the next remaining lifecycle safeguard slice.
+        - type: claim
+          ts: "2026-07-06T18:55:39Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1855Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r3-20260706T1855Z"
+          expires_at: "2026-07-06T22:55:39Z"
+          note: >
+            Claiming only the macOS R3 sub-slice: serialize same-project
+            project launch / PTY click handling in the AppKit tray so a
+            double-click cannot start two competing guest launch flows.
+            Windows lifecycle/R1-R3/R9 safeguards remain outside this lease.
+        - type: checkpoint
+          ts: "2026-07-06T18:59:52Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1855Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r3-20260706T1855Z"
+          commit_sha: "bb72efc2"
+          summary: >
+            macOS R3 sub-slice complete on osx-next: AppKit project PTY
+            launches now take a per-project in-memory launch lease in
+            `TrayActionHost::attach_pty`, so a same-project double-click is
+            ignored while the first Attach/Maintain flow is in flight. Root
+            shell and GitHub login remain project-less and unaffected. Added
+            `project_launch_lease_rejects_duplicate_until_released`. Evidence:
+            `cargo test -p tillandsias-macos-tray` 58 passed / 1 ignored and
+            `./build.sh --check` pass on macOS.
+        - type: released
+          ts: "2026-07-06T18:59:52Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1855Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r3-20260706T1855Z"
+          reason: >
+            Released after completing the macOS R3 slice. All macOS R2/R3/R9
+            work from this packet is complete; packet remains ready for the
+            Windows owner to implement Windows R1-R3/R9 lifecycle safeguards.
       exit_criteria:
         - "Quit then immediate relaunch converges to Ready without manual wsl --shutdown"
         - "Second tray instance exits gracefully pointing at the first"

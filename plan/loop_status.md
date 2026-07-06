@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:20:38Z
+LastExecutionTime: 2026-07-06T18:59:52Z
 
 ## Cycle 2026-07-06T18:15Z (windows — meta-orchestration)
 
@@ -30,24 +30,68 @@ LastExecutionTime: 2026-07-06T18:20:38Z
   `plan/issues/stable-state-codes-research-2026-07-05.md`. This gives the
   macOS status UX packet a concrete code contract instead of ad hoc labels.
 - **Worker drain — `host-guest-transport-macos` (order 126), claimed and
-  checkpointed IN PROGRESS**: first coherent slice landed on
+  checkpointed then BLOCKED/released**: first coherent slice landed on
   `osx-next@0e49d480`. `VzRuntime` implements the normalized
   `GuestTransport` facade for `GuestEndpoint::MacVz` (`open_stream`, `exec`,
   `exec_streaming`) over the existing VZ `VsockStream` / `vsock_exec` helpers.
-  Evidence: `cargo test -p tillandsias-vm-layer` 26/26 and `./build.sh --check`
-  pass on macOS. Remaining: migrate macOS tray call sites to resolve/use the
-  facade directly and run/live-prove shared conformance once substrate is
-  available.
+  Second slice landed on `osx-next@381dbdfc` and `osx-next@e9d55c97`: the
+  AppKit action-host opener now uses `GuestTransport::open_stream`, and
+  `VzRuntime::exec` routes through `GuestTransport::exec` with explicit Unix
+  signal exit-code normalization. Third slice landed on `osx-next@8e9f586d`:
+  `diagnose.rs` now constructs `GuestEndpoint::MacVz` and delegates
+  current-thread VZ connection details to vm-layer, without naming the raw
+  `VsockStream` type or calling `open_vsock_stream_current_thread` directly.
+  Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
+  `cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
+  `./build.sh --check` pass on macOS. Released the lease after recording the
+  blocker: completion now depends on Linux/order124 landing the shared
+  conformance harness/litmus plus a facade-contract decision for
+  secure/expect/signal ExecOneShot semantics, and on a macOS packaged/entitled
+  VM substrate to run the live Darwin fixture. Local e2e eligibility remains
+  `skip:no-podman-user-session`.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R9
+  sub-slice claimed and released after checkpoint**: `osx-next@3e1637ad`
+  changes the VZ cloud-init `fetch-headless.sh` network fallback from
+  `curl --output "$DEST"` to `mktemp` + cleanup trap + `install -D -m 0755`
+  into the live headless path. Added a source-pin test for the temp/install
+  behavior. Evidence: `cargo test -p tillandsias-vm-layer` 30/30 and
+  `./build.sh --check` pass on macOS. The broader packet remains ready for the
+  Windows owner; Windows R1-R3/R9 lifecycle safeguards are not completed by
+  this macOS slice.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R2
+  sub-slice claimed and released after checkpoint**: `osx-next@64676548`
+  adds non-destructive `SingletonGuard::try_acquire` and guards only the no-flag
+  AppKit tray path, so a second tray exits cleanly while CLI utility modes still
+  run. Evidence: `cargo test -p tillandsias-core singleton`,
+  `cargo test -p tillandsias-macos-tray` 57 passed / 1 ignored, and
+  `./build.sh --check` pass on macOS.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R3
+  sub-slice claimed and released after checkpoint**: `osx-next@bb72efc2`
+  adds a per-project launch lease around AppKit Attach/Maintain PTY launches,
+  so a same-project double-click is ignored while the first guest launch flow is
+  in flight. Root shell and GitHub login remain project-less and unaffected.
+  Evidence: `cargo test -p tillandsias-macos-tray` 58 passed / 1 ignored and
+  `./build.sh --check` pass on macOS. Remaining order 161 scope is now
+  Windows lifecycle/R1-R3/R9 only.
+- **Queue reconciliation**: `host-guest-transport-macos` is now blocked on
+  Linux/order124 conformance and live macOS VM substrate; `macos-tray-stream-refactor`
+  and `macos-tray-state-code-status-ux` were returned from stale `ready` to
+  `pending` because `vm-headless-persistent-listener` is still not complete.
+  `host-lifecycle-race-safeguards` remains ready for Windows only after the
+  macOS R2/R3/R9 slices. No macOS-owned packet remains claimable in the current
+  dependency state.
 - **Verification**: conflict-marker scan clean; `plan/index.yaml` and
-  `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
-  on the integrated `linux-next` tree with the Rust toolchain path added.
+  `.github/workflows/release.yml` parse as YAML; `cargo test -p
+  tillandsias-macos-tray` and `./build.sh --check` pass on macOS with the Rust
+  toolchain path added.
 - **E2E gate**: `scripts/e2e-preflight.sh eligibility` →
   `skip:no-podman-user-session`; local-build e2e skipped with the recorded
   verdict.
-- **Next macOS work**: continue order 126 facade call-site migration under the
-  active lease; order 198 remains actively leased by another macOS agent until
-  `2026-07-06T20:58:00Z`; older macOS stream/status implementation packets
-  still depend on the VM/headless persistent listener and push-message work.
+- **Next macOS work**: none claimable in the current dependency state. Order 126
+  is blocked on Linux/order124 conformance and live packaged/entitled macOS VM
+  substrate; older macOS stream/status implementation packets still depend on
+  the VM/headless persistent listener and push-message work. Order 198 remains
+  actively leased by another macOS agent until `2026-07-06T20:58:00Z`.
 
 ## Cycle 2026-07-06T17:34Z (linux_mutable CCR sandbox — meta-orchestration)
 
