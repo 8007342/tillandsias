@@ -2615,7 +2615,7 @@ plan_index:
     - packet_id: macos-tray-clippy-warnings
       order: 197
       title: "macOS tray: fix 3 pre-existing clippy warnings (large_enum_variant x2, match_result_ok)"
-      status: ready
+      status: claimed
       kind: enhancement
       deliverable: plan/issues/macos-tray-clippy-warnings-2026-07-06.md
       depends_on: []
@@ -2629,7 +2629,13 @@ plan_index:
         status_item.rs:203 (match_result_ok). Optionally consolidate the now-
         3x-duplicated ControlWireStream/open_control_wire_stream pattern into
         one shared module.
-      events: []
+      events:
+        - type: claim
+          ts: "2026-07-06T15:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1545Z"
+          host: macos
+          lease_id: "macos-tray-clippy-warnings-claim-1"
+          expires_at: "2026-07-06T19:45:00Z"
       exit_criteria:
         - "cargo clippy -p tillandsias-macos-tray --all-targets reports 0 warnings"
 
