@@ -50,6 +50,7 @@
 
 #![cfg(target_os = "macos")]
 
+use std::collections::HashSet;
 use std::io;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -65,6 +66,7 @@ use objc2_app_kit::{NSMenuItem, NSStatusItem};
 use objc2_foundation::MainThreadMarker;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+use tillandsias_control_wire::guest_transport::{GuestEndpoint, GuestTransport};
 use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
 use tillandsias_vm_layer::VmRuntime;
 use tillandsias_vm_layer::vz::VzRuntime;
@@ -265,9 +267,11 @@ fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
     .clone()
 }
 
+type GuestWireStream = Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>;
+
 enum ControlWireStream {
-    Plain(tillandsias_vm_layer::transport_macos::VsockStream),
-    Secure(Box<EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>>),
+    Plain(GuestWireStream),
+    Secure(Box<EncryptedStream<GuestWireStream>>),
 }
 
 impl AsyncRead for ControlWireStream {
@@ -315,9 +319,10 @@ async fn open_control_wire_stream(
     port: u32,
     timeout: Duration,
 ) -> Result<ControlWireStream, String> {
-    let stream = vz
-        .open_vsock_stream(port, timeout)
+    let endpoint = GuestEndpoint::MacVz { port };
+    let stream = tokio::time::timeout(timeout, vz.open_stream(&endpoint))
         .await
+        .map_err(|_| format!("MacVz GuestTransport open timed out after {timeout:?}"))?
         .map_err(|e| format!("vsock connect: {e}"))?;
 
     match secure_control_wire_mode()? {
@@ -338,11 +343,10 @@ async fn open_control_wire_stream(
 
 /// One-shot VmStatus poll over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_vm_status` but
-/// drives the macOS-specific vsock path:
+/// drives the macOS-specific facade path:
 ///
-///   1. `VzRuntime::open_vsock_stream` (which uses
-///      `VZVirtioSocketDevice.connectToPort:` under the hood) to get
-///      an `AsyncRead + AsyncWrite` stream into the guest's port 42420.
+///   1. `GuestTransport::open_stream(GuestEndpoint::MacVz { port })` to
+///      get an `AsyncRead + AsyncWrite` stream into the guest's port 42420.
 ///   2. Wrap the stream in `Client::from_stream` so the standard
 ///      Hello/HelloAck + request/recv code paths drive it.
 ///   3. Send a `VmStatusRequest` and expect a `VmStatusReply`.
@@ -420,7 +424,7 @@ async fn poll_vm_status_once(
 /// can drain podman containers + sessions BEFORE VZ tears down the
 /// VM. Mirrors `tillandsias-windows-tray::wsl_lifecycle::
 /// request_vm_shutdown` (commit `80eceb0b`) but uses macOS's
-/// `VZVirtioSocketConnection` path via `VzRuntime::open_vsock_stream`.
+/// `GuestTransport` backend over `VZVirtioSocketConnection`.
 ///
 /// Bounded by `RTT_BUDGET` (3 s) — a wedged in-VM headless cannot
 /// delay Quit indefinitely; the caller follows up with VZ-level
@@ -584,8 +588,8 @@ fn cloud_entry_to_menu(
 
 /// One-shot CloudRefreshRequest over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_cloud_projects`
-/// (commit b0cdcdee) but drives the macOS-specific vsock path via
-/// `VzRuntime::open_vsock_stream`. Reuses the standard
+/// (commit b0cdcdee) but drives the macOS-specific `GuestTransport`
+/// backend over VZ virtio-vsock. Reuses the standard
 /// `Client::from_stream` + handshake + request path slice 4
 /// introduced.
 ///
@@ -658,7 +662,7 @@ async fn poll_cloud_projects_once(
 
 /// One-shot GithubLoginStatusRequest over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_github_login` but
-/// drives the macOS-specific vsock path via `VzRuntime::open_vsock_stream`.
+/// drives the macOS-specific `GuestTransport` backend over VZ virtio-vsock.
 ///
 /// Returns the mapped `GithubLoginState` so the caller can write it into the
 /// held `MenuState.login` and re-render the menu.
@@ -673,10 +677,7 @@ async fn poll_github_login_once(
     use tillandsias_host_shell::vsock_client::Client;
 
     let connect_timeout = Duration::from_secs(5);
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -752,6 +753,38 @@ const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
 /// Fedora's ACPI shutdown.
 const VM_STOP_DRAIN: Duration = Duration::from_secs(60);
 
+type ProjectLaunchSet = Arc<Mutex<HashSet<String>>>;
+
+/// Per-project lease held while a project PTY launch is in flight.
+/// Dropping it clears the slot so a retry can proceed after success or
+/// failure.
+struct ProjectLaunchLease {
+    in_flight: ProjectLaunchSet,
+    project: String,
+}
+
+impl Drop for ProjectLaunchLease {
+    fn drop(&mut self) {
+        if let Ok(mut in_flight) = self.in_flight.lock() {
+            in_flight.remove(&self.project);
+        }
+    }
+}
+
+fn try_acquire_project_launch(
+    in_flight: &ProjectLaunchSet,
+    project: &str,
+) -> Option<ProjectLaunchLease> {
+    let mut guard = in_flight.lock().ok()?;
+    if !guard.insert(project.to_string()) {
+        return None;
+    }
+    Some(ProjectLaunchLease {
+        in_flight: in_flight.clone(),
+        project: project.to_string(),
+    })
+}
+
 /// State shared across the host's selector handlers. Lives inside
 /// the declared class via `DeclaredClass::Ivars`.
 pub struct TrayActionHostIvars {
@@ -788,6 +821,10 @@ pub struct TrayActionHostIvars {
     /// isn't Send because of the UnsafeCell layout). Wrapping in
     /// `TrayActionHostHandle` is the safe seam.
     self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+    /// Project names with an in-flight Attach/Maintain launch.
+    /// Prevents a same-project double-click from spawning two competing
+    /// guest launch flows.
+    project_launches: ProjectLaunchSet,
 }
 
 declare_class!(
@@ -1018,25 +1055,45 @@ impl TrayActionHost {
             }
         };
         let runtime = ivars.runtime.clone();
+        let project_launch_lease = match project.as_deref() {
+            Some(project_name) => {
+                match try_acquire_project_launch(&ivars.project_launches, project_name) {
+                    Some(lease) => Some(lease),
+                    None => {
+                        eprintln!(
+                            "[tillandsias-tray] {label}: project launch already in progress \
+                             for {project_name:?}; ignoring duplicate click"
+                        );
+                        return;
+                    }
+                }
+            }
+            None => None,
+        };
         eprintln!("[tillandsias-tray] {label}: spawning attach worker (project={project:?})");
         runtime.spawn(async move {
             let result = run_pty_attach(vz, intent, project).await;
-            dispatch_to_main_thread(move || match result {
-                Ok(slave_path) => {
-                    eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
-                    if let Err(e) = crate::terminal_attach::spawn_terminal_pty_attach(&slave_path) {
-                        eprintln!("[tillandsias-tray] {label}: terminal spawn failed: {e}");
+            dispatch_to_main_thread(move || {
+                let _project_launch_lease = project_launch_lease;
+                match result {
+                    Ok(slave_path) => {
+                        eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
+                        if let Err(e) =
+                            crate::terminal_attach::spawn_terminal_pty_attach(&slave_path)
+                        {
+                            eprintln!("[tillandsias-tray] {label}: terminal spawn failed: {e}");
+                        }
                     }
-                }
-                Err(e) => {
-                    eprintln!("[tillandsias-tray] {label} failed: {e}");
-                    let stub = format!(
-                        "Tillandsias — {label} could not attach. \
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] {label} failed: {e}");
+                        let stub = format!(
+                            "Tillandsias — {label} could not attach. \
                              Error: {e}\n\nLive PTY attach needs a booted VM \
                              with a working in-VM headless on vsock port \
                              42420 (gated on m5 recipe-artifact fetch)."
-                    );
-                    let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
+                        );
+                        let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
+                    }
                 }
             });
         });
@@ -1196,6 +1253,7 @@ impl TrayActionHost {
             })),
             self_handle: Arc::new(Mutex::new(None)),
             status_text: Arc::new(Mutex::new(BOOT_STATUS_TEXT.to_string())),
+            project_launches: Arc::new(Mutex::new(HashSet::new())),
         };
         // SAFETY: `mtm` proves main-thread; allocation + init is the
         // standard ObjC two-step. `set_ivars` populates the declared
@@ -1857,6 +1915,29 @@ fn spawn_vm_status_poller(
 mod tests {
     use super::*;
 
+    #[test]
+    fn project_launch_lease_rejects_duplicate_until_released() {
+        let in_flight = Arc::new(Mutex::new(HashSet::new()));
+        let first = try_acquire_project_launch(&in_flight, "tillandsias")
+            .expect("first project launch should acquire the slot");
+
+        assert!(
+            try_acquire_project_launch(&in_flight, "tillandsias").is_none(),
+            "same-project double-click must not acquire a second launch slot"
+        );
+        assert!(
+            try_acquire_project_launch(&in_flight, "other-project").is_some(),
+            "a different project has an independent launch slot"
+        );
+
+        drop(first);
+
+        assert!(
+            try_acquire_project_launch(&in_flight, "tillandsias").is_some(),
+            "slot must clear after the in-flight launch finishes"
+        );
+    }
+
     /// Smoke: the class registers under the expected ObjC name. Does
     /// NOT require main-thread (only touches `Self::class()`), so it
     /// runs from cargo's test threads.
@@ -1951,6 +2032,33 @@ mod tests {
         assert!(s.contains("Internal"), "code missing: {s}");
         assert!(!s.ends_with(':'), "trailing colon: {s}");
         assert!(!s.contains(": "), "spurious colon-space: {s}");
+    }
+
+    /// The AppKit action host must resolve the macOS control-wire stream
+    /// through the normalized GuestTransport facade instead of opening a
+    /// VZ-specific stream directly.
+    ///
+    /// @trace spec:host-guest-transport
+    #[test]
+    fn action_host_control_wire_opener_uses_guest_transport_facade() {
+        let source = include_str!("action_host.rs");
+        let window = source
+            .split("async fn open_control_wire_stream(")
+            .nth(1)
+            .and_then(|s| s.split("\n///").next())
+            .expect("open_control_wire_stream source");
+        assert!(
+            window.contains("GuestEndpoint::MacVz"),
+            "opener must construct the MacVz endpoint: {window}"
+        );
+        assert!(
+            window.contains(".open_stream(&endpoint)"),
+            "opener must use GuestTransport::open_stream: {window}"
+        );
+        assert!(
+            !window.contains(".open_vsock_stream("),
+            "opener must not bypass the GuestTransport facade: {window}"
+        );
     }
 
     /// `compose_chip_text` appends a non-empty `last_event` after a

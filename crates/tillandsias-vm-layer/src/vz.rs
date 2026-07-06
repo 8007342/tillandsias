@@ -22,12 +22,17 @@
 #![allow(dead_code)]
 
 #[cfg(target_os = "macos")]
+use std::io;
+#[cfg(target_os = "macos")]
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::time::Duration;
 
 use crate::{ProvisionManifest, VmError, VmRuntime};
+
+#[cfg(target_os = "macos")]
+const GUEST_TRANSPORT_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Virtualization.framework-backed VM runtime.
 ///
@@ -402,6 +407,30 @@ impl VzRuntime {
         crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
     }
 
+    /// Current-thread variant of the normalized GuestTransport stream opener.
+    ///
+    /// The trait-level `GuestTransport::open_stream` owns the default backend
+    /// timeout. Headless macOS CLI flows (`--diagnose`, `--exec-guest`,
+    /// `--github-login`) need per-attempt timeouts while pumping the process
+    /// main thread, so they use this endpoint-shaped helper instead of reaching
+    /// down to raw `VsockStream` construction.
+    ///
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    pub async fn open_guest_transport_stream_current_thread(
+        &self,
+        ep: &tillandsias_control_wire::guest_transport::GuestEndpoint,
+        timeout: std::time::Duration,
+    ) -> io::Result<Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>>
+    {
+        let port = macvz_port(ep)?;
+        let stream = self
+            .open_vsock_stream_current_thread(port, timeout)
+            .await
+            .map_err(macvz_io_error)?;
+        Ok(Box::new(stream))
+    }
+
     /// Generate a `cidata.iso` image using `hdiutil makehybrid`.
     #[cfg(target_os = "macos")]
     fn generate_cidata_iso(&self, dest: &Path) -> Result<(), String> {
@@ -463,8 +492,10 @@ fi
 if [[ -x "$DEST" ]]; then exit 0; fi
 ARCH="$(uname -m)"
 URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-${ARCH}-unknown-linux-musl"
-curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$DEST" "$URL"
-chmod 0755 "$DEST"
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$TMP" "$URL"
+install -D -m 0755 "$TMP" "$DEST"
 EOF
 chmod 0755 /usr/local/lib/tillandsias/fetch-headless.sh
 
@@ -1455,25 +1486,28 @@ impl VmRuntime for VzRuntime {
     async fn exec(&self, argv: &[&str]) -> Result<ExitStatus, VmError> {
         // Non-interactive guest exec over the control wire, mirroring
         // WslRuntime::exec (`wsl --exec`) for cross-platform VmRuntime parity.
-        // The PTY session machinery lives in tillandsias-host-shell, which
-        // depends on THIS crate, so we cannot reuse it (cycle); instead we
-        // speak the control wire directly via the self-contained vsock_exec
-        // client. See plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+        // Route through the normalized GuestTransport facade so the macOS
+        // one-shot path shares the same ExecOneShot primitive as platform
+        // callers that use GuestEndpoint::MacVz directly.
         use std::os::unix::process::ExitStatusExt;
+        use tillandsias_control_wire::guest_transport::{
+            ExecRequest, GuestEndpoint, GuestTransport,
+        };
         use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
 
-        let stream = self
-            .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-            .map_err(|e| format!("VzRuntime::exec: vsock connect: {e}"))?;
-        let out = crate::vsock_exec::exec_over_stream(stream, argv).await?;
+        let out = <Self as GuestTransport>::exec(
+            self,
+            &GuestEndpoint::MacVz {
+                port: CONTROL_WIRE_VSOCK_PORT,
+            },
+            ExecRequest::new(argv),
+        )
+        .await
+        .map_err(|e| format!("VzRuntime::exec: {e}"))?;
 
-        // Synthesize a Unix ExitStatus from the guest waitpid-style result:
-        // signal in the low 7 bits, else exit code in the high byte (WEXITSTATUS).
-        let raw = match out.exit.signal {
-            Some(sig) => sig & 0x7f,
-            None => (out.exit.code & 0xff) << 8,
-        };
+        // Synthesize a Unix ExitStatus from the facade's exit-code result
+        // (high byte = WEXITSTATUS).
+        let raw = (out.exit_code & 0xff) << 8;
         Ok(ExitStatus::from_raw(raw))
     }
 
@@ -1722,6 +1756,104 @@ impl VzRuntime {
     }
 }
 
+#[cfg(target_os = "macos")]
+#[async_trait::async_trait]
+impl tillandsias_control_wire::guest_transport::GuestTransport for VzRuntime {
+    async fn open_stream(
+        &self,
+        ep: &tillandsias_control_wire::guest_transport::GuestEndpoint,
+    ) -> io::Result<Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>>
+    {
+        let port = macvz_port(ep)?;
+        let stream = self
+            .open_vsock_stream(port, GUEST_TRANSPORT_CONNECT_TIMEOUT)
+            .await
+            .map_err(macvz_io_error)?;
+        Ok(Box::new(stream))
+    }
+
+    async fn exec(
+        &self,
+        ep: &tillandsias_control_wire::guest_transport::GuestEndpoint,
+        req: tillandsias_control_wire::guest_transport::ExecRequest,
+    ) -> io::Result<tillandsias_control_wire::guest_transport::ExecOutput> {
+        let port = macvz_port(ep)?;
+        let argv_refs: Vec<&str> = req.argv.iter().map(String::as_str).collect();
+        let stdin = req.stdin.unwrap_or_default();
+
+        let stream = self
+            .open_vsock_stream(port, GUEST_TRANSPORT_CONNECT_TIMEOUT)
+            .await
+            .map_err(macvz_io_error)?;
+        let out = crate::vsock_exec::exec_over_stream_with_input(stream, &argv_refs, &stdin)
+            .await
+            .map_err(io::Error::other)?;
+
+        Ok(tillandsias_control_wire::guest_transport::ExecOutput {
+            stdout: out.stdout,
+            stderr: vec![],
+            exit_code: guest_transport_exit_code(out.exit),
+        })
+    }
+
+    async fn exec_streaming(
+        &self,
+        ep: &tillandsias_control_wire::guest_transport::GuestEndpoint,
+        req: tillandsias_control_wire::guest_transport::ExecRequest,
+        on_chunk: &mut (dyn FnMut(tillandsias_control_wire::guest_transport::ExecChunk) + Send),
+    ) -> io::Result<tillandsias_control_wire::guest_transport::ExecOutput> {
+        let port = macvz_port(ep)?;
+        let argv_refs: Vec<&str> = req.argv.iter().map(String::as_str).collect();
+        let stdin = req.stdin.unwrap_or_default();
+
+        let stream = self
+            .open_vsock_stream(port, GUEST_TRANSPORT_CONNECT_TIMEOUT)
+            .await
+            .map_err(macvz_io_error)?;
+        let out = crate::vsock_exec::exec_over_stream_with_input_streaming(
+            stream,
+            &argv_refs,
+            &stdin,
+            |bytes: &[u8]| {
+                on_chunk(
+                    tillandsias_control_wire::guest_transport::ExecChunk::Stdout(bytes.to_vec()),
+                )
+            },
+        )
+        .await
+        .map_err(io::Error::other)?;
+
+        Ok(tillandsias_control_wire::guest_transport::ExecOutput {
+            stdout: out.stdout,
+            stderr: vec![],
+            exit_code: guest_transport_exit_code(out.exit),
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn guest_transport_exit_code(exit: tillandsias_control_wire::PtyExit) -> i32 {
+    match exit.signal {
+        Some(signal) => 128 + signal,
+        None => exit.code,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macvz_port(ep: &tillandsias_control_wire::guest_transport::GuestEndpoint) -> io::Result<u32> {
+    match ep {
+        tillandsias_control_wire::guest_transport::GuestEndpoint::MacVz { port } => Ok(*port),
+        other => Err(io::Error::other(format!(
+            "VzRuntime GuestTransport: unsupported endpoint {other:?}"
+        ))),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macvz_io_error(err: OpenVsockError) -> io::Error {
+    io::Error::other(format!("VzRuntime GuestTransport: {err}"))
+}
+
 // ---------------------------------------------------------------------------
 // Non-macOS: cross-platform link stubs.
 // ---------------------------------------------------------------------------
@@ -1828,6 +1960,34 @@ mod tests {
         assert_send_sync::<VzRuntime>();
     }
 
+    /// The macOS VZ runtime is the Darwin backend for the normalized
+    /// host<->guest transport facade.
+    ///
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_runtime_implements_guest_transport() {
+        fn assert_guest_transport<T: tillandsias_control_wire::guest_transport::GuestTransport>() {}
+        assert_guest_transport::<VzRuntime>();
+    }
+
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macvz_endpoint_accepts_only_macos_vz() {
+        use tillandsias_control_wire::guest_transport::GuestEndpoint;
+
+        assert_eq!(
+            macvz_port(&GuestEndpoint::MacVz { port: 42420 }).unwrap(),
+            42420
+        );
+        let err = macvz_port(&GuestEndpoint::Wsl { port: 42420 }).unwrap_err();
+        assert!(
+            err.to_string().contains("unsupported endpoint"),
+            "unexpected error: {err}"
+        );
+    }
+
     /// The fetch unit must remain an idempotent oneshot. If systemd skips it
     /// with `ConditionPathExists=...`, the dependent headless service can be
     /// skipped on reboot even though the binary is already installed.
@@ -1874,6 +2034,46 @@ mod tests {
         assert!(
             source.contains("install -D -m 0755 \"$STAGED\" \"$DEST\""),
             "fetch script must install the staged binary when present and executable"
+        );
+    }
+
+    /// The network fallback must not curl directly onto the live
+    /// `/usr/local/bin/tillandsias-headless` path. Download to a temp file,
+    /// then install into place so interrupted writes cannot leave a partial
+    /// executable behind.
+    ///
+    /// @trace plan/issues/race-safeguards-research-2026-07-02.md#r9
+    #[test]
+    fn vz_fetch_script_installs_download_via_temp_file() {
+        let source = include_str!("vz.rs");
+        let fetch_script = source
+            .split("# Write fetch-headless.sh")
+            .nth(1)
+            .and_then(|tail| {
+                tail.split("chmod 0755 /usr/local/lib/tillandsias/fetch-headless.sh")
+                    .next()
+            })
+            .expect("fetch-headless script window");
+
+        assert!(
+            fetch_script.contains("TMP=\"$(mktemp)\""),
+            "fetch script must create a temp file before downloading"
+        );
+        assert!(
+            fetch_script.contains("trap 'rm -f \"$TMP\"' EXIT"),
+            "fetch script must clean the temp file"
+        );
+        assert!(
+            fetch_script.contains("--output \"$TMP\" \"$URL\""),
+            "curl must write to the temp file, not the live binary"
+        );
+        assert!(
+            fetch_script.contains("install -D -m 0755 \"$TMP\" \"$DEST\""),
+            "fetch script must install the temp file into the live path"
+        );
+        assert!(
+            !fetch_script.contains("--output \"$DEST\""),
+            "fetch script must not curl directly onto the live binary"
         );
     }
 
@@ -1937,16 +2137,13 @@ mod tests {
         );
     }
 
-    /// `VzRuntime::exec` is explicitly deferred to Phase 5; returns a clear
-    /// "deferred" message rather than `unimplemented!()` so callers don't
-    /// silently panic.
-    ///
-    /// @trace spec:vm-idiomatic-layer
     /// `VzRuntime::exec` is now implemented over the control wire (see
-    /// `vsock_exec`). Without a started VM it must fail at the vsock-connect
-    /// step with a clear "VM not started" error — NOT silently succeed and NOT
-    /// the old Phase-5 deferral stub. The happy-path protocol is unit-tested in
-    /// `vsock_exec::tests` against an in-memory peer (no real VM).
+    /// the GuestTransport facade). Without a started VM it must fail at the
+    /// MacVz backend with a clear "VM not started" error — NOT silently succeed
+    /// and NOT the old Phase-5 deferral stub. The happy-path protocol is
+    /// unit-tested in `vsock_exec::tests` against an in-memory peer (no real VM).
+    ///
+    /// @trace spec:vm-idiomatic-layer, spec:host-guest-transport
     #[cfg(target_os = "macos")]
     #[tokio::test]
     async fn vz_exec_without_started_vm_fails_at_connect() {
@@ -1957,8 +2154,77 @@ mod tests {
             .await
             .expect_err("exec without a started VM must fail");
         assert!(
-            err.contains("vsock connect") && err.contains("not started"),
+            err.contains("GuestTransport") && err.contains("not started"),
             "unexpected exec error: {err}"
+        );
+    }
+
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vmruntime_exec_routes_through_guest_transport_exec() {
+        let source = include_str!("vz.rs");
+        let window = source
+            .split("async fn exec(&self, argv: &[&str]) -> Result<ExitStatus, VmError> {")
+            .nth(1)
+            .and_then(|s| s.split("\n    async fn wait_ready").next())
+            .expect("VzRuntime::exec source");
+        assert!(
+            window.contains("<Self as GuestTransport>::exec"),
+            "VmRuntime::exec must route through GuestTransport::exec: {window}"
+        );
+        assert!(
+            window.contains("GuestEndpoint::MacVz"),
+            "VmRuntime::exec must target the MacVz endpoint: {window}"
+        );
+    }
+
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn current_thread_guest_transport_opener_uses_endpoint_boundary() {
+        let source = include_str!("vz.rs");
+        let window = source
+            .split("pub async fn open_guest_transport_stream_current_thread(")
+            .nth(1)
+            .and_then(|s| s.split("\n    /// Generate a `cidata.iso`").next())
+            .expect("current-thread guest transport opener source");
+        assert!(
+            window.contains("macvz_port(ep)"),
+            "current-thread opener must validate the GuestEndpoint: {window}"
+        );
+        assert!(
+            window.contains("open_vsock_stream_current_thread(port, timeout)"),
+            "current-thread opener must preserve caller-supplied timeout: {window}"
+        );
+    }
+
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn guest_transport_exit_code_preserves_unix_signal_convention() {
+        use tillandsias_control_wire::PtyExit;
+
+        assert_eq!(
+            guest_transport_exit_code(PtyExit {
+                code: 17,
+                signal: None
+            }),
+            17
+        );
+        assert_eq!(
+            guest_transport_exit_code(PtyExit {
+                code: 0,
+                signal: Some(15)
+            }),
+            143
+        );
+        assert_eq!(
+            guest_transport_exit_code(PtyExit {
+                code: 143,
+                signal: Some(15)
+            }),
+            143
         );
     }
 
