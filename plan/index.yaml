@@ -1551,26 +1551,22 @@ plan_index:
     - packet_id: host-lifecycle-race-safeguards
       order: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
-      status: in_progress
+      status: ready
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]
       pickup_role: windows
-      capability_tags: [windows, macos, tray, vm-layer, concurrency]
+      capability_tags: [windows, tray, vm-layer, concurrency]
       estimated_hours: 8
-      lease:
-        lease_id: "host-lifecycle-race-safeguards-macos-r3-20260706T1855Z"
-        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1855Z"
-        host: macos
-        acquired_at: "2026-07-06T18:55:39Z"
-        expires_at: "2026-07-06T22:55:39Z"
       outcome: >
-        (R1) Start poke retries with backoff + WSL-service-sane preflight; drain is
-        observable (lock/marker) so a relaunch waits for teardown instead of racing it;
-        automatic or one-click recovery from WSL/Service/E_UNEXPECTED (guided
-        wsl --shutdown). (R2) Single-instance guard for the tray (mutex), matching the
-        headless SingletonGuard. (R3) Host-side serialization or safe queueing of
-        concurrent PTY launch clicks. macOS analog for the VZ lifecycle.
+        Remaining Windows scope: (R1) start poke retries with backoff +
+        WSL-service-sane preflight; drain is observable (lock/marker) so a
+        relaunch waits for teardown instead of racing it; automatic or one-click
+        recovery from WSL/Service/E_UNEXPECTED (guided wsl --shutdown). (R2)
+        single-instance guard for the Windows tray, matching the headless
+        SingletonGuard. (R3) host-side serialization or safe queueing of
+        concurrent Windows PTY launch clicks. (R9) Windows embedded fetch script
+        atomicity. macOS R2/R3/R9 analog slices are complete on osx-next.
       events:
         - type: claim
           ts: "2026-07-06T18:42:33Z"
@@ -1651,6 +1647,30 @@ plan_index:
             project launch / PTY click handling in the AppKit tray so a
             double-click cannot start two competing guest launch flows.
             Windows lifecycle/R1-R3/R9 safeguards remain outside this lease.
+        - type: checkpoint
+          ts: "2026-07-06T18:59:52Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1855Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r3-20260706T1855Z"
+          commit_sha: "bb72efc2"
+          summary: >
+            macOS R3 sub-slice complete on osx-next: AppKit project PTY
+            launches now take a per-project in-memory launch lease in
+            `TrayActionHost::attach_pty`, so a same-project double-click is
+            ignored while the first Attach/Maintain flow is in flight. Root
+            shell and GitHub login remain project-less and unaffected. Added
+            `project_launch_lease_rejects_duplicate_until_released`. Evidence:
+            `cargo test -p tillandsias-macos-tray` 58 passed / 1 ignored and
+            `./build.sh --check` pass on macOS.
+        - type: released
+          ts: "2026-07-06T18:59:52Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1855Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r3-20260706T1855Z"
+          reason: >
+            Released after completing the macOS R3 slice. All macOS R2/R3/R9
+            work from this packet is complete; packet remains ready for the
+            Windows owner to implement Windows R1-R3/R9 lifecycle safeguards.
       exit_criteria:
         - "Quit then immediate relaunch converges to Ready without manual wsl --shutdown"
         - "Second tray instance exits gracefully pointing at the first"
