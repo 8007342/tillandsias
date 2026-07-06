@@ -90,7 +90,25 @@ if ! command -v agy >/dev/null 2>&1; then
     rm -f "$_agy_installer" 2>/dev/null || true
 fi
 
+# Assert agy is on PATH — no silent exec failure.
+# @trace order 187 (antigravity-agent-finish-up)
+if ! command -v agy >/dev/null 2>&1; then
+    trace_lifecycle "error" "agy not found on PATH — launch will fail"
+fi
+
+# ── Forge bypass: auto-approve permissions without prompting ───
+# `--dangerously-skip-permissions` is documented by agy --help as the
+# non-interactive / skip-approvals flag, analogous to OpenCode's
+# `--dangerously-skip-permissions` and Codex's
+# `--dangerously-bypass-approvals-and-sandbox`. Gated on
+# TILLANDSIAS_HOST_KIND=forge so it only activates inside the already-
+# sandboxed forge container. Verified against `agy --help` on 2026-07-06.
+agy_forge_args=()
+if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+    agy_forge_args+=(--dangerously-skip-permissions)
+fi
+
 # ── Launch Antigravity ──────────────────────────────────────
 trace_lifecycle "entrypoint" "antigravity launching"
 trace_lifecycle "exec" "launching agy"
-exec agy "$@"
+exec agy "${agy_forge_args[@]}" "$@"
