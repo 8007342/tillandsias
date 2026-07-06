@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:52:38Z
+LastExecutionTime: 2026-07-06T18:59:52Z
 
 ## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
 
@@ -55,23 +55,34 @@ LastExecutionTime: 2026-07-06T18:52:38Z
   AppKit tray path, so a second tray exits cleanly while CLI utility modes still
   run. Evidence: `cargo test -p tillandsias-core singleton`,
   `cargo test -p tillandsias-macos-tray` 57 passed / 1 ignored, and
-  `./build.sh --check` pass on macOS. Remaining: macOS R3 launch serialization
-  plus Windows lifecycle/R1-R3/R9 safeguards.
+  `./build.sh --check` pass on macOS.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R3
+  sub-slice claimed and released after checkpoint**: `osx-next@bb72efc2`
+  adds a per-project launch lease around AppKit Attach/Maintain PTY launches,
+  so a same-project double-click is ignored while the first guest launch flow is
+  in flight. Root shell and GitHub login remain project-less and unaffected.
+  Evidence: `cargo test -p tillandsias-macos-tray` 58 passed / 1 ignored and
+  `./build.sh --check` pass on macOS. Remaining order 161 scope is now
+  Windows lifecycle/R1-R3/R9 only.
 - **Queue reconciliation**: `host-guest-transport-macos` is now blocked on
   Linux/order124 conformance and live macOS VM substrate; `macos-tray-stream-refactor`
   and `macos-tray-state-code-status-ux` were returned from stale `ready` to
   `pending` because `vm-headless-persistent-listener` is still not complete.
-  No macOS-owned packet remains claimable in the current dependency state.
+  `host-lifecycle-race-safeguards` remains ready for Windows only after the
+  macOS R2/R3/R9 slices. No macOS-owned packet remains claimable in the current
+  dependency state.
 - **Verification**: conflict-marker scan clean; `plan/index.yaml` and
-  `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
-  on the integrated `linux-next` tree with the Rust toolchain path added.
+  `.github/workflows/release.yml` parse as YAML; `cargo test -p
+  tillandsias-macos-tray` and `./build.sh --check` pass on macOS with the Rust
+  toolchain path added.
 - **E2E gate**: `scripts/e2e-preflight.sh eligibility` →
   `skip:no-podman-user-session`; local-build e2e skipped with the recorded
   verdict.
-- **Next macOS work**: continue order 126 facade call-site migration under the
-  active lease; order 198 remains actively leased by another macOS agent until
-  `2026-07-06T20:58:00Z`; older macOS stream/status implementation packets
-  still depend on the VM/headless persistent listener and push-message work.
+- **Next macOS work**: none claimable in the current dependency state. Order 126
+  is blocked on Linux/order124 conformance and live packaged/entitled macOS VM
+  substrate; older macOS stream/status implementation packets still depend on
+  the VM/headless persistent listener and push-message work. Order 198 remains
+  actively leased by another macOS agent until `2026-07-06T20:58:00Z`.
 
 ## Cycle 2026-07-06T17:34Z (linux_mutable CCR sandbox — meta-orchestration)
 

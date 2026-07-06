@@ -223,3 +223,16 @@ instance already owns the lock. CLI utility modes (`--diagnose`, `--exec-guest`,
 `cargo test -p tillandsias-core singleton`,
 `cargo test -p tillandsias-macos-tray`, and `./build.sh --check` passed on macOS.
 macOS R3 launch serialization and Windows lifecycle/R1-R3/R9 remain.
+
+## Implementation checkpoint — macOS R3 slice 2026-07-06
+
+macOS concurrent project launch serialization is complete on
+`osx-next@bb72efc2`: `TrayActionHost::attach_pty` now takes a per-project
+in-memory launch lease for project-bearing Attach/Maintain actions, so a
+same-project double-click is ignored while the first guest launch flow is in
+flight. Root shell and GitHub login remain project-less and unaffected. Added
+`project_launch_lease_rejects_duplicate_until_released` to pin duplicate
+rejection and retry-after-release behavior. Evidence:
+`cargo test -p tillandsias-macos-tray` 58 passed / 1 ignored and
+`./build.sh --check` passed on macOS. All macOS R2/R3/R9 slices in order 161
+are complete; Windows lifecycle/R1-R3/R9 remains for the Windows owner.
