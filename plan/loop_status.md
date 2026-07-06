@@ -20,6 +20,14 @@ LastExecutionTime: 2026-07-05T23:28:00Z
   `linux-next`; macOS and Windows have sibling work that must be integrated by
   merge, not cherry-pick. Guest<->container encryption and metrics sub-packets
   remain open before M2 soak can start.
+- Windows update 2026-07-06T06:20Z (windows-bullo-fable5-20260706T0535Z):
+  `windows-next` merged `origin/linux-next` (0794510a) per the order-191 freeze;
+  Windows flag-OFF/flag-ON secure-wire evidence recorded in the order-191
+  deliverable (Noise handshake + VmStatus round-trip on a version-matched guest;
+  plaintext rejected failure-closed while gated ON). Order-161 R2 tray
+  SingletonGuard landed (c3089123). Windows local-build e2e gate verdict this
+  cycle: `skip:no-podman-binary` (e2e-preflight). Remaining freeze work: macOS
+  slice + linux coordinator merge of both siblings.
 - Embedded guest state: order 190 is the canonical Linux artifact contract. Older
   macOS-filed packaging notes are now intake evidence, not the active blocker.
 - Observability state: `plan/metrics-dashboard.md` is stale/cache-empty and must not
