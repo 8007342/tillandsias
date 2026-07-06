@@ -44,6 +44,17 @@ and `./build.sh --check` pass on macOS. Remaining: migrate tray call sites to
 the facade and run/live-prove the shared conformance fixture when the VM
 substrate is available.
 
+Checkpoint 2026-07-06T18:29Z: second slice landed on `osx-next@381dbdfc` and
+`osx-next@e9d55c97`. The AppKit action-host control-wire opener now constructs
+`GuestEndpoint::MacVz` and opens it through `GuestTransport::open_stream`, and
+`VzRuntime::exec` now routes through `GuestTransport::exec` while explicitly
+normalizing Unix signal exits at the facade boundary. Evidence:
+`cargo test -p tillandsias-vm-layer` 28/28,
+`cargo test -p tillandsias-macos-tray` 55 passed / 1 ignored, and
+`./build.sh --check` pass on macOS. Remaining: migrate `diagnose.rs`'
+current-thread VZ opener and direct live exec helper paths, then run/live-prove
+the shared conformance fixture when VM substrate is available.
+
 - Implement the facade backend over `VZVirtioSocketDevice`; remove bespoke
   per-call connect logic in favor of `open_stream` / `exec`.
 - Replace the macOS exec-guest helpers with the `ExecOneShot` facade (supersedes
