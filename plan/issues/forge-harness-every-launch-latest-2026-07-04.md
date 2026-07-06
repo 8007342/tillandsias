@@ -3,7 +3,7 @@
 - class: enhancement (forge image)
 - filed: 2026-07-04
 - owner: linux
-- status: pending (blocked on persistence prereq)
+- status: completed (2026-07-05)
 - depends_on: forge-persistent-tool-cache-mount-2026-07-04.md
 - trace: spec:default-image, spec:codex-tray-launcher
 

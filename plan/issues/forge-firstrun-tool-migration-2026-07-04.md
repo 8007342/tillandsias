@@ -3,7 +3,7 @@
 - class: enhancement (forge image)
 - filed: 2026-07-04
 - owner: linux
-- status: pending (blocked on persistence prereq)
+- status: completed (2026-07-05 — all slices done; last slice (ollama sub-slice, 2026-07-05) completed by linux-yoga)
 - depends_on: forge-persistent-tool-cache-mount-2026-07-04.md, forge-image-creation-vs-firstrun-split-research-2026-07-04.md
 - trace: spec:default-image, spec:forge-cache-dual
 

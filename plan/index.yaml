@@ -2034,6 +2034,16 @@ plan_index:
         - "each migrated tool installs on first launch into the persistent cache, present on PATH"
         - "second launch reuses (no reinstall); forge e2e first-attach-installs/second-attach-reuses"
         - "--check + --test pass"
+      events:
+        - type: completed
+          ts: "2026-07-06T00:08:39Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T000839Z"
+          host: linux
+          summary: >
+            Final ollama sub-slice completed: removed OLLAMA_VERSION/SHA256 ARGs
+            and curl/tar RUN block from inference Containerfile; added arch-aware
+            FIRST_RUN self-install into model cache cache at entrypoint.sh.
+            --check + --test pass. Commits: 207c6c85, 57bbbbd1.
 
     - packet_id: forge-firstrun-installer-arch-aware
       order: 188
@@ -2407,6 +2417,15 @@ plan_index:
           host: linux
           lease_id: "lease-192-20260706T000839Z"
           expires_at: "2026-07-06T04:08:39Z"
+        - type: progress
+          ts: "2026-07-06T00:15:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T000839Z"
+          host: linux
+          summary: >
+            Archived 2 superseded embedded-guest issue files (move to plan/archive/).
+            Reconciliated status headers for orders 178-183, 189 to match plan/index.yaml.
+            Updated metrics dashboard to display explicit "NO CURRENT METRICS" state
+            with source provenance. Remaining: update plan/index.yaml completion events.
 
     - packet_id: macos-vz-home-src-mount
       order: 193
