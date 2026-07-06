@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:40:03Z
+LastExecutionTime: 2026-07-06T18:45:15Z
 
 ## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
 
@@ -40,6 +40,15 @@ LastExecutionTime: 2026-07-06T18:40:03Z
   secure/expect/signal ExecOneShot semantics, and on a macOS packaged/entitled
   VM substrate to run the live Darwin fixture. Local e2e eligibility remains
   `skip:no-podman-user-session`.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R9
+  sub-slice claimed and released after checkpoint**: `osx-next@3e1637ad`
+  changes the VZ cloud-init `fetch-headless.sh` network fallback from
+  `curl --output "$DEST"` to `mktemp` + cleanup trap + `install -D -m 0755`
+  into the live headless path. Added a source-pin test for the temp/install
+  behavior. Evidence: `cargo test -p tillandsias-vm-layer` 30/30 and
+  `./build.sh --check` pass on macOS. The broader packet remains ready for the
+  Windows owner; Windows R1-R3/R9 lifecycle safeguards are not completed by
+  this macOS slice.
 - **Verification**: conflict-marker scan clean; `plan/index.yaml` and
   `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
   on the integrated `linux-next` tree with the Rust toolchain path added.
