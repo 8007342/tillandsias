@@ -302,7 +302,7 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: claimed
+      status: in_progress
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
@@ -334,6 +334,22 @@ plan_index:
           host: macos
           lease_id: "host-guest-transport-macos-20260706T1817Z"
           expires_at: "2026-07-06T22:17:01Z"
+        - type: checkpoint
+          ts: "2026-07-06T18:20:38Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "0e49d480"
+          summary: >
+            First coherent slice landed on osx-next: `VzRuntime` now implements
+            the normalized `GuestTransport` facade for `GuestEndpoint::MacVz`,
+            with `open_stream`, `exec`, and `exec_streaming` routed over the
+            existing VZ `VsockStream` / `vsock_exec` helpers. Added compile-time
+            conformance and endpoint validation tests. Evidence:
+            `cargo test -p tillandsias-vm-layer` 26/26 and `./build.sh --check`
+            pass on macOS. Remaining: migrate macOS tray call sites to resolve
+            and use the facade directly, then run/live-prove shared conformance
+            once VM substrate is available.
         - type: progress
           ts: "2026-07-05T01:01:45Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"

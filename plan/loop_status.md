@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:13:19Z
+LastExecutionTime: 2026-07-06T18:20:38Z
 
 ## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
 
@@ -20,16 +20,25 @@ LastExecutionTime: 2026-07-06T18:13:19Z
   naming, and a tray chip message map capped at 37 chars in
   `plan/issues/stable-state-codes-research-2026-07-05.md`. This gives the
   macOS status UX packet a concrete code contract instead of ad hoc labels.
+- **Worker drain — `host-guest-transport-macos` (order 126), claimed and
+  checkpointed IN PROGRESS**: first coherent slice landed on
+  `osx-next@0e49d480`. `VzRuntime` implements the normalized
+  `GuestTransport` facade for `GuestEndpoint::MacVz` (`open_stream`, `exec`,
+  `exec_streaming`) over the existing VZ `VsockStream` / `vsock_exec` helpers.
+  Evidence: `cargo test -p tillandsias-vm-layer` 26/26 and `./build.sh --check`
+  pass on macOS. Remaining: migrate macOS tray call sites to resolve/use the
+  facade directly and run/live-prove shared conformance once substrate is
+  available.
 - **Verification**: conflict-marker scan clean; `plan/index.yaml` and
   `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
   on the integrated `linux-next` tree with the Rust toolchain path added.
 - **E2E gate**: `scripts/e2e-preflight.sh eligibility` →
   `skip:no-podman-user-session`; local-build e2e skipped with the recorded
   verdict.
-- **Next macOS work**: order 198 remains actively leased by another macOS
-  agent until `2026-07-06T20:58:00Z`; older macOS stream/status implementation
-  packets still depend on the VM/headless persistent listener and push-message
-  work.
+- **Next macOS work**: continue order 126 facade call-site migration under the
+  active lease; order 198 remains actively leased by another macOS agent until
+  `2026-07-06T20:58:00Z`; older macOS stream/status implementation packets
+  still depend on the VM/headless persistent listener and push-message work.
 
 ## Cycle 2026-07-06T17:34Z (linux_mutable CCR sandbox — meta-orchestration)
 
