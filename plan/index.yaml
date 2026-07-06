@@ -3604,3 +3604,65 @@ plan_index:
         - "a command: string written as valid backslash-escaped YAML (e.g. containing \\.) executes with a single literal backslash at runtime, matching what ruby -ryaml/yq would produce"
         - "a regression test (fixture litmus file + expected extracted command) pins the fix so this can't silently regress again"
         - "./build.sh --check passes; existing litmus suite still green"
+
+    - packet_id: remote-projects-clone-test-flakiness
+      order: 210
+      title: "Fix: remote_projects.rs clone tests flaky (shared mutex poison + stale atomic-clone path assertion)"
+      status: ready
+      kind: bug-fix
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-06.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, headless, testing]
+      estimated_hours: 3
+      outcome: >
+        Discovered by /build-install-and-smoke-test-e2e (2026-07-06):
+        `cargo test -p tillandsias-headless --bin tillandsias --features tray`
+        (the exact command local-ci.sh's tray-contract gate runs) fails
+        non-deterministically — a different subset of remote_projects::tests::*
+        fails each run, even single-threaded. Root cause appears to be
+        `clone_uses_host_parent_bindmount` asserting the FINAL post-rename path
+        ("/tmp/.tmpXXXX/lakanoa") but observing the atomic-clone staging path
+        ("/tmp/.tmpXXXX/lakanoa.tmp.<hash>") from order 163 (atomic clone,
+        commit d98e8eff) — a real panic that then poisons a shared test Mutex,
+        cascading `PoisonError` panics into 3 other tests
+        (git_image_tag_defaults_to_fully_qualified_versioned_tag,
+        discover_projects_uses_containerized_gh, test_cache_invalidation) in
+        the same binary. Pre-existing (remote_projects.rs untouched by the
+        session that found this); blocks local-ci.sh's tray-contract gate
+        non-deterministically for every future `--ci-full` run.
+      exit_criteria:
+        - "clone_uses_host_parent_bindmount asserts the correct (staging vs final) path for the atomic-clone implementation and passes deterministically"
+        - "the shared test Mutex recovers from poison (e.g. .unwrap_or_else(PoisonError::into_inner)) so one test's panic cannot cascade-fail unrelated tests"
+        - "cargo test -p tillandsias-headless --bin tillandsias --features tray passes cleanly across 5 consecutive runs (parallel, default threads)"
+        - "./build.sh --check and --ci-full pass"
+
+    - packet_id: ci-full-guest-binary-prereq-gap
+      order: 211
+      title: "Research: ./build.sh --ci-full hard-fails on a fresh checkout without a cross-compiled guest binary"
+      status: ready
+      kind: research
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-06.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [research, litmus, ci, cross-compile]
+      estimated_hours: 2
+      outcome: >
+        Discovered by /build-install-and-smoke-test-e2e (2026-07-06):
+        litmus:guest-binary-embed-integrity (a known "local build-state gap,
+        not drift" also seen on macOS in
+        plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md)
+        is enough on its own to fail scripts/local-ci.sh's litmus-pre-build
+        gate, which fails ./build.sh --ci-full --install outright BEFORE
+        --install runs — meaning the smoke-test skill cannot reach its own
+        destructive-reset/re-provision gates on a fresh Linux dev checkout
+        that hasn't separately run scripts/build-guest-binaries.sh. Research
+        the right fix: (a) auto-run build-guest-binaries.sh as a --ci-full
+        prerequisite so a fresh checkout self-heals, or (b) teach the litmus
+        runner to distinguish "local build-state gap" from "product drift"
+        (same thread as the macOS "litmus runner gives no signal for missing
+        tools" finding) so local-ci.sh can warn instead of hard-fail here.
+      exit_criteria:
+        - "decision recorded: auto-cross-compile prerequisite vs. litmus soft-fail classification (or both)"
+        - "a fresh checkout (no target-guest/ artifacts) can reach ./build.sh --ci-full --install's completion (or an explicit, documented, non-blocking skip) without a manual cross-compile step"

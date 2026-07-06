@@ -1,6 +1,41 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T20:20:00Z
+LastExecutionTime: 2026-07-06T20:25:00Z
+
+## Cycle 2026-07-06T20:19Z (linux_mutable — build-install-and-smoke-test-e2e)
+
+- **E2E gate result: STOPPED at gate 1** (build + CI + install), against the
+  freshly-integrated tree from the prior cycle (litmus fixes + order 124/153
+  slices + osx-next/windows-next merges, `linux-next@32da73a1`).
+  `./build.sh --ci-full --install` exited non-zero via `local-ci.sh` before
+  `--install` ran, so per the skill's guardrail the destructive Podman reset
+  was correctly **not** performed. Two pre-existing, unrelated issues caused
+  the failure (both verified NOT caused by this cycle's changes and filed as
+  ready packets in `plan/index.yaml`):
+  - Order 210 (`remote-projects-clone-test-flakiness`): `cargo test -p
+    tillandsias-headless --bin tillandsias --features tray` (the exact
+    `tray-contract` gate command) fails non-deterministically — root cause
+    looks like `clone_uses_host_parent_bindmount` asserting the wrong
+    (post-rename vs. staging) path for order-163's atomic-clone, panicking
+    and poisoning a shared test `Mutex` that cascades into 3 other tests.
+    Reproduces even with `--test-threads=1`; `remote_projects.rs` untouched
+    by this session (last touch: `d98e8eff`, well before today).
+  - Order 211 (`ci-full-guest-binary-prereq-gap`, research): the known
+    "local build-state gap, not drift" `litmus:guest-binary-embed-integrity`
+    (no cross-compiled guest binary on this dev checkout — already
+    documented from the macOS side in
+    `plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md`)
+    is on its own enough to hard-fail `local-ci.sh`'s litmus-pre-build gate,
+    which blocks `--install` from ever running on a fresh Linux checkout.
+  - Full findings + evidence:
+    `plan/issues/build-install-smoke-e2e-findings-2026-07-06.md`.
+- **Reduction engine**: both findings filed and promoted to ready
+  `plan/index.yaml` packets (orders 210, 211) rather than fixed in this smoke
+  session — the skill's own contract is "file findings, don't implement
+  product fixes here."
+- **Next**: whoever picks up order 210 (or 211) should re-run
+  `/build-install-and-smoke-test-e2e` afterward to actually reach gates 2-4
+  (destructive reset, re-provision, forge lane) against this integrated tree.
 
 ## Cycle 2026-07-06T19:03Z (linux_mutable — meta-orchestration + coordinator)
 
