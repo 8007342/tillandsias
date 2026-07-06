@@ -71,5 +71,5 @@ observability:
     backend: "real"
 
 rollback:
-  on_failure: "Check images/inference/Containerfile (should NOT pull models) and images/inference/entrypoint.sh (should pull T0+T1 on startup)"
-  command: "grep -n 'ollama pull' images/inference/Containerfile; echo '---'; grep -n 'Pulling T0\\|Pulling T1' images/inference/entrypoint.sh"
+  on_failure: "Check images/inference/entrypoint.sh (should self-install ollama FIRST_RUN + pull default models on startup)"
+  command: "echo '--- Containerfile ollama traces ---'; grep -n 'ollama\|tar.zst' images/inference/Containerfile 2>/dev/null || echo '(none)'; echo '--- entrypoint.sh ollama install ---'; grep -n 'ollama-linux-\\|\.tools/ollama' images/inference/entrypoint.sh; echo '--- entrypoint.sh model pulls ---'; grep -n 'ollama pull' images/inference/entrypoint.sh"
