@@ -692,7 +692,7 @@ plan_index:
     - packet_id: github-login-e2e-gate
       order: 144
       title: "Add e2e gate for github-login -> list flow"
-      status: ready
+      status: completed
       kind: implementation
       depends_on: [vsock-exec-authz-spec-and-proxy-exemption-audit]
       pickup_role: any
@@ -700,6 +700,15 @@ plan_index:
       estimated_hours: 2
       outcome: >
         Implement the missing github-login->list e2e gate to ensure end-to-end functionality of github login.
+      events:
+        - type: completed
+          ts: "2026-07-06T08:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0700Z"
+          host: linux
+          summary: >
+            Added list_cloud_projects_preflight_order source-analysis test validating
+            that run_list_cloud_projects ensures vault before proxy, proxy before
+            health-check, and all preflight before the gh invocation. Test passes.
       exit_criteria:
         - "E2e test for github login -> list implemented and passing"
 

@@ -9317,6 +9317,41 @@ mod tests {
         );
     }
 
+    /// E2e gate (order 144): verify preflight order in run_list_cloud_projects.
+    /// Every standalone flow that uses the GitHub token (list projects, future
+    /// cloud operations) must ensure vault+proxy are up before dispatching any
+    /// containerized `gh` invocation, or the token-read and egress both fail.
+    #[test]
+    fn list_cloud_projects_preflight_order() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_list_cloud_projects(debug: bool)");
+        let vault_idx = window
+            .find("ensure_vault_running(debug)?")
+            .expect("run_list_cloud_projects must preflight Vault");
+        let proxy_idx = window
+            .find("ensure_proxy_running(debug)?")
+            .expect("run_list_cloud_projects must preflight proxy");
+        let health_idx = window
+            .find("check_auth_required_services(&[\"tillandsias-proxy\"], debug)?")
+            .expect("run_list_cloud_projects must health-check the proxy");
+        let fetch_idx = window
+            .find("discover_github_projects_result_with_debug(debug)?")
+            .expect("run_list_cloud_projects must call the fetch function");
+
+        assert!(
+            vault_idx < proxy_idx,
+            "Vault must be ensured before proxy: run_list_cloud_projects"
+        );
+        assert!(
+            proxy_idx < health_idx,
+            "Proxy must be ensured before health-check: run_list_cloud_projects"
+        );
+        assert!(
+            health_idx < fetch_idx,
+            "All preflight must complete before the gh invocation: run_list_cloud_projects"
+        );
+    }
+
     // Regression: the egress network must be ensured on every enclave-bootstrap
     // path (including the early-return-when-enclave-exists case), or the
     // dual-home leg cannot resolve on a clean runtime.
