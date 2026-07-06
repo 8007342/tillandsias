@@ -65,6 +65,7 @@ use objc2_app_kit::{NSMenuItem, NSStatusItem};
 use objc2_foundation::MainThreadMarker;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+use tillandsias_control_wire::guest_transport::{GuestEndpoint, GuestTransport};
 use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
 use tillandsias_vm_layer::VmRuntime;
 use tillandsias_vm_layer::vz::VzRuntime;
@@ -265,9 +266,11 @@ fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
     .clone()
 }
 
+type GuestWireStream = Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>;
+
 enum ControlWireStream {
-    Plain(tillandsias_vm_layer::transport_macos::VsockStream),
-    Secure(Box<EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>>),
+    Plain(GuestWireStream),
+    Secure(Box<EncryptedStream<GuestWireStream>>),
 }
 
 impl AsyncRead for ControlWireStream {
@@ -315,9 +318,10 @@ async fn open_control_wire_stream(
     port: u32,
     timeout: Duration,
 ) -> Result<ControlWireStream, String> {
-    let stream = vz
-        .open_vsock_stream(port, timeout)
+    let endpoint = GuestEndpoint::MacVz { port };
+    let stream = tokio::time::timeout(timeout, vz.open_stream(&endpoint))
         .await
+        .map_err(|_| format!("MacVz GuestTransport open timed out after {timeout:?}"))?
         .map_err(|e| format!("vsock connect: {e}"))?;
 
     match secure_control_wire_mode()? {
@@ -338,11 +342,10 @@ async fn open_control_wire_stream(
 
 /// One-shot VmStatus poll over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_vm_status` but
-/// drives the macOS-specific vsock path:
+/// drives the macOS-specific facade path:
 ///
-///   1. `VzRuntime::open_vsock_stream` (which uses
-///      `VZVirtioSocketDevice.connectToPort:` under the hood) to get
-///      an `AsyncRead + AsyncWrite` stream into the guest's port 42420.
+///   1. `GuestTransport::open_stream(GuestEndpoint::MacVz { port })` to
+///      get an `AsyncRead + AsyncWrite` stream into the guest's port 42420.
 ///   2. Wrap the stream in `Client::from_stream` so the standard
 ///      Hello/HelloAck + request/recv code paths drive it.
 ///   3. Send a `VmStatusRequest` and expect a `VmStatusReply`.
@@ -420,7 +423,7 @@ async fn poll_vm_status_once(
 /// can drain podman containers + sessions BEFORE VZ tears down the
 /// VM. Mirrors `tillandsias-windows-tray::wsl_lifecycle::
 /// request_vm_shutdown` (commit `80eceb0b`) but uses macOS's
-/// `VZVirtioSocketConnection` path via `VzRuntime::open_vsock_stream`.
+/// `GuestTransport` backend over `VZVirtioSocketConnection`.
 ///
 /// Bounded by `RTT_BUDGET` (3 s) — a wedged in-VM headless cannot
 /// delay Quit indefinitely; the caller follows up with VZ-level
@@ -584,8 +587,8 @@ fn cloud_entry_to_menu(
 
 /// One-shot CloudRefreshRequest over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_cloud_projects`
-/// (commit b0cdcdee) but drives the macOS-specific vsock path via
-/// `VzRuntime::open_vsock_stream`. Reuses the standard
+/// (commit b0cdcdee) but drives the macOS-specific `GuestTransport`
+/// backend over VZ virtio-vsock. Reuses the standard
 /// `Client::from_stream` + handshake + request path slice 4
 /// introduced.
 ///
@@ -658,7 +661,7 @@ async fn poll_cloud_projects_once(
 
 /// One-shot GithubLoginStatusRequest over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_github_login` but
-/// drives the macOS-specific vsock path via `VzRuntime::open_vsock_stream`.
+/// drives the macOS-specific `GuestTransport` backend over VZ virtio-vsock.
 ///
 /// Returns the mapped `GithubLoginState` so the caller can write it into the
 /// held `MenuState.login` and re-render the menu.
@@ -673,10 +676,7 @@ async fn poll_github_login_once(
     use tillandsias_host_shell::vsock_client::Client;
 
     let connect_timeout = Duration::from_secs(5);
-    let stream = vz
-        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
-        .await
-        .map_err(|e| format!("vsock connect: {e}"))?;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -1951,6 +1951,33 @@ mod tests {
         assert!(s.contains("Internal"), "code missing: {s}");
         assert!(!s.ends_with(':'), "trailing colon: {s}");
         assert!(!s.contains(": "), "spurious colon-space: {s}");
+    }
+
+    /// The AppKit action host must resolve the macOS control-wire stream
+    /// through the normalized GuestTransport facade instead of opening a
+    /// VZ-specific stream directly.
+    ///
+    /// @trace spec:host-guest-transport
+    #[test]
+    fn action_host_control_wire_opener_uses_guest_transport_facade() {
+        let source = include_str!("action_host.rs");
+        let window = source
+            .split("async fn open_control_wire_stream(")
+            .nth(1)
+            .and_then(|s| s.split("\n///").next())
+            .expect("open_control_wire_stream source");
+        assert!(
+            window.contains("GuestEndpoint::MacVz"),
+            "opener must construct the MacVz endpoint: {window}"
+        );
+        assert!(
+            window.contains(".open_stream(&endpoint)"),
+            "opener must use GuestTransport::open_stream: {window}"
+        );
+        assert!(
+            !window.contains(".open_vsock_stream("),
+            "opener must not bypass the GuestTransport facade: {window}"
+        );
     }
 
     /// `compose_chip_text` appends a non-empty `last_event` after a
