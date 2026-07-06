@@ -2709,7 +2709,7 @@ plan_index:
 
     - packet_id: litmus-full-suite-macos-first-run-findings
       order: 198
-      title: "Triage 23 litmus failures newly visible after the macOS bash-3.2 runner fix"
+      title: "Triage 14 litmus failures newly visible after the macOS bash-3.2 runner fix"
       status: ready
       kind: research
       deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
@@ -2717,19 +2717,43 @@ plan_index:
       pickup_role: any
       owner_host: any
       capability_tags: [research, litmus, triage, cross-host]
-      estimated_hours: 3
+      estimated_hours: 2
       outcome: >
         The macOS litmus runner never worked before order 196, so no macOS host
-        has ever seen a full-suite verdict. Now that it runs, a full pre-build
-        instant-size pass shows 93 PASS / 24 FAIL / 119 SKIP (100% spec
-        coverage). One fail was fixed same-cycle (wc -c BSD-padding bug in
-        litmus-versioning-shape.yaml). Triage the remaining 23 (spec, test)
-        pairs listed in the deliverable — each is genuine drift, a local-
-        build-state gap, or a macOS/BSD tooling gap in the check itself. Do
-        not action any as a code fix without confirming which category it is.
-      events: []
+        had ever seen a full-suite verdict. First run: 93 PASS / 24 FAIL / 119
+        SKIP (100% spec coverage). Triaged this cycle: 1 fixed immediately
+        (wc -c BSD-padding bug), 2 fixed via orders 199/200
+        (macos-native-tray litmus drift), 6 more turned out to be a single
+        root cause (cargo not on PATH in this macOS shell — zero code
+        changes, all pass once PATH is fixed; also filed as a smaller "litmus
+        runner gives no signal for missing tools" finding), and 2 confirmed
+        non-actionable-here (guest-binary-embed-integrity: local artifact not
+        cross-compiled on this machine; e2e-eligibility-probe-shape: macOS
+        has no `flock`). 14 (spec, test) pairs remain genuinely UNTRIAGED —
+        spot-checks on 6 of them (podman-secrets-integration, vault x2,
+        inference-container x2) look like real, specific source drift in
+        Linux-owned crates/images, not environment noise. Full remaining
+        list + spot-check detail in the deliverable.
+      events:
+        - type: claim
+          ts: "2026-07-06T16:58:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          lease_id: "litmus-full-suite-macos-first-run-findings-claim-1"
+          expires_at: "2026-07-06T20:58:00Z"
+        - type: progress
+          ts: "2026-07-06T17:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          summary: >
+            Narrowed 24 → 14 real remaining unknowns (see outcome above and
+            the rewritten deliverable). Not closing this packet — the 14
+            remaining pairs still need per-item owner triage/fixes, mostly
+            in Linux-owned scope (crates/tillandsias-headless, images/,
+            vault entrypoint scripts). Leaving status ready for Linux (or
+            whichever host owns each artifact) to pick up the remainder.
       exit_criteria:
-        - "each of the 23 (spec, test) pairs has either a plan/index.yaml ready packet (genuine drift), a documented environmental/local-state note (no packet needed), or a landed fix + green re-run"
+        - "each of the 14 remaining (spec, test) pairs has either a plan/index.yaml ready packet (genuine drift), a documented environmental/local-state note (no packet needed), or a landed fix + green re-run"
 
     - packet_id: macos-tray-menu-state-observatorium-v2-pin-test-missing
       order: 199
