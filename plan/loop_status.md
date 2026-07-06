@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:45:15Z
+LastExecutionTime: 2026-07-06T18:47:14Z
 
 ## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
 
@@ -49,6 +49,11 @@ LastExecutionTime: 2026-07-06T18:45:15Z
   `./build.sh --check` pass on macOS. The broader packet remains ready for the
   Windows owner; Windows R1-R3/R9 lifecycle safeguards are not completed by
   this macOS slice.
+- **Queue reconciliation**: `host-guest-transport-macos` is now blocked on
+  Linux/order124 conformance and live macOS VM substrate; `macos-tray-stream-refactor`
+  and `macos-tray-state-code-status-ux` were returned from stale `ready` to
+  `pending` because `vm-headless-persistent-listener` is still not complete.
+  No macOS-owned packet remains claimable in the current dependency state.
 - **Verification**: conflict-marker scan clean; `plan/index.yaml` and
   `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
   on the integrated `linux-next` tree with the Rust toolchain path added.

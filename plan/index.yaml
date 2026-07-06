@@ -1213,7 +1213,7 @@ plan_index:
     - packet_id: macos-tray-stream-refactor
       order: 155
       title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
-      status: ready
+      status: pending
       kind: refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [vm-headless-persistent-listener]
@@ -1227,6 +1227,17 @@ plan_index:
         or equivalent. The two trays MUST end up with equivalent stream architectures
         (share a common reader-task implementation in tillandsias-host-shell if
         possible to avoid divergence).
+      events:
+        - type: blocked
+          ts: "2026-07-06T18:47:14Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1847Z"
+          host: macos
+          reason: >
+            Queue reconciliation: packet was marked ready, but its dependency
+            `vm-headless-persistent-listener` is still not complete. Return to
+            pending until the persistent listener/server-push stream lands.
+          blocker_refs:
+            - vm-headless-persistent-listener
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
@@ -1307,7 +1318,7 @@ plan_index:
     - packet_id: macos-tray-state-code-status-ux
       order: 161
       title: "macOS Tray: 37-char curated state messages from stable codes"
-      status: ready
+      status: pending
       kind: enhancement+refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [stable-state-codes-research, vm-headless-persistent-listener]
@@ -1322,6 +1333,19 @@ plan_index:
         must be driven by observable events and watch-like state channels, not
         polling loops. Curated strings should be concise, teachable, and
         consistent across hosts.
+      events:
+        - type: blocked
+          ts: "2026-07-06T18:47:14Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1847Z"
+          host: macos
+          reason: >
+            Queue reconciliation: stable-state-codes-research is done, but this
+            implementation packet also depends on
+            `vm-headless-persistent-listener`, which is still not complete.
+            Return to pending until status updates can be driven by the
+            observable stream path instead of polling.
+          blocker_refs:
+            - vm-headless-persistent-listener
       exit_criteria:
         - "Chip text hard-capped at 37 characters"
         - "No raw stack traces or multiline errors reach the chip"
