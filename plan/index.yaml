@@ -1551,13 +1551,19 @@ plan_index:
     - packet_id: host-lifecycle-race-safeguards
       order: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
-      status: ready
+      status: in_progress
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]
       pickup_role: windows
       capability_tags: [windows, macos, tray, vm-layer, concurrency]
       estimated_hours: 8
+      lease:
+        lease_id: "host-lifecycle-race-safeguards-macos-r3-20260706T1855Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1855Z"
+        host: macos
+        acquired_at: "2026-07-06T18:55:39Z"
+        expires_at: "2026-07-06T22:55:39Z"
       outcome: >
         (R1) Start poke retries with backoff + WSL-service-sane preflight; drain is
         observable (lock/marker) so a relaunch waits for teardown instead of racing it;
@@ -1634,6 +1640,17 @@ plan_index:
           reason: >
             Released after completing the macOS R2 slice; packet remains ready
             for the next remaining lifecycle safeguard slice.
+        - type: claim
+          ts: "2026-07-06T18:55:39Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1855Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r3-20260706T1855Z"
+          expires_at: "2026-07-06T22:55:39Z"
+          note: >
+            Claiming only the macOS R3 sub-slice: serialize same-project
+            project launch / PTY click handling in the AppKit tray so a
+            double-click cannot start two competing guest launch flows.
+            Windows lifecycle/R1-R3/R9 safeguards remain outside this lease.
       exit_criteria:
         - "Quit then immediate relaunch converges to Ready without manual wsl --shutdown"
         - "Second tray instance exits gracefully pointing at the first"
