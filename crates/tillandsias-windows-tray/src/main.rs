@@ -107,6 +107,18 @@ fn main() {
         let bak = std::env::args().any(|a| a == "--bak");
         std::process::exit(notify_icon::logs(tail, bak));
     }
+    // R2: Concurrent tray instances race and double-poll. Enforce singleton behavior.
+    let _singleton = match tillandsias_core::singleton::SingletonGuard::acquire(
+        "tray-windows",
+        std::time::Duration::from_secs(5),
+    ) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("Error: Tray is already running, or failed to acquire singleton: {e}");
+            std::process::exit(1);
+        }
+    };
+
     notify_icon::run();
 }
 

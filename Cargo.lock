@@ -3385,6 +3385,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tillandsias-control-wire",
+ "tillandsias-core",
  "tillandsias-host-shell",
  "tillandsias-secure-channel",
  "tillandsias-vm-layer",
