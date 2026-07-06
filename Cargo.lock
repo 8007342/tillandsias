@@ -3373,6 +3373,7 @@ dependencies = [
  "tillandsias-control-wire",
  "tokio",
  "toml 0.8.2",
+ "tracing",
  "windows 0.58.0",
  "xz2",
 ]
@@ -3386,6 +3387,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tillandsias-control-wire",
+ "tillandsias-core",
  "tillandsias-host-shell",
  "tillandsias-secure-channel",
  "tillandsias-vm-layer",

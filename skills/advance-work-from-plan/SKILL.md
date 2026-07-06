@@ -72,11 +72,11 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
       expires_at: "<acquired-at + 4 hours>"
     ```
     Change the task's top-level status to `claimed`.
-3.  **Commit & Push**: Commit ONLY the plan file edits to `origin/linux-next`:
+3.  **Commit & Push**: Commit ONLY the plan file edits, and push them to your active branch:
     ```bash
     git add plan/
     git commit -m "chore(plan): claim lease for <task-id>"
-    git push origin linux-next
+    git push origin <active-branch>
     ```
 4.  **Collision Recovery**: If the push is rejected because another agent claimed the lease concurrently, fetch, pull, yield your claim, and select a different packet.
 
@@ -194,7 +194,7 @@ If the 2h integration cron fired in the last 10 min (check the latest `### Cycle
     -   Append a `completed` event to `events:` listing all commit SHAs and validation log paths.
     -   Flip the task status to `done` in the item header.
     -   Update any local dependency mirror tables in the same pass.
-3.  **Commit & Push Ledger**: Commit and push the final plan edits to `origin/linux-next`.
+3.  **Commit & Push Ledger**: Commit and push the final plan edits to `origin/<active-branch>`.
 
 ### Mandatory Exit Discipline
 
@@ -216,7 +216,7 @@ A successful invocation MUST NOT exit with local-only work:
 1.  **Emit Blocked or Failed Event**: If you encounter an unresolvable error, blocker, or spec gap:
     -   Append a `blocked` or `failed` event to `events:` detailing the exact reason, the named blocker, and the smallest next diagnostic command.
     -   Flip status to `blocked` or `failed` (with `retryable: true|false`).
-    -   Commit and push to `origin/linux-next` so the Orchestrator can audit and reschedule it.
+    -   Commit and push to `origin/<active-branch>` so the Orchestrator can audit and reschedule it.
 2.  **Fallback Selection**: Release your local lease, select your named fallback task, and begin the loop fresh.
 
 ---

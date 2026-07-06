@@ -48,8 +48,7 @@ Canonical branches:
 - Windows code: `windows-next`
 - Release: `main` through PR only
 
-All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` writes go to
-`linux-next`.
+All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `linux-next` their canonical home. However, agents working on platform branches (`windows-next`, `osx-next`) MUST commit and push all edits (including plan updates) directly to their active platform branch. The Linux coordinator will merge these branches back into `linux-next` during the `/multihost-orchestration` pass.
 
 ## Start Of Cycle
 
@@ -72,7 +71,8 @@ work. The Cowork scheduled-task runtime can inherit dangling session sockets
 fails for lack of a credential. See
 `plan/issues/cowork-headless-credential-isolation-2026-06-20.md`.
 
-Run the executable guard instead of re-deriving the check in prose:
+Run the executable guard instead of re-deriving the check in prose. 
+*(On Windows: ensure you run this via Git Bash, e.g. `& "C:\Program Files\Git\bin\bash.exe" scripts/check-credential-channel.sh`. PowerShell's `bash` alias defaults to an isolated WSL session that lacks host credentials).*
 
 ```bash
 scripts/check-credential-channel.sh

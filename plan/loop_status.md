@@ -2,6 +2,15 @@
 
 LastExecutionTime: 2026-07-06T18:59:52Z
 
+## Cycle 2026-07-06T18:15Z (windows — meta-orchestration)
+
+- Staged and verified the Windows/WSL host-lifecycle race safeguards (order 161).
+- Implemented:
+  - **R1 (Quit/relaunch)**: added an observable `drain.lock` in the VM install root to coordinate teardown; `WslRuntime::start` now checks `is_wsl_service_sane()` and retries with backoff, automatically executing `wsl --shutdown` (guided recovery) on E_UNEXPECTED / unhealthy service state.
+  - **R3 (PTY Click serialization)**: debounced duplicate terminal launches within 1.5s in `launch_open_shell_terminal`.
+- Verified `cargo check` and `cargo test` clean on Windows host for both `tillandsias-windows-tray` and `tillandsias-vm-layer`. Formatting verified.
+- E2E preflight verdict this cycle: `skip:no-podman-binary` (local-build e2e skipped).
+
 ## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
 
 - **Host**: macOS arm64, started on `osx-next` clean, credential guard
@@ -242,6 +251,14 @@ LastExecutionTime: 2026-07-06T18:59:52Z
   `linux-next`; macOS and Windows have sibling work that must be integrated by
   merge, not cherry-pick. Guest<->container encryption and metrics sub-packets
   remain open before M2 soak can start.
+- Windows update 2026-07-06T06:20Z (windows-bullo-fable5-20260706T0535Z):
+  `windows-next` merged `origin/linux-next` (0794510a) per the order-191 freeze;
+  Windows flag-OFF/flag-ON secure-wire evidence recorded in the order-191
+  deliverable (Noise handshake + VmStatus round-trip on a version-matched guest;
+  plaintext rejected failure-closed while gated ON). Order-161 R2 tray
+  SingletonGuard landed (c3089123). Windows local-build e2e gate verdict this
+  cycle: `skip:no-podman-binary` (e2e-preflight). Remaining freeze work: macOS
+  slice + linux coordinator merge of both siblings.
 - Embedded guest state: order 190 is the canonical Linux artifact contract. Older
   macOS-filed packaging notes are now intake evidence, not the active blocker.
 - Observability state: `plan/metrics-dashboard.md` is stale/cache-empty and must not
