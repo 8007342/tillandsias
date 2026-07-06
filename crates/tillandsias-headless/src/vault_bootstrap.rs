@@ -170,6 +170,16 @@ pub fn host_base_url() -> String {
 /// `DNS:vault` as a SAN so certificate verification succeeds without any
 /// skip-verify workaround. Bypasses host-side port forwarding (127.0.0.1:8201)
 /// which has a known TLS-hang issue with podman/netavark on Fedora WSL2.
+// PLEASE REVIEW (linux): the only non-test caller is inside the
+// `#[cfg(target_os = "linux")]` branch of vault_api_base_url below, so a
+// non-Linux, non-test build (bin/clippy target) sees this as dead code
+// (-D warnings). It IS exercised unconditionally by
+// vault_api_base_url_honors_env_override below, so the allow is scoped to
+// non-Linux only — no change to the Linux dead-code contract. Discovered
+// running `./build.sh --check` on macOS for the first time after fixing the
+// Homebrew-Podman wrapper bug (order 201) — see
+// plan/issues/macos-build-check-podman-wrapper-2026-07-05.md.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn vault_service_base_url() -> String {
     format!("https://{VAULT_NETWORK_ALIAS}:8200")
 }
