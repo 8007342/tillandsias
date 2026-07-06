@@ -1,6 +1,42 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T16:10:00Z
+LastExecutionTime: 2026-07-06T16:30:00Z
+
+## Cycle 2026-07-06T15:37Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, `osx-next` (clean, credential guard `ok:gh-keyring`,
+  no sibling drift to merge at cycle start).
+- **Worker drain — order 197 (macos-tray-clippy-warnings), claimed and
+  COMPLETED**: boxed `ControlWireStream::Secure` in `action_host.rs` +
+  `diagnose.rs` (large_enum_variant); fixed `status_item.rs:203`'s redundant
+  `.ok()` match. `cargo clippy -p tillandsias-macos-tray --all-targets`: 0
+  warnings. `cargo test`: 54/54 pass. Code → `osx-next@0965ad53`; ledger →
+  `linux-next@cd80e0ea`.
+- **Worker drain — order 196 (macos-litmus-runner-bash-version-gap), claimed
+  and COMPLETED**: `scripts/run-litmus-test.sh` used `declare -A` (bash 4+);
+  stock macOS ships bash 3.2 with no Homebrew bash installed, so the runner
+  crashed immediately on every macOS invocation — no macOS host had ever seen
+  a real litmus verdict. Rewrote the 3 associative arrays as portable
+  newline-delimited dedup+count helpers; also fixed a second latent bash-4-ism
+  (`${var,,}`) found while verifying end-to-end. **First-ever full macOS
+  litmus run**: 93 PASS, 24 FAIL, 119 SKIP, 100% spec coverage (88/88). Fixed
+  1 of the 24 same-cycle (`wc -c` BSD-padding bug in
+  `litmus-versioning-shape.yaml`). Filed the remaining 23 for triage
+  (`plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md`,
+  order 198) with an explicit caveat: spot-checks show a MIX of genuine
+  drift, local-build-state gaps (missing cross-compiled artifacts), and
+  macOS/BSD tooling gaps in the checks themselves (e.g. missing `flock`) —
+  do not treat all 23 as code bugs without per-item triage. Promoted 2
+  confirmed-root-cause macos-native-tray items as ready packets (199, 200).
+  All changes → `linux-next@53ba8f36` (openspec/litmus-tests + scripts/
+  route through linux-next per the shared-scope write rule); merged back
+  into `osx-next@78ffa02a`.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-user-session`
+  (same known macOS-host limitation as last cycle); local-build e2e skipped.
+- **Next macOS work**: order 198 (triage 23 litmus failures), order 199
+  (restore/correct the macos-tray-architectural-invariants pin test), order
+  200 (correct the stale pty-attach-project-threading-symmetric litmus
+  string — coordinate with windows since it pins windows-tray's import).
 
 ## Cycle 2026-07-06T15:16Z (macos — meta-orchestration)
 
