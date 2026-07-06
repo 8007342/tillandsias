@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:47:14Z
+LastExecutionTime: 2026-07-06T18:52:38Z
 
 ## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
 
@@ -49,6 +49,14 @@ LastExecutionTime: 2026-07-06T18:47:14Z
   `./build.sh --check` pass on macOS. The broader packet remains ready for the
   Windows owner; Windows R1-R3/R9 lifecycle safeguards are not completed by
   this macOS slice.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R2
+  sub-slice claimed and released after checkpoint**: `osx-next@64676548`
+  adds non-destructive `SingletonGuard::try_acquire` and guards only the no-flag
+  AppKit tray path, so a second tray exits cleanly while CLI utility modes still
+  run. Evidence: `cargo test -p tillandsias-core singleton`,
+  `cargo test -p tillandsias-macos-tray` 57 passed / 1 ignored, and
+  `./build.sh --check` pass on macOS. Remaining: macOS R3 launch serialization
+  plus Windows lifecycle/R1-R3/R9 safeguards.
 - **Queue reconciliation**: `host-guest-transport-macos` is now blocked on
   Linux/order124 conformance and live macOS VM substrate; `macos-tray-stream-refactor`
   and `macos-tray-state-code-status-ux` were returned from stale `ready` to

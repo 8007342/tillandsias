@@ -212,3 +212,14 @@ instead of curling directly onto the live binary. Added
 `vz_fetch_script_installs_download_via_temp_file` to pin the behavior. Evidence:
 `cargo test -p tillandsias-vm-layer` 30/30 and `./build.sh --check` passed on
 macOS. Windows residual R9 (`wsl_lifecycle.rs`) remains for the Windows owner.
+
+## Implementation checkpoint — macOS R2 slice 2026-07-06
+
+macOS concurrent tray instance guard is complete on `osx-next@64676548`: added a
+non-destructive `SingletonGuard::try_acquire` helper in core and wired the
+no-flag AppKit tray path to exit cleanly when another `tillandsias-macos-tray`
+instance already owns the lock. CLI utility modes (`--diagnose`, `--exec-guest`,
+`--github-login`, etc.) still run before the guard. Evidence:
+`cargo test -p tillandsias-core singleton`,
+`cargo test -p tillandsias-macos-tray`, and `./build.sh --check` passed on macOS.
+macOS R3 launch serialization and Windows lifecycle/R1-R3/R9 remain.

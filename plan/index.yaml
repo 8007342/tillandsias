@@ -1551,19 +1551,13 @@ plan_index:
     - packet_id: host-lifecycle-race-safeguards
       order: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
-      status: in_progress
+      status: ready
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]
       pickup_role: windows
       capability_tags: [windows, macos, tray, vm-layer, concurrency]
       estimated_hours: 8
-      lease:
-        lease_id: "host-lifecycle-race-safeguards-macos-r2-20260706T1849Z"
-        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1849Z"
-        host: macos
-        acquired_at: "2026-07-06T18:49:58Z"
-        expires_at: "2026-07-06T22:49:58Z"
       outcome: >
         (R1) Start poke retries with backoff + WSL-service-sane preflight; drain is
         observable (lock/marker) so a relaunch waits for teardown instead of racing it;
@@ -1617,6 +1611,29 @@ plan_index:
             Claiming only the macOS R2 sub-slice: add a single-instance guard
             for the no-flag AppKit tray path while leaving CLI utility modes
             (`--diagnose`, `--exec-guest`, `--github-login`, etc.) runnable.
+        - type: checkpoint
+          ts: "2026-07-06T18:52:38Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1849Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r2-20260706T1849Z"
+          commit_sha: "64676548"
+          summary: >
+            macOS R2 sub-slice complete on osx-next: added a non-destructive
+            `SingletonGuard::try_acquire` helper and wired the no-flag AppKit
+            tray path to exit cleanly when another tray instance already holds
+            `tillandsias-macos-tray`. CLI utility modes still run before the
+            guard. Evidence: `cargo test -p tillandsias-core singleton`,
+            `cargo test -p tillandsias-macos-tray`, and `./build.sh --check`
+            pass on macOS. Remaining in this packet: macOS R3 launch
+            serialization plus Windows lifecycle/R1-R3/R9 safeguards.
+        - type: released
+          ts: "2026-07-06T18:52:38Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1849Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r2-20260706T1849Z"
+          reason: >
+            Released after completing the macOS R2 slice; packet remains ready
+            for the next remaining lifecycle safeguard slice.
       exit_criteria:
         - "Quit then immediate relaunch converges to Ready without manual wsl --shutdown"
         - "Second tray instance exits gracefully pointing at the first"
