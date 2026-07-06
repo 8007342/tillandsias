@@ -202,3 +202,13 @@ the stream packets were filed. The actual implementation packets are:
 Safeguard vocabulary items 1-6 (advisory flocks, ensure-only ownership,
 phase-aware side effects, retry-with-backoff+classify-transient, atomic fs ops,
 one provoking litmus per fixed race) are ratified unchanged.
+
+## Implementation checkpoint — macOS R9 slice 2026-07-06
+
+macOS residual R9 is complete on `osx-next@3e1637ad`: the VZ cloud-init
+`fetch-headless.sh` network fallback now downloads to `mktemp`, cleans it with a
+trap, and `install -D -m 0755`s into `/usr/local/bin/tillandsias-headless`
+instead of curling directly onto the live binary. Added
+`vz_fetch_script_installs_download_via_temp_file` to pin the behavior. Evidence:
+`cargo test -p tillandsias-vm-layer` 30/30 and `./build.sh --check` passed on
+macOS. Windows residual R9 (`wsl_lifecycle.rs`) remains for the Windows owner.
