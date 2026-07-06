@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:29:49Z
+LastExecutionTime: 2026-07-06T18:36:01Z
 
 ## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
 
@@ -28,11 +28,15 @@ LastExecutionTime: 2026-07-06T18:29:49Z
   Second slice landed on `osx-next@381dbdfc` and `osx-next@e9d55c97`: the
   AppKit action-host opener now uses `GuestTransport::open_stream`, and
   `VzRuntime::exec` routes through `GuestTransport::exec` with explicit Unix
-  signal exit-code normalization. Evidence: `cargo test -p tillandsias-vm-layer`
-  28/28, `cargo test -p tillandsias-macos-tray` 55 passed / 1 ignored, and
-  `./build.sh --check` pass on macOS. Remaining: migrate `diagnose.rs`'
-  current-thread VZ opener and direct live exec helper paths, then run/live-prove
-  shared conformance once substrate is available.
+  signal exit-code normalization. Third slice landed on `osx-next@8e9f586d`:
+  `diagnose.rs` now constructs `GuestEndpoint::MacVz` and delegates
+  current-thread VZ connection details to vm-layer, without naming the raw
+  `VsockStream` type or calling `open_vsock_stream_current_thread` directly.
+  Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
+  `cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
+  `./build.sh --check` pass on macOS. Remaining: secure/expect-style live exec
+  helper calls still use `vsock_exec` over the secured boxed stream, and shared
+  conformance still needs a live VM run.
 - **Verification**: conflict-marker scan clean; `plan/index.yaml` and
   `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
   on the integrated `linux-next` tree with the Rust toolchain path added.

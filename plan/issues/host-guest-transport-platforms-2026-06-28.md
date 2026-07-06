@@ -55,6 +55,17 @@ normalizing Unix signal exits at the facade boundary. Evidence:
 current-thread VZ opener and direct live exec helper paths, then run/live-prove
 the shared conformance fixture when VM substrate is available.
 
+Checkpoint 2026-07-06T18:36Z: third slice landed on `osx-next@8e9f586d`.
+`diagnose.rs` no longer names the raw macOS `VsockStream` type or calls
+`open_vsock_stream_current_thread` directly. It constructs `GuestEndpoint::MacVz`
+and delegates current-thread connection details to a vm-layer endpoint-shaped
+helper that preserves the per-attempt timeout needed by headless CLI readiness
+probes. Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
+`cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
+`./build.sh --check` pass on macOS. Remaining: secure/expect-style live exec
+helper calls still use `vsock_exec` over the secured boxed stream, and shared
+conformance still needs a live VM run.
+
 - Implement the facade backend over `VZVirtioSocketDevice`; remove bespoke
   per-call connect logic in favor of `open_stream` / `exec`.
 - Replace the macOS exec-guest helpers with the `ExecOneShot` facade (supersedes
