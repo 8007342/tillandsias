@@ -200,7 +200,7 @@ fn status_icon_path() -> Option<std::path::PathBuf> {
 
 fn status_icon_candidate_paths() -> Vec<std::path::PathBuf> {
     let mut paths = Vec::new();
-    if let Some(mut exedir) = std::env::current_exe().ok() {
+    if let Ok(mut exedir) = std::env::current_exe() {
         exedir.pop(); // typically 'MacOS' inside the bundle
         if let Some(bundled) = exedir
             .parent()

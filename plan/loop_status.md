@@ -1,6 +1,55 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:10:00Z
+LastExecutionTime: 2026-07-06T18:40:03Z
+
+## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, started on `osx-next` clean, credential guard
+  `ok:gh-keyring`.
+- **Branch integration**: `osx-next` had drifted from `origin/linux-next`;
+  merged `origin/linux-next` into `osx-next` and pushed `osx-next@310b7232`.
+  While publishing the next plan claim, the `linux-next` macOS build gate
+  exposed that shared trunk was missing already-landed `osx-next` clippy fixes;
+  merged `origin/osx-next` into `linux-next` by merge commit
+  `1c8203d3`. Added the small Linux cfg fix for the new
+  `containers.conf` proxy setup compile break (`e5c02608`).
+- **Worker drain — `stable-state-codes-research` (order 160), claimed and
+  COMPLETED**: documented the finite dotted-code taxonomy for
+  host/vm/guest/podman plus auth/cloud/forge/transport, event ownership,
+  request/reply fallback mapping until push streams land, stable support-code
+  naming, and a tray chip message map capped at 37 chars in
+  `plan/issues/stable-state-codes-research-2026-07-05.md`. This gives the
+  macOS status UX packet a concrete code contract instead of ad hoc labels.
+- **Worker drain — `host-guest-transport-macos` (order 126), claimed and
+  checkpointed then BLOCKED/released**: first coherent slice landed on
+  `osx-next@0e49d480`. `VzRuntime` implements the normalized
+  `GuestTransport` facade for `GuestEndpoint::MacVz` (`open_stream`, `exec`,
+  `exec_streaming`) over the existing VZ `VsockStream` / `vsock_exec` helpers.
+  Second slice landed on `osx-next@381dbdfc` and `osx-next@e9d55c97`: the
+  AppKit action-host opener now uses `GuestTransport::open_stream`, and
+  `VzRuntime::exec` routes through `GuestTransport::exec` with explicit Unix
+  signal exit-code normalization. Third slice landed on `osx-next@8e9f586d`:
+  `diagnose.rs` now constructs `GuestEndpoint::MacVz` and delegates
+  current-thread VZ connection details to vm-layer, without naming the raw
+  `VsockStream` type or calling `open_vsock_stream_current_thread` directly.
+  Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
+  `cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
+  `./build.sh --check` pass on macOS. Released the lease after recording the
+  blocker: completion now depends on Linux/order124 landing the shared
+  conformance harness/litmus plus a facade-contract decision for
+  secure/expect/signal ExecOneShot semantics, and on a macOS packaged/entitled
+  VM substrate to run the live Darwin fixture. Local e2e eligibility remains
+  `skip:no-podman-user-session`.
+- **Verification**: conflict-marker scan clean; `plan/index.yaml` and
+  `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
+  on the integrated `linux-next` tree with the Rust toolchain path added.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` →
+  `skip:no-podman-user-session`; local-build e2e skipped with the recorded
+  verdict.
+- **Next macOS work**: continue order 126 facade call-site migration under the
+  active lease; order 198 remains actively leased by another macOS agent until
+  `2026-07-06T20:58:00Z`; older macOS stream/status implementation packets
+  still depend on the VM/headless persistent listener and push-message work.
 
 ## Cycle 2026-07-06T17:34Z (linux_mutable CCR sandbox — meta-orchestration)
 
@@ -108,15 +157,49 @@ LastExecutionTime: 2026-07-06T18:10:00Z
 - **Next macOS work**: order 196 (litmus runner bash version) and order 197
   (clippy cleanup) are ready and macOS-owned; both are small (~1h) follow-ups.
 
-## This Loop (coordination audit — secure wire / embedded guest / ledger pruning)
+## Cycle 2026-07-05T22:44Z (macos — meta-orchestration, round 2)
 
-- Ran from a clean `linux-next` worktree at `6bc7171c` after fetching origin.
-- Branch drift exceeds the coordination threshold:
-  - `origin/linux-next..origin/osx-next`: 12 commits.
-  - `origin/linux-next..origin/windows-next`: 6 commits.
-  - Both exceed Dmax=5, so new platform code leases should pause until each
-    platform first merges `origin/linux-next`, records conflict/e2e evidence, and
-    the integration loop either merges or files the exact blocker.
+- **Host**: macOS arm64, `osx-next` (clean, in sync with `origin/linux-next`).
+- **Credential guard**: `ok:gh-keyring`.
+- **Worker drain — order 193 (macos-vz-home-src-mount)**:
+  - Claimed and completed. VZ virtio-fs share already wired in previous WIP
+    (checkpointed). Implemented: `VZVirtioFileSystemDeviceConfiguration` with
+    `home-src` tag in `build_vm_configuration`; cloud-init mounts `/home/forge/src`
+    via `mount -t virtiofs` before headless service; `fetch-headless.sh` prefers
+    staged binary at `/home/forge/src/.tillandsias/guest-bin/` over curl fallback.
+  - **New test**: `vz_fetch_script_prefers_staged_binary_over_network` verifies the
+    staged binary path and install-instead-of-curl logic.
+  - `cargo test -p tillandsias-vm-layer`: **24/24 pass**.
+  - `cargo test -p tillandsias-macos-tray`: **53/53 pass**.
+- **Next macOS work**: order 194 (secure-channel-release-and-probe-hardening) has
+  macOS-relevant slices (PSK parity, VZ readiness probes) — ready for pickup.
+
+## Cycle 2026-07-05T22:23Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, `osx-next` branch, clean worktree after WIP checkpoint.
+- **Credential guard**: `ok:gh-keyring`.
+- **Worker drain — order 191 (multi-host-secure-wire-integration-freeze)**:
+  - Merged `origin/linux-next` (49ab501d) into `osx-next` (34 commit catch-up).
+  - 3 conflicts resolved: `vsock_server.rs`, `plan/loop_status.md`,
+    `plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md` —
+    all resolved with `linux-next` as authoritative per coordination policy.
+  - `cargo fmt --all --check`, `cargo check -p tillandsias-macos-tray` clean.
+  - `cargo test -p tillandsias-macos-tray`: **53/53 pass** (1 ignored, slow e2e).
+  - `cargo test -p tillandsias-secure-channel`: **12/12 pass**.
+  - All touched YAML validated via `ruby -ryaml -e YAML.load_file`.
+  - Branch drift from linux-next resolved (osx-next now at parity).
+  - Pushed `39e9df27` to `origin/osx-next`.
+- **Remaining macOS work**: Order 193 (`macos-vz-home-src-mount`) is now
+  unblocked — linux-next merge complete, order 190 (guest binary contract) done.
+  Next: implement VZ virtio-fs share for host `~/src` → `/home/forge/src`.
+- **E2E gate**: Not run this cycle (merge verification only; no destructive
+  substrate reset). Ready for full local-build e2e on next cycle once order 193
+  implementation is in place.
+- **Finding filed**: `./build.sh --check` requires podman which isn't available
+  on this macOS dev path — noted in existing
+  `plan/issues/macos-build-check-podman-wrapper-2026-07-05.md`.
+
+## This Loop (coordination audit — secure wire / embedded guest / ledger pruning)
 - Current product target distilled for the next agents: macOS tray boots Fedora 44,
   injects a source-matching Linux headless binary for the guest arch, initializes
   the Podman control plane, and launches Codex/Claude/OpenCode/Antigravity inside
@@ -141,17 +224,17 @@ secure_channel_soak:
   subpackets_landed: { "185-A": false, "185-B": true, "185-C": false, "185-D": false }
 
 HighVelocityAlignmentEvent: Active
-Reason: Branch drift is above Dmax and the secure-wire/embedded-guest path is the
-  critical product blocker.
+Reason: Secure-wire/embedded-guest path remains the critical product blocker.
+  Branch drift is resolved for osx-next (merged at parity); windows-next still
+  needs integration.
 
 ## Active Assignment Board
 
 - Linux primary: order 190 `embedded-guest-binary-linux-build` — COMPLETED (added scripts/build-guest-binaries.sh and litmus matching version test). Next focus: order 180 continuation for remaining FIRST_RUN migration/de-hardcoding.
-- macOS primary: order 193 `macos-vz-home-src-mount` plus order 191 integration —
-  prove `/home/forge/src` is actually mounted in the Fedora 44 guest, merge
-  `origin/linux-next` into `osx-next`, rebuild with embedded guest assets, and
-  record secure login/list/forge smoke evidence. Fallback: order 188/180 macOS
-  cold-guest acceptance logs.
+- macOS primary: order 193 `macos-vz-home-src-mount` — **COMPLETED**. VZ virtio-fs
+  share wired, cloud-init mount added, staged binary fallback tested (24/24 vm-layer
+  tests). Next: order 194 (secure-channel-release-and-probe-hardening) — macOS PSK
+  parity and VZ readiness-probe slices.
 - Windows primary: order 186 plus order 191 — merge `origin/linux-next` into
   `windows-next`, preserve the real hvsocket secure-wrapper + embedded-binary work,
   and record WSL2 flag-off/flag-on smoke evidence. Fallback: order 190 consumer

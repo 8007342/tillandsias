@@ -94,7 +94,7 @@ fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
 
 enum ControlWireStream {
     Plain(tillandsias_vm_layer::transport_macos::VsockStream),
-    Secure(EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>),
+    Secure(Box<EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>>),
 }
 
 impl AsyncRead for ControlWireStream {
@@ -158,9 +158,25 @@ async fn open_control_wire_stream(
             let secure = client_handshake(stream, &psk)
                 .await
                 .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
-            Ok(ControlWireStream::Secure(secure))
+            Ok(ControlWireStream::Secure(Box::new(secure)))
         }
     }
+}
+
+/// `VzRuntime::wait_phase_ready`'s per-attempt probe callback. `vm-layer`
+/// does not depend on `tillandsias-secure-channel`, so it cannot decide
+/// Plain-vs-Secure itself; this reuses the exact `open_control_wire_stream`
+/// opener that `--exec-guest` / `--list-cloud-projects` / GitHub login use,
+/// so readiness probing never bypasses secure mode when it is enabled.
+/// @trace plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+async fn probe_phase_secure_or_plain(
+    vz: &tillandsias_vm_layer::vz::VzRuntime,
+    timeout: std::time::Duration,
+) -> Result<tillandsias_control_wire::VmPhase, String> {
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, timeout).await?;
+    tillandsias_vm_layer::vsock_exec::probe_vm_phase(stream).await
 }
 
 /// Output format selected via `--diagnose` (default) or
@@ -450,7 +466,12 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
             return 1;
         }
         eprintln!("[exec-guest] waiting for VM phase Ready…");
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
             eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
@@ -581,7 +602,12 @@ pub fn github_login_main() -> i32 {
             return 1;
         }
         eprintln!("[github-login] waiting for VM phase Ready…");
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
             eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
@@ -767,7 +793,12 @@ pub fn list_cloud_projects_main() -> i32 {
             return 1;
         }
         eprintln!("[list-cloud-projects] waiting for VM phase Ready…");
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
             eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
@@ -877,7 +908,12 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             return 1;
         }
         eprintln!("[opencode] waiting for VM phase Ready…");
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
             eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
@@ -1025,7 +1061,7 @@ mod tests {
             .find("vz.start().await")
             .expect("github login must start the VM");
         let wait_idx = window
-            .find("vz.wait_phase_ready(Duration::from_secs(300)).await")
+            .find("wait_phase_ready(Duration::from_secs(300), |t| {")
             .expect("github login must wait for the VM phase Ready");
         let stream_idx = window
             .find("open_control_wire_stream(")
@@ -1046,6 +1082,38 @@ mod tests {
         assert!(
             prompt_idx < dynamic_idx,
             "prompts should be supplied lazily through the dynamic expect path"
+        );
+    }
+
+    /// litmus:secure-wait-phase-ready — `wait_phase_ready`'s probe callback
+    /// must route through the same secure-or-plain opener as user actions
+    /// (`open_control_wire_stream`), not a bare `open_vsock_stream*` connect.
+    /// Otherwise a flag-ON guest's readiness probe would run in plaintext
+    /// even though the guest only speaks Noise, and could hang/fail even
+    /// though the real user-facing traffic is correctly secured.
+    /// @trace plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+    #[test]
+    fn probe_phase_secure_or_plain_uses_the_secure_or_plain_opener() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let start = source
+            .find("async fn probe_phase_secure_or_plain(")
+            .expect("probe_phase_secure_or_plain must exist");
+        let tail = &source[start..];
+        // Function bodies here are flat (no nested `}\n}`), so the first
+        // `\n}\n` after `start` is this function's own closing brace.
+        let end = tail.find("\n}\n").map(|i| i + 2).unwrap_or(tail.len());
+        let window = &tail[..end];
+
+        assert!(
+            window.contains("open_control_wire_stream("),
+            "wait_phase_ready's probe callback must open its connection via \
+             open_control_wire_stream (the secure-or-plain opener), not a raw \
+             vsock connect: {window}"
+        );
+        assert!(
+            !window.contains("open_vsock_stream"),
+            "wait_phase_ready's probe callback must not bypass \
+             open_control_wire_stream with a direct vsock connect: {window}"
         );
     }
 

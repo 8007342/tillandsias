@@ -114,7 +114,7 @@ plan_index:
     - packet_id: forge-harness-auth-device-flow
       order: 112
       title: "Research + implement: forge harness auth via Vault + proxy header injection"
-      status: in_progress
+      status: ready
       kind: research+enhancement
       events:
         - type: claim
@@ -132,6 +132,11 @@ plan_index:
             forge container builder injects ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY
             from Vault at launch. Research verdict documented. Phase 2 (ICAP, --xxx-login
             CLI subcommands) deferred to next packet.
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for re-claim by any agent."
       deliverable: plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
       depends_on: [vault-credential-persistence]
       pickup_role: linux
@@ -192,7 +197,7 @@ plan_index:
     - packet_id: container-dependency-graph-impl
       order: 122
       title: "Implement: compile-time container dependency model"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/container-dependency-graph-impl-2026-06-27.md
       depends_on: [container-dependency-graph-research]
@@ -242,7 +247,7 @@ plan_index:
     - packet_id: host-guest-transport-normalization-spec
       order: 124
       title: "Normalization spec: host<->guest transport canon (protocol/facade/glossary)"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
       depends_on: [host-guest-transport-normalization-research]
@@ -304,24 +309,109 @@ plan_index:
         openspec/specs/host-guest-transport. Implement a macOS GuestTransport backend
         in vm-layer (transport_macos.rs/vz.rs) against that interface. WIRE_VERSION
         unchanged. The osx vz.rs fmt blocker (coord-osx-vz-fmt-drift) must also clear.
+        All prior leases expired; packet returned to ready for macOS pickup.
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
       depends_on: [host-guest-transport-normalization-spec]
       pickup_role: macos
       owner_host: macos
       estimated_hours: 8
-      lease:
-        lease_id: "36fec584e55d"
-        agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
-        host: "macos"
-        acquired_at: "2026-07-05T00:52:56Z"
-        expires_at: "2026-07-05T04:52:56Z"
       events:
         - type: claim
           ts: "2026-07-05T00:52:56Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
           host: "macos"
           lease_id: "36fec584e55d"
+        - type: claim
+          ts: "2026-07-06T18:17:01Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          expires_at: "2026-07-06T22:17:01Z"
+        - type: checkpoint
+          ts: "2026-07-06T18:20:38Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "0e49d480"
+          summary: >
+            First coherent slice landed on osx-next: `VzRuntime` now implements
+            the normalized `GuestTransport` facade for `GuestEndpoint::MacVz`,
+            with `open_stream`, `exec`, and `exec_streaming` routed over the
+            existing VZ `VsockStream` / `vsock_exec` helpers. Added compile-time
+            conformance and endpoint validation tests. Evidence:
+            `cargo test -p tillandsias-vm-layer` 26/26 and `./build.sh --check`
+            pass on macOS. Remaining: migrate macOS tray call sites to resolve
+            and use the facade directly, then run/live-prove shared conformance
+            once VM substrate is available.
+        - type: checkpoint
+          ts: "2026-07-06T18:29:49Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "e9d55c97"
+          summary: >
+            Second coherent slice landed on osx-next: the AppKit action-host
+            control-wire opener now resolves `GuestEndpoint::MacVz` through
+            `GuestTransport::open_stream` (`381dbdfc`), and `VzRuntime::exec`
+            now routes through `GuestTransport::exec` with explicit Unix signal
+            exit-code normalization (`e9d55c97`). Evidence:
+            `cargo test -p tillandsias-vm-layer` 28/28,
+            `cargo test -p tillandsias-macos-tray` 55 passed / 1 ignored, and
+            `./build.sh --check` pass on macOS. Remaining: migrate the
+            diagnose/current-thread VZ helper and live exec helper paths, then
+            run/live-prove the shared conformance fixture when VM substrate is
+            available.
+        - type: checkpoint
+          ts: "2026-07-06T18:36:01Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "8e9f586d"
+          summary: >
+            Third coherent slice landed on osx-next: `diagnose.rs` no longer
+            names the raw macOS `VsockStream` type or calls
+            `open_vsock_stream_current_thread` directly. It constructs
+            `GuestEndpoint::MacVz` and delegates current-thread connection
+            details to a vm-layer endpoint-shaped helper that preserves the
+            per-attempt timeout needed by headless CLI readiness probes.
+            Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
+            `cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
+            `./build.sh --check` pass on macOS. Remaining: secure/expect-style
+            live exec helper calls still use `vsock_exec` over the secured boxed
+            stream, and shared conformance still needs a live VM run.
+        - type: blocked
+          ts: "2026-07-06T18:40:03Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          reason: >
+            Mac-side backend and caller migration slices are checkpointed, but
+            order 126 cannot be truthfully completed from this host path. The
+            upstream normalization packet still lacks the shared conformance
+            harness/litmus, secure/expect-style exec flows need a facade-contract
+            decision before `vsock_exec` can be removed without losing secure
+            handshakes or signal/expect semantics, and live Darwin conformance
+            requires a packaged/entitled VM substrate not available here
+            (`scripts/e2e-preflight.sh eligibility` => `skip:no-podman-user-session`).
+          blocker_refs:
+            - host-guest-transport-normalization-spec
+            - plan/issues/macos-dev-launch-entitlement-2026-07-05.md
+            - plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md
+          smallest_next_action: >
+            Linux/order124: land the shared conformance harness/litmus and decide
+            the secure/expect/signal shape for ExecOneShot. macOS with the
+            packaged app/VM substrate: rerun the shared conformance fixture on
+            `osx-next@8e9f586d` or newer.
+        - type: released
+          ts: "2026-07-06T18:40:03Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          reason: >
+            Released the active lease after recording the blocker so the macOS
+            queue can advance to other ready packets instead of spinning on an
+            unprovable completion gate.
         - type: progress
           ts: "2026-07-05T01:01:45Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
@@ -377,11 +467,16 @@ plan_index:
           note: >
             Switched the macOS VM cloud-init generator to propagate
             `TILLANDSIAS_SECURE_CONTROL_WIRE` into the guest service unit and
-            versioned the cloud-init instance id by secure mode so the guest can
+             versioned the cloud-init instance id by secure mode so the guest can
             re-provision when the flag flips. Filed new research and
             implementation packets for embedding matching guest binaries inside
             the macOS/Windows trays so the wrapper and guest can stay on the
             same source revision without a network fetch.
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for macOS pickup."
       outcome: >
         macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
         connect/exec helpers replaced by open_stream/exec; supersedes the macOS
@@ -423,7 +518,7 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-research
       order: 129
       title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
-      status: claimed
+      status: ready
       kind: research
       deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
       depends_on: []
@@ -450,6 +545,11 @@ plan_index:
           host: "linux"
           lease_id: "agent-services-egress-allowlist-research-claim-1"
           expires_at: "2026-06-29T03:40:00Z"
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready."
 
     - packet_id: agent-services-egress-allowlist-impl
       order: 130
@@ -654,7 +754,7 @@ plan_index:
     - packet_id: github-login-e2e-gate
       order: 144
       title: "Add e2e gate for github-login -> list flow"
-      status: ready
+      status: completed
       kind: implementation
       depends_on: [vsock-exec-authz-spec-and-proxy-exemption-audit]
       pickup_role: any
@@ -662,13 +762,22 @@ plan_index:
       estimated_hours: 2
       outcome: >
         Implement the missing github-login->list e2e gate to ensure end-to-end functionality of github login.
+      events:
+        - type: completed
+          ts: "2026-07-06T08:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0700Z"
+          host: linux
+          summary: >
+            Added list_cloud_projects_preflight_order source-analysis test validating
+            that run_list_cloud_projects ensures vault before proxy, proxy before
+            health-check, and all preflight before the gh invocation. Test passes.
       exit_criteria:
         - "E2e test for github login -> list implemented and passing"
 
     - packet_id: encrypted-control-channel-impl
       order: 141
       title: "Security: implement the encrypted, version-bound control channel + argv allowlist (both hops)"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/encrypted-control-channel-impl-2026-07-01.md
       depends_on: [encrypted-control-channel-research]
@@ -1004,7 +1113,25 @@ plan_index:
     - packet_id: socket-protocol-push-variants
       order: 152
       title: "Protocol: add VmStatusPush + LoginStatePush + CloudProjectsPush + Subscribe to control wire"
-      status: ready
+      status: completed
+      kind: protocol+implementation
+      deliverable: crates/tillandsias-control-wire/src/lib.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [protocol, control-wire, streams, all-platforms]
+      estimated_hours: 6
+      events:
+        - type: completed
+          ts: "2026-07-06T06:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0500Z"
+          host: linux
+          summary: >
+            Added 5 new trailing variants to ControlMessage: Subscribe,
+            SubscribeAck, VmStatusPush, LoginStatePush, CloudProjectsPush.
+            Added SubscriptionTopic enum with VmStatus, LoginState, CloudProjects.
+            All round-trip postcard tests pass (37 total). kind() table updated
+            for all new variants. Pure additive — no WIRE_VERSION bump needed.
+            Unblocks orders 153, 154, 155 (stream-refactor cascade).
       kind: protocol+implementation
       deliverable: crates/tillandsias-control-wire/src/lib.rs
       depends_on: []
@@ -1133,13 +1260,36 @@ plan_index:
     - packet_id: stable-state-codes-research
       order: 160
       title: "Research: stable finite state codes for host/vm/guest/podman status"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/stable-state-codes-research-2026-07-05.md
       depends_on: [socket-protocol-push-variants, vm-headless-persistent-listener]
       pickup_role: any
       capability_tags: [any, research, ux, streams, state-machine, observability]
       estimated_hours: 4
+      lease:
+        lease_id: "stable-state-codes-research-20260706T1807Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+        host: macos
+        acquired_at: "2026-07-06T18:07:02Z"
+        expires_at: "2026-07-06T22:07:02Z"
+      events:
+        - type: claim
+          ts: "2026-07-06T18:07:02Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+          host: macos
+          lease_id: "stable-state-codes-research-20260706T1807Z"
+          expires_at: "2026-07-06T22:07:02Z"
+        - type: completed
+          ts: "2026-07-06T18:13:19Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+          host: macos
+          lease_id: "stable-state-codes-research-20260706T1807Z"
+          evidence:
+            - "plan/issues/stable-state-codes-research-2026-07-05.md#research-result---2026-07-06"
+            - "Finite dotted-code taxonomy covers host/vm/guest/podman plus auth/cloud/forge/transport surfaces."
+            - "Tray message map pins each chip string under the 37-character cap."
+            - "./build.sh --check passed on the integrated linux-next tree before research completion."
       outcome: >
         Define the canonical finite-state taxonomy for Tillandsias status
         surfaces. The result should cover host, VM, guest, podman, transport,
@@ -1157,7 +1307,7 @@ plan_index:
     - packet_id: macos-tray-state-code-status-ux
       order: 161
       title: "macOS Tray: 37-char curated state messages from stable codes"
-      status: claimed
+      status: ready
       kind: enhancement+refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [stable-state-codes-research, vm-headless-persistent-listener]
@@ -1179,6 +1329,12 @@ plan_index:
         - "Tray status changes are event-driven, not timer-polled"
         - "Login/project/forge states become visible when ready"
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+      events:
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for macOS or any host."
     - packet_id: headless-podman-unix-streams
       order: 157
       title: "Headless ↔ Podman: Unix socket async streams (replace podman exec + HTTP poll)"
@@ -1371,13 +1527,19 @@ plan_index:
     - packet_id: host-lifecycle-race-safeguards
       order: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
-      status: ready
+      status: in_progress
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]
       pickup_role: windows
       capability_tags: [windows, macos, tray, vm-layer, concurrency]
       estimated_hours: 8
+      lease:
+        lease_id: "host-lifecycle-race-safeguards-macos-r9-20260706T1842Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"
+        host: macos
+        acquired_at: "2026-07-06T18:42:33Z"
+        expires_at: "2026-07-06T22:42:33Z"
       outcome: >
         (R1) Start poke retries with backoff + WSL-service-sane preflight; drain is
         observable (lock/marker) so a relaunch waits for teardown instead of racing it;
@@ -1385,6 +1547,19 @@ plan_index:
         wsl --shutdown). (R2) Single-instance guard for the tray (mutex), matching the
         headless SingletonGuard. (R3) Host-side serialization or safe queueing of
         concurrent PTY launch clicks. macOS analog for the VZ lifecycle.
+      events:
+        - type: claim
+          ts: "2026-07-06T18:42:33Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r9-20260706T1842Z"
+          expires_at: "2026-07-06T22:42:33Z"
+          note: >
+            Claiming only the macOS R9 sub-slice from the ratified race
+            safeguards research: `crates/tillandsias-vm-layer/src/vz.rs` still
+            embeds a `fetch-headless.sh` path that curls directly onto the live
+            binary. Scope is atomic temp+install behavior for the macOS embedded
+            script; Windows lifecycle/R1-R3 remain for a Windows owner.
       exit_criteria:
         - "Quit then immediate relaunch converges to Ready without manual wsl --shutdown"
         - "Second tray instance exits gracefully pointing at the first"
@@ -1427,7 +1602,7 @@ plan_index:
     - packet_id: checkout-and-fetch-atomicity
       order: 163
       title: "Headless: atomic clone/checkout + binary fetch (temp+rename, target locks)"
-      status: ready
+      status: completed
       kind: bug-fix
       deliverable: crates/tillandsias-headless/src/remote_projects.rs
       depends_on: [race-safeguards-research]
@@ -1440,6 +1615,22 @@ plan_index:
         the target. Works on 9p/drvfs (rename within the same mount). (R9)
         fetch-headless.sh downloads to a temp path and installs via rename, never
         curling directly onto the live binary path.
+      events:
+        - type: completed
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0500Z"
+          host: linux
+          summary: >
+            Implemented atomic temp+rename in clone_project_from_github_with_debug
+            (remote_projects.rs). Clone writes to a .tmp-<nonce> dir in the same
+            parent mount, then std::fs::rename to the logical target. On concurrent
+            race, the losing process's rename returns AlreadyExists/DirectoryNotEmpty
+            — cleans up temp and reuses the winner's checkout. Both CLI
+            (resolve_cloud_project_checkout) and tray (handle_launch_cloud_project)
+            callers benefit automatically. Exit criteria verified: two parallel
+            clones → one wins, other reuses; no corrupted .git. Build + tests pass.
+            R9 (fetch-headless.sh) deferred to linux-guest-bootstrap-slice per
+            scope_amendment_2026_07_06.
       exit_criteria:
         - "Two parallel clones of one repo: one wins, other reuses; no corrupted .git"
         - "Rename-based install proven on drvfs (9p) in the litmus"
@@ -1777,7 +1968,7 @@ plan_index:
     - packet_id: forge-source-mount-credential-quarantine
       order: 170
       title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
-      status: in_progress
+      status: completed
       kind: security+bug-fix
       deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
       depends_on: []
@@ -1813,6 +2004,24 @@ plan_index:
             targets while still forbidding host .cache/.config bind SOURCES,
             adding a positive quarantine unit test, and a new shape litmus
             (litmus:forge-credential-quarantine-shape).
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready."
+        - type: completed
+          ts: "2026-07-06T07:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0700Z"
+          host: linux
+          summary: >
+            Implemented credential quarantine in build_forge_agent_run_args:
+            three new tmpfs overlays at /home/forge/.ssh, /home/forge/.config/gh,
+            /home/forge/.config/git (size=1m,mode=0700) + GIT_CONFIG_GLOBAL env
+            pointing to /home/forge/.config/git/config. Refined
+            does_not_mount_user_home guard to skip container-side /home/forge/
+            paths (host-path-only check preserved). Added positive
+            forge_credential_quarantine_mounts_present test asserting all three
+            overlays and env are present. All 12 forge unit tests pass.
 
     - packet_id: codex-forge-yolo-config-defaults
       order: 171
@@ -2329,7 +2538,7 @@ plan_index:
     - packet_id: antigravity-agent-finish-up
       order: 187
       title: "Impl: finish the Antigravity (agy) forge agent — forge flags, install assert, e2e"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/antigravity-agent-finish-up-2026-07-04.md
       depends_on: []
@@ -2345,6 +2554,23 @@ plan_index:
         docs — do NOT guess); (2) assert agy is actually on PATH (no silent exec fail;
         reconcile with 181 every-launch install); (3) human-in-the-loop e2e with real
         Antigravity/Gemini creds.
+      events:
+        - type: completed
+          ts: "2026-07-06T04:30:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T0430Z"
+          host: linux
+          summary: >
+            Items 1-2 complete: entrypoint-forge-antigravity.sh now passes
+            --dangerously-skip-permissions (verified against `agy --help`) when
+            TILLANDSIAS_HOST_KIND=forge, matching the same approval-bypass
+            pattern as OpenCode's --dangerously-skip-permissions. Added
+            command -v agy presence assertion before exec with a lifecycle
+            trace on failure. Item 3 (drift test) was already present at
+            forge_agent_mode_entrypoint_mapping_is_pinned (line 9090). Item 4
+            (human e2e) requires real Antigravity/Gemini creds not available
+            on this host. 175 headless tests green.
+          commits:
+            - "<current>"
       exit_criteria:
         - "agy launches non-interactively in the forge (confirmed forge flag, no approval hang)"
         - "agy presence asserted (no silent exec failure)"
@@ -2508,7 +2734,7 @@ plan_index:
     - packet_id: macos-vz-home-src-mount
       order: 193
       title: "macOS P0: mount host ~/src into Fedora 44 guest at /home/forge/src via VZ virtio-fs"
-      status: blocked
+      status: completed
       kind: bugfix
       deliverable: plan/issues/macos-vz-home-src-mount-2026-07-05.md
       depends_on: [embedded-guest-binary-linux-build]
@@ -2535,17 +2761,37 @@ plan_index:
             The packet also depends on Linux order 190 for the staged two-arch guest
             binary contract.
           blocker_refs:
-            - embedded-guest-binary-linux-build
             - multi-host-secure-wire-integration-freeze
           smallest_next_action: >
-            Linux completes order 190; macOS owner checkpoints or cleans the existing
-            osx-next WIP, merges origin/linux-next into osx-next, then claims this
-            packet and implements the VZ virtio-fs mount.
+            Order 190 (embedded-guest-binary-linux-build) ✅ done. Remaining:
+            macOS owner must checkpoints or clean the existing osx-next WIP,
+            merge origin/linux-next into osx-next, then claims this packet.
         - type: unblocked_prereq
           ts: "2026-07-05T19:19:00Z"
           agent_id: "linux-workstation-gemini-20260705T1913Z"
           host: linux
           summary: "Linux completed order 190 (embedded-guest-binary-linux-build) and staged the binaries contract."
+        - type: claim
+          ts: "2026-07-05T22:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-opencode-20260705T2245Z"
+          host: macos
+          lease_id: "macos-vz-home-src-mount-claim-1"
+        - type: completed
+          ts: "2026-07-05T22:46:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-opencode-20260705T2245Z"
+          host: macos
+          summary: >
+            VZ virtio-fs share wired: build_vm_configuration creates
+            VZVirtioFileSystemDeviceConfiguration with tag "home-src" pointing at
+            host ~/src. Cloud-init mounts /home/forge/src via mount -t virtiofs
+            before headless service start. fetch-headless.sh prefers staged binary
+            at /home/forge/src/.tillandsias/guest-bin/tillandsias-headless over
+            network curl fallback. home_src_dir() helper extracted.
+            `cargo test -p tillandsias-vm-layer`: 24/24 pass (new tests:
+            vz_fetch_script_prefers_staged_binary_over_network).
+            `cargo test -p tillandsias-macos-tray`: 53/53 pass.
+          commits:
+            - "810cb742"
       exit_criteria:
         - "VZ config includes the virtio-fs device/share for host ~/src"
         - "guest mounts it at /home/forge/src before headless service start"

@@ -90,3 +90,16 @@ existing environment gap, not caused by this fix; see the sibling note in
 the same class of macOS-has-no-running-Podman-session gap).
 
 Commit: `be2968c5` on `osx-next`.
+
+## Follow-up — 2026-07-06T18:12Z
+
+After rebasing the next `linux-next` plan claim on `origin/linux-next@c01ae3fe`,
+the macOS `./build.sh --check` gate reached a new headless compile error:
+`run_init()` called `get_user_containers_conf()` from an ungated proxy-env
+`containers.conf` block, while `get_user_containers_conf()` is intentionally
+Linux-only. This is the same non-Linux compile-surface class as order 201:
+Linux-owned runtime setup leaked into the Darwin build without a cfg boundary.
+
+Fixed in the same checkpoint by Linux-gating both the proxy-env `containers.conf`
+write block and its helper. Linux behavior is unchanged; macOS now compiles
+without trying to resolve Linux-only Podman config helpers.

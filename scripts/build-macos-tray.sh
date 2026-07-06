@@ -15,7 +15,8 @@
 #   scripts/build-macos-tray.sh
 #
 # Prereqs: macOS (Apple Silicon), Rust toolchain with aarch64-apple-darwin
-# target (= host triple on Apple Silicon), codesign, tar, shasum.
+# target (= host triple on Apple Silicon), zig, cargo-zigbuild, codesign, tar,
+# shasum.
 #
 # @trace spec:macos-tray-build-and-release, spec:macos-native-tray
 # =============================================================================
@@ -25,7 +26,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
-PATH="$(brew --prefix rustup)/bin:$HOME/.cargo/bin:$PATH"
+if command -v brew >/dev/null 2>&1 && brew --prefix rustup >/dev/null 2>&1; then
+    PATH="$(brew --prefix rustup)/bin:$PATH"
+fi
+PATH="$HOME/.cargo/bin:$PATH"
 
 say() { printf '  %s\n' "$*"; }
 die() { printf '  ERROR: %s\n' "$*" >&2; exit 1; }

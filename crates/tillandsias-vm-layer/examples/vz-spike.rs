@@ -117,6 +117,8 @@ mod macos_main {
             memory_bytes: 2 * 1024 * 1024 * 1024,
             root_disk: args.disk.clone(),
             cidata_iso: None,
+            shared_host_dir: None,
+            share_tag: "home-src".to_string(),
             nvram: args.nvram.clone(),
             serial_writer_fd: None,
         };
