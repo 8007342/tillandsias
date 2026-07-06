@@ -114,7 +114,7 @@ plan_index:
     - packet_id: forge-harness-auth-device-flow
       order: 112
       title: "Research + implement: forge harness auth via Vault + proxy header injection"
-      status: in_progress
+      status: ready
       kind: research+enhancement
       events:
         - type: claim
@@ -132,6 +132,11 @@ plan_index:
             forge container builder injects ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY
             from Vault at launch. Research verdict documented. Phase 2 (ICAP, --xxx-login
             CLI subcommands) deferred to next packet.
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for re-claim by any agent."
       deliverable: plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
       depends_on: [vault-credential-persistence]
       pickup_role: linux
@@ -192,7 +197,7 @@ plan_index:
     - packet_id: container-dependency-graph-impl
       order: 122
       title: "Implement: compile-time container dependency model"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/container-dependency-graph-impl-2026-06-27.md
       depends_on: [container-dependency-graph-research]
@@ -242,7 +247,7 @@ plan_index:
     - packet_id: host-guest-transport-normalization-spec
       order: 124
       title: "Normalization spec: host<->guest transport canon (protocol/facade/glossary)"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
       depends_on: [host-guest-transport-normalization-research]
@@ -297,25 +302,20 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: blocked
+      status: ready
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
         openspec/specs/host-guest-transport. Implement a macOS GuestTransport backend
         in vm-layer (transport_macos.rs/vz.rs) against that interface. WIRE_VERSION
         unchanged. The osx vz.rs fmt blocker (coord-osx-vz-fmt-drift) must also clear.
+        All prior leases expired; packet returned to ready for macOS pickup.
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
       depends_on: [host-guest-transport-normalization-spec]
       pickup_role: macos
       owner_host: macos
       estimated_hours: 8
-      lease:
-        lease_id: "36fec584e55d"
-        agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
-        host: "macos"
-        acquired_at: "2026-07-05T00:52:56Z"
-        expires_at: "2026-07-05T04:52:56Z"
       events:
         - type: claim
           ts: "2026-07-05T00:52:56Z"
@@ -377,11 +377,16 @@ plan_index:
           note: >
             Switched the macOS VM cloud-init generator to propagate
             `TILLANDSIAS_SECURE_CONTROL_WIRE` into the guest service unit and
-            versioned the cloud-init instance id by secure mode so the guest can
+             versioned the cloud-init instance id by secure mode so the guest can
             re-provision when the flag flips. Filed new research and
             implementation packets for embedding matching guest binaries inside
             the macOS/Windows trays so the wrapper and guest can stay on the
             same source revision without a network fetch.
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for macOS pickup."
       outcome: >
         macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
         connect/exec helpers replaced by open_stream/exec; supersedes the macOS
@@ -423,7 +428,7 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-research
       order: 129
       title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
-      status: claimed
+      status: ready
       kind: research
       deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
       depends_on: []
@@ -450,6 +455,11 @@ plan_index:
           host: "linux"
           lease_id: "agent-services-egress-allowlist-research-claim-1"
           expires_at: "2026-06-29T03:40:00Z"
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready."
 
     - packet_id: agent-services-egress-allowlist-impl
       order: 130
@@ -668,7 +678,7 @@ plan_index:
     - packet_id: encrypted-control-channel-impl
       order: 141
       title: "Security: implement the encrypted, version-bound control channel + argv allowlist (both hops)"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/encrypted-control-channel-impl-2026-07-01.md
       depends_on: [encrypted-control-channel-research]
@@ -1157,7 +1167,7 @@ plan_index:
     - packet_id: macos-tray-state-code-status-ux
       order: 161
       title: "macOS Tray: 37-char curated state messages from stable codes"
-      status: claimed
+      status: ready
       kind: enhancement+refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [stable-state-codes-research, vm-headless-persistent-listener]
@@ -1179,6 +1189,12 @@ plan_index:
         - "Tray status changes are event-driven, not timer-polled"
         - "Login/project/forge states become visible when ready"
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+      events:
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for macOS or any host."
     - packet_id: headless-podman-unix-streams
       order: 157
       title: "Headless ↔ Podman: Unix socket async streams (replace podman exec + HTTP poll)"
@@ -1777,7 +1793,7 @@ plan_index:
     - packet_id: forge-source-mount-credential-quarantine
       order: 170
       title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
-      status: in_progress
+      status: ready
       kind: security+bug-fix
       deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
       depends_on: []
@@ -1813,6 +1829,11 @@ plan_index:
             targets while still forbidding host .cache/.config bind SOURCES,
             adding a positive quarantine unit test, and a new shape litmus
             (litmus:forge-credential-quarantine-shape).
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready."
 
     - packet_id: codex-forge-yolo-config-defaults
       order: 171
@@ -2552,12 +2573,11 @@ plan_index:
             The packet also depends on Linux order 190 for the staged two-arch guest
             binary contract.
           blocker_refs:
-            - embedded-guest-binary-linux-build
             - multi-host-secure-wire-integration-freeze
           smallest_next_action: >
-            Linux completes order 190; macOS owner checkpoints or cleans the existing
-            osx-next WIP, merges origin/linux-next into osx-next, then claims this
-            packet and implements the VZ virtio-fs mount.
+            Order 190 (embedded-guest-binary-linux-build) ✅ done. Remaining:
+            macOS owner must checkpoints or clean the existing osx-next WIP,
+            merge origin/linux-next into osx-next, then claims this packet.
         - type: unblocked_prereq
           ts: "2026-07-05T19:19:00Z"
           agent_id: "linux-workstation-gemini-20260705T1913Z"
