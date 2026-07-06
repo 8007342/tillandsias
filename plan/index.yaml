@@ -2734,7 +2734,7 @@ plan_index:
     - packet_id: macos-tray-menu-state-observatorium-v2-pin-test-missing
       order: 199
       title: "host-shell menu_state.rs is missing the macos-tray-architectural-invariants pin test"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
       depends_on: []
@@ -2752,14 +2752,38 @@ plan_index:
         (if the underlying v1 behavior — observatorium + opencode_web disabled
         for MacosTray — is still correct and just needs re-pinning) or correct
         the litmus to match the current, intentional behavior.
-      events: []
+      events:
+        - type: claim
+          ts: "2026-07-06T16:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          lease_id: "macos-tray-menu-state-observatorium-v2-pin-test-missing-claim-1"
+          expires_at: "2026-07-06T20:45:00Z"
+        - type: completed
+          ts: "2026-07-06T16:50:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          summary: >
+            Root cause: the behavior was never missing — the litmus pinned
+            the wrong file/function. Two pin tests already exist in
+            crates/tillandsias-macos-tray/src/menu_disabled_v2.rs
+            (render_marks_observatorium_disabled_with_v2_tooltip_on_macos +
+            render_marks_opencode_web_disabled_with_v2_tooltip_on_macos),
+            exercising defers_gui_to_v2() end-to-end via render(). Corrected
+            the litmus's grep target from host-shell/menu_state.rs (wrong
+            crate, wrong name) to macos-tray/menu_disabled_v2.rs (both real
+            test names). litmus:macos-tray-architectural-invariants now
+            passes 9/9 (was 8/9). No product code changed — only the litmus
+            check.
+          commits:
+            - "(pending — see linux-next push this cycle)"
       exit_criteria:
         - "litmus:macos-tray-architectural-invariants passes end-to-end (scripts/run-litmus-test.sh macos-native-tray --phase pre-build --size instant)"
 
     - packet_id: pty-attach-project-threading-litmus-stale-import-shape
       order: 200
       title: "litmus:pty-attach-project-threading-symmetric pins a stale windows-tray import (missing PtyIntent)"
-      status: ready
+      status: done
       kind: bugfix
       deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
       depends_on: []
@@ -2777,7 +2801,28 @@ plan_index:
         pins windows-tray's own source) before updating the fixed string;
         this is a litmus-file fix, not a windows-tray code change, since the
         current import shape is presumably intentional.
-      events: []
+      events:
+        - type: claim
+          ts: "2026-07-06T16:50:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          lease_id: "pty-attach-project-threading-litmus-stale-import-shape-claim-1"
+          expires_at: "2026-07-06T20:50:00Z"
+        - type: completed
+          ts: "2026-07-06T16:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          summary: >
+            Fixed the litmus (not windows-tray's source — the current
+            `{PtyIntent, intent_for_action, launch_spec}` import is correct
+            and intentional). Step 1 now checks for `intent_for_action` +
+            `launch_spec` inside the `use tillandsias_host_shell::pty::{`
+            import block rather than the exact historical literal, so a
+            future addition to the same import won't re-break this check.
+            litmus:pty-attach-project-threading-symmetric now passes 5/5
+            (was 4/5). No windows-tray code touched.
+          commits:
+            - "(pending — see linux-next push this cycle)"
       exit_criteria:
         - "litmus:pty-attach-project-threading-symmetric passes end-to-end (scripts/run-litmus-test.sh macos-native-tray --phase pre-build --size instant)"
 
