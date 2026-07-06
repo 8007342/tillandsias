@@ -50,6 +50,7 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+use tillandsias_control_wire::guest_transport::GuestEndpoint;
 use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
 
 use crate::guest_binary::stage_embedded_guest_binary;
@@ -92,9 +93,11 @@ fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
     .clone()
 }
 
+type GuestWireStream = Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>;
+
 enum ControlWireStream {
-    Plain(tillandsias_vm_layer::transport_macos::VsockStream),
-    Secure(Box<EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>>),
+    Plain(GuestWireStream),
+    Secure(Box<EncryptedStream<GuestWireStream>>),
 }
 
 impl AsyncRead for ControlWireStream {
@@ -142,8 +145,9 @@ async fn open_control_wire_stream(
     port: u32,
     timeout: std::time::Duration,
 ) -> Result<ControlWireStream, String> {
+    let endpoint = GuestEndpoint::MacVz { port };
     let stream = vz
-        .open_vsock_stream_current_thread(port, timeout)
+        .open_guest_transport_stream_current_thread(&endpoint, timeout)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -477,10 +481,11 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
             return 1;
         }
         eprintln!("[exec-guest] running: {argv_ref:?}");
-        // Connect on THIS (main) thread, not via spawn_blocking: VZ delivers
-        // the connect completion on the main dispatch queue, which is only
-        // serviced while the main thread pumps the CFRunLoop. open_vsock_stream
-        // (spawn_blocking) hangs headless; the current-thread variant pumps it.
+        // Connect on THIS (main) thread, not via the trait-level default
+        // opener: VZ delivers the connect completion on the main dispatch
+        // queue, which is only serviced while the main thread pumps the
+        // CFRunLoop. The current-thread GuestTransport helper preserves the
+        // per-attempt timeout that readiness probes pass down.
         let stream =
             match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
                 .await
@@ -1114,6 +1119,40 @@ mod tests {
             !window.contains("open_vsock_stream"),
             "wait_phase_ready's probe callback must not bypass \
              open_control_wire_stream with a direct vsock connect: {window}"
+        );
+    }
+
+    /// `--diagnose` and its sibling CLI actions must construct a normalized
+    /// macOS guest endpoint and delegate current-thread VZ connection details
+    /// to vm-layer, rather than naming `VsockStream` directly.
+    ///
+    /// @trace spec:host-guest-transport
+    #[test]
+    fn diagnose_control_wire_opener_uses_guest_transport_endpoint() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let start = source
+            .find("async fn open_control_wire_stream(")
+            .expect("open_control_wire_stream must exist");
+        let tail = &source[start..];
+        let end = tail.find("\n///").unwrap_or(tail.len());
+        let window = &tail[..end];
+
+        assert!(
+            window.contains("GuestEndpoint::MacVz"),
+            "diagnose opener must construct the normalized MacVz endpoint: {window}"
+        );
+        assert!(
+            window.contains("open_guest_transport_stream_current_thread(&endpoint, timeout)"),
+            "diagnose opener must delegate current-thread VZ details to vm-layer: {window}"
+        );
+        assert!(
+            !window.contains("open_vsock_stream_current_thread"),
+            "diagnose opener must not call the raw VZ connector directly: {window}"
+        );
+        let raw_stream_type = concat!("transport_macos::", "VsockStream");
+        assert!(
+            !source.contains(raw_stream_type),
+            "diagnose.rs must not name the raw macOS stream type directly"
         );
     }
 

@@ -407,6 +407,30 @@ impl VzRuntime {
         crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
     }
 
+    /// Current-thread variant of the normalized GuestTransport stream opener.
+    ///
+    /// The trait-level `GuestTransport::open_stream` owns the default backend
+    /// timeout. Headless macOS CLI flows (`--diagnose`, `--exec-guest`,
+    /// `--github-login`) need per-attempt timeouts while pumping the process
+    /// main thread, so they use this endpoint-shaped helper instead of reaching
+    /// down to raw `VsockStream` construction.
+    ///
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    pub async fn open_guest_transport_stream_current_thread(
+        &self,
+        ep: &tillandsias_control_wire::guest_transport::GuestEndpoint,
+        timeout: std::time::Duration,
+    ) -> io::Result<Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>>
+    {
+        let port = macvz_port(ep)?;
+        let stream = self
+            .open_vsock_stream_current_thread(port, timeout)
+            .await
+            .map_err(macvz_io_error)?;
+        Ok(Box::new(stream))
+    }
+
     /// Generate a `cidata.iso` image using `hdiutil makehybrid`.
     #[cfg(target_os = "macos")]
     fn generate_cidata_iso(&self, dest: &Path) -> Result<(), String> {
@@ -2110,6 +2134,26 @@ mod tests {
         assert!(
             window.contains("GuestEndpoint::MacVz"),
             "VmRuntime::exec must target the MacVz endpoint: {window}"
+        );
+    }
+
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn current_thread_guest_transport_opener_uses_endpoint_boundary() {
+        let source = include_str!("vz.rs");
+        let window = source
+            .split("pub async fn open_guest_transport_stream_current_thread(")
+            .nth(1)
+            .and_then(|s| s.split("\n    /// Generate a `cidata.iso`").next())
+            .expect("current-thread guest transport opener source");
+        assert!(
+            window.contains("macvz_port(ep)"),
+            "current-thread opener must validate the GuestEndpoint: {window}"
+        );
+        assert!(
+            window.contains("open_vsock_stream_current_thread(port, timeout)"),
+            "current-thread opener must preserve caller-supplied timeout: {window}"
         );
     }
 
