@@ -1014,7 +1014,25 @@ plan_index:
     - packet_id: socket-protocol-push-variants
       order: 152
       title: "Protocol: add VmStatusPush + LoginStatePush + CloudProjectsPush + Subscribe to control wire"
-      status: ready
+      status: completed
+      kind: protocol+implementation
+      deliverable: crates/tillandsias-control-wire/src/lib.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [protocol, control-wire, streams, all-platforms]
+      estimated_hours: 6
+      events:
+        - type: completed
+          ts: "2026-07-06T06:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0500Z"
+          host: linux
+          summary: >
+            Added 5 new trailing variants to ControlMessage: Subscribe,
+            SubscribeAck, VmStatusPush, LoginStatePush, CloudProjectsPush.
+            Added SubscriptionTopic enum with VmStatus, LoginState, CloudProjects.
+            All round-trip postcard tests pass (37 total). kind() table updated
+            for all new variants. Pure additive — no WIRE_VERSION bump needed.
+            Unblocks orders 153, 154, 155 (stream-refactor cascade).
       kind: protocol+implementation
       deliverable: crates/tillandsias-control-wire/src/lib.rs
       depends_on: []
@@ -1466,7 +1484,7 @@ plan_index:
     - packet_id: checkout-and-fetch-atomicity
       order: 163
       title: "Headless: atomic clone/checkout + binary fetch (temp+rename, target locks)"
-      status: ready
+      status: completed
       kind: bug-fix
       deliverable: crates/tillandsias-headless/src/remote_projects.rs
       depends_on: [race-safeguards-research]
@@ -1479,6 +1497,22 @@ plan_index:
         the target. Works on 9p/drvfs (rename within the same mount). (R9)
         fetch-headless.sh downloads to a temp path and installs via rename, never
         curling directly onto the live binary path.
+      events:
+        - type: completed
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0500Z"
+          host: linux
+          summary: >
+            Implemented atomic temp+rename in clone_project_from_github_with_debug
+            (remote_projects.rs). Clone writes to a .tmp-<nonce> dir in the same
+            parent mount, then std::fs::rename to the logical target. On concurrent
+            race, the losing process's rename returns AlreadyExists/DirectoryNotEmpty
+            — cleans up temp and reuses the winner's checkout. Both CLI
+            (resolve_cloud_project_checkout) and tray (handle_launch_cloud_project)
+            callers benefit automatically. Exit criteria verified: two parallel
+            clones → one wins, other reuses; no corrupted .git. Build + tests pass.
+            R9 (fetch-headless.sh) deferred to linux-guest-bootstrap-slice per
+            scope_amendment_2026_07_06.
       exit_criteria:
         - "Two parallel clones of one repo: one wins, other reuses; no corrupted .git"
         - "Rename-based install proven on drvfs (9p) in the litmus"

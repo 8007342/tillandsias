@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -579,9 +579,27 @@ pub fn clone_project_from_github_with_debug(
     let parent_str = parent.to_string_lossy().to_string();
     let bind_mount = format!("{parent_str}:{parent_str}:rw");
 
+    // Clone into a temp directory then atomically rename to the target.
+    // This prevents concurrent --cloud resolves from corrupting each other's
+    // .git (R8 — checkout-and-fetch-atomicity, order 163). The podman bind
+    // mount of `parent` gives both paths equal access inside the container.
+    let tmp_dir = {
+        let nonce = format!(
+            "{:016x}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let mut tmp = target_path.as_os_str().to_os_string();
+        tmp.push(".tmp.");
+        tmp.push(&nonce);
+        PathBuf::from(tmp)
+    };
+
     let nwo = normalize_repo_identifier(repo_url);
     let image = git_image_tag();
-    let repo_dir = target_path.to_string_lossy().to_string();
+    let repo_dir = tmp_dir.to_string_lossy().to_string();
     let script = r#"
 set -eu
 export GH_PAGER=cat
@@ -687,11 +705,30 @@ exec gh repo clone "$1" "$2"
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let _ = std::fs::remove_dir_all(&tmp_dir);
         return Err(format!(
             "containerized gh repo clone exited with status {}: {}",
             output.status,
             stderr.trim()
         ));
+    }
+
+    // Atomically rename the temp checkout into the final target path.
+    // If another process already created the target, reclaim the temp dir.
+    if let Err(e) = std::fs::rename(&tmp_dir, target_path) {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        if e.kind() == std::io::ErrorKind::AlreadyExists
+            || e.kind() == std::io::ErrorKind::DirectoryNotEmpty
+        {
+            // Concurrent clone finished first. Our temp is cleaned up above;
+            // the winning clone's .tillandsias is at target_path already.
+            debug!(
+                "github_project_clone: concurrent clone won; reusing {:?}",
+                target_path
+            );
+            return Ok(());
+        }
+        return Err(format!("atomic rename failed: {e}"));
     }
 
     let tillandsias_dir = target_path.join(".tillandsias");
