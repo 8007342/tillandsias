@@ -198,7 +198,6 @@ LastExecutionTime: 2026-07-06T18:20:38Z
   `plan/issues/macos-build-check-podman-wrapper-2026-07-05.md`.
 
 ## This Loop (coordination audit — secure wire / embedded guest / ledger pruning)
->>>>>>> origin/linux-next
 - Current product target distilled for the next agents: macOS tray boots Fedora 44,
   injects a source-matching Linux headless binary for the guest arch, initializes
   the Podman control plane, and launches Codex/Claude/OpenCode/Antigravity inside
