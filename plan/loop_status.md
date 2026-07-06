@@ -1,6 +1,14 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T16:30:00Z
+LastExecutionTime: 2026-07-06T17:15:00Z
+
+## Cycle 2026-07-06T17:15Z (linux_immutable — meta-orchestration)
+
+- **Host**: Linux, `linux-next`, `linux_immutable` (clean, credential guard `ok:gh-keyring`).
+- **Worker Drain**: Skipped (not a builder role host).
+- **E2E Gate**: `eligible`. Executed `/smoke-curl-install-and-test-e2e` for release `v0.3.260704.2`.
+- **E2E Findings**: Substrate reset succeeded. Init completed cleanly (exit 0) but logged SELinux `semanage` and vault `/etc/hosts` permission denied warnings. Forge continuous enhancement run failed immediately with `Error: Unknown image type: curl`.
+- **Reduction Engine**: Filed 3 ready work packets in `plan/issues/smoke-e2e-findings-v0.3.260704.2-2026-07-06.md`.
 
 ## Cycle 2026-07-06T15:37Z (macos — meta-orchestration)
 
