@@ -137,10 +137,14 @@ impl WslLifecycle {
                 match runtime.spawn_keepalive(debug) {
                     Ok(mut child) => match child.wait().await {
                         Ok(status) => {
-                            tracing::warn!("Keepalive wsl.exe exited with status {status}. Respawning in 1s...");
+                            tracing::warn!(
+                                "Keepalive wsl.exe exited with status {status}. Respawning in 1s..."
+                            );
                         }
                         Err(e) => {
-                            tracing::warn!("Keepalive wsl.exe failed to wait: {e}. Respawning in 1s...");
+                            tracing::warn!(
+                                "Keepalive wsl.exe failed to wait: {e}. Respawning in 1s..."
+                            );
                         }
                     },
                     Err(e) => {
@@ -367,22 +371,22 @@ for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_se
             .output()
             .await
             .map_err(|e| format!("failed to detect guest architecture: {e}"))?;
-        let arch = String::from_utf8_lossy(&arch_output.stdout).trim().to_string();
+        let arch = String::from_utf8_lossy(&arch_output.stdout)
+            .trim()
+            .to_string();
 
         let embedded_bin: &[u8] = match arch.as_str() {
             "x86_64" => include_bytes!("../assets/tillandsias-headless-x86_64-unknown-linux-musl"),
-            "aarch64" => include_bytes!("../assets/tillandsias-headless-aarch64-unknown-linux-musl"),
+            "aarch64" => {
+                include_bytes!("../assets/tillandsias-headless-aarch64-unknown-linux-musl")
+            }
             _ => &[],
         };
 
         if !embedded_bin.is_empty() {
             tracing::info!(%arch, "Injecting embedded tillandsias-headless binary");
-            self.wsl_root_write_bytes(
-                "/usr/local/bin/tillandsias-headless",
-                embedded_bin,
-                true,
-            )
-            .await?;
+            self.wsl_root_write_bytes("/usr/local/bin/tillandsias-headless", embedded_bin, true)
+                .await?;
 
             // Write a no-op fetch-headless.sh so the fetch systemd service compiles and runs cleanly
             self.wsl_root_write(
@@ -725,8 +729,7 @@ fi"#,
             let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(port)
                 .await
                 .map_err(|e| format!("hvsocket open: {e}"))?;
-            let mut client =
-                Client::from_stream(stream, Transport::Vsock { cid: 0, port });
+            let mut client = Client::from_stream(stream, Transport::Vsock { cid: 0, port });
             let wire_version = client
                 .handshake()
                 .await

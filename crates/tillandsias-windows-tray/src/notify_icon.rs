@@ -1048,7 +1048,8 @@ async fn live_client_request(
     } // lock released before reconnect — avoids holding it during spawn_blocking
 
     // Slow path: open a new HvSocket connection.
-    let stream = match crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
+    let stream = match crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await
+    {
         Ok(s) => s,
         Err(err) => {
             tracing::debug!(%err, ctx, "control wire unreachable");
@@ -1230,7 +1231,8 @@ async fn request_vm_shutdown(drain_timeout_ms: u32) {
     use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::Client;
 
-    let stream = match crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
+    let stream = match crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await
+    {
         Ok(stream) => stream,
         Err(err) => {
             tracing::debug!(%err, "vm shutdown request: control wire unreachable");
