@@ -2393,7 +2393,7 @@ plan_index:
     - packet_id: semantic-distillation-and-ledger-pruning
       order: 192
       title: "Housekeeping: prune stale active ledgers and refresh dashboard provenance"
-      status: claimed
+      status: done
       kind: housekeeping
       deliverable: plan/issues/semantic-distillation-and-ledger-pruning-2026-07-05.md
       depends_on: []
@@ -2425,7 +2425,14 @@ plan_index:
             Archived 2 superseded embedded-guest issue files (move to plan/archive/).
             Reconciliated status headers for orders 178-183, 189 to match plan/index.yaml.
             Updated metrics dashboard to display explicit "NO CURRENT METRICS" state
-            with source provenance. Remaining: update plan/index.yaml completion events.
+            with source provenance.
+        - type: completed
+          ts: "2026-07-06T00:18:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T000839Z"
+          host: linux
+          summary: >
+            Completed housekeeping: stale ledgers archived, status headers reconciled,
+            dashboard refreshed with explicit empty-metrics state. Commit 261756c5.
 
     - packet_id: macos-vz-home-src-mount
       order: 193
