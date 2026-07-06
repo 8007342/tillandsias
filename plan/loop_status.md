@@ -1,6 +1,81 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:59:52Z
+LastExecutionTime: 2026-07-06T20:20:00Z
+
+## Cycle 2026-07-06T19:03Z (linux_mutable — meta-orchestration + coordinator)
+
+- **Host**: Linux mutable, started on `linux-next` clean, credential guard
+  `ok:gh-keyring`. Sole active linux worker this cycle (AntiGravity had
+  crashed before starting; no stale in-progress linux leases were found in
+  `plan/index.yaml`, so nothing needed forced reclaiming).
+- **Worker drain — litmus drift (order 198), COMPLETED** (`86bd9bf4`): triaged
+  all 14 (spec,test) pairs from the macOS first-run litmus finding on a real
+  Podman-capable Linux tree. 5 were macOS cargo/podman-not-on-PATH
+  environment noise (didn't reproduce on Linux); 9 were genuine litmus drift
+  verified against git history — in every case the shipped code was the
+  correct, already-decided behavior (multi-provider login generalization,
+  order-168 inference-OOM fix, order-175 EVERY_LAUNCH harness installs, the
+  FlakeHub-cache revert, the Antigravity 7th tray leaf) and the litmus itself
+  had gone stale, so fixed the 9 litmus files rather than reverting product
+  code. Filed `plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md`
+  (promoted to ready order 201) after hitting the bug live while writing the
+  fixes. Linux full suite: 116 PASS / 1 FAIL (guest-binary-embed-integrity,
+  confirmed local build-state gap) / 100% spec coverage.
+- **Worker drain — host-guest-transport facade (order 124), COMPLETED**
+  (`edb6a421`): added the missing `litmus:host-guest-no-cfg-transport-selection`
+  drift litmus (3 grep-based steps), verified it actually falsifies by
+  injecting a fake `cfg(target_os)`-gated transport picker into
+  `host-shell/lib.rs` and confirming it's caught, then reverting. Closed
+  order 124. Deliberately did NOT invent the "conformance fixture harness"
+  exit criterion — no real Linux `GuestTransport` backend has landed yet
+  (order 125 still pending), so writing wire-mapping fixtures now would mean
+  pre-empting that packet's design decision. Split it into its own pending
+  packet, `host-guest-transport-conformance-harness` (order 128, depends on
+  125), per operator guidance to split oversized/blocked scope into smaller
+  ledger packets rather than stretching a cycle to cover it.
+- **Worker drain — VM headless persistent listener (order 153), slice 1
+  landed, NOT claimed/blocked** (`d4a7c81a`): discovered the packet's stated
+  premise was partly stale — `vsock_server.rs`'s connection loop already
+  stays open after replies and already `select!`s over PTY + inbound frames
+  (SC-08 was already true). The real gap: `Subscribe`/`SubscribeAck`/`*Push`
+  (added by order 152) fell through `control_dispatch`'s catch-all to
+  `Unsupported`, so no client could ever subscribe. Wired the `VmStatus`
+  topic end-to-end: `control_dispatch.rs` routes `Subscribe` -> `Handle` and
+  the 4 push/ack variants -> `ResponseOnly` on both transports;
+  `VmStateHandle` gained a bounded (16-capacity) `tokio::sync::broadcast`
+  channel + `subscribe_vm_status()`; `set_phase()` pushes `VmStatusPush` only
+  on an actual transition; `handle_connection` handles `Subscribe{VmStatus}`
+  and forwards pushes via a new `select!` branch, treating
+  `RecvError::Lagged` as skip-and-continue (broadcast's per-receiver buffers
+  give the "slow client doesn't block a fast one" property for free). 4 new
+  unit tests, all green; `cargo clippy --features listen-vsock --all-targets
+  -D warnings` shows zero new warnings in either touched file (7 pre-existing
+  warnings elsewhere confirmed present on unmodified linux-next too).
+  `LoginStatePush`/`CloudProjectsPush` still unwired — left for the next
+  slice, packet left `ready` (not claimed) rather than blocking on unfinished
+  scope.
+- **Coordinator duties**: `origin/osx-next` (18 commits, 7 real content
+  commits ahead of merge-base) and `origin/windows-next` (22 commits) had
+  both drifted well past the 5-commit compliance threshold. Merged
+  `origin/osx-next` cleanly (no conflicts — VZ guest-transport facade,
+  singleton tray guard, serialized project PTY launches). Merged
+  `origin/windows-next` with one conflict in `plan/index.yaml` (both branches
+  had appended distinct new packets at the tail of the file — pure
+  concatenation, resolved by keeping both sides' packets: Windows' orders 196
+  (audit-plan-cross-branch-writes)/197 (audit-credential-guard-windows) plus
+  my order 201). Brings in Windows host-lifecycle-race-safeguards R1/R3, the
+  secure-control-wire e2e probe (order 191 evidence), and related plan/skill
+  audits. Ran the full integration verification gate after merging (conflict
+  marker scan clean, all touched YAML re-validated, `./build.sh --check` +
+  `--test` green, litmus suite unchanged at 116/117) before pushing
+  (`08a9676d`).
+- **Reduction engine**: all findings from this cycle filed/promoted (see
+  above); no unfiled "this isn't great" observations pending.
+- **Next**: with litmus fixes + order 124/153 slices + macOS/Windows work all
+  now integrated together on `linux-next`, this is a meaningful moment for
+  the destructive local-build e2e smoke gate (`/build-install-and-smoke-test-e2e`)
+  rather than running it against a single isolated packet — proceeding to it
+  next.
 
 ## Cycle 2026-07-06T18:15Z (windows — meta-orchestration)
 
