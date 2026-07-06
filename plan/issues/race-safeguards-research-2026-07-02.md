@@ -83,3 +83,122 @@ These are not hypothetical — each happened during one afternoon of interactive
 - Orders 142–149 (observable streams) replace polling with push — R6's phase-awareness
   should be designed into the push refactor rather than bolted onto polls.
 - The headless `SingletonGuard` (spec:singleton-guard) is prior art for R2.
+
+## Disposition — ratified 2026-07-06 (order 160, agent linux-ccr-fable5-20260706T1734Z)
+
+Every disposition below was re-verified against the tree at `linux-next@4835931e`
+(file:line references are to that state), not against the 2026-07-02 snapshot.
+Verdict grammar per item: `adopt:<safeguard>` (implementation packet owns it),
+`partial:<what-remains>` (some mitigation landed since the inventory), or
+`accept-as-is:<rationale>`.
+
+### Shared-container ownership model (headline decision)
+
+**Decided: ensure-only + supervisor reconciliation. Refcounting is REJECTED.**
+
+- Shared containers (`tillandsias-proxy`, `tillandsias-inference`, vault,
+  router) are never removed by per-launch cleanup; only per-project containers
+  (`tillandsias-git-<p>`, `tillandsias-<p>-forge`, `tillandsias-browser-<p>`)
+  are cleaned per launch.
+- The prior art already on the tree — `cleanup_shared_stack_if_no_running_forge`
+  (`crates/tillandsias-headless/src/main.rs:2956`) — IS this model: shared
+  teardown only when zero forge containers remain running. The impl packet's
+  job is convergence, not invention (see R5).
+- The vsock headless service is the supervising owner: it is the only component
+  allowed to reconcile (recreate/heal) shared containers, and every reconcile
+  consults `VmPhase` first (see R6).
+- Refcount rejected because count state must itself survive crashes to be
+  correct — a crashed launch that never decrements wedges the count, and the
+  "zero running forges" probe already derives the same fact from live podman
+  state with no bookkeeping to corrupt.
+
+### Per-surface dispositions
+
+- **R1 (quit/relaunch WSL lifecycle)** — `partial:drain-observability+recovery`.
+  Retry-with-backoff now exists on the ready-connect path:
+  `try_connect_until_ready` bounds each attempt at 30 s and backs off 5 s
+  (`crates/tillandsias-windows-tray/src/wsl_lifecycle.rs:680` doc + loop).
+  Still missing: an observable drain marker so a relaunch waits for teardown
+  instead of racing it, a "WSL service sane?" preflight, and automatic/one-click
+  `E_UNEXPECTED` → `wsl --shutdown` recovery. Owner: host-lifecycle-race-safeguards.
+- **R2 (concurrent tray instances)** — `adopt:single-instance-guard`.
+  Verified absent: no CreateMutex/singleton in
+  `crates/tillandsias-windows-tray/src/` or `crates/tillandsias-macos-tray/src/`
+  (only unrelated AppKit-singleton SAFETY comments). Prior art to mirror:
+  `crates/tillandsias-core/src/singleton.rs` (headless `SingletonGuard`).
+  Owner: host-lifecycle-race-safeguards; macOS analog explicitly in scope.
+- **R3 (concurrent PTY launches)** — `adopt:launch-serialization`.
+  `PROVISIONING_ACTIVE` (`notify_icon.rs:1921`) guards only provisioning
+  retriggers; project-click PTY launches have no equivalent guard. Adopt the
+  same swap-true-or-ignore pattern (or a queue) per project.
+  Owner: host-lifecycle-race-safeguards.
+- **R4 (ensure_* TOCTOU)** — `adopt:advisory-flock-per-resource`.
+  Verified still check-then-act with zero locking: `ensure_proxy_running`
+  (`main.rs:2069`) probes `container_running`, then `podman rm --ignore`, then
+  `podman run --name` — two concurrent callers still race to the name conflict.
+  No `flock` usage exists anywhere in `crates/tillandsias-headless/src/`.
+  Adopt flocks under `/run/tillandsias/locks/<resource>` held across check+act.
+  Owner: enclave-container-lifecycle-races.
+- **R5 (cleanup vs shared containers)** — `partial:converge-remaining-sites`.
+  The forge-aware guard exists and is used at 3 sites (`main.rs:4467, 5831,
+  7495`), but `cleanup_stack_containers` — which unconditionally removes the
+  SHARED proxy + inference (`main.rs:2942-2954`) — is still called directly
+  from `run_status_check` (`main.rs:4415`), `run_opencode_mode`
+  (`main.rs:5713`), `monitor_and_cleanup_browser` (`main.rs:6761`), and one
+  further launch path (`main.rs:7157`). Slice: split shared vs per-project
+  removal into two functions; route every call site through the guard; the
+  unconditional shared-removal function must not survive the refactor.
+  Owner: enclave-container-lifecycle-races.
+- **R6 (drain vs self-heal)** — `adopt:phase-gated-side-effects`.
+  Verified unmitigated: the clone path re-ensures the proxy
+  (`remote_projects.rs:571` → `ensure_proxy_running`) with no `VmPhase`
+  consultation; phase state lives only in the vsock `ServerState`
+  (`vsock_server.rs:119`). Adopt: container-(re)creating helpers accept a
+  phase probe and refuse during `Draining`/`Stopping`; standalone CLI paths
+  (no server) pass a permissive probe. Owner: enclave-container-lifecycle-races.
+- **R7 (vault lifecycle)** — `adopt:rwlock+transient-classified-wait`.
+  Verified unmitigated on both halves: (a) `RemoteVaultLease::acquire`
+  (`remote_projects.rs:176`) calls `ensure_vault_running` + mints an AppRole
+  lease with no mutual exclusion against a concurrent vault recreate — the I2
+  ordering fix (proxy ensured AFTER lease, `remote_projects.rs:565-571`) is
+  tactical only; (b) `PodmanClient::wait_healthy` (`client.rs:964`) maps every
+  failure to `CommandFailure` with no transient window — I3's "container is
+  stopped" during a restart is still terminal. Adopt: leases take read /
+  recreate takes write on a vault lifecycle lock; wait_healthy retries
+  "container is stopped" AND "no such container" (Silverblue evidence:
+  `vault_bootstrap.rs:1488`) for a bounded window.
+  Owner: enclave-container-lifecycle-races.
+- **R8 (clone target collisions)** — `adopt:temp+atomic-rename`.
+  Verified unmitigated: `clone_project_from_github_with_debug`
+  (`remote_projects.rs:531`) clones straight into the final target; no lock,
+  no temp dir. Adopt clone-into-`<root>/.tmp-<repo>-<nonce>` + `rename` (same
+  mount, 9p/drvfs-safe). Owner: checkout-and-fetch-atomicity.
+- **R9 (fetch/install atomicity)** — `partial:two-embedded-scripts-remain`.
+  The canonical guest bootstrap is FIXED: `images/vm/bootstrap/20-tillandsias.sh`
+  curls to `$TMP` then `install -D` (unlink+create avoids ETXTBSY). But both
+  host-embedded copies of `fetch-headless.sh` still curl `--output "$DEST"`
+  directly onto the live path: `wsl_lifecycle.rs:368` (windows write scope) and
+  `vz.rs:460` (macos write scope). Slice per owning host; consider deduping the
+  script into one shared constant so it cannot drift three ways again.
+  Owner: checkout-and-fetch-atomicity (linux script done; windows/macos slices
+  to host-lifecycle owners per write scope).
+
+### Impl packet scope confirmation (exit criterion 3)
+
+The inventory's "orders 152-154" pointer is STALE — order numbers collided when
+the stream packets were filed. The actual implementation packets are:
+
+- `host-lifecycle-race-safeguards` (order 161) — CONFIRMED as scoped, plus:
+  R3 serialization explicitly includes the same-project double-click case, and
+  the R2 guard must ship on BOTH windows and macos trays.
+- `enclave-container-lifecycle-races` (order 162) — CONFIRMED, amended: R5 is
+  convergence of the 4 remaining direct `cleanup_stack_containers` call sites
+  onto the already-landed forge-aware guard (not a from-scratch design); R7's
+  transient window must classify "no such container" as transient too.
+- `checkout-and-fetch-atomicity` (order 163) — CONFIRMED, amended: R9's linux
+  bootstrap slice is already done; residual is the two host-embedded fetch
+  scripts (windows `wsl_lifecycle.rs:368`, macos `vz.rs:460`) plus script dedup.
+
+Safeguard vocabulary items 1-6 (advisory flocks, ensure-only ownership,
+phase-aware side effects, retry-with-backoff+classify-transient, atomic fs ops,
+one provoking litmus per fixed race) are ratified unchanged.

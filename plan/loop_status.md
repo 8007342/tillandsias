@@ -1,6 +1,41 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T16:30:00Z
+LastExecutionTime: 2026-07-06T18:10:00Z
+
+## Cycle 2026-07-06T17:34Z (linux_mutable CCR sandbox — meta-orchestration)
+
+- **Host**: Linux mutable, Claude Code remote sandbox. Branch constraint: session
+  may only push `claude/meta-orchestration-skill-uhitvv` (reset onto
+  `linux-next@4835931e`); ledger writes reach `linux-next` via PR, not direct
+  push. Credential guard `ok:gh-token-env`.
+- **Worker drain — order 160 (race-safeguards-research), claimed and
+  COMPLETED**: R1-R9 dispositioned against the live tree with file:line
+  evidence; shared-container ownership decided (ensure-only +
+  vsock-supervisor reconciliation; refcount rejected); impl scopes for orders
+  161/162/163 confirmed with amendments (stale "orders 152-154" pointer
+  corrected). Re-verification deltas: R9 linux bootstrap already fixed but
+  windows `wsl_lifecycle.rs:368` + macos `vz.rs:460` embedded fetch scripts
+  still curl onto the live binary; R5 forge-aware guard landed at 3 sites, 4
+  launch/cleanup paths still remove shared containers unconditionally.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-binary`
+  (sandbox has no podman); both local-build and curl-install gates skipped
+  with recorded verdict.
+- **Coordinator duties**: skipped — sibling merges (osx-next 12 / windows-next
+  6 ahead, order 191) require pushing `linux-next`, which this session cannot
+  do. Left order 191 for a push-capable linux_mutable host.
+- **Reduction engine**: filed
+  `plan/issues/ccr-branch-scoped-ledger-claims-invisible-2026-07-06.md`
+  (optimization): CCR sessions cannot publish leases to `linux-next` before
+  working, so claims are invisible to siblings until PR merge — collision
+  window documented with candidate reductions.
+
+## Cycle 2026-07-06T17:15Z (linux_immutable — meta-orchestration)
+
+- **Host**: Linux, `linux-next`, `linux_immutable` (clean, credential guard `ok:gh-keyring`).
+- **Worker Drain**: Skipped (not a builder role host).
+- **E2E Gate**: `eligible`. Executed `/smoke-curl-install-and-test-e2e` for release `v0.3.260704.2`.
+- **E2E Findings**: Substrate reset succeeded. Init completed cleanly (exit 0) but logged SELinux `semanage` and vault `/etc/hosts` permission denied warnings. Forge continuous enhancement run failed immediately with `Error: Unknown image type: curl`.
+- **Reduction Engine**: Filed 3 ready work packets in `plan/issues/smoke-e2e-findings-v0.3.260704.2-2026-07-06.md`.
 
 ## Cycle 2026-07-06T15:37Z (macos — meta-orchestration)
 
