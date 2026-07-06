@@ -25,34 +25,17 @@ preconditions:
 
 critical_path:
   - step: "no channel_psk call site derives its version input from CARGO_PKG_VERSION"
-    command: >
-      if grep -rn 'channel_psk(env!("CARGO_PKG_VERSION")' crates/ --include='*.rs'; then
-        echo 'FAIL: PSK derived from CARGO_PKG_VERSION'; exit 1;
-      else
-        echo 'ok: no cargo-pkg-version psk drift';
-      fi
+    command: "if grep -rF 'channel_psk(env!(\"CARGO_PKG_VERSION\")' crates/ --include='*.rs' >/dev/null 2>&1; then echo 'FAIL: PSK derived from CARGO_PKG_VERSION'; exit 1; else echo 'ok: no cargo-pkg-version psk drift'; fi"
     timeout_ms: 5000
     expected_behavior: "ok: no cargo-pkg-version psk drift"
 
   - step: "every known channel_psk call site uses the workspace VERSION source"
-    command: >
-      for f in crates/tillandsias-macos-tray/src/action_host.rs
-               crates/tillandsias-macos-tray/src/diagnose.rs
-               crates/tillandsias-headless/src/vsock_server.rs
-               crates/tillandsias-windows-tray/src/hvsocket.rs
-               crates/tillandsias-host-shell/src/vsock_client.rs; do
-        grep -A2 'channel_psk(' "$f" | grep -qE 'workspace_version\(\)|WORKSPACE_VERSION|crate::version\(\)' \
-          || { echo "FAIL: $f does not use workspace VERSION for PSK"; exit 1; }
-      done
-      echo 'ok: all initiators + guest responder use workspace VERSION'
+    command: "for f in crates/tillandsias-macos-tray/src/action_host.rs crates/tillandsias-macos-tray/src/diagnose.rs crates/tillandsias-headless/src/vsock_server.rs crates/tillandsias-windows-tray/src/hvsocket.rs crates/tillandsias-host-shell/src/vsock_client.rs; do grep -A2 'channel_psk(' \"$f\" | grep -qF 'workspace_version()' || grep -A2 'channel_psk(' \"$f\" | grep -qF 'WORKSPACE_VERSION' || grep -A2 'channel_psk(' \"$f\" | grep -qF 'crate::version()' || { echo \"FAIL: $f does not use workspace VERSION for PSK\"; exit 1; }; done; echo 'ok: all initiators + guest responder use workspace VERSION'"
     timeout_ms: 5000
     expected_behavior: "ok: all initiators + guest responder use workspace VERSION"
 
   - step: "host-shell's shared version() helper itself sources WORKSPACE_VERSION (not a crate literal)"
-    command: >
-      grep -A1 'pub fn version()' crates/tillandsias-host-shell/src/lib.rs | grep -qF 'WORKSPACE_VERSION' \
-        && echo 'ok: version() sources WORKSPACE_VERSION' \
-        || { echo 'FAIL: host-shell version() no longer sources WORKSPACE_VERSION'; exit 1; }
+    command: "grep -A1 'pub fn version()' crates/tillandsias-host-shell/src/lib.rs | grep -qF 'WORKSPACE_VERSION' && echo 'ok: version() sources WORKSPACE_VERSION' || { echo 'FAIL: host-shell version() no longer sources WORKSPACE_VERSION'; exit 1; }"
     timeout_ms: 3000
     expected_behavior: "ok: version() sources WORKSPACE_VERSION"
 
