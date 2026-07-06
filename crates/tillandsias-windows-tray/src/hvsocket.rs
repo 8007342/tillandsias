@@ -382,6 +382,60 @@ mod tests {
         );
     }
 
+    /// Secure-wire flag-ON proof (order 191, windows evidence slice): with the
+    /// in-VM headless running a version-matched binary under
+    /// `TILLANDSIAS_SECURE_CONTROL_WIRE=on`, the tray-side wrapper
+    /// (`open_and_wrap_hvsocket_stream`) completes the Noise NNpsk0 handshake
+    /// and a full Hello/HelloAck + `VmStatusRequest` round-trip over the
+    /// encrypted stream. Run with the flag exported on the host:
+    /// `$env:TILLANDSIAS_SECURE_CONTROL_WIRE='on'; cargo test -p tillandsias-windows-tray -- --ignored secure_vm_status`.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    #[ignore = "needs a running WSL distro with a version-matched headless under TILLANDSIAS_SECURE_CONTROL_WIRE=on"]
+    async fn e2e_secure_vm_status_over_hvsocket() {
+        use tillandsias_control_wire::transport::Transport;
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+        use tillandsias_host_shell::vsock_client::Client;
+
+        assert_eq!(
+            std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE").as_deref(),
+            Ok("on"),
+            "export TILLANDSIAS_SECURE_CONTROL_WIRE=on so the wrapper takes the secure path"
+        );
+
+        let stream = open_and_wrap_hvsocket_stream(42420)
+            .await
+            .expect("HvSocket open + Noise client handshake (secure wrapper)");
+        let mut client = Client::from_stream(
+            stream,
+            Transport::Vsock {
+                cid: 0,
+                port: 42420,
+            },
+        );
+        let wire_version = client
+            .handshake()
+            .await
+            .expect("Hello/HelloAck over the encrypted stream");
+        assert_eq!(wire_version, WIRE_VERSION);
+        let seq = client.allocate_seq();
+        let env = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::VmStatusRequest { seq },
+        };
+        let reply = client
+            .request(&env)
+            .await
+            .expect("VmStatusRequest over the encrypted stream");
+        println!("secure control wire UP; VmStatus reply: {:?}", reply.body);
+        assert!(
+            matches!(reply.body, ControlMessage::VmStatusReply { .. }),
+            "expected VmStatusReply, got {:?}",
+            reply.body
+        );
+    }
+
     /// w9 bidirectional probe: open `cat` in a PTY, write to its **stdin**
     /// (host→guest `PtyData{ToGuest}`), and read the echo back
     /// (guest→host `PtyData{ToHost}`). Proves the last unproven data direction —
