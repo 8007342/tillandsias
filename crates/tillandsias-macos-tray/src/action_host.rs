@@ -50,6 +50,7 @@
 
 #![cfg(target_os = "macos")]
 
+use std::collections::HashSet;
 use std::io;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -752,6 +753,38 @@ const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
 /// Fedora's ACPI shutdown.
 const VM_STOP_DRAIN: Duration = Duration::from_secs(60);
 
+type ProjectLaunchSet = Arc<Mutex<HashSet<String>>>;
+
+/// Per-project lease held while a project PTY launch is in flight.
+/// Dropping it clears the slot so a retry can proceed after success or
+/// failure.
+struct ProjectLaunchLease {
+    in_flight: ProjectLaunchSet,
+    project: String,
+}
+
+impl Drop for ProjectLaunchLease {
+    fn drop(&mut self) {
+        if let Ok(mut in_flight) = self.in_flight.lock() {
+            in_flight.remove(&self.project);
+        }
+    }
+}
+
+fn try_acquire_project_launch(
+    in_flight: &ProjectLaunchSet,
+    project: &str,
+) -> Option<ProjectLaunchLease> {
+    let mut guard = in_flight.lock().ok()?;
+    if !guard.insert(project.to_string()) {
+        return None;
+    }
+    Some(ProjectLaunchLease {
+        in_flight: in_flight.clone(),
+        project: project.to_string(),
+    })
+}
+
 /// State shared across the host's selector handlers. Lives inside
 /// the declared class via `DeclaredClass::Ivars`.
 pub struct TrayActionHostIvars {
@@ -788,6 +821,10 @@ pub struct TrayActionHostIvars {
     /// isn't Send because of the UnsafeCell layout). Wrapping in
     /// `TrayActionHostHandle` is the safe seam.
     self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+    /// Project names with an in-flight Attach/Maintain launch.
+    /// Prevents a same-project double-click from spawning two competing
+    /// guest launch flows.
+    project_launches: ProjectLaunchSet,
 }
 
 declare_class!(
@@ -1018,25 +1055,45 @@ impl TrayActionHost {
             }
         };
         let runtime = ivars.runtime.clone();
+        let project_launch_lease = match project.as_deref() {
+            Some(project_name) => {
+                match try_acquire_project_launch(&ivars.project_launches, project_name) {
+                    Some(lease) => Some(lease),
+                    None => {
+                        eprintln!(
+                            "[tillandsias-tray] {label}: project launch already in progress \
+                             for {project_name:?}; ignoring duplicate click"
+                        );
+                        return;
+                    }
+                }
+            }
+            None => None,
+        };
         eprintln!("[tillandsias-tray] {label}: spawning attach worker (project={project:?})");
         runtime.spawn(async move {
             let result = run_pty_attach(vz, intent, project).await;
-            dispatch_to_main_thread(move || match result {
-                Ok(slave_path) => {
-                    eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
-                    if let Err(e) = crate::terminal_attach::spawn_terminal_pty_attach(&slave_path) {
-                        eprintln!("[tillandsias-tray] {label}: terminal spawn failed: {e}");
+            dispatch_to_main_thread(move || {
+                let _project_launch_lease = project_launch_lease;
+                match result {
+                    Ok(slave_path) => {
+                        eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
+                        if let Err(e) =
+                            crate::terminal_attach::spawn_terminal_pty_attach(&slave_path)
+                        {
+                            eprintln!("[tillandsias-tray] {label}: terminal spawn failed: {e}");
+                        }
                     }
-                }
-                Err(e) => {
-                    eprintln!("[tillandsias-tray] {label} failed: {e}");
-                    let stub = format!(
-                        "Tillandsias — {label} could not attach. \
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] {label} failed: {e}");
+                        let stub = format!(
+                            "Tillandsias — {label} could not attach. \
                              Error: {e}\n\nLive PTY attach needs a booted VM \
                              with a working in-VM headless on vsock port \
                              42420 (gated on m5 recipe-artifact fetch)."
-                    );
-                    let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
+                        );
+                        let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
+                    }
                 }
             });
         });
@@ -1196,6 +1253,7 @@ impl TrayActionHost {
             })),
             self_handle: Arc::new(Mutex::new(None)),
             status_text: Arc::new(Mutex::new(BOOT_STATUS_TEXT.to_string())),
+            project_launches: Arc::new(Mutex::new(HashSet::new())),
         };
         // SAFETY: `mtm` proves main-thread; allocation + init is the
         // standard ObjC two-step. `set_ivars` populates the declared
@@ -1856,6 +1914,29 @@ fn spawn_vm_status_poller(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_launch_lease_rejects_duplicate_until_released() {
+        let in_flight = Arc::new(Mutex::new(HashSet::new()));
+        let first = try_acquire_project_launch(&in_flight, "tillandsias")
+            .expect("first project launch should acquire the slot");
+
+        assert!(
+            try_acquire_project_launch(&in_flight, "tillandsias").is_none(),
+            "same-project double-click must not acquire a second launch slot"
+        );
+        assert!(
+            try_acquire_project_launch(&in_flight, "other-project").is_some(),
+            "a different project has an independent launch slot"
+        );
+
+        drop(first);
+
+        assert!(
+            try_acquire_project_launch(&in_flight, "tillandsias").is_some(),
+            "slot must clear after the in-flight launch finishes"
+        );
+    }
 
     /// Smoke: the class registers under the expected ObjC name. Does
     /// NOT require main-thread (only touches `Self::class()`), so it
