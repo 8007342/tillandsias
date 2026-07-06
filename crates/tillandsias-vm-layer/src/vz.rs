@@ -1620,10 +1620,34 @@ impl VzRuntime {
     ///
     /// Requires a current-thread Tokio runtime on the macOS main thread
     /// (same constraint as `open_vsock_stream_current_thread`).
-    pub async fn wait_phase_ready(&self, timeout: Duration) -> Result<(), VmError> {
+    ///
+    /// `probe_once` performs one connect+probe attempt with a per-attempt
+    /// timeout and returns the in-VM `VmPhase`. This crate does not depend on
+    /// `tillandsias-secure-channel`, so it cannot decide Plain-vs-Secure
+    /// itself — the caller supplies `probe_once` using the *same*
+    /// secure-or-plain opener (`open_control_wire_stream` /
+    /// `secure_control_wire_mode()`) it uses for its own user-action control
+    /// wire traffic, so readiness probing never bypasses secure mode.
+    /// @trace plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+    ///
+    /// `probe_once` takes only a per-attempt timeout (not `&Self`): callers
+    /// close over their own `&VzRuntime` reference so the closure's returned
+    /// future is a single concrete opaque type rather than one generic over
+    /// an arbitrary borrow lifetime, which `rustc` cannot unify against an
+    /// `FnMut(&Self, ..)` bound (async fn items don't satisfy HRTB `for<'a>
+    /// Fn(&'a Self, ..) -> Fut` — the opaque future type captures the
+    /// specific input lifetime it was defined with).
+    pub async fn wait_phase_ready<F, Fut>(
+        &self,
+        timeout: Duration,
+        mut probe_once: F,
+    ) -> Result<(), VmError>
+    where
+        F: FnMut(Duration) -> Fut,
+        Fut: std::future::Future<Output = Result<tillandsias_control_wire::VmPhase, String>>,
+    {
         use std::time::Instant;
         use tillandsias_control_wire::VmPhase;
-        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
 
         // Stage 1: wait until VZ kernel is Running (same as wait_ready stage 1).
         let deadline = Instant::now() + timeout;
@@ -1675,20 +1699,7 @@ impl VzRuntime {
                     timeout.as_secs()
                 ));
             }
-            let stream = self
-                .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(2))
-                .await;
-            let stream = match stream {
-                Ok(s) => s,
-                Err(_) => {
-                    // headless not yet bound — back off and retry
-                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
-                    step = step.saturating_add(1);
-                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
-                    continue;
-                }
-            };
-            match crate::vsock_exec::probe_vm_phase(stream).await {
+            match probe_once(Duration::from_secs(2)).await {
                 Ok(VmPhase::Ready) => return Ok(()),
                 Ok(VmPhase::Failed) => {
                     return Err("VzRuntime::wait_phase_ready: VM phase is Failed".to_string());
