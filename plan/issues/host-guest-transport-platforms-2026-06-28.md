@@ -28,6 +28,22 @@ Linux is the reference backend (AF_VSOCK via tokio-vsock + Unix same-host).
 
 macOS VZ virtio-vsock backend (`transport_macos.rs`, `vz.rs`).
 
+Status 2026-07-06T18:17Z: claimed by
+`macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z`
+(`host-guest-transport-macos-20260706T1817Z`) for the first coherent slice:
+add the macOS `GuestTransport` backend over the existing VZ `VsockStream` and
+pin compile-time conformance tests. Broader call-site migration can continue in
+subsequent slices if needed.
+
+Checkpoint 2026-07-06T18:20Z: first slice landed on `osx-next@0e49d480`.
+`VzRuntime` implements `GuestTransport` for `GuestEndpoint::MacVz`; `open_stream`
+uses the existing VZ `VsockStream`, and `exec` / `exec_streaming` route through
+the existing `vsock_exec` helpers. Added macOS-only compile-time conformance and
+endpoint validation tests. Evidence: `cargo test -p tillandsias-vm-layer` 26/26
+and `./build.sh --check` pass on macOS. Remaining: migrate tray call sites to
+the facade and run/live-prove the shared conformance fixture when the VM
+substrate is available.
+
 - Implement the facade backend over `VZVirtioSocketDevice`; remove bespoke
   per-call connect logic in favor of `open_stream` / `exec`.
 - Replace the macOS exec-guest helpers with the `ExecOneShot` facade (supersedes

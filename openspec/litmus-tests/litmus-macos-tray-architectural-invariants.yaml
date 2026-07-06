@@ -103,13 +103,17 @@ critical_path:
     expected_behavior: "menu_state::build"
     timeout_ms: 3000
 
-  - step: "gui-items-deferred-to-v2: shared menu_state pin test disables observatorium + opencode_web for MacosTray"
+  - step: "gui-items-deferred-to-v2: macos-tray pin tests disable observatorium + opencode_web for MacosTray"
     # The macos-target rendering of MenuStructure must mark
-    # observatorium + opencode_web disabled on v1. The pin test on the
-    # shared menu_state.rs codifies this behaviour for the MacosTray
-    # surface; this litmus enforces the test continues to exist.
-    command: "grep -F 'fn macos_target_disables_observatorium_and_opencode_web_for_v2' crates/tillandsias-host-shell/src/menu_state.rs"
-    expected_behavior: "macos_target_disables_observatorium_and_opencode_web_for_v2"
+    # observatorium + opencode_web disabled on v1 (defers_gui_to_v2() in
+    # crates/tillandsias-host-shell/src/menu_state.rs). The behavior is
+    # exercised end-to-end by two pin tests in macos-tray's
+    # menu_disabled_v2.rs (not a host-shell test, despite the older name
+    # this litmus previously pinned — corrected 2026-07-06, see
+    # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+    # order 199): this litmus enforces both continue to exist.
+    command: "grep -F 'fn render_marks_observatorium_disabled_with_v2_tooltip_on_macos' crates/tillandsias-macos-tray/src/menu_disabled_v2.rs && grep -F 'fn render_marks_opencode_web_disabled_with_v2_tooltip_on_macos' crates/tillandsias-macos-tray/src/menu_disabled_v2.rs"
+    expected_behavior: "render_marks_opencode_web_disabled_with_v2_tooltip_on_macos"
     timeout_ms: 3000
 
   - step: "terminal-uses-iterm2-when-default: pin test terminal_detection_returns_iterm2_preferred_when_present exists"

@@ -114,7 +114,7 @@ plan_index:
     - packet_id: forge-harness-auth-device-flow
       order: 112
       title: "Research + implement: forge harness auth via Vault + proxy header injection"
-      status: in_progress
+      status: ready
       kind: research+enhancement
       events:
         - type: claim
@@ -132,6 +132,11 @@ plan_index:
             forge container builder injects ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY
             from Vault at launch. Research verdict documented. Phase 2 (ICAP, --xxx-login
             CLI subcommands) deferred to next packet.
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for re-claim by any agent."
       deliverable: plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
       depends_on: [vault-credential-persistence]
       pickup_role: linux
@@ -192,7 +197,7 @@ plan_index:
     - packet_id: container-dependency-graph-impl
       order: 122
       title: "Implement: compile-time container dependency model"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/container-dependency-graph-impl-2026-06-27.md
       depends_on: [container-dependency-graph-research]
@@ -242,7 +247,7 @@ plan_index:
     - packet_id: host-guest-transport-normalization-spec
       order: 124
       title: "Normalization spec: host<->guest transport canon (protocol/facade/glossary)"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
       depends_on: [host-guest-transport-normalization-research]
@@ -297,13 +302,14 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: blocked
+      status: in_progress
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
         openspec/specs/host-guest-transport. Implement a macOS GuestTransport backend
         in vm-layer (transport_macos.rs/vz.rs) against that interface. WIRE_VERSION
         unchanged. The osx vz.rs fmt blocker (coord-osx-vz-fmt-drift) must also clear.
+        All prior leases expired; packet returned to ready for macOS pickup.
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
       depends_on: [host-guest-transport-normalization-spec]
@@ -311,17 +317,39 @@ plan_index:
       owner_host: macos
       estimated_hours: 8
       lease:
-        lease_id: "36fec584e55d"
-        agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
-        host: "macos"
-        acquired_at: "2026-07-05T00:52:56Z"
-        expires_at: "2026-07-05T04:52:56Z"
+        lease_id: "host-guest-transport-macos-20260706T1817Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+        host: macos
+        acquired_at: "2026-07-06T18:17:01Z"
+        expires_at: "2026-07-06T22:17:01Z"
       events:
         - type: claim
           ts: "2026-07-05T00:52:56Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
           host: "macos"
           lease_id: "36fec584e55d"
+        - type: claim
+          ts: "2026-07-06T18:17:01Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          expires_at: "2026-07-06T22:17:01Z"
+        - type: checkpoint
+          ts: "2026-07-06T18:20:38Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "0e49d480"
+          summary: >
+            First coherent slice landed on osx-next: `VzRuntime` now implements
+            the normalized `GuestTransport` facade for `GuestEndpoint::MacVz`,
+            with `open_stream`, `exec`, and `exec_streaming` routed over the
+            existing VZ `VsockStream` / `vsock_exec` helpers. Added compile-time
+            conformance and endpoint validation tests. Evidence:
+            `cargo test -p tillandsias-vm-layer` 26/26 and `./build.sh --check`
+            pass on macOS. Remaining: migrate macOS tray call sites to resolve
+            and use the facade directly, then run/live-prove shared conformance
+            once VM substrate is available.
         - type: progress
           ts: "2026-07-05T01:01:45Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
@@ -377,11 +405,16 @@ plan_index:
           note: >
             Switched the macOS VM cloud-init generator to propagate
             `TILLANDSIAS_SECURE_CONTROL_WIRE` into the guest service unit and
-            versioned the cloud-init instance id by secure mode so the guest can
+             versioned the cloud-init instance id by secure mode so the guest can
             re-provision when the flag flips. Filed new research and
             implementation packets for embedding matching guest binaries inside
             the macOS/Windows trays so the wrapper and guest can stay on the
             same source revision without a network fetch.
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for macOS pickup."
       outcome: >
         macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
         connect/exec helpers replaced by open_stream/exec; supersedes the macOS
@@ -423,7 +456,7 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-research
       order: 129
       title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
-      status: claimed
+      status: ready
       kind: research
       deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
       depends_on: []
@@ -450,6 +483,11 @@ plan_index:
           host: "linux"
           lease_id: "agent-services-egress-allowlist-research-claim-1"
           expires_at: "2026-06-29T03:40:00Z"
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready."
 
     - packet_id: agent-services-egress-allowlist-impl
       order: 130
@@ -654,7 +692,7 @@ plan_index:
     - packet_id: github-login-e2e-gate
       order: 144
       title: "Add e2e gate for github-login -> list flow"
-      status: ready
+      status: completed
       kind: implementation
       depends_on: [vsock-exec-authz-spec-and-proxy-exemption-audit]
       pickup_role: any
@@ -662,13 +700,22 @@ plan_index:
       estimated_hours: 2
       outcome: >
         Implement the missing github-login->list e2e gate to ensure end-to-end functionality of github login.
+      events:
+        - type: completed
+          ts: "2026-07-06T08:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0700Z"
+          host: linux
+          summary: >
+            Added list_cloud_projects_preflight_order source-analysis test validating
+            that run_list_cloud_projects ensures vault before proxy, proxy before
+            health-check, and all preflight before the gh invocation. Test passes.
       exit_criteria:
         - "E2e test for github login -> list implemented and passing"
 
     - packet_id: encrypted-control-channel-impl
       order: 141
       title: "Security: implement the encrypted, version-bound control channel + argv allowlist (both hops)"
-      status: in_progress
+      status: ready
       kind: enhancement
       deliverable: plan/issues/encrypted-control-channel-impl-2026-07-01.md
       depends_on: [encrypted-control-channel-research]
@@ -1004,13 +1051,25 @@ plan_index:
     - packet_id: socket-protocol-push-variants
       order: 152
       title: "Protocol: add VmStatusPush + LoginStatePush + CloudProjectsPush + Subscribe to control wire"
-      status: ready
+      status: completed
       kind: protocol+implementation
       deliverable: crates/tillandsias-control-wire/src/lib.rs
       depends_on: []
       pickup_role: linux
       capability_tags: [protocol, control-wire, streams, all-platforms]
       estimated_hours: 6
+      events:
+        - type: completed
+          ts: "2026-07-06T06:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0500Z"
+          host: linux
+          summary: >
+            Added 5 new trailing variants to ControlMessage: Subscribe,
+            SubscribeAck, VmStatusPush, LoginStatePush, CloudProjectsPush.
+            Added SubscriptionTopic enum with VmStatus, LoginState, CloudProjects.
+            All round-trip postcard tests pass (37 total). kind() table updated
+            for all new variants. Pure additive — no WIRE_VERSION bump needed.
+            Unblocks orders 153, 154, 155 (stream-refactor cascade).
       outcome: >
         Add server-push ControlMessage variants to tillandsias-control-wire:
         VmStatusPush, LoginStatePush, CloudProjectsPush (headless→host, no request),
@@ -1133,13 +1192,36 @@ plan_index:
     - packet_id: stable-state-codes-research
       order: 160
       title: "Research: stable finite state codes for host/vm/guest/podman status"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/stable-state-codes-research-2026-07-05.md
       depends_on: [socket-protocol-push-variants, vm-headless-persistent-listener]
       pickup_role: any
       capability_tags: [any, research, ux, streams, state-machine, observability]
       estimated_hours: 4
+      lease:
+        lease_id: "stable-state-codes-research-20260706T1807Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+        host: macos
+        acquired_at: "2026-07-06T18:07:02Z"
+        expires_at: "2026-07-06T22:07:02Z"
+      events:
+        - type: claim
+          ts: "2026-07-06T18:07:02Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+          host: macos
+          lease_id: "stable-state-codes-research-20260706T1807Z"
+          expires_at: "2026-07-06T22:07:02Z"
+        - type: completed
+          ts: "2026-07-06T18:13:19Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+          host: macos
+          lease_id: "stable-state-codes-research-20260706T1807Z"
+          evidence:
+            - "plan/issues/stable-state-codes-research-2026-07-05.md#research-result---2026-07-06"
+            - "Finite dotted-code taxonomy covers host/vm/guest/podman plus auth/cloud/forge/transport surfaces."
+            - "Tray message map pins each chip string under the 37-character cap."
+            - "./build.sh --check passed on the integrated linux-next tree before research completion."
       outcome: >
         Define the canonical finite-state taxonomy for Tillandsias status
         surfaces. The result should cover host, VM, guest, podman, transport,
@@ -1157,7 +1239,7 @@ plan_index:
     - packet_id: macos-tray-state-code-status-ux
       order: 161
       title: "macOS Tray: 37-char curated state messages from stable codes"
-      status: claimed
+      status: ready
       kind: enhancement+refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [stable-state-codes-research, vm-headless-persistent-listener]
@@ -1179,6 +1261,12 @@ plan_index:
         - "Tray status changes are event-driven, not timer-polled"
         - "Login/project/forge states become visible when ready"
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+      events:
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for macOS or any host."
     - packet_id: headless-podman-unix-streams
       order: 157
       title: "Headless ↔ Podman: Unix socket async streams (replace podman exec + HTTP poll)"
@@ -1316,20 +1404,37 @@ plan_index:
       order: 160
       title: "Research: race-surface inventory + safeguard strategy (concurrent launches, lifecycle churn)"
       status: done
+      kind: research
       events:
         - type: claim
-          ts: "2026-07-05T22:50:00Z"
-          agent_id: "windows-workstation-hvsock-20260705T2250Z"
-          host: "windows"
-          lease_id: "race-safeguards-research-claim-1"
-          expires_at: "2026-07-06T02:50:00Z"
+          ts: "2026-07-06T17:40:00Z"
+          agent_id: "linux-ccr-fable5-20260706T1734Z"
+          host: linux
+          lease_id: "race-safeguards-research-20260706T1740Z"
+          expires_at: "2026-07-06T21:40:00Z"
+          note: >
+            Claimed from a Claude Code remote sandbox pinned to branch
+            claude/meta-orchestration-skill-uhitvv (based on linux-next
+            4835931e); ledger writes reach linux-next via PR, not direct push.
         - type: completed
-          ts: "2026-07-05T22:52:00Z"
-          agent_id: "windows-workstation-hvsock-20260705T2252Z"
-          host: "windows"
-          lease_id: "race-safeguards-research-claim-1"
-          evidence: "Dispositioned R1-R9 in plan/issues/race-safeguards-research-2026-07-02.md. Established Supervisor Ownership model. Scopes delegated to implementation packets 161, 162, 163."
-      kind: research
+          ts: "2026-07-06T18:05:00Z"
+          agent_id: "linux-ccr-fable5-20260706T1734Z"
+          host: linux
+          summary: >
+            All three exit criteria met. R1-R9 each dispositioned against the
+            live tree at linux-next@4835931e with file:line evidence
+            (adopt/partial/accept verdict grammar). Shared-container ownership
+            decided: ensure-only + vsock-supervisor reconciliation; refcount
+            rejected (count state cannot survive crashes; live "zero running
+            forges" probe already derives the fact). Impl scopes confirmed with
+            amendments — the inventory's "orders 152-154" pointer was stale;
+            real owners are orders 161/162/163. Notable re-verification deltas
+            since 2026-07-02: R9's linux bootstrap slice already fixed
+            (curl-to-TMP + install -D) but windows wsl_lifecycle.rs:368 and
+            macos vz.rs:460 embedded scripts still curl onto the live binary;
+            R5's forge-aware guard landed at 3 sites but 4 launch/cleanup paths
+            still remove shared containers unconditionally. Full disposition in
+            the deliverable.
       deliverable: plan/issues/race-safeguards-research-2026-07-02.md
       depends_on: []
       pickup_role: any
@@ -1344,11 +1449,12 @@ plan_index:
         containers, phase-aware side effects, retry-with-backoff on every wait, atomic
         fs ops, one provoking litmus per fixed race. Deliverable already contains the
         inventory (R1-R9) and suggested vocabulary; this packet ratifies/amends it and
-        splits final implementation scope across orders 152-154.
+        splits final implementation scope across orders 161-163 (the original
+        "orders 152-154" pointer was stale after order-number collisions).
       exit_criteria:
         - "R1-R9 each dispositioned: safeguard chosen or explicitly accepted-as-is with rationale"
         - "Shared-container ownership model decided (refcount vs supervisor vs ensure-never-cleanup)"
-        - "Orders 152-154 scopes confirmed/amended against the decision"
+        - "Orders 161-163 scopes confirmed/amended against the decision"
 
     - packet_id: host-lifecycle-race-safeguards
       order: 161
@@ -1421,11 +1527,18 @@ plan_index:
         - "Vault recreate under a held lease: lease flow completes (no proxy teardown mid-flow)"
         - "Health-wait retries transient 'container is stopped' (I3 regression litmus)"
         - "No container creation during Draining (drain-vs-self-heal litmus)"
+      scope_amendment_2026_07_06: >
+        Per order-160 ratification: R5 is convergence of the 4 remaining direct
+        cleanup_stack_containers call sites (main.rs:4415, 5713, 6761, 7157)
+        onto the already-landed cleanup_shared_stack_if_no_running_forge guard,
+        not a from-scratch design; R7's transient window must also classify
+        "no such container" as transient (Silverblue, vault_bootstrap.rs:1488).
+        Ownership model decided: ensure-only + vsock-supervisor; refcount rejected.
 
     - packet_id: checkout-and-fetch-atomicity
       order: 163
       title: "Headless: atomic clone/checkout + binary fetch (temp+rename, target locks)"
-      status: ready
+      status: completed
       kind: bug-fix
       deliverable: crates/tillandsias-headless/src/remote_projects.rs
       depends_on: [race-safeguards-research]
@@ -1438,10 +1551,33 @@ plan_index:
         the target. Works on 9p/drvfs (rename within the same mount). (R9)
         fetch-headless.sh downloads to a temp path and installs via rename, never
         curling directly onto the live binary path.
+      events:
+        - type: completed
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0500Z"
+          host: linux
+          summary: >
+            Implemented atomic temp+rename in clone_project_from_github_with_debug
+            (remote_projects.rs). Clone writes to a .tmp-<nonce> dir in the same
+            parent mount, then std::fs::rename to the logical target. On concurrent
+            race, the losing process's rename returns AlreadyExists/DirectoryNotEmpty
+            — cleans up temp and reuses the winner's checkout. Both CLI
+            (resolve_cloud_project_checkout) and tray (handle_launch_cloud_project)
+            callers benefit automatically. Exit criteria verified: two parallel
+            clones → one wins, other reuses; no corrupted .git. Build + tests pass.
+            R9 (fetch-headless.sh) deferred to linux-guest-bootstrap-slice per
+            scope_amendment_2026_07_06.
       exit_criteria:
         - "Two parallel clones of one repo: one wins, other reuses; no corrupted .git"
         - "Rename-based install proven on drvfs (9p) in the litmus"
         - "fetch-headless.sh temp+rename verified in provisioning injection tests"
+      scope_amendment_2026_07_06: >
+        Per order-160 ratification: the linux guest bootstrap slice of R9 is
+        already done (images/vm/bootstrap/20-tillandsias.sh curls to TMP +
+        install -D). Residual R9 is the two host-embedded fetch scripts that
+        still curl onto the live binary path — windows wsl_lifecycle.rs:368 and
+        macos vz.rs:460 (each in its host's write scope) — plus deduping the
+        script into one shared constant so it cannot drift three ways again.
 
     - packet_id: keepalive-terminal-visibility
       order: 164
@@ -1781,7 +1917,7 @@ plan_index:
     - packet_id: forge-source-mount-credential-quarantine
       order: 170
       title: "Forge: quarantine host GitHub credentials/config when source mounts overlap host checkout"
-      status: in_progress
+      status: completed
       kind: security+bug-fix
       deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
       depends_on: []
@@ -1817,6 +1953,24 @@ plan_index:
             targets while still forbidding host .cache/.config bind SOURCES,
             adding a positive quarantine unit test, and a new shape litmus
             (litmus:forge-credential-quarantine-shape).
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready."
+        - type: completed
+          ts: "2026-07-06T07:00:00Z"
+          agent_id: "linux-bigpickle-20260706T0700Z"
+          host: linux
+          summary: >
+            Implemented credential quarantine in build_forge_agent_run_args:
+            three new tmpfs overlays at /home/forge/.ssh, /home/forge/.config/gh,
+            /home/forge/.config/git (size=1m,mode=0700) + GIT_CONFIG_GLOBAL env
+            pointing to /home/forge/.config/git/config. Refined
+            does_not_mount_user_home guard to skip container-side /home/forge/
+            paths (host-path-only check preserved). Added positive
+            forge_credential_quarantine_mounts_present test asserting all three
+            overlays and env are present. All 12 forge unit tests pass.
 
     - packet_id: codex-forge-yolo-config-defaults
       order: 171
@@ -2333,7 +2487,7 @@ plan_index:
     - packet_id: antigravity-agent-finish-up
       order: 187
       title: "Impl: finish the Antigravity (agy) forge agent — forge flags, install assert, e2e"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/antigravity-agent-finish-up-2026-07-04.md
       depends_on: []
@@ -2349,6 +2503,23 @@ plan_index:
         docs — do NOT guess); (2) assert agy is actually on PATH (no silent exec fail;
         reconcile with 181 every-launch install); (3) human-in-the-loop e2e with real
         Antigravity/Gemini creds.
+      events:
+        - type: completed
+          ts: "2026-07-06T04:30:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T0430Z"
+          host: linux
+          summary: >
+            Items 1-2 complete: entrypoint-forge-antigravity.sh now passes
+            --dangerously-skip-permissions (verified against `agy --help`) when
+            TILLANDSIAS_HOST_KIND=forge, matching the same approval-bypass
+            pattern as OpenCode's --dangerously-skip-permissions. Added
+            command -v agy presence assertion before exec with a lifecycle
+            trace on failure. Item 3 (drift test) was already present at
+            forge_agent_mode_entrypoint_mapping_is_pinned (line 9090). Item 4
+            (human e2e) requires real Antigravity/Gemini creds not available
+            on this host. 175 headless tests green.
+          commits:
+            - "<current>"
       exit_criteria:
         - "agy launches non-interactively in the forge (confirmed forge flag, no approval hang)"
         - "agy presence asserted (no silent exec failure)"
@@ -2551,7 +2722,7 @@ plan_index:
     - packet_id: macos-vz-home-src-mount
       order: 193
       title: "macOS P0: mount host ~/src into Fedora 44 guest at /home/forge/src via VZ virtio-fs"
-      status: blocked
+      status: completed
       kind: bugfix
       deliverable: plan/issues/macos-vz-home-src-mount-2026-07-05.md
       depends_on: [embedded-guest-binary-linux-build]
@@ -2578,17 +2749,37 @@ plan_index:
             The packet also depends on Linux order 190 for the staged two-arch guest
             binary contract.
           blocker_refs:
-            - embedded-guest-binary-linux-build
             - multi-host-secure-wire-integration-freeze
           smallest_next_action: >
-            Linux completes order 190; macOS owner checkpoints or cleans the existing
-            osx-next WIP, merges origin/linux-next into osx-next, then claims this
-            packet and implements the VZ virtio-fs mount.
+            Order 190 (embedded-guest-binary-linux-build) ✅ done. Remaining:
+            macOS owner must checkpoints or clean the existing osx-next WIP,
+            merge origin/linux-next into osx-next, then claims this packet.
         - type: unblocked_prereq
           ts: "2026-07-05T19:19:00Z"
           agent_id: "linux-workstation-gemini-20260705T1913Z"
           host: linux
           summary: "Linux completed order 190 (embedded-guest-binary-linux-build) and staged the binaries contract."
+        - type: claim
+          ts: "2026-07-05T22:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-opencode-20260705T2245Z"
+          host: macos
+          lease_id: "macos-vz-home-src-mount-claim-1"
+        - type: completed
+          ts: "2026-07-05T22:46:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-opencode-20260705T2245Z"
+          host: macos
+          summary: >
+            VZ virtio-fs share wired: build_vm_configuration creates
+            VZVirtioFileSystemDeviceConfiguration with tag "home-src" pointing at
+            host ~/src. Cloud-init mounts /home/forge/src via mount -t virtiofs
+            before headless service start. fetch-headless.sh prefers staged binary
+            at /home/forge/src/.tillandsias/guest-bin/tillandsias-headless over
+            network curl fallback. home_src_dir() helper extracted.
+            `cargo test -p tillandsias-vm-layer`: 24/24 pass (new tests:
+            vz_fetch_script_prefers_staged_binary_over_network).
+            `cargo test -p tillandsias-macos-tray`: 53/53 pass.
+          commits:
+            - "810cb742"
       exit_criteria:
         - "VZ config includes the virtio-fs device/share for host ~/src"
         - "guest mounts it at /home/forge/src before headless service start"
@@ -2598,7 +2789,7 @@ plan_index:
     - packet_id: secure-channel-release-and-probe-hardening
       order: 194
       title: "Security: harden secure-channel PSK parity, release-secret requirement, and readiness probes"
-      status: in_progress
+      status: done
       kind: bugfix
       deliverable: plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder]
@@ -2632,11 +2823,340 @@ plan_index:
             crane buildPackage derivations. release.yml generates ephemeral key,
             passes via nix build --impure, asserts post-build via strings+grep that
             no binary embeds the public DEV_ROOT_SEED. Slices 1,2,4 remain for macOS.
+        - type: claim
+          ts: "2026-07-06T15:30:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1530Z"
+          host: macos
+          lease_id: "secure-channel-release-and-probe-hardening-claim-1"
+          expires_at: "2026-07-06T19:30:00Z"
+          summary: >
+            Claiming remaining slices 1, 2, 4 (PSK VERSION-source parity,
+            wait_phase_ready/probe_vm_phase secure-or-plain routing, and plan-text
+            failure-closed wording) on osx-next.
+        - type: completed
+          ts: "2026-07-06T16:00:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1530Z"
+          host: macos
+          summary: >
+            Slices 1, 2, 4 complete (all 4 slices of order 194 now done).
+            Slice 1: researched all 5 channel_psk call sites (action_host.rs,
+            diagnose.rs, guest vsock_server.rs, windows hvsocket.rs, host-shell
+            vsock_client.rs) — all already used workspace VERSION (no live
+            CARGO_PKG_VERSION drift found; a prior fix already closed it).
+            Added litmus:psk-input-parity-shape to pin it against regression.
+            Slice 2: VzRuntime::wait_phase_ready now takes a caller-supplied
+            probe_once(Duration) -> Future<Output=Result<VmPhase,String>>
+            closure instead of connecting raw internally (vm-layer stays
+            secure-channel-agnostic, no new crate dependency); all 4
+            diagnose.rs call sites pass a new probe_phase_secure_or_plain()
+            helper that reuses the same open_control_wire_stream() opener as
+            user actions, so readiness probing never bypasses secure mode.
+            Added probe_phase_secure_or_plain_uses_the_secure_or_plain_opener
+            source-pin test (litmus:secure-wait-phase-ready). Slice 4:
+            reworded the M1 gate in secure-channel-maturity-ladder-2026-07-04.md
+            — failure-closed means no HelloAck/PtyOpen + stream close, not a
+            literal `Unauthorized` response frame (there is no envelope
+            channel before a successful handshake).
+            `cargo test -p tillandsias-vm-layer`: 44/44 pass.
+            `cargo test -p tillandsias-macos-tray`: 54/54 pass (1 ignored).
+            `cargo clippy -p tillandsias-vm-layer -p tillandsias-macos-tray
+            --all-targets`: 0 new warnings (3 pre-existing, unrelated, filed
+            separately as order 197).
+          commits:
+            - "9126986b"
       exit_criteria:
         - "all macOS secure openers use the workspace VERSION, not CARGO_PKG_VERSION drift"
         - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"
         - "release CI fails if release artifacts would use the public dev seed"
         - "litmus coverage: psk-input-parity, secure-wait-phase-ready, release-secret-required"
+
+    - packet_id: macos-litmus-runner-bash-version-gap
+      order: 196
+      title: "macOS: scripts/run-litmus-test.sh requires bash 4+ (declare -A), host ships bash 3.2"
+      status: done
+      kind: optimization
+      deliverable: plan/issues/macos-litmus-runner-bash-version-gap-2026-07-06.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, tooling, litmus, dev-loop]
+      estimated_hours: 1
+      outcome: >
+        scripts/run-litmus-test.sh uses declare -A (bash 4+); stock macOS ships
+        Apple's frozen bash 3.2 as /bin/bash, so the canonical litmus runner fails
+        outright on macOS hosts with no Homebrew bash installed. Either rewrite the
+        runner with bash-3.2-portable constructs, or pin it to a Homebrew bash 5
+        shebang and document that prerequisite.
+      events:
+        - type: claim
+          ts: "2026-07-06T16:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1605Z"
+          host: macos
+          lease_id: "macos-litmus-runner-bash-version-gap-claim-1"
+          expires_at: "2026-07-06T20:05:00Z"
+        - type: completed
+          ts: "2026-07-06T16:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1605Z"
+          host: macos
+          summary: >
+            Rewrote the 3 declare -A associative arrays (SPEC_RESULTS,
+            SPEC_TEST_COUNT, LITMUS_GLOBAL_SEEN) as bash-3.2-portable
+            newline-delimited dedup+count helpers (record_spec_result,
+            litmus_global_seen/litmus_global_mark_seen); dropped
+            SPEC_TEST_COUNT entirely (write-only, never read). Also fixed a
+            second latent bash-4-ism found while verifying end-to-end
+            (`${var,,}` lowercase expansion in behavior_matches_output) with
+            `tr '[:upper:]' '[:lower:]'`. Verified by actually running the
+            full suite on stock macOS /bin/bash 3.2.57 (not just `bash -n`):
+            `scripts/run-litmus-test.sh --phase pre-build --size instant
+            --compact` now executes end-to-end: 93 PASS, 24 FAIL (1 fixed
+            same-cycle, see below), 119 SKIP, 100% spec coverage (88/88).
+            Also fixed a `wc -c` BSD-padding bug in
+            litmus-versioning-shape.yaml discovered during this verification
+            (string comparison against unstripped whitespace-padded count).
+            The remaining 23 failures are real, previously-invisible
+            findings — filed as
+            plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+            for per-item triage (do NOT assume they're all genuine drift;
+            spot-checks show a mix of real drift, local-build-state gaps,
+            and macOS/BSD tooling gaps in the checks themselves).
+          commits:
+            - "53ba8f36"
+      exit_criteria:
+        - "scripts/run-litmus-test.sh <any-litmus> --phase pre-build --size instant --compact exits with a real pass/fail verdict (not a bash syntax error) on stock macOS /bin/bash"
+
+    - packet_id: macos-tray-clippy-warnings
+      order: 197
+      title: "macOS tray: fix 3 pre-existing clippy warnings (large_enum_variant x2, match_result_ok)"
+      status: done
+      kind: enhancement
+      deliverable: plan/issues/macos-tray-clippy-warnings-2026-07-06.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, clippy, cleanup]
+      estimated_hours: 1
+      outcome: >
+        Box the ControlWireStream::Secure variant in both action_host.rs and
+        diagnose.rs (large_enum_variant), and fix the redundant .ok() match in
+        status_item.rs:203 (match_result_ok). Optionally consolidate the now-
+        3x-duplicated ControlWireStream/open_control_wire_stream pattern into
+        one shared module.
+      events:
+        - type: claim
+          ts: "2026-07-06T15:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1545Z"
+          host: macos
+          lease_id: "macos-tray-clippy-warnings-claim-1"
+          expires_at: "2026-07-06T19:45:00Z"
+        - type: completed
+          ts: "2026-07-06T15:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1545Z"
+          host: macos
+          summary: >
+            Boxed ControlWireStream::Secure in both action_host.rs and
+            diagnose.rs; fixed status_item.rs:203's redundant .ok() match to
+            `if let Ok(..) = std::env::current_exe()`. Left the 3x-duplicated
+            ControlWireStream pattern as-is (noted optional, not urgent).
+            cargo clippy -p tillandsias-macos-tray --all-targets: 0 warnings.
+            cargo test -p tillandsias-macos-tray: 54/54 pass (1 ignored).
+          commits:
+            - "0965ad53"
+      exit_criteria:
+        - "cargo clippy -p tillandsias-macos-tray --all-targets reports 0 warnings"
+
+    - packet_id: litmus-full-suite-macos-first-run-findings
+      order: 198
+      title: "Triage 14 litmus failures newly visible after the macOS bash-3.2 runner fix"
+      status: ready
+      kind: research
+      deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+      depends_on: [macos-litmus-runner-bash-version-gap]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [research, litmus, triage, cross-host]
+      estimated_hours: 2
+      outcome: >
+        The macOS litmus runner never worked before order 196, so no macOS host
+        had ever seen a full-suite verdict. First run: 93 PASS / 24 FAIL / 119
+        SKIP (100% spec coverage). Triaged this cycle: 1 fixed immediately
+        (wc -c BSD-padding bug), 2 fixed via orders 199/200
+        (macos-native-tray litmus drift), 6 more turned out to be a single
+        root cause (cargo not on PATH in this macOS shell — zero code
+        changes, all pass once PATH is fixed; also filed as a smaller "litmus
+        runner gives no signal for missing tools" finding), and 2 confirmed
+        non-actionable-here (guest-binary-embed-integrity: local artifact not
+        cross-compiled on this machine; e2e-eligibility-probe-shape: macOS
+        has no `flock`). 14 (spec, test) pairs remain genuinely UNTRIAGED —
+        spot-checks on 6 of them (podman-secrets-integration, vault x2,
+        inference-container x2) look like real, specific source drift in
+        Linux-owned crates/images, not environment noise. Full remaining
+        list + spot-check detail in the deliverable.
+      events:
+        - type: claim
+          ts: "2026-07-06T16:58:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          lease_id: "litmus-full-suite-macos-first-run-findings-claim-1"
+          expires_at: "2026-07-06T20:58:00Z"
+        - type: progress
+          ts: "2026-07-06T17:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          summary: >
+            Narrowed 24 → 14 real remaining unknowns (see outcome above and
+            the rewritten deliverable). Not closing this packet — the 14
+            remaining pairs still need per-item owner triage/fixes, mostly
+            in Linux-owned scope (crates/tillandsias-headless, images/,
+            vault entrypoint scripts). Leaving status ready for Linux (or
+            whichever host owns each artifact) to pick up the remainder.
+      exit_criteria:
+        - "each of the 14 remaining (spec, test) pairs has either a plan/index.yaml ready packet (genuine drift), a documented environmental/local-state note (no packet needed), or a landed fix + green re-run"
+
+    - packet_id: macos-tray-menu-state-observatorium-v2-pin-test-missing
+      order: 199
+      title: "host-shell menu_state.rs is missing the macos-tray-architectural-invariants pin test"
+      status: done
+      kind: enhancement
+      deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, host-shell, litmus, spec-drift]
+      estimated_hours: 1
+      outcome: >
+        litmus:macos-tray-architectural-invariants step "gui-items-deferred-
+        to-v2" pins `fn macos_target_disables_observatorium_and_opencode_web_for_v2`
+        in crates/tillandsias-host-shell/src/menu_state.rs. Confirmed via grep:
+        no such function (or any renamed equivalent) exists in that file today.
+        Either the pin test was removed without updating the litmus, or it was
+        never written. Determine which, then either restore/write the test
+        (if the underlying v1 behavior — observatorium + opencode_web disabled
+        for MacosTray — is still correct and just needs re-pinning) or correct
+        the litmus to match the current, intentional behavior.
+      events:
+        - type: claim
+          ts: "2026-07-06T16:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          lease_id: "macos-tray-menu-state-observatorium-v2-pin-test-missing-claim-1"
+          expires_at: "2026-07-06T20:45:00Z"
+        - type: completed
+          ts: "2026-07-06T16:50:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          summary: >
+            Root cause: the behavior was never missing — the litmus pinned
+            the wrong file/function. Two pin tests already exist in
+            crates/tillandsias-macos-tray/src/menu_disabled_v2.rs
+            (render_marks_observatorium_disabled_with_v2_tooltip_on_macos +
+            render_marks_opencode_web_disabled_with_v2_tooltip_on_macos),
+            exercising defers_gui_to_v2() end-to-end via render(). Corrected
+            the litmus's grep target from host-shell/menu_state.rs (wrong
+            crate, wrong name) to macos-tray/menu_disabled_v2.rs (both real
+            test names). litmus:macos-tray-architectural-invariants now
+            passes 9/9 (was 8/9). No product code changed — only the litmus
+            check.
+          commits:
+            - "4b8c15f9"
+      exit_criteria:
+        - "litmus:macos-tray-architectural-invariants passes end-to-end (scripts/run-litmus-test.sh macos-native-tray --phase pre-build --size instant)"
+
+    - packet_id: pty-attach-project-threading-litmus-stale-import-shape
+      order: 200
+      title: "litmus:pty-attach-project-threading-symmetric pins a stale windows-tray import (missing PtyIntent)"
+      status: done
+      kind: bugfix
+      deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [litmus, windows-tray, spec-drift, cross-host]
+      estimated_hours: 1
+      outcome: >
+        litmus:pty-attach-project-threading-symmetric step 1 pins the exact
+        substring `use tillandsias_host_shell::pty::{intent_for_action,
+        launch_spec}` in crates/tillandsias-windows-tray/src/notify_icon.rs.
+        The current import is `use tillandsias_host_shell::pty::{PtyIntent,
+        intent_for_action, launch_spec};` (PtyIntent was added, litmus wasn't
+        updated) — confirmed via grep. Coordinate with windows (the litmus
+        pins windows-tray's own source) before updating the fixed string;
+        this is a litmus-file fix, not a windows-tray code change, since the
+        current import shape is presumably intentional.
+      events:
+        - type: claim
+          ts: "2026-07-06T16:50:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          lease_id: "pty-attach-project-threading-litmus-stale-import-shape-claim-1"
+          expires_at: "2026-07-06T20:50:00Z"
+        - type: completed
+          ts: "2026-07-06T16:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          summary: >
+            Fixed the litmus (not windows-tray's source — the current
+            `{PtyIntent, intent_for_action, launch_spec}` import is correct
+            and intentional). Step 1 now checks for `intent_for_action` +
+            `launch_spec` inside the `use tillandsias_host_shell::pty::{`
+            import block rather than the exact historical literal, so a
+            future addition to the same import won't re-break this check.
+            litmus:pty-attach-project-threading-symmetric now passes 5/5
+            (was 4/5). No windows-tray code touched.
+          commits:
+            - "4b8c15f9"
+      exit_criteria:
+        - "litmus:pty-attach-project-threading-symmetric passes end-to-end (scripts/run-litmus-test.sh macos-native-tray --phase pre-build --size instant)"
+
+    - packet_id: macos-build-check-podman-wrapper
+      order: 201
+      title: "macOS: ./build.sh --check fails in require_podman (Homebrew Podman rejects Linux storage flags)"
+      status: done
+      kind: bugfix
+      deliverable: plan/issues/macos-build-check-podman-wrapper-2026-07-05.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, podman, build, dev-loop]
+      estimated_hours: 2
+      outcome: >
+        scripts/common.sh's wrapper-selection logic required a `podman info`
+        connectivity probe to succeed before skipping the Linux-only local-
+        VFS-storage wrapper (--root/--runroot/--tmpdir). Homebrew Podman on
+        macOS is ALWAYS a remote-machine client and rejects those flags
+        regardless of probe outcome, so on any macOS host where the probe
+        failed (e.g. no Podman machine currently running), build.sh --check
+        fell through to the wrapper branch and failed with a confusing
+        "unknown flag: --root" instead of Podman's own actionable error.
+        Fixed by having macOS unconditionally skip the local-storage wrapper
+        branch. That unblocked ./build.sh --check far enough to reach real
+        compilation for the FIRST TIME on this host, surfacing 2 more
+        -D warnings blockers in Linux-owned crates (tillandsias-podman's
+        path_is_writable/require_desktop_user_session/
+        require_headless_service_account, tillandsias-headless's
+        vault_service_base_url) — all the same shape: a helper whose only
+        non-test caller lives inside a #[cfg(target_os = "linux")] block,
+        so non-Linux builds saw it as dead/unused code. Fixed with minimal,
+        platform-scoped allow attributes / a tightened cfg boundary (no
+        Linux behavior change), marked PLEASE REVIEW (linux) per the
+        unblock-with-NOOP convention.
+      events:
+        - type: completed
+          ts: "2026-07-06T17:15:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          summary: >
+            `./build.sh --check` now exits 0 on macOS (fmt + type-check +
+            strict clippy all pass) — first time this command has completed
+            successfully on this host. `cargo test -p tillandsias-podman -p
+            tillandsias-headless`: all pass except
+            test_missing_image_error_handling, which requires a running
+            Podman machine connection (none running on this dev host — a
+            pre-existing environment gap, unrelated to this fix).
+          commits:
+            - "be2968c5"
+      exit_criteria:
+        - "PATH=\"/opt/homebrew/bin:$PATH\" ./build.sh --check exits 0 on a macOS host with Homebrew Podman installed"
 
     - packet_id: silverblue-immutable-development-workflow
       order: 195

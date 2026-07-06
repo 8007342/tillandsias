@@ -267,7 +267,7 @@ fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
 
 enum ControlWireStream {
     Plain(tillandsias_vm_layer::transport_macos::VsockStream),
-    Secure(EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>),
+    Secure(Box<EncryptedStream<tillandsias_vm_layer::transport_macos::VsockStream>>),
 }
 
 impl AsyncRead for ControlWireStream {
@@ -331,7 +331,7 @@ async fn open_control_wire_stream(
             let secure = client_handshake(stream, &psk)
                 .await
                 .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
-            Ok(ControlWireStream::Secure(secure))
+            Ok(ControlWireStream::Secure(Box::new(secure)))
         }
     }
 }

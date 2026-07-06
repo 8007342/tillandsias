@@ -441,6 +441,12 @@ dnf install -y podman
 systemctl enable podman.socket
 systemctl start podman.socket
 
+# Mount host ~/src via virtio-fs when the VZ config provides the home-src tag.
+mkdir -p /home/forge/src
+if ! mountpoint -q /home/forge/src; then
+  mount -t virtiofs home-src /home/forge/src || true
+fi
+
 # Create directory
 mkdir -p /usr/local/lib/tillandsias
 
@@ -579,13 +585,18 @@ local-hostname: tillandsias-vm
 }
 
 #[cfg(target_os = "macos")]
+fn home_src_dir() -> std::path::PathBuf {
+    std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("src")
+}
+
+#[cfg(target_os = "macos")]
 fn guest_binary_fingerprint() -> Result<String, String> {
     use sha2::{Digest, Sha256};
 
-    let path = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("src/.tillandsias/guest-bin/tillandsias-headless");
+    let path = home_src_dir().join(".tillandsias/guest-bin/tillandsias-headless");
     let bytes = std::fs::read(&path)
         .map_err(|e| format!("read staged guest binary {}: {e}", path.display()))?;
     let digest = Sha256::digest(&bytes);
@@ -868,16 +879,18 @@ pub mod boot {
     use objc2::rc::Retained;
     use objc2_foundation::{NSArray, NSFileHandle, NSString, NSURL};
     use objc2_virtualization::{
-        VZBootLoader, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader, VZEFIVariableStore,
+        VZBootLoader, VZDirectoryShare, VZDirectorySharingDeviceConfiguration,
+        VZDiskImageStorageDeviceAttachment, VZEFIBootLoader, VZEFIVariableStore,
         VZEFIVariableStoreInitializationOptions, VZEntropyDeviceConfiguration,
         VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration,
         VZMemoryBalloonDeviceConfiguration, VZNATNetworkDeviceAttachment,
         VZNetworkDeviceConfiguration, VZPlatformConfiguration, VZSerialPortAttachment,
-        VZSerialPortConfiguration, VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
+        VZSerialPortConfiguration, VZSharedDirectory, VZSingleDirectoryShare,
+        VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
         VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
-        VZVirtioEntropyDeviceConfiguration, VZVirtioNetworkDeviceConfiguration,
-        VZVirtioSocketDeviceConfiguration, VZVirtioTraditionalMemoryBalloonDeviceConfiguration,
-        VZVirtualMachineConfiguration,
+        VZVirtioEntropyDeviceConfiguration, VZVirtioFileSystemDeviceConfiguration,
+        VZVirtioNetworkDeviceConfiguration, VZVirtioSocketDeviceConfiguration,
+        VZVirtioTraditionalMemoryBalloonDeviceConfiguration, VZVirtualMachineConfiguration,
     };
 
     /// Inputs to [`build_vm_configuration`]. The builder consumes a borrow
@@ -895,6 +908,10 @@ pub mod boot {
         pub root_disk: Option<PathBuf>,
         /// Optional cloud-init CIDATA ISO path.
         pub cidata_iso: Option<PathBuf>,
+        /// Optional host directory exposed to the guest over virtio-fs.
+        pub shared_host_dir: Option<PathBuf>,
+        /// virtio-fs tag used by the guest mount command.
+        pub share_tag: String,
         /// Persistent EFI variable store path. `None` skips NVRAM, which
         /// makes the EFI bootloader invalid; callers should always pass
         /// `Some(...)` for a bootable VM (the file is created if missing).
@@ -915,6 +932,8 @@ pub mod boot {
                 memory_bytes: 2 * 1024 * 1024 * 1024,
                 root_disk: None,
                 cidata_iso: None,
+                shared_host_dir: None,
+                share_tag: "home-src".to_string(),
                 nvram: None,
                 serial_writer_fd: None,
             }
@@ -1054,6 +1073,32 @@ pub mod boot {
             let arr_b: Retained<NSArray<VZMemoryBalloonDeviceConfiguration>> =
                 NSArray::from_id_slice(&[Retained::cast(balloon)]);
             cfg.setMemoryBalloonDevices(&arr_b);
+
+            // virtio-fs host source share. cloud-init mounts this tag at
+            // /home/forge/src before installing the staged headless binary.
+            if let Some(shared_host_dir) = &spec.shared_host_dir {
+                let url = ns_url_for_path(shared_host_dir);
+                let shared_dir = VZSharedDirectory::initWithURL_readOnly(
+                    VZSharedDirectory::alloc(),
+                    &url,
+                    false,
+                );
+                let share = VZSingleDirectoryShare::initWithDirectory(
+                    VZSingleDirectoryShare::alloc(),
+                    &shared_dir,
+                );
+                let fs = VZVirtioFileSystemDeviceConfiguration::initWithTag(
+                    VZVirtioFileSystemDeviceConfiguration::alloc(),
+                    &NSString::from_str(&spec.share_tag),
+                );
+                let share_super: &VZDirectoryShare = &share;
+                fs.setShare(Some(share_super));
+                let fs_super: Retained<VZDirectorySharingDeviceConfiguration> =
+                    Retained::into_super(fs);
+                let arr_fs: Retained<NSArray<VZDirectorySharingDeviceConfiguration>> =
+                    NSArray::from_id_slice(&[fs_super]);
+                cfg.setDirectorySharingDevices(&arr_fs);
+            }
 
             // virtio-vsock — host connects later via VZVirtioSocketDevice
             // (see crates/tillandsias-vm-layer/src/transport_macos.rs, TBD).
@@ -1283,6 +1328,8 @@ impl VmRuntime for VzRuntime {
             memory_bytes: 4 * 1024 * 1024 * 1024,
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
+            shared_host_dir: Some(home_src_dir()),
+            share_tag: "home-src".to_string(),
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd,
         };
@@ -1573,10 +1620,34 @@ impl VzRuntime {
     ///
     /// Requires a current-thread Tokio runtime on the macOS main thread
     /// (same constraint as `open_vsock_stream_current_thread`).
-    pub async fn wait_phase_ready(&self, timeout: Duration) -> Result<(), VmError> {
+    ///
+    /// `probe_once` performs one connect+probe attempt with a per-attempt
+    /// timeout and returns the in-VM `VmPhase`. This crate does not depend on
+    /// `tillandsias-secure-channel`, so it cannot decide Plain-vs-Secure
+    /// itself — the caller supplies `probe_once` using the *same*
+    /// secure-or-plain opener (`open_control_wire_stream` /
+    /// `secure_control_wire_mode()`) it uses for its own user-action control
+    /// wire traffic, so readiness probing never bypasses secure mode.
+    /// @trace plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+    ///
+    /// `probe_once` takes only a per-attempt timeout (not `&Self`): callers
+    /// close over their own `&VzRuntime` reference so the closure's returned
+    /// future is a single concrete opaque type rather than one generic over
+    /// an arbitrary borrow lifetime, which `rustc` cannot unify against an
+    /// `FnMut(&Self, ..)` bound (async fn items don't satisfy HRTB `for<'a>
+    /// Fn(&'a Self, ..) -> Fut` — the opaque future type captures the
+    /// specific input lifetime it was defined with).
+    pub async fn wait_phase_ready<F, Fut>(
+        &self,
+        timeout: Duration,
+        mut probe_once: F,
+    ) -> Result<(), VmError>
+    where
+        F: FnMut(Duration) -> Fut,
+        Fut: std::future::Future<Output = Result<tillandsias_control_wire::VmPhase, String>>,
+    {
         use std::time::Instant;
         use tillandsias_control_wire::VmPhase;
-        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
 
         // Stage 1: wait until VZ kernel is Running (same as wait_ready stage 1).
         let deadline = Instant::now() + timeout;
@@ -1628,20 +1699,7 @@ impl VzRuntime {
                     timeout.as_secs()
                 ));
             }
-            let stream = self
-                .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(2))
-                .await;
-            let stream = match stream {
-                Ok(s) => s,
-                Err(_) => {
-                    // headless not yet bound — back off and retry
-                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
-                    step = step.saturating_add(1);
-                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
-                    continue;
-                }
-            };
-            match crate::vsock_exec::probe_vm_phase(stream).await {
+            match probe_once(Duration::from_secs(2)).await {
                 Ok(VmPhase::Ready) => return Ok(()),
                 Ok(VmPhase::Failed) => {
                     return Err("VzRuntime::wait_phase_ready: VM phase is Failed".to_string());
@@ -1793,6 +1851,29 @@ mod tests {
         assert!(
             !fetch_unit.contains("ConditionPathExists=!/usr/local/bin/tillandsias-headless"),
             "systemd must run the idempotent oneshot instead of skipping it"
+        );
+    }
+
+    /// The fetch script must prefer the staged host-provided binary over the
+    /// network fallback (virtio-fs /home/forge/src → staged guest binary).
+    ///
+    /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
+    #[test]
+    fn vz_fetch_script_prefers_staged_binary_over_network() {
+        let source = include_str!("vz.rs");
+
+        assert!(
+            source
+                .contains("STAGED=\"/home/forge/src/.tillandsias/guest-bin/tillandsias-headless\""),
+            "fetch script must define the staged binary path under /home/forge/src"
+        );
+        assert!(
+            source.contains("if [[ -x \"$STAGED\" ]]; then"),
+            "fetch script must check staged binary executability before curl"
+        );
+        assert!(
+            source.contains("install -D -m 0755 \"$STAGED\" \"$DEST\""),
+            "fetch script must install the staged binary when present and executable"
         );
     }
 

@@ -155,12 +155,36 @@ TESTS_FAILED=0
 TESTS_SKIPPED=0
 TESTS_RUN=0
 
-# Track which specs were tested
-declare -A SPEC_RESULTS
-declare -A SPEC_TEST_COUNT
+# Track which specs were tested. Portable bash-3.2 dedup+count (no
+# associative arrays: stock macOS ships bash 3.2, which lacks `declare -A`).
+# The per-spec verdict itself is never read back, only the distinct count.
+SPEC_RESULTS_SEEN=$'\n'
+SPEC_RESULTS_COUNT=0
 
-# Global deduplication for cross-spec litmus tests
-declare -A LITMUS_GLOBAL_SEEN
+record_spec_result() {
+    local spec_id="$1"
+    case "$SPEC_RESULTS_SEEN" in
+        *$'\n'"$spec_id"$'\n'*) ;; # already recorded — don't double-count
+        *)
+            SPEC_RESULTS_SEEN+="$spec_id"$'\n'
+            SPEC_RESULTS_COUNT=$((SPEC_RESULTS_COUNT + 1))
+            ;;
+    esac
+}
+
+# Global deduplication for cross-spec litmus tests (same portable pattern).
+LITMUS_GLOBAL_SEEN_LIST=$'\n'
+
+litmus_global_seen() {
+    case "$LITMUS_GLOBAL_SEEN_LIST" in
+        *$'\n'"$1"$'\n'*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+litmus_global_mark_seen() {
+    LITMUS_GLOBAL_SEEN_LIST+="$1"$'\n'
+}
 
 # Color output (respects NO_COLOR env var)
 RED='\033[0;31m'
@@ -415,8 +439,11 @@ check_signal() {
 behavior_matches_output() {
     local output="$1"
     local expected="$2"
-    local expected_lc="${expected,,}"
-    local output_lc="${output,,}"
+    # tr, not bash-4+ ${var,,}, so this runs on stock macOS bash 3.2 too.
+    local expected_lc
+    expected_lc="$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')"
+    local output_lc
+    output_lc="$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')"
 
     [[ -z "$expected_lc" ]] && return 0
 
@@ -775,7 +802,7 @@ run_tests_for_spec() {
 
     if spec_is_ignored "$spec_id"; then
         [[ "$COMPACT" == "1" ]] || log_warn "Ignoring spec: $spec_id"
-        SPEC_RESULTS["$spec_id"]="SKIP"
+        record_spec_result "$spec_id"
         return 0
     fi
 
@@ -792,7 +819,7 @@ run_tests_for_spec() {
             return 21
         fi
         [[ "$COMPACT" == "1" ]] || log_warn "No litmus tests bound to spec: $spec_id"
-        SPEC_RESULTS["$spec_id"]="SKIP"
+        record_spec_result "$spec_id"
         return 0
     fi
 
@@ -804,13 +831,13 @@ run_tests_for_spec() {
         [[ -z "$test_name" ]] && continue
 
         # Skip if already executed globally (same test bound to multiple specs)
-        if [[ -n "${LITMUS_GLOBAL_SEEN[$test_name]+x}" ]]; then
+        if litmus_global_seen "$test_name"; then
             log_test_result "$spec_id" "$test_name" "SKIP" "Already executed (bound to multiple specs)"
             spec_skipped=1
             test_count=$((test_count+1))
             continue
         fi
-        LITMUS_GLOBAL_SEEN[$test_name]=1
+        litmus_global_mark_seen "$test_name"
 
         # Convert colon to hyphen for file lookup (litmus:ephemeral-guarantee -> litmus-ephemeral-guarantee)
         local test_file="${LITMUS_TESTS_DIR}/${test_name//:/-}.yaml"
@@ -864,14 +891,7 @@ run_tests_for_spec() {
         test_count=$((test_count+1))
     done <<<"$litmus_tests"
 
-    SPEC_TEST_COUNT["$spec_id"]=$test_count
-    if [[ "$spec_failed" == "1" ]]; then
-        SPEC_RESULTS["$spec_id"]="FAIL"
-    elif [[ "$spec_skipped" == "1" && "$test_count" -gt 0 ]]; then
-        SPEC_RESULTS["$spec_id"]="SKIP"
-    else
-        SPEC_RESULTS["$spec_id"]="PASS"
-    fi
+    record_spec_result "$spec_id"
 
     return 0
 }
@@ -907,7 +927,7 @@ print_summary() {
         total_specs="$(printf '%s\n' "$all_specs" | grep -c . || echo 0)"
     fi
     local covered_specs=0
-    local spec_count=${#SPEC_RESULTS[@]}
+    local spec_count=$SPEC_RESULTS_COUNT
     if [[ $total_specs -gt 0 ]]; then
         covered_specs=$(( spec_count * 100 / total_specs ))
     fi
@@ -939,7 +959,7 @@ print_json_summary() {
     local status="FAIL"
     [[ $TESTS_FAILED -eq 0 ]] && status="PASS"
 
-    local spec_count=${#SPEC_RESULTS[@]}
+    local spec_count=$SPEC_RESULTS_COUNT
 
     printf '{\n'
     printf '  "timestamp": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

@@ -273,6 +273,37 @@ pub enum ControlMessage {
         logged_in: bool,
         handle: Option<String>,
     },
+    /// Host → in-VM headless: subscribe to one or more push topics. Sent once
+    /// after Hello/HelloAck. The headless then emits VmStatusPush,
+    /// LoginStatePush, CloudProjectsPush frames without further requests.
+    ///
+    /// New trailing variant (additive, no wire version bump).
+    Subscribe { topics: Vec<SubscriptionTopic> },
+    /// In-VM headless → host: acknowledges a Subscribe frame.
+    SubscribeAck,
+    /// In-VM headless → host: pushed on every VmPhase change (unrequested,
+    /// no seq/seq_in_reply_to — pushed as a stream, not a request-reply).
+    /// `seq` is the headless's current monotonic counter so the host can
+    /// order pushes relative to other frames.
+    VmStatusPush {
+        seq: u64,
+        phase: VmPhase,
+        podman_ready: bool,
+        last_event: Option<String>,
+    },
+    /// In-VM headless → host: pushed when the GitHub login state changes
+    /// (detected by the headless's periodic Vault re-check).
+    LoginStatePush {
+        seq: u64,
+        logged_in: bool,
+        handle: Option<String>,
+    },
+    /// In-VM headless → host: pushed when the cloud project list changes
+    /// (from a gh repo list refresh). Full replacement list each time.
+    CloudProjectsPush {
+        seq: u64,
+        projects: Vec<CloudProjectEntry>,
+    },
 }
 
 /// Direction tag for `PtyData` frames.
@@ -309,6 +340,17 @@ pub enum VmPhase {
     Draining,
     Stopping,
     Failed,
+}
+
+/// Topics the host can subscribe to via `Subscribe`. The headless emits a push
+/// frame on the corresponding topic whenever the tracked state changes.
+///
+/// New trailing variant additions are additive (no wire version bump).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SubscriptionTopic {
+    VmStatus,
+    LoginState,
+    CloudProjects,
 }
 
 /// A single VM-visible project entry returned by `LocalProjectsReply`.
@@ -396,6 +438,11 @@ impl ControlMessage {
             ControlMessage::VaultHandoverReply { .. } => "VaultHandoverReply",
             ControlMessage::GithubLoginStatusRequest { .. } => "GithubLoginStatusRequest",
             ControlMessage::GithubLoginStatusReply { .. } => "GithubLoginStatusReply",
+            ControlMessage::Subscribe { .. } => "Subscribe",
+            ControlMessage::SubscribeAck => "SubscribeAck",
+            ControlMessage::VmStatusPush { .. } => "VmStatusPush",
+            ControlMessage::LoginStatePush { .. } => "LoginStatePush",
+            ControlMessage::CloudProjectsPush { .. } => "CloudProjectsPush",
         }
     }
 }
@@ -784,6 +831,37 @@ mod tests {
                 },
                 "CloudRefreshReply",
             ),
+            (
+                ControlMessage::Subscribe {
+                    topics: vec![SubscriptionTopic::VmStatus],
+                },
+                "Subscribe",
+            ),
+            (ControlMessage::SubscribeAck, "SubscribeAck"),
+            (
+                ControlMessage::VmStatusPush {
+                    seq: 1,
+                    phase: VmPhase::Ready,
+                    podman_ready: true,
+                    last_event: None,
+                },
+                "VmStatusPush",
+            ),
+            (
+                ControlMessage::LoginStatePush {
+                    seq: 1,
+                    logged_in: false,
+                    handle: None,
+                },
+                "LoginStatePush",
+            ),
+            (
+                ControlMessage::CloudProjectsPush {
+                    seq: 1,
+                    projects: vec![],
+                },
+                "CloudProjectsPush",
+            ),
         ];
         for (msg, expected) in cases {
             assert_eq!(
@@ -832,6 +910,107 @@ mod tests {
             .kind(),
             "GithubLoginStatusReply"
         );
+    }
+
+    #[test]
+    fn subscribe_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 200,
+            body: ControlMessage::Subscribe {
+                topics: vec![
+                    SubscriptionTopic::VmStatus,
+                    SubscriptionTopic::LoginState,
+                    SubscriptionTopic::CloudProjects,
+                ],
+            },
+        });
+    }
+
+    #[test]
+    fn subscribe_ack_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 201,
+            body: ControlMessage::SubscribeAck,
+        });
+    }
+
+    #[test]
+    fn vm_status_push_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 202,
+            body: ControlMessage::VmStatusPush {
+                seq: 202,
+                phase: VmPhase::Ready,
+                podman_ready: true,
+                last_event: Some("forge started".into()),
+            },
+        });
+    }
+
+    #[test]
+    fn login_state_push_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 203,
+            body: ControlMessage::LoginStatePush {
+                seq: 203,
+                logged_in: true,
+                handle: Some("octocat".into()),
+            },
+        });
+    }
+
+    #[test]
+    fn login_state_push_logged_out_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 204,
+            body: ControlMessage::LoginStatePush {
+                seq: 204,
+                logged_in: false,
+                handle: None,
+            },
+        });
+    }
+
+    #[test]
+    fn cloud_projects_push_empty_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 205,
+            body: ControlMessage::CloudProjectsPush {
+                seq: 205,
+                projects: vec![],
+            },
+        });
+    }
+
+    #[test]
+    fn cloud_projects_push_with_entries_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 206,
+            body: ControlMessage::CloudProjectsPush {
+                seq: 206,
+                projects: vec![
+                    CloudProjectEntry {
+                        label: "my-repo".into(),
+                        owner: "octocat".into(),
+                        repo: "my-repo".into(),
+                        default_branch: "main".into(),
+                    },
+                    CloudProjectEntry {
+                        label: "other-repo".into(),
+                        owner: "octocat".into(),
+                        repo: "other-repo".into(),
+                        default_branch: "main".into(),
+                    },
+                ],
+            },
+        });
     }
 
     #[test]

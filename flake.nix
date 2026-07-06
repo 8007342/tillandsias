@@ -49,20 +49,17 @@
         aarch64Cc = "${crossPkgs.stdenv.cc}/bin/${crossPkgs.stdenv.cc.targetPrefix}cc";
         aarch64Ar = "${crossPkgs.stdenv.cc.bintools.bintools}/bin/${crossPkgs.stdenv.cc.targetPrefix}ar";
 
-        # Ephemeral per-build secure-channel key injected at compile time.
-        # When unset (local builds without --impure), the Rust code falls back
-        # to the public DEV_ROOT_SEED so local peers interoperate. Release CI
-        # sets TILLANDSIAS_RELEASE_SECRET and passes --impure so all binaries
-        # built in the same invocation share the same secret key.
-        releaseSecret = builtins.getEnv "TILLANDSIAS_RELEASE_SECRET";
+        # Secure-channel key: SHA-256 of the running binary (computed at
+        # runtime, not compile time). No build-time env injection needed,
+        # so nix builds are pure (no --impure). All binaries compiled from
+        # identical source produce identical hashes and therefore derive
+        # matching PSKs — "same binary talks to same binary".
 
         commonCraneArgs = {
           src = craneSrc;
           strictDeps = true;
           doCheck = false; # release builds don't run tests (./build.sh does)
-        } // (if releaseSecret != "" then {
-          TILLANDSIAS_RELEASE_SECRET = releaseSecret;
-        } else {});
+        };
 
         tillandsias-x86_64-musl =
           let

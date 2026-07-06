@@ -32,8 +32,15 @@ preconditions:
 
 critical_path:
   - step: "windows-tray imports intent_for_action + launch_spec from host-shell"
-    command: "grep -F 'use tillandsias_host_shell::pty::{intent_for_action, launch_spec}' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "intent_for_action, launch_spec"
+    # windows-tray's import gained a leading `PtyIntent` at some point after
+    # this litmus was written (the type is used directly in notify_icon.rs);
+    # match on the two names this litmus actually cares about rather than
+    # the exact import-list literal, so future additions to the same import
+    # don't re-break this check. Corrected 2026-07-06, see
+    # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+    # order 200.
+    command: "grep -F 'use tillandsias_host_shell::pty::{' crates/tillandsias-windows-tray/src/notify_icon.rs | grep -F 'intent_for_action' | grep -F 'launch_spec'"
+    expected_behavior: "intent_for_action"
     timeout_ms: 3000
 
   - step: "macos-tray imports intent_for_action + launch_spec from host-shell"
