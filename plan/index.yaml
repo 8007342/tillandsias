@@ -1315,7 +1315,7 @@ plan_index:
     - packet_id: race-safeguards-research
       order: 160
       title: "Research: race-surface inventory + safeguard strategy (concurrent launches, lifecycle churn)"
-      status: claimed
+      status: done
       kind: research
       events:
         - type: claim
@@ -1328,6 +1328,25 @@ plan_index:
             Claimed from a Claude Code remote sandbox pinned to branch
             claude/meta-orchestration-skill-uhitvv (based on linux-next
             4835931e); ledger writes reach linux-next via PR, not direct push.
+        - type: completed
+          ts: "2026-07-06T18:05:00Z"
+          agent_id: "linux-ccr-fable5-20260706T1734Z"
+          host: linux
+          summary: >
+            All three exit criteria met. R1-R9 each dispositioned against the
+            live tree at linux-next@4835931e with file:line evidence
+            (adopt/partial/accept verdict grammar). Shared-container ownership
+            decided: ensure-only + vsock-supervisor reconciliation; refcount
+            rejected (count state cannot survive crashes; live "zero running
+            forges" probe already derives the fact). Impl scopes confirmed with
+            amendments — the inventory's "orders 152-154" pointer was stale;
+            real owners are orders 161/162/163. Notable re-verification deltas
+            since 2026-07-02: R9's linux bootstrap slice already fixed
+            (curl-to-TMP + install -D) but windows wsl_lifecycle.rs:368 and
+            macos vz.rs:460 embedded scripts still curl onto the live binary;
+            R5's forge-aware guard landed at 3 sites but 4 launch/cleanup paths
+            still remove shared containers unconditionally. Full disposition in
+            the deliverable.
       deliverable: plan/issues/race-safeguards-research-2026-07-02.md
       depends_on: []
       pickup_role: any
@@ -1342,11 +1361,12 @@ plan_index:
         containers, phase-aware side effects, retry-with-backoff on every wait, atomic
         fs ops, one provoking litmus per fixed race. Deliverable already contains the
         inventory (R1-R9) and suggested vocabulary; this packet ratifies/amends it and
-        splits final implementation scope across orders 152-154.
+        splits final implementation scope across orders 161-163 (the original
+        "orders 152-154" pointer was stale after order-number collisions).
       exit_criteria:
         - "R1-R9 each dispositioned: safeguard chosen or explicitly accepted-as-is with rationale"
         - "Shared-container ownership model decided (refcount vs supervisor vs ensure-never-cleanup)"
-        - "Orders 152-154 scopes confirmed/amended against the decision"
+        - "Orders 161-163 scopes confirmed/amended against the decision"
 
     - packet_id: host-lifecycle-race-safeguards
       order: 161
@@ -1396,6 +1416,13 @@ plan_index:
         - "Vault recreate under a held lease: lease flow completes (no proxy teardown mid-flow)"
         - "Health-wait retries transient 'container is stopped' (I3 regression litmus)"
         - "No container creation during Draining (drain-vs-self-heal litmus)"
+      scope_amendment_2026_07_06: >
+        Per order-160 ratification: R5 is convergence of the 4 remaining direct
+        cleanup_stack_containers call sites (main.rs:4415, 5713, 6761, 7157)
+        onto the already-landed cleanup_shared_stack_if_no_running_forge guard,
+        not a from-scratch design; R7's transient window must also classify
+        "no such container" as transient (Silverblue, vault_bootstrap.rs:1488).
+        Ownership model decided: ensure-only + vsock-supervisor; refcount rejected.
 
     - packet_id: checkout-and-fetch-atomicity
       order: 163
@@ -1417,6 +1444,13 @@ plan_index:
         - "Two parallel clones of one repo: one wins, other reuses; no corrupted .git"
         - "Rename-based install proven on drvfs (9p) in the litmus"
         - "fetch-headless.sh temp+rename verified in provisioning injection tests"
+      scope_amendment_2026_07_06: >
+        Per order-160 ratification: the linux guest bootstrap slice of R9 is
+        already done (images/vm/bootstrap/20-tillandsias.sh curls to TMP +
+        install -D). Residual R9 is the two host-embedded fetch scripts that
+        still curl onto the live binary path — windows wsl_lifecycle.rs:368 and
+        macos vz.rs:460 (each in its host's write scope) — plus deduping the
+        script into one shared constant so it cannot drift three ways again.
 
     - packet_id: keepalive-terminal-visibility
       order: 164
