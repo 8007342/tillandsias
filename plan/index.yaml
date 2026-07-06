@@ -3695,3 +3695,108 @@ plan_index:
       exit_criteria:
         - "decision recorded: auto-cross-compile prerequisite vs. litmus soft-fail classification (or both)"
         - "a fresh checkout (no target-guest/ artifacts) can reach ./build.sh --ci-full --install's completion (or an explicit, documented, non-blocking skip) without a manual cross-compile step"
+
+    - packet_id: forge-image-split-live-verification
+      order: 220
+      title: "Verify (live): forge CREATION/FIRST_RUN/EVERY_LAUNCH split actually works end-to-end"
+      status: ready
+      kind: research+verification
+      deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, podman, testing]
+      estimated_hours: 3
+      outcome: >
+        Orders 179 (persistent cache mount), 180 (FIRST_RUN tool migration),
+        181 (EVERY_LAUNCH harness reinstall), 182/183 (inference FIRST_RUN
+        models) are all marked done/completed in plan/index.yaml, and a
+        code-level re-audit this cycle confirms it: Containerfile.base is
+        down to microdnf + a couple pinned lint-tool npm installs (no
+        curl/tar chains remain — grep confirms), lib-common.sh's
+        ensure_forge_prebuilt_tools/ensure_dart_sdk/ensure_forge_harnesses
+        are idempotent + fail-soft + arch-aware, all 5 forge entrypoints
+        (claude/codex/opencode/opencode-web/antigravity) call them, and
+        build_forge_agent_run_args mounts the tillandsias-forge-cache-alpha
+        volume (order 179) that CARGO_HOME/NPM_CONFIG_PREFIX resolve into.
+        BUT none of this has been proven with a LIVE two-launch test: launch
+        a forge harness (e.g. --claude or --codex), observe the first-run
+        tool/harness install actually happen and land in the persistent
+        cache volume, then relaunch the SAME project's forge and confirm
+        (a) the cache mount is the same volume (podman inspect), (b) the
+        previously-installed FIRST_RUN tools (e.g. a cargo dev-tool) are
+        already present and skipped instantly (not reinstalled), (c) the
+        EVERY_LAUNCH harness (codex/claude/opencode) still re-checks/updates
+        to latest each launch, and (d) every harness (Claude, Codex,
+        OpenCode, OpenCode Web, Antigravity) launches cleanly with the full
+        combined tool stack (dnf base + FIRST_RUN cache tools + EVERY_LAUNCH
+        harness) all visible on PATH inside the container.
+      exit_criteria:
+        - "podman inspect on a live forge container shows the persistent cache volume mounted at /home/forge/.cache/tillandsias-project"
+        - "a FIRST_RUN tool (e.g. cargo-nextest) installs on launch 1 and is confirmed present-and-skipped (not reinstalled) on launch 2 of the same project"
+        - "each of the 5 forge entrypoints (claude/codex/opencode/opencode-web/antigravity) launches cleanly and the harness binary + full dnf+cache tool set are on PATH inside the container"
+        - "findings (pass or specific gaps) recorded in the research deliverable's update log"
+
+    - packet_id: sidecar-containerfile-base-split-research
+      order: 221
+      title: "Research: would git/proxy/vault/inference benefit from a Containerfile.base + Containerfile split like default-image?"
+      status: ready
+      kind: research
+      deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [research, podman, images]
+      estimated_hours: 1
+      outcome: >
+        images/default/ splits into Containerfile.base (heavy, stable,
+        rarely-changing microdnf install layer) + Containerfile (thin,
+        rapidly-iterated config/entrypoint layer built FROM the base) so
+        editing entrypoints/config doesn't force a full toolchain reinstall.
+        Check whether images/git, images/proxy, images/vault, and
+        images/inference (each currently a single monolithic Containerfile)
+        would benefit from the same split. A quick audit this cycle found:
+        all 4 are already small (43-82 lines), install packages via their
+        native package manager in ONE RUN layer BEFORE any COPY of
+        frequently-changing files (correct Podman layer-cache ordering
+        already), and none has a heavy/fragile toolchain or curl/tar chain
+        like the pre-split forge image did. Confirm this holds (measure
+        actual rebuild times touching only entrypoint.sh vs. the package
+        layer) and record a decision: split, or explicitly close as
+        not-worth-it with the measured evidence.
+      exit_criteria:
+        - "rebuild time measured for each of git/proxy/vault/inference after touching only entrypoint.sh (package layer must show as cached, not rebuilt)"
+        - "decision recorded per image: split into Containerfile.base, or confirmed not-worth-it (with the timing evidence) — no work half-done"
+
+    - packet_id: selective-tillandsias-image-reset
+      order: 222
+      title: "Impl: selective destructive reset that wipes tillandsias images/containers but preserves pulled upstream base images"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, podman, testing, ci]
+      estimated_hours: 3
+      outcome: >
+        `podman system reset --force` (used by /build-install-and-smoke-test-e2e
+        and /smoke-curl-install-and-test-e2e) wipes EVERY image, including the
+        upstream base images pulled from public registries
+        (registry.fedoraproject.org/fedora-minimal:44,
+        docker.io/library/alpine:3.20, docker.io/hashicorp/vault:1.18,
+        docker.io/library/caddy:2-alpine) — forcing a full re-pull on every
+        smoke iteration even though those bases rarely change and the actual
+        thing under test is always the localhost/tillandsias-* layer. Add a
+        selective reset mode/script that: stops+removes all containers, removes
+        all tillandsias volumes/secrets, removes every `localhost/tillandsias-*`
+        image (all tags), but explicitly PRESERVES the upstream FROM base
+        images (an allowlist, not a denylist, so a new base added later is
+        wiped-by-default until explicitly allowlisted — fail toward the
+        existing destructive behavior, not toward silently keeping something
+        new). Wire it as an opt-in fast-iteration mode for the smoke skills
+        (e.g. `TILLANDSIAS_SMOKE_RESET_MODE=selective`, default remains `full`
+        so release-acceptance runs stay maximally destructive/paranoid).
+      exit_criteria:
+        - "a script/flag exists that wipes all localhost/tillandsias-* images+containers+volumes+secrets but leaves the upstream base images present"
+        - "re-running ./build.sh --init after the selective reset does NOT re-pull fedora-minimal/alpine/vault/caddy (verify via podman events or pull-count) but DOES rebuild every tillandsias-* image from scratch"
+        - "default smoke-skill behavior is unchanged (full reset) unless the opt-in mode is explicitly requested — this is an iteration-speed opt-in, not a replacement for the release-acceptance destructive gate"
+        - "documented in the build-install-and-smoke-test-e2e skill as an available fast-iteration mode"
