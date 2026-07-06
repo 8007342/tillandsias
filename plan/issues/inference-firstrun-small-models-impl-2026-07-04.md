@@ -3,7 +3,7 @@
 - class: enhancement (inference)
 - filed: 2026-07-04
 - owner: linux
-- status: pending (blocked on model-selection research + O1-O3 sign-off)
+- status: done
 - depends_on: inference-firstrun-small-models-research-2026-07-04.md
 - trace: spec:inference-container, spec:async-inference-launch
 

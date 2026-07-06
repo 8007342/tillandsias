@@ -7330,16 +7330,18 @@ pub(crate) fn build_forge_agent_run_args(
     let provider_api = match mode {
         ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
         ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity => {
-            Some(crate::vault_bootstrap::ProviderId::Gemini)
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity | ForgeAgentMode::Maintenance => {
+            None
         }
-        ForgeAgentMode::Maintenance => None,
     };
     if let Some(p) = provider_api
         && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
         && !key.is_empty()
     {
-        spec = spec.env(p.env_var(), key);
+        spec = spec.env(p.env_var(), &key);
+        if p.env_var() == "GEMINI_API_KEY" {
+            spec = spec.env("GOOGLE_GENERATIVE_AI_API_KEY", key);
+        }
     }
 
     spec.build_run_args()
@@ -7378,15 +7380,9 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             Some(ProviderId::Codex),
             Some(crate::vault_bootstrap::ProviderId::Openai),
         ),
-        ForgeAgentMode::OpenCode => (
-            Some(ProviderId::Antigravity),
-            Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ),
-        ForgeAgentMode::Antigravity => (
-            Some(ProviderId::Antigravity),
-            Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ),
-        ForgeAgentMode::Maintenance => (None, None),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity | ForgeAgentMode::Maintenance => {
+            (None, None)
+        }
     };
 
     if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
@@ -7415,7 +7411,7 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
         let config = ProviderLoginConfig {
             provider: op,
             auth_model: AuthModel::OAuthDevice,
-            image_name: "curl",
+            image_name: "forge",
             token_script,
         };
         run_provider_login(&config, debug)?;

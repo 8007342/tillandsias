@@ -83,22 +83,21 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ollama pull llama3.2:3b"
 
-  - step: "Req inference container: ollama install via tarball extracting only bin/ (skip GPU lib/)"
-    # The Containerfile docblock explicitly notes the tarball-only-
-    # bin extraction skips the ~1.8GB lib/ollama/ GPU runners
-    # since this container is CPU-only inference. Pin the canonical
-    # `ollama-linux-amd64.tar.zst` URL + the `bin/ollama` extraction
-    # discipline note so a regression to a full-extract bloats the
-    # image silently.
-    command: "grep -F 'ollama-linux-amd64.tar.zst' images/inference/Containerfile && grep -F 'bin/ollama' images/inference/Containerfile"
+  - step: "Req inference container: ollama install via FIRST_RUN tarball extracting only bin/ (skip GPU lib/)"
+    # @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180 ollama sub-slice)
+    # Ollama moved from CREATION-time (Containerfile) to FIRST_RUN (entrypoint.sh) to
+    # avoid hardcoded version/SHA + enable arch-awareness + de-hardcode to latest release.
+    # Pin that the entrypoint downloads `ollama-linux-*.tar.zst` (arch-resolved) and
+    # extracts `bin/ollama` to the persistent model cache.
+    command: "grep -F 'ollama-linux-${OLLAMA_ARCH}.tar.zst' images/inference/entrypoint.sh && grep -F 'bin/ollama' images/inference/entrypoint.sh"
     timeout_ms: 3000
-    expected_behavior: "ollama-linux-amd64"
+    expected_behavior: "ollama-linux-"
 
 observability:
   traces:
     - "@trace spec:zen-default-with-ollama-analysis-pool"
     - "@trace spec:inference-container"
-  expected_log: "Zen-default model literals + ollama provider enumeration + T0/T1 pre-pull + inference container CPU-only ollama install pinned"
+  expected_log: "Zen-default model literals + ollama provider enumeration + T0/T1 pre-pull + inference container CPU-only ollama FIRST_RUN install (arch-aware, latest)"
   log_fields:
     spec: "zen-default-with-ollama-analysis-pool"
     test: "zen-default-with-ollama-shape"
@@ -110,8 +109,8 @@ rollback:
     drifted. Restore: `"model": "opencode/big-pickle"` + `"small_
     model": "opencode/gpt-5-nano"` in config.json; ollama provider
     with `baseURL: http://inference:11434/v1` + >=8 enumerated
-    models; inference entrypoint `ollama pull qwen2.5:0.5b` (T0)
-    + `ollama pull llama3.2:3b` (T1); Containerfile uses the
-    `ollama-linux-amd64.tar.zst` tarball with `bin/ollama`-only
-    extraction discipline (skip ~1.8GB lib/ollama GPU runners).
-  command: "grep -nE 'opencode/big-pickle|opencode/gpt-5-nano|inference:11434|ollama pull (qwen2.5:0.5b|llama3.2:3b)|ollama-linux-amd64' images/default/config-overlay/opencode/config.json images/inference/entrypoint.sh images/inference/Containerfile | head -15"
+    models;     inference entrypoint `ollama pull qwen2.5:0.5b` (T0)
+    + `ollama pull llama3.2:3b` (T1); entrypoint.sh self-installs
+    ollama binary at FIRST_RUN into the persistent model cache
+    (arch-aware, de-hardcoded to latest release).
+  command: "grep -nE 'opencode/big-pickle|opencode/gpt-5-nano|inference:11434|ollama pull (qwen2.5:0.5b|llama3.2:3b)|ollama-linux-\${OLLAMA_ARCH}' images/default/config-overlay/opencode/config.json images/inference/entrypoint.sh | head -15"

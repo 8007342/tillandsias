@@ -67,19 +67,56 @@ jobs:
       - name: Verify version monotonicity
         run: bash scripts/verify-version-monotonic.sh
 
+      - name: Generate ephemeral secure-channel key
+        id: genkey
+        run: |
+          EPHEMERAL_SECRET="$(openssl rand -hex 32)"
+          echo "key=${EPHEMERAL_SECRET}" >> "$GITHUB_OUTPUT"
+          echo "Generated ephemeral 256-bit secure-channel key (first 8 chars: ${EPHEMERAL_SECRET:0:8}...)"
+
       - name: Record Nix Build Start Time
         run: echo "NIX_BUILD_START_TIME=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Build musl-static binaries via Nix (host + in-VM agents, both arches)
+        env:
+          TILLANDSIAS_RELEASE_SECRET: ${{ steps.genkey.outputs.key }}
         run: |
           # Hermetic crane + pkgsCross builds (flake.nix). Replaces the prior
           # cargo+musl-tools (x86_64) and cross/musl.cc (aarch64) paths — both
           # failed in CI (musl.cc network timeout; cross 0.2.5's ancient-glibc
           # container choked on build.rs). The router sidecar + runtime assets
           # are git-tracked, so nix embeds them from the checked-out tree.
-          nix build -L .#tillandsias-x86_64-musl              --out-link result-host
-          nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
-          nix build -L .#tillandsias-headless-aarch64-musl  --out-link result-ha
+          #
+          # TILLANDSIAS_RELEASE_SECRET is injected via --impure so the flake
+          # reads it through builtins.getEnv and passes it to all crane build
+          # derivations. Every binary compiled in this invocation shares the
+          # same ephemeral key (order 194 — secure channel release hardening).
+          nix build -L --impure .#tillandsias-x86_64-musl              --out-link result-host
+          nix build -L --impure .#tillandsias-headless-x86_64-musl   --out-link result-hx
+          nix build -L --impure .#tillandsias-headless-aarch64-musl  --out-link result-ha
+
+      - name: Verify ephemeral secure-channel key is embedded (no dev seed fallback)
+        run: |
+          # The compile-time DEV_ROOT_SEED (b"tillandsias-dev-root-not-a-secret") must
+          # NOT appear in release binaries built with TILLANDSIAS_RELEASE_SECRET set.
+          # With LTO + optimization, the unreachable match arm in release_root_secret()
+          # is dead-code-eliminated, so the dev seed string is absent from .rodata.
+          # If it IS present, the env var was NOT propagated to the crane derivation
+          # and the binary uses the public fallback — a critical security gap.
+          for binary in result-host/bin/tillandsias result-hx/bin/tillandsias result-ha/bin/tillandsias; do
+            if [ ! -f "$binary" ]; then
+              echo "::error::Binary not found: $binary"
+              exit 1
+            fi
+            if strings "$binary" 2>/dev/null | grep -qF "tillandsias-dev-root-not-a-secret"; then
+              echo "::error::FAIL: ${binary} contains the public DEV_ROOT_SEED — TILLANDSIAS_RELEASE_SECRET was NOT embedded!"
+              echo "::error::Check that (1) the env var was set in the nix build step,"
+              echo "::error::(2) --impure was passed, and (3) flake.nix commonCraneArgs includes the env var."
+              exit 1
+            else
+              echo "✓ ${binary}: dev seed absent — release secret is active"
+            fi
+          done
 
       - name: Record Nix Build Duration and Assert Cache Performance
         if: always()

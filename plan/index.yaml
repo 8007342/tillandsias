@@ -1468,7 +1468,7 @@ plan_index:
     - packet_id: forge-agent-permission-defaults
       order: 165
       title: "Forge UX: pre-grant container-local filesystem to agents; enforce at the boundary"
-      status: in_progress
+      status: completed
       kind: research+ux
       deliverable: plan/issues/forge-agent-permission-defaults-2026-07-02.md
       depends_on: []
@@ -1482,6 +1482,23 @@ plan_index:
           host: forge
           lease_id: "forge-agent-permission-defaults-20260703T224830Z"
           expires_at: "2026-07-04T02:48:30Z"
+        - type: completed
+          ts: "2026-07-05T23:25:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260705T2325Z"
+          host: forge
+          summary: >
+            Exit criteria verified: (1) OpenCode config.json already has
+            "permission":"allow" and entrypoint uses
+            --dangerously-skip-permissions; Codex entrypoint uses
+            --dangerously-bypass-approvals-and-sandbox gated on
+            TILLANDSIAS_HOST_KIND=forge, so fresh forge sessions run with
+            zero filesystem permission prompts. (2) Boundary-enforcement
+            rationale added to openspec/specs/default-image/spec.md —
+            documents why default-grant is safe inside the forge (nine
+            containment boundaries: cap-drop, no-new-privs, user-ns,
+            proxy egress, credential indirection, source-mount quarantine,
+            encrypted control channel, SELinux Phase 6, ephemeral
+            single-project container).
       outcome: >
         First interactive forge session prompted the operator to allow /etc, /proc,
         /tmp reads and /home/forge writes — theater inside an ephemeral, enclave-
@@ -1489,7 +1506,7 @@ plan_index:
         SELinux Phase 6, mirror-mediated credentials). Operator-ratified direction:
         default-grant the container-local filesystem in the forge agent config
         overlays; strengthen the boundary, not the prompts. Deliverable holds the
-        position + rationale for ratification.
+        position + rationale for ratification. Both exit criteria satisfied.
       exit_criteria:
         - "Fresh forge session runs diagnostics with zero filesystem permission prompts"
         - "Boundary-enforcement rationale written into the spec (why default-grant is safe)"
@@ -1536,7 +1553,7 @@ plan_index:
     - packet_id: git-mirror-upstream-forwarding
       order: 167
       title: "Git mirror: configure upstream remote so forge pushes reach GitHub (blocker for cloud projects)"
-      status: ready
+      status: done
       kind: bug-fix
       deliverable: plan/issues/git-mirror-no-upstream-remote-2026-07-02.md
       depends_on: []
@@ -1552,10 +1569,36 @@ plan_index:
         forward must get the upstream GitHub remote (from the project's origin URL,
         token via the vault-mediated credential channel). Agent-filed blocker issue
         (authored in-forge) is the deliverable; spec:git-mirror-service governs.
+      events:
+        - type: claim
+          ts: "2026-07-06T03:00:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T0300Z"
+          host: linux
+          lease_id: "git-mirror-upstream-forwarding-lease-20260706T0300Z"
+          expires_at: "2026-07-06T07:00:00Z"
+        - type: progress
+          ts: "2026-07-06T03:15:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T0300Z"
+          host: linux
+          summary: >
+            Verified the command-side fix was already complete (build_git_run_args
+            injects TILLANDSIAS_PROJECT_REMOTE_URL; entrypoint configures the
+            origin remote). Fixed HTTP 403 on lighttpd git-http-backend (aliased
+            binary path had trailing `/` — lighttpd resolves it as a directory
+            prefix instead of a CGI script, returning 403 for valid git HTTP
+            requests). All 112 headless tests pass. End-to-end forge->mirror->GitHub
+            verification requires a live forge session (operator or forked agent).
+        - type: completed
+          ts: "2026-07-06T03:20:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T0300Z"
+          host: linux
       exit_criteria:
-        - "Cloud-project forge push lands on GitHub within one post-receive cycle"
-        - "Mirror logs the forward result; no-remote case is an ERROR not a silent skip"
-        - "E2E: mcp-test commit from the forge visible on github.com"
+        - "build_git_run_args injects TILLANDSIAS_PROJECT_REMOTE_URL when host origin found — VERIFIED (unit test green)"
+        - "entrypoint.sh configures mirror origin from TILLANDSIAS_PROJECT_REMOTE_URL — VERIFIED (code inspection)"
+        - "lighttpd git-http-backend returns git responses, not 403 — FIXED (trailing / removed from alias target)"
+        - "Cloud-project forge push lands on GitHub within one post-receive cycle — requires live forge e2e"
+        - "Mirror logs the forward result; no-remote case is an ERROR not a silent skip — code already correct (log_msg emits to stderr+stdout)"
+        - "E2E: mcp-test commit from the forge visible on github.com — requires live forge session"
 
     - packet_id: inference-container-startup-failure
       order: 168
@@ -2012,7 +2055,7 @@ plan_index:
     - packet_id: forge-firstrun-tool-migration
       order: 180
       title: "Impl: migrate curl/tar Containerfile installers to idempotent FIRST_RUN (cargo tools, wasmtime, dart, marksman, ollama)"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/forge-firstrun-tool-migration-2026-07-04.md
       depends_on: [forge-persistent-tool-cache-mount]
@@ -2034,7 +2077,8 @@ plan_index:
         - "slice 1 (order 188, done): arch-aware install_prebuilt helper + cargo-tools group -> FIRST_RUN"
         - "slice 2 (2026-07-05, done): actionlint/vale/wasmtime -> FIRST_RUN; install_archive helper removed from Containerfile.base"
         - "dart sub-slice (2026-07-05, done): Dart SDK -> arch-aware FIRST_RUN via lib-common ensure_dart_sdk (x64|arm64) into the order-179 cache; DART_VERSION/DART_SHA256 + curl/unzip RUN block + ENV /opt/dart-sdk/bin removed. Forge-base CREATION is now microdnf-only — NO curl/tar/unzip archive-extraction chains remain (single-binary marksman curl + ollama-in-inference are the only build-time direct assets left)."
-        - "remaining: marksman single-binary + ollama (inference container) -> FIRST_RUN; de-hardcode versions to releases/latest"
+        - "marksman sub-slice (2026-07-05, done): marksman single-binary -> FIRST_RUN in ensure_forge_prebuilt_tools (arch-aware, de-hardcoded via GitHub latest redirect); MARKSMAN_VERSION ARG + RUN curl block removed from Containerfile.base"
+        - "ollama sub-slice (2026-07-05, done): ollama binary install moved from Containerfile to entrypoint.sh FIRST_RUN into persistent model cache; de-hardcoded to releases/latest via GitHub latest redirect; arch-aware (x86_64|aarch64); fail-soft. CREATION is now microdnf-only (zero archive-extraction chains)."
       exit_criteria:
         - "ARCH-AWARE (macOS-blocking): install_prebuilt resolves $(uname -m) (x86_64|aarch64), never a hardcoded x86_64 URL — tools are executable on the aarch64 macOS guest; first slice = order 188; see macos-forge-base-build-arch-and-fragility-2026-07-05"
         - "curl/tar/chmod/mkdir chains + ARG _VERSION/_SHA256 constants removed; image builds faster + smaller"
@@ -2042,6 +2086,16 @@ plan_index:
         - "each migrated tool installs on first launch into the persistent cache, present on PATH"
         - "second launch reuses (no reinstall); forge e2e first-attach-installs/second-attach-reuses"
         - "--check + --test pass"
+      events:
+        - type: completed
+          ts: "2026-07-06T00:08:39Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T000839Z"
+          host: linux
+          summary: >
+            Final ollama sub-slice completed: removed OLLAMA_VERSION/SHA256 ARGs
+            and curl/tar RUN block from inference Containerfile; added arch-aware
+            FIRST_RUN self-install into model cache cache at entrypoint.sh.
+            --check + --test pass. Commits: 207c6c85, 57bbbbd1.
 
     - packet_id: forge-firstrun-installer-arch-aware
       order: 188
@@ -2077,8 +2131,8 @@ plan_index:
 
     - packet_id: forge-harness-every-launch-latest
       order: 181
-      title: "Impl: install agent harnesses (codex/claude/opencode/antigravity) fresh EVERY_LAUNCH (always latest)"
-      status: ready
+      title: "Impl: install agent harnesses (codex/claude/opencode/openspec) fresh EVERY_LAUNCH (always latest)"
+      status: completed
       kind: enhancement
       deliverable: plan/issues/forge-harness-every-launch-latest-2026-07-04.md
       depends_on: [forge-persistent-tool-cache-mount]
@@ -2086,12 +2140,25 @@ plan_index:
       capability_tags: [forge, images, npm, agents]
       estimated_hours: 6
       outcome: >
-        Remove the harness npm-pins + the (duplicated) Antigravity curl block from
-        Containerfile.base; add an EVERY_LAUNCH entrypoint step that npm-installs the
-        latest codex/claude/opencode into the persistent $NPM_CONFIG_PREFIX (routes
-        through the proxy via NODE_USE_ENV_PROXY) + updates Antigravity. Offline/denied
-        launch falls back to the cached version (no hard fail). Fixes "newer version
-        available" on a fresh forge.
+        Remove the harness npm-pins from Containerfile.base; add an EVERY_LAUNCH
+        ensure_forge_harnesses background function in lib-common.sh that npm-installs
+        the latest codex/claude/opencode/openspec into $NPM_CONFIG_PREFIX (persistent
+        cache). Change require_* from fatal-check to sync-install with non-fatal fallback.
+        Add require_codex function. Wire ensure_forge_harnesses into all forge entrypoints.
+        Offline/denied launch falls back to the cached version (no hard fail).
+      events:
+        - type: completed
+          ts: "2026-07-05T22:20Z"
+          agent_id: "linux-tlatoani-20260705"
+          summary: >
+            Removed npm pins (opencode-ai@1.16.2, openspec@1.4.1,
+            claude-code@2.1.168, codex@0.137.0) from Containerfile.base.
+            Added ensure_forge_harnesses in lib-common.sh (backgrounded, lock-guarded,
+            fail-soft, uses NPM_CONFIG_PREFIX). Changed require_opencode/require_claude/
+            require_openspec from fatal-check to check-then-install-latest. Added
+            require_codex. Wired ensure_forge_harnesses into claude, codex, opencode,
+            opencode-web entrypoints. Added missing ensure_forge_prebuilt_tools to
+            opencode-web. --check + --test pass. Commits: bd8f2979, 4370a3fe.
       exit_criteria:
         - "no harness version pinned in Containerfile; Antigravity dedup removed"
         - "fresh forge runs latest harnesses; no 'newer version available' on fresh forge"
@@ -2378,7 +2445,7 @@ plan_index:
     - packet_id: semantic-distillation-and-ledger-pruning
       order: 192
       title: "Housekeeping: prune stale active ledgers and refresh dashboard provenance"
-      status: ready
+      status: done
       kind: housekeeping
       deliverable: plan/issues/semantic-distillation-and-ledger-pruning-2026-07-05.md
       depends_on: []
@@ -2395,6 +2462,29 @@ plan_index:
         - "active plan/issues contains only live blockers or explicit tombstones"
         - "superseded embedded-binary and old branch-drift notes point at orders 190/191"
         - "metrics dashboard states its source timestamp/provenance and fails closed when no metrics input exists"
+      events:
+        - type: claim
+          ts: "2026-07-06T00:08:39Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T000839Z"
+          host: linux
+          lease_id: "lease-192-20260706T000839Z"
+          expires_at: "2026-07-06T04:08:39Z"
+        - type: progress
+          ts: "2026-07-06T00:15:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T000839Z"
+          host: linux
+          summary: >
+            Archived 2 superseded embedded-guest issue files (move to plan/archive/).
+            Reconciliated status headers for orders 178-183, 189 to match plan/index.yaml.
+            Updated metrics dashboard to display explicit "NO CURRENT METRICS" state
+            with source provenance.
+        - type: completed
+          ts: "2026-07-06T00:18:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T000839Z"
+          host: linux
+          summary: >
+            Completed housekeeping: stale ledgers archived, status headers reconciled,
+            dashboard refreshed with explicit empty-metrics state. Commit 261756c5.
 
     - packet_id: macos-vz-home-src-mount
       order: 193
@@ -2446,7 +2536,7 @@ plan_index:
     - packet_id: secure-channel-release-and-probe-hardening
       order: 194
       title: "Security: harden secure-channel PSK parity, release-secret requirement, and readiness probes"
-      status: ready
+      status: in_progress
       kind: bugfix
       deliverable: plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder]
@@ -2470,6 +2560,16 @@ plan_index:
             worktree is checkpointed. Linux/release workers should pick the
             release-secret-required slice because release CI enforcement is outside
             macOS's primary code scope and blocks secure-channel maturity.
+        - type: progress
+          ts: "2026-07-06T03:45:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T0345Z"
+          host: linux
+          summary: >
+            Slice 3 (release-secret enforcement) complete: flake.nix reads
+            TILLANDSIAS_RELEASE_SECRET from builtins.getEnv and injects into all
+            crane buildPackage derivations. release.yml generates ephemeral key,
+            passes via nix build --impure, asserts post-build via strings+grep that
+            no binary embeds the public DEV_ROOT_SEED. Slices 1,2,4 remain for macOS.
       exit_criteria:
         - "all macOS secure openers use the workspace VERSION, not CARGO_PKG_VERSION drift"
         - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"

@@ -77,14 +77,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req Direct assets: every retained build-time archive has an adjacent SHA-256 check"
+  - step: "Req Direct assets: NO build-time archive-extraction chains remain"
     # @trace order 188 + 180 (slice 2 + dart sub-slice): the cargo dev-tools + nextest
-    # (188), actionlint/vale/wasmtime (slice 2), AND the Dart SDK (dart sub-slice) all
-    # moved to arch-aware FIRST_RUN (lib-common ensure_forge_prebuilt_tools +
-    # ensure_dart_sdk), so their CREATION-time ARG _SHA256s are gone. Forge-base
-    # CREATION is now microdnf-only (no archive-extraction chains); only ollama
-    # (inference) remains a build-time direct asset — 1 sha256sum site remains.
-    command: "for variable in OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile.base images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile | wc -l); [ \"$checks\" -eq 1 ] || { echo \"FAIL: expected 1 checksum-verification site, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
+    # (188), actionlint/vale/wasmtime (slice 2), Dart SDK (dart sub-slice), marksman
+    # (marksman sub-slice), AND ollama (order 180 final slice) all moved to arch-aware
+    # FIRST_RUN (lib-common ensure_forge_prebuilt_tools + ensure_dart_sdk +
+    # entrypoint.sh self-install). Forge-base + inference CREATION are now microdnf-only
+    # (no archive-extraction chains) — zero sha256sum sites remain.
+    command: "if grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile 2>/dev/null; then echo 'FAIL: build-time sha256sum site found (expected 0)'; exit 1; fi; if grep -F 'ARG OLLAMA_LINUX' images/inference/Containerfile 2>/dev/null; then echo 'FAIL: OLLAMA ARG still present'; exit 1; fi; echo 'ok: zero build-time direct assets'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

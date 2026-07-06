@@ -4,7 +4,7 @@
 - filed: 2026-07-05
 - owner: linux
 - pickup_role: linux
-- status: ready
+- status: done
 - trace: spec:vsock-transport, plan/issues/secure-channel-maturity-ladder-2026-07-04.md
 
 ## Problem
