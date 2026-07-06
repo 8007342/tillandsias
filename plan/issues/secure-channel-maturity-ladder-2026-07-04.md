@@ -74,9 +74,13 @@ objective, checkable condition, not a vibe.
   - flag OFF: all three platforms build + connect exactly as today (no regression);
   - flag ON: each platform VM-smokes a real host↔guest handshake e2e (e.g.
     `--github-login` over the encrypted wire) with logged evidence;
-  - failure-closed litmus green: with flag ON, a plaintext / wrong-version peer is
-    rejected `Unauthorized` and served no `PtyOpen` (order 137 /
-    `vsock-unauthenticated-peer-rejected`);
+  - failure-closed litmus green: with flag ON, a plaintext / wrong-version peer
+    never receives a `HelloAck` or `PtyOpen` — the pre-handshake Noise failure
+    has no control-envelope channel to carry an `Unauthorized` response over,
+    so failing closed means the responder closes/errors the stream before any
+    envelope is ever read or written (order 137 /
+    `vsock-unauthenticated-peer-rejected`; primitive-level proof:
+    `tillandsias-secure-channel::secure_stream::tests::plaintext_peer_is_rejected`);
   - GuestContainer hop wired behind the same flag (145 slice 6).
 
 ### M2 — Opt-in SOAK (flag works ON, still OFF by default)
