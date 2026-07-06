@@ -22,12 +22,17 @@
 #![allow(dead_code)]
 
 #[cfg(target_os = "macos")]
+use std::io;
+#[cfg(target_os = "macos")]
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::time::Duration;
 
 use crate::{ProvisionManifest, VmError, VmRuntime};
+
+#[cfg(target_os = "macos")]
+const GUEST_TRANSPORT_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Virtualization.framework-backed VM runtime.
 ///
@@ -1722,6 +1727,96 @@ impl VzRuntime {
     }
 }
 
+#[cfg(target_os = "macos")]
+#[async_trait::async_trait]
+impl tillandsias_control_wire::guest_transport::GuestTransport for VzRuntime {
+    async fn open_stream(
+        &self,
+        ep: &tillandsias_control_wire::guest_transport::GuestEndpoint,
+    ) -> io::Result<Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>>
+    {
+        let port = macvz_port(ep)?;
+        let stream = self
+            .open_vsock_stream(port, GUEST_TRANSPORT_CONNECT_TIMEOUT)
+            .await
+            .map_err(macvz_io_error)?;
+        Ok(Box::new(stream))
+    }
+
+    async fn exec(
+        &self,
+        ep: &tillandsias_control_wire::guest_transport::GuestEndpoint,
+        req: tillandsias_control_wire::guest_transport::ExecRequest,
+    ) -> io::Result<tillandsias_control_wire::guest_transport::ExecOutput> {
+        let port = macvz_port(ep)?;
+        let argv_refs: Vec<&str> = req.argv.iter().map(String::as_str).collect();
+        let stdin = req.stdin.unwrap_or_default();
+
+        let stream = self
+            .open_vsock_stream(port, GUEST_TRANSPORT_CONNECT_TIMEOUT)
+            .await
+            .map_err(macvz_io_error)?;
+        let out = crate::vsock_exec::exec_over_stream_with_input(stream, &argv_refs, &stdin)
+            .await
+            .map_err(io::Error::other)?;
+
+        Ok(tillandsias_control_wire::guest_transport::ExecOutput {
+            stdout: out.stdout,
+            stderr: vec![],
+            exit_code: out.exit.code,
+        })
+    }
+
+    async fn exec_streaming(
+        &self,
+        ep: &tillandsias_control_wire::guest_transport::GuestEndpoint,
+        req: tillandsias_control_wire::guest_transport::ExecRequest,
+        on_chunk: &mut (dyn FnMut(tillandsias_control_wire::guest_transport::ExecChunk) + Send),
+    ) -> io::Result<tillandsias_control_wire::guest_transport::ExecOutput> {
+        let port = macvz_port(ep)?;
+        let argv_refs: Vec<&str> = req.argv.iter().map(String::as_str).collect();
+        let stdin = req.stdin.unwrap_or_default();
+
+        let stream = self
+            .open_vsock_stream(port, GUEST_TRANSPORT_CONNECT_TIMEOUT)
+            .await
+            .map_err(macvz_io_error)?;
+        let out = crate::vsock_exec::exec_over_stream_with_input_streaming(
+            stream,
+            &argv_refs,
+            &stdin,
+            |bytes: &[u8]| {
+                on_chunk(
+                    tillandsias_control_wire::guest_transport::ExecChunk::Stdout(bytes.to_vec()),
+                )
+            },
+        )
+        .await
+        .map_err(io::Error::other)?;
+
+        Ok(tillandsias_control_wire::guest_transport::ExecOutput {
+            stdout: out.stdout,
+            stderr: vec![],
+            exit_code: out.exit.code,
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macvz_port(ep: &tillandsias_control_wire::guest_transport::GuestEndpoint) -> io::Result<u32> {
+    match ep {
+        tillandsias_control_wire::guest_transport::GuestEndpoint::MacVz { port } => Ok(*port),
+        other => Err(io::Error::other(format!(
+            "VzRuntime GuestTransport: unsupported endpoint {other:?}"
+        ))),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macvz_io_error(err: OpenVsockError) -> io::Error {
+    io::Error::other(format!("VzRuntime GuestTransport: {err}"))
+}
+
 // ---------------------------------------------------------------------------
 // Non-macOS: cross-platform link stubs.
 // ---------------------------------------------------------------------------
@@ -1826,6 +1921,34 @@ mod tests {
     fn vz_runtime_is_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<VzRuntime>();
+    }
+
+    /// The macOS VZ runtime is the Darwin backend for the normalized
+    /// host<->guest transport facade.
+    ///
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_runtime_implements_guest_transport() {
+        fn assert_guest_transport<T: tillandsias_control_wire::guest_transport::GuestTransport>() {}
+        assert_guest_transport::<VzRuntime>();
+    }
+
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macvz_endpoint_accepts_only_macos_vz() {
+        use tillandsias_control_wire::guest_transport::GuestEndpoint;
+
+        assert_eq!(
+            macvz_port(&GuestEndpoint::MacVz { port: 42420 }).unwrap(),
+            42420
+        );
+        let err = macvz_port(&GuestEndpoint::Wsl { port: 42420 }).unwrap_err();
+        assert!(
+            err.to_string().contains("unsupported endpoint"),
+            "unexpected error: {err}"
+        );
     }
 
     /// The fetch unit must remain an idempotent oneshot. If systemd skips it
