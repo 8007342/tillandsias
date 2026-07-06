@@ -1328,6 +1328,11 @@ plan_index:
         polling loops. Curated strings should be concise, teachable, and
         consistent across hosts.
       events:
+        - type: expired
+          ts: "2026-07-06T05:00:00Z"
+          agent_id: "linux-bigp pickle-20260706T0500Z"
+          host: linux
+          summary: "Lease expired; packet returned to ready for macOS or any host."
         - type: blocked
           ts: "2026-07-06T18:47:14Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1847Z"
@@ -1347,12 +1352,6 @@ plan_index:
         - "Tray status changes are event-driven, not timer-polled"
         - "Login/project/forge states become visible when ready"
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
-      events:
-        - type: expired
-          ts: "2026-07-06T05:00:00Z"
-          agent_id: "linux-bigp pickle-20260706T0500Z"
-          host: linux
-          summary: "Lease expired; packet returned to ready for macOS or any host."
     - packet_id: headless-podman-unix-streams
       order: 157
       title: "Headless ↔ Podman: Unix socket async streams (replace podman exec + HTTP poll)"
@@ -1546,6 +1545,21 @@ plan_index:
       order: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
       status: ready
+      kind: bug-fix+enhancement
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      depends_on: [race-safeguards-research]
+      pickup_role: windows
+      capability_tags: [windows, tray, vm-layer, concurrency]
+      estimated_hours: 8
+      outcome: >
+        Remaining Windows scope: (R1) start poke retries with backoff +
+        WSL-service-sane preflight; drain is observable (lock/marker) so a
+        relaunch waits for teardown instead of racing it; automatic or one-click
+        recovery from WSL/Service/E_UNEXPECTED (guided wsl --shutdown). (R2)
+        single-instance guard for the Windows tray, matching the headless
+        SingletonGuard. (R3) host-side serialization or safe queueing of
+        concurrent Windows PTY launch clicks. (R9) Windows embedded fetch script
+        atomicity. macOS R2/R3/R9 analog slices are complete on osx-next.
       events:
         - type: progress
           ts: "2026-07-06T05:40:00Z"
@@ -1569,22 +1583,6 @@ plan_index:
             start() preflights with is_wsl_service_sane() and retries with exponential backoff,
             falling back to perform_wsl_shutdown_recovery() on wedge status (-1);
             launch_open_shell_terminal debounces concurrent PTY launch clicks within 1500ms.
-      kind: bug-fix+enhancement
-      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
-      depends_on: [race-safeguards-research]
-      pickup_role: windows
-      capability_tags: [windows, tray, vm-layer, concurrency]
-      estimated_hours: 8
-      outcome: >
-        Remaining Windows scope: (R1) start poke retries with backoff +
-        WSL-service-sane preflight; drain is observable (lock/marker) so a
-        relaunch waits for teardown instead of racing it; automatic or one-click
-        recovery from WSL/Service/E_UNEXPECTED (guided wsl --shutdown). (R2)
-        single-instance guard for the Windows tray, matching the headless
-        SingletonGuard. (R3) host-side serialization or safe queueing of
-        concurrent Windows PTY launch clicks. (R9) Windows embedded fetch script
-        atomicity. macOS R2/R3/R9 analog slices are complete on osx-next.
-      events:
         - type: claim
           ts: "2026-07-06T18:42:33Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"
