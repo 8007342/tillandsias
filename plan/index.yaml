@@ -2544,6 +2544,16 @@ plan_index:
             crane buildPackage derivations. release.yml generates ephemeral key,
             passes via nix build --impure, asserts post-build via strings+grep that
             no binary embeds the public DEV_ROOT_SEED. Slices 1,2,4 remain for macOS.
+        - type: claim
+          ts: "2026-07-06T15:30:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1530Z"
+          host: macos
+          lease_id: "secure-channel-release-and-probe-hardening-claim-1"
+          expires_at: "2026-07-06T19:30:00Z"
+          summary: >
+            Claiming remaining slices 1, 2, 4 (PSK VERSION-source parity,
+            wait_phase_ready/probe_vm_phase secure-or-plain routing, and plan-text
+            failure-closed wording) on osx-next.
       exit_criteria:
         - "all macOS secure openers use the workspace VERSION, not CARGO_PKG_VERSION drift"
         - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"
