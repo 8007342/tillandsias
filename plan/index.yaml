@@ -2642,7 +2642,7 @@ plan_index:
             spot-checks show a mix of real drift, local-build-state gaps,
             and macOS/BSD tooling gaps in the checks themselves).
           commits:
-            - "(pending — see linux-next push this cycle)"
+            - "53ba8f36"
       exit_criteria:
         - "scripts/run-litmus-test.sh <any-litmus> --phase pre-build --size instant --compact exits with a real pass/fail verdict (not a bash syntax error) on stock macOS /bin/bash"
 
@@ -2779,7 +2779,7 @@ plan_index:
             passes 9/9 (was 8/9). No product code changed — only the litmus
             check.
           commits:
-            - "(pending — see linux-next push this cycle)"
+            - "4b8c15f9"
       exit_criteria:
         - "litmus:macos-tray-architectural-invariants passes end-to-end (scripts/run-litmus-test.sh macos-native-tray --phase pre-build --size instant)"
 
@@ -2825,9 +2825,59 @@ plan_index:
             litmus:pty-attach-project-threading-symmetric now passes 5/5
             (was 4/5). No windows-tray code touched.
           commits:
-            - "(pending — see linux-next push this cycle)"
+            - "4b8c15f9"
       exit_criteria:
         - "litmus:pty-attach-project-threading-symmetric passes end-to-end (scripts/run-litmus-test.sh macos-native-tray --phase pre-build --size instant)"
+
+    - packet_id: macos-build-check-podman-wrapper
+      order: 201
+      title: "macOS: ./build.sh --check fails in require_podman (Homebrew Podman rejects Linux storage flags)"
+      status: done
+      kind: bugfix
+      deliverable: plan/issues/macos-build-check-podman-wrapper-2026-07-05.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, podman, build, dev-loop]
+      estimated_hours: 2
+      outcome: >
+        scripts/common.sh's wrapper-selection logic required a `podman info`
+        connectivity probe to succeed before skipping the Linux-only local-
+        VFS-storage wrapper (--root/--runroot/--tmpdir). Homebrew Podman on
+        macOS is ALWAYS a remote-machine client and rejects those flags
+        regardless of probe outcome, so on any macOS host where the probe
+        failed (e.g. no Podman machine currently running), build.sh --check
+        fell through to the wrapper branch and failed with a confusing
+        "unknown flag: --root" instead of Podman's own actionable error.
+        Fixed by having macOS unconditionally skip the local-storage wrapper
+        branch. That unblocked ./build.sh --check far enough to reach real
+        compilation for the FIRST TIME on this host, surfacing 2 more
+        -D warnings blockers in Linux-owned crates (tillandsias-podman's
+        path_is_writable/require_desktop_user_session/
+        require_headless_service_account, tillandsias-headless's
+        vault_service_base_url) — all the same shape: a helper whose only
+        non-test caller lives inside a #[cfg(target_os = "linux")] block,
+        so non-Linux builds saw it as dead/unused code. Fixed with minimal,
+        platform-scoped allow attributes / a tightened cfg boundary (no
+        Linux behavior change), marked PLEASE REVIEW (linux) per the
+        unblock-with-NOOP convention.
+      events:
+        - type: completed
+          ts: "2026-07-06T17:15:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1645Z"
+          host: macos
+          summary: >
+            `./build.sh --check` now exits 0 on macOS (fmt + type-check +
+            strict clippy all pass) — first time this command has completed
+            successfully on this host. `cargo test -p tillandsias-podman -p
+            tillandsias-headless`: all pass except
+            test_missing_image_error_handling, which requires a running
+            Podman machine connection (none running on this dev host — a
+            pre-existing environment gap, unrelated to this fix).
+          commits:
+            - "be2968c5"
+      exit_criteria:
+        - "PATH=\"/opt/homebrew/bin:$PATH\" ./build.sh --check exits 0 on a macOS host with Homebrew Podman installed"
 
     - packet_id: silverblue-immutable-development-workflow
       order: 195
