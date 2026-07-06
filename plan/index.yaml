@@ -1315,8 +1315,19 @@ plan_index:
     - packet_id: race-safeguards-research
       order: 160
       title: "Research: race-surface inventory + safeguard strategy (concurrent launches, lifecycle churn)"
-      status: ready
+      status: claimed
       kind: research
+      events:
+        - type: claim
+          ts: "2026-07-06T17:40:00Z"
+          agent_id: "linux-ccr-fable5-20260706T1734Z"
+          host: linux
+          lease_id: "race-safeguards-research-20260706T1740Z"
+          expires_at: "2026-07-06T21:40:00Z"
+          note: >
+            Claimed from a Claude Code remote sandbox pinned to branch
+            claude/meta-orchestration-skill-uhitvv (based on linux-next
+            4835931e); ledger writes reach linux-next via PR, not direct push.
       deliverable: plan/issues/race-safeguards-research-2026-07-02.md
       depends_on: []
       pickup_role: any
