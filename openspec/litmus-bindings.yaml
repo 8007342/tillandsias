@@ -900,5 +900,6 @@ specs:
   status: active
   litmus_tests:
   - litmus:secure-control-wire-guest-responder-shape
-  coverage_ratio: 40
-  last_verified: '2026-07-05'
+  - litmus:psk-input-parity-shape
+  coverage_ratio: 55
+  last_verified: '2026-07-06'

@@ -1,0 +1,74 @@
+# @trace plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+# @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
+#
+# All `channel_psk(...)` call sites (every host initiator + guest responder,
+# both hops) must derive the PSK from the same workspace-release version
+# source, not per-crate CARGO_PKG_VERSION. A crate-version drift would make
+# two builds of the *same* workspace release compute different PSKs (or the
+# same PSK across two *different* releases), silently breaking the anti-
+# downgrade property `channel_psk(VERSION, WIRE_VERSION, hop)` is supposed to
+# give: peers on different builds must fail to handshake, not the reverse.
+name: litmus:psk-input-parity-shape
+spec: host-guest-transport
+phase: pre-build
+description: >
+  Pin PSK input parity across all channel_psk call sites: macOS action_host.rs
+  + diagnose.rs, guest vsock_server.rs, windows hvsocket.rs, and shared
+  host-shell vsock_client.rs all derive from the workspace VERSION file
+  (via workspace_version() / WORKSPACE_VERSION / host-shell's crate::version()),
+  never from a bare CARGO_PKG_VERSION.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-secure-channel/src/lib.rs
+
+critical_path:
+  - step: "no channel_psk call site derives its version input from CARGO_PKG_VERSION"
+    command: >
+      if grep -rn 'channel_psk(env!("CARGO_PKG_VERSION")' crates/ --include='*.rs'; then
+        echo 'FAIL: PSK derived from CARGO_PKG_VERSION'; exit 1;
+      else
+        echo 'ok: no cargo-pkg-version psk drift';
+      fi
+    timeout_ms: 5000
+    expected_behavior: "ok: no cargo-pkg-version psk drift"
+
+  - step: "every known channel_psk call site uses the workspace VERSION source"
+    command: >
+      for f in crates/tillandsias-macos-tray/src/action_host.rs
+               crates/tillandsias-macos-tray/src/diagnose.rs
+               crates/tillandsias-headless/src/vsock_server.rs
+               crates/tillandsias-windows-tray/src/hvsocket.rs
+               crates/tillandsias-host-shell/src/vsock_client.rs; do
+        grep -A2 'channel_psk(' "$f" | grep -qE 'workspace_version\(\)|WORKSPACE_VERSION|crate::version\(\)' \
+          || { echo "FAIL: $f does not use workspace VERSION for PSK"; exit 1; }
+      done
+      echo 'ok: all initiators + guest responder use workspace VERSION'
+    timeout_ms: 5000
+    expected_behavior: "ok: all initiators + guest responder use workspace VERSION"
+
+  - step: "host-shell's shared version() helper itself sources WORKSPACE_VERSION (not a crate literal)"
+    command: >
+      grep -A1 'pub fn version()' crates/tillandsias-host-shell/src/lib.rs | grep -qF 'WORKSPACE_VERSION' \
+        && echo 'ok: version() sources WORKSPACE_VERSION' \
+        || { echo 'FAIL: host-shell version() no longer sources WORKSPACE_VERSION'; exit 1; }
+    timeout_ms: 3000
+    expected_behavior: "ok: version() sources WORKSPACE_VERSION"
+
+observability:
+  traces:
+    - "@trace spec:host-guest-transport"
+  expected_log: "PSK input parity pinned across all channel_psk call sites (workspace VERSION, no CARGO_PKG_VERSION drift)"
+  log_fields:
+    spec: "host-guest-transport"
+    test: "psk-input-parity-shape"
+    artifact: "crates/tillandsias-secure-channel/src/lib.rs"
+
+rollback:
+  on_failure: >
+    A channel_psk call site regressed to a per-crate CARGO_PKG_VERSION (or some
+    other non-workspace source). Restore it to workspace_version() /
+    WORKSPACE_VERSION / host-shell's crate::version() so every host initiator
+    and the guest responder derive the same PSK for the same workspace release,
+    preserving the anti-downgrade property.

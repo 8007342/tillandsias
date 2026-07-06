@@ -2,7 +2,7 @@
 
 - class: security+release hardening
 - owner: any, with macOS evidence where VZ probes are involved
-- status: ready
+- status: done
 - order: 194
 - trace: plan/issues/secure-channel-maturity-ladder-2026-07-04.md,
   plan/issues/secure-channel-flag-and-maturity-metrics-2026-07-04.md
@@ -73,3 +73,43 @@ Remaining work for macOS pickup (slices 1, 2, 4):
 
 MacOS can own the PSK parity and VZ readiness-probe slices once the local
 `osx-next` WIP is checkpointed and the branch has merged `origin/linux-next`.
+
+## macOS slices 1, 2, 4 complete — 2026-07-06T16:00Z (order 194, ALL SLICES DONE)
+
+- **Slice 1 (PSK normalization):** audited all 5 `channel_psk` call sites
+  (`tillandsias-macos-tray/src/action_host.rs`, `.../diagnose.rs`,
+  `tillandsias-headless/src/vsock_server.rs`,
+  `tillandsias-windows-tray/src/hvsocket.rs`,
+  `tillandsias-host-shell/src/vsock_client.rs`) — all already derive from the
+  workspace `VERSION` file (via `workspace_version()` / `WORKSPACE_VERSION` /
+  host-shell's `crate::version()`); no live `CARGO_PKG_VERSION` drift found. A
+  prior commit (`007c57e5`) had already closed this gap. Added
+  `litmus:psk-input-parity-shape` (`openspec/litmus-tests/litmus-psk-input-parity-shape.yaml`)
+  so a regression fails loud instead of silently drifting again.
+- **Slice 2 (readiness-probe secure routing):** `VzRuntime::wait_phase_ready`
+  (`crates/tillandsias-vm-layer/src/vz.rs`) connected raw over vsock and
+  called `probe_vm_phase` directly — bypassing the secure-or-plain check user
+  actions go through. Since `tillandsias-vm-layer` deliberately does not
+  depend on `tillandsias-secure-channel`, the fix is dependency injection:
+  `wait_phase_ready` now takes a caller-supplied
+  `probe_once(Duration) -> impl Future<Output=Result<VmPhase,String>>`
+  closure. All 4 `diagnose.rs` call sites (`--exec-guest`,
+  `--list-cloud-projects`, GitHub login, and the 4th diagnostic path) now
+  pass a new `probe_phase_secure_or_plain()` helper that reuses the existing
+  `open_control_wire_stream()` opener — the same one `--exec-guest` etc. use
+  — so readiness probing never bypasses `TILLANDSIAS_SECURE_CONTROL_WIRE=on`.
+  Added `probe_phase_secure_or_plain_uses_the_secure_or_plain_opener` (a
+  source-pin unit test) covering `litmus:secure-wait-phase-ready`.
+- **Slice 4 (plan-text wording):** reworded the M1 gate in
+  `secure-channel-maturity-ladder-2026-07-04.md` — a plaintext/wrong-version
+  peer failing closed means no `HelloAck`/`PtyOpen` and the stream is
+  closed/errored, NOT a literal `Unauthorized` response frame (there is no
+  control-envelope channel before a successful handshake to carry one over).
+  Cited the primitive-level proof test
+  (`tillandsias-secure-channel::secure_stream::tests::plaintext_peer_is_rejected`).
+- **Evidence:** `cargo test -p tillandsias-vm-layer`: 44/44 pass. `cargo test
+  -p tillandsias-macos-tray`: 54/54 pass (1 ignored). `cargo clippy -p
+  tillandsias-vm-layer -p tillandsias-macos-tray --all-targets`: 0 new
+  warnings (3 pre-existing ones filed separately as order 197).
+- **Commit:** `9126986b` on `osx-next`.
+- **Order 194 is now fully done** (all 4 slices across linux + macos closed).

@@ -2510,7 +2510,7 @@ plan_index:
     - packet_id: secure-channel-release-and-probe-hardening
       order: 194
       title: "Security: harden secure-channel PSK parity, release-secret requirement, and readiness probes"
-      status: in_progress
+      status: done
       kind: bugfix
       deliverable: plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder]
@@ -2554,11 +2554,84 @@ plan_index:
             Claiming remaining slices 1, 2, 4 (PSK VERSION-source parity,
             wait_phase_ready/probe_vm_phase secure-or-plain routing, and plan-text
             failure-closed wording) on osx-next.
+        - type: completed
+          ts: "2026-07-06T16:00:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1530Z"
+          host: macos
+          summary: >
+            Slices 1, 2, 4 complete (all 4 slices of order 194 now done).
+            Slice 1: researched all 5 channel_psk call sites (action_host.rs,
+            diagnose.rs, guest vsock_server.rs, windows hvsocket.rs, host-shell
+            vsock_client.rs) — all already used workspace VERSION (no live
+            CARGO_PKG_VERSION drift found; a prior fix already closed it).
+            Added litmus:psk-input-parity-shape to pin it against regression.
+            Slice 2: VzRuntime::wait_phase_ready now takes a caller-supplied
+            probe_once(Duration) -> Future<Output=Result<VmPhase,String>>
+            closure instead of connecting raw internally (vm-layer stays
+            secure-channel-agnostic, no new crate dependency); all 4
+            diagnose.rs call sites pass a new probe_phase_secure_or_plain()
+            helper that reuses the same open_control_wire_stream() opener as
+            user actions, so readiness probing never bypasses secure mode.
+            Added probe_phase_secure_or_plain_uses_the_secure_or_plain_opener
+            source-pin test (litmus:secure-wait-phase-ready). Slice 4:
+            reworded the M1 gate in secure-channel-maturity-ladder-2026-07-04.md
+            — failure-closed means no HelloAck/PtyOpen + stream close, not a
+            literal `Unauthorized` response frame (there is no envelope
+            channel before a successful handshake).
+            `cargo test -p tillandsias-vm-layer`: 44/44 pass.
+            `cargo test -p tillandsias-macos-tray`: 54/54 pass (1 ignored).
+            `cargo clippy -p tillandsias-vm-layer -p tillandsias-macos-tray
+            --all-targets`: 0 new warnings (3 pre-existing, unrelated, filed
+            separately as order 197).
+          commits:
+            - "9126986b"
       exit_criteria:
         - "all macOS secure openers use the workspace VERSION, not CARGO_PKG_VERSION drift"
         - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"
         - "release CI fails if release artifacts would use the public dev seed"
         - "litmus coverage: psk-input-parity, secure-wait-phase-ready, release-secret-required"
+
+    - packet_id: macos-litmus-runner-bash-version-gap
+      order: 196
+      title: "macOS: scripts/run-litmus-test.sh requires bash 4+ (declare -A), host ships bash 3.2"
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/macos-litmus-runner-bash-version-gap-2026-07-06.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, tooling, litmus, dev-loop]
+      estimated_hours: 1
+      outcome: >
+        scripts/run-litmus-test.sh uses declare -A (bash 4+); stock macOS ships
+        Apple's frozen bash 3.2 as /bin/bash, so the canonical litmus runner fails
+        outright on macOS hosts with no Homebrew bash installed. Either rewrite the
+        runner with bash-3.2-portable constructs, or pin it to a Homebrew bash 5
+        shebang and document that prerequisite.
+      events: []
+      exit_criteria:
+        - "scripts/run-litmus-test.sh <any-litmus> --phase pre-build --size instant --compact exits with a real pass/fail verdict (not a bash syntax error) on stock macOS /bin/bash"
+
+    - packet_id: macos-tray-clippy-warnings
+      order: 197
+      title: "macOS tray: fix 3 pre-existing clippy warnings (large_enum_variant x2, match_result_ok)"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/macos-tray-clippy-warnings-2026-07-06.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, clippy, cleanup]
+      estimated_hours: 1
+      outcome: >
+        Box the ControlWireStream::Secure variant in both action_host.rs and
+        diagnose.rs (large_enum_variant), and fix the redundant .ok() match in
+        status_item.rs:203 (match_result_ok). Optionally consolidate the now-
+        3x-duplicated ControlWireStream/open_control_wire_stream pattern into
+        one shared module.
+      events: []
+      exit_criteria:
+        - "cargo clippy -p tillandsias-macos-tray --all-targets reports 0 warnings"
 
     - packet_id: silverblue-immutable-development-workflow
       order: 195
