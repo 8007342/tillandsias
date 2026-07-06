@@ -2510,7 +2510,7 @@ plan_index:
     - packet_id: secure-channel-release-and-probe-hardening
       order: 194
       title: "Security: harden secure-channel PSK parity, release-secret requirement, and readiness probes"
-      status: ready
+      status: in_progress
       kind: bugfix
       deliverable: plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder]
@@ -2534,6 +2534,16 @@ plan_index:
             worktree is checkpointed. Linux/release workers should pick the
             release-secret-required slice because release CI enforcement is outside
             macOS's primary code scope and blocks secure-channel maturity.
+        - type: progress
+          ts: "2026-07-06T03:45:00Z"
+          agent_id: "linux-yoga-macuahuitl-20260706T0345Z"
+          host: linux
+          summary: >
+            Slice 3 (release-secret enforcement) complete: flake.nix reads
+            TILLANDSIAS_RELEASE_SECRET from builtins.getEnv and injects into all
+            crane buildPackage derivations. release.yml generates ephemeral key,
+            passes via nix build --impure, asserts post-build via strings+grep that
+            no binary embeds the public DEV_ROOT_SEED. Slices 1,2,4 remain for macOS.
       exit_criteria:
         - "all macOS secure openers use the workspace VERSION, not CARGO_PKG_VERSION drift"
         - "wait_phase_ready/probe_vm_phase use the same secure-or-plain opener as user actions"
