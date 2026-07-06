@@ -1527,13 +1527,19 @@ plan_index:
     - packet_id: host-lifecycle-race-safeguards
       order: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
-      status: ready
+      status: in_progress
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]
       pickup_role: windows
       capability_tags: [windows, macos, tray, vm-layer, concurrency]
       estimated_hours: 8
+      lease:
+        lease_id: "host-lifecycle-race-safeguards-macos-r9-20260706T1842Z"
+        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"
+        host: macos
+        acquired_at: "2026-07-06T18:42:33Z"
+        expires_at: "2026-07-06T22:42:33Z"
       outcome: >
         (R1) Start poke retries with backoff + WSL-service-sane preflight; drain is
         observable (lock/marker) so a relaunch waits for teardown instead of racing it;
@@ -1541,6 +1547,19 @@ plan_index:
         wsl --shutdown). (R2) Single-instance guard for the tray (mutex), matching the
         headless SingletonGuard. (R3) Host-side serialization or safe queueing of
         concurrent PTY launch clicks. macOS analog for the VZ lifecycle.
+      events:
+        - type: claim
+          ts: "2026-07-06T18:42:33Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"
+          host: macos
+          lease_id: "host-lifecycle-race-safeguards-macos-r9-20260706T1842Z"
+          expires_at: "2026-07-06T22:42:33Z"
+          note: >
+            Claiming only the macOS R9 sub-slice from the ratified race
+            safeguards research: `crates/tillandsias-vm-layer/src/vz.rs` still
+            embeds a `fetch-headless.sh` path that curls directly onto the live
+            binary. Scope is atomic temp+install behavior for the macOS embedded
+            script; Windows lifecycle/R1-R3 remain for a Windows owner.
       exit_criteria:
         - "Quit then immediate relaunch converges to Ready without manual wsl --shutdown"
         - "Second tray instance exits gracefully pointing at the first"
