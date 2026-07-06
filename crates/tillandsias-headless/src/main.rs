@@ -3158,6 +3158,19 @@ fn build_opencode_forge_args(
             "{}:/home/forge/src/{project_name}:rw",
             project_path.display()
         ),
+        // Persistent per-project tool/package cache (order 179), same as
+        // build_forge_agent_run_args (Claude/Codex/Antigravity/Maintenance).
+        // Without this, OpenCode/OpenCode Web launches lose $CARGO_HOME /
+        // $NPM_CONFIG_PREFIX to the --rm overlay on every attach, so the
+        // FIRST_RUN tool installs (orders 180/181) would re-run from scratch
+        // every time instead of persisting like every other forge entrypoint.
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        // @trace plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md (order 220)
+        "-v".into(),
+        format!(
+            "{}:/home/forge/.cache/tillandsias-project:rw",
+            forge_tool_cache_volume(project_name)
+        ),
         "--mount".into(),
         format!(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
@@ -9564,6 +9577,34 @@ mod tests {
         assert!(
             args.iter()
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
+        );
+    }
+
+    #[test]
+    fn opencode_args_mount_persistent_tool_cache_named_volume() {
+        // Order 220: OpenCode/OpenCode Web launches must mount the same
+        // per-project persistent cache volume as Claude/Codex/Antigravity/
+        // Maintenance (order 179), or FIRST_RUN tool installs (orders
+        // 180/181) never persist for these two launch modes and re-run from
+        // scratch on every attach — discovered live during order 220's
+        // verification (podman inspect showed no cache mount on an OpenCode
+        // container before this fix).
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        // @trace plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md (order 220)
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            Some("hello"),
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            false,
+            true,
+        );
+        assert!(
+            args.iter().any(|arg| arg
+                == "tillandsias-forge-cache-alpha:/home/forge/.cache/tillandsias-project:rw"),
+            "OpenCode forge args must mount the persistent per-project tool cache volume; got {args:?}"
         );
     }
 

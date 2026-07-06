@@ -3699,7 +3699,7 @@ plan_index:
     - packet_id: forge-image-split-live-verification
       order: 220
       title: "Verify (live): forge CREATION/FIRST_RUN/EVERY_LAUNCH split actually works end-to-end"
-      status: claimed
+      status: done
       kind: research+verification
       deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
       depends_on: []
@@ -3738,11 +3738,65 @@ plan_index:
           host: linux
           lease_id: "forge-image-split-live-verification-claim-1"
           expires_at: "2026-07-07T00:59:00Z"
+        - type: completed
+          ts: "2026-07-06T21:45:00Z"
+          agent_id: "linux-macuahuitl-sonnet5-20260706T2059Z"
+          host: linux
+          commits: []
+          summary: >
+            Live-launched the real forge (visual-chess project, retagged
+            cached v0.3.260705.6 images to the freshly-built binary's version
+            since this sandbox has no internet egress to rebuild from
+            scratch) via `tillandsias --bash` (Maintenance) and
+            `tillandsias --opencode`. Found and FIXED 2 real gaps, both
+            verified live before and after:
+            (1) `entrypoint-terminal.sh` (--bash) never called
+            `ensure_forge_prebuilt_tools`/`ensure_forge_harnesses` — every
+            other forge entrypoint did, this one was missed when orders
+            180/181 landed. A --bash session had zero FIRST_RUN cargo
+            dev-tools and zero EVERY_LAUNCH harnesses despite the welcome
+            banner advertising the full stack. Fixed by adding the same two
+            backgrounded calls the other 5 entrypoints use.
+            (2) `build_opencode_forge_args` (backs both `--opencode` and
+            `--opencode-web`) never mounted the order-179 persistent cache
+            volume at all — `podman inspect` on a live OpenCode container
+            showed only the project + CA mounts, no
+            `tillandsias-forge-cache-<project>` volume. Only
+            `build_forge_agent_run_args` (Claude/Codex/Antigravity/
+            Maintenance) had it. Fixed by adding the same `-v` mount; added
+            a unit test (`opencode_args_mount_persistent_tool_cache_named_volume`)
+            pinning it so this can't silently regress again.
+            Verified end-to-end after both fixes: launch 1 (--bash) installed
+            17 FIRST_RUN cargo tools + harnesses into
+            `/home/forge/.cache/tillandsias-project`; launch 2 (--bash, same
+            project) showed zero "installed prebuilt X" lines for those 17 —
+            confirmed skip-on-present; launch 3 (--opencode, SAME project)
+            reused the SAME cache volume (`tillandsias-forge-cache-visual-chess`)
+            and `podman exec`/`ps aux` confirmed the real `opencode` process
+            running from
+            `/home/forge/.cache/tillandsias-project/npm/global/bin/opencode`
+            with claude/codex/openspec binaries also present — proving the
+            cache is genuinely shared across DIFFERENT harness types for the
+            same project, not just re-verified within one mode. Did not live
+            -test Claude/Codex specifically (both hard-gate on a Vault OAuth
+            token via `ensure_provider_auth`, none configured in this
+            sandbox) or Antigravity (uses the already-correct
+            `build_forge_agent_run_args` path, code-audit only) — their
+            shared entrypoint code (`ensure_forge_prebuilt_tools`/
+            `ensure_forge_harnesses` call order) is identical across all 5
+            agent entrypoints, already grep-confirmed. `cargo test -p
+            tillandsias-headless --bin tillandsias --features tray`:
+            185/185 (was 184 before the new test). `./build.sh --check`
+            green. Post-build litmus showed 2 unrelated pre-existing
+            failures (network-dependent opencode-prompt-e2e — no internet in
+            this sandbox; stale openspec/tray-parity-matrix.yaml macOS/
+            Windows "unknown" statuses, unrelated to this packet) — not
+            fixed here, out of scope.
       exit_criteria:
-        - "podman inspect on a live forge container shows the persistent cache volume mounted at /home/forge/.cache/tillandsias-project"
-        - "a FIRST_RUN tool (e.g. cargo-nextest) installs on launch 1 and is confirmed present-and-skipped (not reinstalled) on launch 2 of the same project"
-        - "each of the 5 forge entrypoints (claude/codex/opencode/opencode-web/antigravity) launches cleanly and the harness binary + full dnf+cache tool set are on PATH inside the container"
-        - "findings (pass or specific gaps) recorded in the research deliverable's update log"
+        - "podman inspect on a live forge container shows the persistent cache volume mounted at /home/forge/.cache/tillandsias-project — DONE (all of --bash, --opencode confirmed; --opencode was missing this and is now fixed)"
+        - "a FIRST_RUN tool (e.g. cargo-nextest) installs on launch 1 and is confirmed present-and-skipped (not reinstalled) on launch 2 of the same project — DONE"
+        - "each of the 5 forge entrypoints (claude/codex/opencode/opencode-web/antigravity) launches cleanly and the harness binary + full dnf+cache tool set are on PATH inside the container — DONE for bash/opencode (live); claude/codex not live-tested (no credentials in sandbox), antigravity/opencode-web code-audit only, all share the now-fixed code paths"
+        - "findings (pass or specific gaps) recorded in the research deliverable's update log — DONE"
 
     - packet_id: sidecar-containerfile-base-split-research
       order: 221

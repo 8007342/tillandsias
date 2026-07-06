@@ -140,3 +140,37 @@ in the inference research packet (182).
 Impl packets (orders 179-182 + inference 183-184) reference this research; do not
 start the tool migration before the persistence question is answered — a
 first-run install that doesn't persist is a regression.
+
+## Update 2026-07-06T21:45Z — order 220 live verification: 2 real gaps found and fixed
+
+Orders 179-183 were all marked done/completed, but nobody had proven the split
+with a real two-launch test. Live-launched the forge (`tillandsias --bash` and
+`tillandsias --opencode` against a real project) and found:
+
+1. **`entrypoint-terminal.sh` (`--bash`/Maintenance) never called
+   `ensure_forge_prebuilt_tools`/`ensure_forge_harnesses`** — every other forge
+   entrypoint did; this one was missed when orders 180/181 landed. A `--bash`
+   session had zero FIRST_RUN cargo dev-tools and zero EVERY_LAUNCH harnesses
+   despite the welcome banner advertising the full stack. **Fixed.**
+2. **`build_opencode_forge_args` (backs both `--opencode` and `--opencode-web`)
+   never mounted the order-179 persistent cache volume at all** —
+   `podman inspect` on a live OpenCode container showed only the project + CA
+   mounts. Only `build_forge_agent_run_args` (Claude/Codex/Antigravity/
+   Maintenance) had it. **Fixed**, with a new unit test pinning the mount so it
+   can't silently regress.
+
+Verified end-to-end after both fixes: FIRST_RUN tools installed once and were
+confirmed skipped (not reinstalled) on a second `--bash` launch of the same
+project; a subsequent `--opencode` launch of the SAME project reused the SAME
+cache volume and ran the real `opencode` binary from
+`/home/forge/.cache/tillandsias-project/npm/global/bin/opencode` — proving the
+cache is genuinely shared across different harness types for one project, not
+just re-verified within a single mode.
+
+Not live-tested: Claude/Codex (hard-gate on a Vault OAuth token via
+`ensure_provider_auth`, none configured in the verification sandbox) and
+Antigravity (already used the correct, unaffected code path — code-audit only).
+Their shared entrypoint logic is identical to the tested ones.
+
+Full evidence and reasoning: `plan/index.yaml` packet
+`forge-image-split-live-verification` (order 220, status done).

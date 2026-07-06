@@ -77,6 +77,18 @@ clone_project_from_mirror
 require_openspec
 apply_opencode_config_overlay
 
+# @trace plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md (order 220)
+# FIRST_RUN arch-aware prebuilt dev-tools + EVERY_LAUNCH agent harness update.
+# Every other forge entrypoint (claude/codex/opencode/opencode-web/antigravity)
+# backgrounds these; the maintenance/--bash terminal was missed when orders
+# 180/181 landed, so a --bash session never got the FIRST_RUN cargo dev-tools
+# (cargo-nextest, actionlint, wasmtime, marksman, dart) or the EVERY_LAUNCH
+# harness set (codex/claude/opencode-ai), even though the welcome banner
+# advertises the full combined tool stack. Backgrounded + fail-soft, same as
+# the agent entrypoints, so it never blocks shell startup.
+ensure_forge_prebuilt_tools &
+ensure_forge_harnesses &
+
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
 # Automatically discover and export SSH keys/agent from the host.
