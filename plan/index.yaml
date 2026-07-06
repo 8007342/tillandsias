@@ -2615,7 +2615,7 @@ plan_index:
     - packet_id: macos-litmus-runner-bash-version-gap
       order: 196
       title: "macOS: scripts/run-litmus-test.sh requires bash 4+ (declare -A), host ships bash 3.2"
-      status: ready
+      status: done
       kind: optimization
       deliverable: plan/issues/macos-litmus-runner-bash-version-gap-2026-07-06.md
       depends_on: []
@@ -2629,14 +2629,48 @@ plan_index:
         outright on macOS hosts with no Homebrew bash installed. Either rewrite the
         runner with bash-3.2-portable constructs, or pin it to a Homebrew bash 5
         shebang and document that prerequisite.
-      events: []
+      events:
+        - type: claim
+          ts: "2026-07-06T16:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1605Z"
+          host: macos
+          lease_id: "macos-litmus-runner-bash-version-gap-claim-1"
+          expires_at: "2026-07-06T20:05:00Z"
+        - type: completed
+          ts: "2026-07-06T16:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1605Z"
+          host: macos
+          summary: >
+            Rewrote the 3 declare -A associative arrays (SPEC_RESULTS,
+            SPEC_TEST_COUNT, LITMUS_GLOBAL_SEEN) as bash-3.2-portable
+            newline-delimited dedup+count helpers (record_spec_result,
+            litmus_global_seen/litmus_global_mark_seen); dropped
+            SPEC_TEST_COUNT entirely (write-only, never read). Also fixed a
+            second latent bash-4-ism found while verifying end-to-end
+            (`${var,,}` lowercase expansion in behavior_matches_output) with
+            `tr '[:upper:]' '[:lower:]'`. Verified by actually running the
+            full suite on stock macOS /bin/bash 3.2.57 (not just `bash -n`):
+            `scripts/run-litmus-test.sh --phase pre-build --size instant
+            --compact` now executes end-to-end: 93 PASS, 24 FAIL (1 fixed
+            same-cycle, see below), 119 SKIP, 100% spec coverage (88/88).
+            Also fixed a `wc -c` BSD-padding bug in
+            litmus-versioning-shape.yaml discovered during this verification
+            (string comparison against unstripped whitespace-padded count).
+            The remaining 23 failures are real, previously-invisible
+            findings — filed as
+            plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+            for per-item triage (do NOT assume they're all genuine drift;
+            spot-checks show a mix of real drift, local-build-state gaps,
+            and macOS/BSD tooling gaps in the checks themselves).
+          commits:
+            - "(pending — see linux-next push this cycle)"
       exit_criteria:
         - "scripts/run-litmus-test.sh <any-litmus> --phase pre-build --size instant --compact exits with a real pass/fail verdict (not a bash syntax error) on stock macOS /bin/bash"
 
     - packet_id: macos-tray-clippy-warnings
       order: 197
       title: "macOS tray: fix 3 pre-existing clippy warnings (large_enum_variant x2, match_result_ok)"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/macos-tray-clippy-warnings-2026-07-06.md
       depends_on: []
@@ -2650,9 +2684,102 @@ plan_index:
         status_item.rs:203 (match_result_ok). Optionally consolidate the now-
         3x-duplicated ControlWireStream/open_control_wire_stream pattern into
         one shared module.
-      events: []
+      events:
+        - type: claim
+          ts: "2026-07-06T15:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1545Z"
+          host: macos
+          lease_id: "macos-tray-clippy-warnings-claim-1"
+          expires_at: "2026-07-06T19:45:00Z"
+        - type: completed
+          ts: "2026-07-06T15:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1545Z"
+          host: macos
+          summary: >
+            Boxed ControlWireStream::Secure in both action_host.rs and
+            diagnose.rs; fixed status_item.rs:203's redundant .ok() match to
+            `if let Ok(..) = std::env::current_exe()`. Left the 3x-duplicated
+            ControlWireStream pattern as-is (noted optional, not urgent).
+            cargo clippy -p tillandsias-macos-tray --all-targets: 0 warnings.
+            cargo test -p tillandsias-macos-tray: 54/54 pass (1 ignored).
+          commits:
+            - "0965ad53"
       exit_criteria:
         - "cargo clippy -p tillandsias-macos-tray --all-targets reports 0 warnings"
+
+    - packet_id: litmus-full-suite-macos-first-run-findings
+      order: 198
+      title: "Triage 23 litmus failures newly visible after the macOS bash-3.2 runner fix"
+      status: ready
+      kind: research
+      deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+      depends_on: [macos-litmus-runner-bash-version-gap]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [research, litmus, triage, cross-host]
+      estimated_hours: 3
+      outcome: >
+        The macOS litmus runner never worked before order 196, so no macOS host
+        has ever seen a full-suite verdict. Now that it runs, a full pre-build
+        instant-size pass shows 93 PASS / 24 FAIL / 119 SKIP (100% spec
+        coverage). One fail was fixed same-cycle (wc -c BSD-padding bug in
+        litmus-versioning-shape.yaml). Triage the remaining 23 (spec, test)
+        pairs listed in the deliverable — each is genuine drift, a local-
+        build-state gap, or a macOS/BSD tooling gap in the check itself. Do
+        not action any as a code fix without confirming which category it is.
+      events: []
+      exit_criteria:
+        - "each of the 23 (spec, test) pairs has either a plan/index.yaml ready packet (genuine drift), a documented environmental/local-state note (no packet needed), or a landed fix + green re-run"
+
+    - packet_id: macos-tray-menu-state-observatorium-v2-pin-test-missing
+      order: 199
+      title: "host-shell menu_state.rs is missing the macos-tray-architectural-invariants pin test"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, host-shell, litmus, spec-drift]
+      estimated_hours: 1
+      outcome: >
+        litmus:macos-tray-architectural-invariants step "gui-items-deferred-
+        to-v2" pins `fn macos_target_disables_observatorium_and_opencode_web_for_v2`
+        in crates/tillandsias-host-shell/src/menu_state.rs. Confirmed via grep:
+        no such function (or any renamed equivalent) exists in that file today.
+        Either the pin test was removed without updating the litmus, or it was
+        never written. Determine which, then either restore/write the test
+        (if the underlying v1 behavior — observatorium + opencode_web disabled
+        for MacosTray — is still correct and just needs re-pinning) or correct
+        the litmus to match the current, intentional behavior.
+      events: []
+      exit_criteria:
+        - "litmus:macos-tray-architectural-invariants passes end-to-end (scripts/run-litmus-test.sh macos-native-tray --phase pre-build --size instant)"
+
+    - packet_id: pty-attach-project-threading-litmus-stale-import-shape
+      order: 200
+      title: "litmus:pty-attach-project-threading-symmetric pins a stale windows-tray import (missing PtyIntent)"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [litmus, windows-tray, spec-drift, cross-host]
+      estimated_hours: 1
+      outcome: >
+        litmus:pty-attach-project-threading-symmetric step 1 pins the exact
+        substring `use tillandsias_host_shell::pty::{intent_for_action,
+        launch_spec}` in crates/tillandsias-windows-tray/src/notify_icon.rs.
+        The current import is `use tillandsias_host_shell::pty::{PtyIntent,
+        intent_for_action, launch_spec};` (PtyIntent was added, litmus wasn't
+        updated) — confirmed via grep. Coordinate with windows (the litmus
+        pins windows-tray's own source) before updating the fixed string;
+        this is a litmus-file fix, not a windows-tray code change, since the
+        current import shape is presumably intentional.
+      events: []
+      exit_criteria:
+        - "litmus:pty-attach-project-threading-symmetric passes end-to-end (scripts/run-litmus-test.sh macos-native-tray --phase pre-build --size instant)"
 
     - packet_id: silverblue-immutable-development-workflow
       order: 195

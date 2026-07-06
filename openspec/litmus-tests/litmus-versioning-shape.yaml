@@ -49,7 +49,7 @@ critical_path:
     # Minor.YYMMDD.Build`. ERE quantifiers `{6}` don't survive the
     # YAML→shell un-escape; use `tr | wc -c` to count dots = 3 (=
     # 4 segments).
-    command: "DOTS=$(tr -cd '.' < VERSION | wc -c); if [ \"$DOTS\" = '3' ]; then echo \"ok: VERSION has 4 segments (3 dots)\"; else echo \"FAIL: VERSION has $DOTS dots, expected 3\"; exit 1; fi"
+    command: "DOTS=$(tr -cd '.' < VERSION | wc -c | tr -d ' '); if [ \"$DOTS\" = '3' ]; then echo \"ok: VERSION has 4 segments (3 dots)\"; else echo \"FAIL: VERSION has $DOTS dots, expected 3\"; exit 1; fi"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
