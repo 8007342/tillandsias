@@ -368,6 +368,24 @@ plan_index:
             diagnose/current-thread VZ helper and live exec helper paths, then
             run/live-prove the shared conformance fixture when VM substrate is
             available.
+        - type: checkpoint
+          ts: "2026-07-06T18:36:01Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          commit_sha: "8e9f586d"
+          summary: >
+            Third coherent slice landed on osx-next: `diagnose.rs` no longer
+            names the raw macOS `VsockStream` type or calls
+            `open_vsock_stream_current_thread` directly. It constructs
+            `GuestEndpoint::MacVz` and delegates current-thread connection
+            details to a vm-layer endpoint-shaped helper that preserves the
+            per-attempt timeout needed by headless CLI readiness probes.
+            Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
+            `cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
+            `./build.sh --check` pass on macOS. Remaining: secure/expect-style
+            live exec helper calls still use `vsock_exec` over the secured boxed
+            stream, and shared conformance still needs a live VM run.
         - type: progress
           ts: "2026-07-05T01:01:45Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"
