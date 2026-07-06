@@ -247,7 +247,7 @@ plan_index:
     - packet_id: host-guest-transport-normalization-spec
       order: 124
       title: "Normalization spec: host<->guest transport canon (protocol/facade/glossary)"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
       depends_on: [host-guest-transport-normalization-research]
@@ -273,11 +273,75 @@ plan_index:
             canonical glossary). Remaining: bind the spec in litmus-bindings, add the
             no-cfg-selection drift litmus (gates after callers migrate in 125), and the
             conformance fixture harness.
+        - type: completed
+          ts: "2026-07-06T19:35:00Z"
+          agent_id: "linux-macuahuitl-sonnet5-20260706T1903Z"
+          host: linux
+          commits: []
+          summary: >
+            Closed the remaining spec-authoring scope: bound the spec in
+            litmus-bindings.yaml (coverage_ratio 55 -> 67) and added
+            litmus:host-guest-no-cfg-transport-selection (3 grep-based steps:
+            no backend-impl name leaks into guest_transport.rs's non-comment
+            lines; the trait stays Send+Sync/object-safe; no shared
+            tillandsias-host-shell file branches on cfg(target_os)/cfg!(target_os)
+            near GuestTransport/GuestEndpoint) — green, and verified it actually
+            falsifies (temporarily injected a cfg(target_os)-gated fake
+            GuestTransport picker into host-shell/lib.rs, confirmed the litmus
+            catches it, reverted). Deliberately did NOT attempt the
+            "conformance fixture harness" item in this cycle: order 125 (the
+            real Linux AF_VSOCK GuestTransport backend) hasn't landed yet, so
+            no host on linux-next has ExecOneShot/InteractiveStream implemented
+            over the real wire protocol to validate against — writing fixtures
+            now would mean inventing the exec wire-mapping myself, which is
+            125's design decision to make, not this packet's. Split that
+            remaining scope into its own smaller packet
+            (host-guest-transport-conformance-harness, pending on 125) instead
+            of stretching this cycle to cover it. All other exit criteria DONE.
       exit_criteria:
-        - "openspec/specs/host-guest-transport/spec.md authored — DONE (bind in litmus-bindings TODO)"
+        - "openspec/specs/host-guest-transport/spec.md authored — DONE"
         - "Facade trait + GuestEndpoint + ExecRequest/ExecOutput compile on all targets — DONE"
         - "Glossary committed (spec Nomenclature section) — DONE"
-        - "litmus:host-guest-no-cfg-transport-selection pinned and green — TODO (lands with 125 caller migration)"
+        - "litmus:host-guest-no-cfg-transport-selection pinned and green — DONE"
+        - "conformance fixture harness — split out to host-guest-transport-conformance-harness (pending on order 125)"
+
+    - packet_id: host-guest-transport-conformance-harness
+      order: 128
+      title: "Shared conformance fixtures for GuestTransport backends (host-guest-transport.conformance.shared-fixtures@v1)"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
+      depends_on: [host-guest-transport-linux]
+      pickup_role: linux
+      capability_tags: [rust, testing, vsock, cross-platform]
+      estimated_hours: 4
+      blocked_reason: >
+        Split out of order 124 (2026-07-06) rather than invented speculatively:
+        writing the shared InteractiveStream/ExecOneShot conformance fixtures
+        requires a real GuestTransport backend to validate them against, and
+        none has landed on linux-next yet (order 125, the Linux AF_VSOCK
+        backend, is still pending — Windows' WslGuestTransport is the only
+        landed impl and lives in Windows' write scope). Deciding the
+        exec-request/response wire mapping is order 125's job; writing
+        conformance fixtures before that decision exists would mean
+        pre-empting it from the wrong side of the boundary. Ready once 125
+        lands a concrete backend on linux-next to test the fixtures against.
+      outcome: >
+        Add a reusable, transport-agnostic async fixture suite (e.g.
+        crates/tillandsias-control-wire/src/conformance.rs, `pub` so
+        per-platform crates can call it from their own test files) exercising
+        the spec's shared-fixtures requirement: InteractiveStream echo +
+        half-close; ExecOneShot stdout/stderr/exit + stdin + streaming +
+        version-skew rejection. Prove it against the Linux AF_VSOCK backend
+        landed by order 125 first (in-crate, no live VM required — an
+        in-memory duplex stands in for the vsock socket); macOS/Windows adopt
+        the same fixtures against their own backends in their own follow-on
+        packets once each lands.
+      exit_criteria:
+        - "conformance.rs (or equivalent) fixture functions exist, parameterized over &dyn GuestTransport + &GuestEndpoint"
+        - "the Linux AF_VSOCK backend (order 125) passes the fixtures via an in-memory/loopback harness, no live VM required"
+        - "litmus:host-guest-transport-conformance pinned and green for at least the Linux backend"
+        - "./build.sh --check and --test pass"
 
     - packet_id: host-guest-transport-linux
       order: 125

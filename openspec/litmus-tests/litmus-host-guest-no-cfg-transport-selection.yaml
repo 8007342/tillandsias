@@ -1,0 +1,75 @@
+# @trace spec:host-guest-transport
+#
+# Order 124's remaining exit criterion: "litmus:host-guest-no-cfg-transport-
+# selection pinned and green". The spec (host-guest-transport.facade.
+# no-cfg-selection@v1) requires tray/headless callers to resolve a
+# `Box<dyn GuestTransport>` once at the platform boundary and never branch on
+# `cfg!(target_os)`/`#[cfg(target_os = ...)]` or match `GuestEndpoint`
+# variants to pick a backend — that per-file `cfg(target_os)` branching is
+# exactly the mechanism that let the three prior host<->guest
+# implementations (Linux vsock, macOS VZ, Windows hvsock) drift apart before
+# the facade existed. Backend implementation names (`virtio-vsock`,
+# `hvsock`, `VZVirtioSocketDevice`) are also barred from the facade's public
+# API surface — they're demoted to backend-impl names only (see the
+# Nomenclature section of the spec).
+name: litmus:host-guest-no-cfg-transport-selection
+spec: host-guest-transport
+phase: pre-build
+description: >
+  Pin that the GuestTransport facade's public API never names a backend
+  implementation directly, and that shared cross-platform caller code
+  (tillandsias-host-shell) never branches on cfg(target_os) to select a
+  host<->guest transport.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-control-wire/src/guest_transport.rs
+  - workspace contains crates/tillandsias-host-shell
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "guest_transport.rs's non-comment lines never name a backend implementation (virtio-vsock/hvsock/VZVirtioSocketDevice)"
+    # Doc comments are allowed to explain the rule (they do, in the module
+    # docblock and Nomenclature) — only non-comment (code) lines are barred
+    # from mentioning backend-impl names, per "MUST NOT appear in the
+    # facade's public API, logs, or caller code".
+    command: "grep -vE '^[[:space:]]*//' crates/tillandsias-control-wire/src/guest_transport.rs | grep -qiE 'virtio-vsock|hvsock|vzvirtiosocketdevice' && { echo 'FAIL: backend impl name leaked into facade code'; exit 1; } || echo 'ok: no backend impl names in facade code'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no backend impl names in facade code"
+
+  - step: "GuestTransport trait is Send + Sync and stays object-safe (Box<dyn GuestTransport> resolved once at the boundary)"
+    command: "grep -F 'pub trait GuestTransport: Send + Sync' crates/tillandsias-control-wire/src/guest_transport.rs"
+    timeout_ms: 3000
+    expected_behavior: "pub trait GuestTransport: Send + Sync"
+
+  - step: "shared cross-platform host-shell code never branches on cfg(target_os) to select a host<->guest transport"
+    # tillandsias-host-shell is the ONE place tray callers on every platform
+    # share PTY/attach launch logic; a regression re-introducing
+    # `#[cfg(target_os = "macos")] ... open_vsock_stream ...` /
+    # `#[cfg(target_os = "windows")] ... hvsocket ...` branching here would
+    # silently resurrect the pre-facade drift. Unix-specific PTY plumbing
+    # (pty/unix.rs's `#[cfg(target_os = "macos"|"linux")]` ioctl constants)
+    # is unrelated to transport selection and is excluded by path.
+    command: "FILES=$(grep -rlF -e 'cfg(target_os' -e 'cfg!(target_os' crates/tillandsias-host-shell/src --include=*.rs 2>/dev/null | grep -v 'pty/unix.rs'); VIOLATION=0; for f in $FILES; do if grep -qE 'GuestTransport|GuestEndpoint' \"$f\"; then echo \"FAIL: $f branches on cfg(target_os) near GuestTransport/GuestEndpoint\"; VIOLATION=1; fi; done; if [ \"$VIOLATION\" = 1 ]; then exit 1; fi; echo 'ok: no cfg(target_os) transport selection in host-shell'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no cfg(target_os) transport selection in host-shell"
+
+observability:
+  traces:
+    - "@trace spec:host-guest-transport"
+  expected_log: "GuestTransport facade stays backend-name-free and cfg(target_os)-selection-free in shared caller code"
+  log_fields:
+    spec: "host-guest-transport"
+    test: "host-guest-no-cfg-transport-selection"
+    artifact: "crates/tillandsias-control-wire/src/guest_transport.rs + crates/tillandsias-host-shell/src/**"
+
+rollback:
+  on_failure: >
+    A caller re-introduced cfg(target_os) transport-backend selection, or a
+    backend implementation name leaked into the facade's public API/logs.
+    Resolve the endpoint's backend via `Box<dyn GuestTransport>` at the
+    platform boundary instead of branching in shared code, and keep
+    `virtio-vsock`/`hvsock`/`VZVirtioSocketDevice` out of
+    guest_transport.rs's non-comment lines.
+  command: "grep -nF -e 'cfg(target_os' -e 'cfg!(target_os' crates/tillandsias-host-shell/src -r --include=*.rs | grep -v 'pty/unix.rs'; grep -niE 'virtio-vsock|hvsock|vzvirtiosocketdevice' crates/tillandsias-control-wire/src/guest_transport.rs"

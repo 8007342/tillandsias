@@ -901,5 +901,6 @@ specs:
   litmus_tests:
   - litmus:secure-control-wire-guest-responder-shape
   - litmus:psk-input-parity-shape
-  coverage_ratio: 55
+  - litmus:host-guest-no-cfg-transport-selection
+  coverage_ratio: 67
   last_verified: '2026-07-06'
