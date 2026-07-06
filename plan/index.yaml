@@ -1354,6 +1354,18 @@ plan_index:
       order: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
       status: ready
+      events:
+        - type: progress
+          ts: "2026-07-06T05:40:00Z"
+          agent_id: "windows-bullo-fable5-20260706T0535Z"
+          host: windows
+          commits: ["c3089123"]
+          summary: >
+            R2 landed on windows-next: the Windows tray acquires
+            tillandsias_core::singleton::SingletonGuard("tray-windows") at startup
+            (after CLI fast-paths) and a second instance fails fast. Remaining:
+            R1 (observable drain lock + start-poke retries), R3 (PTY launch
+            serialization), the macOS analog, and the N=10 quit/relaunch litmus.
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: [race-safeguards-research]
@@ -2422,7 +2434,10 @@ plan_index:
     - packet_id: multi-host-secure-wire-integration-freeze
       order: 191
       title: "Coordination: freeze sibling drift and integrate secure-wire + embedded-guest branches by merge"
-      status: claimed
+      status: ready
+      status_note: >
+        Windows evidence slice COMPLETE 2026-07-06 (see deliverable §Windows run
+        result). Remaining: macOS evidence slice + linux coordinator merge.
       events:
         - type: claim
           ts: "2026-07-06T05:45:00Z"
@@ -2443,6 +2458,22 @@ plan_index:
             TILLANDSIAS_SECURE_CONTROL_WIRE) verified intact post-merge; tray crate
             cargo check --locked green on the merged tree. Next: WSL2 flag-OFF and
             flag-ON smoke evidence.
+        - type: completed_slice
+          ts: "2026-07-06T06:10:00Z"
+          agent_id: "windows-bullo-fable5-20260706T0535Z"
+          host: windows
+          commits: ["0794510a", "8644b8ea"]
+          summary: >
+            Windows evidence slice complete: linux-next merged + pushed; flag-OFF
+            plaintext handshake + VmStatus green on old and rebuilt guest; flag-ON
+            Noise NNpsk0 handshake + VmStatus round-trip green against a
+            version-matched (v0.3.260705.6) in-VM headless with
+            TILLANDSIAS_SECURE_CONTROL_WIRE=on; plaintext peer rejected (early eof,
+            failure-closed) while gated ON. New ignored probe
+            e2e_secure_vm_status_over_hvsocket committed. Guest reverted to
+            flag-OFF pending the order-145 atomic cutover. Evidence:
+            plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md.
+            Packet returned to ready for the macOS slice + coordinator merge.
       kind: integration
       deliverable: plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder, embedded-guest-binary-linux-build]

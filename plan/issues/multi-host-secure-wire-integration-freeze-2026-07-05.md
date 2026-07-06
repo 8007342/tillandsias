@@ -63,6 +63,36 @@ Linux/coordinator:
 - Embedded guest binary work is aligned around order 190 as the Linux artifact
   contract consumed by macOS and Windows.
 
+## Windows run result 2026-07-06T06:05Z — evidence slice COMPLETE
+
+Agent `windows-bullo-fable5-20260706T0535Z` on `windows-next`:
+
+- **Merge**: `origin/linux-next` (c50bdf3a) merged into `windows-next` as
+  0794510a and pushed. The hvsocket secure-wrapper
+  (`open_and_wrap_hvsocket_stream`, gated by `TILLANDSIAS_SECURE_CONTROL_WIRE`)
+  and embedded-binary injection path in `wsl_lifecycle.rs` survived the merge;
+  `cargo check --locked` and the 48 tray unit tests are green on the merged tree.
+- **Flag OFF (plaintext no-regression)**: `e2e_hvsocket_handshake` negotiated
+  `wire_version=2` and `e2e_vm_status_over_hvsocket` round-tripped
+  `VmStatusReply { phase: Ready, podman_ready: true }` — verified against BOTH
+  the previously deployed guest (v0.3.260704.2) and the rebuilt v0.3.260705.6
+  guest with the flag off.
+- **Flag ON (secure handshake)**: guest headless rebuilt in-VM from the merged
+  windows-next tree (version-matched v0.3.260705.6, dev PSK seed both sides),
+  run with `TILLANDSIAS_SECURE_CONTROL_WIRE=on`; the new ignored probe
+  `e2e_secure_vm_status_over_hvsocket` (commit 8644b8ea) completed the Noise
+  NNpsk0 handshake and a Hello/HelloAck + VmStatusRequest round-trip over the
+  encrypted stream: `VmStatusReply { phase: Ready, podman_ready: true }`.
+- **Failure-closed**: with the guest gate ON, a plaintext client's Hello is
+  dropped (`early eof`) — no downgrade path.
+- Guest was reverted to flag-OFF default after the smoke so the installed tray
+  keeps working until the order-145 atomic cutover.
+
+Method note: the version-matched guest was produced with the in-VM offline build
+loop (host `cargo fetch` + registry cache copied into the distro) because the
+VM's egress proxy could not be started manually after a VM reboot (its
+`/tmp/tillandsias-ca` bind source is tmpfs and was wiped) — filed as a finding.
+
 ## macOS run result 2026-07-05T18:53Z
 
 MacOS meta-orchestration did not merge or implement because the local `osx-next`
