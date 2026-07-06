@@ -26,6 +26,7 @@ preconditions:
   - workspace contains images/default/Containerfile.base and images/default/Containerfile
   - workspace contains scripts/build-image.sh
   - workspace contains images/default/entrypoint-forge-{opencode,opencode-web,claude,codex}.sh
+  - workspace contains images/default/lib-common.sh
   - shell utilities (grep) are available in PATH
 
 critical_path:
@@ -59,11 +60,17 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req Agents: pinned npm install of opencode + openspec + claude + codex"
-    # Spec § Req mandates OpenCode + OpenSpec + Claude Code + Codex
-    # are available in PATH. The npm install line installs all 4 in
-    # one invocation; pin the canonical package names.
-    command: "for package in 'opencode-ai@1.16.2' '@fission-ai/openspec@1.4.1' '@anthropic-ai/claude-code@2.1.168' '@openai/codex@0.137.0'; do grep -Fq \"$package\" images/default/Containerfile.base || { echo \"FAIL: pinned agent '$package' missing\"; exit 1; }; done && echo 'ok: agents pinned'"
+  - step: "Req Agents: opencode + openspec + claude + codex install at EVERY_LAUNCH via npm @latest"
+    # Spec § Req mandates OpenCode + OpenSpec + Claude Code + Codex are
+    # available in PATH. Order 175 (forge-harness-every-launch-latest,
+    # 2026-07-04) moved these OFF pinned versions baked into
+    # Containerfile.base and onto an EVERY_LAUNCH `npm install
+    # <pkg>@latest` in images/default/lib-common.sh (require_opencode/
+    # require_claude/require_openspec/require_codex + the harness
+    # update-check path), so a fresh forge always gets the newest
+    # harness instead of an image-build-time snapshot. Pin the
+    # canonical package names in lib-common.sh, not the Containerfile.
+    command: "for package in 'opencode-ai' '@fission-ai/openspec' '@anthropic-ai/claude-code' '@openai/codex'; do grep -Fq \"$package@latest\" images/default/lib-common.sh || { echo \"FAIL: EVERY_LAUNCH agent '$package' missing\"; exit 1; }; done && echo 'ok: agents install at EVERY_LAUNCH via npm @latest'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
@@ -147,9 +154,10 @@ rollback:
     `@trace spec:default-image` on Containerfile; `FROM registry.
     fedoraproject.org/fedora-minimal:44`; `microdnf install -y`
     with git/gh/ripgrep/nodejs/python3-pip + the broader dev
-    toolchain; pinned npm installs of `opencode-ai`, `@fission-ai/
-    openspec`, `@anthropic-ai/claude-code`, and `@openai/codex`;
-    no pipe-to-shell/floating image inputs; checksum verification
+    toolchain; EVERY_LAUNCH `npm install <pkg>@latest` in
+    lib-common.sh for `opencode-ai`, `@fission-ai/openspec`,
+    `@anthropic-ai/claude-code`, and `@openai/codex`; no
+    pipe-to-shell/floating image inputs; checksum verification
     for every retained direct release asset; `useradd
     -u 1000 -m -s /bin/bash forge`; COPY directives for all 4
     forge entrypoint scripts (opencode, opencode-web, claude,

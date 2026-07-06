@@ -21,7 +21,9 @@ phase: pre-build
 description: >
   Pin workflow_dispatch-only triggers on release.yml + the local
   release preflight/local-ci scripts that replace hosted convergence,
-  litmus metadata, and cache-warm workflows.
+  litmus metadata, and cache-warm workflows. Nix builds run via
+  DeterminateSystems/nix-installer-action + nix-community/cache-nix-action
+  (FlakeHub caching was tried and reverted 2026-07-02, commit 769b4a32).
 severity: medium
 size: instant
 
@@ -32,8 +34,8 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "release workflow uses FlakeHub-backed Nix builds"
-    command: "grep -F 'DeterminateSystems/determinate-nix-action@v3.21.2' .github/workflows/release.yml && grep -F 'DeterminateSystems/flakehub-cache-action@v3.21.2' .github/workflows/release.yml && grep -F 'nix build -L .#tillandsias-x86_64-musl' .github/workflows/release.yml"
+  - step: "release workflow installs Nix via nix-installer-action and builds the musl target"
+    command: "grep -F 'DeterminateSystems/nix-installer-action' .github/workflows/release.yml && grep -F 'nix build -L .#tillandsias-x86_64-musl' .github/workflows/release.yml"
     timeout_ms: 3000
     expected_behavior: "tillandsias-x86_64-musl"
 
@@ -47,8 +49,13 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "workflow_dispatch:"
 
-  - step: "hosted verification workflows are absent"
-    command: "test ! -e .github/workflows/ci.yml && test ! -e .github/workflows/litmus-tests.yml && test ! -e .github/workflows/github-actions-convergence.yml && test ! -e .github/workflows/nix-cache-warm.yml && echo 'ok: hosted verification retired'"
+  - step: "hosted verification (test/convergence) workflows are absent; only release + cache-warm remain"
+    # nix-cache-warm.yml legitimately exists (commit 769b4a32, reverting
+    # FlakeHub caching back to nix-community/cache-nix-action) — it warms
+    # the Nix build cache on a schedule/push, it does not run tests or
+    # verification, so it does not violate the local-only-verification
+    # contract this step protects.
+    command: "test ! -e .github/workflows/ci.yml && test ! -e .github/workflows/litmus-tests.yml && test ! -e .github/workflows/github-actions-convergence.yml && echo 'ok: hosted verification retired'"
     timeout_ms: 3000
     expected_behavior: "ok: hosted verification retired"
 
@@ -77,6 +84,7 @@ observability:
 rollback:
   on_failure: >
     A ci-release workflow surface drifted. Restore manual-only release.yml,
-    FlakeHub-backed Nix release builds, absence of hosted verification workflows,
-    and executable local-ci.sh + release-preflight-local.sh scripts.
-  command: "grep -nE 'workflow_dispatch:|flakehub-cache-action|nix build -L' .github/workflows/release.yml && ls -la scripts/local-ci.sh scripts/release-preflight-local.sh"
+    nix-installer-action-backed Nix release builds, absence of hosted
+    verification workflows, and executable local-ci.sh +
+    release-preflight-local.sh scripts.
+  command: "grep -nE 'workflow_dispatch:|nix-installer-action|nix build -L' .github/workflows/release.yml && ls -la scripts/local-ci.sh scripts/release-preflight-local.sh"

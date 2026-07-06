@@ -138,6 +138,90 @@ running before it's counted as real drift either way; not re-checked this
 cycle, listed here for completeness but likely folds into the flock/podman
 environment bucket rather than being a 15th genuine item.)
 
+## Update 2026-07-06T19:20Z — Linux triage of the 14: 9 fixed/closed, 5 confirmed environment-only, 0 remaining genuine drift
+
+Ran `scripts/run-litmus-test.sh --phase pre-build --size instant` on `linux-next`
+(Linux mutable host) to re-verify each of the 14 against a real Podman-capable
+Linux tree instead of guessing from macOS:
+
+- **5 of the 14 did not reproduce on Linux at all**:
+  `forge-environment-discoverability-install-shape`,
+  `forge-hot-cold-split-shape`, `forge-opencode-onboarding-bootstrap-shape`,
+  `image-build-convergence-shape` (forge-staleness), and
+  `zen-default-with-ollama-shape` all passed cleanly — confirming these were
+  the macOS "cargo/podman not on PATH" environment bucket, not product drift.
+  No packets needed; closing without further action.
+- **9 of the 14 were genuine drift, all fixed this cycle by updating the
+  litmus to match intentional, already-shipped behavior** (in every case the
+  *code* was correct and the *litmus* had gone stale after a refactor/decision
+  the litmus was never updated for — verified against `git log`/commit
+  messages before touching anything, not just pattern-matched):
+  - `podman-secrets-integration-shape`: `secret_name` accountability fields
+    partly moved to `config.provider.vault_secret_name()` (multi-provider
+    generalization) — was 5 literal + 4 dynamic = 9 sites, litmus only counted
+    literals. Broadened the count pattern.
+  - `vault-github-token-capture-shape` + `vault-entrypoint-hardened-shape`:
+    same multi-provider generalization (`config.provider.vault_path()` /
+    `.secret_field()`) plus a real *security improvement* — the tmpfs handover
+    cleanup now zero-fills (`dd if=/dev/zero`) each file before `rm -f`
+    (shred, not just unlink) instead of the `rm -rf` the litmus pinned.
+    Re-pointed both litmus steps at the current call shape.
+  - `inference-container-implementation-shape`: `build_inference_run_args`
+    now calls a shared `proxy_env_args()` helper instead of inlining the
+    proxy env-var literals — re-pointed the check at the helper.
+  - `inference-firstrun-default-models-shape`: order 168 (2026-07-05,
+    commit `e56b0156`, operator fix) deliberately narrowed
+    `DEFAULT_MODELS` from 4 models (~2GB) to just `qwen2.5:0.5b` (~400MB)
+    to fix an OOM/~32s container-death bug — `qwen2.5-coder:1.5b` was never
+    meant to survive in the default set after that fix. Updated the litmus
+    to assert the new intentional default and that the coder model is still
+    reachable as an opt-in tier pull.
+  - `ci-release-toolchain-shape`: FlakeHub caching (`determinate-nix-action`
+    / `flakehub-cache-action`) was tried then reverted (commit `769b4a32`,
+    "revert FlakeHub cache workflow") in favor of
+    `DeterminateSystems/nix-installer-action` + `nix-community/cache-nix-action`;
+    also `nix-cache-warm.yml` legitimately exists now (cache warming, not
+    hosted verification) so the litmus's blanket "no extra workflow files"
+    check was over-broad. Updated both.
+  - `default-image-containerfile-shape`: order 175
+    (forge-harness-every-launch-latest) moved opencode/openspec/claude/codex
+    off pinned versions baked into `Containerfile.base` and onto an
+    EVERY_LAUNCH `npm install <pkg>@latest` in `images/default/lib-common.sh`
+    — re-pointed the check at the new file + install pattern.
+  - `gh-auth-script-shape`: `run_github_login(debug: bool)` was generalized
+    into the shared `run_provider_login(config: &ProviderLoginConfig, debug:
+    bool)` (order agent-login-flows-impl-2026-06-28, shared across
+    `--claude-login`/`--codex-login`/`--antigravity-login`/`--github-login`);
+    the `gh_auth_start` accountability operation also generalized to
+    `{provider}_auth_start` (renders `github_auth_start`, not `gh_auth_start`,
+    since `id_str()` returns `"github"`). Re-pointed both steps.
+  - `github-credential-health-shape`: the old single
+    `vault_bootstrap::is_github_logged_in` was split into a cheap high-
+    frequency presence poll (`vault_bootstrap::is_github_key_present`,
+    still `vault_data_volume_exists()`-gated) and the definitive
+    token-actually-works check (`remote_projects::is_github_logged_in`).
+    Re-pointed both steps at the correct file/function per role.
+  - `simplified-tray-ux-leaf-action-shape`: `LeafAction` grew a 7th variant
+    (`Antigravity`, first-class forge agent) — `ALL: [LeafAction; 6]` →
+    `; 7]`, and the offset-table docblock's `Maintenance` slot moved from
+    `+5` to `+6`. Updated the variant list, array-size literal, and offset
+    check.
+- **0 of the 14 need a new `plan/index.yaml` fix packet** — every genuine
+  item was closed by a same-cycle litmus fix, not a code change (the spot
+  checks in the previous update correctly identified real *litmus* drift, but
+  in each case the "restore-to-match-litmus" direction was wrong — the code
+  was the intentional, already-decided state and the litmus had gone stale).
+- Filed `plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md`
+  (a papercut found while writing the fixes: `scripts/run-litmus-test.sh`'s
+  `command:` extraction is a bash regex, not a real YAML parser, and only
+  unescapes `\"` → `"` — not `\\` → `\` — so a `command:` string that is
+  valid YAML and passes `ruby -ryaml` can still silently misbehave at
+  runtime if it needs a literal backslash for regex escaping).
+- Full-suite verdict after fixes: `--phase pre-build --size instant` on Linux
+  now shows 115 PASS / 1 FAIL (only `guest-binary-embed-integrity`, a known
+  local-build-state gap — no cross-compiled guest binary on this dev
+  checkout, not drift) / 100% spec coverage.
+
 ## Work (next reduction step)
 
 1. Linux (or whoever owns the relevant crate/image) triages each of the 14
