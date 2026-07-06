@@ -779,7 +779,11 @@ mod tests {
 
     #[test]
     fn git_image_tag_defaults_to_fully_qualified_versioned_tag() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Ensure no override is leaking from a previous test.
         unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
         let tag = git_image_tag();
@@ -832,7 +836,11 @@ mod tests {
 
     #[test]
     fn test_cache_invalidation() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         invalidate_github_projects_cache();
         let mut guard = cache().lock().expect("cache lock");
         *guard = Some(CacheEntry {
@@ -853,7 +861,11 @@ mod tests {
 
     #[test]
     fn discover_projects_uses_containerized_gh() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
         let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
@@ -890,7 +902,11 @@ mod tests {
 
     #[test]
     fn clone_project_uses_containerized_gh() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
         let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
@@ -976,7 +992,11 @@ mod tests {
     /// `owner/name` form.
     #[test]
     fn clone_normalizes_api_url_to_owner_name() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let podman_dir = install_podman_mock();
         let state_dir = tempdir().expect("state tempdir");
         let original_path = std::env::var_os("PATH");
@@ -1035,7 +1055,11 @@ mod tests {
     /// containers (`build_git_run_args` and friends).
     #[test]
     fn clone_uses_host_parent_bindmount() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let podman_dir = install_podman_mock();
         let state_dir = tempdir().expect("state tempdir");
         let original_path = std::env::var_os("PATH");
@@ -1085,12 +1109,27 @@ mod tests {
             *bind_spec, expected_bind,
             "bind-mount must identity-map the host parent dir as rw"
         );
-        // Sanity: the positional clone target still comes through unchanged
-        // and is *inside* the bind-mounted parent.
+        // Order 163 (atomic clone, R8): the container clones into a
+        // `<target>.tmp.<nonce>` staging path inside the bind-mounted
+        // parent, not `target` directly — `clone_project_from_github` then
+        // atomically renames the staging dir onto `target` on success. The
+        // positional arg podman/gh actually saw must be that staging path
+        // (still inside the bind-mounted parent so the container can write
+        // it), and the real `target` must exist for real once the call
+        // returns (proving the rename happened).
         let captured_target =
             std::fs::read_to_string(state_dir.path().join("last_clone_target_arg"))
                 .expect("mock should record target arg");
-        assert_eq!(captured_target.trim(), target.to_string_lossy().as_ref());
+        let captured_target = captured_target.trim();
+        let target_str = target.to_string_lossy();
+        assert!(
+            captured_target.starts_with(&format!("{target_str}.tmp.")),
+            "clone target arg should be target's atomic-clone staging path (target.tmp.<nonce>); got {captured_target:?}, target was {target_str:?}"
+        );
+        assert!(
+            target.join(".git").is_dir(),
+            "target dir must exist (post-rename) after a successful clone; target was {target:?}"
+        );
 
         if let Some(path) = original_path {
             unsafe { std::env::set_var("PATH", path) };

@@ -3608,7 +3608,7 @@ plan_index:
     - packet_id: remote-projects-clone-test-flakiness
       order: 210
       title: "Fix: remote_projects.rs clone tests flaky (shared mutex poison + stale atomic-clone path assertion)"
-      status: ready
+      status: done
       kind: bug-fix
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-06.md
       depends_on: []
@@ -3632,11 +3632,40 @@ plan_index:
         the same binary. Pre-existing (remote_projects.rs untouched by the
         session that found this); blocks local-ci.sh's tray-contract gate
         non-deterministically for every future `--ci-full` run.
+      events:
+        - type: completed
+          ts: "2026-07-06T20:32:00Z"
+          agent_id: "linux-macuahuitl-sonnet5-20260706T1903Z"
+          host: linux
+          commits: []
+          summary: >
+            Root cause confirmed: `clone_uses_host_parent_bindmount` asserted
+            `captured_target == target` but order 163's atomic-clone passes
+            podman the STAGING path (`target.tmp.<nonce>`), then
+            `std::fs::rename`s it onto `target` only after success — the test
+            predates that change. Fixed the assertion to check
+            `captured_target` starts with `target.tmp.` (the staging
+            contract) and separately assert `target/.git` exists afterward
+            (proving the rename happened) — this is a stronger test than the
+            original, since it now also proves atomicity, not just argument
+            plumbing. Also made all 6 `TEST_LOCK.lock()` call sites recover
+            from poison (`.unwrap_or_else(|e| e.into_inner())`) instead of
+            panicking, so one test's panic can no longer cascade-fail
+            unrelated tests sharing the module's env-var-guarding mutex.
+            Verified: `cargo test -p tillandsias-headless --bin tillandsias
+            --features tray` passes 184/184 across 5 consecutive runs (was
+            previously failing 3-5 tests non-deterministically every run).
+            `./build.sh --check` and `--test` green. Re-ran
+            `./build.sh --ci-full --install`: the tray-contract gate this
+            packet targeted now passes; the run still stops at
+            `litmus-pre-build` on the pre-existing, separately-filed order
+            211 (guest-binary-embed-integrity local build-state gap) — that
+            remains its own research packet, not fixed here.
       exit_criteria:
-        - "clone_uses_host_parent_bindmount asserts the correct (staging vs final) path for the atomic-clone implementation and passes deterministically"
-        - "the shared test Mutex recovers from poison (e.g. .unwrap_or_else(PoisonError::into_inner)) so one test's panic cannot cascade-fail unrelated tests"
-        - "cargo test -p tillandsias-headless --bin tillandsias --features tray passes cleanly across 5 consecutive runs (parallel, default threads)"
-        - "./build.sh --check and --ci-full pass"
+        - "clone_uses_host_parent_bindmount asserts the correct (staging vs final) path for the atomic-clone implementation and passes deterministically — DONE"
+        - "the shared test Mutex recovers from poison (e.g. .unwrap_or_else(PoisonError::into_inner)) so one test's panic cannot cascade-fail unrelated tests — DONE"
+        - "cargo test -p tillandsias-headless --bin tillandsias --features tray passes cleanly across 5 consecutive runs (parallel, default threads) — DONE (184/184 x5)"
+        - "./build.sh --check and --ci-full pass — --check DONE; --ci-full still blocked on the separate order-211 guest-binary gap, not this packet's scope"
 
     - packet_id: ci-full-guest-binary-prereq-gap
       order: 211
