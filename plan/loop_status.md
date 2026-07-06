@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:36:01Z
+LastExecutionTime: 2026-07-06T18:40:03Z
 
 ## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
 
@@ -21,7 +21,7 @@ LastExecutionTime: 2026-07-06T18:36:01Z
   `plan/issues/stable-state-codes-research-2026-07-05.md`. This gives the
   macOS status UX packet a concrete code contract instead of ad hoc labels.
 - **Worker drain — `host-guest-transport-macos` (order 126), claimed and
-  checkpointed IN PROGRESS**: first coherent slice landed on
+  checkpointed then BLOCKED/released**: first coherent slice landed on
   `osx-next@0e49d480`. `VzRuntime` implements the normalized
   `GuestTransport` facade for `GuestEndpoint::MacVz` (`open_stream`, `exec`,
   `exec_streaming`) over the existing VZ `VsockStream` / `vsock_exec` helpers.
@@ -34,9 +34,12 @@ LastExecutionTime: 2026-07-06T18:36:01Z
   `VsockStream` type or calling `open_vsock_stream_current_thread` directly.
   Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
   `cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
-  `./build.sh --check` pass on macOS. Remaining: secure/expect-style live exec
-  helper calls still use `vsock_exec` over the secured boxed stream, and shared
-  conformance still needs a live VM run.
+  `./build.sh --check` pass on macOS. Released the lease after recording the
+  blocker: completion now depends on Linux/order124 landing the shared
+  conformance harness/litmus plus a facade-contract decision for
+  secure/expect/signal ExecOneShot semantics, and on a macOS packaged/entitled
+  VM substrate to run the live Darwin fixture. Local e2e eligibility remains
+  `skip:no-podman-user-session`.
 - **Verification**: conflict-marker scan clean; `plan/index.yaml` and
   `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
   on the integrated `linux-next` tree with the Rust toolchain path added.

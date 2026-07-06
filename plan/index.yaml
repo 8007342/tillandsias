@@ -302,7 +302,7 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: in_progress
+      status: blocked
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
@@ -316,12 +316,6 @@ plan_index:
       pickup_role: macos
       owner_host: macos
       estimated_hours: 8
-      lease:
-        lease_id: "host-guest-transport-macos-20260706T1817Z"
-        agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
-        host: macos
-        acquired_at: "2026-07-06T18:17:01Z"
-        expires_at: "2026-07-06T22:17:01Z"
       events:
         - type: claim
           ts: "2026-07-05T00:52:56Z"
@@ -386,6 +380,38 @@ plan_index:
             `./build.sh --check` pass on macOS. Remaining: secure/expect-style
             live exec helper calls still use `vsock_exec` over the secured boxed
             stream, and shared conformance still needs a live VM run.
+        - type: blocked
+          ts: "2026-07-06T18:40:03Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          reason: >
+            Mac-side backend and caller migration slices are checkpointed, but
+            order 126 cannot be truthfully completed from this host path. The
+            upstream normalization packet still lacks the shared conformance
+            harness/litmus, secure/expect-style exec flows need a facade-contract
+            decision before `vsock_exec` can be removed without losing secure
+            handshakes or signal/expect semantics, and live Darwin conformance
+            requires a packaged/entitled VM substrate not available here
+            (`scripts/e2e-preflight.sh eligibility` => `skip:no-podman-user-session`).
+          blocker_refs:
+            - host-guest-transport-normalization-spec
+            - plan/issues/macos-dev-launch-entitlement-2026-07-05.md
+            - plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md
+          smallest_next_action: >
+            Linux/order124: land the shared conformance harness/litmus and decide
+            the secure/expect/signal shape for ExecOneShot. macOS with the
+            packaged app/VM substrate: rerun the shared conformance fixture on
+            `osx-next@8e9f586d` or newer.
+        - type: released
+          ts: "2026-07-06T18:40:03Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1817Z"
+          host: macos
+          lease_id: "host-guest-transport-macos-20260706T1817Z"
+          reason: >
+            Released the active lease after recording the blocker so the macOS
+            queue can advance to other ready packets instead of spinning on an
+            unprovable completion gate.
         - type: progress
           ts: "2026-07-05T01:01:45Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"

@@ -1,6 +1,6 @@
 # Per-Platform Conformance: Host↔Guest Transport
 
-**Status:** `pending` (blocked on normalization spec)
+**Status:** `blocked` (macOS slices checkpointed; blocked on shared conformance/facade contract and live VM substrate)
 **Depends on:** `host-guest-transport-normalization-spec-2026-06-28`
 **Date:** 2026-06-28
 **Kind:** enhancement
@@ -65,6 +65,16 @@ probes. Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
 `./build.sh --check` pass on macOS. Remaining: secure/expect-style live exec
 helper calls still use `vsock_exec` over the secured boxed stream, and shared
 conformance still needs a live VM run.
+
+Blocked 2026-07-06T18:40Z: released the macOS lease after three coherent slices.
+Completion now depends on work outside this macOS code slice: order 124 still
+needs the shared conformance harness/litmus and a facade-contract decision for
+secure/expect/signal ExecOneShot semantics, and this host path cannot run the
+live Darwin fixture (`scripts/e2e-preflight.sh eligibility` returns
+`skip:no-podman-user-session`; packaged/entitled VM substrate is still tracked by
+the macOS runtime-smoke/entitlement blockers). Next: Linux/order124 lands the
+harness/contract decision, then a macOS host with the packaged VM substrate runs
+the shared fixture against `osx-next@8e9f586d` or newer.
 
 - Implement the facade backend over `VZVirtioSocketDevice`; remove bespoke
   per-call connect logic in favor of `open_stream` / `exec`.
