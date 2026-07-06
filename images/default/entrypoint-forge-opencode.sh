@@ -32,6 +32,7 @@ populate_hot_paths
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
 # so it never blocks the agent launch, and fail-soft.
 ensure_forge_prebuilt_tools &
+ensure_forge_harnesses &
 
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.

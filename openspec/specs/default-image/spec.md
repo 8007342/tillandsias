@@ -450,6 +450,67 @@ equivalent key, so both agent runtimes see the eight `browser.*` tools.
   the host-browser-mcp window-survival requirement
 
 
+### Requirement: Agent permission defaults — pre-grant container-local filesystem; enforce at the boundary
+
+Inside a forge container, agent-level permission prompts for the container's own
+filesystem are security theater. The forge is ephemeral, single-project, and
+already contained by real boundaries that operate below the agent layer. The
+agent's own sandbox adds no meaningful security; it only stalls unattended
+/meta-orchestration loops.
+
+Therefore, ALL forge agent configs (OpenCode, Codex, Claude) SHALL pre-grant
+read/write access to the container-local filesystem by default, with zero
+filesystem permission prompts. The real enforcement lives at the boundary and
+SHALL be strengthened there, not in agent-level prompts.
+
+The containment boundaries that make default-grant safe are:
+
+1. **No kernel capabilities** (`--cap-drop=ALL`): the forge process has no
+   privileges — cannot load modules, change ownership, or escape the container.
+2. **No privilege escalation** (`--security-opt=no-new-privileges`): even if a
+   setuid binary existed, the process cannot gain new privileges.
+3. **User namespace isolation** (`--userns=keep-id`): the container UID (1000)
+   maps to the host UID but cannot interact with host processes or namespaces.
+4. **Proxy-mediated egress** (enclave network): all outbound traffic routes
+   through the enclave proxy (Squid), which enforces a strict domain allowlist.
+   An agent that can write arbitrary files cannot exfiltrate data because no
+   unproxied egress path exists.
+5. **Credential indirection** (git mirror): the forge has no raw GitHub token
+   or provider API keys. All git operations go through the git mirror service,
+   which holds the credential. An agent that can read `/home/forge/.gitconfig`
+   sees only the mirror URL, not the credential.
+6. **Source-mount credential quarantine** (order 170): when the forge source
+   mount overlaps the host checkout, host `~/.gitconfig`, `~/.config/gh`, and
+   `~/.ssh` are masked with forge-owned empty overlays. Host credentials never
+   enter the container.
+7. **Encrypted control channel** (order 141): the host↔guest vsock is encrypted
+   and version-bound (Noise protocol, ChaCha20-Poly1305). A compromised agent
+   cannot inject arbitrary commands into the host or other containers.
+8. **SELinux Phase 6 (planned)**: future release will apply SELinux MCS labels
+   to the forge domain, adding mandatory access control at the boundary layer.
+9. **Ephemeral, single-project container**: each forge is created per project
+   attach and destroyed on detach. Cross-project data cannot accumulate.
+
+No agent-level permission prompt protects against a threat that any of these
+nine boundaries already contains. Strengthening the boundaries is the correct
+long-term approach; default-granting the container-local filesystem eliminates
+theater without weakening security.
+
+#### Scenario: Fresh forge session runs with zero filesystem prompts
+- **WHEN** a forge container starts and a configured agent (OpenCode, Codex,
+  or Claude) is launched
+- **THEN** the agent SHALL NOT prompt for filesystem read/write permissions
+- **AND** the agent SHALL be able to read `/etc`, `/proc`, `/tmp`, `/usr`,
+  `/opt` and write to `/home/forge/**` without user approval
+- **AND** no "allow this filesystem path" prompt SHALL appear during
+  `/meta-orchestration`, diagnostics, or normal agent operations
+
+#### Scenario: Boundary enforcement is documented, not folkloric
+- **WHEN** an operator or auditor asks "why is default-grant safe inside the
+  forge?"
+- **THEN** the answer SHALL reference the nine containment boundaries listed
+  above, not assumptions about agent behavior
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns

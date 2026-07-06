@@ -794,9 +794,67 @@ ensure_forge_prebuilt_tools() {
     # in this same backgrounded context. @trace order 180 dart sub-slice.
     ensure_dart_sdk
 
+    # ── marksman Markdown LSP (single binary) ────────────────────
+    # Unlike cargo dev-tools (archives), marksman is a raw GitHub release asset.
+    # Idempotent: skip if already executable. Fail-soft: a failed fetch is logged
+    # and retried next launch — never fatal. Uses the GitHub `latest` redirect
+    # so the version is de-hardcoded (not pinned in Containerfile).
+    # @trace order 180 marksman sub-slice
+    local marksman_bin="${CARGO_HOME:-/usr/local/cargo}/bin/marksman"
+    if [ ! -x "$marksman_bin" ]; then
+        local marksman_arch
+        case "$arch" in
+            x86_64) marksman_arch="x64" ;;
+            aarch64) marksman_arch="arm64" ;;
+        esac
+        if [ -n "$marksman_arch" ]; then
+            if curl -fsSL --max-time 120 --retry 2 --retry-delay 3 \
+                "https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-${marksman_arch}" \
+                -o "$marksman_bin" 2>/dev/null; then
+                chmod +x "$marksman_bin" 2>/dev/null || true
+                trace_lifecycle "tools" "installed marksman ($arch)"
+            else
+                trace_lifecycle "tools" "marksman fetch failed (non-fatal, retry next launch)"
+            fi
+        fi
+    fi
+
     trace_lifecycle "tools" "prebuilt dev-tools ensured (arch=${arch})"
 }
 
+# ── Agent harness EVERY_LAUNCH update ──────────────────────────
+# ensure_forge_harnesses: npm-install/update agent harnesses (codex, claude-code,
+# opencode, openspec) to the LATEST version at every launch. Runs in the background
+# so it never blocks the agent launch. Fail-soft: if npm is offline or the proxy
+# is unreachable, the baked/cached version is used silently (no hard fail).
+# @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+ensure_forge_harnesses() {
+    # Avoid a concurrent npm join race — only the first process runs npm.
+    local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
+    if ! mkdir "$npm_lock" 2>/dev/null; then
+        return 0
+    fi
+    # Ensure we clean up the lock on exit (even forked).
+    trap 'rm -rf "$npm_lock"' EXIT
+
+    local npm_bin
+    npm_bin="$(command -v npm 2>/dev/null)"
+    if [ -z "$npm_bin" ]; then
+        trace_lifecycle "harness" "npm not available; skipping harness update"
+        return 0
+    fi
+
+    # Update each harness to latest. We use `npm install` (not `npm update`) so
+    # a missing or removed package is installed rather than silently skipped.
+    # Uses $NPM_CONFIG_PREFIX (persistent cache, set in lib-common.sh).
+    for pkg in opencode-ai "@fission-ai/openspec" "@anthropic-ai/claude-code" "@openai/codex"; do
+        if ! "$npm_bin" install -g --no-audit --no-fund "$pkg@latest" 2>/dev/null; then
+            trace_lifecycle "harness" "npm update failed for $pkg (non-fatal, using cached)"
+        fi
+    done
+
+    trace_lifecycle "harness" "agent harnesses up to date"
+}
 
 # ── Update-check rate-limiting ──────────────────────────────
 # Returns 0 (true) if the last check was more than 24 hours ago or never ran.
@@ -853,30 +911,67 @@ find_project_dir() {
 # These helpers verify presence and export the canonical bin path each
 # entrypoint needs. Failure here means the image is corrupt; bail loudly.
 require_opencode() {
-    OC_BIN="/usr/local/bin/opencode"
+    OC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/opencode"
     if [ ! -x "$OC_BIN" ]; then
-        echo "[entrypoint] FATAL: OpenCode missing at $OC_BIN — forge image is corrupt" >&2
-        exit 1
+        OC_BIN="/usr/local/bin/opencode"
     fi
-    trace_lifecycle "install" "opencode: hard-installed ($OC_BIN)"
+    if [ ! -x "$OC_BIN" ]; then
+        trace_lifecycle "harness" "opencode missing — install latest"
+        if ! npm install -g --no-audit --no-fund opencode-ai@latest 2>/dev/null; then
+            trace_lifecycle "harness" "opencode install failed (non-fatal)"
+            return 1
+        fi
+        OC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/opencode"
+    fi
+    trace_lifecycle "install" "opencode: available ($("$OC_BIN" --version 2>/dev/null || echo 'unknown'))"
 }
 
 require_claude() {
-    CC_BIN="/usr/local/bin/claude"
+    CC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/claude"
     if [ ! -x "$CC_BIN" ]; then
-        echo "[entrypoint] FATAL: Claude Code missing at $CC_BIN — forge image is corrupt" >&2
-        exit 1
+        CC_BIN="/usr/local/bin/claude"
     fi
-    trace_lifecycle "install" "claude-code: hard-installed ($CC_BIN)"
+    if [ ! -x "$CC_BIN" ]; then
+        trace_lifecycle "harness" "claude-code missing — install latest"
+        if ! npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@latest" 2>/dev/null; then
+            trace_lifecycle "harness" "claude-code install failed (non-fatal)"
+            return 1
+        fi
+        CC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/claude"
+    fi
+    trace_lifecycle "install" "claude-code: available ($("$CC_BIN" --version 2>/dev/null || echo 'unknown'))"
 }
 
 require_openspec() {
-    OS_BIN="/usr/local/bin/openspec"
+    OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
     if [ ! -x "$OS_BIN" ]; then
-        echo "[entrypoint] FATAL: OpenSpec missing at $OS_BIN — forge image is corrupt" >&2
-        exit 1
+        OS_BIN="/usr/local/bin/openspec"
     fi
-    trace_lifecycle "install" "openspec: hard-installed ($OS_BIN)"
+    if [ ! -x "$OS_BIN" ]; then
+        trace_lifecycle "harness" "openspec missing — install latest"
+        if ! npm install -g --no-audit --no-fund "@fission-ai/openspec@latest" 2>/dev/null; then
+            trace_lifecycle "harness" "openspec install failed (non-fatal)"
+            return 1
+        fi
+        OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
+    fi
+    trace_lifecycle "install" "openspec: available ($("$OS_BIN" --version 2>/dev/null || echo 'unknown'))"
+}
+
+require_codex() {
+    CX_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/codex"
+    if [ ! -x "$CX_BIN" ]; then
+        CX_BIN="/usr/local/bin/codex"
+    fi
+    if [ ! -x "$CX_BIN" ]; then
+        trace_lifecycle "harness" "codex missing — install latest"
+        if ! npm install -g --no-audit --no-fund "@openai/codex@latest" 2>/dev/null; then
+            trace_lifecycle "harness" "codex install failed (non-fatal)"
+            return 1
+        fi
+        CX_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/codex"
+    fi
+    trace_lifecycle "install" "codex: available ($("$CX_BIN" --version 2>/dev/null || echo 'unknown'))"
 }
 
 # ── OpenCode config overlay ─────────────────────────────────

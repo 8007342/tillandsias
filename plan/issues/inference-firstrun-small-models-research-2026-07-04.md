@@ -3,7 +3,7 @@
 - class: research (inference)
 - filed: 2026-07-04
 - owner: linux
-- status: ready
+- status: done
 - trace: spec:inference-container, crates/tillandsias-core/src/container_profile.rs (models cache)
 - goal: operator directive — download a few 0.3-1.5B general-purpose free open-source models by default on first run, made available inside the inference container; foundation for fine-tuning + piggy-backing agents that diagnose local build tests.
 

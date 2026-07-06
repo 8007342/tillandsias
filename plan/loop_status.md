@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-05T22:27:00Z
+LastExecutionTime: 2026-07-05T23:28:00Z
 
 ## Cycle 2026-07-05T22:44Z (macos — meta-orchestration, round 2)
 
@@ -88,6 +88,18 @@ Reason: Secure-wire/embedded-guest path remains the critical product blocker.
   order 194 `secure-channel-release-and-probe-hardening` — prune stale active
   issues, update dashboard provenance, and close PSK/release/probe ambiguity before
   secure-channel maturity advances.
+
+### Cycle 2026-07-05T23:28Z (forge — meta-orchestration)
+- Recovered dirty VERSION (0.3.260705.5 → 0.3.260705.6 uncommitted), committed as
+  checkpoint before work.
+- Claimed and completed order 165 (forge-agent-permission-defaults): verified exit
+  criteria that OpenCode/Codex already pre-grant container-local filesystem
+  (permission:allow + --dangerously-skip-permissions / --dangerously-bypass-approvals),
+  and wrote boundary-enforcement rationale to openspec/specs/default-image/spec.md
+  documenting the nine containment boundaries (cap-drop, no-new-privs, user-ns,
+  proxy egress, credential indirection, source-mount quarantine, encrypted control
+  channel, SELinux Phase 6, ephemeral single-project container) that make
+  default-grant safe inside the forge. No remaining forge-agent-permission blockers.
 
 ## This Loop (2026-07-05 macos — meta-orchestration)
 - Recovered dirty macOS packaging work: styled DMG script/assets, release workflow

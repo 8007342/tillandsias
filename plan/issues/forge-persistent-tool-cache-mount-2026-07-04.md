@@ -3,7 +3,7 @@
 - class: enhancement (forge cache)
 - filed: 2026-07-04
 - owner: linux
-- status: pending (blocked on the research persistence-answer)
+- status: done
 - depends_on: forge-image-creation-vs-firstrun-split-research-2026-07-04.md
 - trace: spec:forge-cache-dual
 

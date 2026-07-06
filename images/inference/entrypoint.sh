@@ -30,6 +30,47 @@ export OLLAMA_MAX_LOADED_MODELS=1
 # Shared model cache — persisted via volume mount.
 export OLLAMA_MODELS=/home/ollama/.ollama/models/
 
+# ── Self-install ollama binary (FIRST_RUN into persistent model cache) ──
+# @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180 ollama sub-slice)
+# Download the latest ollama release, extracting only bin/ollama (skipping
+# ~1.8GB GPU runner libs). Installs into the persistent model cache volume so
+# it survives container restarts. Arch-aware (x86_64|aarch64). Fail-soft.
+OLLAMA_BINDIR="${OLLAMA_MODELS}.tools/ollama"
+OLLAMA_BIN="$OLLAMA_BINDIR/ollama"
+if [ ! -x "$OLLAMA_BIN" ]; then
+    echo "[inference] Installing ollama binary (first run)..."
+    mkdir -p "$OLLAMA_BINDIR" 2>/dev/null || true
+    OLLAMA_ARCH=""
+    case "$(uname -m)" in
+        x86_64 | amd64) OLLAMA_ARCH="amd64" ;;
+        aarch64 | arm64) OLLAMA_ARCH="arm64" ;;
+    esac
+    if [ -n "$OLLAMA_ARCH" ]; then
+        TMP_O="$(mktemp -d 2>/dev/null)" || true
+        if [ -n "$TMP_O" ]; then
+            if curl -fsSL --max-time 120 --retry 2 --retry-delay 3 \
+                "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${OLLAMA_ARCH}.tar.zst" \
+                -o "$TMP_O/ollama.tar.zst" 2>/dev/null; then
+                if zstd -d "$TMP_O/ollama.tar.zst" -o "$TMP_O/ollama.tar" 2>/dev/null \
+                    && tar -xf "$TMP_O/ollama.tar" -C "$TMP_O" bin/ollama 2>/dev/null \
+                    && install -m 0755 "$TMP_O/bin/ollama" "$OLLAMA_BIN" 2>/dev/null; then
+                    echo "[inference] ollama $OLLAMA_ARCH installed into model cache"
+                else
+                    echo "[inference] ollama install FAILED — will retry next launch (non-fatal)" >&2
+                fi
+            else
+                echo "[inference] ollama download FAILED — will retry next launch (non-fatal)" >&2
+            fi
+            rm -rf "$TMP_O"
+        fi
+    else
+        echo "[inference] unsupported arch $(uname -m) — relying on system ollama" >&2
+    fi
+fi
+if [ -x "$OLLAMA_BIN" ]; then
+    export PATH="$OLLAMA_BINDIR:$PATH"
+fi
+
 # CA certificate from podman secret for HTTPS trust.
 # @trace spec:podman-secrets-integration, spec:inference-container
 # Ollama may need to trust the enclave proxy's CA when pulling models through it.

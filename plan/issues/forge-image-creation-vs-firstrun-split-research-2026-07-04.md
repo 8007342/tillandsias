@@ -3,7 +3,7 @@
 - class: research (forge image architecture)
 - filed: 2026-07-04
 - owner: linux
-- status: ready
+- status: done
 - trace: spec:default-image, spec:forge-cache-dual, spec:forge-hot-cold-split, cheatsheets/runtime/forge-paths-ephemeral-vs-persistent.md
 - goal: operator directive — remove finicky curl/tar installers from container CREATION and move them to idempotent FIRST_RUN flows on the persistent cache; harnesses reinstalled EVERY_LAUNCH for latest.
 
