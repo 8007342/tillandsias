@@ -1143,7 +1143,7 @@ plan_index:
     - packet_id: stable-state-codes-research
       order: 160
       title: "Research: stable finite state codes for host/vm/guest/podman status"
-      status: claimed
+      status: done
       kind: research
       deliverable: plan/issues/stable-state-codes-research-2026-07-05.md
       depends_on: [socket-protocol-push-variants, vm-headless-persistent-listener]
@@ -1163,6 +1163,16 @@ plan_index:
           host: macos
           lease_id: "stable-state-codes-research-20260706T1807Z"
           expires_at: "2026-07-06T22:07:02Z"
+        - type: completed
+          ts: "2026-07-06T18:13:19Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1807Z"
+          host: macos
+          lease_id: "stable-state-codes-research-20260706T1807Z"
+          evidence:
+            - "plan/issues/stable-state-codes-research-2026-07-05.md#research-result---2026-07-06"
+            - "Finite dotted-code taxonomy covers host/vm/guest/podman plus auth/cloud/forge/transport surfaces."
+            - "Tray message map pins each chip string under the 37-character cap."
+            - "./build.sh --check passed on the integrated linux-next tree before research completion."
       outcome: >
         Define the canonical finite-state taxonomy for Tillandsias status
         surfaces. The result should cover host, VM, guest, podman, transport,

@@ -1,6 +1,35 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T18:10:00Z
+LastExecutionTime: 2026-07-06T18:13:19Z
+
+## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, started on `osx-next` clean, credential guard
+  `ok:gh-keyring`.
+- **Branch integration**: `osx-next` had drifted from `origin/linux-next`;
+  merged `origin/linux-next` into `osx-next` and pushed `osx-next@310b7232`.
+  While publishing the next plan claim, the `linux-next` macOS build gate
+  exposed that shared trunk was missing already-landed `osx-next` clippy fixes;
+  merged `origin/osx-next` into `linux-next` by merge commit
+  `1c8203d3`. Added the small Linux cfg fix for the new
+  `containers.conf` proxy setup compile break (`e5c02608`).
+- **Worker drain — `stable-state-codes-research` (order 160), claimed and
+  COMPLETED**: documented the finite dotted-code taxonomy for
+  host/vm/guest/podman plus auth/cloud/forge/transport, event ownership,
+  request/reply fallback mapping until push streams land, stable support-code
+  naming, and a tray chip message map capped at 37 chars in
+  `plan/issues/stable-state-codes-research-2026-07-05.md`. This gives the
+  macOS status UX packet a concrete code contract instead of ad hoc labels.
+- **Verification**: conflict-marker scan clean; `plan/index.yaml` and
+  `.github/workflows/release.yml` parse as YAML; `./build.sh --check` passes
+  on the integrated `linux-next` tree with the Rust toolchain path added.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` →
+  `skip:no-podman-user-session`; local-build e2e skipped with the recorded
+  verdict.
+- **Next macOS work**: order 198 remains actively leased by another macOS
+  agent until `2026-07-06T20:58:00Z`; older macOS stream/status implementation
+  packets still depend on the VM/headless persistent listener and push-message
+  work.
 
 ## Cycle 2026-07-06T17:34Z (linux_mutable CCR sandbox — meta-orchestration)
 
