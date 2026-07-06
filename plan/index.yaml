@@ -2615,7 +2615,7 @@ plan_index:
     - packet_id: macos-tray-clippy-warnings
       order: 197
       title: "macOS tray: fix 3 pre-existing clippy warnings (large_enum_variant x2, match_result_ok)"
-      status: claimed
+      status: done
       kind: enhancement
       deliverable: plan/issues/macos-tray-clippy-warnings-2026-07-06.md
       depends_on: []
@@ -2636,6 +2636,19 @@ plan_index:
           host: macos
           lease_id: "macos-tray-clippy-warnings-claim-1"
           expires_at: "2026-07-06T19:45:00Z"
+        - type: completed
+          ts: "2026-07-06T15:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1545Z"
+          host: macos
+          summary: >
+            Boxed ControlWireStream::Secure in both action_host.rs and
+            diagnose.rs; fixed status_item.rs:203's redundant .ok() match to
+            `if let Ok(..) = std::env::current_exe()`. Left the 3x-duplicated
+            ControlWireStream pattern as-is (noted optional, not urgent).
+            cargo clippy -p tillandsias-macos-tray --all-targets: 0 warnings.
+            cargo test -p tillandsias-macos-tray: 54/54 pass (1 ignored).
+          commits:
+            - "0965ad53"
       exit_criteria:
         - "cargo clippy -p tillandsias-macos-tray --all-targets reports 0 warnings"
 
