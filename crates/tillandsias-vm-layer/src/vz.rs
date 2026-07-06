@@ -1460,25 +1460,28 @@ impl VmRuntime for VzRuntime {
     async fn exec(&self, argv: &[&str]) -> Result<ExitStatus, VmError> {
         // Non-interactive guest exec over the control wire, mirroring
         // WslRuntime::exec (`wsl --exec`) for cross-platform VmRuntime parity.
-        // The PTY session machinery lives in tillandsias-host-shell, which
-        // depends on THIS crate, so we cannot reuse it (cycle); instead we
-        // speak the control wire directly via the self-contained vsock_exec
-        // client. See plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+        // Route through the normalized GuestTransport facade so the macOS
+        // one-shot path shares the same ExecOneShot primitive as platform
+        // callers that use GuestEndpoint::MacVz directly.
         use std::os::unix::process::ExitStatusExt;
+        use tillandsias_control_wire::guest_transport::{
+            ExecRequest, GuestEndpoint, GuestTransport,
+        };
         use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
 
-        let stream = self
-            .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-            .map_err(|e| format!("VzRuntime::exec: vsock connect: {e}"))?;
-        let out = crate::vsock_exec::exec_over_stream(stream, argv).await?;
+        let out = <Self as GuestTransport>::exec(
+            self,
+            &GuestEndpoint::MacVz {
+                port: CONTROL_WIRE_VSOCK_PORT,
+            },
+            ExecRequest::new(argv),
+        )
+        .await
+        .map_err(|e| format!("VzRuntime::exec: {e}"))?;
 
-        // Synthesize a Unix ExitStatus from the guest waitpid-style result:
-        // signal in the low 7 bits, else exit code in the high byte (WEXITSTATUS).
-        let raw = match out.exit.signal {
-            Some(sig) => sig & 0x7f,
-            None => (out.exit.code & 0xff) << 8,
-        };
+        // Synthesize a Unix ExitStatus from the facade's exit-code result
+        // (high byte = WEXITSTATUS).
+        let raw = (out.exit_code & 0xff) << 8;
         Ok(ExitStatus::from_raw(raw))
     }
 
@@ -1763,7 +1766,7 @@ impl tillandsias_control_wire::guest_transport::GuestTransport for VzRuntime {
         Ok(tillandsias_control_wire::guest_transport::ExecOutput {
             stdout: out.stdout,
             stderr: vec![],
-            exit_code: out.exit.code,
+            exit_code: guest_transport_exit_code(out.exit),
         })
     }
 
@@ -1797,8 +1800,16 @@ impl tillandsias_control_wire::guest_transport::GuestTransport for VzRuntime {
         Ok(tillandsias_control_wire::guest_transport::ExecOutput {
             stdout: out.stdout,
             stderr: vec![],
-            exit_code: out.exit.code,
+            exit_code: guest_transport_exit_code(out.exit),
         })
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn guest_transport_exit_code(exit: tillandsias_control_wire::PtyExit) -> i32 {
+    match exit.signal {
+        Some(signal) => 128 + signal,
+        None => exit.code,
     }
 }
 
@@ -2060,16 +2071,13 @@ mod tests {
         );
     }
 
-    /// `VzRuntime::exec` is explicitly deferred to Phase 5; returns a clear
-    /// "deferred" message rather than `unimplemented!()` so callers don't
-    /// silently panic.
-    ///
-    /// @trace spec:vm-idiomatic-layer
     /// `VzRuntime::exec` is now implemented over the control wire (see
-    /// `vsock_exec`). Without a started VM it must fail at the vsock-connect
-    /// step with a clear "VM not started" error — NOT silently succeed and NOT
-    /// the old Phase-5 deferral stub. The happy-path protocol is unit-tested in
-    /// `vsock_exec::tests` against an in-memory peer (no real VM).
+    /// the GuestTransport facade). Without a started VM it must fail at the
+    /// MacVz backend with a clear "VM not started" error — NOT silently succeed
+    /// and NOT the old Phase-5 deferral stub. The happy-path protocol is
+    /// unit-tested in `vsock_exec::tests` against an in-memory peer (no real VM).
+    ///
+    /// @trace spec:vm-idiomatic-layer, spec:host-guest-transport
     #[cfg(target_os = "macos")]
     #[tokio::test]
     async fn vz_exec_without_started_vm_fails_at_connect() {
@@ -2080,8 +2088,57 @@ mod tests {
             .await
             .expect_err("exec without a started VM must fail");
         assert!(
-            err.contains("vsock connect") && err.contains("not started"),
+            err.contains("GuestTransport") && err.contains("not started"),
             "unexpected exec error: {err}"
+        );
+    }
+
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vmruntime_exec_routes_through_guest_transport_exec() {
+        let source = include_str!("vz.rs");
+        let window = source
+            .split("async fn exec(&self, argv: &[&str]) -> Result<ExitStatus, VmError> {")
+            .nth(1)
+            .and_then(|s| s.split("\n    async fn wait_ready").next())
+            .expect("VzRuntime::exec source");
+        assert!(
+            window.contains("<Self as GuestTransport>::exec"),
+            "VmRuntime::exec must route through GuestTransport::exec: {window}"
+        );
+        assert!(
+            window.contains("GuestEndpoint::MacVz"),
+            "VmRuntime::exec must target the MacVz endpoint: {window}"
+        );
+    }
+
+    /// @trace spec:host-guest-transport
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn guest_transport_exit_code_preserves_unix_signal_convention() {
+        use tillandsias_control_wire::PtyExit;
+
+        assert_eq!(
+            guest_transport_exit_code(PtyExit {
+                code: 17,
+                signal: None
+            }),
+            17
+        );
+        assert_eq!(
+            guest_transport_exit_code(PtyExit {
+                code: 0,
+                signal: Some(15)
+            }),
+            143
+        );
+        assert_eq!(
+            guest_transport_exit_code(PtyExit {
+                code: 143,
+                signal: Some(15)
+            }),
+            143
         );
     }
 
