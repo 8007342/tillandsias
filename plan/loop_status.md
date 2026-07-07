@@ -1,6 +1,68 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T20:25:00Z
+LastExecutionTime: 2026-07-06T20:30:00Z
+
+## Cycle 2026-07-06T19:30Z (macos — /goal "drain the macos queue")
+
+- **Host**: macOS arm64, `osx-next` (clean, credential guard `ok:gh-keyring`).
+  Pulled substantial concurrent work from linux/windows (order 194 macos-
+  native-tray litmus fixes, order 168 inference OOM fix, order 201 filed,
+  9 litmus files fixed by Linux's own triage of the remaining order-198
+  items, plus a host-guest transport normalization refactor).
+- **Order 201 (litmus-runner-command-backslash-escaping), claimed and
+  COMPLETED**: implemented the proposed fix (collapse `\\` -> `\` after
+  the existing `\"` -> `"` pass, in that exact order — reproduces a real
+  YAML parser's left-to-right escape consumption). Added the required
+  regression test (`litmus:litmus-runner-backslash-escaping-shape`),
+  verified as an effective negative/positive control (fails when the fix
+  is reverted, passes with it in place). `./build.sh --check` exits 0.
+- **Continued triaging litmus-full-suite-macos-first-run-findings (order
+  198, already closed by Linux) — found and fixed 4 real macOS/BSD-
+  specific bugs Linux's own investigation had mischaracterized as
+  "environment noise"** (added a correction event, didn't edit Linux's
+  original text):
+  - `litmus:forge-environment-discoverability-install-shape`: `\\|` parsed
+    as escaped-backslash + dangling alternation on BSD/macOS grep ("empty
+    (sub)expression"); fixed with the portable bracket-expression `[|]`.
+  - `litmus:forge-opencode-onboarding-bootstrap-shape`: same class, `\\[`
+    in an awk regex; fixed with `[[]`.
+  - `litmus:image-build-convergence-shape` (forge-staleness spec): found
+    2 more bash-3.2/<4.4 incompatibilities in `scripts/build-image.sh` —
+    `mapfile -d ''` (bash 4+ builtin, replaced with the portable
+    `while read -d ''` loop the file's own git-less fallback already
+    used) and `"${ARR[@]}"` on a possibly-empty array under `set -u`
+    (bash <4.4 treats this as "unbound variable", fixed with the
+    `"${ARR[@]+"${ARR[@]}"}"` conditional-expansion idiom for
+    NO_CACHE_ARGS/BUILD_ARGS/CACHE_MOUNT_ARGS).
+  - `litmus:zen-default-with-ollama-shape` T0 step: genuine drift (order
+    183 replaced the hardcoded pull literal with a config-driven
+    DEFAULT_MODELS loop); fixed the check. T1 step: resolved the "open
+    question" I'd flagged — Linux's order-168 investigation on a sibling
+    litmus already answered it (DEFAULT_MODELS was deliberately narrowed
+    to fix a real OOM bug, so T1's auto-pull guarantee was intentionally
+    dropped, not a regression); re-pointed the check at the explanatory
+    comment.
+- **Full pre-build/instant litmus suite**: started this cycle at 93 PASS
+  (bare shell, no cargo on PATH) → 117 PASS / 2 FAIL / 100% coverage on
+  the final merged tree. Both remaining fails are confirmed local-
+  machine-state gaps on this specific dev host (no cross-compiled x86_64
+  guest binary; no `flock`, and no working Podman machine at all — see
+  below), not code bugs.
+- **Investigated the "no Podman machine" root cause** behind every macOS
+  finding this cycle that needed live Podman: `podman-machine-default`
+  exists but has never started; `podman machine start` fails with
+  `krunkit: executable file not found` (not in Homebrew core, needs a
+  third-party tap or Podman Desktop). One-time local machine setup gap,
+  not a repo bug — documented the exact bootstrap command in
+  `plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md` rather
+  than installing a third-party tap unprompted.
+- All changes routed through `linux-next` per the openspec/scripts
+  shared-scope write rule (this cycle: `linux-next@2763f3de`,
+  `4a5729b2`); merged back into `osx-next@4a5729b2`, tests green (58/58
+  macos-tray, 50/50 vm-layer), `cargo fmt --check` clean.
+- **macOS queue status**: order 191 still needs windows-next's half
+  (osx-next's is done); no other macOS-owned or `any`-owned ready work
+  remains in `plan/index.yaml`.
 
 ## Cycle 2026-07-06T20:19Z (linux_mutable — build-install-and-smoke-test-e2e)
 
