@@ -25,6 +25,13 @@
 set -euo pipefail
 export TILLANDSIAS_NO_SINGLETON=1
 
+# On Fedora Silverblue (immutable), transparently re-exec inside the
+# tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
+# Non-Silverblue hosts skip with zero overhead.
+_BUILDER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$_BUILDER_DIR/scripts/with-tillandsias-builder.sh"
+unset _BUILDER_DIR
+
 # @trace spec:linux-native-portable-executable, spec:dev-build, spec:build-script-architecture, spec:windows-cross-build
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

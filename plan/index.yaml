@@ -4644,3 +4644,49 @@ plan_index:
         - "Recommended option identified with rationale"
         - "If deploy-key/personal-access-token route: token scoped to push-only with no other permissions"
         - "Solution does not require user to enter GitHub credentials in the forge"
+
+    - packet_id: silverblue-toolbox-builder
+      order: 239
+      title: "Research + implement: transparent toolbox-based builder layer for Fedora Silverblue hosts"
+      status: ready
+      kind: research+enhancement
+      deliverable: plan/issues/silverblue-toolbox-builder-2026-07-07.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [silverblue, toolbox, build, infrastructure, container]
+      estimated_hours: 3
+      scope_note: >
+        Fedora Silverblue is an immutable host — the root filesystem is read-only,
+        so `rustc`, `cargo`, `ruby`, `gcc`, `pkg-config`, and other build tools
+        cannot be installed via `dnf` on the host directly. `toolbox` (v0.3+) is
+        the standard Silverblue escape hatch: it creates a mutable Fedora container
+        with the host's home directory mounted.
+
+        Research and implement a transparent wrapper that, at the top of `build.sh`
+        (and any other build/CI entry points), detects the Silverblue host, checks
+        if we are already inside a `tillandsias-builder` toolbox, and if not:
+        (A) creates the toolbox if absent, (B) idempotently installs the required
+        tools (`rustup` + Rust toolchain, `gcc`, `ruby`, `pkg-config`, `cmake`,
+        `openssl-devel`, etc.), and (C) re-execs the same command inside the
+        toolbox — all transparent to the caller.
+
+        The implementation must be:
+        - Idempotent: second invocation is a no-op (toolbox already exists, already
+          initialized)
+        - Transparent: caller does not need to know about toolbox — `./build.sh`
+          "just works" on Silverblue
+        - Efficient: skip toolbox check on non-Silverblue hosts (Fedora Workstation,
+          macOS, Windows) with zero overhead
+        - Composable: a standalone script `scripts/with-tillandsias-builder.sh`
+          that any script can source to wrap itself in the toolbox
+      outcome: >
+        `./build.sh`, `./build.sh --check`, `./build.sh --test`, and other build
+        commands work transparently on Fedora Silverblue without manual `rustup`,
+        `dnf install`, or toolbox entry steps. The builder toolbox is created and
+        initialized on first use and reused on subsequent invocations.
+      exit_criteria:
+        - "`./build.sh --check` succeeds on a fresh Silverblue host with no pre-installed Rust toolchain"
+        - "Toolbox creation + tool installation is idempotent (second run skips, does not reinstall)"
+        - "Non-Silverblue hosts (Workstation, macOS, Windows) pass through with zero overhead"
+        - "`scripts/with-tillandsias-builder.sh <command>` works independently of build.sh"
+        - "Clear error message if `toolbox` binary is absent on Silverblue"
