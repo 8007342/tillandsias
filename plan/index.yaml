@@ -3752,6 +3752,50 @@ plan_index:
         - "a litmus test pins that the primitive-resolution mechanism itself doesn't silently regress"
         - "an authoring guide exists and is linked from methodology/ or a new cheatsheet"
 
+    - packet_id: build-sh-unconditional-podman-gate
+      order: 226
+      title: "Fix: build.sh's top-level require_podman gate blocks flags that never touch podman"
+      status: claimed
+      kind: bug-fix
+      deliverable: plan/issues/build-sh-unconditional-podman-gate-2026-07-07.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [bug-fix, build-script, podman, dev-loop, cross-host]
+      estimated_hours: 1
+      outcome: >
+        build.sh:63 runs `require_podman || exit 1` unconditionally, before
+        argument parsing even happens, so every invocation — including
+        --check, --test, plain debug builds, --install (alone), and
+        --clean/--wipe/--remove — pays a hard Podman-connectivity
+        requirement none of their own work needs. Traced every Podman
+        touchpoint in build.sh: every other call (dev-cache proxy setup,
+        registries config, all 3 image-prune calls) already degrades
+        gracefully (warn + continue); the only flag with a genuine,
+        unconditional Podman need is --init. --ci/--ci-full/--release
+        delegate to scripts/local-ci.sh, which already calls require_podman
+        itself at the 4 specific points that need it — so the build.sh-level
+        gate is redundant for those paths too, not just overly broad for the
+        others. Fix: remove the top-level gate, add an explicit
+        require_podman guard immediately before the --init block only, leave
+        --ci/--ci-full/--release alone (already correctly self-guarded via
+        local-ci.sh). This generalizes the narrower macOS-only symptom fixed
+        in order 201/macos-build-check-podman-wrapper — that fix made
+        require_podman itself succeed again on macOS, but any host with a
+        stopped/misconfigured Podman daemon still hits this same
+        architectural gate today.
+      events:
+        - type: claim
+          ts: "2026-07-07T00:00:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260707T0000Z"
+          host: macos
+          lease_id: "build-sh-unconditional-podman-gate-claim-1"
+          expires_at: "2026-07-07T04:00:00Z"
+      exit_criteria:
+        - "./build.sh --check exits 0 with Podman stopped/misconfigured"
+        - "./build.sh --init still fails fast and clearly (not a raw downstream error) with Podman stopped/misconfigured"
+        - "no regression in --ci/--ci-full/--release's existing Podman-gating behavior (still correctly fails when a real Podman-dependent litmus check can't run)"
+
     - packet_id: remote-projects-clone-test-flakiness
       order: 210
       title: "Fix: remote_projects.rs clone tests flaky (shared mutex poison + stale atomic-clone path assertion)"
