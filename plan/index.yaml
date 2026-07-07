@@ -4516,13 +4516,25 @@ plan_index:
     - packet_id: container-microdnf-gpg-workaround
       order: 236
       title: "Add --nogpgcheck to microdnf install in forge-base and chromium-core for transient Fedora 44 upstream GPG signature failure"
-      status: ready
+      status: done
       kind: fix
       deliverable: images/default/Containerfile.base + images/chromium/Containerfile.core
       depends_on: []
       pickup_role: linux
       capability_tags: [container, build, fedora]
       estimated_hours: 0.25
+      events:
+        - type: completed
+          ts: "2026-07-07T19:20:00Z"
+          agent_id: "linux-tlatoani-workstation-opencode-20260707T1918Z"
+          host: linux_immutable
+          commits: ["9f4dd61d"]
+          summary: >
+            Already completed in commit 9f4dd61d (found during meta-orchestration
+            cycle on linux_immutable). Containerfile.base and Containerfile.core
+            already had `--nogpgcheck`. Noting: Containerfile.framework (2 call
+            sites) and inference/Containerfile also lack `--nogpgcheck` — filed
+            as residual scope.
       outcome: >
         Fedora 44's `updates` repo has transiently invalid GPG signatures on
         packages like `gdb-17.2-1.fc44.x86_64` and `bluez-libs-5.87-1.fc44.x86_64`,

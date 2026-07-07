@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-07T08:18:33Z
+LastExecutionTime: 2026-07-07T19:17:35Z
 
 ## Cycle 2026-07-07T08:18Z (linux_mutable — meta-orchestration)
 
@@ -2292,3 +2292,18 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
   - `.github/workflows/release.yml`: +`rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl`
   - `.github/workflows/nix-cache-warm.yml`: removed `push` trigger (keep `schedule` + `workflow_dispatch`)
 - **Blocked**: orders 148/150/154 (Windows), 155/161b/198 (macOS) need their respective host agents. Order 145 (encrypted-channel-vsock-cutover) needs cross-host coordination. Order 129 needs user to run forge session for proxy logs.
+
+## Cycle 2026-07-07T19:17Z (linux_immutable — meta-orchestration, opencode)
+
+- **Host**: Linux immutable (Fedora Silverblue), `linux-next` (clean at `9f4dd61d`,
+  credential guard `ok:gh-keyring`).
+- **Order 236 (container-microdnf-gpg-workaround)**: Found already completed in
+  commit `9f4dd61d` but still marked `ready` in `plan/index.yaml`. Updated status
+  to `done` with completion event. Noted residual: `Containerfile.framework` and
+  `inference/Containerfile` still have `microdnf install` without `--nogpgcheck`.
+- **Reduction observation**: plan/index.yaml reported order 236 as `ready` for
+  ~11h after the fix commit landed — plan ledger lags behind `git log` when only
+  one side (code vs plan) is updated. No formal cross-packet staleness checker.
+- **Next cycle suggestion**: run curl-install e2e against latest release
+  v0.3.260707.2 (latest tested in plan: v0.3.260627.1) on a linux_immutable host;
+  or pick up order 224 (litmus-command-portability-dsl-research) for `any` host.
