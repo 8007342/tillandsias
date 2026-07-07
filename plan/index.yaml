@@ -3337,6 +3337,58 @@ plan_index:
             plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md
             as a new papercut finding. Detail in the deliverable's
             2026-07-06T19:20Z update.
+        - type: correction
+          ts: "2026-07-06T20:00:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1930Z"
+          host: macos
+          summary: >
+            Correcting the previous event's "environment noise, no packet
+            needed" verdict for 4 of the 5 items (not forge-hot-cold-split,
+            not independently re-verified here): these were real,
+            macOS/BSD-specific bugs, not noise — they simply couldn't
+            reproduce on Linux's GNU-grep/bash-4+ toolchain, which is
+            exactly why "doesn't repro on my platform" isn't equivalent to
+            "not a bug" for cross-host portability findings. All 4 fixed
+            this cycle with hand-verified root causes (see
+            plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
+            2026-07-06T20:00Z update for detail):
+            forge-environment-discoverability-install-shape (`\\|` parsed
+            as escaped-backslash + dangling alternation on BSD grep,
+            "empty (sub)expression"); forge-opencode-onboarding-bootstrap-shape
+            (same class, `\\[` in an awk regex); forge-staleness's
+            image-build-convergence-shape (scripts/build-image.sh used
+            `mapfile -d ''`, a bash-4+ builtin absent from macOS's stock
+            bash 3.2, plus `"${ARR[@]}"` on a possibly-empty array, which
+            bash <4.4 treats as "unbound variable" under set -u, not an
+            empty expansion); zen-default-with-ollama-shape's T0 step
+            (checked a `ollama pull qwen2.5:0.5b` literal that order 183
+            genuinely replaced with a config-driven DEFAULT_MODELS loop —
+            this one WAS real litmus drift, just not "environment noise").
+            Also independently discovered and fixed the exact backslash-
+            collapse root cause order 201 already names (implemented the
+            fix there this cycle) — worth noting since it explains why
+            these 4 looked like "can't reproduce" from a Linux vantage
+            point: the underlying parser bug plus BSD/GNU regex-dialect
+            differences compound into "no signal on Linux, real failure
+            on macOS."
+        - type: progress
+          ts: "2026-07-06T20:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1930Z"
+          host: macos
+          summary: >
+            Also resolved zen-default-with-ollama-shape's T1 open question
+            (flagged, not fixed, in the litmus-full-suite-macos-first-run-
+            findings update): Linux's order-168 investigation of the
+            sibling inference-firstrun-default-models-shape litmus already
+            answered it — order 168 (commit e56b0156) deliberately
+            narrowed DEFAULT_MODELS to qwen2.5:0.5b only to fix a real OOM
+            bug, so T1's "always pulled" guarantee was intentionally
+            dropped, not a regression. Re-pointed the T1 step at the
+            explanatory comment documenting that intent instead of
+            asserting a pull that no longer exists on purpose. Full
+            pre-build/instant suite now 117 PASS / 2 FAIL (both confirmed
+            local-machine-state gaps on this dev host: no cross-compiled
+            guest binary, no flock — see the deliverable) / 100% coverage.
       exit_criteria:
         - "each of the 14 remaining (spec, test) pairs has either a plan/index.yaml ready packet (genuine drift), a documented environmental/local-state note (no packet needed), or a landed fix + green re-run"
 
@@ -3576,7 +3628,7 @@ plan_index:
     - packet_id: litmus-runner-command-backslash-escaping
       order: 201
       title: "Fix: litmus runner's command: extraction doesn't collapse \\\\ to \\, breaking valid-YAML regex escapes"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md
       depends_on: []
@@ -3599,7 +3651,37 @@ plan_index:
         substitution (matches real YAML semantics), or switch command:/step
         parsing to the yq-backed path already used by yaml_get() for other
         fields when yq is available.
-      events: []
+      events:
+        - type: claim
+          ts: "2026-07-06T19:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1930Z"
+          host: macos
+          lease_id: "litmus-runner-command-backslash-escaping-claim-1"
+          expires_at: "2026-07-06T23:40:00Z"
+        - type: completed
+          ts: "2026-07-06T19:50:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260706T1930Z"
+          host: macos
+          summary: >
+            Fixed as proposed: added a second substitution pass
+            (`current_step_command="${current_step_command//\\\\/\\}"`)
+            after the existing `\"` -> `"` pass, in that order — this
+            reproduces a real YAML parser's left-to-right escape
+            consumption for combined `\\`/`\"` sequences (verified
+            mechanically against several test cases before landing).
+            Added the required regression test: a new litmus fixture
+            (litmus:litmus-runner-backslash-escaping-shape, bound to
+            spec:spec-traceability matching the runner's own @trace) whose
+            command: requires a valid-YAML `\\.` to collapse to `\.` for a
+            grep -E literal-dot match to behave correctly; verified it
+            fails when the fix is reverted (negative control) and passes
+            with the fix in place (positive control). Full pre-build/
+            instant suite: 116 PASS / 3 FAIL (unchanged, same 3
+            already-diagnosed non-actionable items) / 100% coverage.
+            `./build.sh --check` exits 0 (fmt + type-check + strict
+            clippy all pass).
+          commits:
+            - "(pending — see linux-next push this cycle)"
       exit_criteria:
         - "a command: string written as valid backslash-escaped YAML (e.g. containing \\.) executes with a single literal backslash at runtime, matching what ruby -ryaml/yq would produce"
         - "a regression test (fixture litmus file + expected extracted command) pins the fix so this can't silently regress again"

@@ -1,0 +1,64 @@
+# @trace spec:spec-traceability
+#
+# Regression pin for the litmus runner's own `command:` extraction (order
+# 201, plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md).
+# scripts/run-litmus-test.sh reads each critical_path step's `command:`
+# value via a bash regex over raw file bytes, then unescapes it. A real
+# YAML parser (ruby -ryaml, yq) collapses `\\` -> `\` inside a double-
+# quoted scalar (the only valid YAML way to embed one literal backslash),
+# but the runner's own extractor originally only unescaped `\"` -> `"` and
+# left `\\` untouched — so a `command:` string that is valid YAML and
+# reads correctly under `ruby -ryaml` could still execute with an EXTRA
+# literal backslash at runtime, silently breaking any grep -E pattern
+# needing `\.`/`\(`/`\)`/`\|` escaping, with no parse error anywhere to
+# point at the cause. Discovered independently by two hosts the same
+# cycle (2026-07-06) while fixing unrelated litmus files that needed
+# exactly this kind of escape.
+#
+# This test's own command: field is the regression pin. It requires a
+# literal `\.` (escaped dot) in a grep -E pattern, written as valid YAML
+# (`\\.`) below. If the runner's parser regresses to not collapsing `\\`,
+# grep receives a literal `a\\.b` pattern instead (backslash-escaped
+# backslash + any-char), which cannot match either "a.b" or "ab" (neither
+# test line contains an actual backslash character) — so a regression
+# flips this step's count from 1 to 0 and the step fails loudly, instead
+# of the bug silently reappearing with no signal anywhere.
+name: litmus:litmus-runner-backslash-escaping-shape
+spec: spec-traceability
+phase: pre-build
+description: >
+  Pin that scripts/run-litmus-test.sh's command: extraction collapses \\
+  to \ (matching real YAML double-quote semantics), so a valid-YAML
+  backslash-escaped regex metacharacter (\., \(, \), \|, \[) in a
+  critical_path command: executes with exactly one literal backslash at
+  runtime, not two.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/run-litmus-test.sh
+  - shell utilities (printf, grep) are available in PATH
+
+critical_path:
+  - step: "command: extraction collapses \\\\ to \\ (a literal-dot grep -E pattern matches exactly the line with a dot, not the line without one)"
+    command: "printf 'a.b\\nab\\n' | grep -cE 'a\\.b' | grep -qx 1 && echo 'ok: backslash-dot escape collapsed correctly'"
+    timeout_ms: 3000
+    expected_behavior: "ok: backslash-dot escape collapsed correctly"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "litmus runner command: extraction correctly collapses \\\\ to \\, matching real YAML double-quote escaping"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-runner-backslash-escaping-shape"
+    artifact: "scripts/run-litmus-test.sh"
+
+rollback:
+  on_failure: >
+    scripts/run-litmus-test.sh's command: extraction (the
+    `current_step_command="${BASH_REMATCH[1]//\\\"/\"}"` line and its
+    follow-up `\\` -> `\` collapse) regressed. Restore both substitution
+    passes, in order: first `\"` -> `"`, then `\\` -> `\`. See
+    plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md.
+  command: "grep -n 'current_step_command=' scripts/run-litmus-test.sh"
