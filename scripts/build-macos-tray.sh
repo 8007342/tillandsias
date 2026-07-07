@@ -15,7 +15,8 @@
 #   scripts/build-macos-tray.sh
 #
 # Prereqs: macOS (Apple Silicon), Rust toolchain with aarch64-apple-darwin
-# target (= host triple on Apple Silicon), codesign, tar, shasum.
+# target (= host triple on Apple Silicon), zig, cargo-zigbuild, codesign, tar,
+# shasum.
 #
 # @trace spec:macos-tray-build-and-release, spec:macos-native-tray
 # =============================================================================
@@ -25,6 +26,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
+if command -v brew >/dev/null 2>&1 && brew --prefix rustup >/dev/null 2>&1; then
+    PATH="$(brew --prefix rustup)/bin:$PATH"
+fi
+PATH="$HOME/.cargo/bin:$PATH"
 
 say() { printf '  %s\n' "$*"; }
 die() { printf '  ERROR: %s\n' "$*" >&2; exit 1; }
@@ -37,6 +42,8 @@ die() { printf '  ERROR: %s\n' "$*" >&2; exit 1; }
 command -v cargo    >/dev/null || die "cargo not in PATH (install Rust: https://rustup.rs)"
 command -v codesign >/dev/null || die "codesign not in PATH (install Xcode Command Line Tools)"
 command -v shasum   >/dev/null || die "shasum not in PATH"
+command -v zig      >/dev/null || die "zig not in PATH (install via brew install zig)"
+command -v cargo-zigbuild >/dev/null || die "cargo-zigbuild not in PATH (install via cargo install cargo-zigbuild)"
 
 # Apple Silicon is the host triple, so 'cargo build --release' is enough; an
 # explicit --target aarch64-apple-darwin produces the same binary but adds
@@ -84,6 +91,26 @@ fi
 if [[ -f "$TRAY_ICON_SRC" ]]; then
     cp "$TRAY_ICON_SRC" "$APP/Contents/Resources/tray-icon.png"
 fi
+
+# Guest binaries: bundle the matching Linux headless build for both supported
+# guest architectures so the tray can stage the exact same revision into the
+# shared host tree before VM boot.
+GUEST_DIR="$APP/Contents/Resources/guest"
+mkdir -p "$GUEST_DIR"
+
+build_guest_binary() {
+    local target="$1"
+    local asset_name="$2"
+    local bin_path="$ROOT/target/${target}/release/tillandsias"
+    say "cargo zigbuild --release -p tillandsias-headless --features listen-vsock --target ${target} …"
+    cargo zigbuild --release -p tillandsias-headless --features listen-vsock --target "$target" --bin tillandsias >&2
+    [[ -x "$bin_path" ]] || die "expected guest binary at $bin_path after zigbuild"
+    cp "$bin_path" "$GUEST_DIR/$asset_name"
+    chmod 0755 "$GUEST_DIR/$asset_name"
+}
+
+build_guest_binary "aarch64-unknown-linux-musl" "tillandsias-headless-aarch64-unknown-linux-musl"
+build_guest_binary "x86_64-unknown-linux-musl" "tillandsias-headless-x86_64-unknown-linux-musl"
 
 # ── 6. Ad-hoc codesign with entitlements ────────────────────────────────
 ENTITLEMENTS="$ROOT/crates/tillandsias-macos-tray/assets/Tillandsias.entitlements"

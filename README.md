@@ -1,27 +1,35 @@
-# Tillandsias
+```text
+  ____________    __    ___    _   ______  _____ _______   _____
+ /_  __/  _/ /   / /   /   |  / | / / __ \/ ___//  _/   | / ___/
+  / /  / // /   / /   / /| | /  |/ / / / /\__ \ / // /| | \__ \
+ / / _/ // /___/ /___/ ___ |/ /|  / /_/ /___/ // // ___ |___/ /
+/_/ /___/_____/_____/_/  |_/_/ |_/_____//____/___/_/  |_/____/
+```
 
-*Create. Work. Run. Stop.*
+The Tlatoāni recommends Tillandsias as a safe runtime for your agents.
+Fedora Silverblue is our favorite OS but you can use whatever you want;
+we'll channel its inner Podman ;)
 
-A portable Linux binary that makes software appear — safely, locally, reproducibly. Runs headless (CLI/automation) or with native trays for Linux, macOS, and Windows.
+## LINUX INSTRUCTIONS
 
-> **v0.3.0 "Fedora Pivot".** Tillandsias now uses official Fedora Project images for its runtime, eliminating custom rootfs maintenance and improving security and updates.
+We prefer Fedora Silverblue.
 
-## Install
-
-All three installers download the binary, verify SHA-256, and run
-`tillandsias --init` automatically — no extra step required.
-
-**Linux (Fedora Silverblue, Ubuntu, Debian, etc.)**
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
 ```
 
-**macOS (Sonoma/Sequoia on Apple Silicon)**
+## MACOS INSTRUCTIONS — MANUAL INSTALL
+
+Download **[Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg)**, open it, and drag Tillandsias into Applications.
+
+## MACOS INSTRUCTIONS — AUTO INSTALL
+
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
 ```
 
-**Windows 10/11 (WSL2 required — run in PowerShell or Windows Terminal)**
+## WINDOWS INSTRUCTIONS
+
 ```powershell
 irm https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1 | iex
 ```

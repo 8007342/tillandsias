@@ -86,6 +86,29 @@ multi_host_development:
       check fails, another host has independent work; stop and coordinate
       through `plan/` before pushing.
 
+  sibling_drift_guard:
+    max_unintegrated_commits: 5
+    rule: >
+      If `git rev-list --count origin/linux-next..origin/<sibling>` exceeds 5
+      for `osx-next` or `windows-next`, that sibling is in branch-drift alert.
+      Freeze new platform feature leases on that sibling until it merges
+      `origin/linux-next`, records the observed conflicts or smoke evidence, and
+      the coordinator creates or updates a named integration packet.
+    rationale: >
+      The product-critical path crosses shared secure-wire, embedded guest
+      binary, VM provisioning, Podman, and forge-launch boundaries. Long sibling
+      drift turns implementation progress into hidden uncertainty because branch
+      heads can each be locally correct but globally incompatible.
+    allowed_work_while_frozen:
+      - "merge origin/linux-next into the platform branch"
+      - "resolve platform-owned conflicts"
+      - "run and record focused no-regression/e2e evidence"
+      - "write shared-state plan/methodology updates directly on linux-next"
+    prohibited_work_while_frozen:
+      - "new platform feature scope unrelated to the integration blocker"
+      - "rebasing or cherry-picking published sibling commits across branches"
+      - "overwriting linux-next plan/methodology state with stale sibling copies"
+
   pull_merge_cadence:
     before_start: true
     before_long_verification: true
@@ -111,6 +134,25 @@ multi_host_development:
       - "Spec, methodology, and plan conflicts block until explicitly reconciled."
       - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."
       - "Never resolve conflicts by deleting another host's plan notes; tombstone, supersede, or merge by stable ID."
+    pre_push_gate:
+      rule: >
+        NON-linux-next branches (windows-next, osx-next, any shared non-trunk
+        branch) MUST `git fetch` and `git merge origin/linux-next` (merge-only,
+        integration_strategy case 2) and resolve all conflicts LOCALLY before
+        EVERY push to their remote branch. Pushing un-integrated platform work
+        exports the conflict to the linux-next coordinator, who then has to
+        resolve platform-side conflicts on the trunk — the wrong side, with the
+        least context. Operator directive 2026-07-02: this is the normal
+        workflow — platform hosts absorb the merge cost so remote linux workers
+        can merge platform branches back into linux-next cleanly.
+      applies_to: ["windows-next", "osx-next", "any non-linux-next shared branch"]
+      race_exception: >
+        If the coordinator is actively merging your already-pushed head (your
+        commits are in flight toward linux-next), do NOT race them with a second
+        divergent push: wait for their merge to land on origin/linux-next, merge
+        THAT into your branch, validate (packets/code survived, tests green),
+        then push. First applied 2026-07-02 (windows merge validation of
+        6feac841).
 
   plan_ledger:
     canonical_files:
@@ -182,6 +224,19 @@ multi_host_development:
       - "Do not exit a skill successfully with local-only commits or uncommitted tracked changes."
       - "Incomplete but coherent work must be checkpoint-committed, pushed, and recorded in the owning plan item."
       - "Prefer separate `git worktree` directories for concurrent platform branches instead of switching branches with dirty state."
+
+  product_topology_invariant:
+    rule: >
+      The target runtime is an ephemeral portable cloud region with a frozen
+      control plane: top host terminal -> platform tray/launcher -> Fedora 44
+      guest -> Podman service stack -> deepest forge container running the
+      selected agent harness. Requirements that do not preserve this topology
+      must be tombstoned or rewritten before implementation.
+    verification_boundary: >
+      A packet is not product-complete until it states which hop it proves
+      (host, guest, Podman service stack, or deepest forge) and records evidence
+      that credentials, version identity, and transport mode did not silently
+      cross an unintended boundary.
 
   branch_canon:
     rule: >
@@ -278,3 +333,21 @@ multi_host_development:
       `plan/` and use the defined communication protocols (agent_status_packet)
       to report the completion of entire waves, avoiding unnecessary stalls
       while waiting for central unblocking.
+
+  fedora_silverblue_immutable_builders:
+    rule: >
+      On Fedora Silverblue (and other immutable Linux hosts), native cross-compilation
+      to target guest architectures (like aarch64 musl) requires standard C library headers
+      that are missing from the host's minimal bare-metal toolchains. To build without
+      rebooting or polluting the host's immutable /usr layer, all compilation MUST be
+      standardized inside a local Toolbx container (e.g. tillandsias-builder).
+    setup_and_execution:
+      - "Create the Toolbx container: toolbox create -y tillandsias-builder"
+      - "Enable the cross-compiler COPR repo inside Toolbx: toolbox run --container tillandsias-builder sudo dnf copr enable -y lantw44/aarch64-linux-gnu-toolchain"
+      - "Install compilation tools inside Toolbx: toolbox run --container tillandsias-builder sudo dnf install -y gcc aarch64-linux-gnu-gcc aarch64-linux-gnu-glibc"
+      - "Build targets via Toolbx wrapper: toolbox run --container tillandsias-builder env CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS='-C link-self-contained=yes' cargo build --release --target aarch64-unknown-linux-musl --features listen-vsock"
+    rootless_dns_recommendation: >
+      Since rootless users cannot write to /etc/hosts, the launcher automatically falls
+      back to published port loopback routing (https://127.0.0.1:<port>) on host runs. All
+      enclave containers and toolboxes must configure working public resolvers (like 1.1.1.1) in
+      ~/.config/containers/containers.conf to bypass broken system-resolved defaults.

@@ -140,7 +140,17 @@ pub fn current_runtime_lane() -> RuntimeLane {
     RuntimeLane::DesktopUserSession
 }
 
-#[cfg(unix)]
+// PLEASE REVIEW (linux): was previously split `unix`/`not(unix)` with a
+// stub `true` fallback for the non-unix arm. Its only caller is gated
+// `#[cfg(target_os = "linux")]`, but `unix` also matches macOS, so the
+// macOS build compiled a `path_is_writable` stub it never calls (dead_code,
+// -D warnings). There is no non-Linux caller at all, so the stub arm was
+// removed rather than re-gated — gate this function itself to Linux only.
+// Discovered running `./build.sh --check` on macOS for the first time after
+// fixing the Homebrew-Podman wrapper bug (order 201) — see
+// plan/issues/macos-build-check-podman-wrapper-2026-07-05.md. No behavior
+// change on Linux.
+#[cfg(target_os = "linux")]
 fn path_is_writable(path: &Path) -> bool {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
@@ -151,16 +161,15 @@ fn path_is_writable(path: &Path) -> bool {
     unsafe { libc::access(c_path.as_ptr(), libc::W_OK) == 0 }
 }
 
-#[cfg(not(unix))]
-fn path_is_writable(_path: &Path) -> bool {
-    true
-}
-
 /// Require the interactive desktop lane.
 ///
 /// Interactive launchers use this to ensure they are running inside a real
 /// logind-managed user session rather than the service-account or dev/test
 /// lanes.
+// PLEASE REVIEW (linux): `operation` is only read inside the
+// `#[cfg(target_os = "linux")]` body below, so non-Linux builds saw it as
+// unused (-D warnings). Same discovery as path_is_writable above.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 pub fn require_desktop_user_session(operation: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
@@ -211,6 +220,9 @@ pub fn require_desktop_user_session(operation: &str) -> Result<(), String> {
 /// continue to exercise the headless code path without provisioning the system
 /// service account. When the service-account markers are present, the runtime
 /// must be backed by the supervised user-service model.
+// PLEASE REVIEW (linux): same unused-on-non-Linux issue as
+// require_desktop_user_session above.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 pub fn require_headless_service_account(operation: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {

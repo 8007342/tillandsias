@@ -633,8 +633,228 @@ export RUSTUP_HOME="/usr/local/rustup"
 export DART_ROOT="/opt/dart-sdk"
 export FLUTTER_ROOT="/opt/flutter"
 export TILLANDSIAS_CHEATSHEETS="/opt/cheatsheets"
-export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PNPM_HOME:$HOME/.cargo/bin:$HOME/go/bin:/usr/local/cargo/bin:/opt/dart-sdk/bin:$PATH"
+export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PNPM_HOME:$HOME/.cargo/bin:$HOME/go/bin:/usr/local/cargo/bin:$PROJECT_CACHE/dart/dart-sdk/bin:$PATH"
 
+
+# ── FIRST_RUN prebuilt dev-tool install (arch-aware) ────────────
+# @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
+# @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180)
+#
+# Moves the prebuilt cargo dev-tools OUT of container CREATION (the fragile
+# hardcoded curl/tar chain in Containerfile.base that (a) baked non-executable
+# x86_64 binaries on the aarch64 macOS guest and (b) hung `podman build` / VM
+# setup on any stalled fetch) INTO an idempotent, fail-soft, timeout-guarded
+# FIRST_RUN install into the persistent CARGO_HOME (order 179 named volume).
+# Policy: prebuilt release-asset CDN URLs only — NO GitHub API, NO cargo install
+# (source compile), NO cargo binstall (rate-limited API). See
+# cheatsheets/build/nix-ci-incremental-release.md.
+
+# Map the running machine arch to the release-asset arch token. Empty = unsupported.
+_forge_uname_arch() {
+    case "$(uname -m)" in
+        x86_64 | amd64) echo "x86_64" ;;
+        aarch64 | arm64) echo "aarch64" ;;
+        *) echo "" ;;
+    esac
+}
+
+# install_prebuilt <check_bin> <url>
+# Idempotent (skip if $CARGO_HOME/bin/<check_bin> already executable), fail-soft
+# (a fetch/extract miss is logged and RETRIED next launch — never fatal), and
+# timeout-guarded (--max-time so a stalled fetch can NEVER hang the launch the way
+# the CREATION-time chain hung the build). Extracts the archive's binaries into
+# $CARGO_HOME/bin. The caller has already substituted the arch into <url>.
+install_prebuilt() {
+    local check_bin="$1" url="$2"
+    local bindir="${CARGO_HOME:-/usr/local/cargo}/bin"
+    [ -x "$bindir/$check_bin" ] && return 0
+    mkdir -p "$bindir" 2>/dev/null || true
+    local tmp archive
+    tmp="$(mktemp -d 2>/dev/null)" || return 0
+    archive="$tmp/asset"
+    if ! curl -fsSL --max-time 120 --retry 2 --retry-delay 3 "$url" -o "$archive" 2>/dev/null; then
+        trace_lifecycle "tools" "prebuilt fetch failed (non-fatal, retry next launch): $check_bin"
+        rm -rf "$tmp"
+        return 0
+    fi
+    case "$url" in
+        *.tar.gz | *.tgz) tar -xzf "$archive" -C "$tmp" 2>/dev/null || true ;;
+        *.tar.xz) tar -xJf "$archive" -C "$tmp" 2>/dev/null || true ;;
+        *.zip) unzip -qo "$archive" -d "$tmp" 2>/dev/null || true ;;
+    esac
+    # Install every regular executable the archive carries (these are bare binary
+    # distributions). basename-placed onto the persistent cache PATH.
+    find "$tmp" -type f -perm -u+x ! -name asset 2>/dev/null | while read -r f; do
+        install -m 0755 "$f" "$bindir/$(basename "$f")" 2>/dev/null || true
+    done
+    if [ -x "$bindir/$check_bin" ]; then
+        trace_lifecycle "tools" "installed prebuilt $check_bin ($(uname -m))"
+    else
+        trace_lifecycle "tools" "prebuilt install incomplete (non-fatal, retry next launch): $check_bin"
+    fi
+    rm -rf "$tmp"
+    return 0
+}
+
+# ensure_dart_sdk: FIRST_RUN, ARCH-AWARE install of the Dart SDK into the order-179
+# persistent PROJECT_CACHE. Unlike the cargo dev-tools (single binaries handled by
+# install_prebuilt), Dart ships as a FULL SDK that unpacks to a top-level `dart-sdk/`
+# directory, so it gets its own helper. Idempotent (skip if the SDK's `dart` binary is
+# already executable), fail-soft (a failed fetch is logged and RETRIED next launch —
+# NEVER fatal), and timeout-guarded (--max-time so a stalled fetch can NEVER hang the
+# launch the way the CREATION-time curl/unzip chain hung the aarch64 macOS VM build,
+# where the baked x86_64 SDK was also non-executable). Dart's arch token differs from
+# the cargo triple: x86_64 -> x64, aarch64 -> arm64.
+# @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180 dart sub-slice)
+ensure_dart_sdk() {
+    local arch zarch
+    arch="$(_forge_uname_arch)"
+    case "$arch" in
+        x86_64) zarch="x64" ;;
+        aarch64) zarch="arm64" ;;
+        *)
+            trace_lifecycle "tools" "unsupported arch $(uname -m); skipping dart SDK"
+            return 0
+            ;;
+    esac
+    local sdk_bin="$PROJECT_CACHE/dart/dart-sdk/bin/dart"
+    [ -x "$sdk_bin" ] && return 0
+    mkdir -p "$PROJECT_CACHE/dart" 2>/dev/null || true
+    local tmp archive url
+    tmp="$(mktemp -d 2>/dev/null)" || return 0
+    archive="$tmp/dart-sdk.zip"
+    url="https://storage.googleapis.com/dart-archive/channels/stable/release/3.12.1/sdk/dartsdk-linux-${zarch}-release.zip"
+    if ! curl -fsSL --max-time 300 "$url" -o "$archive" 2>/dev/null; then
+        trace_lifecycle "tools" "dart SDK fetch failed (non-fatal, retry next launch): ${zarch}"
+        rm -rf "$tmp"
+        return 0
+    fi
+    # The zip carries a top-level dart-sdk/ dir; unzip -o overwrites a partial prior try.
+    unzip -qo "$archive" -d "$PROJECT_CACHE/dart" 2>/dev/null || true
+    if [ -x "$sdk_bin" ]; then
+        trace_lifecycle "tools" "installed dart SDK ($(uname -m))"
+    else
+        trace_lifecycle "tools" "dart SDK install incomplete (non-fatal, retry next launch): ${zarch}"
+    fi
+    rm -rf "$tmp"
+    return 0
+}
+
+# ensure_forge_prebuilt_tools: FIRST_RUN, ARCH-AWARE install of the cargo dev-tool
+# group into the persistent CARGO_HOME. Idempotent + fail-soft; safe to call every
+# launch (installed tools are skipped instantly). Intended to be backgrounded by
+# the forge entrypoints so it never blocks the agent launch.
+# NOTE: versions are a centralized pinned FLOOR (moved out of Containerfile.base);
+# de-hardcoding to `releases/latest` (via the web redirect, NOT the API) is the
+# next slice of order 180. This slice's job is the arch-correctness + de-fragiling
+# that unblocks the aarch64 macOS guest.
+ensure_forge_prebuilt_tools() {
+    local arch
+    arch="$(_forge_uname_arch)"
+    if [ -z "$arch" ]; then
+        trace_lifecycle "tools" "unsupported arch $(uname -m); skipping prebuilt dev-tools"
+        return 0
+    fi
+    local gnu="${arch}-unknown-linux-gnu"
+    local musl="${arch}-unknown-linux-musl"
+    local qi="https://github.com/cargo-bins/cargo-quickinstall/releases/download"
+    trace_lifecycle "tools" "ensuring prebuilt cargo dev-tools (arch=${arch}) in ${CARGO_HOME}/bin"
+
+    install_prebuilt cargo-nextest "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.137/cargo-nextest-0.9.137-${gnu}.tar.gz"
+    install_prebuilt cargo-chef "${qi}/cargo-chef-0.1.77/cargo-chef-0.1.77-${gnu}.tar.gz"
+    install_prebuilt cargo-watch "${qi}/cargo-watch-8.5.3/cargo-watch-8.5.3-${gnu}.tar.gz"
+    install_prebuilt cargo-audit "${qi}/cargo-audit-0.22.2/cargo-audit-0.22.2-${gnu}.tar.gz"
+    install_prebuilt wasm-pack "${qi}/wasm-pack-0.15.0/wasm-pack-0.15.0-${gnu}.tar.gz"
+    install_prebuilt typos "${qi}/typos-cli-1.47.2/typos-cli-1.47.2-${gnu}.tar.gz"
+    install_prebuilt watchexec "${qi}/watchexec-cli-2.5.1/watchexec-cli-2.5.1-${gnu}.tar.gz"
+    install_prebuilt cargo-upgrade "${qi}/cargo-edit-0.13.11/cargo-edit-0.13.11-${musl}.tar.gz"
+    install_prebuilt cargo-expand "${qi}/cargo-expand-1.0.122/cargo-expand-1.0.122-${gnu}.tar.gz"
+    install_prebuilt cargo-criterion "${qi}/cargo-criterion-1.1.0/cargo-criterion-1.1.0-${gnu}.tar.gz"
+    install_prebuilt cargo-wasi "${qi}/cargo-wasi-0.1.28/cargo-wasi-0.1.28-${gnu}.tar.gz"
+    install_prebuilt cargo-outdated "${qi}/cargo-outdated-0.19.0/cargo-outdated-0.19.0-${gnu}.tar.gz"
+    install_prebuilt trunk "https://github.com/trunk-rs/trunk/releases/download/v0.22.0-beta.1/trunk-${gnu}.tar.gz"
+    install_prebuilt cargo-llvm-cov "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.8.7/cargo-llvm-cov-${gnu}.tar.gz"
+    install_prebuilt cargo-semver-checks "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.48.0/cargo-semver-checks-${gnu}.tar.gz"
+
+    # actionlint / vale / wasmtime — prebuilt, arch-aware (order 180 slice 2). These
+    # use DIFFERENT arch tokens than the cargo `-unknown-linux-gnu` triple. Installed
+    # onto the persistent cache PATH by install_prebuilt (dart's SDK is a separate
+    # sub-slice — it unpacks to /opt/dart-sdk, not a single binary).
+    local actionlint_arch vale_arch
+    case "$arch" in
+        x86_64) actionlint_arch="amd64"; vale_arch="64-bit" ;;
+        aarch64) actionlint_arch="arm64"; vale_arch="arm64" ;;
+    esac
+    install_prebuilt actionlint "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_${actionlint_arch}.tar.gz"
+    install_prebuilt vale "https://github.com/errata-ai/vale/releases/download/v3.14.2/vale_3.14.2_Linux_${vale_arch}.tar.gz"
+    install_prebuilt wasmtime "https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-${arch}-linux.tar.xz"
+
+    # Dart ships as a full SDK (unpacks a top-level dart-sdk/ dir), so it has its own
+    # arch-aware first-run helper rather than install_prebuilt (single binaries). Runs
+    # in this same backgrounded context. @trace order 180 dart sub-slice.
+    ensure_dart_sdk
+
+    # ── marksman Markdown LSP (single binary) ────────────────────
+    # Unlike cargo dev-tools (archives), marksman is a raw GitHub release asset.
+    # Idempotent: skip if already executable. Fail-soft: a failed fetch is logged
+    # and retried next launch — never fatal. Uses the GitHub `latest` redirect
+    # so the version is de-hardcoded (not pinned in Containerfile).
+    # @trace order 180 marksman sub-slice
+    local marksman_bin="${CARGO_HOME:-/usr/local/cargo}/bin/marksman"
+    if [ ! -x "$marksman_bin" ]; then
+        local marksman_arch
+        case "$arch" in
+            x86_64) marksman_arch="x64" ;;
+            aarch64) marksman_arch="arm64" ;;
+        esac
+        if [ -n "$marksman_arch" ]; then
+            if curl -fsSL --max-time 120 --retry 2 --retry-delay 3 \
+                "https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-${marksman_arch}" \
+                -o "$marksman_bin" 2>/dev/null; then
+                chmod +x "$marksman_bin" 2>/dev/null || true
+                trace_lifecycle "tools" "installed marksman ($arch)"
+            else
+                trace_lifecycle "tools" "marksman fetch failed (non-fatal, retry next launch)"
+            fi
+        fi
+    fi
+
+    trace_lifecycle "tools" "prebuilt dev-tools ensured (arch=${arch})"
+}
+
+# ── Agent harness EVERY_LAUNCH update ──────────────────────────
+# ensure_forge_harnesses: npm-install/update agent harnesses (codex, claude-code,
+# opencode, openspec) to the LATEST version at every launch. Runs in the background
+# so it never blocks the agent launch. Fail-soft: if npm is offline or the proxy
+# is unreachable, the baked/cached version is used silently (no hard fail).
+# @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+ensure_forge_harnesses() {
+    # Avoid a concurrent npm join race — only the first process runs npm.
+    local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
+    if ! mkdir "$npm_lock" 2>/dev/null; then
+        return 0
+    fi
+    # Ensure we clean up the lock on exit (even forked).
+    trap 'rm -rf "$npm_lock"' EXIT
+
+    local npm_bin
+    npm_bin="$(command -v npm 2>/dev/null)"
+    if [ -z "$npm_bin" ]; then
+        trace_lifecycle "harness" "npm not available; skipping harness update"
+        return 0
+    fi
+
+    # Update each harness to latest. We use `npm install` (not `npm update`) so
+    # a missing or removed package is installed rather than silently skipped.
+    # Uses $NPM_CONFIG_PREFIX (persistent cache, set in lib-common.sh).
+    for pkg in opencode-ai "@fission-ai/openspec" "@anthropic-ai/claude-code" "@openai/codex"; do
+        if ! "$npm_bin" install -g --no-audit --no-fund "$pkg@latest" 2>/dev/null; then
+            trace_lifecycle "harness" "npm update failed for $pkg (non-fatal, using cached)"
+        fi
+    done
+
+    trace_lifecycle "harness" "agent harnesses up to date"
+}
 
 # ── Update-check rate-limiting ──────────────────────────────
 # Returns 0 (true) if the last check was more than 24 hours ago or never ran.
@@ -691,30 +911,67 @@ find_project_dir() {
 # These helpers verify presence and export the canonical bin path each
 # entrypoint needs. Failure here means the image is corrupt; bail loudly.
 require_opencode() {
-    OC_BIN="/usr/local/bin/opencode"
+    OC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/opencode"
     if [ ! -x "$OC_BIN" ]; then
-        echo "[entrypoint] FATAL: OpenCode missing at $OC_BIN — forge image is corrupt" >&2
-        exit 1
+        OC_BIN="/usr/local/bin/opencode"
     fi
-    trace_lifecycle "install" "opencode: hard-installed ($OC_BIN)"
+    if [ ! -x "$OC_BIN" ]; then
+        trace_lifecycle "harness" "opencode missing — install latest"
+        if ! npm install -g --no-audit --no-fund opencode-ai@latest 2>/dev/null; then
+            trace_lifecycle "harness" "opencode install failed (non-fatal)"
+            return 1
+        fi
+        OC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/opencode"
+    fi
+    trace_lifecycle "install" "opencode: available ($("$OC_BIN" --version 2>/dev/null || echo 'unknown'))"
 }
 
 require_claude() {
-    CC_BIN="/usr/local/bin/claude"
+    CC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/claude"
     if [ ! -x "$CC_BIN" ]; then
-        echo "[entrypoint] FATAL: Claude Code missing at $CC_BIN — forge image is corrupt" >&2
-        exit 1
+        CC_BIN="/usr/local/bin/claude"
     fi
-    trace_lifecycle "install" "claude-code: hard-installed ($CC_BIN)"
+    if [ ! -x "$CC_BIN" ]; then
+        trace_lifecycle "harness" "claude-code missing — install latest"
+        if ! npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@latest" 2>/dev/null; then
+            trace_lifecycle "harness" "claude-code install failed (non-fatal)"
+            return 1
+        fi
+        CC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/claude"
+    fi
+    trace_lifecycle "install" "claude-code: available ($("$CC_BIN" --version 2>/dev/null || echo 'unknown'))"
 }
 
 require_openspec() {
-    OS_BIN="/usr/local/bin/openspec"
+    OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
     if [ ! -x "$OS_BIN" ]; then
-        echo "[entrypoint] FATAL: OpenSpec missing at $OS_BIN — forge image is corrupt" >&2
-        exit 1
+        OS_BIN="/usr/local/bin/openspec"
     fi
-    trace_lifecycle "install" "openspec: hard-installed ($OS_BIN)"
+    if [ ! -x "$OS_BIN" ]; then
+        trace_lifecycle "harness" "openspec missing — install latest"
+        if ! npm install -g --no-audit --no-fund "@fission-ai/openspec@latest" 2>/dev/null; then
+            trace_lifecycle "harness" "openspec install failed (non-fatal)"
+            return 1
+        fi
+        OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
+    fi
+    trace_lifecycle "install" "openspec: available ($("$OS_BIN" --version 2>/dev/null || echo 'unknown'))"
+}
+
+require_codex() {
+    CX_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/codex"
+    if [ ! -x "$CX_BIN" ]; then
+        CX_BIN="/usr/local/bin/codex"
+    fi
+    if [ ! -x "$CX_BIN" ]; then
+        trace_lifecycle "harness" "codex missing — install latest"
+        if ! npm install -g --no-audit --no-fund "@openai/codex@latest" 2>/dev/null; then
+            trace_lifecycle "harness" "codex install failed (non-fatal)"
+            return 1
+        fi
+        CX_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/codex"
+    fi
+    trace_lifecycle "install" "codex: available ($("$CX_BIN" --version 2>/dev/null || echo 'unknown'))"
 }
 
 # ── OpenCode config overlay ─────────────────────────────────
@@ -1379,7 +1636,8 @@ inject_startup_context() {
 # Forge Startup Context
 
 **Project**: ${project_name}
-**Branch**: ${branch}
+**Startup branch**: ${branch}
+> Note: Branch is a startup snapshot; agents may switch branches during orchestration.
 **Version**: ${version}
 **Agent**: ${agent_name}
 **Generated**: $(date -u +%Y-%m-%dT%H:%MZ)
@@ -1395,7 +1653,7 @@ You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA
 
 ## Plan entry points
 
-- **Active work queue**: \`plan/issues/ACTIVE.md\`
+- **Active work queue**: \`plan/index.yaml\`
 - **Full plan index**: \`plan/index.yaml\`
 - **Loop status**: \`plan/loop_status.md\`
 

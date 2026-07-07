@@ -31,7 +31,6 @@ mkdir -p "$MODEL_CACHE"
 echo "[diagnostic] Launching container with model cache at: $MODEL_CACHE"
 if ! podman run \
   --detach \
-  --rm \
   --name "$CONTAINER_NAME" \
   --hostname inference \
   --cap-drop=ALL \

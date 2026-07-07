@@ -182,6 +182,32 @@ printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES
 test -z "$CONTAINERS"; test -z "$VOLUMES"; test -z "$IMAGES"
 ```
 
+#### Opt-in fast-iteration mode (Linux only): selective reset
+
+`podman system reset --force` also wipes the upstream base images pulled from
+public registries (`registry.fedoraproject.org/fedora-minimal:44`,
+`docker.io/library/alpine:3.20`, `docker.io/hashicorp/vault:1.18`,
+`docker.io/library/caddy:2-alpine`), forcing a full re-pull on every iteration
+even though those bases rarely change and the thing actually under test is
+always the `localhost/tillandsias-*` layer
+(`plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md`,
+order 222). When `TILLANDSIAS_SMOKE_RESET_MODE=selective` is set, use
+`scripts/selective-tillandsias-reset.sh` instead of `podman system reset
+--force` for gate 2 — it wipes every container, volume, secret, and
+`localhost/tillandsias-*` image but preserves the allowlisted upstream bases:
+
+```bash
+TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
+  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  scripts/selective-tillandsias-reset.sh 2>&1 | tee "$LOG_DIR/02-reset.log"
+RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee "$LOG_DIR/02-reset-exit.txt"
+test "$RESET_RC" -eq 0
+```
+
+This is an **iteration-speed opt-in only** — it does NOT replace the full
+`podman system reset --force` gate for release-acceptance runs. Default
+behavior (no env var set) is unchanged: the full destructive reset above.
+
 ### 2·macOS — destroy the Virtualization.framework VM
 
 ```bash

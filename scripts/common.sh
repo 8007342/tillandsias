@@ -114,13 +114,24 @@ elif [[ -n "${LITMUS_PODMAN_CALLS_FILE:-}" && -n "$_litmus_podman_bin" ]]; then
     PODMAN="$_litmus_podman_bin"
     export TILLANDSIAS_PODMAN_BIN="$_litmus_podman_bin"
 elif [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-${CONTAINER_HOST:-}}" ]] \
-     && timeout 5 "$_podman_bin" info --format '{{.Store.GraphRoot}}' >/dev/null 2>&1; then
+     && { [[ "$(uname -s 2>/dev/null)" == "Darwin" ]] \
+          || timeout 5 "$_podman_bin" info --format '{{.Store.GraphRoot}}' >/dev/null 2>&1; }; then
     # Direct podman works under the current environment. Skip the wrapper so
     # shell-script callers and the Rust binary share one storage view; without
     # this fast-path the wrapper points scripts at a private /tmp graphroot
     # while the binary keeps using the user's default store, splitting the
     # tillandsias-* image inventory between two backends and silently breaking
     # the runtime litmus probe.
+    #
+    # macOS unconditionally takes this branch (skipping the `podman info`
+    # probe): Homebrew Podman on macOS is ALWAYS a remote-machine client, even
+    # when a machine happens to be running — it never supports the Linux
+    # local-VFS-storage flags (--root/--runroot/--tmpdir) the else branch
+    # below generates. Routing macOS through that branch produced "Error:
+    # unknown flag: --root" instead of Podman's own actionable "no machine
+    # running" message. Skipping the probe also means a macOS host with no
+    # machine running gets that same honest, actionable error immediately
+    # instead of it being masked behind the wrapper's flag-rejection failure.
     PODMAN="$_podman_bin"
     # Deliberately UNSET TILLANDSIAS_PODMAN_BIN here instead of pinning it
     # to $_podman_bin. The litmus runner (scripts/run-litmus-test.sh) only

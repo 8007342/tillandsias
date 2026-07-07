@@ -1,6 +1,9 @@
 #!/bin/bash
 set -uo pipefail
 
+if grep -qi "microsoft" /proc/version 2>/dev/null && pwd | grep -q '^/mnt/[c-z]/'; then
+  echo "[check-credential-channel] WARNING: Running in WSL but directory is on Windows host. Host credentials may be unavailable. On Windows, use Git Bash instead." >&2
+fi
 # @trace spec:meta-orchestration
 # check-credential-channel.sh: executable Credential Channel Guard (plan order 61).
 #

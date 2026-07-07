@@ -48,8 +48,7 @@ Canonical branches:
 - Windows code: `windows-next`
 - Release: `main` through PR only
 
-All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` writes go to
-`linux-next`.
+All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `linux-next` their canonical home. However, agents working on platform branches (`windows-next`, `osx-next`) MUST commit and push all edits (including plan updates) directly to their active platform branch. The Linux coordinator will merge these branches back into `linux-next` during the `/multihost-orchestration` pass.
 
 ## Start Of Cycle
 
@@ -72,7 +71,8 @@ work. The Cowork scheduled-task runtime can inherit dangling session sockets
 fails for lack of a credential. See
 `plan/issues/cowork-headless-credential-isolation-2026-06-20.md`.
 
-Run the executable guard instead of re-deriving the check in prose:
+Run the executable guard instead of re-deriving the check in prose. 
+*(On Windows: ensure you run this via Git Bash, e.g. `& "C:\Program Files\Git\bin\bash.exe" scripts/check-credential-channel.sh`. PowerShell's `bash` alias defaults to an isolated WSL session that lacks host credentials).*
 
 ```bash
 scripts/check-credential-channel.sh
@@ -267,7 +267,7 @@ Before exit:
    from this cycle is filed in `plan/issues/` (classified `research/`,
    `exploration/`, `enhancement/`, or `optimization/`) and, where reduced,
    promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit.
-2. Refresh `plan/issues/ACTIVE.md` and `plan/loop_status.md` if this cycle
+2. Refresh `plan/index.yaml` and `plan/loop_status.md` if this cycle
    changed active work, blockers, tested release, or host assignments.
 3. Validate touched YAML with a parser. The approved validator is
    `tillandsias-policy validate-yaml <files>` where built, with

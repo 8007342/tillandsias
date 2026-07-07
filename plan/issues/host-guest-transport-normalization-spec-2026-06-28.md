@@ -50,6 +50,38 @@ conforms to. One protocol, one facade, two primitives, one glossary.
 - `litmus:host-guest-no-cfg-transport-selection` pinned and green.
 - `./build.sh --check` passes.
 
+## Update 2026-07-06T19:35Z — closed
+
+All exit criteria for this spec-authoring packet are met:
+
+- `openspec/specs/host-guest-transport/spec.md` authored (4 MUST
+  requirements) and bound in `openspec/litmus-bindings.yaml`
+  (`host-guest-transport` spec_id, coverage_ratio 55 -> 67).
+- The `GuestTransport` facade + `GuestEndpoint` + `ExecRequest`/`ExecOutput`
+  live in `tillandsias-control-wire::guest_transport`, compile on all
+  targets, and are exercised by object-safety/unit tests.
+- Nomenclature glossary is committed as the spec's own Nomenclature section
+  (one canonical term per concept: `vsock` protocol family vs.
+  `virtio-vsock`/`hvsock`/`VZVirtioSocketDevice` backend-impl names).
+- `litmus:host-guest-no-cfg-transport-selection` is pinned and green (3
+  grep-based steps: no backend-impl name leaks into the facade's non-comment
+  lines; the trait stays `Send + Sync`/object-safe; no shared
+  `tillandsias-host-shell` file branches on `cfg(target_os)`/`cfg!(target_os)`
+  near `GuestTransport`/`GuestEndpoint`). Verified it actually falsifies by
+  temporarily injecting a `cfg(target_os)`-gated fake transport picker into
+  `host-shell/lib.rs`, confirming the litmus caught it, then reverting.
+- `./build.sh --check` passes.
+
+**Not done here, split out instead**: the "conformance fixture harness"
+deliverable (`host-guest-transport.conformance.shared-fixtures@v1`) needs a
+real `GuestTransport` backend to validate against. Order 125 (the Linux
+AF_VSOCK backend) hasn't landed on `linux-next` yet, so writing the fixtures
+now would mean inventing the `ExecOneShot` wire-mapping myself — that
+decision belongs to 125, not this packet. Filed as its own pending packet,
+`host-guest-transport-conformance-harness` (order 128, depends on 125), in
+`plan/index.yaml` rather than stretching this packet to cover unresolved
+dependencies.
+
 ## Related
 
 - `host-guest-transport-normalization-research-2026-06-28.md` (blocker)

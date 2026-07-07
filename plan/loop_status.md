@@ -1,6 +1,638 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-04T03:05Z
+LastExecutionTime: 2026-07-06T20:30:00Z
+
+## Cycle 2026-07-06T19:30Z (macos — /goal "drain the macos queue")
+
+- **Host**: macOS arm64, `osx-next` (clean, credential guard `ok:gh-keyring`).
+  Pulled substantial concurrent work from linux/windows (order 194 macos-
+  native-tray litmus fixes, order 168 inference OOM fix, order 201 filed,
+  9 litmus files fixed by Linux's own triage of the remaining order-198
+  items, plus a host-guest transport normalization refactor).
+- **Order 201 (litmus-runner-command-backslash-escaping), claimed and
+  COMPLETED**: implemented the proposed fix (collapse `\\` -> `\` after
+  the existing `\"` -> `"` pass, in that exact order — reproduces a real
+  YAML parser's left-to-right escape consumption). Added the required
+  regression test (`litmus:litmus-runner-backslash-escaping-shape`),
+  verified as an effective negative/positive control (fails when the fix
+  is reverted, passes with it in place). `./build.sh --check` exits 0.
+- **Continued triaging litmus-full-suite-macos-first-run-findings (order
+  198, already closed by Linux) — found and fixed 4 real macOS/BSD-
+  specific bugs Linux's own investigation had mischaracterized as
+  "environment noise"** (added a correction event, didn't edit Linux's
+  original text):
+  - `litmus:forge-environment-discoverability-install-shape`: `\\|` parsed
+    as escaped-backslash + dangling alternation on BSD/macOS grep ("empty
+    (sub)expression"); fixed with the portable bracket-expression `[|]`.
+  - `litmus:forge-opencode-onboarding-bootstrap-shape`: same class, `\\[`
+    in an awk regex; fixed with `[[]`.
+  - `litmus:image-build-convergence-shape` (forge-staleness spec): found
+    2 more bash-3.2/<4.4 incompatibilities in `scripts/build-image.sh` —
+    `mapfile -d ''` (bash 4+ builtin, replaced with the portable
+    `while read -d ''` loop the file's own git-less fallback already
+    used) and `"${ARR[@]}"` on a possibly-empty array under `set -u`
+    (bash <4.4 treats this as "unbound variable", fixed with the
+    `"${ARR[@]+"${ARR[@]}"}"` conditional-expansion idiom for
+    NO_CACHE_ARGS/BUILD_ARGS/CACHE_MOUNT_ARGS).
+  - `litmus:zen-default-with-ollama-shape` T0 step: genuine drift (order
+    183 replaced the hardcoded pull literal with a config-driven
+    DEFAULT_MODELS loop); fixed the check. T1 step: resolved the "open
+    question" I'd flagged — Linux's order-168 investigation on a sibling
+    litmus already answered it (DEFAULT_MODELS was deliberately narrowed
+    to fix a real OOM bug, so T1's auto-pull guarantee was intentionally
+    dropped, not a regression); re-pointed the check at the explanatory
+    comment.
+- **Full pre-build/instant litmus suite**: started this cycle at 93 PASS
+  (bare shell, no cargo on PATH) → 117 PASS / 2 FAIL / 100% coverage on
+  the final merged tree. Both remaining fails are confirmed local-
+  machine-state gaps on this specific dev host (no cross-compiled x86_64
+  guest binary; no `flock`, and no working Podman machine at all — see
+  below), not code bugs.
+- **Investigated the "no Podman machine" root cause** behind every macOS
+  finding this cycle that needed live Podman: `podman-machine-default`
+  exists but has never started; `podman machine start` fails with
+  `krunkit: executable file not found` (not in Homebrew core, needs a
+  third-party tap or Podman Desktop). One-time local machine setup gap,
+  not a repo bug — documented the exact bootstrap command in
+  `plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md` rather
+  than installing a third-party tap unprompted.
+- All changes routed through `linux-next` per the openspec/scripts
+  shared-scope write rule (this cycle: `linux-next@2763f3de`,
+  `4a5729b2`); merged back into `osx-next@4a5729b2`, tests green (58/58
+  macos-tray, 50/50 vm-layer), `cargo fmt --check` clean.
+- **macOS queue status**: order 191 still needs windows-next's half
+  (osx-next's is done); no other macOS-owned or `any`-owned ready work
+  remains in `plan/index.yaml`.
+
+## Cycle 2026-07-06T20:19Z (linux_mutable — build-install-and-smoke-test-e2e)
+
+- **E2E gate result: STOPPED at gate 1** (build + CI + install), against the
+  freshly-integrated tree from the prior cycle (litmus fixes + order 124/153
+  slices + osx-next/windows-next merges, `linux-next@32da73a1`).
+  `./build.sh --ci-full --install` exited non-zero via `local-ci.sh` before
+  `--install` ran, so per the skill's guardrail the destructive Podman reset
+  was correctly **not** performed. Two pre-existing, unrelated issues caused
+  the failure (both verified NOT caused by this cycle's changes and filed as
+  ready packets in `plan/index.yaml`):
+  - Order 210 (`remote-projects-clone-test-flakiness`): `cargo test -p
+    tillandsias-headless --bin tillandsias --features tray` (the exact
+    `tray-contract` gate command) fails non-deterministically — root cause
+    looks like `clone_uses_host_parent_bindmount` asserting the wrong
+    (post-rename vs. staging) path for order-163's atomic-clone, panicking
+    and poisoning a shared test `Mutex` that cascades into 3 other tests.
+    Reproduces even with `--test-threads=1`; `remote_projects.rs` untouched
+    by this session (last touch: `d98e8eff`, well before today).
+  - Order 211 (`ci-full-guest-binary-prereq-gap`, research): the known
+    "local build-state gap, not drift" `litmus:guest-binary-embed-integrity`
+    (no cross-compiled guest binary on this dev checkout — already
+    documented from the macOS side in
+    `plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md`)
+    is on its own enough to hard-fail `local-ci.sh`'s litmus-pre-build gate,
+    which blocks `--install` from ever running on a fresh Linux checkout.
+  - Full findings + evidence:
+    `plan/issues/build-install-smoke-e2e-findings-2026-07-06.md`.
+- **Reduction engine**: both findings filed and promoted to ready
+  `plan/index.yaml` packets (orders 210, 211) rather than fixed in this smoke
+  session — the skill's own contract is "file findings, don't implement
+  product fixes here."
+- **Next**: whoever picks up order 210 (or 211) should re-run
+  `/build-install-and-smoke-test-e2e` afterward to actually reach gates 2-4
+  (destructive reset, re-provision, forge lane) against this integrated tree.
+
+## Cycle 2026-07-06T19:03Z (linux_mutable — meta-orchestration + coordinator)
+
+- **Host**: Linux mutable, started on `linux-next` clean, credential guard
+  `ok:gh-keyring`. Sole active linux worker this cycle (AntiGravity had
+  crashed before starting; no stale in-progress linux leases were found in
+  `plan/index.yaml`, so nothing needed forced reclaiming).
+- **Worker drain — litmus drift (order 198), COMPLETED** (`86bd9bf4`): triaged
+  all 14 (spec,test) pairs from the macOS first-run litmus finding on a real
+  Podman-capable Linux tree. 5 were macOS cargo/podman-not-on-PATH
+  environment noise (didn't reproduce on Linux); 9 were genuine litmus drift
+  verified against git history — in every case the shipped code was the
+  correct, already-decided behavior (multi-provider login generalization,
+  order-168 inference-OOM fix, order-175 EVERY_LAUNCH harness installs, the
+  FlakeHub-cache revert, the Antigravity 7th tray leaf) and the litmus itself
+  had gone stale, so fixed the 9 litmus files rather than reverting product
+  code. Filed `plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md`
+  (promoted to ready order 201) after hitting the bug live while writing the
+  fixes. Linux full suite: 116 PASS / 1 FAIL (guest-binary-embed-integrity,
+  confirmed local build-state gap) / 100% spec coverage.
+- **Worker drain — host-guest-transport facade (order 124), COMPLETED**
+  (`edb6a421`): added the missing `litmus:host-guest-no-cfg-transport-selection`
+  drift litmus (3 grep-based steps), verified it actually falsifies by
+  injecting a fake `cfg(target_os)`-gated transport picker into
+  `host-shell/lib.rs` and confirming it's caught, then reverting. Closed
+  order 124. Deliberately did NOT invent the "conformance fixture harness"
+  exit criterion — no real Linux `GuestTransport` backend has landed yet
+  (order 125 still pending), so writing wire-mapping fixtures now would mean
+  pre-empting that packet's design decision. Split it into its own pending
+  packet, `host-guest-transport-conformance-harness` (order 128, depends on
+  125), per operator guidance to split oversized/blocked scope into smaller
+  ledger packets rather than stretching a cycle to cover it.
+- **Worker drain — VM headless persistent listener (order 153), slice 1
+  landed, NOT claimed/blocked** (`d4a7c81a`): discovered the packet's stated
+  premise was partly stale — `vsock_server.rs`'s connection loop already
+  stays open after replies and already `select!`s over PTY + inbound frames
+  (SC-08 was already true). The real gap: `Subscribe`/`SubscribeAck`/`*Push`
+  (added by order 152) fell through `control_dispatch`'s catch-all to
+  `Unsupported`, so no client could ever subscribe. Wired the `VmStatus`
+  topic end-to-end: `control_dispatch.rs` routes `Subscribe` -> `Handle` and
+  the 4 push/ack variants -> `ResponseOnly` on both transports;
+  `VmStateHandle` gained a bounded (16-capacity) `tokio::sync::broadcast`
+  channel + `subscribe_vm_status()`; `set_phase()` pushes `VmStatusPush` only
+  on an actual transition; `handle_connection` handles `Subscribe{VmStatus}`
+  and forwards pushes via a new `select!` branch, treating
+  `RecvError::Lagged` as skip-and-continue (broadcast's per-receiver buffers
+  give the "slow client doesn't block a fast one" property for free). 4 new
+  unit tests, all green; `cargo clippy --features listen-vsock --all-targets
+  -D warnings` shows zero new warnings in either touched file (7 pre-existing
+  warnings elsewhere confirmed present on unmodified linux-next too).
+  `LoginStatePush`/`CloudProjectsPush` still unwired — left for the next
+  slice, packet left `ready` (not claimed) rather than blocking on unfinished
+  scope.
+- **Coordinator duties**: `origin/osx-next` (18 commits, 7 real content
+  commits ahead of merge-base) and `origin/windows-next` (22 commits) had
+  both drifted well past the 5-commit compliance threshold. Merged
+  `origin/osx-next` cleanly (no conflicts — VZ guest-transport facade,
+  singleton tray guard, serialized project PTY launches). Merged
+  `origin/windows-next` with one conflict in `plan/index.yaml` (both branches
+  had appended distinct new packets at the tail of the file — pure
+  concatenation, resolved by keeping both sides' packets: Windows' orders 196
+  (audit-plan-cross-branch-writes)/197 (audit-credential-guard-windows) plus
+  my order 201). Brings in Windows host-lifecycle-race-safeguards R1/R3, the
+  secure-control-wire e2e probe (order 191 evidence), and related plan/skill
+  audits. Ran the full integration verification gate after merging (conflict
+  marker scan clean, all touched YAML re-validated, `./build.sh --check` +
+  `--test` green, litmus suite unchanged at 116/117) before pushing
+  (`08a9676d`).
+- **Reduction engine**: all findings from this cycle filed/promoted (see
+  above); no unfiled "this isn't great" observations pending.
+- **Next**: with litmus fixes + order 124/153 slices + macOS/Windows work all
+  now integrated together on `linux-next`, this is a meaningful moment for
+  the destructive local-build e2e smoke gate (`/build-install-and-smoke-test-e2e`)
+  rather than running it against a single isolated packet — proceeding to it
+  next.
+
+## Cycle 2026-07-06T18:15Z (windows — meta-orchestration)
+
+- Staged and verified the Windows/WSL host-lifecycle race safeguards (order 161).
+- Implemented:
+  - **R1 (Quit/relaunch)**: added an observable `drain.lock` in the VM install root to coordinate teardown; `WslRuntime::start` now checks `is_wsl_service_sane()` and retries with backoff, automatically executing `wsl --shutdown` (guided recovery) on E_UNEXPECTED / unhealthy service state.
+  - **R3 (PTY Click serialization)**: debounced duplicate terminal launches within 1.5s in `launch_open_shell_terminal`.
+- Verified `cargo check` and `cargo test` clean on Windows host for both `tillandsias-windows-tray` and `tillandsias-vm-layer`. Formatting verified.
+- E2E preflight verdict this cycle: `skip:no-podman-binary` (local-build e2e skipped).
+
+## Cycle 2026-07-06T18:04Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, started on `osx-next` clean, credential guard
+  `ok:gh-keyring`.
+- **Branch integration**: `osx-next` had drifted from `origin/linux-next`;
+  merged `origin/linux-next` into `osx-next` and pushed `osx-next@310b7232`.
+  While publishing the next plan claim, the `linux-next` macOS build gate
+  exposed that shared trunk was missing already-landed `osx-next` clippy fixes;
+  merged `origin/osx-next` into `linux-next` by merge commit
+  `1c8203d3`. Added the small Linux cfg fix for the new
+  `containers.conf` proxy setup compile break (`e5c02608`).
+- **Worker drain — `stable-state-codes-research` (order 160), claimed and
+  COMPLETED**: documented the finite dotted-code taxonomy for
+  host/vm/guest/podman plus auth/cloud/forge/transport, event ownership,
+  request/reply fallback mapping until push streams land, stable support-code
+  naming, and a tray chip message map capped at 37 chars in
+  `plan/issues/stable-state-codes-research-2026-07-05.md`. This gives the
+  macOS status UX packet a concrete code contract instead of ad hoc labels.
+- **Worker drain — `host-guest-transport-macos` (order 126), claimed and
+  checkpointed then BLOCKED/released**: first coherent slice landed on
+  `osx-next@0e49d480`. `VzRuntime` implements the normalized
+  `GuestTransport` facade for `GuestEndpoint::MacVz` (`open_stream`, `exec`,
+  `exec_streaming`) over the existing VZ `VsockStream` / `vsock_exec` helpers.
+  Second slice landed on `osx-next@381dbdfc` and `osx-next@e9d55c97`: the
+  AppKit action-host opener now uses `GuestTransport::open_stream`, and
+  `VzRuntime::exec` routes through `GuestTransport::exec` with explicit Unix
+  signal exit-code normalization. Third slice landed on `osx-next@8e9f586d`:
+  `diagnose.rs` now constructs `GuestEndpoint::MacVz` and delegates
+  current-thread VZ connection details to vm-layer, without naming the raw
+  `VsockStream` type or calling `open_vsock_stream_current_thread` directly.
+  Evidence: `cargo test -p tillandsias-vm-layer` 29/29,
+  `cargo test -p tillandsias-macos-tray` 56 passed / 1 ignored, and
+  `./build.sh --check` pass on macOS. Released the lease after recording the
+  blocker: completion now depends on Linux/order124 landing the shared
+  conformance harness/litmus plus a facade-contract decision for
+  secure/expect/signal ExecOneShot semantics, and on a macOS packaged/entitled
+  VM substrate to run the live Darwin fixture. Local e2e eligibility remains
+  `skip:no-podman-user-session`.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R9
+  sub-slice claimed and released after checkpoint**: `osx-next@3e1637ad`
+  changes the VZ cloud-init `fetch-headless.sh` network fallback from
+  `curl --output "$DEST"` to `mktemp` + cleanup trap + `install -D -m 0755`
+  into the live headless path. Added a source-pin test for the temp/install
+  behavior. Evidence: `cargo test -p tillandsias-vm-layer` 30/30 and
+  `./build.sh --check` pass on macOS. The broader packet remains ready for the
+  Windows owner; Windows R1-R3/R9 lifecycle safeguards are not completed by
+  this macOS slice.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R2
+  sub-slice claimed and released after checkpoint**: `osx-next@64676548`
+  adds non-destructive `SingletonGuard::try_acquire` and guards only the no-flag
+  AppKit tray path, so a second tray exits cleanly while CLI utility modes still
+  run. Evidence: `cargo test -p tillandsias-core singleton`,
+  `cargo test -p tillandsias-macos-tray` 57 passed / 1 ignored, and
+  `./build.sh --check` pass on macOS.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), macOS R3
+  sub-slice claimed and released after checkpoint**: `osx-next@bb72efc2`
+  adds a per-project launch lease around AppKit Attach/Maintain PTY launches,
+  so a same-project double-click is ignored while the first guest launch flow is
+  in flight. Root shell and GitHub login remain project-less and unaffected.
+  Evidence: `cargo test -p tillandsias-macos-tray` 58 passed / 1 ignored and
+  `./build.sh --check` pass on macOS. Remaining order 161 scope is now
+  Windows lifecycle/R1-R3/R9 only.
+- **Queue reconciliation**: `host-guest-transport-macos` is now blocked on
+  Linux/order124 conformance and live macOS VM substrate; `macos-tray-stream-refactor`
+  and `macos-tray-state-code-status-ux` were returned from stale `ready` to
+  `pending` because `vm-headless-persistent-listener` is still not complete.
+  `host-lifecycle-race-safeguards` remains ready for Windows only after the
+  macOS R2/R3/R9 slices. No macOS-owned packet remains claimable in the current
+  dependency state.
+- **Verification**: conflict-marker scan clean; `plan/index.yaml` and
+  `.github/workflows/release.yml` parse as YAML; `cargo test -p
+  tillandsias-macos-tray` and `./build.sh --check` pass on macOS with the Rust
+  toolchain path added.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` →
+  `skip:no-podman-user-session`; local-build e2e skipped with the recorded
+  verdict.
+- **Next macOS work**: none claimable in the current dependency state. Order 126
+  is blocked on Linux/order124 conformance and live packaged/entitled macOS VM
+  substrate; older macOS stream/status implementation packets still depend on
+  the VM/headless persistent listener and push-message work. Order 198 remains
+  actively leased by another macOS agent until `2026-07-06T20:58:00Z`.
+
+## Cycle 2026-07-06T17:34Z (linux_mutable CCR sandbox — meta-orchestration)
+
+- **Host**: Linux mutable, Claude Code remote sandbox. Branch constraint: session
+  may only push `claude/meta-orchestration-skill-uhitvv` (reset onto
+  `linux-next@4835931e`); ledger writes reach `linux-next` via PR, not direct
+  push. Credential guard `ok:gh-token-env`.
+- **Worker drain — order 160 (race-safeguards-research), claimed and
+  COMPLETED**: R1-R9 dispositioned against the live tree with file:line
+  evidence; shared-container ownership decided (ensure-only +
+  vsock-supervisor reconciliation; refcount rejected); impl scopes for orders
+  161/162/163 confirmed with amendments (stale "orders 152-154" pointer
+  corrected). Re-verification deltas: R9 linux bootstrap already fixed but
+  windows `wsl_lifecycle.rs:368` + macos `vz.rs:460` embedded fetch scripts
+  still curl onto the live binary; R5 forge-aware guard landed at 3 sites, 4
+  launch/cleanup paths still remove shared containers unconditionally.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-binary`
+  (sandbox has no podman); both local-build and curl-install gates skipped
+  with recorded verdict.
+- **Coordinator duties**: skipped — sibling merges (osx-next 12 / windows-next
+  6 ahead, order 191) require pushing `linux-next`, which this session cannot
+  do. Left order 191 for a push-capable linux_mutable host.
+- **Reduction engine**: filed
+  `plan/issues/ccr-branch-scoped-ledger-claims-invisible-2026-07-06.md`
+  (optimization): CCR sessions cannot publish leases to `linux-next` before
+  working, so claims are invisible to siblings until PR merge — collision
+  window documented with candidate reductions.
+
+## Cycle 2026-07-06T17:15Z (linux_immutable — meta-orchestration)
+
+- **Host**: Linux, `linux-next`, `linux_immutable` (clean, credential guard `ok:gh-keyring`).
+- **Worker Drain**: Skipped (not a builder role host).
+- **E2E Gate**: `eligible`. Executed `/smoke-curl-install-and-test-e2e` for release `v0.3.260704.2`.
+- **E2E Findings**: Substrate reset succeeded. Init completed cleanly (exit 0) but logged SELinux `semanage` and vault `/etc/hosts` permission denied warnings. Forge continuous enhancement run failed immediately with `Error: Unknown image type: curl`.
+- **Reduction Engine**: Filed 3 ready work packets in `plan/issues/smoke-e2e-findings-v0.3.260704.2-2026-07-06.md`.
+
+## Cycle 2026-07-06T15:37Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, `osx-next` (clean, credential guard `ok:gh-keyring`,
+  no sibling drift to merge at cycle start).
+- **Worker drain — order 197 (macos-tray-clippy-warnings), claimed and
+  COMPLETED**: boxed `ControlWireStream::Secure` in `action_host.rs` +
+  `diagnose.rs` (large_enum_variant); fixed `status_item.rs:203`'s redundant
+  `.ok()` match. `cargo clippy -p tillandsias-macos-tray --all-targets`: 0
+  warnings. `cargo test`: 54/54 pass. Code → `osx-next@0965ad53`; ledger →
+  `linux-next@cd80e0ea`.
+- **Worker drain — order 196 (macos-litmus-runner-bash-version-gap), claimed
+  and COMPLETED**: `scripts/run-litmus-test.sh` used `declare -A` (bash 4+);
+  stock macOS ships bash 3.2 with no Homebrew bash installed, so the runner
+  crashed immediately on every macOS invocation — no macOS host had ever seen
+  a real litmus verdict. Rewrote the 3 associative arrays as portable
+  newline-delimited dedup+count helpers; also fixed a second latent bash-4-ism
+  (`${var,,}`) found while verifying end-to-end. **First-ever full macOS
+  litmus run**: 93 PASS, 24 FAIL, 119 SKIP, 100% spec coverage (88/88). Fixed
+  1 of the 24 same-cycle (`wc -c` BSD-padding bug in
+  `litmus-versioning-shape.yaml`). Filed the remaining 23 for triage
+  (`plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md`,
+  order 198) with an explicit caveat: spot-checks show a MIX of genuine
+  drift, local-build-state gaps (missing cross-compiled artifacts), and
+  macOS/BSD tooling gaps in the checks themselves (e.g. missing `flock`) —
+  do not treat all 23 as code bugs without per-item triage. Promoted 2
+  confirmed-root-cause macos-native-tray items as ready packets (199, 200).
+  All changes → `linux-next@53ba8f36` (openspec/litmus-tests + scripts/
+  route through linux-next per the shared-scope write rule); merged back
+  into `osx-next@78ffa02a`.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-user-session`
+  (same known macOS-host limitation as last cycle); local-build e2e skipped.
+- **Next macOS work**: order 198 (triage 23 litmus failures), order 199
+  (restore/correct the macos-tray-architectural-invariants pin test), order
+  200 (correct the stale pty-attach-project-threading-symmetric litmus
+  string — coordinate with windows since it pins windows-tray's import).
+
+## Cycle 2026-07-06T15:16Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, `osx-next` (clean, credential guard `ok:gh-keyring`).
+- Merged `origin/linux-next` (49ab501d..c50bdf3a, 1 conflict in
+  `plan/loop_status.md` resolved keeping both cycle logs) into `osx-next`;
+  `cargo test -p tillandsias-vm-layer` 24/24, `-p tillandsias-macos-tray`
+  53/53 green post-merge. Pushed `23b00572`.
+- **Worker drain — order 194 (secure-channel-release-and-probe-hardening),
+  claimed and COMPLETED all remaining slices 1/2/4** (linux's slice 3 was
+  already done):
+  - Slice 1: audited all 5 `channel_psk` call sites — no live
+    `CARGO_PKG_VERSION` drift (already fixed by a prior commit). Added
+    `litmus:psk-input-parity-shape` to pin it.
+  - Slice 2: `VzRuntime::wait_phase_ready` (vm-layer, secure-channel-agnostic
+    by design) now takes a caller-supplied `probe_once` closure instead of
+    connecting raw internally; `diagnose.rs`'s 4 call sites pass a new
+    `probe_phase_secure_or_plain()` helper reusing the existing
+    `open_control_wire_stream()` secure-or-plain opener. Added a source-pin
+    test covering `litmus:secure-wait-phase-ready`.
+  - Slice 4: corrected the M1 gate wording in
+    `secure-channel-maturity-ladder-2026-07-04.md` — failure-closed means no
+    `HelloAck`/`PtyOpen` + stream close, not a literal `Unauthorized` frame.
+  - Evidence: `cargo test -p tillandsias-vm-layer` 44/44,
+    `-p tillandsias-macos-tray` 54/54 (1 ignored), clippy 0 new warnings.
+  - Code commit `9126986b` → `osx-next`; plan/ledger commit `626cc2e2` →
+    `linux-next` (order 194 now `done`; 2 new ready packets filed: order 196
+    macOS litmus-runner bash-3.2 gap, order 197 macOS-tray clippy cleanup).
+  - Merged `linux-next` (626cc2e2) back into `osx-next` (clean, no conflicts);
+    pushed `1a87fc61`.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-user-session`
+  (known macOS-host limitation, already tracked); local-build e2e skipped
+  this cycle per protocol.
+- **Next macOS work**: order 196 (litmus runner bash version) and order 197
+  (clippy cleanup) are ready and macOS-owned; both are small (~1h) follow-ups.
+
+## Cycle 2026-07-05T22:44Z (macos — meta-orchestration, round 2)
+
+- **Host**: macOS arm64, `osx-next` (clean, in sync with `origin/linux-next`).
+- **Credential guard**: `ok:gh-keyring`.
+- **Worker drain — order 193 (macos-vz-home-src-mount)**:
+  - Claimed and completed. VZ virtio-fs share already wired in previous WIP
+    (checkpointed). Implemented: `VZVirtioFileSystemDeviceConfiguration` with
+    `home-src` tag in `build_vm_configuration`; cloud-init mounts `/home/forge/src`
+    via `mount -t virtiofs` before headless service; `fetch-headless.sh` prefers
+    staged binary at `/home/forge/src/.tillandsias/guest-bin/` over curl fallback.
+  - **New test**: `vz_fetch_script_prefers_staged_binary_over_network` verifies the
+    staged binary path and install-instead-of-curl logic.
+  - `cargo test -p tillandsias-vm-layer`: **24/24 pass**.
+  - `cargo test -p tillandsias-macos-tray`: **53/53 pass**.
+- **Next macOS work**: order 194 (secure-channel-release-and-probe-hardening) has
+  macOS-relevant slices (PSK parity, VZ readiness probes) — ready for pickup.
+
+## Cycle 2026-07-05T22:23Z (macos — meta-orchestration)
+
+- **Host**: macOS arm64, `osx-next` branch, clean worktree after WIP checkpoint.
+- **Credential guard**: `ok:gh-keyring`.
+- **Worker drain — order 191 (multi-host-secure-wire-integration-freeze)**:
+  - Merged `origin/linux-next` (49ab501d) into `osx-next` (34 commit catch-up).
+  - 3 conflicts resolved: `vsock_server.rs`, `plan/loop_status.md`,
+    `plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md` —
+    all resolved with `linux-next` as authoritative per coordination policy.
+  - `cargo fmt --all --check`, `cargo check -p tillandsias-macos-tray` clean.
+  - `cargo test -p tillandsias-macos-tray`: **53/53 pass** (1 ignored, slow e2e).
+  - `cargo test -p tillandsias-secure-channel`: **12/12 pass**.
+  - All touched YAML validated via `ruby -ryaml -e YAML.load_file`.
+  - Branch drift from linux-next resolved (osx-next now at parity).
+  - Pushed `39e9df27` to `origin/osx-next`.
+- **Remaining macOS work**: Order 193 (`macos-vz-home-src-mount`) is now
+  unblocked — linux-next merge complete, order 190 (guest binary contract) done.
+  Next: implement VZ virtio-fs share for host `~/src` → `/home/forge/src`.
+- **E2E gate**: Not run this cycle (merge verification only; no destructive
+  substrate reset). Ready for full local-build e2e on next cycle once order 193
+  implementation is in place.
+- **Finding filed**: `./build.sh --check` requires podman which isn't available
+  on this macOS dev path — noted in existing
+  `plan/issues/macos-build-check-podman-wrapper-2026-07-05.md`.
+
+## This Loop (coordination audit — secure wire / embedded guest / ledger pruning)
+- Current product target distilled for the next agents: macOS tray boots Fedora 44,
+  injects a source-matching Linux headless binary for the guest arch, initializes
+  the Podman control plane, and launches Codex/Claude/OpenCode/Antigravity inside
+  the deepest forge container from a top-host terminal without leaking host
+  credentials.
+- Secure-channel state: host<->guest primitive and linux guest responder are on
+  `linux-next`; macOS and Windows have sibling work that must be integrated by
+  merge, not cherry-pick. Guest<->container encryption and metrics sub-packets
+  remain open before M2 soak can start.
+- Windows update 2026-07-06T06:20Z (windows-bullo-fable5-20260706T0535Z):
+  `windows-next` merged `origin/linux-next` (0794510a) per the order-191 freeze;
+  Windows flag-OFF/flag-ON secure-wire evidence recorded in the order-191
+  deliverable (Noise handshake + VmStatus round-trip on a version-matched guest;
+  plaintext rejected failure-closed while gated ON). Order-161 R2 tray
+  SingletonGuard landed (c3089123). Windows local-build e2e gate verdict this
+  cycle: `skip:no-podman-binary` (e2e-preflight). Remaining freeze work: macOS
+  slice + linux coordinator merge of both siblings.
+- Embedded guest state: order 190 is the canonical Linux artifact contract. Older
+  macOS-filed packaging notes are now intake evidence, not the active blocker.
+- Observability state: `plan/metrics-dashboard.md` is stale/cache-empty and must not
+  be used as live evidence until order 192 refreshes the metrics source and stamps
+  provenance.
+
+secure_channel_soak:
+  start_date: null
+  days_elapsed: 0
+  qualifying_commits: 0
+  first_release_tag: null
+  third_release_tag: null
+  subpackets_landed: { "185-A": false, "185-B": true, "185-C": false, "185-D": false }
+
+HighVelocityAlignmentEvent: Active
+Reason: Secure-wire/embedded-guest path remains the critical product blocker.
+  Branch drift is resolved for osx-next (merged at parity); windows-next still
+  needs integration.
+
+## Active Assignment Board
+
+- Linux primary: order 190 `embedded-guest-binary-linux-build` — COMPLETED (added scripts/build-guest-binaries.sh and litmus matching version test). Next focus: order 180 continuation for remaining FIRST_RUN migration/de-hardcoding.
+- macOS primary: order 193 `macos-vz-home-src-mount` — **COMPLETED**. VZ virtio-fs
+  share wired, cloud-init mount added, staged binary fallback tested (24/24 vm-layer
+  tests). Next: order 194 (secure-channel-release-and-probe-hardening) — macOS PSK
+  parity and VZ readiness-probe slices.
+- Windows primary: order 186 plus order 191 — merge `origin/linux-next` into
+  `windows-next`, preserve the real hvsocket secure-wrapper + embedded-binary work,
+  and record WSL2 flag-off/flag-on smoke evidence. Fallback: order 190 consumer
+  review for the Windows installer/staging path.
+- Coordination primary: order 192 `semantic-distillation-and-ledger-pruning` and
+  order 194 `secure-channel-release-and-probe-hardening` — prune stale active
+  issues, update dashboard provenance, and close PSK/release/probe ambiguity before
+  secure-channel maturity advances.
+
+### Cycle 2026-07-05T23:28Z (forge — meta-orchestration)
+- Recovered dirty VERSION (0.3.260705.5 → 0.3.260705.6 uncommitted), committed as
+  checkpoint before work.
+- Claimed and completed order 165 (forge-agent-permission-defaults): verified exit
+  criteria that OpenCode/Codex already pre-grant container-local filesystem
+  (permission:allow + --dangerously-skip-permissions / --dangerously-bypass-approvals),
+  and wrote boundary-enforcement rationale to openspec/specs/default-image/spec.md
+  documenting the nine containment boundaries (cap-drop, no-new-privs, user-ns,
+  proxy egress, credential indirection, source-mount quarantine, encrypted control
+  channel, SELinux Phase 6, ephemeral single-project container) that make
+  default-grant safe inside the forge. No remaining forge-agent-permission blockers.
+
+## This Loop (2026-07-05 macos — meta-orchestration)
+- Recovered dirty macOS packaging work: styled DMG script/assets, release workflow
+  DMG staging/signing, and packaged `.app` guest-binary embedding for
+  `aarch64-unknown-linux-musl` + `x86_64-unknown-linux-musl`.
+- Fixed macOS secure-control PSK drift by deriving both tray/headless from repo
+  `VERSION`, and fixed `--exec-guest` to use the guest PTY allowlisted
+  `/bin/bash -lc` wrapper.
+- Verified: `cargo fmt --all -- --check`; `cargo test -p tillandsias-macos-tray`;
+  `cargo test -p tillandsias-secure-channel`; `scripts/build-macos-tray.sh`;
+  `scripts/build-macos-dmg.sh`; read-only DMG contents; packaged app
+  `--exec-guest /bin/echo TILLANDSIAS_GUEST_OK` returned exit 0.
+- Residual blocker filed in
+  `plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md`:
+  `--list-cloud-projects` reaches the guest but Vault startup fails with
+  `Operation not permitted`. Next action is to merge latest `origin/linux-next`
+  Vault/SELinux + guest-binary builder work into `osx-next`, rebuild, and rerun
+  list-projects plus agent-launch smoke.
+- Integration gate note: `./build.sh --check` does not reach cargo on this
+  macOS host because `scripts/common.sh` wraps Homebrew Podman with Linux-only
+  `--root/--runroot` flags. Filed
+  `plan/issues/macos-build-check-podman-wrapper-2026-07-05.md`.
+
+### Cycle 2026-07-05T00:0XZ (macos — meta-orchestration)
+- Merged origin/linux-next 7ab86309 into osx-next (9614d32f); built + installed
+  tray v0.3.260704.1; control wire E2E green (--exec-guest → Podman hello-world ok).
+- macOS evidence for the CREATION_TIME→FIRST_RUN split: forge-base is absent and
+  built at runtime in the **aarch64** guest from Containerfile.base via a long
+  x86_64 curl/tar chain → the "stuck initializing VM" symptom + wrong-arch tools.
+- Filed 2 ready packets (`macos-forge-base-build-arch-and-fragility-2026-07-05`,
+  `podman-stale-volume-locks-2026-07-05`) + added arch-awareness requirement to
+  `forge-firstrun-tool-migration`. No tray-side change needed; osx re-verifies once
+  linux lands the arch-aware first-run migration.
+
+## This Loop (2026-07-04 — CREATION_TIME->FIRST_RUN container refactor: research + inference impl)
+
+Operator directive: strip finicky curl/tar installers out of forge image CREATION,
+move to idempotent FIRST_RUN on the persistent cache; harnesses EVERY_LAUNCH for
+latest; pull small models on inference FIRST_RUN. Multi-session; file packets.
+
+- **Filed 6 packets (178-183)** with a full Containerfile audit (evidence-backed):
+  CREATION (keep dnf: node/rust/go/java/python bases) vs FIRST_RUN (migrate the
+  install_archive block: ~19 cargo tools + wasmtime/dart/marksman + ollama) vs
+  EVERY_LAUNCH (codex/claude/opencode/antigravity via npm/latest — fixes "newer
+  version available" on a fresh forge).
+- **178 research DONE (the crux answered, code-definitive):** NO live forge-launch
+  path mounts a persistent cache for $CARGO_HOME/$NPM_CONFIG_PREFIX
+  (build_forge_agent_run_args + build_opencode_forge_args mount only project+CA+tmpfs;
+  ContainerProfile's rich cache is unused dead code; forge runs --rm). So first-run
+  installs would NOT persist today -> order 179 (add the cache mount) is a HARD
+  PREREQUISITE for 180/181. Promoted 179 ready.
+- **182 research DONE + 183 impl DONE (self-contained win):** inference already did
+  idempotent first-run ollama pulls into the persistent models cache, but pulled
+  llama3.2:3b (3B, out of the operator's 0.3-1.5B envelope). Replaced with a
+  config-driven default set (qwen2.5:0.5b, qwen2.5:1.5b, llama3.2:1b,
+  qwen2.5-coder:1.5b) via TILLANDSIAS_DEFAULT_MODELS; idempotent+non-fatal; pinned by
+  litmus:inference-firstrun-default-models-shape (4/4) + fixed the stale STEP 7.
+- **NOT touched (respected):** the operator's uncommitted WIP on main.rs /
+  Containerfile.base / lib-common.sh / proxy allowlist etc. — including a DUPLICATED
+  antigravity curl block. The forge tool migration (180) lives in Containerfile.base
+  (WIP-dirty) + needs 179 (persistent mount, in WIP-dirty main.rs), so it is
+  next-session work once the WIP settles. Flagged the duplication in packet 181.
+- **Follow-up filed inline:** the inference tier system auto-pulls qwen2.5:7b on a
+  16GB laptop (RAM>=16 -> T2), conflicting with tiny-model-first.
+
+## This Loop cont. (2026-07-04 — owner handoff: recover WIP + advance-work-from-plan)
+
+Operator handed sole ownership of the workdir ("recover or delete uncommitted code"),
+then asked to drain the queue.
+
+- **Recovered the uncommitted WIP (it was a coherent feature, not junk):** wired
+  Antigravity as a first-class forge agent (--antigravity flag, ForgeAgentMode +
+  tray leaf 6->7, provider auth, .antigravity.google allow/no-bump) — closing the
+  known 'agy installed but not an agent' gap. FIXED its compile gap (a LaunchKind
+  match arm missing under --features tray, why plain --check had passed). Wiped
+  generated churn (build-proxy-progress.jsonl; gitignored build-*.log). Verified:
+  build --features vault,tray green, 243 tests pass. Committed 35ba3d3f.
+- **Order 179 DONE (advance-work-from-plan, the critical prereq 178 identified):**
+  build_forge_agent_run_args now mounts a per-project podman NAMED volume
+  tillandsias-forge-cache-<project> at /home/forge/.cache/tillandsias-project (the
+  lib-common CARGO_HOME/NPM_CONFIG_PREFIX root) — first-run installs now persist
+  across --rm. Named volume (not a ~/.cache bind) => zero host-$HOME surface, no
+  credential-leak path. Refined the launch_forge_agent_does_not_mount_user_home
+  guard to be SOURCE-scoped. +positive unit test, +litmus (forge-cache-dual). 244
+  tests pass. Committed d1838350. Promoted 180 + 181 to ready.
+
+### Queue state + next cycle
+- done: 178 (research), 179 (cache mount), 182 (research), 183 (inference models).
+- ready, NEXT CYCLE (both large + runtime-critical on the launch path — deliberately
+  NOT rushed at session end):
+  - **180 forge-firstrun-tool-migration (12h). CORRECTED by operator:** the path is
+    "curl-install PREBUILT at CREATION" -> "curl-install PREBUILT at FIRST_RUN, latest
+    version" — KEEP prebuilt binaries (NOT source compile / NOT cargo install). The
+    problem is the finicky curl/tar/zip/chmod/mkdir/chown/rm chains + hardcoded
+    version/SHA constants in CREATION. First slice: a reusable install_prebuilt helper
+    (fetch latest prebuilt -> extract -> place on cache PATH, idempotent) + migrate the
+    cargo-tool group. (My earlier "must pick binstall vs compile" framing was wrong —
+    prebuilt-at-first-run was always the answer.)
+  - **181 forge-harness-every-launch-latest (6h).** Now unblocked (NPM_CONFIG_PREFIX
+    persists via 179). Slice-1 candidate: add an idempotent, offline-safe,
+    proxy-routed every-launch npm upgrade in the forge entrypoint while keeping the
+    baked baseline; slice-2 removes the Containerfile pins.
+
+## This Loop (2026-07-04T04:02Z, forge — Codex /meta-orchestration validation)
+
+Codex ran inside the Tillandsias forge and validated the current in-forge
+runtime/config surface without using host credentials.
+
+- **Branch + credentials**: started on `main`, switched to `linux-next` for plan
+  writes. `scripts/check-credential-channel.sh` returned `ok:forge-git-mirror`;
+  `git push --dry-run origin linux-next` returned `Everything up-to-date`.
+  Real push forwarding reached GitHub, but the forge mirror continued to
+  advertise stale `origin/linux-next` afterward. A follow-up amended push
+  returned client exit 0 while the mirror log showed upstream GitHub rejected the
+  forwarded update as non-fast-forward; filed in the validation packet.
+- **Eligible gates**: `scripts/e2e-preflight.sh eligibility` returned
+  `skip:no-podman-binary`, so destructive local-build e2e was not eligible in
+  this forge.
+- **Build/test validation**: `cargo check --workspace` PASS. Full
+  `cargo test --workspace --no-fail-fast` FAIL only on
+  `-p tillandsias-headless --bin tillandsias`; targeted rerun produced 109 pass,
+  2 fail, 1 ignored. Failures: `launch_forge_agent_does_not_mount_user_home`
+  false-positives on the in-container target `/home/forge/src/...`, and
+  `source_built_init_and_status_check_smoke_uses_fake_podman` cannot find the
+  `openssl` CLI used by `ensure_ca_bundle`.
+- **Services/network**: Vault healthy at `https://vault:8200` (initialized,
+  unsealed, v1.18.5); inference healthy at `http://inference:11434/api/tags`
+  with `llama3.2:3b` + `qwen2.5:0.5b`; outbound HTTPS via proxy env reached
+  `https://api.github.com/rate_limit`.
+- **Findings filed**: `plan/issues/forge-validation-findings-2026-07-04.md`;
+  plan order 177 added as pending for Tlatoani approval.
+
+## Release v0.3.260704.2 (2026-07-04T03:38Z — completes the Codex-connect chain)
+
+The 704.1 curl-install smoke (run on the host) FOUND a new blocker, proving the
+value of verify-before-release: forge launch failed at the proxy stage
+("tillandsias-proxy already in use") whenever a proxy was already running
+(from --init or a prior session) — blocking Codex/Claude/OpenCode launch.
+
+- **Order 176 — forge-launch proxy idempotency FIXED**: the three forge-launch
+  proxy sites (ensure_enclave_for_project [tray+CLI], opencode, opencode-web) ran
+  `podman run --name tillandsias-proxy` raw. Now guarded by
+  container_running(tillandsias-proxy) (reuse) + rm --ignore (clear stale), matching
+  ensure_proxy_running. Regression test forge_launch_proxy_bringup_is_idempotent.
+- **FULL CHAIN LIVE-VERIFIED with the fixed binary**: proxy already running (the
+  failing case) → forge launches cleanly → inside the forge NODE_USE_ENV_PROXY=1 +
+  `node fetch https://api.openai.com → HTTP 401 (REACHED REMOTE)`. So: curl-install
+  → --init (vault healthy) → forge launches → Node reaches the model API through the
+  proxy. A Codex session with a valid token now connects.
+- PR #67 merged (main ac608247→4b9a4376); VERSION 704.2; tag v0.3.260704.2;
+  release.yml run 28693745435 SUCCESS (all 3 jobs green); published https://github.com/8007342/tillandsias/releases/tag/v0.3.260704.2
+- Net across this session: fixed the ACTUAL Codex-connect root cause (Node bypassing
+  proxy, order 175) + forge-launch proxy idempotency (176) + vault secret race (174),
+  integrated Codex's forge findings (171/172/173), and verified the whole chain live.
+  Remaining: order 170 (credential quarantine, ready); the human-in-loop step
+  (operator logs in with real Codex/Claude creds and confirms a session).
 
 ## Release v0.3.260704.1 (2026-07-04T03:00Z, linux_mutable — merge-to-main-and-release)
 
@@ -1603,3 +2235,24 @@ LastExecutionTime: 2026-06-28T09:20Z
 - Release workflow: all three jobs success (17m) — Linux musl, macOS arm64, Windows x64
 - First release with tillandsias-zeroclaw-linux-x86_64
 - Latest tested release: v0.3.260627.1
+
+## /loop iter 1 (2026-07-05 — unblock macOS: order 188 arch-aware first-run cargo tools)
+
+macOS filed evidence + packet 188 (macOS-blocking): forge-base is built in-guest on
+the aarch64 Apple-Silicon guest, where the Containerfile's hardcoded-x86_64 cargo
+curl/tar chain (a) baked non-executable x86_64 binaries and (b) hung `podman build` /
+VM setup. Linux (image owner) implemented slice 1 of order 180:
+
+- lib-common: `_forge_uname_arch` + `install_prebuilt` (idempotent, fail-soft,
+  `curl --max-time`) + `ensure_forge_prebuilt_tools` (15 cargo tools, arch-substituted
+  URLs) into the order-179 persistent cache. Verified on x86_64 (nextest installs +
+  runs; 2nd call no-op); all aarch64 assets pre-verified 200. NO API / NO
+  compile / NO binstall (project policy).
+- 4 forge entrypoints call it backgrounded (never blocks launch).
+- Containerfile.base: cargo block + ARG _VERSION/_SHA256 removed; Antigravity `agy`
+  pipe-to-shell moved to every-launch entrypoint install-if-missing.
+- Litmus: new arch-shape litmus + updated the stale default-image-containerfile-shape
+  STEPs 7-8 (pinned the old cargo-at-creation structure). default-image suite 100%.
+- 188 -> done. macOS to re-verify on a cold Apple-Silicon guest.
+- Next: slice 2 (actionlint/vale/wasmtime/dart arch-aware) + de-hardcode versions to
+  releases/latest redirect.

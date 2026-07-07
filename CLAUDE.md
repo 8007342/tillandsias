@@ -54,5 +54,7 @@ scripts/run-litmus-test.sh git-mirror-service --phase pre-build --size instant -
   heads for `main`, `linux-next`, `windows-next`, and `osx-next`.
 - Before fast-forwarding a platform branch, verify the remote platform head is
   an ancestor of the source ref.
+- Before EVERY push of a non-linux-next branch, merge `origin/linux-next` into
+  it and resolve conflicts locally (methodology `pull_merge_cadence.pre_push_gate`).
 
 Canonical details: `methodology/multi-host-development.yaml`.

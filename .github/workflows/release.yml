@@ -77,9 +77,33 @@ jobs:
           # failed in CI (musl.cc network timeout; cross 0.2.5's ancient-glibc
           # container choked on build.rs). The router sidecar + runtime assets
           # are git-tracked, so nix embeds them from the checked-out tree.
+          #
+          # The secure-channel key is SHA-256 of the binary itself (computed at
+          # runtime, not compile time). No env injection or --impure needed.
+          # All binaries from identical source produce identical content →
+          # identical hash → matching PSK. See release_root_secret().
           nix build -L .#tillandsias-x86_64-musl              --out-link result-host
           nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
           nix build -L .#tillandsias-headless-aarch64-musl  --out-link result-ha
+
+      - name: Verify release builds use binary-self-hash (no dev seed fallback)
+        run: |
+          # Release builds must NOT contain the debug DEV_ROOT_SEED. With LTO
+          # the #[cfg(debug_assertions)] branch is dead-code-eliminated, so the
+          # string "tillandsias-dev-root-not-a-secret" is absent from .rodata.
+          # Its presence means the binary was built in debug mode → security gap.
+          for binary in result-host/bin/tillandsias result-hx/bin/tillandsias result-ha/bin/tillandsias; do
+            if [ ! -f "$binary" ]; then
+              echo "::error::Binary not found: $binary"
+              exit 1
+            fi
+            if strings "$binary" 2>/dev/null | grep -qF "tillandsias-dev-root-not-a-secret"; then
+              echo "::error::FAIL: ${binary} contains the debug DEV_ROOT_SEED — built in debug mode!"
+              exit 1
+            else
+              echo "✓ ${binary}: binary-self-hash active (dev seed absent)"
+            fi
+          done
 
       - name: Record Nix Build Duration and Assert Cache Performance
         if: always()
@@ -306,6 +330,11 @@ jobs:
         with:
           workspaces: . -> target
 
+      - name: Install guest cross-build tools
+        run: |
+          brew install zig
+          cargo install cargo-zigbuild --locked
+
       - name: Resolve version (same as Linux job)
         id: version
         run: |
@@ -328,10 +357,26 @@ jobs:
               | grep -q 'com.apple.security.virtualization'
           ls -la dist/
 
+      # Styled drag-to-Applications disk image for manual installs (the
+      # README's "MACOS — MANUAL INSTALL" path). Stable asset name
+      # Tillandsias.dmg so the releases/latest/download/ link never goes
+      # stale. Appends its own line to dist/SHA256SUMS before staging.
+      - name: Build styled DMG (drag to Applications)
+        run: scripts/build-macos-dmg.sh
+
+      - name: Verify DMG contents
+        run: |
+          hdiutil attach dist/Tillandsias.dmg -readonly -nobrowse
+          test -d /Volumes/Tillandsias/Tillandsias.app
+          test -L /Volumes/Tillandsias/Applications
+          test -f /Volumes/Tillandsias/.background/dmg-background.png
+          hdiutil detach /Volumes/Tillandsias
+
       - name: Stage release artifacts
         run: |
           mkdir -p release-artifacts
           cp dist/tillandsias-tray-*-macos-arm64.tar.gz release-artifacts/
+          cp dist/Tillandsias.dmg release-artifacts/
           install -m 0755 scripts/install-macos.sh release-artifacts/install-macos.sh
           # The macOS SHA256SUMS uses a distinct filename so it doesn't
           # collide with the Linux job's SHA256SUMS in the GitHub release.
@@ -344,7 +389,7 @@ jobs:
       - name: Sign macOS artifacts with Cosign bundles
         run: |
           cd release-artifacts
-          for artifact in tillandsias-tray-*-macos-arm64.tar.gz install-macos.sh; do
+          for artifact in tillandsias-tray-*-macos-arm64.tar.gz Tillandsias.dmg install-macos.sh; do
             echo "::group::Signing ${artifact}"
             cosign sign-blob \
               --yes \

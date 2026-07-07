@@ -19,6 +19,31 @@ pub use tillandsias_vm_layer::transport_windows::{
 };
 
 #[cfg(target_os = "windows")]
+pub async fn open_and_wrap_hvsocket_stream(
+    port: u32,
+) -> std::io::Result<Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>> {
+    let stream = open_hvsocket_stream(port).await?;
+    if std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE").as_deref() == Ok("on") {
+        let psk = tillandsias_secure_channel::channel_psk(
+            env!("WORKSPACE_VERSION"),
+            tillandsias_control_wire::WIRE_VERSION,
+            tillandsias_secure_channel::HopId::HostGuest,
+        );
+        let encrypted = tillandsias_secure_channel::client_handshake(stream, &psk)
+            .await
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("secure handshake failed: {e}"),
+                )
+            })?;
+        Ok(Box::new(encrypted))
+    } else {
+        Ok(Box::new(stream))
+    }
+}
+
+#[cfg(target_os = "windows")]
 pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpStream, u16)> {
     use std::io::{Error, ErrorKind};
     use tillandsias_control_wire::{
@@ -354,6 +379,60 @@ mod tests {
             String::from_utf8_lossy(&output).contains("tillandsias-pty-ok"),
             "expected PTY output to contain the marker; got {:?}",
             String::from_utf8_lossy(&output)
+        );
+    }
+
+    /// Secure-wire flag-ON proof (order 191, windows evidence slice): with the
+    /// in-VM headless running a version-matched binary under
+    /// `TILLANDSIAS_SECURE_CONTROL_WIRE=on`, the tray-side wrapper
+    /// (`open_and_wrap_hvsocket_stream`) completes the Noise NNpsk0 handshake
+    /// and a full Hello/HelloAck + `VmStatusRequest` round-trip over the
+    /// encrypted stream. Run with the flag exported on the host:
+    /// `$env:TILLANDSIAS_SECURE_CONTROL_WIRE='on'; cargo test -p tillandsias-windows-tray -- --ignored secure_vm_status`.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    #[ignore = "needs a running WSL distro with a version-matched headless under TILLANDSIAS_SECURE_CONTROL_WIRE=on"]
+    async fn e2e_secure_vm_status_over_hvsocket() {
+        use tillandsias_control_wire::transport::Transport;
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+        use tillandsias_host_shell::vsock_client::Client;
+
+        assert_eq!(
+            std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE").as_deref(),
+            Ok("on"),
+            "export TILLANDSIAS_SECURE_CONTROL_WIRE=on so the wrapper takes the secure path"
+        );
+
+        let stream = open_and_wrap_hvsocket_stream(42420)
+            .await
+            .expect("HvSocket open + Noise client handshake (secure wrapper)");
+        let mut client = Client::from_stream(
+            stream,
+            Transport::Vsock {
+                cid: 0,
+                port: 42420,
+            },
+        );
+        let wire_version = client
+            .handshake()
+            .await
+            .expect("Hello/HelloAck over the encrypted stream");
+        assert_eq!(wire_version, WIRE_VERSION);
+        let seq = client.allocate_seq();
+        let env = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::VmStatusRequest { seq },
+        };
+        let reply = client
+            .request(&env)
+            .await
+            .expect("VmStatusRequest over the encrypted stream");
+        println!("secure control wire UP; VmStatus reply: {:?}", reply.body);
+        assert!(
+            matches!(reply.body, ControlMessage::VmStatusReply { .. }),
+            "expected VmStatusReply, got {:?}",
+            reply.body
         );
     }
 

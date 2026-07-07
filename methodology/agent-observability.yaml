@@ -211,6 +211,13 @@ agent_observability_protocol:
 
   stale_tracking_policy:
     stale_after: "10 minutes without a new event for active work"
+    reclaim_after: "the distributed-work lease expires, normally 4 hours"
+    distinction: >
+      Ten minutes without a heartbeat marks an active task stale for display and
+      requires the next touching agent to fresh-read state before proceeding. It
+      does not by itself release the lease. Reclaim is allowed only after the
+      lease TTL in methodology/distributed-work.yaml expires, or after an
+      explicit failed/released event.
     stale_action: >
       Mark the task stale and require the next agent touching it to emit a fresh
       reading or verifying event before continuing.

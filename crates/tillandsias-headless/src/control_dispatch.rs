@@ -103,6 +103,11 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         // filesystem / `gh` invocation.
         (EnumerateLocalProjects { .. } | CloudRefreshRequest { .. }, _) => Handle,
 
+        // Order 153: Subscribe opens the server-push event stream on BOTH
+        // transports — the Linux-native tray/headless local path (order 156)
+        // wants the same watch-channel-driven UI updates as the vsock hop.
+        (Subscribe { .. }, _) => Handle,
+
         // PTY family is vsock-only — the in-VM headless is the PTY
         // producer (it owns the forge container's session). The unix
         // dispatcher would have nothing useful to do here.
@@ -138,7 +143,11 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | CloudRefreshReply { .. }
             | DeliverCredentialsReply { .. }
             | VaultHandoverReply { .. }
-            | GithubLoginStatusReply { .. },
+            | GithubLoginStatusReply { .. }
+            | SubscribeAck
+            | VmStatusPush { .. }
+            | LoginStatePush { .. }
+            | CloudProjectsPush { .. },
             _,
         ) => ResponseOnly,
 
@@ -323,6 +332,37 @@ mod tests {
                 },
                 "GithubLoginStatusReply",
             ),
+            (
+                ControlMessage::Subscribe {
+                    topics: vec![tillandsias_control_wire::SubscriptionTopic::VmStatus],
+                },
+                "Subscribe",
+            ),
+            (ControlMessage::SubscribeAck, "SubscribeAck"),
+            (
+                ControlMessage::VmStatusPush {
+                    seq: 1,
+                    phase: VmPhase::Ready,
+                    podman_ready: true,
+                    last_event: None,
+                },
+                "VmStatusPush",
+            ),
+            (
+                ControlMessage::LoginStatePush {
+                    seq: 1,
+                    logged_in: true,
+                    handle: Some("test-user".to_string()),
+                },
+                "LoginStatePush",
+            ),
+            (
+                ControlMessage::CloudProjectsPush {
+                    seq: 1,
+                    projects: vec![],
+                },
+                "CloudProjectsPush",
+            ),
         ]
     }
 
@@ -339,7 +379,8 @@ mod tests {
                 | "VmStatusRequest"
                 | "VmShutdownRequest"
                 | "EnumerateLocalProjects"
-                | "CloudRefreshRequest" => DispatchOutcome::Handle,
+                | "CloudRefreshRequest"
+                | "Subscribe" => DispatchOutcome::Handle,
                 "PtyOpen"
                 | "PtyData"
                 | "PtyResize"
@@ -355,7 +396,11 @@ mod tests {
                 | "CloudRefreshReply"
                 | "DeliverCredentialsReply"
                 | "VaultHandoverReply"
-                | "GithubLoginStatusReply" => DispatchOutcome::ResponseOnly,
+                | "GithubLoginStatusReply"
+                | "SubscribeAck"
+                | "VmStatusPush"
+                | "LoginStatePush"
+                | "CloudProjectsPush" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(
@@ -385,7 +430,8 @@ mod tests {
                 | "PtyClose"
                 | "DeliverCredentials"
                 | "GetVaultHandover"
-                | "GithubLoginStatusRequest" => DispatchOutcome::Handle,
+                | "GithubLoginStatusRequest"
+                | "Subscribe" => DispatchOutcome::Handle,
                 "IssueWebSession" | "EvictProject" | "McpFrame" => DispatchOutcome::Unsupported,
                 "HelloAck"
                 | "IssueAck"
@@ -395,7 +441,11 @@ mod tests {
                 | "CloudRefreshReply"
                 | "DeliverCredentialsReply"
                 | "VaultHandoverReply"
-                | "GithubLoginStatusReply" => DispatchOutcome::ResponseOnly,
+                | "GithubLoginStatusReply"
+                | "SubscribeAck"
+                | "VmStatusPush"
+                | "LoginStatePush"
+                | "CloudProjectsPush" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(
@@ -422,6 +472,9 @@ mod tests {
             },
             ControlMessage::EnumerateLocalProjects { seq: 1 },
             ControlMessage::CloudRefreshRequest { seq: 1 },
+            ControlMessage::Subscribe {
+                topics: vec![tillandsias_control_wire::SubscriptionTopic::VmStatus],
+            },
         ];
         for msg in &symmetric {
             assert_eq!(
@@ -474,6 +527,22 @@ mod tests {
                 seq_in_reply_to: 1,
                 logged_in: true,
                 handle: Some("user".to_string()),
+            },
+            ControlMessage::SubscribeAck,
+            ControlMessage::VmStatusPush {
+                seq: 1,
+                phase: VmPhase::Ready,
+                podman_ready: true,
+                last_event: None,
+            },
+            ControlMessage::LoginStatePush {
+                seq: 1,
+                logged_in: true,
+                handle: Some("user".to_string()),
+            },
+            ControlMessage::CloudProjectsPush {
+                seq: 1,
+                projects: vec![],
             },
         ];
         for msg in &resp {

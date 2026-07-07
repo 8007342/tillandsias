@@ -170,6 +170,16 @@ pub fn host_base_url() -> String {
 /// `DNS:vault` as a SAN so certificate verification succeeds without any
 /// skip-verify workaround. Bypasses host-side port forwarding (127.0.0.1:8201)
 /// which has a known TLS-hang issue with podman/netavark on Fedora WSL2.
+// PLEASE REVIEW (linux): the only non-test caller is inside the
+// `#[cfg(target_os = "linux")]` branch of vault_api_base_url below, so a
+// non-Linux, non-test build (bin/clippy target) sees this as dead code
+// (-D warnings). It IS exercised unconditionally by
+// vault_api_base_url_honors_env_override below, so the allow is scoped to
+// non-Linux only — no change to the Linux dead-code contract. Discovered
+// running `./build.sh --check` on macOS for the first time after fixing the
+// Homebrew-Podman wrapper bug (order 201) — see
+// plan/issues/macos-build-check-podman-wrapper-2026-07-05.md.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn vault_service_base_url() -> String {
     format!("https://{VAULT_NETWORK_ALIAS}:8200")
 }
@@ -1471,11 +1481,10 @@ fn vault_selinux_label_opt(debug: bool) -> Option<String> {
         return None;
     }
 
-    // Use the custom confined type only if we can CONFIRM it is loaded (or load
-    // it — root only, i.e. inside the guest VM).
-    if vault_container_type_loaded() {
-        return Some("label=type:vault_container_t".to_string());
-    }
+    // Use the custom confined type only after loading the bundled CIL for this
+    // exact binary. Existing VMs may have an older `vault_container` module
+    // loaded; trusting presence alone preserves stale policy and keeps denying
+    // the no-new-privileges transition.
     if try_load_vault_selinux_module(debug) && vault_container_type_loaded() {
         return Some("label=type:vault_container_t".to_string());
     }
@@ -1524,7 +1533,12 @@ fn try_load_vault_selinux_module(debug: bool) -> bool {
         return false;
     }
     let loaded = matches!(
-        Command::new("semodule").arg("-i").arg(&cil_path).status(),
+        Command::new("semodule")
+            .arg("-i")
+            .arg(&cil_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status(),
         Ok(s) if s.success()
     );
     let _ = fs::remove_file(&cil_path);
@@ -1764,6 +1778,18 @@ fn wait_for_vault_ready(
 /// /etc/hosts does.
 #[cfg(feature = "vault")]
 fn update_etc_hosts_vault(debug: bool) {
+    #[cfg(unix)]
+    let is_root = unsafe { libc::geteuid() == 0 };
+    #[cfg(not(unix))]
+    let is_root = false;
+
+    if !is_root {
+        if debug {
+            eprintln!("[tillandsias-vault] skipping /etc/hosts update: not root");
+        }
+        return;
+    }
+
     let out = match podman_cmd_sync()
         .args([
             "inspect",
@@ -2325,6 +2351,28 @@ mod tests {
         assert!(
             cil.contains("(type vault_container_t)"),
             "vault_container.cil must declare vault_container_t"
+        );
+
+        // Declaring the type is not enough: launch checks are charged to the
+        // SOURCE domain container_runtime_t, which stays enforcing (the
+        // typepermissive only covers vault_container_t-sourced checks). The
+        // CIL must grant the runtime→vault transition family — plain
+        // `transition` (EACCES on the entrypoint exec without it) and
+        // `nnp_transition` (EPERM; the vault run sets no-new-privileges) —
+        // and container_domain membership so container-selinux's own
+        // runtime↔container rules apply. AVCs observed on the enforcing
+        // Fedora 44 VZ guest, 2026-07-02.
+        assert!(
+            cil.contains("(typeattributeset container_domain (vault_container_t))"),
+            "vault_container.cil must join container_domain (container-selinux runtime rules)"
+        );
+        assert!(
+            cil.contains("(allow container_runtime_t vault_container_t (process (transition"),
+            "vault_container.cil must allow the runtime→vault process transition"
+        );
+        assert!(
+            cil.contains("(allow container_runtime_t vault_container_t (process2 (nnp_transition nosuid_transition)))"),
+            "vault_container.cil must allow nnp/nosuid transition from container_runtime_t (no-new-privileges is set on the vault run)"
         );
     }
 

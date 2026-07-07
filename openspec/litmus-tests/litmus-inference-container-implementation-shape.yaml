@@ -89,13 +89,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req 4 pull-failure-non-fatal: entrypoint logs FAILED then continues (Squid EOF tolerance)"
-    # Spec § Req 4 § Scenario `Squid manifest-pull EOF is non-
-    # fatal` mandates pull failures log + continue, not abort.
-    # Entrypoint uses `if ollama pull X; then ok; else FAILED echo
-    # >&2; fi` pattern — pin the FAILED — inference degraded
-    # message that signals non-fatal continuation.
-    command: "FAILS=$(grep -cE '(T0|T1).*pull FAILED' images/inference/entrypoint.sh); if [ \"$FAILS\" -ge 2 ]; then echo \"ok: $FAILS pull-failure non-fatal sites (T0 + T1)\"; else echo \"FAIL: $FAILS sites (expected >=2)\"; exit 1; fi"
+  - step: "Req 4 pull-failure-non-fatal: entrypoint logs a non-fatal pull FAILED then continues (Squid EOF tolerance)"
+    # Spec § Req 4 § Scenario `Squid manifest-pull EOF is non-fatal` mandates pull
+    # failures log + continue, not abort. The default small-model set (order 183)
+    # is now pulled in a loop (`if ollama pull "$_model"; then ok; else "pull
+    # FAILED … non-fatal" >&2; fi`) instead of hardcoded T0/T1 blocks — pin the
+    # non-fatal FAILED handler in that (or the tier) loop rather than a specific
+    # T0/T1 label count.
+    # @trace plan/issues/inference-firstrun-small-models-impl-2026-07-04.md
+    command: "grep -qF 'pull FAILED' images/inference/entrypoint.sh && grep -qF 'non-fatal' images/inference/entrypoint.sh && echo 'ok: non-fatal pull-failure handler present' || { echo 'FAIL: no non-fatal pull-failure handler'; exit 1; }"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
@@ -106,7 +108,11 @@ critical_path:
     # set NEITHER. Fixed 2026-05-31: both proxy + NO_PROXY env vars
     # are now set. inference_profile() in container_profile.rs also
     # declares them (unconsumed — args path is canonical).
-    command: "B=$(grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs); echo \"$B\" | grep -Fq 'HTTP_PROXY=http://proxy:3128' || exit 1; echo \"$B\" | grep -Fq 'HTTPS_PROXY=http://proxy:3128' || exit 1; echo \"$B\" | grep -Fq 'NO_PROXY=' || exit 1; echo \"$B\" | grep -Fq 'no_proxy=' || exit 1; echo 'ok: proxy + NO_PROXY env vars present'"
+    # Refactored since to route through the shared `proxy_env_args()`
+    # helper (reused by other enclave containers) instead of inlining
+    # the literals in build_inference_run_args itself — assert the
+    # call site plus the helper's env vars.
+    command: "B=$(grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs); echo \"$B\" | grep -Fq 'proxy_env_args()' || exit 1; H=$(grep -A 20 'fn proxy_env_args' crates/tillandsias-headless/src/main.rs); echo \"$H\" | grep -Fq 'HTTP_PROXY=http://proxy:3128' || exit 1; echo \"$H\" | grep -Fq 'HTTPS_PROXY=http://proxy:3128' || exit 1; echo \"$H\" | grep -Fq 'NO_PROXY={no_proxy}' || exit 1; echo \"$H\" | grep -Fq 'no_proxy={no_proxy}' || exit 1; echo 'ok: proxy + NO_PROXY env vars present'"
     timeout_ms: 3000
     expected_behavior: "ok: proxy + NO_PROXY env vars present"
 

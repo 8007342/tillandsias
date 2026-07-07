@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -104,6 +104,22 @@ fn git_image_tag() -> String {
         // `:latest` tag is ever produced.
         format!("localhost/tillandsias-git:v{}", RUNTIME_VERSION.trim())
     })
+}
+
+fn ensure_git_image_available(image: &str, debug: bool) -> Result<(), String> {
+    #[cfg(test)]
+    {
+        let _ = image;
+        let _ = debug;
+        Ok(())
+    }
+    #[cfg(not(test))]
+    {
+        let root = crate::resolve_runtime_asset_root(RUNTIME_VERSION.trim(), debug)?;
+        crate::ensure_image_exists(&root, "git", image, debug).map_err(|err| {
+            format!("required git image {image} is absent and failed to build on demand: {err}")
+        })
+    }
 }
 
 /// Truncate a script body to a single-line preview suitable for an
@@ -278,6 +294,7 @@ fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Result<O
 
 fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result<String, String> {
     let image = git_image_tag();
+    ensure_git_image_available(&image, debug)?;
     let vault_lease = RemoteVaultLease::acquire(debug)?;
     let vault_mount = vault_lease.mount_arg();
     // The gh call egresses through squid; self-heal a dead proxy (VM restart,
@@ -367,7 +384,13 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
 pub fn probe_github_username(debug: bool) -> Option<String> {
     let script = r#"
 set -eu
-vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+export GH_PROMPT_DISABLED=1
+TOKEN="$(vault-cli read -field=token secret/github/token)"
+if [ -z "$TOKEN" ]; then
+  echo "github token missing in Vault; run tillandsias --github-login" >&2
+  exit 2
+fi
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 gh api user --jq .login
 "#;
     match run_git_image_shell(script, &[], debug) {
@@ -397,7 +420,13 @@ fn fetch_github_projects(debug: bool) -> Result<Vec<GitHubProject>, String> {
     let script = r#"
 set -eu
 export GH_PAGER=cat
-vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+export GH_PROMPT_DISABLED=1
+TOKEN="$(vault-cli read -field=token secret/github/token)"
+if [ -z "$TOKEN" ]; then
+  echo "github token missing in Vault; run tillandsias --github-login" >&2
+  exit 2
+fi
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 exec gh api user/repos?per_page=100\&sort=pushed\&type=owner
 "#;
 
@@ -550,15 +579,40 @@ pub fn clone_project_from_github_with_debug(
     let parent_str = parent.to_string_lossy().to_string();
     let bind_mount = format!("{parent_str}:{parent_str}:rw");
 
+    // Clone into a temp directory then atomically rename to the target.
+    // This prevents concurrent --cloud resolves from corrupting each other's
+    // .git (R8 — checkout-and-fetch-atomicity, order 163). The podman bind
+    // mount of `parent` gives both paths equal access inside the container.
+    let tmp_dir = {
+        let nonce = format!(
+            "{:016x}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let mut tmp = target_path.as_os_str().to_os_string();
+        tmp.push(".tmp.");
+        tmp.push(&nonce);
+        PathBuf::from(tmp)
+    };
+
     let nwo = normalize_repo_identifier(repo_url);
     let image = git_image_tag();
-    let repo_dir = target_path.to_string_lossy().to_string();
+    let repo_dir = tmp_dir.to_string_lossy().to_string();
     let script = r#"
 set -eu
 export GH_PAGER=cat
-vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+export GH_PROMPT_DISABLED=1
+TOKEN="$(vault-cli read -field=token secret/github/token)"
+if [ -z "$TOKEN" ]; then
+  echo "github token missing in Vault; run tillandsias --github-login" >&2
+  exit 2
+fi
+printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 exec gh repo clone "$1" "$2"
 "#;
+    ensure_git_image_available(&image, debug)?;
     let vault_lease = RemoteVaultLease::acquire(debug)?;
     let vault_mount = vault_lease.mount_arg();
 
@@ -651,11 +705,30 @@ exec gh repo clone "$1" "$2"
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let _ = std::fs::remove_dir_all(&tmp_dir);
         return Err(format!(
             "containerized gh repo clone exited with status {}: {}",
             output.status,
             stderr.trim()
         ));
+    }
+
+    // Atomically rename the temp checkout into the final target path.
+    // If another process already created the target, reclaim the temp dir.
+    if let Err(e) = std::fs::rename(&tmp_dir, target_path) {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        if e.kind() == std::io::ErrorKind::AlreadyExists
+            || e.kind() == std::io::ErrorKind::DirectoryNotEmpty
+        {
+            // Concurrent clone finished first. Our temp is cleaned up above;
+            // the winning clone's .tillandsias is at target_path already.
+            debug!(
+                "github_project_clone: concurrent clone won; reusing {:?}",
+                target_path
+            );
+            return Ok(());
+        }
+        return Err(format!("atomic rename failed: {e}"));
     }
 
     let tillandsias_dir = target_path.join(".tillandsias");
@@ -706,7 +779,11 @@ mod tests {
 
     #[test]
     fn git_image_tag_defaults_to_fully_qualified_versioned_tag() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Ensure no override is leaking from a previous test.
         unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
         let tag = git_image_tag();
@@ -722,6 +799,34 @@ mod tests {
     }
 
     #[test]
+    fn remote_project_git_runner_preflights_git_image() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/remote_projects.rs"
+        ));
+        let runner = source
+            .split("fn run_git_image_shell")
+            .nth(1)
+            .expect("run_git_image_shell source")
+            .split("fn run_command_with_timeout")
+            .next()
+            .unwrap_or("");
+        assert!(
+            runner.contains("ensure_git_image_available(&image, debug)?"),
+            "remote project listing must build the git image before podman run"
+        );
+
+        let clone = source
+            .split("pub fn clone_project_from_github_with_debug")
+            .nth(1)
+            .expect("clone_project_from_github_with_debug source");
+        assert!(
+            clone.contains("ensure_git_image_available(&image, debug)?"),
+            "cloud attach clone must build the git image before podman run"
+        );
+    }
+
+    #[test]
     fn test_is_cache_valid() {
         let now = now_secs();
         assert!(is_cache_valid(now));
@@ -731,7 +836,11 @@ mod tests {
 
     #[test]
     fn test_cache_invalidation() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         invalidate_github_projects_cache();
         let mut guard = cache().lock().expect("cache lock");
         *guard = Some(CacheEntry {
@@ -752,7 +861,11 @@ mod tests {
 
     #[test]
     fn discover_projects_uses_containerized_gh() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
         let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
@@ -789,7 +902,11 @@ mod tests {
 
     #[test]
     fn clone_project_uses_containerized_gh() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
         let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
@@ -875,7 +992,11 @@ mod tests {
     /// `owner/name` form.
     #[test]
     fn clone_normalizes_api_url_to_owner_name() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let podman_dir = install_podman_mock();
         let state_dir = tempdir().expect("state tempdir");
         let original_path = std::env::var_os("PATH");
@@ -934,7 +1055,11 @@ mod tests {
     /// containers (`build_git_run_args` and friends).
     #[test]
     fn clone_uses_host_parent_bindmount() {
-        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Recover from poison rather than panic: this mutex only serializes
+        // access to shared env vars across tests in this module, so one
+        // test's unrelated panic must not cascade-fail every test that
+        // acquires the lock afterward.
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let podman_dir = install_podman_mock();
         let state_dir = tempdir().expect("state tempdir");
         let original_path = std::env::var_os("PATH");
@@ -984,12 +1109,27 @@ mod tests {
             *bind_spec, expected_bind,
             "bind-mount must identity-map the host parent dir as rw"
         );
-        // Sanity: the positional clone target still comes through unchanged
-        // and is *inside* the bind-mounted parent.
+        // Order 163 (atomic clone, R8): the container clones into a
+        // `<target>.tmp.<nonce>` staging path inside the bind-mounted
+        // parent, not `target` directly — `clone_project_from_github` then
+        // atomically renames the staging dir onto `target` on success. The
+        // positional arg podman/gh actually saw must be that staging path
+        // (still inside the bind-mounted parent so the container can write
+        // it), and the real `target` must exist for real once the call
+        // returns (proving the rename happened).
         let captured_target =
             std::fs::read_to_string(state_dir.path().join("last_clone_target_arg"))
                 .expect("mock should record target arg");
-        assert_eq!(captured_target.trim(), target.to_string_lossy().as_ref());
+        let captured_target = captured_target.trim();
+        let target_str = target.to_string_lossy();
+        assert!(
+            captured_target.starts_with(&format!("{target_str}.tmp.")),
+            "clone target arg should be target's atomic-clone staging path (target.tmp.<nonce>); got {captured_target:?}, target was {target_str:?}"
+        );
+        assert!(
+            target.join(".git").is_dir(),
+            "target dir must exist (post-rename) after a successful clone; target was {target:?}"
+        );
 
         if let Some(path) = original_path {
             unsafe { std::env::set_var("PATH", path) };

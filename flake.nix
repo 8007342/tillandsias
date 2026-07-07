@@ -49,6 +49,12 @@
         aarch64Cc = "${crossPkgs.stdenv.cc}/bin/${crossPkgs.stdenv.cc.targetPrefix}cc";
         aarch64Ar = "${crossPkgs.stdenv.cc.bintools.bintools}/bin/${crossPkgs.stdenv.cc.targetPrefix}ar";
 
+        # Secure-channel key: SHA-256 of the running binary (computed at
+        # runtime, not compile time). No build-time env injection needed,
+        # so nix builds are pure (no --impure). All binaries compiled from
+        # identical source produce identical hashes and therefore derive
+        # matching PSKs — "same binary talks to same binary".
+
         commonCraneArgs = {
           src = craneSrc;
           strictDeps = true;

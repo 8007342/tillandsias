@@ -1,0 +1,60 @@
+# @trace plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md
+# @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
+#
+# The in-VM guest headless responder (vsock_server.rs) must gate the encrypted
+# control wire on the boot-time TILLANDSIAS_SECURE_CONTROL_WIRE flag: a NO-OP when
+# OFF (plaintext, opt-in flip) and FAIL-CLOSED when ON or misconfigured (a failed
+# handshake / plaintext peer / unknown flag value gets the connection closed, never
+# a silent downgrade). Falsifies a regression that drops the gate, makes it
+# fail-open, or serves envelopes before the handshake.
+name: litmus:secure-control-wire-guest-responder-shape
+spec: host-guest-transport
+phase: pre-build
+description: >
+  Pin the guest secure-control-wire responder in vsock_server.rs: flag-gated
+  (TILLANDSIAS_SECURE_CONTROL_WIRE), version-bound server_handshake on HopId::HostGuest,
+  fail-closed on handshake error, and a unit test proving default-OFF + fail-closed
+  flag parsing.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/vsock_server.rs
+
+critical_path:
+  - step: "the responder gates on the boot-time TILLANDSIAS_SECURE_CONTROL_WIRE flag"
+    command: "grep -qF 'TILLANDSIAS_SECURE_CONTROL_WIRE' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: flag-gated'"
+    timeout_ms: 3000
+    expected_behavior: "ok: flag-gated"
+
+  - step: "when ON it runs the version-bound server handshake on the host<->guest hop"
+    command: "grep -qF 'server_handshake' crates/tillandsias-headless/src/vsock_server.rs && grep -qF 'HopId::HostGuest' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: handshake wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: handshake wired"
+
+  - step: "fail-closed: a handshake error closes the connection (returns before reading an envelope)"
+    command: "awk '/async fn handle_connection/{h=1} h&&/maybe_secure_stream/{m=1} h&&m&&/handshake failed/{f=1} h&&m&&f&&/return;/{print \"ok: fail-closed\"; found=1; exit} END{if(!found){print \"FAIL: no fail-closed return in handle_connection\"; exit 1}}' crates/tillandsias-headless/src/vsock_server.rs"
+    timeout_ms: 3000
+    expected_behavior: "ok: fail-closed"
+
+  - step: "the default-OFF + fail-closed flag parsing is unit-tested"
+    command: "grep -qF 'secure_control_wire_flag_defaults_off_and_fails_closed' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: fail-closed test present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fail-closed test present"
+
+observability:
+  traces:
+    - "@trace spec:host-guest-transport"
+  expected_log: "guest secure-control-wire responder pinned (flag-gated, version-bound handshake, fail-closed)"
+  log_fields:
+    spec: "host-guest-transport"
+    test: "secure-control-wire-guest-responder-shape"
+    artifact: "crates/tillandsias-headless/src/vsock_server.rs"
+
+rollback:
+  on_failure: >
+    The guest secure-control-wire responder drifted. Restore maybe_secure_stream in
+    vsock_server.rs: gate on TILLANDSIAS_SECURE_CONTROL_WIRE (default OFF = no-op),
+    run server_handshake(channel_psk(VERSION, WIRE_VERSION, HopId::HostGuest)) when
+    ON, and RETURN from handle_connection on a handshake error (fail-closed) before
+    reading any envelope. Keep the fail-closed parsing unit test.

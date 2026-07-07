@@ -60,11 +60,14 @@
 /out*.log
 /out-cache
 /release-artifacts
+/research/images/
+/research/vfr-spike/.build/
 /result
 /result-*
 /smoke*.err
 /smoke*.log
 /target-musl/
+/target-guest/
 /target/
 /target/forge-diagnostics
 Thumbs.db
@@ -77,3 +80,11 @@ images/router/tillandsias-router-sidecar
 mock-release/
 result
 vendor/debug/
+images/default/skills/
+images/default/cheatsheets/
+images/default/cheatsheet-sources/
+# Generated per-image build logs (build-image.sh writes build-<IMAGE>.log)
+build-*.log
+
+# Generated headless binaries for Windows tray embed
+crates/tillandsias-windows-tray/assets/tillandsias-headless-*

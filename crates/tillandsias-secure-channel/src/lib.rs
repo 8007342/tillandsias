@@ -60,30 +60,53 @@ impl HopId {
     }
 }
 
-/// Fixed, non-secret dev seed used when no release secret is embedded at build
-/// time (local `--debug` builds). It lets a locally-built host + guest of the
-/// *same* tree interoperate without CI. It is intentionally NOT a secret and
-/// MUST NOT be relied on for release builds — release CI injects a real secret
-/// via `TILLANDSIAS_RELEASE_SECRET` (see [`release_root_secret`]). (Open
-/// Decision O4.)
+/// Fixed, non-secret dev seed used in debug builds.
+/// It lets a locally-built host + guest of the *same* tree interoperate
+/// without a release build. It is intentionally NOT a secret and MUST NOT be
+/// relied on for release builds — release builds use the binary's own hash.
+#[cfg(debug_assertions)]
 const DEV_ROOT_SEED: &[u8] = b"tillandsias-dev-root-not-a-secret";
 
-/// The build-embedded per-release secret (Open Decision O1, option a).
+/// The deterministic per-release secret: SHA-256 of the running binary.
 ///
-/// Release CI sets `TILLANDSIAS_RELEASE_SECRET` at compile time, so every
-/// binary of a release (host tray, guest headless, in-container agent) embeds
-/// the same value and derives matching keys — "same release talks to same
-/// release". When unset (developer builds), falls back to [`DEV_ROOT_SEED`] so
-/// locally-built peers still interoperate.
+/// On release builds, every invocation of this function returns the SHA-256
+/// hash of the binary's own on-disk content. This creates a cryptographic
+/// version binding — only binaries compiled from identical source produce
+/// identical hashes and therefore derive the same PSK. When the host embeds
+/// the guest binary and overwrites the guest on each boot (order 190), both
+/// ends automatically run identical content and derive matching keys.
 ///
-/// The per-boot hardening that mixes in a host-controlled secret is deferred to
-/// `plan/issues/encrypted-channel-perboot-key-hardening-2026-07-01.md` (order
-/// 142) and is intentionally NOT part of this function.
+/// On debug (dev) builds, falls back to [`DEV_ROOT_SEED`] so locally-built
+/// peers interoperate without a full release build.
+///
+/// The hash is computed once (lazily via OnceLock) and cached for the process
+/// lifetime. The per-boot hardening that mixes in a host-controlled secret is
+/// deferred to `plan/issues/encrypted-channel-perboot-key-hardening-2026-07-01.md`
+/// (order 142) and is intentionally NOT part of this function.
 pub fn release_root_secret() -> &'static [u8] {
-    match option_env!("TILLANDSIAS_RELEASE_SECRET") {
-        Some(s) if !s.is_empty() => s.as_bytes(),
-        _ => DEV_ROOT_SEED,
+    #[cfg(not(debug_assertions))]
+    {
+        use sha2::{Digest, Sha256};
+        use std::sync::OnceLock;
+
+        static HASH: OnceLock<Vec<u8>> = OnceLock::new();
+        HASH.get_or_init(|| {
+            let exe = std::env::current_exe().expect("current_exe for self-hash");
+            let bytes = std::fs::read(&exe).expect("read self binary for hash");
+            Sha256::digest(&bytes).to_vec()
+        })
     }
+    #[cfg(debug_assertions)]
+    DEV_ROOT_SEED
+}
+
+/// Workspace release version used to bind both ends of the control channel.
+///
+/// This comes from the repo-root `VERSION` file rather than each crate's
+/// `CARGO_PKG_VERSION`, because the host tray and guest headless are released
+/// as separate crates with different package versions.
+pub fn workspace_version() -> &'static str {
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../VERSION")).trim()
 }
 
 /// Derive the 32-byte control-channel PSK from an explicit root secret.
@@ -168,11 +191,19 @@ mod tests {
     }
 
     /// Dev builds fall back to the (non-secret) dev seed so local peers
-    /// interoperate; this is stable and non-empty.
+    /// interoperate; release builds use the binary's own hash (never the seed).
+    #[cfg(debug_assertions)]
     #[test]
-    fn dev_root_secret_is_stable_and_nonempty() {
-        assert!(!release_root_secret().is_empty());
+    fn dev_root_secret_is_dev_seed() {
         assert_eq!(release_root_secret(), DEV_ROOT_SEED);
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn release_root_secret_is_binary_hash() {
+        let secret = release_root_secret();
+        assert!(!secret.is_empty());
+        assert_eq!(secret.len(), 32, "SHA-256 output is 32 bytes");
     }
 
     #[test]

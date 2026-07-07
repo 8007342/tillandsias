@@ -67,7 +67,17 @@ critical_path:
     # catalogue (Languages/Build/Test/Utils/Agents/Web/API) is the
     # contract for what gets enumerated. Pin the 6-category floor
     # via grep count on the canonical `"<Category>|` shape.
-    command: "CATS=$(grep -cE '^    \"(Languages|Build|Test|Utils|Agents|Web/API)\\|' images/default/cli/tillandsias-inventory); if [ \"$CATS\" -ge 6 ]; then echo \"ok: $CATS categories\"; else echo \"FAIL: $CATS categories (need >=6)\"; exit 1; fi"
+    #
+    # The trailing literal pipe uses a bracket expression `[|]`, not
+    # `\|`: `\|` as "literal pipe" is a GNU grep -E extension. BSD/macOS
+    # grep's ERE engine parses `\|` as an escaped-backslash followed by
+    # the alternation metacharacter, producing a trailing empty
+    # alternative branch, which its regex engine rejects outright with
+    # "grep: empty (sub)expression" (discovered running this litmus on
+    # macOS for the first time — see
+    # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md).
+    # `[|]` matches a literal pipe identically on both GNU and BSD grep.
+    command: "CATS=$(grep -cE '^    \"(Languages|Build|Test|Utils|Agents|Web/API)[|]' images/default/cli/tillandsias-inventory); if [ \"$CATS\" -ge 6 ]; then echo \"ok: $CATS categories\"; else echo \"FAIL: $CATS categories (need >=6)\"; exit 1; fi"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

@@ -18,6 +18,61 @@ pub struct SingletonGuard {
 }
 
 impl SingletonGuard {
+    /// Try to acquire the singleton lock without signalling or terminating an
+    /// existing owner. Returns `Ok(None)` when another instance already holds
+    /// the lock.
+    pub fn try_acquire(name: &str) -> Result<Option<Self>, String> {
+        if std::env::var("TILLANDSIAS_NO_SINGLETON").is_ok() {
+            return Ok(Some(Self {
+                _file: OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .truncate(false)
+                    .open("/dev/null")
+                    .unwrap(),
+            }));
+        }
+        let name = std::env::var("TILLANDSIAS_LOCK_NAME").unwrap_or_else(|_| name.to_string());
+        let lock_dir = dirs::runtime_dir()
+            .or_else(dirs::cache_dir)
+            .ok_or_else(|| "Could not determine runtime/cache directory".to_string())?
+            .join("tillandsias");
+
+        std::fs::create_dir_all(&lock_dir).map_err(|e| {
+            format!(
+                "Failed to create lock directory {}: {e}",
+                lock_dir.display()
+            )
+        })?;
+
+        let lock_path = lock_dir.join(format!("{}.lock", name));
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|e| format!("Failed to open lockfile {}: {e}", lock_path.display()))?;
+
+        match file.try_lock_exclusive() {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => return Ok(None),
+            Err(err) => return Err(format!("Failed to try-lock {}: {err}", lock_path.display())),
+        }
+
+        file.set_len(0)
+            .map_err(|e| format!("Failed to truncate lockfile: {e}"))?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| format!("Failed to seek lockfile: {e}"))?;
+        write!(file, "{}", process::id())
+            .map_err(|e| format!("Failed to write PID to lockfile: {e}"))?;
+        file.flush()
+            .map_err(|e| format!("Failed to flush lockfile: {e}"))?;
+
+        Ok(Some(Self { _file: file }))
+    }
+
     /// Acquire an exclusive lock on the singleton lockfile.
     ///
     /// If the lock is already held by another process:
@@ -128,5 +183,34 @@ impl SingletonGuard {
             // Windows implementation using windows-sys or winapi
             warn!(target: "tillandsias_core", pid, "cross-process termination not yet implemented on Windows");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SingletonGuard;
+    use std::process;
+
+    #[test]
+    fn try_acquire_returns_none_when_lock_is_busy() {
+        if std::env::var("TILLANDSIAS_NO_SINGLETON").is_ok() {
+            return;
+        }
+
+        let name = format!("tillandsias-singleton-test-{}", process::id());
+        let first = SingletonGuard::try_acquire(&name)
+            .expect("first try_acquire should not error")
+            .expect("first try_acquire should acquire");
+        let second =
+            SingletonGuard::try_acquire(&name).expect("second try_acquire should not error");
+        assert!(
+            second.is_none(),
+            "second try_acquire must not steal the lock"
+        );
+        drop(first);
+        let third = SingletonGuard::try_acquire(&name)
+            .expect("third try_acquire should not error")
+            .expect("third try_acquire should acquire after drop");
+        drop(third);
     }
 }

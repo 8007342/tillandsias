@@ -133,7 +133,9 @@ fn main() {
     let codex = user_args.iter().any(|a| a == "--codex");
     let claude = user_args.iter().any(|a| a == "--claude");
     let bash = user_args.iter().any(|a| a == "--bash");
+    let antigravity = user_args.iter().any(|a| a == "--antigravity");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
+
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
@@ -252,6 +254,7 @@ fn main() {
         "--codex",
         "--claude",
         "--bash",
+        "--antigravity",
         "--opencode-web",
         "--observatorium",
         "--port",
@@ -486,12 +489,14 @@ fn main() {
         }
     }
 
-    if codex || claude || bash {
+    if codex || claude || bash || antigravity {
         maybe_spawn_detached_tray_for_cli(tray, debug);
         let (mode, flag) = if codex {
             (ForgeAgentMode::Codex, "--codex")
         } else if claude {
             (ForgeAgentMode::Claude, "--claude")
+        } else if antigravity {
+            (ForgeAgentMode::Antigravity, "--antigravity")
         } else {
             (ForgeAgentMode::Maintenance, "--bash")
         };
@@ -680,6 +685,7 @@ fn print_usage(version: &str) {
     println!("  --opencode     Enable LLM code analysis mode");
     println!("  --codex        Launch Codex inside the forge for a project");
     println!("  --claude       Launch Claude Code inside the forge for a project");
+    println!("  --antigravity  Launch Antigravity inside the forge for a project");
     println!("  --bash         Launch the forge welcome shell for a project");
     println!("  --opencode-web Launch OpenCode Web plus isolated browser");
     println!("  --observatorium Launch the project Observatorium viewer");
@@ -1804,6 +1810,12 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
+
+    if std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge") {
+        // The forge environment does not have openssl CLI and is not responsible
+        // for generating CAs. The CA is injected by the host.
+        return Ok(certs_dir);
+    }
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     std::fs::create_dir_all(&certs_dir)
@@ -2279,7 +2291,6 @@ fn build_inference_run_args(
 
     let mut args = vec![
         "--detach".into(),
-        "--rm".into(),
         "--name".into(),
         "tillandsias-inference".into(),
         "--hostname".into(),
@@ -3147,6 +3158,19 @@ fn build_opencode_forge_args(
             "{}:/home/forge/src/{project_name}:rw",
             project_path.display()
         ),
+        // Persistent per-project tool/package cache (order 179), same as
+        // build_forge_agent_run_args (Claude/Codex/Antigravity/Maintenance).
+        // Without this, OpenCode/OpenCode Web launches lose $CARGO_HOME /
+        // $NPM_CONFIG_PREFIX to the --rm overlay on every attach, so the
+        // FIRST_RUN tool installs (orders 180/181) would re-run from scratch
+        // every time instead of persisting like every other forge entrypoint.
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        // @trace plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md (order 220)
+        "-v".into(),
+        format!(
+            "{}:/home/forge/.cache/tillandsias-project:rw",
+            forge_tool_cache_volume(project_name)
+        ),
         "--mount".into(),
         format!(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
@@ -3555,6 +3579,7 @@ fn auto_detect_and_configure_dns(debug: bool) {
 // so forge containers and other containers that bypass the Rust launcher also
 // get HTTP_PROXY / HTTPS_PROXY without per-container injection.
 // @trace cheatsheets/runtime/enclave-proxy-patterns.md, spec:proxy-container
+#[cfg(target_os = "linux")]
 fn ensure_containers_conf_proxy_env(path: &std::path::Path) -> Result<(), String> {
     let no_proxy = enclave_no_proxy();
     let proxy_url = "http://proxy:3128";
@@ -3639,14 +3664,17 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     // Write proxy env to containers.conf so Podman injects it into every
     // container on this host, including forge containers that bypass the Rust
     // launcher. Idempotent — only writes when the [engine] env block is absent.
-    if let Some(conf_path) = get_user_containers_conf() {
-        if let Err(e) = ensure_containers_conf_proxy_env(&conf_path) {
-            eprintln!("[tillandsias] init: failed to configure proxy in containers.conf: {e}");
-        } else if debug {
-            eprintln!(
-                "[tillandsias] init: proxy env written to {}",
-                conf_path.display()
-            );
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(conf_path) = get_user_containers_conf() {
+            if let Err(e) = ensure_containers_conf_proxy_env(&conf_path) {
+                eprintln!("[tillandsias] init: failed to configure proxy in containers.conf: {e}");
+            } else if debug {
+                eprintln!(
+                    "[tillandsias] init: proxy env written to {}",
+                    conf_path.display()
+                );
+            }
         }
     }
 
@@ -6937,6 +6965,7 @@ pub(crate) enum ForgeAgentMode {
     Claude,
     Codex,
     OpenCode,
+    Antigravity,
     Maintenance,
 }
 
@@ -6946,6 +6975,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Claude => "/usr/local/bin/entrypoint-forge-claude.sh",
             ForgeAgentMode::Codex => "/usr/local/bin/entrypoint-forge-codex.sh",
             ForgeAgentMode::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
+            ForgeAgentMode::Antigravity => "/usr/local/bin/entrypoint-forge-antigravity.sh",
             ForgeAgentMode::Maintenance => "/usr/local/bin/entrypoint-terminal.sh",
         }
     }
@@ -6955,6 +6985,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Claude => "claude",
             ForgeAgentMode::Codex => "codex",
             ForgeAgentMode::OpenCode => "opencode",
+            ForgeAgentMode::Antigravity => "antigravity",
             ForgeAgentMode::Maintenance => "maintenance",
         }
     }
@@ -7231,6 +7262,19 @@ pub(crate) fn ensure_enclave_for_project(
 /// `/home/forge/src/<project>/`, CA cert at `/etc/tillandsias/ca.crt`.
 /// @trace spec:forge-as-only-runtime
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
+/// Name of the podman named volume backing a project's persistent forge tool/
+/// package cache. `$CARGO_HOME` and `$NPM_CONFIG_PREFIX` (set by lib-common to
+/// `/home/forge/.cache/tillandsias-project/...`) live here, so FIRST_RUN tool
+/// installs survive the forge's `--rm`. A named volume — not a host bind-mount —
+/// keeps this container-managed with no host-$HOME surface, so it cannot become a
+/// credential-leak path (preserves the one-way boundary). Per-project so caches
+/// never cross project boundaries. Reuses `project_name`, which is already
+/// constrained to valid container/volume-name characters by the container name.
+/// @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+fn forge_tool_cache_volume(project_name: &str) -> String {
+    format!("tillandsias-forge-cache-{project_name}")
+}
+
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
     project_name: &str,
@@ -7254,6 +7298,19 @@ pub(crate) fn build_forge_agent_run_args(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),
             MountMode::ReadWrite,
+        )
+        // Persistent per-project tool/package cache (order 179). lib-common points
+        // $CARGO_HOME and $NPM_CONFIG_PREFIX at /home/forge/.cache/tillandsias-project;
+        // without a persistent backing this lives in the --rm overlay and is lost
+        // every launch, so FIRST_RUN tool installs (orders 180/181) would re-run
+        // each attach. A podman NAMED volume gives container-managed persistence
+        // across --rm with ZERO host-$HOME reference (safer than a bind-mount — it
+        // cannot leak host credentials, preserving the one-way boundary).
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        .volume(
+            forge_tool_cache_volume(project_name),
+            "/home/forge/.cache/tillandsias-project".to_string(),
+            MountMode::ReadWrite,
         );
     let mut spec = apply_proxy_env(spec)
         .env("PATH", "/usr/local/bin:/usr/bin")
@@ -7265,6 +7322,19 @@ pub(crate) fn build_forge_agent_run_args(
         .tmpfs("/tmp:size=256m,mode=1777")
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
+        // Credential quarantine (order 170): empty tmpfs overlays at
+        // credential-surface paths prevent host ~/.ssh, ~/.config/gh,
+        // and ~/.config/git from leaking into the forge even when the
+        // host checkout IS the source mount. These are FORGE-OWNED empty
+        // directories that mask any host material Podman would otherwise
+        // resolve from the host filesystem (Podman does NOT auto-bind
+        // host $HOME, but the --volume source mount of Tllatoani's
+        // ~/src/tillandsias is the host's own checkout, so its child
+        // .ssh/.config would be visible). The tmpfs prevents that.
+        .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
+        .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
+        .tmpfs("/home/forge/.config/git:size=1m,mode=0700")
+        .env("GIT_CONFIG_GLOBAL", "/home/forge/.config/git/config")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     if debug {
@@ -7290,14 +7360,18 @@ pub(crate) fn build_forge_agent_run_args(
     let provider_api = match mode {
         ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
         ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
-        ForgeAgentMode::OpenCode => Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ForgeAgentMode::Maintenance => None,
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity | ForgeAgentMode::Maintenance => {
+            None
+        }
     };
     if let Some(p) = provider_api
         && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
         && !key.is_empty()
     {
-        spec = spec.env(p.env_var(), key);
+        spec = spec.env(p.env_var(), &key);
+        if p.env_var() == "GEMINI_API_KEY" {
+            spec = spec.env("GOOGLE_GENERATIVE_AI_API_KEY", key);
+        }
     }
 
     spec.build_run_args()
@@ -7336,11 +7410,9 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             Some(ProviderId::Codex),
             Some(crate::vault_bootstrap::ProviderId::Openai),
         ),
-        ForgeAgentMode::OpenCode => (
-            Some(ProviderId::Antigravity),
-            Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ),
-        ForgeAgentMode::Maintenance => (None, None),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity | ForgeAgentMode::Maintenance => {
+            (None, None)
+        }
     };
 
     if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
@@ -7369,7 +7441,7 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
         let config = ProviderLoginConfig {
             provider: op,
             auth_model: AuthModel::OAuthDevice,
-            image_name: "curl",
+            image_name: "forge",
             token_script,
         };
         run_provider_login(&config, debug)?;
@@ -8945,15 +9017,33 @@ mod tests {
             false,
         );
 
-        let joined = argv.join(" ");
-        assert!(
-            !joined.contains(".config"),
-            "must not mount user .config dirs into the forge; got: {joined}"
-        );
-        assert!(
-            !joined.contains(".cache"),
-            "must not mount user .cache dirs into the forge; got: {joined}"
-        );
+        // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
+        // SOURCE (left of ':'), but allow the container-side TARGET
+        // /home/forge/.cache/tillandsias-project (the persistent tool cache, order
+        // 179), podman NAMED volumes (tillandsias-forge-cache-*, no host path), and
+        // credential-quarantine tmpfs overlays at /home/forge/.ssh/.config/... (order
+        // 170) which are FORGE-OWNED surfaces, not host leaks.
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
+        for arg in &argv {
+            if arg.starts_with("HOME=") {
+                continue;
+            }
+            // tmpfs spec args (/home/forge/.config/gh:size=1m,...) are
+            // container-side overlay mountpoints — never host paths.
+            if arg.contains("/home/forge/") {
+                continue;
+            }
+            let source = arg.split(':').next().unwrap_or("");
+            assert!(
+                !source.contains("/.config"),
+                "must not mount a host .config dir into the forge; got source in: {arg}"
+            );
+            assert!(
+                !source.contains("/.cache"),
+                "must not mount a host .cache dir into the forge; got source in: {arg}"
+            );
+        }
 
         if let Some(home) = std::env::var_os("HOME") {
             let home_str = home.to_string_lossy().into_owned();
@@ -8962,11 +9052,94 @@ mod tests {
                 // We're guarding against the *host* $HOME leaking in as a bind source.
                 for arg in &argv {
                     if arg.contains(&home_str) && !arg.starts_with("HOME=") {
-                        panic!("argv contains host $HOME ({home_str}) outside of HOME env: {arg}");
+                        let is_target_only = if arg.contains(':') {
+                            let parts: Vec<&str> = arg.split(':').collect();
+                            !parts[0].contains(&home_str) && parts.len() > 1
+                        } else {
+                            false
+                        };
+                        if !is_target_only {
+                            panic!(
+                                "argv contains host $HOME ({home_str}) outside of HOME env: {arg}"
+                            );
+                        }
                     }
                 }
             }
         }
+    }
+
+    #[test]
+    fn forge_credential_quarantine_mounts_present() {
+        // Verify the credential quarantine tmpfs overlays (order 170) are
+        // present in the forge agent mount args. These mask host credential
+        // surfaces when the source mount overlaps the host checkout.
+        // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+
+        let mut found_ssh = false;
+        let mut found_gh_config = false;
+        let mut found_git_config = false;
+        for arg in &argv {
+            if arg.contains("/home/forge/.ssh") && arg.contains("size=1m") {
+                found_ssh = true;
+            }
+            if arg.contains("/home/forge/.config/gh") && arg.contains("size=1m") {
+                found_gh_config = true;
+            }
+            if arg.contains("/home/forge/.config/git") && arg.contains("size=1m") {
+                found_git_config = true;
+            }
+        }
+        assert!(
+            found_ssh,
+            "must mount credential-quarantine tmpfs at /home/forge/.ssh"
+        );
+        assert!(
+            found_gh_config,
+            "must mount credential-quarantine tmpfs at /home/forge/.config/gh"
+        );
+        assert!(
+            found_git_config,
+            "must mount credential-quarantine tmpfs at /home/forge/.config/git"
+        );
+
+        // Verify GIT_CONFIG_GLOBAL redirects inside the quarantine zone.
+        let has_git_config_global = argv.iter().any(|a| {
+            a.starts_with("GIT_CONFIG_GLOBAL=") && a.contains("/home/forge/.config/git/config")
+        });
+        assert!(
+            has_git_config_global,
+            "must set GIT_CONFIG_GLOBAL to quarantined path"
+        );
+    }
+
+    #[test]
+    fn forge_agent_mounts_persistent_tool_cache_named_volume() {
+        // Order 179: FIRST_RUN tool installs ($CARGO_HOME/$NPM_CONFIG_PREFIX, which
+        // lib-common points at /home/forge/.cache/tillandsias-project) must survive
+        // the forge's --rm. A per-project podman NAMED volume backs that path.
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+        let joined = argv.join(" ");
+        assert!(
+            joined.contains("tillandsias-forge-cache-alpha:/home/forge/.cache/tillandsias-project"),
+            "forge must mount the persistent tool-cache named volume (order 179); got: {joined}"
+        );
     }
 
     #[test]
@@ -9003,6 +9176,10 @@ mod tests {
         assert_eq!(
             ForgeAgentMode::OpenCode.entrypoint(),
             "/usr/local/bin/entrypoint-forge-opencode.sh"
+        );
+        assert_eq!(
+            ForgeAgentMode::Antigravity.entrypoint(),
+            "/usr/local/bin/entrypoint-forge-antigravity.sh"
         );
         assert_eq!(
             ForgeAgentMode::Maintenance.entrypoint(),
@@ -9150,6 +9327,41 @@ mod tests {
         assert!(
             login_window.contains("container.as_str()"),
             "github login health preflight must target the ephemeral login helper container"
+        );
+    }
+
+    /// E2e gate (order 144): verify preflight order in run_list_cloud_projects.
+    /// Every standalone flow that uses the GitHub token (list projects, future
+    /// cloud operations) must ensure vault+proxy are up before dispatching any
+    /// containerized `gh` invocation, or the token-read and egress both fail.
+    #[test]
+    fn list_cloud_projects_preflight_order() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_list_cloud_projects(debug: bool)");
+        let vault_idx = window
+            .find("ensure_vault_running(debug)?")
+            .expect("run_list_cloud_projects must preflight Vault");
+        let proxy_idx = window
+            .find("ensure_proxy_running(debug)?")
+            .expect("run_list_cloud_projects must preflight proxy");
+        let health_idx = window
+            .find("check_auth_required_services(&[\"tillandsias-proxy\"], debug)?")
+            .expect("run_list_cloud_projects must health-check the proxy");
+        let fetch_idx = window
+            .find("discover_github_projects_result_with_debug(debug)?")
+            .expect("run_list_cloud_projects must call the fetch function");
+
+        assert!(
+            vault_idx < proxy_idx,
+            "Vault must be ensured before proxy: run_list_cloud_projects"
+        );
+        assert!(
+            proxy_idx < health_idx,
+            "Proxy must be ensured before health-check: run_list_cloud_projects"
+        );
+        assert!(
+            health_idx < fetch_idx,
+            "All preflight must complete before the gh invocation: run_list_cloud_projects"
         );
     }
 
@@ -9365,6 +9577,34 @@ mod tests {
         assert!(
             args.iter()
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
+        );
+    }
+
+    #[test]
+    fn opencode_args_mount_persistent_tool_cache_named_volume() {
+        // Order 220: OpenCode/OpenCode Web launches must mount the same
+        // per-project persistent cache volume as Claude/Codex/Antigravity/
+        // Maintenance (order 179), or FIRST_RUN tool installs (orders
+        // 180/181) never persist for these two launch modes and re-run from
+        // scratch on every attach — discovered live during order 220's
+        // verification (podman inspect showed no cache mount on an OpenCode
+        // container before this fix).
+        // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
+        // @trace plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md (order 220)
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            Some("hello"),
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            false,
+            true,
+        );
+        assert!(
+            args.iter().any(|arg| arg
+                == "tillandsias-forge-cache-alpha:/home/forge/.cache/tillandsias-project:rw"),
+            "OpenCode forge args must mount the persistent per-project tool cache volume; got {args:?}"
         );
     }
 

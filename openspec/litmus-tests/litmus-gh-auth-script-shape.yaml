@@ -7,8 +7,17 @@
 # fake-podman test harness end-to-end — covers behavioural
 # correctness. This companion is instant + grep-only; pins the
 # canonical surfaces the spec mandates so a refactor that drops
-# `run_github_login`, renames the harness, or strips the multi-
-# spec trace fires pre-build.
+# the shared login entry point, renames the harness, or strips the
+# multi-spec trace fires pre-build.
+#
+# Order agent-login-flows-impl-2026-06-28 generalized the GitHub-only
+# `run_github_login(debug: bool)` into `run_provider_login(config:
+# &ProviderLoginConfig, debug: bool)`, shared across
+# --claude-login/--codex-login/--antigravity-login/--github-login.
+# The GitHub-specific accountability operation name also moved from
+# the literal `gh_auth_start` to `format!("{}_auth_start",
+# config.provider.id_str())`, which renders `github_auth_start` for
+# GitHub (id_str() returns "github", not "gh").
 #
 # Combined with the existing smoke litmus, raises gh-auth-script
 # coverage_ratio 30 → 67.
@@ -16,10 +25,10 @@ name: litmus:gh-auth-script-shape
 spec: gh-auth-script
 phase: pre-build
 description: >
-  Pin the `run_github_login` entry point + its multi-spec trace +
-  the `--github-login` CLI flag + the fake-podman test harness,
-  per the spec's "Single implementation behind tray and CLI entry points"
-  requirement.
+  Pin the shared `run_provider_login` entry point (GitHub's single
+  implementation behind tray and CLI entry points) + its multi-spec
+  trace + the `--github-login` CLI flag + the fake-podman test
+  harness.
 severity: medium
 size: instant
 
@@ -29,13 +38,14 @@ preconditions:
   - shell utilities (grep, test) are available in PATH
 
 critical_path:
-  - step: "run_github_login() entry point exists with the multi-spec trace"
+  - step: "run_provider_login() shared entry point exists with the multi-spec trace"
     # Spec requirement: "Single implementation behind tray and
-    # CLI entry points". The `run_github_login(debug: bool)`
-    # signature is that single implementation.
-    command: "grep -F 'fn run_github_login(debug: bool) -> Result<(), String>' crates/tillandsias-headless/src/main.rs"
+    # CLI entry points". `run_provider_login(config: &ProviderLoginConfig,
+    # debug: bool)` is that single implementation, shared across all
+    # 4 providers (GitHub included).
+    command: "grep -F 'fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String>' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
-    expected_behavior: "fn run_github_login"
+    expected_behavior: "fn run_provider_login"
 
   - step: "run_github_login docblock traces all related specs"
     command: "grep -F '@trace spec:gh-auth-script, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault' crates/tillandsias-headless/src/main.rs"
@@ -52,15 +62,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: fake harness executable"
 
-  - step: "accountability log line is emitted on gh_auth_start"
-    command: "grep -F 'operation = \"gh_auth_start\"' crates/tillandsias-headless/src/main.rs"
+  - step: "accountability log line is emitted on <provider>_auth_start (github_auth_start for GitHub)"
+    command: "grep -F 'operation = format!(\"{}_auth_start\", config.provider.id_str())' crates/tillandsias-headless/src/main.rs && grep -F 'ProviderId::GitHub => \"github\"' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
-    expected_behavior: "gh_auth_start"
+    expected_behavior: "_auth_start"
 
-  - step: "login verifies gh authentication before Vault persistence"
-    command: "grep -F 'containerized gh authentication verification failed after login' crates/tillandsias-headless/src/main.rs && grep -F 'in-container vault write failed' crates/tillandsias-headless/src/main.rs"
+  - step: "login verifies containerized provider authentication before Vault persistence"
+    command: "grep -F 'containerized {provider_name} authentication verification failed after login' crates/tillandsias-headless/src/main.rs && grep -F 'in-container vault write failed' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
-    expected_behavior: "containerized gh authentication verification failed after login"
+    expected_behavior: "containerized {provider_name} authentication verification failed after login"
 
 observability:
   traces:
@@ -76,8 +86,9 @@ observability:
 rollback:
   on_failure: >
     A gh-auth-script surface drifted from the spec. Restore:
-    `fn run_github_login(debug: bool)` entry point;
-    `--github-login` CLI flag;
-    `gh_auth_start` accountability log; executable bit on
+    `fn run_provider_login(config: &ProviderLoginConfig, debug: bool)`
+    shared entry point; `--github-login` CLI flag; the
+    `{provider}_auth_start` accountability log (renders
+    `github_auth_start` for GitHub); executable bit on
     scripts/test-support/github-login-fake.sh.
-  command: "grep -nE 'run_github_login|github-login|gh_auth_start' crates/tillandsias-headless/src/main.rs | head -10 && ls -la scripts/test-support/github-login-fake.sh"
+  command: "grep -nE 'run_provider_login|github-login|_auth_start' crates/tillandsias-headless/src/main.rs | head -10 && ls -la scripts/test-support/github-login-fake.sh"

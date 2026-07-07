@@ -57,6 +57,17 @@ const SELINUX_VAULT_FC: &str = include_str!("../../../images/selinux/tillandsias
 /// terminal attaches to.
 pub const DISTRO_NAME: &str = "tillandsias";
 
+/// A guard that aborts the supervised keepalive task when dropped.
+pub struct KeepaliveGuard {
+    abort_handle: tokio::task::AbortHandle,
+}
+
+impl Drop for KeepaliveGuard {
+    fn drop(&mut self) {
+        self.abort_handle.abort();
+    }
+}
+
 /// Convenience wrapper around `tillandsias-vm-layer::wsl::WslRuntime` that
 /// carries the tray's preferred defaults (distro name `tillandsias`,
 /// install root under `%LOCALAPPDATA%`).
@@ -114,18 +125,51 @@ impl WslLifecycle {
     }
 
     /// Spawn a keepalive `wsl --exec` session that holds the WSL2 utility VM
-    /// open (it idles down otherwise, dropping the HvSocket control wire). The
-    /// caller holds the returned `Child` for the tray's lifetime; it's
-    /// `kill_on_drop`, so releasing it lets the VM idle normally again.
-    pub fn spawn_keepalive(&self) -> Result<tokio::process::Child, String> {
-        self.runtime.spawn_keepalive()
+    /// open. The background task supervises it and respawns it if killed.
+    /// The caller holds the returned `KeepaliveGuard` for the tray's lifetime;
+    /// dropping it aborts the task and lets the VM idle normally again.
+    pub fn spawn_keepalive(&self, debug: bool) -> Result<KeepaliveGuard, String> {
+        let distro_name = self.runtime.distro_name.clone();
+        let handle = tokio::spawn(async move {
+            loop {
+                // Install root is unused by spawn_keepalive, so dummy path is fine.
+                let runtime = WslRuntime::new(&distro_name, std::path::PathBuf::new());
+                match runtime.spawn_keepalive(debug) {
+                    Ok(mut child) => match child.wait().await {
+                        Ok(status) => {
+                            tracing::warn!(
+                                "Keepalive wsl.exe exited with status {status}. Respawning in 1s..."
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Keepalive wsl.exe failed to wait: {e}. Respawning in 1s..."
+                            );
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!("Failed to spawn keepalive wsl.exe: {e}. Retrying in 1s...");
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        });
+        Ok(KeepaliveGuard {
+            abort_handle: handle.abort_handle(),
+        })
     }
 
     /// Graceful shutdown — issued by the tray on Quit. The host-shell's
     /// `VmLifecycle::stop` is the production entry point; this wrapper
     /// exists for callers that don't want the full `VmLifecycle` machinery.
     pub async fn graceful_shutdown(&self) -> Result<(), String> {
-        self.runtime.stop(Duration::from_secs(30)).await
+        let lock_path = Self::install_root().join("drain.lock");
+        if let Err(e) = tokio::fs::write(&lock_path, b"draining").await {
+            tracing::warn!("Failed to write drain lock: {e}");
+        }
+        let res = self.runtime.stop(Duration::from_secs(30)).await;
+        let _ = tokio::fs::remove_file(&lock_path).await;
+        res
     }
 
     /// Recipe-path first-run provisioning — the **w11 Fedora pivot**. Supersedes the
@@ -145,6 +189,20 @@ impl WslLifecycle {
         &self,
         progress: Arc<dyn ProvisionProgress>,
     ) -> Result<(), String> {
+        // R1: observe drain path (wait for drain.lock if it exists)
+        let lock_path = Self::install_root().join("drain.lock");
+        if lock_path.exists() {
+            tracing::info!("WSL VM is currently draining, waiting for teardown to finish...");
+            let start_time = std::time::Instant::now();
+            while lock_path.exists() {
+                if start_time.elapsed().as_secs() > 20 {
+                    tracing::warn!("Drain lock timed out, proceeding anyway");
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        }
+
         progress.report_phase(ProvisionPhase::SettingUp);
         tokio::fs::create_dir_all(Self::cache_root())
             .await
@@ -161,7 +219,7 @@ impl WslLifecycle {
             self.runtime.start().await?;
             progress.report_phase(ProvisionPhase::Connecting);
             const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-            let _keepalive = self.spawn_keepalive().ok();
+            let _keepalive = self.spawn_keepalive(false).ok();
             let mut last_err = String::from("(no attempt)");
             for attempt in 1..=36u32 {
                 match self.try_connect_until_ready(CW_PORT, attempt).await {
@@ -256,7 +314,7 @@ impl WslLifecycle {
         const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
 
         // Hold a keepalive across the connect loop so the VM doesn't idle out mid-wait.
-        let _keepalive = self.spawn_keepalive().ok();
+        let _keepalive = self.spawn_keepalive(false).ok();
 
         let mut last_err = String::from("(no attempt)");
         for attempt in 1..=36u32 {
@@ -320,11 +378,46 @@ for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_se
             })?
     }
 
-    /// Inject the `fetch-headless.sh` script and systemd units into the
-    /// official Fedora image via `wsl --exec`.
     async fn inject_bootstrap_logic(&self) -> Result<(), String> {
-        // 1. fetch-headless.sh
-        let fetch_script = r#"#!/usr/bin/env bash
+        // Detect guest architecture
+        let arch_output = tokio::process::Command::new("wsl")
+            .arg("-d")
+            .arg(DISTRO_NAME)
+            .arg("-u")
+            .arg("root")
+            .arg("--")
+            .arg("uname")
+            .arg("-m")
+            .output()
+            .await
+            .map_err(|e| format!("failed to detect guest architecture: {e}"))?;
+        let arch = String::from_utf8_lossy(&arch_output.stdout)
+            .trim()
+            .to_string();
+
+        let embedded_bin: &[u8] = match arch.as_str() {
+            "x86_64" => include_bytes!("../assets/tillandsias-headless-x86_64-unknown-linux-musl"),
+            "aarch64" => {
+                include_bytes!("../assets/tillandsias-headless-aarch64-unknown-linux-musl")
+            }
+            _ => &[],
+        };
+
+        if !embedded_bin.is_empty() {
+            tracing::info!(%arch, "Injecting embedded tillandsias-headless binary");
+            self.wsl_root_write_bytes("/usr/local/bin/tillandsias-headless", embedded_bin, true)
+                .await?;
+
+            // Write a no-op fetch-headless.sh so the fetch systemd service compiles and runs cleanly
+            self.wsl_root_write(
+                "/usr/local/lib/tillandsias/fetch-headless.sh",
+                "#!/usr/bin/env bash\nexit 0\n",
+                true,
+            )
+            .await?;
+        } else {
+            // 1. fetch-headless.sh
+            let fetch_script = r#"#!/usr/bin/env bash
 set -euo pipefail
 DEST="/usr/local/bin/tillandsias-headless"
 if [[ -x "$DEST" ]]; then exit 0; fi
@@ -333,12 +426,13 @@ URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias
 curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$DEST" "$URL"
 chmod 0755 "$DEST"
 "#;
-        self.wsl_root_write(
-            "/usr/local/lib/tillandsias/fetch-headless.sh",
-            fetch_script,
-            true,
-        )
-        .await?;
+            self.wsl_root_write(
+                "/usr/local/lib/tillandsias/fetch-headless.sh",
+                fetch_script,
+                true,
+            )
+            .await?;
+        }
 
         // 2. headless-preflight.sh
         let preflight_script = r#"#!/usr/bin/env bash
@@ -575,6 +669,45 @@ fi"#,
         Ok(())
     }
 
+    async fn wsl_root_write_bytes(
+        &self,
+        path: &str,
+        content: &[u8],
+        make_executable: bool,
+    ) -> Result<(), String> {
+        let mut child = tokio::process::Command::new("wsl")
+            .arg("-d")
+            .arg(DISTRO_NAME)
+            .arg("-u")
+            .arg("root")
+            .arg("--")
+            .arg("sh")
+            .arg("-c")
+            .arg(format!(
+                "cat > {path} && if [ \"{make_executable}\" = \"true\" ]; then chmod +x {path}; fi"
+            ))
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("wsl write {path} failed: {e}"))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            stdin
+                .write_all(content)
+                .await
+                .map_err(|e| format!("write stdin to {path} failed: {e}"))?;
+        }
+
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| format!("wait for wsl write {path} failed: {e}"))?;
+        if !status.success() {
+            return Err(format!("wsl write {path} exited {status}"));
+        }
+        Ok(())
+    }
+
     async fn wsl_root_sh(&self, script: &str) -> Result<(), String> {
         let status = tokio::process::Command::new("wsl")
             .arg("-d")
@@ -613,11 +746,10 @@ fi"#,
             // Open the HvSocket transport, then drive the standard host-shell Client
             // (same Hello/HelloAck + request path the macOS tray uses over its
             // VZVirtioSocketConnection stream — slice 4 `80d9196e`).
-            let stream = crate::hvsocket::open_hvsocket_stream(port)
+            let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(port)
                 .await
                 .map_err(|e| format!("hvsocket open: {e}"))?;
-            let mut client =
-                Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
+            let mut client = Client::from_stream(stream, Transport::Vsock { cid: 0, port });
             let wire_version = client
                 .handshake()
                 .await

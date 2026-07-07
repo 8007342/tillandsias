@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "0.3.260704"
+version = "0.3.260705"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
@@ -34,6 +34,7 @@ tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 tempfile = "3"
 reqwest = { workspace = true }
+tillandsias-secure-channel = { workspace = true }
 
 # @trace spec:tillandsias-vault — Phase 6: Vault is now the default secrets
 # backend for Linux. The `vault` feature is enabled by default.

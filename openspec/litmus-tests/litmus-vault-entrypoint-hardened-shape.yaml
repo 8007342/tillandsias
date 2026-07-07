@@ -26,10 +26,10 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "$HANDOVER_DIR/root.token"
 
-  - step: "Host bootstrap reads token and unseal key from tmpfs and deletes the directory"
-    command: "grep -F '\"exec\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"cat\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"/run/vault-handover/root.token\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"/run/vault-handover/unseal.key\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"rm\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"-rf\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"/run/vault-handover\"' crates/tillandsias-headless/src/vault_bootstrap.rs"
+  - step: "Host bootstrap reads token and unseal key from tmpfs and shreds them before unlinking"
+    command: "grep -F '\"cat\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '/run/vault-handover/{name}' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'dd if=/dev/zero' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key' crates/tillandsias-headless/src/vault_bootstrap.rs"
     timeout_ms: 3000
-    expected_behavior: "/run/vault-handover"
+    expected_behavior: "rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key"
 
 observability:
   traces:

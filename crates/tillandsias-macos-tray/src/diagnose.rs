@@ -42,7 +42,18 @@
 
 #![cfg(target_os = "macos")]
 
+use std::io;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::OnceLock;
+use std::task::{Context, Poll};
+
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use tillandsias_control_wire::guest_transport::GuestEndpoint;
+use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
+
+use crate::guest_binary::stage_embedded_guest_binary;
 
 /// Manifest bundled at build time so the binary doesn't need the repo or
 /// network to know its artifact-URL template + pinned SHAs. Same constant
@@ -58,6 +69,118 @@ fn image_root() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/tmp"));
     home.join("Library/Application Support/tillandsias")
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SecureControlWireMode {
+    Off,
+    On,
+}
+
+fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
+    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(|| match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
+        Ok(raw) if raw.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
+        Ok(raw) if raw.eq_ignore_ascii_case("off") || raw.is_empty() => {
+            Ok(SecureControlWireMode::Off)
+        }
+        Ok(raw) => Err(format!(
+            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {raw:?})"
+        )),
+        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
+        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
+    })
+    .clone()
+}
+
+type GuestWireStream = Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>;
+
+enum ControlWireStream {
+    Plain(GuestWireStream),
+    Secure(Box<EncryptedStream<GuestWireStream>>),
+}
+
+impl AsyncRead for ControlWireStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        out: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_read(cx, out),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_read(cx, out),
+        }
+    }
+}
+
+impl AsyncWrite for ControlWireStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_write(cx, buf),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_flush(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_shutdown(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
+    }
+}
+
+async fn open_control_wire_stream(
+    vz: &tillandsias_vm_layer::vz::VzRuntime,
+    port: u32,
+    timeout: std::time::Duration,
+) -> Result<ControlWireStream, String> {
+    let endpoint = GuestEndpoint::MacVz { port };
+    let stream = vz
+        .open_guest_transport_stream_current_thread(&endpoint, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match secure_control_wire_mode()? {
+        SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
+        SecureControlWireMode::On => {
+            let psk = channel_psk(
+                tillandsias_secure_channel::workspace_version(),
+                tillandsias_control_wire::WIRE_VERSION,
+                HopId::HostGuest,
+            );
+            let secure = client_handshake(stream, &psk)
+                .await
+                .map_err(|e| format!("secure control wire handshake failed: {e}"))?;
+            Ok(ControlWireStream::Secure(Box::new(secure)))
+        }
+    }
+}
+
+/// `VzRuntime::wait_phase_ready`'s per-attempt probe callback. `vm-layer`
+/// does not depend on `tillandsias-secure-channel`, so it cannot decide
+/// Plain-vs-Secure itself; this reuses the exact `open_control_wire_stream`
+/// opener that `--exec-guest` / `--list-cloud-projects` / GitHub login use,
+/// so readiness probing never bypasses secure mode when it is enabled.
+/// @trace plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+async fn probe_phase_secure_or_plain(
+    vz: &tillandsias_vm_layer::vz::VzRuntime,
+    timeout: std::time::Duration,
+) -> Result<tillandsias_control_wire::VmPhase, String> {
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, timeout).await?;
+    tillandsias_vm_layer::vsock_exec::probe_vm_phase(stream).await
 }
 
 /// Output format selected via `--diagnose` (default) or
@@ -223,6 +346,10 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 ///   * `0` — provisioned (or already provisioned)
 ///   * `1` — hard failure (manifest parse, network, conversion, SHA)
 pub fn provision_main() -> i32 {
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let image_root = image_root();
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root);
 
@@ -295,6 +422,10 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
         eprintln!("--exec-guest requires a command, e.g. --exec-guest /bin/echo HELLO");
         return 2;
     }
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
     if !vz.is_provisioned() {
@@ -339,27 +470,33 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
             return 1;
         }
         eprintln!("[exec-guest] waiting for VM phase Ready…");
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
             eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
         eprintln!("[exec-guest] running: {argv_ref:?}");
-        // Connect on THIS (main) thread, not via spawn_blocking: VZ delivers
-        // the connect completion on the main dispatch queue, which is only
-        // serviced while the main thread pumps the CFRunLoop. open_vsock_stream
-        // (spawn_blocking) hangs headless; the current-thread variant pumps it.
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
+        // Connect on THIS (main) thread, not via the trait-level default
+        // opener: VZ delivers the connect completion on the main dispatch
+        // queue, which is only serviced while the main thread pumps the
+        // CFRunLoop. The current-thread GuestTransport helper preserves the
+        // per-attempt timeout that readiness probes pass down.
+        let stream =
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                    let _ = vz.stop(Duration::from_secs(10)).await;
+                    return 1;
+                }
+            };
         // Stream output chunk-by-chunk so long-running commands (curl, --init,
         // forge) show progress live instead of buffering until exit.
         let result = {
@@ -436,6 +573,10 @@ fn prompt_line(label: &str, hidden: bool) -> String {
 pub fn github_login_main() -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
     if !vz.is_provisioned() {
@@ -466,22 +607,27 @@ pub fn github_login_main() -> i32 {
             return 1;
         }
         eprintln!("[github-login] waiting for VM phase Ready…");
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
             eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
+        let stream =
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                    let _ = vz.stop(Duration::from_secs(10)).await;
+                    return 1;
+                }
+            };
         eprintln!(
             "[github-login] control wire ready; guest auth preflight runs before credential prompts"
         );
@@ -617,6 +763,10 @@ pub fn github_login_main() -> i32 {
 pub fn list_cloud_projects_main() -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true);
     if !vz.is_provisioned() {
@@ -648,22 +798,27 @@ pub fn list_cloud_projects_main() -> i32 {
             return 1;
         }
         eprintln!("[list-cloud-projects] waiting for VM phase Ready…");
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
             eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
+        let stream =
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                    let _ = vz.stop(Duration::from_secs(10)).await;
+                    return 1;
+                }
+            };
         eprintln!("[list-cloud-projects] control wire ready; fetching remote projects…");
 
         // Same CA cert + exited-proxy workaround as github_login_main.
@@ -723,6 +878,10 @@ pub fn list_cloud_projects_main() -> i32 {
 pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true);
     if !vz.is_provisioned() {
@@ -754,22 +913,27 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             return 1;
         }
         eprintln!("[opencode] waiting for VM phase Ready…");
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
             eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
+        let stream =
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                    let _ = vz.stop(Duration::from_secs(10)).await;
+                    return 1;
+                }
+            };
         eprintln!("[opencode] control wire ready; launching forge in guest…");
 
         // Build the shell command for the guest: set required env vars and
@@ -902,10 +1066,10 @@ mod tests {
             .find("vz.start().await")
             .expect("github login must start the VM");
         let wait_idx = window
-            .find("vz.wait_phase_ready(Duration::from_secs(300)).await")
+            .find("wait_phase_ready(Duration::from_secs(300), |t| {")
             .expect("github login must wait for the VM phase Ready");
         let stream_idx = window
-            .find("open_vsock_stream_current_thread")
+            .find("open_control_wire_stream(")
             .expect("github login must open the control-wire stream");
         let prompt_idx = window
             .find("prompt_line(\"Git author name\"")
@@ -923,6 +1087,72 @@ mod tests {
         assert!(
             prompt_idx < dynamic_idx,
             "prompts should be supplied lazily through the dynamic expect path"
+        );
+    }
+
+    /// litmus:secure-wait-phase-ready — `wait_phase_ready`'s probe callback
+    /// must route through the same secure-or-plain opener as user actions
+    /// (`open_control_wire_stream`), not a bare `open_vsock_stream*` connect.
+    /// Otherwise a flag-ON guest's readiness probe would run in plaintext
+    /// even though the guest only speaks Noise, and could hang/fail even
+    /// though the real user-facing traffic is correctly secured.
+    /// @trace plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
+    #[test]
+    fn probe_phase_secure_or_plain_uses_the_secure_or_plain_opener() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let start = source
+            .find("async fn probe_phase_secure_or_plain(")
+            .expect("probe_phase_secure_or_plain must exist");
+        let tail = &source[start..];
+        // Function bodies here are flat (no nested `}\n}`), so the first
+        // `\n}\n` after `start` is this function's own closing brace.
+        let end = tail.find("\n}\n").map(|i| i + 2).unwrap_or(tail.len());
+        let window = &tail[..end];
+
+        assert!(
+            window.contains("open_control_wire_stream("),
+            "wait_phase_ready's probe callback must open its connection via \
+             open_control_wire_stream (the secure-or-plain opener), not a raw \
+             vsock connect: {window}"
+        );
+        assert!(
+            !window.contains("open_vsock_stream"),
+            "wait_phase_ready's probe callback must not bypass \
+             open_control_wire_stream with a direct vsock connect: {window}"
+        );
+    }
+
+    /// `--diagnose` and its sibling CLI actions must construct a normalized
+    /// macOS guest endpoint and delegate current-thread VZ connection details
+    /// to vm-layer, rather than naming `VsockStream` directly.
+    ///
+    /// @trace spec:host-guest-transport
+    #[test]
+    fn diagnose_control_wire_opener_uses_guest_transport_endpoint() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let start = source
+            .find("async fn open_control_wire_stream(")
+            .expect("open_control_wire_stream must exist");
+        let tail = &source[start..];
+        let end = tail.find("\n///").unwrap_or(tail.len());
+        let window = &tail[..end];
+
+        assert!(
+            window.contains("GuestEndpoint::MacVz"),
+            "diagnose opener must construct the normalized MacVz endpoint: {window}"
+        );
+        assert!(
+            window.contains("open_guest_transport_stream_current_thread(&endpoint, timeout)"),
+            "diagnose opener must delegate current-thread VZ details to vm-layer: {window}"
+        );
+        assert!(
+            !window.contains("open_vsock_stream_current_thread"),
+            "diagnose opener must not call the raw VZ connector directly: {window}"
+        );
+        let raw_stream_type = concat!("transport_macos::", "VsockStream");
+        assert!(
+            !source.contains(raw_stream_type),
+            "diagnose.rs must not name the raw macOS stream type directly"
         );
     }
 

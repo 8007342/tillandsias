@@ -200,7 +200,6 @@ log_step "Starting inference container (non-blocking)..."
 
     if ! podman run \
         --detach \
-        --rm \
         --name "$INFERENCE_CONTAINER" \
         --hostname inference \
         --network-alias inference \

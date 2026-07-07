@@ -81,7 +81,20 @@ critical_path:
     # `instructions[0] MUST be methodology.md`. Verify by checking
     # the line IMMEDIATELY after `"instructions": [` references
     # methodology.md — i.e. the first-array-entry position.
-    command: "awk '/\"instructions\": \\[/{getline; if ($0 ~ /methodology.md/) { print \"ok: methodology.md is instructions[0]\"; exit 0 } else { print \"FAIL: instructions[0] is\", $0; exit 1 } }' images/default/config-overlay/opencode/config.json"
+    #
+    # Literal `[` matched via the bracket-expression `[[]`, not a
+    # backslash escape (`\[`): run-litmus-test.sh's command parser only
+    # unescapes `\"`, so a raw `\[` (needed here to satisfy real YAML
+    # double-quote validation, which requires `\\` for one literal
+    # backslash) survives as a literal double-backslash into awk's
+    # regex — `\\` parses as an escaped-backslash, leaving the bare `[`
+    # after it to start an unterminated bracket expression (a syntax
+    # error). `[[]` sidesteps the whole conflict: inside a POSIX bracket
+    # expression `[` has no special meaning, so it matches itself
+    # literally with zero backslashes needed anywhere. Discovered
+    # running this litmus on macOS for the first time — see
+    # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md.
+    command: "awk '/\"instructions\": [[]/{getline; if ($0 ~ /methodology.md/) { print \"ok: methodology.md is instructions[0]\"; exit 0 } else { print \"FAIL: instructions[0] is\", $0; exit 1 } }' images/default/config-overlay/opencode/config.json"
     timeout_ms: 3000
     expected_behavior: "ok: methodology.md is instructions[0]"
 

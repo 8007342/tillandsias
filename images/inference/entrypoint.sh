@@ -23,8 +23,53 @@ fi
 # Bind to all interfaces — reachable from other containers in the enclave.
 export OLLAMA_HOST=0.0.0.0:11434
 
+# Resource limits — prevent OOM on constrained hosts.
+export OLLAMA_NUM_PARALLEL=1
+export OLLAMA_MAX_LOADED_MODELS=1
+
 # Shared model cache — persisted via volume mount.
 export OLLAMA_MODELS=/home/ollama/.ollama/models/
+
+# ── Self-install ollama binary (FIRST_RUN into persistent model cache) ──
+# @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180 ollama sub-slice)
+# Download the latest ollama release, extracting only bin/ollama (skipping
+# ~1.8GB GPU runner libs). Installs into the persistent model cache volume so
+# it survives container restarts. Arch-aware (x86_64|aarch64). Fail-soft.
+OLLAMA_BINDIR="${OLLAMA_MODELS}.tools/ollama"
+OLLAMA_BIN="$OLLAMA_BINDIR/ollama"
+if [ ! -x "$OLLAMA_BIN" ]; then
+    echo "[inference] Installing ollama binary (first run)..."
+    mkdir -p "$OLLAMA_BINDIR" 2>/dev/null || true
+    OLLAMA_ARCH=""
+    case "$(uname -m)" in
+        x86_64 | amd64) OLLAMA_ARCH="amd64" ;;
+        aarch64 | arm64) OLLAMA_ARCH="arm64" ;;
+    esac
+    if [ -n "$OLLAMA_ARCH" ]; then
+        TMP_O="$(mktemp -d 2>/dev/null)" || true
+        if [ -n "$TMP_O" ]; then
+            if curl -fsSL --max-time 120 --retry 2 --retry-delay 3 \
+                "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${OLLAMA_ARCH}.tar.zst" \
+                -o "$TMP_O/ollama.tar.zst" 2>/dev/null; then
+                if zstd -d "$TMP_O/ollama.tar.zst" -o "$TMP_O/ollama.tar" 2>/dev/null \
+                    && tar -xf "$TMP_O/ollama.tar" -C "$TMP_O" bin/ollama 2>/dev/null \
+                    && install -m 0755 "$TMP_O/bin/ollama" "$OLLAMA_BIN" 2>/dev/null; then
+                    echo "[inference] ollama $OLLAMA_ARCH installed into model cache"
+                else
+                    echo "[inference] ollama install FAILED — will retry next launch (non-fatal)" >&2
+                fi
+            else
+                echo "[inference] ollama download FAILED — will retry next launch (non-fatal)" >&2
+            fi
+            rm -rf "$TMP_O"
+        fi
+    else
+        echo "[inference] unsupported arch $(uname -m) — relying on system ollama" >&2
+    fi
+fi
+if [ -x "$OLLAMA_BIN" ]; then
+    export PATH="$OLLAMA_BINDIR:$PATH"
+fi
 
 # CA certificate from podman secret for HTTPS trust.
 # @trace spec:podman-secrets-integration, spec:inference-container
@@ -84,12 +129,14 @@ done
 
 # ── Tier-tagged tool-capable model pre-pulls ────────────────────
 # @trace spec:inference-container, spec:zen-default-with-ollama-analysis-pool
-# T0 (qwen2.5:0.5b) and T1 (llama3.2:3b) are baked into the image at build
-# time so the first attach has them locally. T2+ pull at runtime if the
-# host has the headroom, and pull failures stay non-fatal — Squid SSL bump
-# tends to EOF on big ollama manifest pulls (see project memory:
-# project_squid_ollama_eof.md). All tiers ship tool-capable models;
-# tinyllama et al are out because they don't follow tool-call schemas.
+# The DEFAULT small set (0.3-1.5B) is always pulled first-run (see the block
+# below). LARGER tier models (T2+: qwen2.5:7b … 32b) pull at runtime only if the
+# host has the headroom; pull failures stay non-fatal — Squid SSL bump tends to
+# EOF on big ollama manifest pulls (see project memory project_squid_ollama_eof.md).
+# All ship tool-capable models. NOTE: on a 16GB laptop RAM_GB>=16 selects T2 and
+# background-pulls qwen2.5:7b — this conflicts with the "tiny-model-first" reference
+# envelope and should be reconciled (follow-up: gate T2+ behind an opt-in, keep the
+# small default set as the laptop baseline).
 
 # Detect runtime tier from RAM (CPU) and GPU VRAM, pick the highest.
 RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)
@@ -105,36 +152,34 @@ fi
 
 echo "[inference] tier=$TIER (RAM ${RAM_GB}GB, VRAM ${VRAM_GB}GB)"
 
-# ── Ensure T0 + T1 are available ──────────────────────────────────
+# ── Default small models (0.3-1.5B) — pulled on FIRST_RUN ─────────
 # @trace spec:inference-container
-# T0 (qwen2.5:0.5b) and T1 (llama3.2:3b) are pulled at container startup
-# (not build time) to keep image build fast. They're cached on a host-mounted
-# volume (~/.cache/tillandsias/models), so only first run downloads them.
-# Subsequent container starts load them from the cached volume immediately.
-
-# Check if T0 is cached; if not, pull it (first run only).
-if ! ollama list 2>/dev/null | grep -q "qwen2.5:0.5b"; then
-    echo "[inference] Pulling T0 (qwen2.5:0.5b)..."
-    if ollama pull qwen2.5:0.5b 2>&1; then
-        echo "[inference] T0 (qwen2.5:0.5b) ready"
+# @trace plan/issues/inference-firstrun-small-models-impl-2026-07-04.md (order 183)
+# Operator directive: a fresh forge should have a few general-purpose 0.3-1.5B
+# models available on first run (foundation for fine-tuning + forge build-test
+# diagnostics). Pulled at container startup — NOT baked at build (keeps the image
+# small) — into the host-mounted models cache (~/.cache/tillandsias/models), so
+# only the first run downloads; subsequent starts load from the cached volume.
+#
+# All in the 0.3-1.5B envelope (the operator's "tiny-model-first" spec — llama3.2:3b
+# was 3B and is replaced by llama3.2:1b). qwen2.5-coder:1.5b serves the "diagnose
+# local build tests" use case. Idempotent (skip if cached), non-fatal (a failed
+# pull degrades gracefully + retries next launch; Squid SSL-bump can EOF big
+# manifests — see project memory project_squid_ollama_eof.md), and overridable via
+# TILLANDSIAS_DEFAULT_MODELS (space-separated ollama tags).
+DEFAULT_MODELS="${TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b}"
+for _model in $DEFAULT_MODELS; do
+    if ollama list 2>/dev/null | grep -q "$_model"; then
+        echo "[inference] default model $_model ready (cached)"
     else
-        echo "[inference] T0 (qwen2.5:0.5b) pull FAILED — inference degraded" >&2
+        echo "[inference] pulling default model $_model (first run)..."
+        if ollama pull "$_model" 2>&1; then
+            echo "[inference] default model $_model ready"
+        else
+            echo "[inference] default model $_model pull FAILED — will retry next launch (non-fatal)" >&2
+        fi
     fi
-else
-    echo "[inference] T0 (qwen2.5:0.5b) ready (cached)"
-fi
-
-# Check if T1 is cached; if not, pull it (first run only).
-if ! ollama list 2>/dev/null | grep -q "llama3.2:3b"; then
-    echo "[inference] Pulling T1 (llama3.2:3b)..."
-    if ollama pull llama3.2:3b 2>&1; then
-        echo "[inference] T1 (llama3.2:3b) ready"
-    else
-        echo "[inference] T1 (llama3.2:3b) pull FAILED — inference degraded" >&2
-    fi
-else
-    echo "[inference] T1 (llama3.2:3b) ready (cached)"
-fi
+done
 
 if [ -n "${TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS:-}" ]; then
     echo "[inference] status-check mode — skipping runtime pulls"

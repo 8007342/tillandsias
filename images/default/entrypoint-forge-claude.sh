@@ -27,6 +27,15 @@ export TILLANDSIAS_HOST_KIND="forge"
 # The --tmpfs mount is already in place (podman establishes it before exec).
 populate_hot_paths
 
+# @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
+# FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
+# so it never blocks the agent launch, and fail-soft.
+ensure_forge_prebuilt_tools &
+
+# @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+# EVERY_LAUNCH agent harness update; backgrounded, fail-soft.
+ensure_forge_harnesses &
+
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
 # System trust store updates require root (denied under --cap-drop=ALL).

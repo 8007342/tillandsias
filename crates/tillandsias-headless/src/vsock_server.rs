@@ -17,6 +17,7 @@
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -28,8 +29,9 @@ use tillandsias_control_wire::{
     CAP_PTY_ATTACH_V1, CloudProjectEntry, ControlEnvelope, ControlMessage, ErrorCode,
     LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
 };
+use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, info, warn};
 
 #[cfg(unix)]
@@ -55,6 +57,51 @@ const IN_VM_PROJECT_ROOT_DEFAULT: &str = "/home/forge/src";
 /// to decide whether containers can actually start.
 const IN_VM_PODMAN_SOCKET_DEFAULT: &str = "/run/podman/podman.sock";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SecureControlWireMode {
+    Off,
+    On,
+}
+
+fn parse_secure_control_wire_mode(
+    raw: Result<String, std::env::VarError>,
+) -> Result<SecureControlWireMode, String> {
+    match raw {
+        Ok(v) if v.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
+        Ok(v) if v.eq_ignore_ascii_case("off") || v.is_empty() => Ok(SecureControlWireMode::Off),
+        Ok(v) => Err(format!(
+            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {v:?})"
+        )),
+        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
+        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
+    }
+}
+
+fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
+    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(|| {
+        parse_secure_control_wire_mode(std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE"))
+    })
+    .clone()
+}
+
+async fn maybe_secure_stream(
+    stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
+    match secure_control_wire_mode().map_err(io::Error::other)? {
+        SecureControlWireMode::Off => Ok(stream),
+        SecureControlWireMode::On => {
+            let psk = channel_psk(
+                tillandsias_secure_channel::workspace_version(),
+                WIRE_VERSION,
+                HopId::HostGuest,
+            );
+            let secure = server_handshake(stream, &psk).await?;
+            Ok(Box::new(secure))
+        }
+    }
+}
+
 /// Shared lifecycle state that the in-VM headless updates as it progresses
 /// through provisioning → ready → drain. The vsock listener reads from this
 /// on every `VmStatusRequest` so the host tray sees real state, not a stub.
@@ -67,28 +114,77 @@ const IN_VM_PODMAN_SOCKET_DEFAULT: &str = "/run/podman/podman.sock";
 /// `Draining` is set by the per-connection drain path.
 ///
 /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle, plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 6)
+/// @trace plan/issues/vm-headless-persistent-listener-2026-07-06.md (order 153, slice 1)
 #[derive(Debug, Clone)]
 pub struct VmStateHandle {
     phase: Arc<RwLock<VmPhase>>,
     podman_socket: PathBuf,
+    /// Broadcast fan-out for `VmStatusPush`: every subscribed connection gets
+    /// its own receiver, so one slow/lagging client cannot block delivery to
+    /// the others (order 153 SC-10). Bounded capacity (documented below) so a
+    /// receiver that never polls just lags and drops old frames instead of
+    /// growing memory unboundedly.
+    vm_status_tx: broadcast::Sender<ControlMessage>,
+    /// Monotonic counter for the `seq` field carried inside each push
+    /// message (distinct from the per-request `ControlEnvelope.seq`, which
+    /// pushes don't have a request to reply to).
+    push_seq: Arc<std::sync::atomic::AtomicU64>,
 }
+
+/// Bounded capacity of the `VmStatusPush` broadcast channel. VmPhase changes
+/// are infrequent (a handful over a VM's lifetime), so this only needs to
+/// cover the gap between two pushes for the slowest realistic subscriber.
+const VM_STATUS_PUSH_CAPACITY: usize = 16;
 
 impl VmStateHandle {
     /// Construct with default `Starting` phase and the conventional podman
     /// socket path. Tests and lifecycle hooks may use [`set_phase`] /
     /// [`set_podman_socket`] to drive transitions.
     pub fn new() -> Self {
+        let (vm_status_tx, _) = broadcast::channel(VM_STATUS_PUSH_CAPACITY);
         Self {
             phase: Arc::new(RwLock::new(VmPhase::Starting)),
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
+            vm_status_tx,
+            push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
+    /// Subscribe to the `VmStatus` push topic. Each call returns an
+    /// independent receiver (tokio broadcast semantics): a lagging
+    /// subscriber only affects its own receiver, never other subscribers or
+    /// the sender.
+    pub fn subscribe_vm_status(&self) -> broadcast::Receiver<ControlMessage> {
+        self.vm_status_tx.subscribe()
+    }
+
     /// Update the reported phase. The vsock handler reads this on every
-    /// `VmStatusRequest`. Safe to call from any task.
+    /// `VmStatusRequest`. Safe to call from any task. Also pushes a
+    /// `VmStatusPush` to every `VmStatus`-subscribed connection when the
+    /// phase actually changes (order 153 SC-09) — a no-op write (same phase
+    /// set twice) does not spam subscribers with redundant pushes.
     pub fn set_phase(&self, phase: VmPhase) {
-        if let Ok(mut guard) = self.phase.write() {
-            *guard = phase;
+        let changed = match self.phase.write() {
+            Ok(mut guard) => {
+                let changed = *guard != phase;
+                *guard = phase;
+                changed
+            }
+            Err(_) => false,
+        };
+        if changed {
+            let seq = self
+                .push_seq
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1;
+            // No receivers is not an error — pushes are fire-and-forget to
+            // whoever is currently subscribed.
+            let _ = self.vm_status_tx.send(ControlMessage::VmStatusPush {
+                seq,
+                phase,
+                podman_ready: self.podman_ready(),
+                last_event: Some(SERVER_NAME.to_string()),
+            });
         }
     }
 
@@ -246,6 +342,20 @@ async fn handle_connection(
     mut stream: Box<dyn AsyncReadWrite + Unpin + Send>,
     state: VmStateHandle,
 ) {
+    match maybe_secure_stream(stream).await {
+        Ok(secured) => {
+            info!(
+                spec = "vsock-transport",
+                "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
+            );
+            stream = secured;
+        }
+        Err(err) => {
+            warn!(spec = "vsock-transport", error = %err, "secure control wire handshake failed");
+            return;
+        }
+    }
+
     let first = match read_envelope(&mut stream).await {
         Ok(env) => env,
         Err(err) => {
@@ -310,6 +420,11 @@ async fn handle_connection(
     // close pty_rx).
     let _pty_tx_keepalive = pty_tx;
 
+    // Order 153 slice 1: set once `Subscribe{VmStatus}` arrives. `None` means
+    // not subscribed — the branch below is disabled entirely (never polled)
+    // via the `if` guard, so an unsubscribed connection pays zero cost.
+    let mut vm_status_rx: Option<broadcast::Receiver<ControlMessage>> = None;
+
     loop {
         tokio::select! {
             // Outbound PTY frame (PtyData{ToHost} from a pump or PtyClose
@@ -320,6 +435,43 @@ async fn handle_connection(
                     #[cfg(unix)]
                     pty_store.shutdown_all().await;
                     return;
+                }
+                continue;
+            }
+            // Server-push: VmStatusPush, once subscribed. Lagged receivers
+            // (a slow client that fell behind the broadcast buffer) skip the
+            // missed frames and keep going rather than disconnecting — the
+            // next push still carries the current phase, so no state is
+            // permanently lost, just intermediate transitions (order 153
+            // SC-10: a slow client never blocks or drops a fast one, since
+            // each subscriber has its own independent broadcast receiver).
+            push = async {
+                loop {
+                    match vm_status_rx.as_mut()?.recv().await {
+                        Ok(msg) => return Some(msg),
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(spec = "vsock-transport", skipped, "VmStatus push receiver lagged; skipping to latest");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            }, if vm_status_rx.is_some() => {
+                match push {
+                    Some(body) => {
+                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
+                        if write_envelope(&mut stream, &env).await.is_err() {
+                            debug!(spec = "vsock-transport", "vsock write failed during VmStatusPush; closing connection");
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                    }
+                    None => {
+                        // Sender dropped (should not happen — VmStateHandle
+                        // outlives connections) — stop polling this branch.
+                        vm_status_rx = None;
+                    }
                 }
                 continue;
             }
@@ -418,6 +570,24 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope(&mut stream, &reply).await.is_err() {
+                    return;
+                }
+            }
+            // Order 153 slice 1: only the VmStatus topic is wired to a real
+            // push source so far; LoginState/CloudProjects subscriptions are
+            // accepted (SubscribeAck) but don't yet deliver pushes — those
+            // land in follow-on slices once the vault/cloud-refresh call
+            // sites gain their own broadcast sources.
+            ControlMessage::Subscribe { topics } => {
+                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::VmStatus) {
+                    vm_status_rx = Some(state.subscribe_vm_status());
+                }
+                let ack = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::SubscribeAck,
+                };
+                if write_envelope(&mut stream, &ack).await.is_err() {
                     return;
                 }
             }
@@ -765,7 +935,42 @@ mod tests {
 
     // (parse_gh_repo_list tests moved to crate::cloud_projects with the
     // function itself. The vsock-side fetch_cloud_projects wrapper is
-    // now a thin token-read shim, not worth a separate test target.)
+    // now a thin token-read shim, not worth a separate token-read target.)
+
+    /// The secure-control-wire gate must DEFAULT OFF (absent/empty/"off" =
+    /// plaintext, so the flip is opt-in and off is a no-op) and must FAIL CLOSED
+    /// on any unrecognized value — an unknown flag is an error, never a silent
+    /// downgrade to plaintext. @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
+    #[test]
+    fn secure_control_wire_flag_defaults_off_and_fails_closed() {
+        use std::env::VarError;
+        // default OFF paths (no behaviour change when the flag is unset/off/empty)
+        assert_eq!(
+            parse_secure_control_wire_mode(Err(VarError::NotPresent)).unwrap(),
+            SecureControlWireMode::Off
+        );
+        assert_eq!(
+            parse_secure_control_wire_mode(Ok("off".to_string())).unwrap(),
+            SecureControlWireMode::Off
+        );
+        assert_eq!(
+            parse_secure_control_wire_mode(Ok(String::new())).unwrap(),
+            SecureControlWireMode::Off
+        );
+        // explicit ON (case-insensitive)
+        assert_eq!(
+            parse_secure_control_wire_mode(Ok("on".to_string())).unwrap(),
+            SecureControlWireMode::On
+        );
+        assert_eq!(
+            parse_secure_control_wire_mode(Ok("ON".to_string())).unwrap(),
+            SecureControlWireMode::On
+        );
+        // FAIL CLOSED: garbage is an error, NOT a silent fallback to Off/plaintext
+        assert!(parse_secure_control_wire_mode(Ok("yes".to_string())).is_err());
+        assert!(parse_secure_control_wire_mode(Ok("1".to_string())).is_err());
+        assert!(parse_secure_control_wire_mode(Ok("true".to_string())).is_err());
+    }
 
     /// Default is `Starting` (gap-6 contract). The vsock listener can
     /// answer VmStatusRequest the moment it binds, but the in-VM
@@ -793,6 +998,66 @@ mod tests {
         let b = a.clone();
         a.set_phase(VmPhase::Stopping);
         assert_eq!(b.current_phase(), VmPhase::Stopping);
+    }
+
+    /// Order 153 slice 1 SC-09: a real phase change pushes a VmStatusPush
+    /// to a subscribed receiver.
+    #[tokio::test]
+    async fn set_phase_pushes_vm_status_on_change() {
+        let state = VmStateHandle::new();
+        let mut rx = state.subscribe_vm_status();
+        state.set_phase(VmPhase::Ready);
+        let msg = rx.try_recv().expect("push should be immediately available");
+        match msg {
+            ControlMessage::VmStatusPush { phase, .. } => assert_eq!(phase, VmPhase::Ready),
+            other => panic!("expected VmStatusPush, got {other:?}"),
+        }
+    }
+
+    /// Setting the SAME phase twice must not spam subscribers with a
+    /// redundant push — only a real transition is push-worthy.
+    #[tokio::test]
+    async fn set_phase_does_not_push_when_unchanged() {
+        let state = VmStateHandle::new();
+        state.set_phase(VmPhase::Ready);
+        let mut rx = state.subscribe_vm_status();
+        state.set_phase(VmPhase::Ready); // no-op: already Ready
+        assert!(matches!(
+            rx.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
+    }
+
+    /// Order 153 SC-10: multiple subscribers each get their own
+    /// independent stream of pushes — one is not starved by another.
+    #[tokio::test]
+    async fn multiple_subscribers_each_receive_pushes() {
+        let state = VmStateHandle::new();
+        let mut rx_a = state.subscribe_vm_status();
+        let mut rx_b = state.subscribe_vm_status();
+        state.set_phase(VmPhase::Ready);
+        assert!(rx_a.try_recv().is_ok());
+        assert!(rx_b.try_recv().is_ok());
+    }
+
+    /// A subscriber that never polls falls behind the bounded broadcast
+    /// buffer and gets `Lagged`, not a hang or a panic — the connection
+    /// loop's `RecvError::Lagged` arm (see `handle_connection`'s select!)
+    /// is what turns this into "skip to latest" instead of dropping the
+    /// client.
+    #[tokio::test]
+    async fn slow_subscriber_lags_instead_of_blocking() {
+        let state = VmStateHandle::new();
+        let mut rx = state.subscribe_vm_status();
+        // Overflow the bounded channel capacity without ever calling recv().
+        for _ in 0..(VM_STATUS_PUSH_CAPACITY + 2) {
+            state.set_phase(VmPhase::Starting);
+            state.set_phase(VmPhase::Ready);
+        }
+        match rx.try_recv() {
+            Err(broadcast::error::TryRecvError::Lagged(_)) => {}
+            other => panic!("expected Lagged, got {other:?}"),
+        }
     }
 
     #[test]

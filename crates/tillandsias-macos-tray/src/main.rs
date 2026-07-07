@@ -20,6 +20,8 @@ mod action_host;
 #[cfg(target_os = "macos")]
 mod diagnose;
 #[cfg(target_os = "macos")]
+mod guest_binary;
+#[cfg(target_os = "macos")]
 mod installation_uuid;
 #[cfg(target_os = "macos")]
 mod main_thread;
@@ -100,7 +102,7 @@ fn main() {
         // --exec-guest "ls -la" or --exec-guest tillandsias --debug --init
         // without needing to pre-split argv themselves.
         let shell_cmd = args[idx + 1..].join(" ");
-        let guest_argv = vec!["/bin/sh".to_string(), "-c".to_string(), shell_cmd];
+        let guest_argv = vec!["/bin/bash".to_string(), "-lc".to_string(), shell_cmd];
         std::process::exit(diagnose::exec_guest_main(guest_argv));
     }
     // Headless GitHub login: boot the VM and drive the guest --github-login over
@@ -137,6 +139,21 @@ fn main() {
         };
         std::process::exit(diagnose::main(format));
     }
+
+    let _singleton_guard =
+        match tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray") {
+            Ok(Some(guard)) => guard,
+            Ok(None) => {
+                eprintln!(
+                    "[tillandsias-tray] another macOS tray instance is already running; exiting"
+                );
+                std::process::exit(0);
+            }
+            Err(err) => {
+                eprintln!("[tillandsias-tray] singleton guard failed: {err}");
+                std::process::exit(1);
+            }
+        };
     status_item::run();
 }
 
@@ -146,4 +163,30 @@ fn main() {
         "tillandsias-macos-tray runs on macOS only — see openspec/specs/macos-native-tray/spec.md"
     );
     std::process::exit(1);
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn singleton_guard_applies_only_to_appkit_tray_mode() {
+        let source = include_str!("main.rs");
+        let guard_idx = source
+            .find("SingletonGuard::try_acquire(\"tillandsias-macos-tray\")")
+            .expect("macOS tray must acquire a non-destructive singleton guard");
+        let diagnose_idx = source
+            .find("diagnose::main(format)")
+            .expect("--diagnose handler must exist");
+        let appkit_idx = source
+            .find("status_item::run()")
+            .expect("AppKit tray launch must exist");
+
+        assert!(
+            diagnose_idx < guard_idx,
+            "CLI utility modes must exit before the singleton guard"
+        );
+        assert!(
+            guard_idx < appkit_idx,
+            "AppKit tray mode must acquire the singleton guard before launch"
+        );
+    }
 }

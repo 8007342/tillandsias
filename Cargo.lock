@@ -3086,7 +3086,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.3.260704"
+version = "0.3.260705"
 dependencies = [
  "async-trait",
  "dirs",
@@ -3109,7 +3109,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "0.3.260704"
+version = "0.3.260705"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3133,6 +3133,7 @@ dependencies = [
  "tillandsias-metrics",
  "tillandsias-otp",
  "tillandsias-podman",
+ "tillandsias-secure-channel",
  "tillandsias-vault-client",
  "tokio",
  "tokio-vsock",
@@ -3157,6 +3158,7 @@ dependencies = [
  "tillandsias-control-wire",
  "tillandsias-core",
  "tillandsias-scanner",
+ "tillandsias-secure-channel",
  "tillandsias-vm-layer",
  "tokio",
  "tracing",
@@ -3209,7 +3211,9 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tillandsias-control-wire",
+ "tillandsias-core",
  "tillandsias-host-shell",
+ "tillandsias-secure-channel",
  "tillandsias-vm-layer",
  "tokio",
  "tracing",
@@ -3245,7 +3249,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.3.260704"
+version = "0.3.260705"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3307,7 +3311,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.3.260704"
+version = "0.3.260705"
 dependencies = [
  "dirs",
  "notify",
@@ -3369,6 +3373,7 @@ dependencies = [
  "tillandsias-control-wire",
  "tokio",
  "toml 0.8.2",
+ "tracing",
  "windows 0.58.0",
  "xz2",
 ]
@@ -3382,7 +3387,9 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tillandsias-control-wire",
+ "tillandsias-core",
  "tillandsias-host-shell",
+ "tillandsias-secure-channel",
  "tillandsias-vm-layer",
  "tokio",
  "tracing",

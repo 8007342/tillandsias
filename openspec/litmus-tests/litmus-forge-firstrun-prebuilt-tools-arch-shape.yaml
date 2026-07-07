@@ -1,0 +1,89 @@
+# @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
+# @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180)
+#
+# The cargo dev-tools must install at ARCH-AWARE FIRST_RUN (into the order-179
+# persistent cache), NOT at container CREATION with hardcoded x86_64 URLs. This
+# falsifies (a) drift back to the Containerfile install_archive cargo chain (which
+# hung the aarch64 macOS VM build + baked non-executable x86_64 binaries), and (b)
+# a first-run helper that hardcodes x86_64 instead of resolving $(uname -m).
+name: litmus:forge-firstrun-prebuilt-tools-arch-shape
+spec: default-image
+phase: pre-build
+description: >
+  Pin the order-188 migration: lib-common has an arch-aware, fail-soft
+  install_prebuilt + ensure_forge_prebuilt_tools (resolving $(uname -m), NOT a
+  hardcoded x86_64 triple, with a curl --max-time so a stalled fetch cannot hang
+  launch); the forge entrypoints call it backgrounded; and the cargo-tools
+  install_archive block is gone from Containerfile.base.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains images/default/Containerfile.base
+
+critical_path:
+  - step: "lib-common defines the arch-aware prebuilt-tool helpers"
+    command: "grep -qF 'ensure_forge_prebuilt_tools' images/default/lib-common.sh && grep -qF 'install_prebuilt' images/default/lib-common.sh && grep -qF '_forge_uname_arch' images/default/lib-common.sh && echo 'ok: helpers present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: helpers present"
+
+  - step: "arch is resolved from uname -m (aarch64 + x86_64), not assumed"
+    command: "grep -qF 'uname -m' images/default/lib-common.sh && grep -qF 'aarch64' images/default/lib-common.sh && echo 'ok: arch-resolved'"
+    timeout_ms: 3000
+    expected_behavior: "ok: arch-resolved"
+
+  - step: "the cargo-tool install URLs are arch-parameterized (no hardcoded x86_64 cargo asset in lib-common)"
+    command: "grep -qE 'cargo-chef-[0-9.]+-x86_64' images/default/lib-common.sh && { echo 'FAIL: hardcoded x86_64 cargo asset'; exit 1; } || echo 'ok: no hardcoded x86_64 cargo asset'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no hardcoded x86_64 cargo asset"
+
+  - step: "install_prebuilt is timeout-guarded (a stalled fetch cannot hang launch)"
+    command: "grep -qF 'max-time' images/default/lib-common.sh && echo 'ok: timeout-guarded'"
+    timeout_ms: 3000
+    expected_behavior: "ok: timeout-guarded"
+
+  - step: "forge entrypoints trigger the first-run tool install (backgrounded)"
+    command: "grep -qF 'ensure_forge_prebuilt_tools' images/default/entrypoint-forge-codex.sh && grep -qF 'ensure_forge_prebuilt_tools' images/default/entrypoint-forge-claude.sh && echo 'ok: entrypoints wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: entrypoints wired"
+
+  - step: "the cargo-tools install_archive block is GONE from Containerfile.base creation"
+    command: "grep -qF 'install_archive cargo-chef' images/default/Containerfile.base && { echo 'FAIL: cargo chain still at build'; exit 1; } || echo 'ok: cargo chain removed from creation'"
+    timeout_ms: 3000
+    expected_behavior: "ok: cargo chain removed from creation"
+
+  - step: "slice 2: actionlint/vale/wasmtime also arch-aware first-run, and gone from creation"
+    # @trace order 180 slice 2: actionlint/vale/wasmtime moved to first-run
+    # install_prebuilt (arch tokens differ from the cargo triple); the whole
+    # install_archive helper is gone from Containerfile.base (dart followed in the
+    # dart sub-slice below).
+    command: "for t in actionlint vale wasmtime; do grep -qF \"install_prebuilt $t \" images/default/lib-common.sh || { echo \"FAIL: $t not first-run\"; exit 1; }; done; if grep -qF 'install_archive' images/default/Containerfile.base; then echo 'FAIL: install_archive still at build'; exit 1; fi; echo 'ok: actionlint/vale/wasmtime first-run, install_archive gone'"
+    timeout_ms: 3000
+    expected_behavior: "ok: actionlint/vale/wasmtime first-run, install_archive gone"
+
+  - step: "dart sub-slice: Dart SDK installs arch-aware at FIRST_RUN (ensure_dart_sdk), gone from creation"
+    # @trace order 180 dart sub-slice: dart migrated from a CREATION-time curl+unzip of
+    # an x86_64 SDK to /opt/dart-sdk into an arch-aware, fail-soft FIRST_RUN install
+    # (lib-common ensure_dart_sdk, x64|arm64) into the order-179 persistent cache. This
+    # COMPLETES forge-base CREATION becoming microdnf-only (no curl/tar/unzip chains).
+    command: "grep -qF 'ensure_dart_sdk' images/default/lib-common.sh || { echo 'FAIL: ensure_dart_sdk missing'; exit 1; }; if grep -qF 'dartsdk-linux' images/default/Containerfile.base; then echo 'FAIL: dart SDK still fetched at build'; exit 1; fi; echo 'ok: dart SDK first-run, gone from creation'"
+    timeout_ms: 3000
+    expected_behavior: "ok: dart SDK first-run, gone from creation"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "forge cargo dev-tools install arch-aware at FIRST_RUN (order 188); creation-time cargo chain removed"
+  log_fields:
+    spec: "default-image"
+    test: "forge-firstrun-prebuilt-tools-arch-shape"
+    artifact: "images/default/lib-common.sh"
+
+rollback:
+  on_failure: >
+    The order-188 arch-aware first-run tool migration drifted. Restore
+    ensure_forge_prebuilt_tools + install_prebuilt in lib-common.sh (arch from
+    $(uname -m), curl --max-time, fail-soft), keep the forge entrypoints calling it
+    backgrounded, and keep the cargo-tools install_archive block OUT of
+    Containerfile.base.

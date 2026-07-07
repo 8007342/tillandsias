@@ -139,8 +139,9 @@ specs:
   litmus_tests:
   - litmus:ci-release-musl-binary-policy
   - litmus:ci-release-toolchain-shape
-  coverage_ratio: 67
-  last_verified: '2026-05-29'
+  - litmus:guest-binary-embed-integrity
+  coverage_ratio: 75
+  last_verified: '2026-07-05'
 - spec_id: codex-tray-launcher
   status: active
   litmus_tests:
@@ -184,8 +185,9 @@ specs:
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-30'
+  - litmus:forge-firstrun-prebuilt-tools-arch-shape
+  coverage_ratio: 80
+  last_verified: '2026-07-05'
 - spec_id: dev-build
   status: active
   litmus_tests:
@@ -288,8 +290,9 @@ specs:
   litmus_tests:
   - litmus:forge-cache-dual-shape
   - litmus:forge-cache-dual-tmpfs-caps
-  coverage_ratio: 67
-  last_verified: '2026-05-29'
+  - litmus:forge-persistent-tool-cache-mount-shape
+  coverage_ratio: 75
+  last_verified: '2026-07-04'
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
@@ -403,8 +406,9 @@ specs:
   - litmus:inference-readiness-probe-shape
   - litmus:inference-deferred-model-pulls
   - litmus:inference-container-implementation-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-31'
+  - litmus:inference-firstrun-default-models-shape
+  coverage_ratio: 80
+  last_verified: '2026-07-04'
 - spec_id: inference-host-side-pull
   status: obsolete
   litmus_tests: null
@@ -673,8 +677,9 @@ specs:
   litmus_tests:
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
+  - litmus:litmus-runner-backslash-escaping-shape
   coverage_ratio: 75
-  last_verified: '2026-05-30'
+  last_verified: '2026-07-06'
 - spec_id: subdomain-naming-flip
   status: active
   litmus_tests:
@@ -892,3 +897,11 @@ specs:
   - litmus:enclave-isolation
   - litmus:reverse-proxy-internal-shape
   coverage_ratio: 75
+- spec_id: host-guest-transport
+  status: active
+  litmus_tests:
+  - litmus:secure-control-wire-guest-responder-shape
+  - litmus:psk-input-parity-shape
+  - litmus:host-guest-no-cfg-transport-selection
+  coverage_ratio: 67
+  last_verified: '2026-07-06'
