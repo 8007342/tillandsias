@@ -4740,12 +4740,25 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
 
     ensure_image_exists(&root, config.image_name, &image, debug)?;
 
-    ensure_enclave_network(debug)?;
-
+    // Route infrastructure bring-up through the container dependency model
+    // (order 227).  This replaces the ad-hoc ensure_enclave_network →
+    // ensure_vault_running → ensure_proxy_running chain with a single
+    // topological ensure that enforces the graph invariant at compile time.
     #[cfg(feature = "vault")]
-    vault_bootstrap::ensure_vault_running(debug)?;
-
-    ensure_proxy_running(debug)?;
+    {
+        use crate::container_deps::ensure_git_login;
+        let _witness = ensure_git_login(debug)?;
+        // _witness: Up<GitLoginReady> — proves Vault, Proxy, and their
+        // transitive dependencies are running.
+    }
+    #[cfg(not(feature = "vault"))]
+    {
+        // Without Vault the dependency model can't satisfy GitLogin's
+        // prerequisites.  Fall back to the manual ensure chain (enclave
+        // network + proxy only).
+        ensure_enclave_network(debug)?;
+        ensure_proxy_running(debug)?;
+    }
 
     check_auth_required_services(&["tillandsias-vault", "tillandsias-proxy"], debug)?;
 
@@ -4977,12 +4990,12 @@ fn run_list_cloud_projects(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --list-cloud-projects")?;
     report_runtime_lane("--list-cloud-projects", debug);
 
-    vault_bootstrap::ensure_vault_running(debug)?;
-    // The containerized `gh` fetch reaches GitHub through the enclave proxy
-    // (only egress path on the --internal enclave network). Start it or the
-    // fetch fails with "error connecting to proxy".
-    // @trace plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
-    ensure_proxy_running(debug)?;
+    // Route infrastructure bring-up through the container dependency model
+    // (order 227).  Ensures vault + proxy + transitive deps in graph order.
+    {
+        use crate::container_deps::ensure_git_login;
+        let _witness = ensure_git_login(debug)?;
+    }
     // Squid's sslcrtd cert-generator child takes a few seconds to initialize
     // after the container starts listening on :3128.  Without this check the
     // containerized `gh` HTTPS handshake can race sslcrtd and hang for the
@@ -9251,10 +9264,12 @@ mod tests {
         );
         // The dual-home leg only resolves if the managed egress network exists.
         // `--github-login` can run without a prior full `--init`, so the login
-        // path must ensure the networks itself.
+        // path now routes infrastructure bring-up through the container
+        // dependency graph (order 227) which ensures enclave+egress networks
+        // as GitLogin prerequisites.
         assert!(
-            login_window.contains("ensure_enclave_network(debug)?"),
-            "run_provider_login must ensure the enclave+egress networks before launching the helper: {login_window}"
+            login_window.contains("ensure_git_login(debug)?"),
+            "run_provider_login must ensure enclave+egress+ca+vault+proxy via the dependency model: {login_window}"
         );
     }
 
@@ -9268,12 +9283,16 @@ mod tests {
         let image_idx = login_window
             .find("ensure_image_exists(&root, config.image_name, &image, debug)?")
             .expect("github login must preflight the git image");
-        let network_idx = login_window
-            .find("ensure_enclave_network(debug)?")
-            .expect("github login must preflight the managed networks");
-        let vault_idx = login_window
-            .find("vault_bootstrap::ensure_vault_running(debug)?")
-            .expect("github login must preflight Vault");
+        // Infrastructure bring-up is now routed through the container
+        // dependency model (order 227) via a single `ensure_git_login` call
+        // that topologically satisfies EnclaveNetwork → EgressNetwork →
+        // CaBundle → Vault → Proxy.
+        let deps_check_idx = login_window
+            .find("ensure_git_login(debug)?")
+            .expect("github login must satisfy all prerequisite services via the dependency model");
+        let infra_health_idx = login_window
+            .find("check_auth_required_services(&[\"tillandsias-vault\", \"tillandsias-proxy\"], debug)?")
+            .expect("github login must health-check the core services");
         let helper_idx = login_window
             .find("run_command_silent(run, debug)?;")
             .expect("github login must start the helper container before prompts");
@@ -9292,8 +9311,8 @@ mod tests {
 
         for (label, idx) in [
             ("image", image_idx),
-            ("network", network_idx),
-            ("vault", vault_idx),
+            ("deps model", deps_check_idx),
+            ("infra health", infra_health_idx),
             ("helper", helper_idx),
             ("helper health", helper_health_idx),
         ] {
@@ -9302,6 +9321,14 @@ mod tests {
                 "{label} preflight must happen before credential prompts: {login_window}"
             );
         }
+        assert!(
+            deps_check_idx < infra_health_idx,
+            "dependency model must complete before the core-service health check: {login_window}"
+        );
+        assert!(
+            infra_health_idx < helper_idx,
+            "core service health check must pass before the helper container starts: {login_window}"
+        );
         assert!(
             helper_idx < helper_preflight_idx && helper_preflight_idx < helper_health_idx,
             "the health preflight must target the helper container after it starts: {login_window}"
@@ -9334,16 +9361,16 @@ mod tests {
     /// Every standalone flow that uses the GitHub token (list projects, future
     /// cloud operations) must ensure vault+proxy are up before dispatching any
     /// containerized `gh` invocation, or the token-read and egress both fail.
+    /// Infrastructure bring-up is now routed through the container dependency
+    /// model (order 227) via `ensure_git_login` which topologically satisfies
+    /// all prerequisite services.
     #[test]
     fn list_cloud_projects_preflight_order() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let window = source_window(source, "fn run_list_cloud_projects(debug: bool)");
-        let vault_idx = window
-            .find("ensure_vault_running(debug)?")
-            .expect("run_list_cloud_projects must preflight Vault");
-        let proxy_idx = window
-            .find("ensure_proxy_running(debug)?")
-            .expect("run_list_cloud_projects must preflight proxy");
+        let deps_idx = window
+            .find("ensure_git_login(debug)?")
+            .expect("run_list_cloud_projects must satisfy prerequisites via the dependency model");
         let health_idx = window
             .find("check_auth_required_services(&[\"tillandsias-proxy\"], debug)?")
             .expect("run_list_cloud_projects must health-check the proxy");
@@ -9352,12 +9379,8 @@ mod tests {
             .expect("run_list_cloud_projects must call the fetch function");
 
         assert!(
-            vault_idx < proxy_idx,
-            "Vault must be ensured before proxy: run_list_cloud_projects"
-        );
-        assert!(
-            proxy_idx < health_idx,
-            "Proxy must be ensured before health-check: run_list_cloud_projects"
+            deps_idx < health_idx,
+            "Dependency model must complete before proxy health-check: run_list_cloud_projects"
         );
         assert!(
             health_idx < fetch_idx,
