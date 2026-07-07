@@ -4566,14 +4566,14 @@ plan_index:
 
     - packet_id: forge-git-mirror-agent-affordance
       order: 237
-      title: "Research + implement: in-forge agent transparent git push to forge mirror (no credentials needed)"
+      title: "Research + implement: in-forge agent transparent git push to forge mirror (properly authenticated)"
       status: ready
       kind: research+enhancement
       deliverable: plan/issues/forge-git-mirror-agent-affordance-2026-07-07.md
       depends_on: []
       pickup_role: forge
       capability_tags: [forge, git, container, infrastructure]
-      estimated_hours: 3
+      estimated_hours: 4
       scope_note: >
         Agents inside the forge currently fail git push because `git push origin`
         prompts for credentials or errors with `could not read Username`. The
@@ -4581,26 +4581,36 @@ plan_index:
         pushes from the enclave with no authentication, but agents do not know
         this and either abort on credential prompts or fail when git falls back
         to HTTPS mode. This packet is ELIGIBLE ONLY by in-forge agents (agents
-        running inside the forge container). Research and implement the simplest
-        approach: either (A) inject a fake credential into the forge agent
-        environment so git push to the mirror succeeds transparently, (B)
-        configure git inside the forge to never prompt for credentials when the
-        remote is the local mirror, or (C) have the git-mirror present a dummy
-        auth endpoint so agents that probe credentials see a successful handshake.
-        The token/credential must be forge-enclave-only — if leaked outside the
-        forge it is useless (only valid for the local mirror within the enclave
-        network, scoped to the current session). Evidence: a forge agent can
-        commit and push without any manual credential intervention.
+        running inside the forge container).
+
+        The solution must provide REAL, properly-scoped authentication — not
+        dummy endpoints or fake credentials. The forge environment should inject
+        a real credential (e.g. a per-session token, a git credential helper, or
+        embedded git config) that authenticates the agent to the local git-mirror.
+        The credential must be:
+        - Cryptographically valid for the git-mirror's auth mechanism
+        - Scoped exclusively to the forge enclave network — useless if leaked
+          beyond the local `tillandsias-git` container
+        - Tied to the current forge session (ephemeral, not persistent on disk)
+
+        Research and implement the simplest approach that meets these constraints:
+        (A) inject a per-session git credential (via GIT_ASKPASS, git-credential
+        helper, or .gitconfig with embedded password) at forge container launch,
+        (B) configure the forge mirror container to issue time-limited tokens
+        that the forge retrieves at agent launch and presents on push.
+        Evidence: a forge agent can commit and push without any manual
+        credential intervention, using real authenticated git operations.
       outcome: >
-        In-forge agents can git commit and git push to the forge mirror without
-        any credential setup, manual intervention, or CI-like "no credential"
-        errors. The push is handled transparently regardless of whether the agent
-        expects credentials or not.
+        In-forge agents can git commit and git push to the forge mirror with
+        real, forge-scoped authentication — no manual credential setup, no
+        CI-style "no credential" errors. The credential is ephemeral, scoped
+        to the enclave, and useless outside the forge network.
       exit_criteria:
-        - "In-forge agent can run `git push origin linux-next` without any credential prompt or error"
-        - "In-forge agent can run `git commit -m msg && git push` as a blind two-step without auth setup"
-        - "The credential (if any) is scoped to the forge enclave and useless outside the `tillandsias-git` network"
-        - "Evidence: forge run with meta-orchestration pushes plan changes without credential failure"
+        - "In-forge agent runs `git push origin linux-next` using real authentication, no credential prompt or error"
+        - "In-forge agent runs `git commit -m msg && git push` as a blind two-step without auth setup"
+        - "The credential is cryptographically valid but scoped to the forge enclave — useless outside `tillandsias-git` network"
+        - "Credential is ephemeral (per-session): does not persist between forge container restarts"
+        - "Evidence: forge run with meta-orchestration pushes plan changes with authenticated git operations, no credential failure"
 
     - packet_id: forge-git-mirror-credential-injection
       order: 238
