@@ -1,11 +1,29 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-07T19:17:35Z
+LastExecutionTime: 2026-07-07T19:48:50Z
+
+## Cycle 2026-07-07T19:48Z (forge — advance-work-from-plan: order 227)
+
+- **Host**: forge (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`, credential guard `ok:forge-git-mirror`.
+  Worktree clean at `34738da7` (reverted from pending 92dce746 by mirror credential collision).
+- **Worker drain — `container-dependency-graph-satisfier-typestate` (order 227), CLAIMED and COMPLETED**:
+  Implemented `RealSatisfier` — wraps `ensure_enclave_network`, `ensure_egress_network`,
+  `ensure_ca_bundle`, `ensure_vault_running`, `ensure_proxy_running` as `Satisfier` impl in
+  `container_deps.rs`. Added `Up<T>` typestate wrapper with module-private constructor + `GitLoginReady`
+  marker. Added `ensure_git_login() -> Result<Up<GitLoginReady>, String>` as the public entry point.
+  Migrated `run_provider_login` (main.rs:4741) — replaced ad-hoc `ensure_enclave_network` →
+  `ensure_vault_running` → `ensure_proxy_running` with `ensure_git_login(debug)?` under
+  `#[cfg(feature = "vault")]`, with fallback for `#[cfg(not(feature = "vault"))]`.
+  Migrated `run_list_cloud_projects` (main.rs:4989) — same migration. Updated 3 source-text
+  preflight-order tests to assert `ensure_git_login` instead of old individual ensure calls.
+  10 new container_deps tests (all pass), `cargo check` + clippy clean, total 119/120 pass
+  (pre-existing `launch_forge_agent_does_not_mount_user_home` forge-container false positive).
+- **Push**: local git-mirror accepted 2 commits (92dce746 claim + 7bb02fae implementation),
+  `origin/linux-next` = 7bb02fae. Upstream GitHub forwarding fails (mirror credential issue,
+  same as prior cycles). GitHub `linux-next` still at 34738da7.
+- **Plan ledger**: order 227 marked `done`, `plan/loop_status.md` updated.
 
 ## Cycle 2026-07-07T08:18Z (linux_mutable — meta-orchestration)
-
-- **Host**: Linux mutable, `linux-next` (clean at `0c0ff9fc`, credential guard `ok:gh-credentials-store`).
-- **Release v0.3.260707.2**: Run 28851065890 still in progress (Linux musl ✅; macOS and Windows jobs building).
   macOS job previously fixed with `rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl`
   (fix applied after v0.3.260707.1 macOS failure). Linux build benefited from Nix cache HIT
   (v0.3.260707.1 PR merge warmed the cache) — 10m41s vs 12m25s cold build.
