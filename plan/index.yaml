@@ -198,6 +198,10 @@ plan_index:
       order: 122
       title: "Implement: compile-time container dependency model"
       status: ready
+      split_into:
+        - "227 — container-dependency-graph-satisfier-typestate (slice 3: real Satisfier + typestate Up<S> + trybuild)"
+        - "228 — container-dependency-graph-liveness (slice 4: runtime liveness probe)"
+        - "229 — container-dependency-graph-drift-litmus (slice 5: gated-launch drift litmus)"
       kind: enhancement
       deliverable: plan/issues/container-dependency-graph-impl-2026-06-27.md
       depends_on: [container-dependency-graph-research]
@@ -1215,6 +1219,9 @@ plan_index:
       order: 153
       title: "VM Headless: persistent vsock listener + server-push event stream"
       status: ready
+      split_into:
+        - "230 — headless-loginstatus-push (slice 2: LoginStatePush on Vault token change)"
+        - "231 — headless-cloudprojects-push (slice 3: CloudProjectsPush on gh repo list change)"
       kind: refactor+implementation
       deliverable: crates/tillandsias-headless/src/
       depends_on: [socket-protocol-push-variants]
@@ -1805,6 +1812,11 @@ plan_index:
       order: 162
       title: "Headless: shared-container ownership + ensure_* concurrency safety"
       status: ready
+      split_into:
+        - "232 — container-concurrency-flock (R4: advisory flock per resource)"
+        - "233 — container-shared-cleanup-guard (R5: shared containers not removed)"
+        - "234 — container-phase-self-heal (R6: phase-aware self-heal)"
+        - "235 — container-vault-recreate-mutex (R7: vault recreate mutual exclusion)"
       kind: refactor+bug-fix
       deliverable: crates/tillandsias-headless/src/
       depends_on: [race-safeguards-research]
@@ -4279,3 +4291,248 @@ plan_index:
         - "root cause identified via bash -x: the exact blocking call between distro-detect and podman build invocation for the vault image — DONE (not vault-specific: this sandbox's build-container egress is blackholed directly and unreachable via the enclave-only proxy hostname either way)"
         - "the call either fails fast (matching git/proxy/inference's behavior) or is given a bounded timeout instead of hanging indefinitely — DONE (bounded timeout wrapper, all 4 podman build call sites)"
         - "scripts/build-image.sh vault --force completes (success or a fast, legible failure) on an offline host within a few seconds, matching the other 3 images — DONE: now fails within TILLANDSIAS_BUILD_TIMEOUT_SECS (default 1800s, configurable) with a clear message instead of hanging forever; succeeds normally when network is actually reachable (verified all 5 images build clean on this now-online host)"
+
+    # ── Sliced from order 122 (container-dependency-graph-impl) — 2026-07-07 ──
+    # Split per meta-orchestration Reducer directive: 10h → 3 × ~2-3h slices.
+    # Slice 1 (declarative graph + acyclic/completeness tests) DONE.
+    # Slice 2 (ensure_with topological driver + Satisfier trait) DONE.
+    # ───────────────────────────────────────────────────────────────────────────
+
+    - packet_id: container-dependency-graph-satisfier-typestate
+      order: 227
+      title: "Container deps slice 3: real Satisfier wraps ensure_* + typestate Up<S> + trybuild compile-fail"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/container_deps/
+      depends_on: [container-dependency-graph-impl]
+      pickup_role: linux
+      capability_tags: [rust, headless, podman, typestate]
+      estimated_hours: 3
+      outcome: >
+        Replace the test-only FakeSatisfier from slice 2 with a real Satisfier
+        that wraps ensure_enclave_network/ensure_vault_running/ensure_proxy_running.
+        Add typestate Up<S> launch witnesses (prove at compile time that
+        vault+proxy precede GitLogin) with a trybuild compile-fail test showing
+        a skipped prerequisite is rejected. Migrate github-login and
+        list-cloud-projects as first consumers so the proxy/vault prerequisites
+        can't be skipped without a compile error.
+      exit_criteria:
+        - "real Satisfier ensures vault, then proxy, then health-check in topological order"
+        - "Up<S> typestate witness + trybuild compile-fail proves skipped prerequisite is rejected at compile time"
+        - "github-login and list-cloud-projects route through the dependency model"
+        - "./build.sh --check and --test pass"
+
+    - packet_id: container-dependency-graph-liveness
+      order: 228
+      title: "Container deps slice 4: runtime liveness probe for all managed containers"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/container_deps/
+      depends_on: [container-dependency-graph-satisfier-typestate]
+      pickup_role: linux
+      capability_tags: [rust, headless, podman, observability]
+      estimated_hours: 2
+      outcome: >
+        Add a runtime liveness probe that periodically (or on-demand) checks
+        every managed container (vault, proxy, git, inference, router) is
+        still running and healthy. A dead container triggers re-ensure
+        (idempotent). Wire into VmPhase::Ready steady-state so the headless
+        self-heals without a full restart.
+      exit_criteria:
+        - "liveness check iterates all managed containers, reports pass/fail per container"
+        - "a dead container is re-ensured (idempotent, no crash)"
+        - "integrated into VmPhase::Ready steady-state loop"
+        - "litmus:container-liveness-probe green; ./build.sh --check and --test pass"
+
+    - packet_id: container-dependency-graph-drift-litmus
+      order: 229
+      title: "Container deps slice 5: gated-launch drift litmus + compile-time dependency invariant"
+      status: ready
+      kind: test+guardrail
+      deliverable: crates/tillandsias-headless/src/container_deps/
+      depends_on: [container-dependency-graph-liveness]
+      pickup_role: linux
+      capability_tags: [litmus, rust, testing]
+      estimated_hours: 1
+      outcome: >
+        Add the final gated-launch drift litmus: a launch that skips a
+        prerequisite must be a compile error or litmus failure. Pins the
+        invariant that the dependency graph is the single source of truth
+        for container bring-up order. Completes the litmus coverage for
+        the container-dependency-graph packet family.
+      exit_criteria:
+        - "litmus:launch-skips-prerequisite-fails green (proves the gate)"
+        - "all launch paths route through the dependency model (grep litmus)"
+        - "./build.sh --check and --test pass"
+
+    # ── Sliced from order 153 (vm-headless-persistent-listener) — 2026-07-07 ──
+    # Slice 1 (VmStatus push topic, bounded broadcast channel, Subscribe routing)
+    # DONE. Split remaining 2 push topics into own packets.
+    # ───────────────────────────────────────────────────────────────────────────
+
+    - packet_id: headless-loginstatus-push
+      order: 230
+      title: "Headless: emit LoginStatePush on Vault token change"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
+      depends_on: [vm-headless-persistent-listener]
+      pickup_role: linux
+      capability_tags: [rust, headless, vault, vsock]
+      estimated_hours: 4
+      outcome: >
+        Wire the VmStatus broadcast channel pattern from slice 1 into
+        vault_bootstrap.rs: when a Vault token change is detected (via KV
+        watch or periodic check), emit LoginStatePush to all subscribed
+        clients. SubscribeAck for LoginState topic already sent on
+        Subscribe; this adds the actual push event source.
+      exit_criteria:
+        - "login state change triggers LoginStatePush to all subscribed clients"
+        - "no redundant push on unchanged state (matches slice 1 set_phase pattern)"
+        - "unit test: vault token change emits LoginStatePush"
+        - "./build.sh --check and --test pass"
+
+    - packet_id: headless-cloudprojects-push
+      order: 231
+      title: "Headless: emit CloudProjectsPush on gh repo list result change"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/remote_projects.rs
+      depends_on: [vm-headless-persistent-listener]
+      pickup_role: linux
+      capability_tags: [rust, headless, github, vsock]
+      estimated_hours: 4
+      outcome: >
+        Wire the broadcast channel pattern into remote_projects.rs: when
+        a cloud project list refresh detects changes (new/removed repos),
+        emit CloudProjectsPush to all subscribed clients. SubscribeAck for
+        CloudProjects topic already sent on Subscribe; this adds the actual
+        push event source.
+      exit_criteria:
+        - "cloud project list change triggers CloudProjectsPush to all subscribed clients"
+        - "no redundant push on unchanged list (diff-based)"
+        - "unit test: project list change emits CloudProjectsPush"
+        - "./build.sh --check and --test pass"
+
+    # ── Sliced from order 162 (enclave-container-lifecycle-races) — 2026-07-07 ──
+    # Per order-160 ratification: ensure-only + vsock-supervisor ownership model;
+    # refcount rejected. Split R4-R7 into 4 × ~3h slices.
+    # ───────────────────────────────────────────────────────────────────────────
+
+    - packet_id: container-concurrency-flock
+      order: 232
+      title: "R4: ensure_proxy/vault/network/images concurrency-safe (advisory flock per resource)"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/
+      depends_on: [enclave-container-lifecycle-races]
+      pickup_role: linux
+      capability_tags: [rust, headless, podman, concurrency]
+      estimated_hours: 3
+      outcome: >
+        Add advisory file-based flock per shared resource (proxy, vault,
+        enclave network, images). Before check+act, acquire the flock; on
+        contention, wait (bounded) instead of racing. Prevents two parallel
+        cloud launches from both trying to create the same container
+        simultaneously ("name already in use" class). Covers all 4 ensure_*
+        sites identified in the race-safeguards research.
+      exit_criteria:
+        - "flock acquired before each ensure_proxy/vault/network/images check+act"
+        - "concurrent ensure_* of the same resource: one wins, other waits then reuses"
+        - "litmus:concurrent-container-ensure-no-race green"
+        - "./build.sh --check and --test pass"
+
+    - packet_id: container-shared-cleanup-guard
+      order: 233
+      title: "R5: cleanup_stack_containers stops removing SHARED containers"
+      status: ready
+      kind: bug-fix+enhancement
+      deliverable: crates/tillandsias-headless/src/
+      depends_on: [container-concurrency-flock]
+      pickup_role: linux
+      capability_tags: [rust, headless, podman]
+      estimated_hours: 3
+      outcome: >
+        Per order-160 ratification: ensure-only + vsock-supervisor ownership
+        for shared containers (proxy, inference, router). Converge the 4
+        remaining direct cleanup_stack_containers call sites (main.rs:4415,
+        5713, 6761, 7157) onto the already-landed
+        cleanup_shared_stack_if_no_running_forge guard. SHARED containers
+        must NOT be removed by per-project cleanup — only by a
+        deliberate no-forges-still-running check.
+      exit_criteria:
+        - "cleanup_stack_containers removes only per-project containers (not proxy/inference/router)"
+        - "4 call sites use cleanup_shared_stack_if_no_running_forge pattern"
+        - "litmus:shared-containers-survive-per-project-cleanup green"
+        - "./build.sh --check and --test pass"
+
+    - packet_id: container-phase-self-heal
+      order: 234
+      title: "R6: self-heal and container-creating side effects consult VmPhase"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/
+      depends_on: [container-shared-cleanup-guard]
+      pickup_role: linux
+      capability_tags: [rust, headless, podman, concurrency]
+      estimated_hours: 3
+      outcome: >
+        Every container-creating side effect (ensure_*, cleanup, health
+        check) must consult VmPhase and refuse to create/remove containers
+        during Draining/Stopping. Prevents a teardown race where a health
+        check self-heals a container the shutdown process just removed.
+      exit_criteria:
+        - "ensure_* returns a phase-appropriate error (not a container operation) during Draining/Stopping"
+        - "cleanup skips during Draining/Stopping (already in the correct path, verify with litmus)"
+        - "litmus:drain-vs-self-heal green (no container creation during Draining)"
+        - "./build.sh --check and --test pass"
+
+    - packet_id: container-vault-recreate-mutex
+      order: 235
+      title: "R7: vault recreate is mutually exclusive with lease holders (read/write lock)"
+      status: ready
+      kind: bug-fix+enhancement
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
+      depends_on: [container-concurrency-flock]
+      pickup_role: linux
+      capability_tags: [rust, headless, vault, concurrency]
+      estimated_hours: 3
+      outcome: >
+        Vault recreate (init/restart) must be mutually exclusive with any
+        lease holder that reads Vault state. A read/write lock (RwLock
+        wrapping a tokio::sync::OnceCell or similar) ensures that during
+        vault recreation, all read-side operations (fetch_cloud_projects,
+        vault_kv_get, etc.) block or retry rather than reading stale state
+        or hitting "container is stopped". Also classify "no such container"
+        as transient during the recreate window (bounded retry, not
+        permanent failure) — matching the Silverblue observation in
+        vault_bootstrap.rs:1488.
+      exit_criteria:
+        - "vault recreate acquires write lock; readers acquire read lock (or skip for bounded retry)"
+        - "recreate under a held read lease: lease completes (no proxy teardown mid-flow)"
+        - "health-wait retries transient 'container is stopped' / 'no such container' (bounded, not permanent)"
+        - "litmus:vault-recreate-mutex green; ./build.sh --check and --test pass"
+
+    - packet_id: container-microdnf-gpg-workaround
+      order: 236
+      title: "Add --nogpgcheck to microdnf install in forge-base and chromium-core for transient Fedora 44 upstream GPG signature failure"
+      status: ready
+      kind: fix
+      deliverable: images/default/Containerfile.base + images/chromium/Containerfile.core
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [container, build, fedora]
+      estimated_hours: 0.25
+      outcome: >
+        Fedora 44's `updates` repo has transiently invalid GPG signatures on
+        packages like `gdb-17.2-1.fc44.x86_64` and `bluez-libs-5.87-1.fc44.x86_64`,
+        causing `Transaction failed: Signature verification failed.` during
+        `microdnf install` in both forge-base and chromium-core container builds.
+        Adding `--nogpgcheck` to the `microdnf install` invocation bypasses the
+        signature check as a workaround until the upstream Fedora infrastructure
+        is healthy again. This unblocks fresh local builds on Fedora Silverblue
+        hosts (and any host hitting the same upstream mirror issue).
+      exit_criteria:
+        - "microdnf install succeeds on a Fedora Silverblue host without signature errors"
+        - "./build.sh --check passes"
+        - "forge-base and chromium-core images build successfully from scratch"

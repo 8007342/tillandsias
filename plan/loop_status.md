@@ -1,6 +1,28 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T20:30:00Z
+LastExecutionTime: 2026-07-07T08:18:33Z
+
+## Cycle 2026-07-07T08:18Z (linux_mutable — meta-orchestration)
+
+- **Host**: Linux mutable, `linux-next` (clean at `0c0ff9fc`, credential guard `ok:gh-credentials-store`).
+- **Release v0.3.260707.2**: Run 28851065890 still in progress (Linux musl ✅; macOS and Windows jobs building).
+  macOS job previously fixed with `rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl`
+  (fix applied after v0.3.260707.1 macOS failure). Linux build benefited from Nix cache HIT
+  (v0.3.260707.1 PR merge warmed the cache) — 10m41s vs 12m25s cold build.
+- **Reduction engine — split 3 large packets into smaller ready slices**:
+  - `container-dependency-graph-impl` (order 122, 10h → 3 slices): slices 1-2 done, split into
+    successor packets 227 (satisfier+typestate, 3h), 228 (liveness probe, 2h), 229 (drift litmus, 1h).
+  - `vm-headless-persistent-listener` (order 153, 10h → 2 slices): slice 1 (VmStatus push) done,
+    split into successor packets 230 (LoginStatePush, 4h) and 231 (CloudProjectsPush, 4h).
+  - `enclave-container-lifecycle-races` (order 162, 12h → 4 slices): split into successor packets
+    232 (flock concurrency R4, 3h), 233 (shared cleanup guard R5, 3h), 234 (phase-aware self-heal R6, 3h),
+    235 (vault recreate mutex R7, 3h).
+- **Coordinator duties**: sibling drift checked — both `origin/osx-next` and `origin/windows-next`
+  at 0 commits ahead of `origin/linux-next` (clean, no merge needed).
+- **Plan ledger**: all 3 existing packets updated with `split_into` notes; 9 new `ready` packets
+  appended to `plan/index.yaml`; YAML validated via `ruby -ryaml`.
+- **Release artifacts**: waiting for macOS and Windows jobs to complete before verifying
+  published release.
 
 ## Cycle 2026-07-06T19:30Z (macos — /goal "drain the macos queue")
 
@@ -2256,3 +2278,17 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - 188 -> done. macOS to re-verify on a cold Apple-Silicon guest.
 - Next: slice 2 (actionlint/vale/wasmtime/dart arch-aware) + de-hardcode versions to
   releases/latest redirect.
+
+## Cycle 2026-07-07T07:45Z (linux — release v0.3.260707.1 + CI fixes)
+
+- **Drift**: `osx-next` (0 behind, 35 ahead) and `windows-next` (0 behind, 31 ahead) both fully contained in `origin/linux-next` — verified via `git branch --contains`. No merge needed.
+- **Release v0.3.260707.1**: PR #69 (linux-next→main) created, VERSION conflict resolved by merging `origin/main` into `linux-next` (kept VERSION=0.3.260707.1). PR merged at 2026-07-07T07:36:25Z. Tag `v0.3.260707.1` pushed. Release workflow run ID 28849700897.
+  - **Linux musl**: ✅ SUCCESS (12m25s, Nix cache miss — full build). Artifacts published.
+  - **macOS tray (Apple Silicon)**: ❌ **FAILURE** — `error[E0463]: can't find crate for 'core'` for `aarch64-unknown-linux-musl` target. Root cause: `scripts/build-macos-tray.sh` uses `cargo zigbuild` to cross-compile guest Linux binaries, but the `aarch64-unknown-linux-musl` Rust target is not installed on the macOS runner. **Fix applied**: added `rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl` to the "Install guest cross-build tools" step in `.github/workflows/release.yml`.
+  - **Windows tray**: ✅ SUCCESS. Artifacts uploaded.
+  - **Release published**: Linux assets published (Nix-built musl binaries + install/uninstall/verify scripts + Cosign bundles). No macOS tray DMG or tarball due to build failure.
+- **nix-cache-warm.yml push trigger removed**: The cache warm triggered on every push to `main`/`linux-next` touching `flake.nix`/`flake.lock`/itself, which overlapped with the release workflow — both concurrently built the same Nix derivations (duplicate CPU time). Fix: removed the `push` trigger entirely. Cache warm now runs only on the weekly schedule and `workflow_dispatch`. The release workflow has its own `Nix Cache` step (`save: false`, restore-only) so it doesn't depend on the cache warm.
+- **Files changed**:
+  - `.github/workflows/release.yml`: +`rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl`
+  - `.github/workflows/nix-cache-warm.yml`: removed `push` trigger (keep `schedule` + `workflow_dispatch`)
+- **Blocked**: orders 148/150/154 (Windows), 155/161b/198 (macOS) need their respective host agents. Order 145 (encrypted-channel-vsock-cutover) needs cross-host coordination. Order 129 needs user to run forge session for proxy logs.

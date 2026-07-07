@@ -1,14 +1,6 @@
 name: Nix Cache Warm
 
 on:
-  push:
-    branches:
-      - main
-      - linux-next
-    paths:
-      - 'flake.nix'
-      - 'flake.lock'
-      - '.github/workflows/nix-cache-warm.yml'
   schedule:
     # Run weekly to ensure the cache stays active and doesn't expire
     - cron: '0 4 * * 0'

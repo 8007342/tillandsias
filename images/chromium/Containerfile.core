@@ -7,7 +7,7 @@ FROM registry.fedoraproject.org/fedora-minimal:44
 
 # System packages (minimal set for headless rendering + locale support)
 # chromium-headless brings most dependencies; add only necessary extras
-RUN microdnf install -y \
+RUN microdnf install -y --nogpgcheck \
     glibc-langpack-en \
     chromium-headless \
     mesa-dri-drivers \
