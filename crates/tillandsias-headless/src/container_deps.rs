@@ -407,7 +407,10 @@ mod tests {
             // Runtime outcome depends on Podman availability; we only
             // assert that the GitLogin arm rejects its own service.
             if svc == Service::GitLogin {
-                assert!(_result.is_err(), "GitLogin must be rejected as a prerequisite");
+                assert!(
+                    _result.is_err(),
+                    "GitLogin must be rejected as a prerequisite"
+                );
             }
         }
         // Structural proof: all 6 Service variants compile through Satisfier

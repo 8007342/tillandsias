@@ -4292,6 +4292,53 @@ plan_index:
         - "the call either fails fast (matching git/proxy/inference's behavior) or is given a bounded timeout instead of hanging indefinitely — DONE (bounded timeout wrapper, all 4 podman build call sites)"
         - "scripts/build-image.sh vault --force completes (success or a fast, legible failure) on an offline host within a few seconds, matching the other 3 images — DONE: now fails within TILLANDSIAS_BUILD_TIMEOUT_SECS (default 1800s, configurable) with a clear message instead of hanging forever; succeeds normally when network is actually reachable (verified all 5 images build clean on this now-online host)"
 
+    - packet_id: forge-gitconfig-quarantine-and-injection
+      order: 224
+      title: "Forge: quarantine host .gitconfig + inject forge-owned git config with mirror redirect at launch"
+      status: completed
+      kind: enhancement+bugfix
+      deliverable: plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [rust, forge, podman, git-mirror, credential-isolation]
+      estimated_hours: 4
+      outcome: >
+        The host's ~/.gitconfig (which the tray modifies with DNS and proxy
+        config) leaks into forge containers via the source mount of ~/src/.
+        While build_forge_agent_run_args (Claude/Codex/Antigravity/Maintenance)
+        has credential quarantine (tmpfs overlays + GIT_CONFIG_GLOBAL), the
+        OpenCode forge path (build_opencode_forge_args) has NO quarantine at
+        all. Moreover, even the quarantined path leaves the forge's git config
+        EMPTY at container start — requiring lib-common.sh's rewrite_origin_
+        for_enclave_push to populate the insteadOf redirect at runtime via
+        `git config --global`, which is too late for early git operations and
+        may not work if the host .gitconfig already set conflicting values.
+        Fix: (1) add credential quarantine (tmpfs + GIT_CONFIG_GLOBAL) to
+        build_opencode_forge_args, (2) pre-populate a forge-owned .gitconfig
+        with the mirror insteadOf redirect, safe.directory, and CA/proxy
+        settings, injected via a bind-mounted file at the GIT_CONFIG_GLOBAL
+        path, and (3) update lib-common.sh's rewrite_origin_for_enclave_push
+        to detect the pre-injected config and skip duplicate runtime writes.
+      events:
+        - type: claim
+          ts: "2026-07-07T05:00Z"
+          agent_id: "linux-macuahuitl-bigpickle-20260707T0500Z"
+          host: linux
+          lease_id: "forge-gitconfig-injection-20260707T0500Z"
+          expires_at: "2026-07-07T09:00Z"
+        - type: complete
+          ts: "2026-07-07T06:30Z"
+          agent_id: "linux-macuahuitl-bigpickle-20260707T0500Z"
+          host: linux
+          summary: "All changes implemented, tested (124/124 unit tests, all integration tests pass), and reviewed"
+      exit_criteria:
+        - "build_opencode_forge_args includes tmpfs overlays at /home/forge/.ssh, /home/forge/.config/gh + GIT_CONFIG_GLOBAL env var"
+        - "forge-owned .gitconfig pre-populated with url.insteadOf for the git mirror, safe.directory, and CA bundle path, bind-mounted read-only at GIT_CONFIG_GLOBAL path (replaces .config/git tmpfs)"
+        - "rewrite_origin_for_enclave_push in lib-common.sh detects pre-injected config and skips duplicate runtime writes"
+        - "unit tests pin inject-forge-gitconfig shape for both forge agent and opencode paths"
+        - "./build.sh --check and --test pass"
+
     # ── Sliced from order 122 (container-dependency-graph-impl) — 2026-07-07 ──
     # Split per meta-orchestration Reducer directive: 10h → 3 × ~2-3h slices.
     # Slice 1 (declarative graph + acyclic/completeness tests) DONE.

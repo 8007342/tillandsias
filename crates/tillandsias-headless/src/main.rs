@@ -3145,6 +3145,18 @@ fn build_opencode_forge_args(
         "/run/user/1000:size=64m,mode=0700".into(),
         "--tmpfs".into(),
         "/opt/cheatsheets:size=8m,mode=0755".into(),
+        // Credential quarantine (order 224): empty tmpfs overlays prevent host
+        // ~/.ssh and ~/.config/gh credentials from leaking into the forge even
+        // when the host checkout IS the source mount. Unlike
+        // build_forge_agent_run_args which also quarantines ~/.config/git via a
+        // tmpfs, this path replaces the tmpfs with a read-only bind-mount of a
+        // forge-owned pre-populated .gitconfig (see below). The .ssh and .config/gh
+        // tmpfs are empty — the forge has no business reading host SSH keys or
+        // GitHub CLI tokens; all authenticated git traffic flows through the mirror.
+        "--tmpfs".into(),
+        "/home/forge/.ssh:size=1m,mode=0700".into(),
+        "--tmpfs".into(),
+        "/home/forge/.config/gh:size=1m,mode=0700".into(),
         // Mount under `/home/forge/src/<project>/` (not directly at
         // `/home/forge/src`) so the in-container tree matches what the forge
         // entrypoint's clone path would produce
@@ -3177,6 +3189,24 @@ fn build_opencode_forge_args(
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
+    // Forge gitconfig injection (order 224): pre-populate global git config
+    // with mirror redirect, safe.directory, and CA cert path, bind-mounted
+    // read-only. Replaces the empty tmpfs approach — the file is owned by
+    // Tillandsias, written before container start, and never writable inside
+    // the forge. lib-common.sh's rewrite_origin_for_enclave_push detects the
+    // pre-injected config and skips redundant writes.
+    // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
+    if let Some(gitconfig_path) = write_forge_gitconfig(project_name, project_path) {
+        args.extend([
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target=/home/forge/.config/git/config,readonly=true",
+                gitconfig_path.display()
+            ),
+            "--env".into(),
+            "GIT_CONFIG_GLOBAL=/home/forge/.config/git/config".into(),
+        ]);
+    }
     append_git_identity_env_args(&mut args);
     if let Some(prompt) = prompt {
         args.extend([
@@ -5165,6 +5195,103 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
         .join("secrets")
         .join("git")
         .join(".gitconfig"))
+}
+
+/// Write a forge-owned `.gitconfig` to disk for injection into forge containers.
+///
+/// The generated config prepopulates the mirror redirect (`url.insteadOf`),
+/// `safe.directory`, and `http.sslCAInfo` so the forge entrypoint's
+/// `rewrite_origin_for_enclave_push` can skip redundant writes on a read-only
+/// mount. The caller bind-mounts this file into the container at
+/// `$GIT_CONFIG_GLOBAL`.
+///
+/// Returns `Some(path)` on success, `None` on any I/O error.
+/// @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> Option<PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    let forge_git_dir = PathBuf::from(home)
+        .join(".cache")
+        .join("tillandsias")
+        .join("forge-gitconfig");
+    std::fs::create_dir_all(&forge_git_dir).ok()?;
+
+    let config_path = forge_git_dir.join(format!("{}.config", project_name));
+
+    // Read the host origin URL for mirror redirect.
+    let origin_url = read_host_project_origin_url(project_path);
+
+    let mut config = String::new();
+    config.push_str("[safe]\n");
+    config.push_str("\tdirectory = /home/forge/src/*\n");
+    config.push('\n');
+    config.push_str("[http]\n");
+    config.push_str("\tsslCAInfo = /etc/tillandsias/ca.crt\n");
+    config.push('\n');
+    config.push_str("[credential]\n");
+    config.push_str("\thelper =\n");
+    config.push('\n');
+    config.push_str("[core]\n");
+    config.push_str("\thooksPath = /home/forge/.cache/tillandsias/git-hooks\n");
+
+    if let Some(ref origin) = origin_url {
+        config.push('\n');
+        config.push_str("[url \"git://tillandsias-git/\"]\n");
+        config.push_str(&format!("\tinsteadOf = {}\n", origin));
+        // If origin is an SSH-style URL, also redirect its HTTPS equivalent
+        // so `git push https://github.com/<org>/<repo>` also hits the mirror.
+        // Matches the logic in lib-common.sh rewrite_origin_for_enclave_push.
+        if origin.starts_with("git@github.com:") {
+            let nwo = origin
+                .strip_prefix("git@github.com:")
+                .and_then(|s| s.strip_suffix(".git"))
+                .unwrap_or(origin.strip_prefix("git@github.com:").unwrap_or(""));
+            let https_form = format!("https://github.com/{}.git", nwo);
+            config.push_str(&format!("\tinsteadOf = {}\n", https_form));
+        }
+    }
+
+    // Preserve existing git identity if the file exists (e.g., from a prior
+    // `managed_gitconfig_path` write by the identity prompt). We only inject
+    // structural config (redirect, safe.directory, CA) — identity comes from
+    // launch env vars.
+    if let Ok(existing) = std::fs::read_to_string(&config_path)
+        && let Some(user_section) = extract_gitconfig_section(&existing, "user")
+    {
+        config.push('\n');
+        config.push_str(&user_section);
+    }
+
+    std::fs::write(&config_path, config.as_bytes()).ok()?;
+    Some(config_path)
+}
+
+/// Extract a named `[section]` (including its key=value lines) from a gitconfig string.
+/// Returns `Some(String)` with the section header and body, or `None` if not found.
+fn extract_gitconfig_section(contents: &str, section: &str) -> Option<String> {
+    let target = format!("[{}]", section);
+    let mut result = String::new();
+    let mut in_section = false;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            if in_section {
+                break;
+            }
+            if trimmed == target {
+                in_section = true;
+            }
+        }
+        if in_section {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+    if in_section && !result.is_empty() {
+        Some(result)
+    } else {
+        None
+    }
 }
 
 fn parse_git_identity(contents: &str) -> GitIdentity {
@@ -7346,7 +7473,6 @@ pub(crate) fn build_forge_agent_run_args(
         // .ssh/.config would be visible). The tmpfs prevents that.
         .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
         .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
-        .tmpfs("/home/forge/.config/git:size=1m,mode=0700")
         .env("GIT_CONFIG_GLOBAL", "/home/forge/.config/git/config")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
@@ -7363,6 +7489,21 @@ pub(crate) fn build_forge_agent_run_args(
         spec = spec.bind_mount(
             ca_cert.display().to_string(),
             "/etc/tillandsias/ca.crt",
+            true,
+        );
+    }
+
+    // Forge gitconfig injection (order 224): pre-populate $GIT_CONFIG_GLOBAL
+    // with mirror redirect, safe.directory, and CA cert path so the
+    // entrypoint's rewrite_origin_for_enclave_push can skip redundant writes
+    // on a read-only mount. Replaces the empty tmpfs formerly used at
+    // /home/forge/.config/git — the file is owned by Tillandsias, stored
+    // outside the project workspace, and bind-mounted read-only.
+    // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
+    if let Some(gitconfig_path) = write_forge_gitconfig(project_name, project_path) {
+        spec = spec.bind_mount(
+            gitconfig_path.display().to_string(),
+            "/home/forge/.config/git/config",
             true,
         );
     }
@@ -9033,11 +9174,15 @@ mod tests {
         // Source-scoped guard: forbid a HOST .cache/.config directory as a mount
         // SOURCE (left of ':'), but allow the container-side TARGET
         // /home/forge/.cache/tillandsias-project (the persistent tool cache, order
-        // 179), podman NAMED volumes (tillandsias-forge-cache-*, no host path), and
+        // 179), podman NAMED volumes (tillandsias-forge-cache-*, no host path),
         // credential-quarantine tmpfs overlays at /home/forge/.ssh/.config/... (order
-        // 170) which are FORGE-OWNED surfaces, not host leaks.
+        // 170) which are FORGE-OWNED surfaces not host leaks, and the forge gitconfig
+        // bind mount (order 224) at ~/.cache/tillandsias/forge-gitconfig/ which is a
+        // Tillandsias-owned pre-populated config file (read-only, never a credential
+        // leak path).
         // @trace plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
         // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
+        // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
         for arg in &argv {
             if arg.starts_with("HOME=") {
                 continue;
@@ -9048,6 +9193,11 @@ mod tests {
                 continue;
             }
             let source = arg.split(':').next().unwrap_or("");
+            // Allow the forge gitconfig bind mount (order 224): a Tillandsias-owned
+            // pre-populated config file outside the project workspace.
+            if source.contains("forge-gitconfig") {
+                continue;
+            }
             assert!(
                 !source.contains("/.config"),
                 "must not mount a host .config dir into the forge; got source in: {arg}"
@@ -9065,6 +9215,11 @@ mod tests {
                 // We're guarding against the *host* $HOME leaking in as a bind source.
                 for arg in &argv {
                     if arg.contains(&home_str) && !arg.starts_with("HOME=") {
+                        // Allow the forge gitconfig bind mount (order 224), a
+                        // Tillandsias-owned pre-populated config file.
+                        if arg.contains("forge-gitconfig") {
+                            continue;
+                        }
                         let is_target_only = if arg.contains(':') {
                             let parts: Vec<&str> = arg.split(':').collect();
                             !parts[0].contains(&home_str) && parts.len() > 1
@@ -9084,10 +9239,14 @@ mod tests {
 
     #[test]
     fn forge_credential_quarantine_mounts_present() {
-        // Verify the credential quarantine tmpfs overlays (order 170) are
+        // Verify the credential quarantine tmpfs overlays (order 170/224) are
         // present in the forge agent mount args. These mask host credential
         // surfaces when the source mount overlaps the host checkout.
+        // ~/.ssh and ~/.config/gh remain empty tmpfs dirs; ~/.config/git/config
+        // is replaced by a read-only bind-mount of a Tillandsias-owned pre-populated
+        // .gitconfig (order 224) so the mirror redirect is available at launch.
         // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
+        // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -9099,7 +9258,7 @@ mod tests {
 
         let mut found_ssh = false;
         let mut found_gh_config = false;
-        let mut found_git_config = false;
+        let mut found_git_config_ro = false;
         for arg in &argv {
             if arg.contains("/home/forge/.ssh") && arg.contains("size=1m") {
                 found_ssh = true;
@@ -9107,8 +9266,13 @@ mod tests {
             if arg.contains("/home/forge/.config/gh") && arg.contains("size=1m") {
                 found_gh_config = true;
             }
-            if arg.contains("/home/forge/.config/git") && arg.contains("size=1m") {
-                found_git_config = true;
+            // The .git/config is now a read-only bind mount of a pre-populated
+            // forge-owned config (order 224), not an empty tmpfs.
+            if arg.contains("forge-gitconfig")
+                && arg.contains("/home/forge/.config/git/config")
+                && arg.contains("readonly=true")
+            {
+                found_git_config_ro = true;
             }
         }
         assert!(
@@ -9120,17 +9284,17 @@ mod tests {
             "must mount credential-quarantine tmpfs at /home/forge/.config/gh"
         );
         assert!(
-            found_git_config,
-            "must mount credential-quarantine tmpfs at /home/forge/.config/git"
+            found_git_config_ro,
+            "must mount forge-owned gitconfig at /home/forge/.config/git/config (order 224)"
         );
 
-        // Verify GIT_CONFIG_GLOBAL redirects inside the quarantine zone.
+        // Verify GIT_CONFIG_GLOBAL redirects to the injected config.
         let has_git_config_global = argv.iter().any(|a| {
             a.starts_with("GIT_CONFIG_GLOBAL=") && a.contains("/home/forge/.config/git/config")
         });
         assert!(
             has_git_config_global,
-            "must set GIT_CONFIG_GLOBAL to quarantined path"
+            "must set GIT_CONFIG_GLOBAL to forge gitconfig path"
         );
     }
 
@@ -9601,6 +9765,21 @@ mod tests {
             args.iter()
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
         );
+        // Credential quarantine (order 224): .ssh and .config/gh must be
+        // empty tmpfs overlays, GIT_CONFIG_GLOBAL must be set to the
+        // forge-injected gitconfig path (may or may not be present depending
+        // on whether HOME is set in the test environment).
+        assert!(has_arg(&args, "--tmpfs"));
+        assert!(
+            args.iter()
+                .any(|arg| arg == "/home/forge/.ssh:size=1m,mode=0700"),
+            "opencode forge args must quarantine .ssh via tmpfs; got {args:?}"
+        );
+        assert!(
+            args.iter()
+                .any(|arg| arg == "/home/forge/.config/gh:size=1m,mode=0700"),
+            "opencode forge args must quarantine .config/gh via tmpfs; got {args:?}"
+        );
     }
 
     #[test]
@@ -9707,6 +9886,175 @@ mod tests {
         assert!(!has_arg(&args, "run"));
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
+    }
+
+    #[test]
+    fn write_forge_gitconfig_produces_valid_config_with_origin_redirect() {
+        // Create a temp directory with a minimal git repo to test reading the origin URL.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("my-project");
+        std::fs::create_dir_all(&project_path).expect("create project dir");
+        let origin_url = "https://github.com/example/repo.git";
+
+        // Init a bare repo and set the origin.
+        let status = std::process::Command::new("git")
+            .args(["-C", &project_path.to_string_lossy(), "init"])
+            .output()
+            .expect("git init");
+        assert!(
+            status.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&status.stderr)
+        );
+
+        let status = std::process::Command::new("git")
+            .args([
+                "-C",
+                &project_path.to_string_lossy(),
+                "remote",
+                "add",
+                "origin",
+                origin_url,
+            ])
+            .output()
+            .expect("git remote add");
+        assert!(
+            status.status.success(),
+            "git remote add failed: {}",
+            String::from_utf8_lossy(&status.stderr)
+        );
+
+        // Store original HOME so we can restore it.
+        let orig_home = std::env::var("HOME").ok();
+        // SAFETY: single-threaded test, no concurrent env reads.
+        unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
+
+        let result = write_forge_gitconfig("test-project", &project_path);
+        assert!(result.is_some(), "write_forge_gitconfig should succeed");
+        let config_path = result.unwrap();
+
+        // Read the config file and verify contents.
+        let contents = std::fs::read_to_string(&config_path).expect("read forge gitconfig");
+        assert!(
+            contents.contains("directory = /home/forge/src/*"),
+            "config must contain safe.directory"
+        );
+        assert!(
+            contents.contains("sslCAInfo = /etc/tillandsias/ca.crt"),
+            "config must contain CA cert path"
+        );
+        assert!(
+            contents.contains(&format!("insteadOf = {}", origin_url)),
+            "config must contain mirror redirect for origin URL"
+        );
+        assert!(
+            contents.contains("[url \"git://tillandsias-git/\"]"),
+            "config must contain url.insteadOf section for mirror"
+        );
+        assert!(
+            contents.contains("helper ="),
+            "config must disable credential helper"
+        );
+
+        // The config file should be at the expected path under HOME/.cache/...
+        let expected_prefix = tmp.path().join(".cache/tillandsias/forge-gitconfig");
+        assert!(
+            config_path.starts_with(&expected_prefix),
+            "config path {} should be under {}",
+            config_path.display(),
+            expected_prefix.display()
+        );
+        assert!(
+            config_path.ends_with("test-project.config"),
+            "config filename should end with project name"
+        );
+
+        // Restore original HOME.
+        // SAFETY: single-threaded test, no concurrent env reads.
+        match orig_home {
+            Some(h) => unsafe { std::env::set_var("HOME", h) },
+            None => unsafe { std::env::remove_var("HOME") },
+        }
+    }
+
+    #[test]
+    fn write_forge_gitconfig_handles_ssh_origin_with_https_redirect() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("another-project");
+        std::fs::create_dir_all(&project_path).expect("create project dir");
+        let ssh_origin = "git@github.com:org/repo.git";
+
+        let status = std::process::Command::new("git")
+            .args(["-C", &project_path.to_string_lossy(), "init"])
+            .output()
+            .expect("git init");
+        assert!(status.status.success(), "git init failed");
+
+        let status = std::process::Command::new("git")
+            .args([
+                "-C",
+                &project_path.to_string_lossy(),
+                "remote",
+                "add",
+                "origin",
+                ssh_origin,
+            ])
+            .output()
+            .expect("git remote add");
+        assert!(status.status.success(), "git remote add failed");
+
+        let orig_home = std::env::var("HOME").ok();
+        // SAFETY: single-threaded test, no concurrent env reads.
+        unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
+
+        let result = write_forge_gitconfig("ssh-test", &project_path);
+        assert!(result.is_some(), "write_forge_gitconfig should succeed");
+        let contents =
+            std::fs::read_to_string(result.as_ref().unwrap()).expect("read forge gitconfig");
+
+        // Should have the SSH origin redirect...
+        assert!(
+            contents.contains(&format!("insteadOf = {}", ssh_origin)),
+            "config must redirect SSH origin"
+        );
+        // ...and the HTTPS equivalent redirect.
+        assert!(
+            contents.contains("insteadOf = https://github.com/org/repo.git"),
+            "config must also redirect HTTPS equivalent of SSH origin"
+        );
+
+        // SAFETY: single-threaded test, no concurrent env reads.
+        match orig_home {
+            Some(h) => unsafe { std::env::set_var("HOME", h) },
+            None => unsafe { std::env::remove_var("HOME") },
+        }
+    }
+
+    #[test]
+    fn extract_gitconfig_section_finds_user_block() {
+        let config = "\
+[user]
+\tname = Test User
+\temail = test@example.com
+[core]
+\thooksPath = /path
+";
+        let user = extract_gitconfig_section(config, "user");
+        assert!(user.is_some(), "should find [user] section");
+        let user = user.unwrap();
+        assert!(user.contains("[user]"));
+        assert!(user.contains("name = Test User"));
+        assert!(user.contains("email = test@example.com"));
+        assert!(
+            !user.contains("[core]"),
+            "should not include other sections"
+        );
+    }
+
+    #[test]
+    fn extract_gitconfig_section_returns_none_for_missing() {
+        let config = "[core]\n\thooksPath = /path\n";
+        assert!(extract_gitconfig_section(config, "user").is_none());
     }
 
     #[test]
