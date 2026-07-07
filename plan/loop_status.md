@@ -1,6 +1,31 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-07T19:48:50Z
+LastExecutionTime: 2026-07-07T21:45:00Z
+
+## Cycle 2026-07-07T21:45Z (linux_immutable — meta-orchestration + curl-install e2e)
+
+- **Host**: Linux, `linux-next`, `linux_immutable` (clean, credential guard `ok:gh-keyring`).
+- **Worker drain — order 236 (container-microdnf-gpg-workaround)**: found already landed
+  in `9f4dd61d` (fix: `--nogpgcheck` to microdnf in `Containerfile.base` and
+  `Containerfile.core`). Updated plan: `ready`→`done` with completion event.
+  Noted residual: `Containerfile.framework` and `inference/Containerfile` still
+  lack `--nogpgcheck` (out of original scope).
+- **E2E Gate**: `eligible` (curl-install on linux_immutable; no local build).
+  Executed `/smoke-curl-install-and-test-e2e` for release `v0.3.260707.2`:
+  - Step 1: installed release binary successfully
+  - Step 2: `podman system reset --force` — clean
+  - Step 3: `tillandsias --debug --init` — all images built, Vault healthy,
+    networks created, exit 0
+  - Step 4: forge launched with `/meta-orchestration` — completed order 227
+    (`container-dependency-graph-satisfier-typestate`) inside forge:
+    `RealSatisfier` struct, `Up<T>` typestate witness, migrated `run_provider_login`
+    and `run_list_cloud_projects` to `ensure_git_login`, 10 new tests.
+- **Push**: forge committed and pushed to local mirror (`git://tillandsias-git/tillandsias`),
+  but git-mirror HTTPS upstream push failed (`fatal: could not read Username for
+  'https://github.com'`). GitHub `linux-next` still at `34738da7`; forge commits
+  (`92dce746`, `7bb02fae`, `d49fd7ef`) in forge mirror only.
+- **Findings**: no new product bugs. Known forge-mirror HTTPS credential limitation
+  documented in `plan/issues/smoke-e2e-findings-2026-07-07.md`.
 
 ## Cycle 2026-07-07T19:48Z (forge — advance-work-from-plan: order 227)
 
