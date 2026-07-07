@@ -3755,7 +3755,7 @@ plan_index:
     - packet_id: build-sh-unconditional-podman-gate
       order: 226
       title: "Fix: build.sh's top-level require_podman gate blocks flags that never touch podman"
-      status: claimed
+      status: done
       kind: bug-fix
       deliverable: plan/issues/build-sh-unconditional-podman-gate-2026-07-07.md
       depends_on: []
@@ -3791,6 +3791,36 @@ plan_index:
           host: macos
           lease_id: "build-sh-unconditional-podman-gate-claim-1"
           expires_at: "2026-07-07T04:00:00Z"
+        - type: completed
+          ts: "2026-07-07T00:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-claude-20260707T0000Z"
+          host: macos
+          summary: >
+            Removed the unconditional `require_podman || exit 1` at
+            build.sh:63; added an explicit guard immediately before the
+            --init block only. Verified with Podman genuinely unreachable
+            on this host (podman-machine-default never started,
+            `podman info` connection-refused): `./build.sh --check` now
+            exits 0 (fmt + type-check + strict clippy all pass, no gate
+            trip at all). `./build.sh --init` still exits 1 with a clear,
+            comprehensible message ("Failed to build 7 required
+            image(s): ..."). Note on that second point: `require_podman()`
+            itself only checks `podman --version` succeeds (binary
+            invokable), which is true even with no machine running — so
+            it was ALREADY a weak check before this change too; moving it
+            didn't make --init's failure mode either better or worse, it
+            only stopped that same weak check from blocking flags that
+            never needed it. Strengthening require_podman() into a real
+            connectivity check is a separate, out-of-scope question this
+            packet does not address. --ci/--ci-full/--release untouched
+            (still correctly self-guard via scripts/local-ci.sh's own
+            require_podman calls). Regression checks: cargo fmt --check
+            clean; cargo test -p tillandsias-macos-tray -p
+            tillandsias-vm-layer 58/58 + 50/50 pass; full pre-build/instant
+            litmus suite unchanged at 117 PASS / 2 FAIL (same 2
+            already-diagnosed local-machine-state gaps).
+          commits:
+            - "(pending — see linux-next push this cycle)"
       exit_criteria:
         - "./build.sh --check exits 0 with Podman stopped/misconfigured"
         - "./build.sh --init still fails fast and clearly (not a raw downstream error) with Podman stopped/misconfigured"

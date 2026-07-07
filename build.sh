@@ -56,11 +56,19 @@ INSTALL_DIR="$ACTUAL_HOME/.local/bin"
 INSTALL_BIN="$INSTALL_DIR/tillandsias"
 CACHE_DIR="$ACTUAL_HOME/.cache/tillandsias"
 
-# Prime the Podman wrapper before any build orchestration touches it.
-# On immutable hosts, raw /usr/bin/podman may fail version/config probes if the
-# default runtime dir is read-only; the wrapper redirects that state to writable
-# per-user locations first.
-require_podman || exit 1
+# NOTE: no unconditional `require_podman` gate here. Sourcing common.sh
+# above already primed the Podman wrapper selection/generation (needed on
+# immutable hosts where the default runtime dir is read-only); that setup
+# is independent of whether Podman is actually reachable right now. Most
+# flags below (--check, --test, plain debug builds, --install alone,
+# --clean/--wipe/--remove) never touch Podman at all — every Podman call in
+# this script already degrades gracefully (warn + continue) except the
+# explicit guard before --init, and --ci/--ci-full/--release already
+# self-guard via scripts/local-ci.sh's own require_podman calls at the
+# specific points that need it. A blanket gate here would hard-block those
+# Podman-independent flags on any host with a stopped/misconfigured Podman
+# daemon for no reason. See
+# plan/issues/build-sh-unconditional-podman-gate-2026-07-07.md.
 
 # Colors
 RED='\033[0;31m'
@@ -363,6 +371,10 @@ fi
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_INIT" == true ]]; then
+    # The only build.sh flag with a genuine, unconditional Podman need
+    # (it builds every container image). Fail fast with a clear message
+    # here rather than a possibly-confusing downstream Rust error.
+    require_podman || exit 1
     _step "Running tillandsias --init (builds all images with versioned tags)..."
     # Runs on the host where podman works.
     "$SCRIPT_DIR/target/debug/tillandsias" --init 2>&1

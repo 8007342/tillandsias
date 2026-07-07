@@ -3,7 +3,7 @@
 - class: bug-fix (build-script architecture)
 - filed: 2026-07-07
 - owner: any (cross-platform script, not host-specific)
-- status: claimed
+- status: done
 - trace: spec:dev-build, spec:build-script-architecture,
   plan/issues/macos-build-check-podman-wrapper-2026-07-05.md (the earlier,
   narrower macOS-only symptom of this same root architecture)
@@ -101,3 +101,55 @@ was necessary but not sufficient.
   need, not blanket-require infrastructure the invoked operation doesn't
   use) — flagging here so meta-orchestration's compaction cycle picks it
   up rather than this staying scattered across a plan/issues note only.
+
+## Fixed — 2026-07-07T00:20Z (order 226)
+
+Removed the unconditional `require_podman || exit 1` at `build.sh:63`;
+added an explicit guard immediately before the `--init` block only, with a
+comment explaining why no blanket gate exists at the top of the script
+anymore.
+
+**Verified with Podman genuinely unreachable** on the filing host
+(`podman-machine-default` has never started, `podman info` returns
+connection-refused — see `plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md`
+for why): `./build.sh --check` now exits 0 (`cargo fmt --check` + `cargo
+check --workspace` + `cargo clippy -- -D warnings` all pass, no gate trip
+at all — this is the same scenario that motivated the whole
+`macos-build-check-podman-wrapper` investigation, now genuinely resolved
+at the architecture level, not just the wrapper-flags level). `./build.sh
+--init` still exits 1 with a clear, comprehensible message ("Failed to
+build 7 required image(s): proxy, git, inference, router, chromium-core,
+chromium-framework, web").
+
+**One nuance worth recording precisely** rather than overclaiming:
+`require_podman()` itself only checks that `podman --version` succeeds
+(binary is invokable), which is true even with *no Podman machine
+running at all* — `podman --version` never touches the socket. So this
+check was already weak (binary-presence, not connectivity) before this
+change, at the old top-level location too. Moving it to just before
+`--init` did not make `--init`'s failure mode either better or worse; it
+only stopped that same weak check from blocking flags that never needed
+it in the first place. Whether `require_podman()` should become a real
+connectivity check (e.g. `podman info` instead of `podman --version`) is
+a separate, legitimate follow-on question this packet intentionally does
+not address — filing that separately would be premature without deciding
+whether every current caller of `require_podman()` (including
+`local-ci.sh`'s 4 call sites) actually wants the stricter behavior.
+
+**Regression evidence**: `cargo fmt --check` clean; `cargo test -p
+tillandsias-macos-tray -p tillandsias-vm-layer`: 58/58 + 50/50 pass;
+`scripts/run-litmus-test.sh --phase pre-build --size instant --compact`
+unchanged at 117 PASS / 2 FAIL (same 2 already-diagnosed local-machine-
+state gaps, unrelated to this change). `--ci`/`--ci-full`/`--release`
+code paths were not touched at all (no lines in their branches changed),
+so their existing `scripts/local-ci.sh`-mediated Podman gating is
+unaffected by construction.
+
+**For the semantic-distillation pass** (see the candidate note above):
+the durable, spec-worthy claim to carry forward is "a build-script gate
+must be scoped to the operation that actually needs the resource, not
+placed unconditionally ahead of argument parsing" — this repo's own
+`ensure_dev_cache()`/registries-setup/image-prune calls already modeled
+the correct pattern (degrade gracefully, fail only where truly needed);
+this fix brings the one outlier (`require_podman`'s placement) in line
+with the convention the rest of the script already followed.
