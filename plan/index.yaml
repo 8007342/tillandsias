@@ -3681,11 +3681,76 @@ plan_index:
             `./build.sh --check` exits 0 (fmt + type-check + strict
             clippy all pass).
           commits:
-            - "(pending — see linux-next push this cycle)"
+            - "2763f3de"
+            - "4a5729b2"
       exit_criteria:
         - "a command: string written as valid backslash-escaped YAML (e.g. containing \\.) executes with a single literal backslash at runtime, matching what ruby -ryaml/yq would produce"
         - "a regression test (fixture litmus file + expected extracted command) pins the fix so this can't silently regress again"
         - "./build.sh --check passes; existing litmus suite still green"
+
+    - packet_id: litmus-command-portability-dsl-research
+      order: 224
+      title: "Research: readable, portable building-block primitives for litmus command: fields"
+      status: ready
+      kind: research
+      deliverable: plan/issues/litmus-command-portability-dsl-research-2026-07-06.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [research, litmus, tooling, portability, cross-host]
+      estimated_hours: 4
+      outcome: >
+        Litmus command: fields are raw hand-escaped shell text for a
+        non-YAML-aware extractor, causing a recurring class of cross-host
+        breakage this cycle (\|, \[, \\, mapfile, "${ARR[@]}" — see order 201
+        and the macOS-first-run findings). Design a named building-block
+        mechanism (operator's proposed shape: "${MEANINGFUL_TOKEN} ${PIPE}
+        ${LOG_PARSER} ${REDIRECT} ..." instead of hand-derived escape
+        soup) that resolves per-host automatically, so authors write stable,
+        readable commands without knowing GNU-vs-BSD/bash-version dialect
+        details. Mine the actual ~90-file corpus for real primitive shapes
+        (do not invent speculatively); resolve the 5 design questions in the
+        deliverable (substitution model, primitive inventory, per-OS
+        resolution mechanism, migration strategy, escape hatch) with a
+        concrete choice plus a 3-5 file working prototype before the
+        implementation packet starts.
+      events: []
+      exit_criteria:
+        - "a written design decision (not just options) for each of the 5 questions in the deliverable"
+        - "a working prototype: 3-5 real existing command: fields rewritten in the chosen token form, passing identically to their raw form"
+
+    - packet_id: litmus-command-portability-dsl-implementation
+      order: 225
+      title: "Implement portable building-block primitives for litmus command: fields"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/litmus-command-portability-dsl-implementation-2026-07-06.md
+      depends_on: [litmus-command-portability-dsl-research]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [enhancement, litmus, tooling, portability, cross-host]
+      estimated_hours: 6
+      outcome: >
+        Build the primitive library the research packet designs (most likely
+        a sourced scripts/litmus-stdlib.sh with per-host branching internal
+        to each primitive) and wire scripts/run-litmus-test.sh to resolve it
+        before executing each step's command:. Convert the 4 files this
+        cycle's fixes already touched (forge-environment-discoverability,
+        forge-opencode-onboarding, zen-default-with-ollama's rollback
+        command, litmus-versioning-shape) as the first real migration batch
+        — each currently carries a raw dialect-workaround or a manual-escape
+        comment, so converting them proves the mechanism removes the actual
+        pain rather than adding a second way to write the same bug. Add a
+        drift-protection litmus so a future command: reintroducing a raw
+        \|/\[-style workaround fails loud instead of landing silently. Write
+        the authoring guide.
+      events: []
+      exit_criteria:
+        - "scripts/run-litmus-test.sh --phase pre-build --size instant is green on both a Linux host and a macOS host after the migration batch lands"
+        - "the 4 migrated files no longer contain a hand-derived backslash-escape workaround comment and produce byte-identical PASS/FAIL verdicts to their pre-conversion form"
+        - "./build.sh --check still passes on macOS"
+        - "a litmus test pins that the primitive-resolution mechanism itself doesn't silently regress"
+        - "an authoring guide exists and is linked from methodology/ or a new cheatsheet"
 
     - packet_id: remote-projects-clone-test-flakiness
       order: 210
