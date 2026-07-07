@@ -4301,7 +4301,7 @@ plan_index:
     - packet_id: container-dependency-graph-satisfier-typestate
       order: 227
       title: "Container deps slice 3: real Satisfier wraps ensure_* + typestate Up<S> + trybuild compile-fail"
-      status: ready
+      status: claimed
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/container_deps/
       depends_on: [container-dependency-graph-impl]
@@ -4316,6 +4316,13 @@ plan_index:
         a skipped prerequisite is rejected. Migrate github-login and
         list-cloud-projects as first consumers so the proxy/vault prerequisites
         can't be skipped without a compile error.
+      events:
+        - type: claim
+          ts: "2026-07-07T19:35:00Z"
+          agent_id: "forge-big-pickle-20260707T1935Z"
+          host: forge
+          lease_id: "container-dependency-graph-satisfier-typestate-forge-20260707T1935Z"
+          expires_at: "2026-07-07T23:35:00Z"
       exit_criteria:
         - "real Satisfier ensures vault, then proxy, then health-check in topological order"
         - "Up<S> typestate witness + trybuild compile-fail proves skipped prerequisite is rejected at compile time"
