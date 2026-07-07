@@ -6,10 +6,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/tests/project_discovery.rs#L2](../../../crates/tillandsias-core/tests/project_discovery.rs#L2)
-- [crates/tillandsias-headless/src/main.rs#L7768](../../../crates/tillandsias-headless/src/main.rs#L7768)
-- [crates/tillandsias-headless/src/main.rs#L8267](../../../crates/tillandsias-headless/src/main.rs#L8267)
-- [flake.nix#L268](../../../flake.nix#L268)
-- [flake.nix#L279](../../../flake.nix#L279)
+- [crates/tillandsias-headless/src/main.rs#L7802](../../../crates/tillandsias-headless/src/main.rs#L7802)
+- [crates/tillandsias-headless/src/main.rs#L8301](../../../crates/tillandsias-headless/src/main.rs#L8301)
+- [flake.nix#L274](../../../flake.nix#L274)
+- [flake.nix#L285](../../../flake.nix#L285)
 - [images/default/config-overlay/mcp/dependency-resolver.sh#L3](../../../images/default/config-overlay/mcp/dependency-resolver.sh#L3)
 - [images/default/config-overlay/mcp/dependency-resolver.sh#L23](../../../images/default/config-overlay/mcp/dependency-resolver.sh#L23)
 - [images/default/config-overlay/mcp/dependency-resolver.sh#L304](../../../images/default/config-overlay/mcp/dependency-resolver.sh#L304)
@@ -32,7 +32,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-claude.sh#L96](../../../images/default/entrypoint-forge-claude.sh#L96)
 - [images/default/entrypoint-forge-opencode.sh#L109](../../../images/default/entrypoint-forge-opencode.sh#L109)
 - [images/default/entrypoint-forge-opencode-web.sh#L101](../../../images/default/entrypoint-forge-opencode-web.sh#L101)
-- [images/default/entrypoint-terminal.sh#L90](../../../images/default/entrypoint-terminal.sh#L90)
+- [images/default/entrypoint-terminal.sh#L102](../../../images/default/entrypoint-terminal.sh#L102)
 - [images/default/forge-welcome.sh#L167](../../../images/default/forge-welcome.sh#L167)
 - [images/default/lib-common.sh#L1403](../../../images/default/lib-common.sh#L1403)
 - [images/default/lib-common.sh#L1617](../../../images/default/lib-common.sh#L1617)
