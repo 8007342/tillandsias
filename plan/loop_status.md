@@ -2256,3 +2256,17 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - 188 -> done. macOS to re-verify on a cold Apple-Silicon guest.
 - Next: slice 2 (actionlint/vale/wasmtime/dart arch-aware) + de-hardcode versions to
   releases/latest redirect.
+
+## Cycle 2026-07-07T07:45Z (linux — release v0.3.260707.1 + CI fixes)
+
+- **Drift**: `osx-next` (0 behind, 35 ahead) and `windows-next` (0 behind, 31 ahead) both fully contained in `origin/linux-next` — verified via `git branch --contains`. No merge needed.
+- **Release v0.3.260707.1**: PR #69 (linux-next→main) created, VERSION conflict resolved by merging `origin/main` into `linux-next` (kept VERSION=0.3.260707.1). PR merged at 2026-07-07T07:36:25Z. Tag `v0.3.260707.1` pushed. Release workflow run ID 28849700897.
+  - **Linux musl**: ✅ SUCCESS (12m25s, Nix cache miss — full build). Artifacts published.
+  - **macOS tray (Apple Silicon)**: ❌ **FAILURE** — `error[E0463]: can't find crate for 'core'` for `aarch64-unknown-linux-musl` target. Root cause: `scripts/build-macos-tray.sh` uses `cargo zigbuild` to cross-compile guest Linux binaries, but the `aarch64-unknown-linux-musl` Rust target is not installed on the macOS runner. **Fix applied**: added `rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl` to the "Install guest cross-build tools" step in `.github/workflows/release.yml`.
+  - **Windows tray**: ✅ SUCCESS. Artifacts uploaded.
+  - **Release published**: Linux assets published (Nix-built musl binaries + install/uninstall/verify scripts + Cosign bundles). No macOS tray DMG or tarball due to build failure.
+- **nix-cache-warm.yml push trigger removed**: The cache warm triggered on every push to `main`/`linux-next` touching `flake.nix`/`flake.lock`/itself, which overlapped with the release workflow — both concurrently built the same Nix derivations (duplicate CPU time). Fix: removed the `push` trigger entirely. Cache warm now runs only on the weekly schedule and `workflow_dispatch`. The release workflow has its own `Nix Cache` step (`save: false`, restore-only) so it doesn't depend on the cache warm.
+- **Files changed**:
+  - `.github/workflows/release.yml`: +`rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl`
+  - `.github/workflows/nix-cache-warm.yml`: removed `push` trigger (keep `schedule` + `workflow_dispatch`)
+- **Blocked**: orders 148/150/154 (Windows), 155/161b/198 (macOS) need their respective host agents. Order 145 (encrypted-channel-vsock-cutover) needs cross-host coordination. Order 129 needs user to run forge session for proxy logs.
