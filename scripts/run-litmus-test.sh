@@ -692,7 +692,22 @@ run_litmus_test_file() {
                 # to the underlying program (e.g. podman: parsing reference
                 # "\"localhost/foo\""). Unescape here so commands behave the
                 # way they read.
+                #
+                # Also collapse \\ -> \, matching real YAML double-quote
+                # escaping (the only valid YAML way to embed one literal
+                # backslash, e.g. for a grep -E `\.`/`\(`/`\)`/`\|`). Order
+                # matters: do the \" pass FIRST, then \\ — this reproduces
+                # YAML's own left-to-right escape consumption for combined
+                # sequences (e.g. raw `\\\"` -> `\"` -> `\"`, matching a real
+                # YAML parser, not `\\\"` -> (both passes blindly interact) ->
+                # something else). Without this second pass, a `command:`
+                # string that is valid YAML and reads correctly under
+                # `ruby -ryaml` could still execute with an extra literal
+                # backslash at runtime, silently breaking any escaped
+                # metacharacter with no parse error anywhere — see
+                # plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md.
                 current_step_command="${BASH_REMATCH[1]//\\\"/\"}"
+                current_step_command="${current_step_command//\\\\/\\}"
             elif [[ "$line" =~ timeout_ms:\ ([0-9]+) ]]; then
                 current_step_timeout="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ expected_behavior:\ \"(.+)\" ]]; then

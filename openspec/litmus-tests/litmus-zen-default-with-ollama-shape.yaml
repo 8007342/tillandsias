@@ -69,16 +69,32 @@ critical_path:
 
   - step: "Req Tier-tagged pre-pull: inference entrypoint pulls T0 (qwen2.5:0.5b)"
     # Spec § Tier table mandates T0 is always pulled (CPU baseline,
-    # 397MB qwen2.5:0.5b). The entrypoint's startup pull is the
-    # tier-0 implementation; pin the canonical literal + the
-    # `ollama pull qwen2.5:0.5b` invocation.
-    command: "grep -F 'ollama pull qwen2.5:0.5b' images/inference/entrypoint.sh"
+    # 397MB qwen2.5:0.5b). Order 183 (2026-07-04) replaced the
+    # hardcoded `ollama pull qwen2.5:0.5b` literal with a config-driven
+    # DEFAULT_MODELS loop (`ollama pull "$_model"`) whose fallback
+    # default is still exactly qwen2.5:0.5b — check both halves of that
+    # shape instead of the now-nonexistent literal call. Discovered
+    # running this litmus on macOS for the first time — see
+    # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md.
+    command: "grep -F 'DEFAULT_MODELS=\"${TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b}\"' images/inference/entrypoint.sh && grep -F 'ollama pull \"$_model\"' images/inference/entrypoint.sh && echo 'ok: T0 default-model pull wired'"
     timeout_ms: 3000
-    expected_behavior: "ollama pull qwen2.5:0.5b"
+    expected_behavior: "ok: T0 default-model pull wired"
 
   - step: "Req Tier-tagged pre-pull: inference entrypoint pulls T1 (llama3.2:3b)"
     # Spec § Tier table mandates T1 is always pulled (CPU, 2.0GB
     # llama3.2:3b). Tool-capable per the spec table.
+    #
+    # OPEN QUESTION, left failing on purpose (2026-07-06): entrypoint.sh's
+    # own comment says llama3.2:3b "is replaced by llama3.2:1b" under the
+    # tiny-model-first directive (order 183, 2026-07-04), but the current
+    # DEFAULT_MODELS fallback only guarantees qwen2.5:0.5b (T0) — neither
+    # llama3.2:3b NOR llama3.2:1b is unconditionally pulled today. Unclear
+    # whether "T1 always pulled" was intentionally relaxed when the model
+    # set was simplified, or is a silent regression. NOT fixed here —
+    # needs an inference-container owner to decide: restore an
+    # always-pulled T1, or correct this litmus (and the spec table it
+    # pins) to match the now-T0-only default. See
+    # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md.
     command: "grep -F 'ollama pull llama3.2:3b' images/inference/entrypoint.sh"
     timeout_ms: 3000
     expected_behavior: "ollama pull llama3.2:3b"
@@ -109,8 +125,18 @@ rollback:
     drifted. Restore: `"model": "opencode/big-pickle"` + `"small_
     model": "opencode/gpt-5-nano"` in config.json; ollama provider
     with `baseURL: http://inference:11434/v1` + >=8 enumerated
-    models;     inference entrypoint `ollama pull qwen2.5:0.5b` (T0)
-    + `ollama pull llama3.2:3b` (T1); entrypoint.sh self-installs
+    models; inference entrypoint's DEFAULT_MODELS fallback still
+    defaults to `qwen2.5:0.5b` (T0) pulled via `ollama pull "$_model"`
+    (order 183, 2026-07-04, replaced the old hardcoded per-model
+    literals — see the T0 step above); entrypoint.sh self-installs
     ollama binary at FIRST_RUN into the persistent model cache
-    (arch-aware, de-hardcoded to latest release).
-  command: "grep -nE 'opencode/big-pickle|opencode/gpt-5-nano|inference:11434|ollama pull (qwen2.5:0.5b|llama3.2:3b)|ollama-linux-\${OLLAMA_ARCH}' images/default/config-overlay/opencode/config.json images/inference/entrypoint.sh | head -15"
+    (arch-aware, de-hardcoded to latest release). T1's old
+    `llama3.2:3b` guarantee needs owner review — see the T1 step's
+    note.
+  # The `[$]` bracket-expression matches a literal `$`, not `\$`: the
+  # latter needs `\\` for real YAML double-quote validity, but
+  # run-litmus-test.sh's command parser doesn't collapse `\\`, so it
+  # would survive as a literal double-backslash into grep -E. Same
+  # portability fix pattern as the T0/T1 steps above — see
+  # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md.
+  command: "grep -nE 'opencode/big-pickle|opencode/gpt-5-nano|inference:11434|DEFAULT_MODELS|ollama-linux-[$]{OLLAMA_ARCH}' images/default/config-overlay/opencode/config.json images/inference/entrypoint.sh | head -15"

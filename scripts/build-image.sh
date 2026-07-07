@@ -239,7 +239,7 @@ _compute_hash() {
     # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds, spec:nix-builder
     local image_dir="$1"
     local image_rel
-    local -a file_list=() tracked_rel=() untracked_rel=()
+    local -a file_list=() untracked_rel=()
 
     if [[ ! -d "$image_dir" ]]; then
         echo "no-sources"
@@ -249,7 +249,14 @@ _compute_hash() {
     image_rel="${image_dir#"$ROOT"/}"
 
     if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        mapfile -d '' -t untracked_rel < <(git -C "$ROOT" ls-files --others --exclude-standard -z -- "$image_rel" 2>/dev/null || true)
+        # `mapfile -d ''` is a bash-4+ builtin; stock macOS ships bash 3.2,
+        # so use the same portable NUL-delimited `while read -d ''` pattern
+        # the git-less fallback below already relies on (discovered running
+        # forge-staleness's litmus on macOS for the first time — see
+        # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md).
+        while IFS= read -r -d '' rel; do
+            [[ -n "$rel" ]] && untracked_rel+=("$rel")
+        done < <(git -C "$ROOT" ls-files --others --exclude-standard -z -- "$image_rel" 2>/dev/null || true)
         if [[ ${#untracked_rel[@]} -gt 0 ]]; then
             _error "Untracked files detected under ${image_rel}:"
             printf '  %s\n' "${untracked_rel[@]}" >&2
@@ -257,10 +264,9 @@ _compute_hash() {
             exit 1
         fi
 
-        mapfile -d '' -t tracked_rel < <(git -C "$ROOT" ls-files -z -- "$image_rel" 2>/dev/null || true)
-        for rel in "${tracked_rel[@]}"; do
+        while IFS= read -r -d '' rel; do
             [[ -n "$rel" ]] && file_list+=("$ROOT/$rel")
-        done
+        done < <(git -C "$ROOT" ls-files -z -- "$image_rel" 2>/dev/null || true)
     else
         _warn "Not in a git repository; falling back to find-based source enumeration for ${image_rel}"
         while IFS= read -r -d '' f; do
@@ -370,6 +376,16 @@ _info "Detected base distro: ${BOLD}${DISTRO}${NC}"
 # Package-manager caches are intentionally retained across builds. Containerfile
 # cache mounts can reuse this directory where supported; normal Podman layer
 # reuse handles the rest. Use --no-cache only for diagnostics.
+#
+# NOTE on the "${FOO[@]+"${FOO[@]}"}" expansions below (NO_CACHE_ARGS,
+# BUILD_ARGS, CACHE_MOUNT_ARGS): under `set -u`, bash < 4.4 (stock macOS
+# ships 3.2) treats "${arr[@]}" on a zero-element array as an unset-variable
+# error, not an empty expansion. CACHE_MOUNT_ARGS in particular is always
+# empty today (declared, never appended to). The `+` conditional-expansion
+# form sidesteps the bug on old bash while behaving identically on bash 4+.
+# Discovered running litmus:image-build-convergence-shape on macOS for the
+# first time — see
+# plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md.
 # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
 CACHE_MOUNT_ARGS=()
 PACKAGE_CACHE="$HOME/.cache/tillandsias/packages"
@@ -500,9 +516,9 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
             --isolation "$BUILD_ISOLATION" \
             --userns "$BUILD_USERNS" \
             --tag "$BASE_IMAGE_TAG" \
-            "${NO_CACHE_ARGS[@]}" \
-            "${BUILD_ARGS[@]}" \
-            "${CACHE_MOUNT_ARGS[@]}" \
+            "${NO_CACHE_ARGS[@]+"${NO_CACHE_ARGS[@]}"}" \
+            "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}" \
+            "${CACHE_MOUNT_ARGS[@]+"${CACHE_MOUNT_ARGS[@]}"}" \
             -f "$IMAGE_DIR/Containerfile.base" \
             "$IMAGE_DIR/" | tee "$BUILD_PROGRESS_LOG"
     else
@@ -512,9 +528,9 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
             --isolation "$BUILD_ISOLATION" \
             --userns "$BUILD_USERNS" \
             --tag "$BASE_IMAGE_TAG" \
-            "${NO_CACHE_ARGS[@]}" \
-            "${BUILD_ARGS[@]}" \
-            "${CACHE_MOUNT_ARGS[@]}" \
+            "${NO_CACHE_ARGS[@]+"${NO_CACHE_ARGS[@]}"}" \
+            "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}" \
+            "${CACHE_MOUNT_ARGS[@]+"${CACHE_MOUNT_ARGS[@]}"}" \
             -f "$IMAGE_DIR/Containerfile.base" \
             "$IMAGE_DIR/" >"$BUILD_PROGRESS_LOG" 2>&1; then
             _error "podman build failed for ${BASE_IMAGE_TAG}"
@@ -533,9 +549,9 @@ if _verbose_enabled; then
         --isolation "$BUILD_ISOLATION" \
         --userns "$BUILD_USERNS" \
         --tag "$IMAGE_TAG" \
-        "${NO_CACHE_ARGS[@]}" \
-        "${BUILD_ARGS[@]}" \
-        "${CACHE_MOUNT_ARGS[@]}" \
+        "${NO_CACHE_ARGS[@]+"${NO_CACHE_ARGS[@]}"}" \
+        "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}" \
+        "${CACHE_MOUNT_ARGS[@]+"${CACHE_MOUNT_ARGS[@]}"}" \
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/" | tee "$BUILD_PROGRESS_LOG"
 else
@@ -545,9 +561,9 @@ else
         --isolation "$BUILD_ISOLATION" \
         --userns "$BUILD_USERNS" \
         --tag "$IMAGE_TAG" \
-        "${NO_CACHE_ARGS[@]}" \
-        "${BUILD_ARGS[@]}" \
-        "${CACHE_MOUNT_ARGS[@]}" \
+        "${NO_CACHE_ARGS[@]+"${NO_CACHE_ARGS[@]}"}" \
+        "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}" \
+        "${CACHE_MOUNT_ARGS[@]+"${CACHE_MOUNT_ARGS[@]}"}" \
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/" >"$BUILD_PROGRESS_LOG" 2>&1; then
         if grep -Eqi 'newuidmap|read-only file system|cannot set up namespace|uid_map' "$BUILD_PROGRESS_LOG"; then
