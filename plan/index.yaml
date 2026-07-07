@@ -4563,3 +4563,74 @@ plan_index:
         - "microdnf install succeeds on a Fedora Silverblue host without signature errors"
         - "./build.sh --check passes"
         - "forge-base and chromium-core images build successfully from scratch"
+
+    - packet_id: forge-git-mirror-agent-affordance
+      order: 237
+      title: "Research + implement: in-forge agent transparent git push to forge mirror (no credentials needed)"
+      status: ready
+      kind: research+enhancement
+      deliverable: plan/issues/forge-git-mirror-agent-affordance-2026-07-07.md
+      depends_on: []
+      pickup_role: forge
+      capability_tags: [forge, git, container, infrastructure]
+      estimated_hours: 3
+      scope_note: >
+        Agents inside the forge currently fail git push because `git push origin`
+        prompts for credentials or errors with `could not read Username`. The
+        forge's local git-mirror (`git://tillandsias-git/tillandsias`) accepts
+        pushes from the enclave with no authentication, but agents do not know
+        this and either abort on credential prompts or fail when git falls back
+        to HTTPS mode. This packet is ELIGIBLE ONLY by in-forge agents (agents
+        running inside the forge container). Research and implement the simplest
+        approach: either (A) inject a fake credential into the forge agent
+        environment so git push to the mirror succeeds transparently, (B)
+        configure git inside the forge to never prompt for credentials when the
+        remote is the local mirror, or (C) have the git-mirror present a dummy
+        auth endpoint so agents that probe credentials see a successful handshake.
+        The token/credential must be forge-enclave-only — if leaked outside the
+        forge it is useless (only valid for the local mirror within the enclave
+        network, scoped to the current session). Evidence: a forge agent can
+        commit and push without any manual credential intervention.
+      outcome: >
+        In-forge agents can git commit and git push to the forge mirror without
+        any credential setup, manual intervention, or CI-like "no credential"
+        errors. The push is handled transparently regardless of whether the agent
+        expects credentials or not.
+      exit_criteria:
+        - "In-forge agent can run `git push origin linux-next` without any credential prompt or error"
+        - "In-forge agent can run `git commit -m msg && git push` as a blind two-step without auth setup"
+        - "The credential (if any) is scoped to the forge enclave and useless outside the `tillandsias-git` network"
+        - "Evidence: forge run with meta-orchestration pushes plan changes without credential failure"
+
+    - packet_id: forge-git-mirror-credential-injection
+      order: 238
+      title: "Research: forge mirror credential injection for transparent agent push (infrastructure side)"
+      status: pending
+      kind: research
+      deliverable: plan/issues/forge-git-mirror-credential-injection-2026-07-07.md
+      depends_on: [forge-git-mirror-agent-affordance]
+      pickup_role: any
+      capability_tags: [git, container, infrastructure, forge]
+      estimated_hours: 2
+      scope_note: >
+        Complementary out-of-forge research to order 237. Even after in-forge
+        agents learn to push without credentials, the forge mirror's upstream
+        push to GitHub over HTTPS also fails (the git-mirror container itself
+        cannot authenticate to github.com). Research options for the mirror side:
+        (A) configure the git-mirror with a GitHub deploy key or personal access
+        token so it can forward pushes to GitHub (the mirror already accepts
+        pushes in-network, but forwarding to the real origin fails without creds);
+        (B) have the forge inject the host's keyring credential into the mirror
+        container at launch (transient, no persistent secret on disk); (C) skip
+        the mirror's HTTPS upstream push entirely and have out-of-forge agents
+        push directly. The goal is that commits made by in-forge agents reach
+        GitHub without a separate out-of-forge push step.
+      outcome: >
+        Forge mirror (tillandsias-git container) can forward pushes to GitHub
+        upstream without manual credential setup, making in-forge agent commits
+        visible on GitHub without a separate host-side push.
+      exit_criteria:
+        - "Research doc covers options A/B/C with pros/cons/security analysis"
+        - "Recommended option identified with rationale"
+        - "If deploy-key/personal-access-token route: token scoped to push-only with no other permissions"
+        - "Solution does not require user to enter GitHub credentials in the forge"
