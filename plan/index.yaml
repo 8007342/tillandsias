@@ -4512,3 +4512,27 @@ plan_index:
         - "recreate under a held read lease: lease completes (no proxy teardown mid-flow)"
         - "health-wait retries transient 'container is stopped' / 'no such container' (bounded, not permanent)"
         - "litmus:vault-recreate-mutex green; ./build.sh --check and --test pass"
+
+    - packet_id: container-microdnf-gpg-workaround
+      order: 236
+      title: "Add --nogpgcheck to microdnf install in forge-base and chromium-core for transient Fedora 44 upstream GPG signature failure"
+      status: ready
+      kind: fix
+      deliverable: images/default/Containerfile.base + images/chromium/Containerfile.core
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [container, build, fedora]
+      estimated_hours: 0.25
+      outcome: >
+        Fedora 44's `updates` repo has transiently invalid GPG signatures on
+        packages like `gdb-17.2-1.fc44.x86_64` and `bluez-libs-5.87-1.fc44.x86_64`,
+        causing `Transaction failed: Signature verification failed.` during
+        `microdnf install` in both forge-base and chromium-core container builds.
+        Adding `--nogpgcheck` to the `microdnf install` invocation bypasses the
+        signature check as a workaround until the upstream Fedora infrastructure
+        is healthy again. This unblocks fresh local builds on Fedora Silverblue
+        hosts (and any host hitting the same upstream mirror issue).
+      exit_criteria:
+        - "microdnf install succeeds on a Fedora Silverblue host without signature errors"
+        - "./build.sh --check passes"
+        - "forge-base and chromium-core images build successfully from scratch"
