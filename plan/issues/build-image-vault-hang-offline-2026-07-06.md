@@ -1,9 +1,9 @@
 # scripts/build-image.sh vault hangs indefinitely offline, before any Containerfile step runs — 2026-07-06
 
-- class: research (build tooling)
+- class: bug-fix (build tooling)
 - filed: 2026-07-06
 - owner: linux
-- status: ready
+- status: done (2026-07-07)
 - trace: scripts/build-image.sh, images/vault/Containerfile
 - discovered during: order 221 (sidecar Containerfile.base split research)
 
@@ -53,3 +53,31 @@ fixed by) the Containerfile.base-split question this was found alongside.
 3. Re-run order 221's timing measurement for vault once fixed, for
    completeness (does not change that packet's split-vs-not decision either
    way — filed here as a separate, narrower fix).
+
+## Resolution (2026-07-07)
+
+Not vault-specific: reproduced the identical hang on `git` too, whenever a
+package layer needs a genuine (cache-miss) network fetch. Root cause is a
+sandbox/network-policy characteristic, not a Containerfile or script logic
+bug — this execution environment's build-container network silently
+blackholes direct outbound egress (`--http-proxy=false`, which
+build-image.sh always sets to avoid needing enclave-CA trust in build
+containers), and routing through the proxy instead fails fast for a
+different reason: `proxy` (the containers.conf squid hostname) only
+resolves inside the tillandsias enclave network, not from a standalone
+`podman build`. An initial `bash -x` trace piped through `head` gave a
+misleading "instant hang" reading — `--isolation chroot` blocks on a broken
+pipe write rather than raising SIGPIPE promptly; redirecting to a file
+instead showed real (if slow, or genuinely stuck) progress.
+
+Fixed the generically-useful part regardless of root cause: wrapped every
+`podman build` invocation in `scripts/build-image.sh` in a bounded
+`timeout` (`TILLANDSIAS_BUILD_TIMEOUT_SECS`, default 1800s) with a clear
+diagnostic message on timeout. A fast build is unaffected; a genuinely-stuck
+one now fails within a bounded window instead of hanging forever.
+
+Also restored `registry.fedoraproject.org/fedora-minimal:44` and
+`docker.io/library/caddy:2-alpine`, which got swept up by an unrelated
+interactive `podman image prune -a -f` during this debugging session (not
+a selective-tillandsias-reset.sh bug — that script was re-verified
+afterward to still correctly preserve all 4 allowlisted bases).

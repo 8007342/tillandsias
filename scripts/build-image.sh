@@ -13,6 +13,15 @@
 # Environment:
 #   TILLANDSIAS_BUILD_VERBOSE=1   Show raw podman build output
 #   TILLANDSIAS_BUILD_NO_CACHE=1  Diagnostic: pass podman build --no-cache
+#   TILLANDSIAS_BUILD_TIMEOUT_SECS=<n>  Bound each podman build invocation
+#     (default 1800s/30min). A package-manager layer that needs a genuine
+#     network fetch (cache miss) can silently hang instead of failing fast
+#     on hosts/sandboxes where a build container's direct egress is
+#     blackholed by a firewall (no ECONNREFUSED, just silence) — see
+#     plan/issues/build-image-vault-hang-offline-2026-07-06.md. A bounded
+#     timeout turns that into a clear, actionable failure instead of an
+#     indefinite hang, on any host — a fetch that completes fast still
+#     completes fast; only a genuinely-stuck one is affected.
 
 set -euo pipefail
 
@@ -461,6 +470,20 @@ if [[ "$IMAGE_NAME" == "forge" || "$IMAGE_NAME" == "nanoclawv2" ]]; then
 fi
 # Log preservation: the build output is kept in $ROOT/build-*.log for agent iteration
 
+BUILD_TIMEOUT_SECS="${TILLANDSIAS_BUILD_TIMEOUT_SECS:-1800}"
+_timeout_podman_build() {
+    local rc=0
+    timeout --signal=TERM --kill-after=10 "$BUILD_TIMEOUT_SECS" "$PODMAN" build "$@" || rc=$?
+    if [[ "$rc" -eq 124 ]]; then
+        _error "podman build timed out after ${BUILD_TIMEOUT_SECS}s (TILLANDSIAS_BUILD_TIMEOUT_SECS to adjust)."
+        _error "A package-manager layer needing a genuine network fetch can hang"
+        _error "indefinitely (rather than failing fast) if this host's build-container"
+        _error "egress is blocked by a firewall without a fast ECONNREFUSED/DNS-error —"
+        _error "see plan/issues/build-image-vault-hang-offline-2026-07-06.md."
+    fi
+    return "$rc"
+}
+
 NO_CACHE_ARGS=()
 if [[ "$FLAG_NO_CACHE" == true || "$FLAG_NO_CACHE" == "1" ]]; then
     _warn "Diagnostic no-cache mode enabled; Podman layers will not be reused"
@@ -471,7 +494,7 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
     _step "Building base image (Containerfile.base)..."
     BASE_IMAGE_TAG="${IMAGE_LABEL_PREFIX}-base:latest"
     if _verbose_enabled; then
-        "$PODMAN" build \
+        _timeout_podman_build \
             --format docker \
             --progress json \
             --isolation "$BUILD_ISOLATION" \
@@ -483,7 +506,7 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
             -f "$IMAGE_DIR/Containerfile.base" \
             "$IMAGE_DIR/" | tee "$BUILD_PROGRESS_LOG"
     else
-        if ! "$PODMAN" build \
+        if ! _timeout_podman_build \
             --format docker \
             --progress json \
             --isolation "$BUILD_ISOLATION" \
@@ -504,7 +527,7 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
 fi
 
 if _verbose_enabled; then
-    "$PODMAN" build \
+    _timeout_podman_build \
         --format docker \
         --progress json \
         --isolation "$BUILD_ISOLATION" \
@@ -516,7 +539,7 @@ if _verbose_enabled; then
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/" | tee "$BUILD_PROGRESS_LOG"
 else
-    if ! "$PODMAN" build \
+    if ! _timeout_podman_build \
         --format docker \
         --progress json \
         --isolation "$BUILD_ISOLATION" \
