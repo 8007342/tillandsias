@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-proxy.sh#L2](../../../build-proxy.sh#L2)
-- [build.sh#L288](../../../build.sh#L288)
+- [build.sh#L303](../../../build.sh#L303)
 - [crates/tillandsias-core/src/container_profile.rs#L210](../../../crates/tillandsias-core/src/container_profile.rs#L210)
 - [crates/tillandsias-core/src/container_profile.rs#L381](../../../crates/tillandsias-core/src/container_profile.rs#L381)
 - [crates/tillandsias-core/src/container_profile.rs#L453](../../../crates/tillandsias-core/src/container_profile.rs#L453)
@@ -25,10 +25,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/main.rs#L1784](../../../crates/tillandsias-headless/src/main.rs#L1784)
 - [crates/tillandsias-headless/src/main.rs#L2068](../../../crates/tillandsias-headless/src/main.rs#L2068)
 - [crates/tillandsias-headless/src/main.rs#L2237](../../../crates/tillandsias-headless/src/main.rs#L2237)
-- [crates/tillandsias-headless/src/main.rs#L3230](../../../crates/tillandsias-headless/src/main.rs#L3230)
-- [crates/tillandsias-headless/src/main.rs#L3581](../../../crates/tillandsias-headless/src/main.rs#L3581)
-- [crates/tillandsias-headless/src/main.rs#L4049](../../../crates/tillandsias-headless/src/main.rs#L4049)
-- [crates/tillandsias-headless/src/main.rs#L4401](../../../crates/tillandsias-headless/src/main.rs#L4401)
+- [crates/tillandsias-headless/src/main.rs#L3260](../../../crates/tillandsias-headless/src/main.rs#L3260)
+- [crates/tillandsias-headless/src/main.rs#L3611](../../../crates/tillandsias-headless/src/main.rs#L3611)
+- [crates/tillandsias-headless/src/main.rs#L4079](../../../crates/tillandsias-headless/src/main.rs#L4079)
+- [crates/tillandsias-headless/src/main.rs#L4431](../../../crates/tillandsias-headless/src/main.rs#L4431)
 - [crates/tillandsias-headless/src/remote_projects.rs#L305](../../../crates/tillandsias-headless/src/remote_projects.rs#L305)
 - [crates/tillandsias-headless/src/remote_projects.rs#L339](../../../crates/tillandsias-headless/src/remote_projects.rs#L339)
 - [crates/tillandsias-headless/src/remote_projects.rs#L623](../../../crates/tillandsias-headless/src/remote_projects.rs#L623)

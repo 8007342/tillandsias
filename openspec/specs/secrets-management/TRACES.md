@@ -27,7 +27,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/Containerfile#L61](../../../images/default/Containerfile#L61)
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
 - [images/default/lib-common.sh#L60](../../../images/default/lib-common.sh#L60)
-- [images/default/lib-common.sh#L212](../../../images/default/lib-common.sh#L212)
+- [images/default/lib-common.sh#L216](../../../images/default/lib-common.sh#L216)
 - [images/git/Containerfile#L18](../../../images/git/Containerfile#L18)
 - [images/git/post-receive-hook.sh#L114](../../../images/git/post-receive-hook.sh#L114)
 - [images/git/vault-cli.sh#L2](../../../images/git/vault-cli.sh#L2)
