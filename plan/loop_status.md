@@ -1,6 +1,39 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-07T21:45:00Z
+LastExecutionTime: 2026-07-08T00:20:00Z
+
+## Cycle 2026-07-08T00:20Z (forge — meta-orchestration worker slice)
+
+- **Host**: forge (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`, started clean
+  after fast-forward to `origin/linux-next@ee94611c`; credential guard initially
+  reported `ok:forge-git-mirror`.
+- **Worker drain — order 237 (forge-git-mirror-agent-affordance), IN PROGRESS**:
+  implemented slice 1. `scripts/check-credential-channel.sh` now fails closed
+  in forge mode unless `git ls-remote --get-url origin` resolves to
+  `git://tillandsias-git/*` or `git://git-service/*`, then probes that resolved
+  mirror URL directly. `write_forge_gitconfig()` now injects the
+  project-specific mirror base `git://tillandsias-git/<project>` instead of the
+  incomplete `git://tillandsias-git/` base. Added litmus cases for the plain
+  GitHub-origin false positive and mirror-resolved pass path.
+- **Finding filed/promoted — order 240 (forge-build-check-tooling-gap)**:
+  `./build.sh --check` cannot run inside the forge because it requires host
+  Podman setup even though the forge is already inside a Podman container, then
+  also reports missing `file`. Filed
+  `plan/issues/forge-build-check-tooling-gap-2026-07-08.md` and promoted a
+  ready packet requiring the forge check-only path to skip host-Podman setup or
+  emit a precise delegation message.
+- **Verification**: `cargo fmt --all --check` PASS; conflict-marker scan PASS;
+  `cargo test --package tillandsias-headless write_forge_gitconfig` PASS (2
+  tests, with temporary HOME to avoid root-owned forge git config); direct guard
+  checks PASS for GitHub-origin fail-closed and mirror-resolved success;
+  `tillandsias-policy validate-yaml` PASS for touched YAML. `./build.sh --check`
+  blocked by the newly filed forge tooling gap.
+- **Residual**: order 237 remains in progress; full cryptographic per-session
+  mirror authentication remains for order 238 if enclave-scoped git-daemon
+  routing is insufficient. Push to GitHub `origin/linux-next` failed after
+  three fetch/rebase/push attempts with `fatal: could not read Username for
+  'https://github.com': No such device or address`; order 237 was marked
+  blocked on the external credential channel.
 
 ## Cycle 2026-07-07T21:45Z (linux_immutable — meta-orchestration + curl-install e2e)
 

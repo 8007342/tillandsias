@@ -4614,13 +4614,63 @@ plan_index:
     - packet_id: forge-git-mirror-agent-affordance
       order: 237
       title: "Research + implement: in-forge agent transparent git push to forge mirror (properly authenticated)"
-      status: ready
+      status: blocked
       kind: research+enhancement
       deliverable: plan/issues/forge-git-mirror-agent-affordance-2026-07-07.md
       depends_on: []
       pickup_role: forge
       capability_tags: [forge, git, container, infrastructure]
       estimated_hours: 4
+      events:
+        - type: claim
+          ts: "2026-07-08T00:03:00Z"
+          agent_id: "forge-codex-20260708T0000Z"
+          host: forge
+          lease_id: "forge-git-mirror-agent-affordance-20260708T0003Z"
+          expires_at: "2026-07-08T04:03:00Z"
+        - type: progress
+          ts: "2026-07-08T00:15:00Z"
+          agent_id: "forge-codex-20260708T0000Z"
+          host: forge
+          lease_id: "forge-git-mirror-agent-affordance-20260708T0003Z"
+          summary: >
+            Slice 1 implemented: forge credential guard now fails closed unless
+            `git ls-remote --get-url origin` resolves to the enclave mirror
+            (`git://tillandsias-git/*` or `git://git-service/*`) and that
+            resolved mirror endpoint answers. The forge gitconfig injector now
+            writes a project-specific mirror base (`git://tillandsias-git/<project>`)
+            instead of the incomplete `git://tillandsias-git/` base. Added
+            litmus coverage for the plain-GitHub-origin false positive and the
+            mirror-resolved pass path.
+          evidence:
+            - "cargo test --package tillandsias-headless write_forge_gitconfig (with temporary HOME): 2 passed"
+            - "direct guard checks: forge plain GitHub origin fails closed; mirror-resolved origin returns ok:forge-git-mirror"
+            - "cargo run --quiet -p tillandsias-policy -- validate-yaml plan/index.yaml openspec/litmus-tests/litmus-credential-channel-check-shape.yaml: ok"
+            - "./build.sh --check blocked in this forge because it requires host Podman setup even though the forge is already inside a Podman container, and file is missing on PATH; filed plan/issues/forge-build-check-tooling-gap-2026-07-08.md"
+          residual: >
+            Full cryptographic per-session mirror authentication is not closed
+            by this slice. Keep order 238 as the follow-up research packet for
+            token issuance or authenticated git-daemon replacement if enclave
+            network scoping is insufficient.
+        - type: blocked
+          ts: "2026-07-08T00:30:00Z"
+          agent_id: "forge-codex-20260708T0000Z"
+          host: forge
+          lease_id: "forge-git-mirror-agent-affordance-20260708T0003Z"
+          reason: >
+            GitHub origin push failed after three fetch/rebase/push attempts:
+            `fatal: could not read Username for 'https://github.com': No such
+            device or address`. This forge checkout has no usable GitHub
+            credential channel and its origin currently resolves to plain
+            `https://github.com/8007342/tillandsias.git`, not the enclave mirror.
+          blocker_refs:
+            - "plan/issues/forge-git-mirror-agent-affordance-2026-07-07.md"
+            - "plan/issues/forge-git-mirror-credential-injection-2026-07-07.md"
+          smallest_next_action: >
+            Launch future forge checkouts with the injected project-specific
+            mirror gitconfig active, or provide the git mirror container with a
+            scoped upstream GitHub credential so pushes through the mirror reach
+            origin/linux-next.
       scope_note: >
         Agents inside the forge currently fail git push because `git push origin`
         prompts for credentials or errors with `could not read Username`. The
@@ -4737,3 +4787,31 @@ plan_index:
         - "Non-Silverblue hosts (Workstation, macOS, Windows) pass through with zero overhead"
         - "`scripts/with-tillandsias-builder.sh <command>` works independently of build.sh"
         - "Clear error message if `toolbox` binary is absent on Silverblue"
+
+    - packet_id: forge-build-check-tooling-gap
+      order: 240
+      title: "Forge: make ./build.sh --check usable from inside the forge container"
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/forge-build-check-tooling-gap-2026-07-08.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [forge, build-script, dev-loop, tooling]
+      estimated_hours: 1
+      scope_note: >
+        The forge is already running inside a Podman container, so `./build.sh
+        --check` must not require host Podman setup from inside
+        `TILLANDSIAS_HOST_KIND=forge`. The current gate exits early with
+        "podman must be installed" before reaching the Rust checks, then also
+        reports missing `file`. Fix the in-forge check-only path so forge agents
+        can run the standard integration gate, or emit a precise delegation
+        message only when an outer-host Podman operation is genuinely required.
+      outcome: >
+        Forge agents can run the repo-standard check path for code/script slices
+        from inside the forge without being blocked by unavailable host Podman.
+      exit_criteria:
+        - "`TILLANDSIAS_HOST_KIND=forge ./build.sh --check` reaches the Rust type-check stage without requiring podman on PATH"
+        - "If `file` remains required, the error names only `file` and does not suggest installing Podman inside the forge"
+        - "Non-forge hosts still run the existing Podman setup when needed"
+        - "A targeted shell or litmus check pins the forge check-only branch"

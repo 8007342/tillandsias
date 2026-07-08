@@ -5236,7 +5236,8 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
 
     if let Some(ref origin) = origin_url {
         config.push('\n');
-        config.push_str("[url \"git://tillandsias-git/\"]\n");
+        let mirror_url = format!("git://tillandsias-git/{}", project_name);
+        config.push_str(&format!("[url \"{}\"]\n", mirror_url));
         config.push_str(&format!("\tinsteadOf = {}\n", origin));
         // If origin is an SSH-style URL, also redirect its HTTPS equivalent
         // so `git push https://github.com/<org>/<repo>` also hits the mirror.
@@ -9948,8 +9949,8 @@ mod tests {
             "config must contain mirror redirect for origin URL"
         );
         assert!(
-            contents.contains("[url \"git://tillandsias-git/\"]"),
-            "config must contain url.insteadOf section for mirror"
+            contents.contains("[url \"git://tillandsias-git/test-project\"]"),
+            "config must contain project-specific url.insteadOf section for mirror"
         );
         assert!(
             contents.contains("helper ="),

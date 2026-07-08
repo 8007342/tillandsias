@@ -80,7 +80,17 @@ credential_channel_verdict() {
       echo "ok:forge-git-mirror"
       return 0
     fi
-    if timeout 10 git ls-remote origin HEAD >/dev/null 2>&1; then
+    local effective_origin
+    effective_origin="$(git ls-remote --get-url origin 2>/dev/null || true)"
+    case "$effective_origin" in
+      git://tillandsias-git/*|git://git-service/*) ;;
+      *)
+        echo "[check-credential-channel] TILLANDSIAS_HOST_KIND=forge but origin does not resolve to the enclave git mirror (effective origin: ${effective_origin:-<missing>}): no usable push channel. Fix the forge gitconfig injection or provide a forge credential channel; do NOT import host credentials." >&2
+        echo "missing:no-credential-channel"
+        return 1
+        ;;
+    esac
+    if timeout 10 git ls-remote "$effective_origin" HEAD >/dev/null 2>&1; then
       echo "ok:forge-git-mirror"
       return 0
     fi
