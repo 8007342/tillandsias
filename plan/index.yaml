@@ -5010,7 +5010,7 @@ plan_index:
     - packet_id: ensure-git-login-target-as-prerequisite-failure
       order: 244
       title: "Fix: ensure_git_login fails because ensure_with satisfies the target node itself"
-      status: claimed
+      status: completed
       kind: bug
       deliverable: plan/issues/github-login-ensure-target-as-prerequisite-failure-2026-07-08.md
       depends_on: []
@@ -5025,6 +5025,16 @@ plan_index:
           host: linux
           lease_id: "ensure-git-login-target-as-prerequisite-failure-20260708T2230Z"
           expires_at: "2026-07-09T02:30:00Z"
+        - type: completed
+          ts: "2026-07-08T22:50:00Z"
+          agent_id: "linux-big-pickle-20260708T2230Z"
+          host: linux
+          lease_id: "ensure-git-login-target-as-prerequisite-failure-20260708T2230Z"
+          commit_sha: "807a0950"
+          evidence:
+            - "fix(container_deps): ensure_git_login skips target node in satisfier loop"
+            - "cargo test -p tillandsias-headless container_deps: 10/10 PASS"
+            - "./build.sh --check: PASS"
       outcome: >
         ensure_git_login() called ensure_with(Service::GitLogin, ...) which
         calls satisfy() on every node in the dep graph including GitLogin
