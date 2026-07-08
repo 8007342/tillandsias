@@ -5,6 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [mock-release/install.sh#L4](../../../mock-release/install.sh#L4)
 - [scripts/build-guest-binaries.sh#L2](../../../scripts/build-guest-binaries.sh#L2)
 - [scripts/install.sh#L4](../../../scripts/install.sh#L4)
 - [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)

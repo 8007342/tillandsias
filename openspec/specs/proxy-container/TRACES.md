@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-proxy.sh#L2](../../../build-proxy.sh#L2)
-- [build.sh#L303](../../../build.sh#L303)
+- [build.sh#L315](../../../build.sh#L315)
 - [crates/tillandsias-core/src/container_profile.rs#L210](../../../crates/tillandsias-core/src/container_profile.rs#L210)
 - [crates/tillandsias-core/src/container_profile.rs#L381](../../../crates/tillandsias-core/src/container_profile.rs#L381)
 - [crates/tillandsias-core/src/container_profile.rs#L453](../../../crates/tillandsias-core/src/container_profile.rs#L453)
@@ -17,7 +17,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L854](../../../crates/tillandsias-core/src/container_profile.rs#L854)
 - [crates/tillandsias-core/src/container_profile.rs#L935](../../../crates/tillandsias-core/src/container_profile.rs#L935)
 - [crates/tillandsias-core/src/container_profile.rs#L1099](../../../crates/tillandsias-core/src/container_profile.rs#L1099)
-- [crates/tillandsias-core/src/state.rs#L171](../../../crates/tillandsias-core/src/state.rs#L171)
+- [crates/tillandsias-core/src/state.rs#L175](../../../crates/tillandsias-core/src/state.rs#L175)
 - [crates/tillandsias-headless/src/main.rs#L823](../../../crates/tillandsias-headless/src/main.rs#L823)
 - [crates/tillandsias-headless/src/main.rs#L833](../../../crates/tillandsias-headless/src/main.rs#L833)
 - [crates/tillandsias-headless/src/main.rs#L852](../../../crates/tillandsias-headless/src/main.rs#L852)
@@ -36,8 +36,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-antigravity.sh#L32](../../../images/default/entrypoint-forge-antigravity.sh#L32)
 - [images/default/entrypoint-forge-claude.sh#L39](../../../images/default/entrypoint-forge-claude.sh#L39)
 - [images/default/entrypoint-forge-codex.sh#L35](../../../images/default/entrypoint-forge-codex.sh#L35)
-- [images/default/entrypoint-forge-opencode.sh#L37](../../../images/default/entrypoint-forge-opencode.sh#L37)
 - [images/default/entrypoint-forge-opencode-web.sh#L38](../../../images/default/entrypoint-forge-opencode-web.sh#L38)
+- [images/default/entrypoint-forge-opencode.sh#L37](../../../images/default/entrypoint-forge-opencode.sh#L37)
 - [images/default/entrypoint-terminal.sh#L39](../../../images/default/entrypoint-terminal.sh#L39)
 - [images/proxy/Containerfile#L1](../../../images/proxy/Containerfile#L1)
 - [images/proxy/Containerfile#L10](../../../images/proxy/Containerfile#L10)

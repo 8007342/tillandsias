@@ -11,7 +11,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-browser-mcp/src/server.rs#L605](../../../crates/tillandsias-browser-mcp/src/server.rs#L605)
 - [crates/tillandsias-browser-mcp/tests/allowlist_enforcement_integration.rs#L3](../../../crates/tillandsias-browser-mcp/tests/allowlist_enforcement_integration.rs#L3)
 - [crates/tillandsias-browser-mcp/tests/allowlist_enforcement_integration.rs#L505](../../../crates/tillandsias-browser-mcp/tests/allowlist_enforcement_integration.rs#L505)
-- [crates/tillandsias-core/src/state.rs#L183](../../../crates/tillandsias-core/src/state.rs#L183)
+- [crates/tillandsias-core/src/state.rs#L187](../../../crates/tillandsias-core/src/state.rs#L187)
 - [crates/tillandsias-headless/src/main.rs#L6725](../../../crates/tillandsias-headless/src/main.rs#L6725)
 - [crates/tillandsias-headless/src/main.rs#L6772](../../../crates/tillandsias-headless/src/main.rs#L6772)
 - [images/chromium/Containerfile.core#L1](../../../images/chromium/Containerfile.core#L1)

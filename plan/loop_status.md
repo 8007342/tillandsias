@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-08T20:29:31Z
+LastExecutionTime: 2026-07-08T20:34:30Z
 
 ## Cycle 2026-07-08T20:29Z (linux_mutable — meta-orchestration worker + e2e slice)
 
@@ -33,6 +33,11 @@ LastExecutionTime: 2026-07-08T20:29:31Z
   through `34862ec3` (local install checkpoint), `c73decd1` (toolbox-exists
   detection finding), and `7d534d8b` (order 239 completion / Python policy
   fix). The local order-211 changes were reapplied on top of that pushed state.
+- **Final local install**: per operator request, ran plain `./build.sh
+  --install` after pushing the order-211 fix. It bumped `VERSION` to
+  `0.3.260708.3`, regenerated trace indexes, installed
+  `/home/tlatoani/.local/bin/tillandsias`, and the installed binary reports
+  `Tillandsias v0.3.260708.3`.
 
 ## Cycle 2026-07-08T20:20Z (linux_mutable — meta-orchestration worker slice)
 

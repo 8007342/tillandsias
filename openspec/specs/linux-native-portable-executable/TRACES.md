@@ -5,11 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [build.sh#L35](../../../build.sh#L35)
-- [build.sh#L358](../../../build.sh#L358)
 - [.cargo/config.toml#L1](../../../.cargo/config.toml#L1)
-- [crates/tillandsias-headless/build.rs#L1](../../../crates/tillandsias-headless/build.rs#L1)
+- [build.sh#L35](../../../build.sh#L35)
+- [build.sh#L370](../../../build.sh#L370)
 - [crates/tillandsias-headless/Cargo.toml#L78](../../../crates/tillandsias-headless/Cargo.toml#L78)
+- [crates/tillandsias-headless/build.rs#L1](../../../crates/tillandsias-headless/build.rs#L1)
 - [crates/tillandsias-headless/src/main.rs#L1](../../../crates/tillandsias-headless/src/main.rs#L1)
 - [crates/tillandsias-headless/src/main.rs#L549](../../../crates/tillandsias-headless/src/main.rs#L549)
 - [crates/tillandsias-headless/src/main.rs#L759](../../../crates/tillandsias-headless/src/main.rs#L759)
@@ -24,5 +24,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/tests/signal_handling.rs#L1](../../../crates/tillandsias-headless/tests/signal_handling.rs#L1)
 - [crates/tillandsias-headless/tests/stress_concurrent_operations.rs#L1](../../../crates/tillandsias-headless/tests/stress_concurrent_operations.rs#L1)
 - [flake.nix#L36](../../../flake.nix#L36)
+- [mock-release/install.sh#L4](../../../mock-release/install.sh#L4)
 - [scripts/install.sh#L4](../../../scripts/install.sh#L4)
 - [scripts/test-install-path.sh#L2](../../../scripts/test-install-path.sh#L2)
