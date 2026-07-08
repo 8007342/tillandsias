@@ -28,6 +28,11 @@ LastExecutionTime: 2026-07-08T19:28:41Z
   wsl_fetch_script_installs_download_via_temp_file` PASS, `./build.sh --check`
   PASS.
 - **E2E**: pending after the integration push.
+- **Finding filed**: integration push from the linked worktree succeeded but
+  emitted `fatal: unable to get credential storage lock in 1000 ms: Not a
+  directory` because the local helper is `store --file=.git/.gh-credentials`
+  and `.git` is a file in linked worktrees. Filed
+  `plan/issues/git-credential-store-linked-worktree-lock-2026-07-08.md`.
 
 ## Cycle 2026-07-08T00:20Z (forge — meta-orchestration worker slice)
 
