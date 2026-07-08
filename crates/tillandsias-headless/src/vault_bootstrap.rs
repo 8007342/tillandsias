@@ -28,7 +28,7 @@ use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
 const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
-const VAULT_VOLUME: &str = "tillandsias-vault-data";
+
 const VAULT_UNSEAL_SECRET: &str = "tillandsias-vault-unseal";
 const VAULT_TLS_CERT_SECRET: &str = "tillandsias-vault-tls-cert";
 const VAULT_TLS_KEY_SECRET: &str = "tillandsias-vault-tls-key";
@@ -872,11 +872,8 @@ pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
 /// expensive on-demand launch in `is_github_key_present` and `ensure_vault_running`.
 #[allow(dead_code)]
 fn vault_data_volume_exists() -> bool {
-    podman_cmd_sync()
-        .args(["volume", "exists", VAULT_VOLUME])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    let dir = crate::init_cache_dir().unwrap_or_else(|_| PathBuf::from(".")).join("vault-data");
+    dir.exists()
 }
 
 /// True iff the host keychain holds a valid (32-byte, base64-encoded) Shamir
@@ -1607,11 +1604,8 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
                  (volume exists but no Shamir share in keychain)"
             );
         }
-        let _ = podman_cmd_sync()
-            .args(["volume", "rm", "-f", VAULT_VOLUME])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output();
+        let vault_dir = crate::init_cache_dir().unwrap_or_else(|_| PathBuf::from(".")).join("vault-data");
+        let _ = std::fs::remove_dir_all(vault_dir);
     } else if debug && vault_data_volume_exists() {
         eprintln!(
             "[tillandsias-vault] preserving existing data volume (Shamir share present in keychain)"
@@ -1654,7 +1648,9 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // /vault/data/core/_migration and `--github-login` then reports Vault as
     // not running. `:U` re-asserts ownership and self-repairs that drift.
     // @trace spec:tillandsias-vault
-    let volume_arg = format!("{}:/vault/data:U", VAULT_VOLUME);
+    let vault_dir = crate::init_cache_dir().map_err(|e| e.to_string())?.join("vault-data");
+    std::fs::create_dir_all(&vault_dir).map_err(|e| format!("failed to create vault data dir: {}", e))?;
+    let volume_arg = format!("{}:/vault/data:U", vault_dir.display());
     let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
     let mut run_args: Vec<String> = vec![
         "run".into(),

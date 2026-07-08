@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-08
 **Agent:** forge-codex-20260708T0000Z
+**Status:** Resolved
 
 ## Slice 1: fail closed unless origin really resolves to the mirror
 
