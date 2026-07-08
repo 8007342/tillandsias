@@ -75,11 +75,6 @@ credential_channel_verdict() {
     # present. Unlike a direct anonymous GitHub read, an ls-remote THROUGH the
     # mirror exercises the same rewrite path a push takes and proves the mirror
     # sidecar is up for this repo; a failure is definitive evidence it is unusable.
-    if [ "${TILLANDSIAS_CRED_SKIP_MIRROR_PROBE:-0}" = "1" ]; then
-      # Fixture seam: trust the env var without a network probe (deterministic).
-      echo "ok:forge-git-mirror"
-      return 0
-    fi
     local effective_origin
     effective_origin="$(git ls-remote --get-url origin 2>/dev/null || true)"
     case "$effective_origin" in
@@ -90,6 +85,12 @@ credential_channel_verdict() {
         return 1
         ;;
     esac
+    if [ "${TILLANDSIAS_CRED_SKIP_MIRROR_PROBE:-0}" = "1" ]; then
+      # Fixture seam: verify URL rewriting first, then skip only the live
+      # network probe so host pre-build litmus does not depend on forge DNS.
+      echo "ok:forge-git-mirror"
+      return 0
+    fi
     if timeout 10 git ls-remote "$effective_origin" HEAD >/dev/null 2>&1; then
       echo "ok:forge-git-mirror"
       return 0

@@ -3926,13 +3926,29 @@ plan_index:
     - packet_id: ci-full-guest-binary-prereq-gap
       order: 211
       title: "Research: ./build.sh --ci-full hard-fails on a fresh checkout without a cross-compiled guest binary"
-      status: ready
-      kind: research
-      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-06.md
+      status: done
+      kind: research+fix
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
       depends_on: []
       pickup_role: linux
       capability_tags: [research, litmus, ci, cross-compile]
       estimated_hours: 2
+      outcome: >
+        Resolved by making `./build.sh --ci-full --install` self-prepare local
+        release inputs before the pre-build CI gate. The selected fix is the
+        auto-cross-compile prerequisite path: CI-full install now bumps the
+        local version, regenerates traces, and runs
+        `scripts/build-guest-binaries.sh` before `scripts/local-ci.sh --phase
+        pre-build`. `scripts/build-guest-binaries.sh` also has an explicit
+        Cargo fallback when the local Nix daemon is unavailable, including an
+        `aarch64-unknown-linux-musl` `rust-lld` path for hosts without
+        `aarch64-linux-musl-gcc`. The follow-up e2e run
+        `target/build-install-smoke-e2e/20260708T200628Z` passed the
+        guest-binary embed litmus and reached post-build status smoke, proving
+        this packet no longer blocks the smoke-test skill before install.
+      exit_criteria:
+        - "decision recorded: auto-cross-compile prerequisite vs. litmus soft-fail classification (or both) — DONE (auto-cross-compile prerequisite)"
+        - "a fresh checkout (no target-guest/ artifacts) can reach ./build.sh --ci-full --install's completion (or an explicit, documented, non-blocking skip) without a manual cross-compile step — DONE through pre-build/install; later post-build status smoke failures are tracked separately"
       events:
         - type: observed
           ts: "2026-07-08T19:34:50Z"
@@ -3946,24 +3962,23 @@ plan_index:
             `target-guest/tillandsias-headless-x86_64-unknown-linux-musl`
             is absent. Evidence:
             target/build-install-smoke-e2e/20260708T193145Z/01-build-install.log:1344-1349.
-      outcome: >
-        Discovered by /build-install-and-smoke-test-e2e (2026-07-06):
-        litmus:guest-binary-embed-integrity (a known "local build-state gap,
-        not drift" also seen on macOS in
-        plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md)
-        is enough on its own to fail scripts/local-ci.sh's litmus-pre-build
-        gate, which fails ./build.sh --ci-full --install outright BEFORE
-        --install runs — meaning the smoke-test skill cannot reach its own
-        destructive-reset/re-provision gates on a fresh Linux dev checkout
-        that hasn't separately run scripts/build-guest-binaries.sh. Research
-        the right fix: (a) auto-run build-guest-binaries.sh as a --ci-full
-        prerequisite so a fresh checkout self-heals, or (b) teach the litmus
-        runner to distinguish "local build-state gap" from "product drift"
-        (same thread as the macOS "litmus runner gives no signal for missing
-        tools" finding) so local-ci.sh can warn instead of hard-fail here.
-      exit_criteria:
-        - "decision recorded: auto-cross-compile prerequisite vs. litmus soft-fail classification (or both)"
-        - "a fresh checkout (no target-guest/ artifacts) can reach ./build.sh --ci-full --install's completion (or an explicit, documented, non-blocking skip) without a manual cross-compile step"
+        - type: claim
+          ts: "2026-07-08T19:58:00Z"
+          agent_id: "linux-macuahuitl-codex-20260708T1958Z"
+          host: linux_mutable
+          lease_id: "linux-macuahuitl-codex-20260708T1958Z"
+          summary: "Claimed during meta-orchestration after latest remote sync."
+        - type: completed
+          ts: "2026-07-08T20:29:31Z"
+          agent_id: "linux-macuahuitl-codex-20260708T1958Z"
+          host: linux_mutable
+          evidence:
+            - "scripts/test-build-sh-ci-full-install-prep.sh PASS."
+            - "scripts/build-guest-binaries.sh --verify PASS for staged v0.3.260708.2 guest binaries."
+            - "scripts/local-ci.sh --phase pre-build PASS before e2e."
+            - "target/build-install-smoke-e2e/20260708T200628Z/01-build-install.log:1498-1499 shows litmus:guest-binary-embed-integrity PASS."
+            - "target/build-install-smoke-e2e/20260708T200628Z/01-build-install.log:2280 shows pre-build litmus PASS."
+            - "target/build-install-smoke-e2e/20260708T200628Z/01-build-install.log:2321 shows the portable launcher installed."
 
     - packet_id: forge-image-split-live-verification
       order: 220
@@ -4903,3 +4918,60 @@ plan_index:
             - "scripts/test-build-sh-forge-check-only.sh PASS."
             - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check PASS; output shows host Podman setup skipped, then fmt/type-check/clippy passed."
             - "./build.sh --check PASS on linux_mutable; output shows normal non-forge Podman registry setup still runs."
+
+    - packet_id: forge-diagnostics-opencode-attached-exit
+      order: 241
+      title: "Post-build smoke: forge diagnostics records opencode attached command exit"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [litmus, forge, diagnostics, opencode, e2e]
+      estimated_hours: 2
+      outcome: >
+        During local-build e2e run 20260708T200628Z, post-build
+        `litmus:forge-diagnostics-e2e` reported a failed opencode container
+        launch during annex capture even though the build/install and pre-build
+        phases had passed.
+      exit_criteria:
+        - "`scripts/run-litmus-test.sh default-image --phase post-build --size e2e --compact` no longer records `event:container_launch stage=opencode state=failed` during diagnostics annex capture"
+
+    - packet_id: opencode-prompt-e2e-loop-status-contract
+      order: 242
+      title: "Post-build smoke: opencode prompt e2e loop_status contract mismatch"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
+      depends_on: []
+      pickup_role: any
+      owner_host: linux
+      capability_tags: [litmus, meta-orchestration, forge, plan, opencode]
+      estimated_hours: 2
+      outcome: >
+        During local-build e2e run 20260708T200628Z, the in-forge
+        meta-orchestration prompt advanced HEAD but the litmus assertion that
+        `plan/loop_status.md` changed in the new commit(s) failed. Decide
+        whether the litmus contract is stale or the in-forge loop must always
+        include a loop-status update before push.
+      exit_criteria:
+        - "`scripts/run-litmus-test.sh meta-orchestration --phase post-build --size e2e --compact` passes the loop_status.md delta assertion, or the assertion is replaced with the current durable meta-orchestration exit contract"
+
+    - packet_id: tray-parity-matrix-complete-post-build
+      order: 243
+      title: "Post-build smoke: tray parity matrix completeness litmus fails"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
+      depends_on: []
+      pickup_role: any
+      owner_host: linux
+      capability_tags: [litmus, tray, parity, post-build]
+      estimated_hours: 1
+      outcome: >
+        During local-build e2e run 20260708T200628Z,
+        `litmus:tray-parity-matrix-complete` failed in post-build status smoke
+        without additional detail in compact output.
+      exit_criteria:
+        - "Run the tray parity litmus with verbose output, then either update the parity matrix evidence or fix the missing implementation/status entry so the post-build litmus passes"

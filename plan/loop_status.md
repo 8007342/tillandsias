@@ -1,6 +1,38 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-08T20:20:38Z
+LastExecutionTime: 2026-07-08T20:29:31Z
+
+## Cycle 2026-07-08T20:29Z (linux_mutable — meta-orchestration worker + e2e slice)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Pulled latest remote state first; started from `origin/linux-next@f1d3dcc7`
+  before in-forge work advanced the branch to `origin/linux-next@7d534d8b`.
+- **Worker drain — order 211 (ci-full-guest-binary-prereq-gap), COMPLETED**:
+  selected the auto-cross-compile prerequisite fix. `./build.sh --ci-full
+  --install` now prepares local release inputs before pre-build CI by bumping
+  the local version, regenerating traces, and running
+  `scripts/build-guest-binaries.sh`. The guest-binary builder now has a Cargo
+  fallback when the Nix daemon is unavailable, including an aarch64 musl
+  `rust-lld` path for hosts without `aarch64-linux-musl-gcc`.
+- **Resolved prior e2e blockers**: follow-up run
+  `target/build-install-smoke-e2e/20260708T200628Z` showed version
+  monotonicity PASS (`01-build-install.log:230`), no-Python policy PASS
+  (`01-build-install.log:1383`), guest-binary embed integrity PASS
+  (`01-build-install.log:1498-1499`), pre-build litmus PASS
+  (`01-build-install.log:2280`), and portable launcher install PASS
+  (`01-build-install.log:2321`).
+- **Local-build e2e**: `./build.sh --ci-full --install` reached post-build
+  status smoke, then STOPPED at gate 1 with exit 1. Per the e2e runbook, the
+  destructive Podman reset was not reached and was not run. New ready packets
+  filed in `plan/issues/build-install-smoke-e2e-findings-2026-07-08.md` and
+  promoted in `plan/index.yaml`: order 241
+  (`forge-diagnostics-opencode-attached-exit`), order 242
+  (`opencode-prompt-e2e-loop-status-contract`), and order 243
+  (`tray-parity-matrix-complete-post-build`).
+- **In-forge commits observed**: the e2e-invoked forge advanced `linux-next`
+  through `34862ec3` (local install checkpoint), `c73decd1` (toolbox-exists
+  detection finding), and `7d534d8b` (order 239 completion / Python policy
+  fix). The local order-211 changes were reapplied on top of that pushed state.
 
 ## Cycle 2026-07-08T20:20Z (linux_mutable — meta-orchestration worker slice)
 

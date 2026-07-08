@@ -116,26 +116,57 @@ if verify_binaries >/dev/null 2>&1; then
     exit 0
 fi
 
-# We need to build. Check if nix is installed.
-if ! command -v nix >/dev/null 2>&1; then
-    echo "[build-guest-binaries] ERROR: nix is required to build guest binaries." >&2
-    echo "[build-guest-binaries] Please install Nix or ensure it is on your PATH." >&2
-    exit 1
+build_with_nix() {
+    command -v nix >/dev/null 2>&1 || return 1
+
+    echo "[build-guest-binaries] Building guest binaries using Nix..."
+    mkdir -p "$ROOT/.nix-output"
+    nix build -L .#tillandsias-headless-x86_64-musl   --out-link "$ROOT/.nix-output/result-hx" || return 1
+    nix build -L .#tillandsias-headless-aarch64-musl  --out-link "$ROOT/.nix-output/result-ha" || return 1
+
+    mkdir -p "$TARGET_DIR"
+    install -m 0755 "$ROOT/.nix-output/result-hx/bin/tillandsias" "$X86_64_DEST" || return 1
+    install -m 0755 "$ROOT/.nix-output/result-ha/bin/tillandsias" "$AARCH64_DEST" || return 1
+
+    # Remove symlinks to keep directory clean
+    rm -rf "$ROOT/.nix-output/result-hx" "$ROOT/.nix-output/result-ha"
+}
+
+build_with_cargo() {
+    command -v cargo >/dev/null 2>&1 || return 1
+
+    echo "[build-guest-binaries] Building guest binaries using local Cargo fallback..."
+    cargo build --package tillandsias-headless --bin tillandsias \
+        --release --target x86_64-unknown-linux-musl --features tray \
+        --manifest-path "$ROOT/Cargo.toml" || return 1
+    if command -v aarch64-linux-musl-gcc >/dev/null 2>&1; then
+        cargo build --package tillandsias-headless --bin tillandsias \
+            --release --target aarch64-unknown-linux-musl --features tray \
+            --manifest-path "$ROOT/Cargo.toml" || return 1
+    elif command -v clang >/dev/null 2>&1; then
+        CC_aarch64_unknown_linux_musl=clang \
+        CFLAGS_aarch64_unknown_linux_musl='--target=aarch64-linux-musl' \
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
+            cargo build --package tillandsias-headless --bin tillandsias \
+                --release --target aarch64-unknown-linux-musl --features tray \
+                --manifest-path "$ROOT/Cargo.toml" || return 1
+    else
+        echo "[build-guest-binaries] ERROR: missing aarch64 musl linker." >&2
+        echo "[build-guest-binaries] Install aarch64-linux-musl-gcc or clang + rust-lld." >&2
+        return 1
+    fi
+
+    mkdir -p "$TARGET_DIR"
+    install -m 0755 "$ROOT/target/x86_64-unknown-linux-musl/release/tillandsias" "$X86_64_DEST" || return 1
+    install -m 0755 "$ROOT/target/aarch64-unknown-linux-musl/release/tillandsias" "$AARCH64_DEST" || return 1
+}
+
+if ! build_with_nix; then
+    echo "[build-guest-binaries] Nix build unavailable; trying local Cargo fallback..." >&2
+    if ! build_with_cargo; then
+        echo "[build-guest-binaries] ERROR: failed to build guest binaries with Nix or local Cargo." >&2
+        exit 1
+    fi
 fi
-
-echo "[build-guest-binaries] Building guest binaries using Nix..."
-
-# Perform the builds
-mkdir -p "$ROOT/.nix-output"
-nix build -L .#tillandsias-headless-x86_64-musl   --out-link "$ROOT/.nix-output/result-hx"
-nix build -L .#tillandsias-headless-aarch64-musl  --out-link "$ROOT/.nix-output/result-ha"
-
-mkdir -p "$TARGET_DIR"
-
-install -m 0755 "$ROOT/.nix-output/result-hx/bin/tillandsias" "$X86_64_DEST"
-install -m 0755 "$ROOT/.nix-output/result-ha/bin/tillandsias" "$AARCH64_DEST"
-
-# Remove symlinks to keep directory clean
-rm -rf "$ROOT/.nix-output/result-hx" "$ROOT/.nix-output/result-ha"
 
 verify_binaries

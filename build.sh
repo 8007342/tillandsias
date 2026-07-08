@@ -522,6 +522,22 @@ _run_local_ci_gate() {
     fi
 }
 
+_prepare_ci_full_install_inputs() {
+    [[ "$FLAG_CI_FULL" == true ]] || return 0
+    [[ "$FLAG_INSTALL" == true ]] || return 0
+
+    _step "Preparing version and staged guest binaries for full install CI..."
+    "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+
+    if [[ ! -x "$SCRIPT_DIR/scripts/build-guest-binaries.sh" ]]; then
+        _error "Missing executable guest binary builder: scripts/build-guest-binaries.sh"
+        exit 1
+    fi
+
+    "$SCRIPT_DIR/scripts/build-guest-binaries.sh"
+}
+
 # CI validation
 if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
     CI_ARG_LIST=()
@@ -539,6 +555,7 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
     fi
     if [[ "$FLAG_CI_FULL" == true ]]; then
         _step "Running full CI/CD validation (pre-build gate)..."
+        _prepare_ci_full_install_inputs
         CI_ARGS=(--phase pre-build)
     else
         _step "Running quick CI/CD validation (pre-build gate, fast mode)..."
@@ -577,8 +594,10 @@ fi
 
 if [[ "$FLAG_INSTALL" == true ]]; then
     _step "Building portable launcher (musl-static) with tray support for install..."
-    "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
-    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    if [[ "$FLAG_CI_FULL" == false ]]; then
+        "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+        "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    fi
 
     # Build only the Linux launcher here. macOS and Windows tray binaries share
     # the `tillandsias-tray` bin name and have platform-specific release paths.
