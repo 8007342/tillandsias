@@ -4798,11 +4798,12 @@ plan_index:
     - packet_id: silverblue-toolbox-builder
       order: 239
       title: "Research + implement: transparent toolbox-based builder layer for Fedora Silverblue hosts"
-      status: ready
+      status: done
       kind: research+enhancement
       deliverable: plan/issues/silverblue-toolbox-builder-2026-07-07.md
       depends_on: []
       pickup_role: linux
+      owner_host: linux
       capability_tags: [silverblue, toolbox, build, infrastructure, container]
       estimated_hours: 3
       scope_note: >
@@ -4840,6 +4841,22 @@ plan_index:
         - "Non-Silverblue hosts (Workstation, macOS, Windows) pass through with zero overhead"
         - "`scripts/with-tillandsias-builder.sh <command>` works independently of build.sh"
         - "Clear error message if `toolbox` binary is absent on Silverblue"
+      events:
+        - type: claim
+          ts: "2026-07-08T20:20:38Z"
+          agent_id: "meta-orchestration-linux-macuahuitl-20260708T2020Z"
+          host: linux_mutable
+          lease_id: "silverblue-toolbox-builder-20260708T2020Z"
+          summary: "Claimed during meta-orchestration worker drain."
+        - type: completed
+          ts: "2026-07-08T20:28:00Z"
+          agent_id: "meta-orchestration-linux-macuahuitl-20260708T2020Z"
+          host: linux_mutable
+          evidence:
+            - "scripts/with-tillandsias-builder.sh implements the transparent toolbox wrapper (existing code, already sourced in build.sh:32)."
+            - "Removed python3 python3-pyyaml from dnf install list to comply with no-python-runtime policy."
+            - "scripts/check-no-python-scripts.sh PASS against the touched file."
+            - "Deliverable filed: plan/issues/silverblue-toolbox-builder-2026-07-07.md."
 
     - packet_id: forge-build-check-tooling-gap
       order: 240

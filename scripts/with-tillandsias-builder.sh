@@ -89,7 +89,6 @@ if ! _toolbox_has_rustup; then
             gcc pkg-config file cmake make \
             openssl-devel systemd-devel \
             ruby perl-FindBin \
-            python3 python3-pyyaml \
             procps-ng findutils diffutils \
         2>&1 | while IFS= read -r line; do printf '  [dnf] %s\n' "$line"; done
 
