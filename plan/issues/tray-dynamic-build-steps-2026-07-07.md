@@ -30,6 +30,6 @@ When `tillandsias --init` is building specific images, the tray will cycle throu
 ### Implementation Steps
 1. **Telemetry Streaming**: The headless `tillandsias` process inside the VM (or host) currently records `podman build` events to a `.jsonl` file. We will emit these events over the control wire (vsock) to the macOS tray.
 2. **State Updates**: `TrayState::active_builds` will be updated dynamically with the current image being built (or current layer).
-3. **UI Rendering**: The `status_text` function in the tray will map the currently active image name to the curated strings above, rather than a generic "Building..." fallback. 
+3. **UI Rendering**: The `status_text` function in the tray will map the currently active image name to the curated strings above, rather than a generic "Building..." fallback.
 
 This creates a lively, transparent setup experience that assures the user the system is actively working.
