@@ -87,7 +87,12 @@ timeout 120 tillandsias --opencode-web "$TEST_PROJECT" 2>&1 | tee "$EVIDENCE_DIR
 PID=$!
 
 # Wait for container startup and router readiness
-sleep 5
+for i in {1..15}; do
+    if podman ps 2>&1 | grep -q "tillandsias"; then
+        break
+    fi
+    sleep 2
+done
 
 # Check if chromium process is running (browser should auto-open)
 if pgrep -f "chromium\|google-chrome" > /dev/null; then
