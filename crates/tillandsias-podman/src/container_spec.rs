@@ -56,7 +56,7 @@ impl MountSpec {
                 target,
                 readonly,
             } => {
-                let mut value = format!("type=bind,source={source},target={target}");
+                let mut value = format!("type=bind,source={source},target={target},relabel=shared");
                 if *readonly {
                     value.push_str(",readonly=true");
                 }
@@ -501,7 +501,7 @@ mod tests {
         assert!(args.contains(&"--mount".to_string()));
         assert!(
             args.iter()
-                .any(|arg| arg == "type=bind,source=/tmp/ca.crt,target=/etc/ca.crt,readonly=true")
+                .any(|arg| arg == "type=bind,source=/tmp/ca.crt,target=/etc/ca.crt,relabel=shared,readonly=true")
         );
     }
 

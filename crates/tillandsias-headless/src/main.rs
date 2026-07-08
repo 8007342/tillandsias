@@ -7515,7 +7515,8 @@ pub(crate) fn build_forge_agent_run_args(
     let provider_api = match mode {
         ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
         ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity | ForgeAgentMode::Maintenance => {
+        ForgeAgentMode::Antigravity => Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => {
             None
         }
     };
@@ -7565,7 +7566,11 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             Some(ProviderId::Codex),
             Some(crate::vault_bootstrap::ProviderId::Openai),
         ),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity | ForgeAgentMode::Maintenance => {
+        ForgeAgentMode::Antigravity => (
+            Some(ProviderId::Antigravity),
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
+        ),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => {
             (None, None)
         }
     };
