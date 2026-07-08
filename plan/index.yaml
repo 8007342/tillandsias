@@ -2950,11 +2950,14 @@ plan_index:
     - packet_id: multi-host-secure-wire-integration-freeze
       order: 191
       title: "Coordination: freeze sibling drift and integrate secure-wire + embedded-guest branches by merge"
-      status: ready
+      status: done
       status_note: >
-        Windows and macOS evidence slices BOTH COMPLETE (see deliverable for
-        respective run results). Remaining: linux coordinator merge of both
-        siblings into linux-next.
+        All three slices complete: windows evidence (flag-OFF/flag-ON hvsocket
+        handshake), macOS evidence (build + test + deferred VM smoke), and linux
+        coordinator merge (fast-forward origin/osx-next into linux-next; windows-next
+        already a linux-next ancestor). Fix applied: pty GithubLogin script uses
+        exec + subshell pattern to avoid `;` (wt.exe separator bug). Tree verified:
+        no conflict markers, YAML valid, build.sh --check green.
       events:
         - type: claim
           ts: "2026-07-06T05:45:00Z"
@@ -3006,6 +3009,18 @@ plan_index:
             (skip:no-podman-user-session on this dev host). Evidence:
             plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md.
             Packet remains ready for the linux coordinator merge.
+        - type: completed_slice
+          ts: "2026-07-08T22:40:00Z"
+          agent_id: "opencode-big-pickle-20260708T2210Z"
+          host: macos
+          commits: ["1780cfb3"]
+          summary: >
+            Linux coordinator merge complete: origin/osx-next (1780cfb3) merged
+            into linux-next (fast-forward, clean). Fix applied to pty/mod.rs
+            GithubLogin script: use exec + subshell fallback to avoid `;`
+            (wt.exe separator bug). Integration gate: no conflict markers, YAML
+            valid, build.sh --check green. Packet closed — all three exit criteria
+            met.
       kind: integration
       deliverable: plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder, embedded-guest-binary-linux-build]

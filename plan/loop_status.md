@@ -1,6 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-08T22:15:00Z
+LastExecutionTime: 2026-07-08T22:50:00Z
+
+## Cycle 2026-07-08T22:30Z (macos — linux coordinator merge for order 191)
+
+- **Host**: macOS arm64, `linux-next`.
+- **Merge**: fast-forward `origin/osx-next` (1780cfb3) into `linux-next` — clean, no conflicts.
+- **Fix**: Updated pty/mod.rs GithubLogin script: use `exec ... || (...)` subshell pattern instead of `{ ...; ...; }` to avoid `;` in the command string (wt.exe separator bug on Windows). This restores the `exec` prefix and eliminates `;` while preserving error-handling fallback.
+- **Integration gate**: No conflict markers, `plan/index.yaml` YAML valid, all crates type-check + clippy pass.
+- **Test**: `cargo test -p tillandsias-host-shell` — `launch_spec_maps_intents_to_in_vm_argv` now passes. Pre-existing test failures on this host (keychain read-back, no Podman machine) unchanged.
+- **Order 191 status**: `done` — all three exit criteria met:
+  1. osx-next merged origin/linux-next ✅ (9308cf5c)
+  2. windows-next already a linux-next ancestor ✅
+  3. Both hosts recorded evidence (win: flag-OFF/ON hvsocket, mac: build + test + deferred VM smoke) ✅
 
 ## Cycle 2026-07-08T22:03Z (macos — meta-orchestration, secure-wire integration + full local build)
 

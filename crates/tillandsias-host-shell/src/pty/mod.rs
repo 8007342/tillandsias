@@ -210,7 +210,7 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // vault launch, so no host-side podman wrapper is needed. The former
             // base64 podman shim was removed 2026-07-02 (base64_script_injection_ban).
             vm_login_shell_argv(
-                "tillandsias-headless --github-login || { echo 'tillandsias-headless failed'; sleep 10; exit 1; }",
+                "exec tillandsias-headless --github-login || (echo 'tillandsias-headless failed' && sleep 10 && false)",
             )
         }
         PtyIntent::Agent(agent) => {
