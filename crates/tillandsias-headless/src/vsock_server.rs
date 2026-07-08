@@ -129,6 +129,8 @@ pub struct VmStateHandle {
     /// message (distinct from the per-request `ControlEnvelope.seq`, which
     /// pushes don't have a request to reply to).
     push_seq: Arc<std::sync::atomic::AtomicU64>,
+    /// Last event message.
+    last_event: Arc<RwLock<String>>,
 }
 
 /// Bounded capacity of the `VmStatusPush` broadcast channel. VmPhase changes
@@ -147,6 +149,7 @@ impl VmStateHandle {
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
             vm_status_tx,
             push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            last_event: Arc::new(RwLock::new(SERVER_NAME.to_string())),
         }
     }
 
@@ -183,9 +186,33 @@ impl VmStateHandle {
                 seq,
                 phase,
                 podman_ready: self.podman_ready(),
-                last_event: Some(SERVER_NAME.to_string()),
+                last_event: self.last_event(),
             });
         }
+    }
+
+    /// Update the last_event string and trigger a push to subscribers so the tray
+    /// can surface the event text in the UI.
+    pub fn set_last_event(&self, event: String) {
+        let mut guard = self.last_event.write().unwrap();
+        *guard = event.clone();
+        drop(guard);
+
+        let seq = self
+            .push_seq
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
+        let _ = self.vm_status_tx.send(ControlMessage::VmStatusPush {
+            seq,
+            phase: self.current_phase(),
+            podman_ready: self.podman_ready(),
+            last_event: Some(event),
+        });
+    }
+
+    /// Retrieve the current last_event string.
+    pub fn last_event(&self) -> Option<String> {
+        self.last_event.read().unwrap().clone().into()
     }
 
     /// Read the current phase. Falls back to `Failed` if the lock is
@@ -566,7 +593,7 @@ async fn handle_connection(
                         seq_in_reply_to: seq,
                         phase: state.current_phase(),
                         podman_ready: state.podman_ready(),
-                        last_event: Some(SERVER_NAME.to_string()),
+                        last_event: Some(state.last_event()),
                     },
                 };
                 if write_envelope(&mut stream, &reply).await.is_err() {

@@ -546,6 +546,8 @@ impl PodmanDirect {
             "build".to_string(),
             "--format".to_string(),
             "docker".to_string(),
+            "--network".to_string(),
+            "host".to_string(),
             "--tag".to_string(),
             image_tag.to_string(),
             "-f".to_string(),
@@ -616,6 +618,17 @@ impl ImageBuilder for PodmanDirect {
         let call = self.prepare_build(image_name, image_tag)?;
 
         // Step 3: Execute podman (synchronous, for prod)
+        // DEBUG NETWORK:
+        let curl_out = std::process::Command::new("curl")
+            .args(["-v", "https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/APKINDEX.tar.gz"])
+            .output();
+        if let Ok(out) = curl_out {
+            eprintln!("[debug] curl status: {:?}", out.status);
+            eprintln!("[debug] curl stderr: {}", String::from_utf8_lossy(&out.stderr));
+        } else {
+            eprintln!("[debug] curl failed to execute");
+        }
+
         // In real code:
         // let output = std::process::Command::new(<podman-binary>)
         //     .args(&call.args)

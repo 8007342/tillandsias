@@ -1567,7 +1567,7 @@ fn ensure_image_exists(
         }
     }
 
-    let build_args = if image_name == "chromium-framework" {
+    let mut build_args = if image_name == "chromium-framework" {
         vec![
             "--build-arg".to_string(),
             format!(
@@ -1583,6 +1583,8 @@ fn ensure_image_exists(
     } else {
         Vec::new()
     };
+    build_args.push("--dns".to_string());
+    build_args.push("8.8.8.8".to_string());
 
     rt.block_on(async move {
         if client.image_exists(image_tag).await {
@@ -4020,6 +4022,12 @@ pub(crate) const BUILD_PROXY_NEUTRALIZE_VARS: [&str; 6] = [
 /// ## Build Arguments
 /// - `--build-arg CHROMIUM_CORE_IMAGE=<image>` for chromium-framework only
 /// - chromium-framework MUST be built after chromium-core to resolve the ARG
+pub(crate) fn push_udp_event(msg: &str) {
+    if let Ok(socket) = std::net::UdpSocket::bind("127.0.0.1:0") {
+        let _ = socket.send_to(msg.as_bytes(), "127.0.0.1:42421");
+    }
+}
+
 pub(crate) fn build_image_with_logging(
     root: &Path,
     image_name: &str,
@@ -4028,6 +4036,19 @@ pub(crate) fn build_image_with_logging(
     log_file: &Option<PathBuf>,
     _debug: bool,
 ) -> Result<(), String> {
+    let curated_name = match image_name {
+        "forge" | "forge-base" => "Building Forge",
+        "chromium-framework" => "Polishing Chromium",
+        "chromium-core" => "Thinkering Chromium Dev",
+        "inference" => "Loading Inference",
+        "proxy" => "Routing Proxy",
+        "git" => "Setting up Git",
+        "router" => "Routing Traffic",
+        "web" => "Serving Web",
+        _ => "Setting up containers",
+    };
+    push_udp_event(curated_name);
+
     // @trace gap:ON-005 — show progress % during image pull
     let (containerfile, context_dir) = image_specs(root, image_name)?;
 
@@ -4172,6 +4193,8 @@ fn podman_build_argv(
         "build".to_string(),
         "--format".to_string(),
         "docker".to_string(),
+        "--dns".to_string(),
+        "8.8.8.8".to_string(),
         "-t".to_string(),
         identity.canonical_tag.clone(),
     ];
@@ -7697,6 +7720,76 @@ fn maybe_spawn_vsock_listener(
                 .watch_shutdown_and_mark_stopping(watcher_shutdown)
                 .await;
         });
+        // Podman events monitor: reads `podman events --format json`
+        // and pushes curated step names to the tray.
+        let events_state = state.clone();
+        let events_monitor = tokio::spawn(async move {
+            use tokio::io::AsyncBufReadExt;
+            loop {
+                // Wait for podman to be ready
+                if !events_state.podman_ready() {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    continue;
+                }
+                
+                let mut cmd = tillandsias_podman::podman_cmd();
+                cmd.args(&["events", "--format", "json"]);
+                cmd.stdout(std::process::Stdio::piped());
+                
+                if let Ok(mut child) = cmd.spawn() {
+                    if let Some(stdout) = child.stdout.take() {
+                        let mut reader = tokio::io::BufReader::new(stdout).lines();
+                        while let Ok(Some(line)) = reader.next_line().await {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
+                                if let Some(action) = parsed.get("Action").and_then(|v| v.as_str()) {
+                                    if let Some(name) = parsed.get("Actor").and_then(|a| a.get("Attributes")).and_then(|a| a.get("name")).and_then(|v| v.as_str()) {
+                                        let display = match action {
+                                            "create" | "start" | "init" => {
+                                                if name.contains("forge") {
+                                                    Some("Building Forge")
+                                                } else if name.contains("chromium") {
+                                                    Some("Polishing Chromium")
+                                                } else if name.contains("inference") {
+                                                    Some("Loading Inference")
+                                                } else if name.contains("vault") {
+                                                    Some("Securing Vault")
+                                                } else if name.contains("proxy") {
+                                                    Some("Routing Proxy")
+                                                } else if name.contains("git") {
+                                                    Some("Setting up Git")
+                                                } else {
+                                                    Some("Setting up containers")
+                                                }
+                                            },
+                                            "build" => Some("Building image"),
+                                            _ => None
+                                        };
+                                        if let Some(msg) = display {
+                                            events_state.set_last_event(msg.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let _ = child.wait().await;
+                }
+                
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        });
+
+        let udp_state = state.clone();
+        let udp_monitor = tokio::spawn(async move {
+            if let Ok(socket) = tokio::net::UdpSocket::bind("127.0.0.1:42421").await {
+                let mut buf = [0; 1024];
+                while let Ok((len, _)) = socket.recv_from(&mut buf).await {
+                    if let Ok(msg) = std::str::from_utf8(&buf[..len]) {
+                        udp_state.set_last_event(msg.to_string());
+                    }
+                }
+            }
+        });
 
         match vsock_server::run_vsock_listener(port, shutdown, state).await {
             Ok(()) => {}
@@ -7714,6 +7807,8 @@ fn maybe_spawn_vsock_listener(
         let _ = advancer.await;
         watcher.abort();
         let _ = watcher.await;
+        events_monitor.abort();
+        let _ = events_monitor.await;
     }))
 }
 

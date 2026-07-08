@@ -77,13 +77,27 @@ pub fn set_in_vm_credentials(
     installation_uuid: String,
     root_token: Option<String>,
 ) {
+    // If we have a pending fresh handover, the VM's state is strictly newer than
+    // whatever the host tray just delivered. Ignore the stale delivery to prevent
+    // clobbering the fresh token in memory and the fallback file.
+    if get_pending_handover().1.is_some() {
+        return;
+    }
+
     let cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = cell.lock() {
         *guard = Some(InVmCredentials {
             unseal_share_b64,
             installation_uuid,
-            root_token,
+            root_token: root_token.clone(),
         });
+    }
+
+    if let Some(token) = root_token {
+        if let Ok(cache_dir) = crate::init_cache_dir() {
+            let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+            let _ = std::fs::write(&fallback_file, token);
+        }
     }
 }
 
@@ -1929,9 +1943,31 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
             if let Ok(mut guard) = cell.lock() {
                 *guard = Some(PendingHandover {
-                    unseal_share_b64: Some(share_b64),
+                    unseal_share_b64: Some(share_b64.clone()),
                     root_token: Some(token.clone()),
                 });
+            }
+
+            // Also proactively update the fallback file so child processes (like GithubLogin) 
+            // running right after init can use the fresh token before the host re-delivers it.
+            if let Ok(cache_dir) = crate::init_cache_dir() {
+                let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+                let _ = std::fs::write(&fallback_file, &token);
+            }
+
+            // Update in-memory credentials so the current process has the new token.
+            let creds_cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
+            if let Ok(mut guard) = creds_cell.lock() {
+                if let Some(creds) = guard.as_mut() {
+                    creds.root_token = Some(token.clone());
+                    creds.unseal_share_b64 = Some(share_b64.clone());
+                } else {
+                    *guard = Some(InVmCredentials {
+                        unseal_share_b64: Some(share_b64.clone()),
+                        installation_uuid: String::new(),
+                        root_token: Some(token.clone()),
+                    });
+                }
             }
         } else {
             keychain_set_blocking("vault-root-token-v1", &token)?;

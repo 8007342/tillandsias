@@ -1827,8 +1827,11 @@ fn spawn_vm_status_poller(
                     // dispatch the cloud-projects branch uses.
                     {
                         let mut guard = menu_state.lock().unwrap();
-                        if guard.podman_ready != podman_ready {
+                        let new_login_runtime_ready =
+                            matches!(phase, tillandsias_control_wire::VmPhase::Ready) && podman_ready;
+                        if guard.podman_ready != podman_ready || guard.login_runtime_ready != new_login_runtime_ready {
                             guard.podman_ready = podman_ready;
+                            guard.login_runtime_ready = new_login_runtime_ready;
                             rebuild_needed = true;
                         }
                     }
@@ -1866,8 +1869,9 @@ fn spawn_vm_status_poller(
                     eprintln!("[tillandsias-tray] vm-status poll: {e}");
                     {
                         let mut guard = menu_state.lock().unwrap();
-                        if guard.podman_ready {
+                        if guard.podman_ready || guard.login_runtime_ready {
                             guard.podman_ready = false;
+                            guard.login_runtime_ready = false;
                             rebuild_needed = true;
                         }
                     }
