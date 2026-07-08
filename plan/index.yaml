@@ -1699,6 +1699,17 @@ plan_index:
             start() preflights with is_wsl_service_sane() and retries with exponential backoff,
             falling back to perform_wsl_shutdown_recovery() on wedge status (-1);
             launch_open_shell_terminal debounces concurrent PTY launch clicks within 1500ms.
+        - type: progress
+          ts: "2026-07-07T23:25:00Z"
+          agent_id: "windows-antigravity-20260707T2325Z"
+          host: windows
+          commits: ["4e432e54"]
+          summary: >
+            Windows R9 safeguard completed: changed fetch-headless.sh fallback network path
+            to curl to a temporary file created via mktemp, trap deletion on exit, and
+            install atomically into /usr/local/bin/tillandsias-headless. Added regression
+            test wsl_fetch_script_installs_download_via_temp_file. All Windows lifecycle
+            race safeguards (R1, R2, R3, R9) are now completed.
         - type: claim
           ts: "2026-07-06T18:42:33Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260706T1842Z"

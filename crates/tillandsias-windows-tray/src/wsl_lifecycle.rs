@@ -423,8 +423,10 @@ DEST="/usr/local/bin/tillandsias-headless"
 if [[ -x "$DEST" ]]; then exit 0; fi
 ARCH="$(uname -m)"
 URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-${ARCH}-unknown-linux-musl"
-curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$DEST" "$URL"
-chmod 0755 "$DEST"
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$TMP" "$URL"
+install -D -m 0755 "$TMP" "$DEST"
 "#;
             self.wsl_root_write(
                 "/usr/local/lib/tillandsias/fetch-headless.sh",
@@ -912,6 +914,43 @@ mod tests {
         assert!(
             !headless_unit.contains("Requires=podman.socket"),
             "podman.socket is a wanted readiness input, not a hard dependency for diagnostics"
+        );
+    }
+
+    /// The network fallback must not curl directly onto the live
+    /// `/usr/local/bin/tillandsias-headless` path. Download to a temp file,
+    /// then install into place so interrupted writes cannot leave a partial
+    /// executable behind.
+    ///
+    /// @trace plan/issues/race-safeguards-research-2026-07-02.md#r9
+    #[test]
+    fn wsl_fetch_script_installs_download_via_temp_file() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let fetch_script = source
+            .split("let fetch_script = r#\"")
+            .nth(1)
+            .and_then(|tail| tail.split("\"#;").next())
+            .expect("fetch-headless script window");
+
+        assert!(
+            fetch_script.contains("TMP=\"$(mktemp)\""),
+            "fetch script must create a temp file before downloading"
+        );
+        assert!(
+            fetch_script.contains("trap 'rm -f \"$TMP\"' EXIT"),
+            "fetch script must clean the temp file"
+        );
+        assert!(
+            fetch_script.contains("--output \"$TMP\" \"$URL\""),
+            "curl must write to the temp file, not the live binary"
+        );
+        assert!(
+            fetch_script.contains("install -D -m 0755 \"$TMP\" \"$DEST\""),
+            "fetch script must install the temp file into the live path"
+        );
+        assert!(
+            !fetch_script.contains("--output \"$DEST\""),
+            "fetch script must not curl directly onto the live binary"
         );
     }
 }

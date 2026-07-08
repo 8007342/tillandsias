@@ -60,6 +60,26 @@ LastExecutionTime: 2026-07-08T19:23:03Z
   above. Full cryptographic per-session mirror authentication remains for order
   238 if enclave-scoped git-daemon routing is insufficient.
 
+## Cycle 2026-07-07T23:25Z (windows — meta-orchestration)
+
+- **Host**: Windows, antigravity agent.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), Windows R9
+  slice COMPLETED**:
+  - Implemented R9 safeguard for the Windows guest headless fetch script.
+  - The fetch script fallback now writes to a temporary file via `mktemp`, traps
+    cleanups on exit, and installs the binary atomically into
+    `/usr/local/bin/tillandsias-headless`.
+  - Added test `wsl_fetch_script_installs_download_via_temp_file` to
+    `wsl_lifecycle.rs` to assert correct atomic behavior.
+- **Merge & Sync**:
+  - Merged `origin/linux-next` into `windows-next`.
+  - Resolved plan ledger syntax errors caused by duplicate `events` keys in the
+    upstream merge under packets 152 and 161.
+- **Verification**:
+  - `cargo test -p tillandsias-windows-tray` PASS (55 tests).
+  - `cargo test -p tillandsias-host-shell` PASS (45 tests).
+  - `cargo run -p tillandsias-policy -- validate-yaml plan/index.yaml` PASS.
+
 ## Cycle 2026-07-07T21:45Z (linux_immutable — meta-orchestration + curl-install e2e)
 
 - **Host**: Linux, `linux-next`, `linux_immutable` (clean, credential guard `ok:gh-keyring`).
