@@ -33,6 +33,15 @@ LastExecutionTime: 2026-07-08T19:28:41Z
   directory` because the local helper is `store --file=.git/.gh-credentials`
   and `.git` is a file in linked worktrees. Filed
   `plan/issues/git-credential-store-linked-worktree-lock-2026-07-08.md`.
+- **Local-build e2e**: eligible and started as
+  `target/build-install-smoke-e2e/20260708T193145Z`; STOPPED at gate 1
+  (`./build.sh --ci-full --install`, exit 1), so the destructive Podman reset
+  was not reached. Filed
+  `plan/issues/build-install-smoke-e2e-findings-2026-07-08.md`: new ready
+  packets for stale `VERSION` vs latest release, Silverblue builder Python
+  runtime policy violation, and host-pre-build forge credential mirror litmus
+  fixture; duplicate guest-binary prerequisite failure recorded against
+  order 211.
 
 ## Cycle 2026-07-08T00:20Z (forge — meta-orchestration worker slice)
 

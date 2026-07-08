@@ -3933,6 +3933,19 @@ plan_index:
       pickup_role: linux
       capability_tags: [research, litmus, ci, cross-compile]
       estimated_hours: 2
+      events:
+        - type: observed
+          ts: "2026-07-08T19:34:50Z"
+          agent_id: "linux-macuahuitl-codex-20260708T1919Z"
+          host: linux_mutable
+          summary: >
+            Reproduced during local-build e2e gate 1 at
+            linux-next@38ea4156. `./build.sh --ci-full --install` stopped
+            before install/destructive reset because
+            `litmus:guest-binary-embed-integrity` still fails when
+            `target-guest/tillandsias-headless-x86_64-unknown-linux-musl`
+            is absent. Evidence:
+            target/build-install-smoke-e2e/20260708T193145Z/01-build-install.log:1344-1349.
       outcome: >
         Discovered by /build-install-and-smoke-test-e2e (2026-07-06):
         litmus:guest-binary-embed-integrity (a known "local build-state gap,
