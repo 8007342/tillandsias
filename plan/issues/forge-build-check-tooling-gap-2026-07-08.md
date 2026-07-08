@@ -53,3 +53,24 @@ A forge session can run:
 and reach the Rust type-check stage without failing on missing host `podman`.
 If `file` is still required, the error names only that missing metadata tool and
 does not suggest installing Podman inside the forge.
+
+## Resolution
+
+2026-07-08T19:23Z: Implemented in `build.sh`.
+
+- `TILLANDSIAS_HOST_KIND=forge ./build.sh --check` now skips host Podman
+  registry setup and host dev-cache setup, then proceeds to formatting,
+  type-check, and clippy.
+- `_require_host_build_tools` no longer requires `file` for `--check`; `file`
+  remains required for `--install`, where the portable launcher validation uses
+  it.
+- Added `scripts/test-build-sh-forge-check-only.sh` as the targeted regression
+  check for the forge check-only branch.
+
+Evidence:
+
+- `scripts/test-build-sh-forge-check-only.sh` — PASS.
+- `TILLANDSIAS_HOST_KIND=forge ./build.sh --check` — PASS; host Podman setup
+  skipped, Rust fmt/type-check/clippy all passed.
+- `./build.sh --check` — PASS on linux_mutable; normal non-forge Podman
+  registry setup still ran before fmt/type-check/clippy.

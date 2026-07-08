@@ -248,6 +248,18 @@ if [[ -n "$CI_SPEC_LIST" ]]; then
     fi
 fi
 
+_forge_check_only_without_host_podman_setup() {
+    [[ "${TILLANDSIAS_HOST_KIND:-}" == "forge" ]] || return 1
+    [[ "$FLAG_CHECK" == true ]] || return 1
+    [[ "$FLAG_RELEASE" == false ]] || return 1
+    [[ "$FLAG_TEST" == false ]] || return 1
+    [[ "$FLAG_INSTALL" == false ]] || return 1
+    [[ "$FLAG_INIT" == false ]] || return 1
+    [[ "$FLAG_CI" == false ]] || return 1
+    [[ "$FLAG_CI_FULL" == false ]] || return 1
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # Transparent HTTPS caching setup (dev proxy)
 # ---------------------------------------------------------------------------
@@ -357,7 +369,9 @@ ensure_dev_cache() {
 # Setup podman registries configuration ONLY for dev builds, not portable installs
 # Portable binaries must not depend on host configuration (@trace spec:linux-native-portable-executable)
 # @trace spec:podman-registries-config
-if [[ "$FLAG_INSTALL" != true ]]; then
+if _forge_check_only_without_host_podman_setup; then
+    _info "Skipping host Podman registry setup for forge check-only build"
+elif [[ "$FLAG_INSTALL" != true ]]; then
     "$SCRIPT_DIR/scripts/setup-podman-registries.sh" || {
         _warn "Failed to setup podman registries (non-fatal, build may continue)"
     }
@@ -367,7 +381,9 @@ fi
 
 # Dev cache (squid proxy) is optional and skipped for portable installs
 # @trace spec:dev-build
-if [[ "$FLAG_INSTALL" != true ]]; then
+if _forge_check_only_without_host_podman_setup; then
+    _info "Skipping host dev cache setup for forge check-only build"
+elif [[ "$FLAG_INSTALL" != true ]]; then
     ensure_dev_cache
 else
     _info "Skipping dev cache for portable install"
@@ -443,11 +459,14 @@ fi
 _require_host_build_tools() {
     local missing=()
     local tool
-    for tool in cargo rustc rustfmt clippy-driver gcc pkg-config file; do
+    for tool in cargo rustc rustfmt clippy-driver gcc pkg-config; do
         if ! command -v "$tool" >/dev/null 2>&1; then
             missing+=("$tool")
         fi
     done
+    if [[ "$FLAG_INSTALL" == true ]] && ! command -v file >/dev/null 2>&1; then
+        missing+=(file)
+    fi
     if [[ "${#missing[@]}" -gt 0 ]]; then
         _error "Missing host build tools: ${missing[*]}"
         _error "Install the Fedora build dependencies, then rerun this command."

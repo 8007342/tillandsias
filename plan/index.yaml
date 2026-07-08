@@ -4820,7 +4820,7 @@ plan_index:
     - packet_id: forge-build-check-tooling-gap
       order: 240
       title: "Forge: make ./build.sh --check usable from inside the forge container"
-      status: ready
+      status: done
       kind: optimization
       deliverable: plan/issues/forge-build-check-tooling-gap-2026-07-08.md
       depends_on: []
@@ -4844,3 +4844,21 @@ plan_index:
         - "If `file` remains required, the error names only `file` and does not suggest installing Podman inside the forge"
         - "Non-forge hosts still run the existing Podman setup when needed"
         - "A targeted shell or litmus check pins the forge check-only branch"
+      events:
+        - type: claim
+          ts: "2026-07-08T19:19:00Z"
+          agent_id: "linux-macuahuitl-codex-20260708T1919Z"
+          host: linux_mutable
+          lease_id: "forge-build-check-tooling-gap-20260708T1919Z"
+          summary: "Claimed during meta-orchestration worker drain after advisory ledger-node claim succeeded."
+        - type: completed
+          ts: "2026-07-08T19:23:03Z"
+          agent_id: "linux-macuahuitl-codex-20260708T1919Z"
+          host: linux_mutable
+          evidence:
+            - "build.sh now detects TILLANDSIAS_HOST_KIND=forge check-only runs and skips host Podman registry/proxy setup."
+            - "Host build tool preflight no longer requires file for --check; file remains install-only for portable launcher validation."
+            - "Added scripts/test-build-sh-forge-check-only.sh to pin the forge check-only branch."
+            - "scripts/test-build-sh-forge-check-only.sh PASS."
+            - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check PASS; output shows host Podman setup skipped, then fmt/type-check/clippy passed."
+            - "./build.sh --check PASS on linux_mutable; output shows normal non-forge Podman registry setup still runs."

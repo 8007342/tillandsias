@@ -1,6 +1,26 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-08T00:20:00Z
+LastExecutionTime: 2026-07-08T19:23:03Z
+
+## Cycle 2026-07-08T19:18Z (linux_mutable — meta-orchestration worker slice)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Started clean, fetched/pruned remote, fast-forwarded `linux-next` to
+  `origin/linux-next@a8932a6c`, and credential guard passed with
+  `ok:gh-credentials-store`.
+- **Worker drain — order 240 (forge-build-check-tooling-gap), COMPLETED**:
+  `build.sh` now detects `TILLANDSIAS_HOST_KIND=forge` check-only invocations
+  and skips host Podman registry/proxy setup before running the Rust checks.
+  `_require_host_build_tools` no longer requires `file` for `--check`; `file`
+  remains install-only for portable launcher validation. Added
+  `scripts/test-build-sh-forge-check-only.sh` to pin the branch.
+- **Verification**: `scripts/test-build-sh-forge-check-only.sh` PASS;
+  `TILLANDSIAS_HOST_KIND=forge ./build.sh --check` PASS with host Podman setup
+  skipped and fmt/type-check/clippy green; normal `./build.sh --check` PASS on
+  linux_mutable and still ran the non-forge Podman registry setup path.
+- **Coordinator/e2e**: pending after worker checkpoint; sibling drift at cycle
+  start was below the freeze threshold (`osx-next` 3 ahead, `windows-next` 2
+  ahead of `linux-next`).
 
 ## Cycle 2026-07-08T00:20Z (forge — meta-orchestration worker slice)
 
