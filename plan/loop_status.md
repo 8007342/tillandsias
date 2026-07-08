@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-08T19:28:41Z
+LastExecutionTime: 2026-07-08T19:38:24Z
 
 ## Cycle 2026-07-08T19:18Z (linux_mutable — meta-orchestration worker slice)
 
@@ -27,7 +27,6 @@ LastExecutionTime: 2026-07-08T19:28:41Z
   `cargo test -p tillandsias-windows-tray
   wsl_fetch_script_installs_download_via_temp_file` PASS, `./build.sh --check`
   PASS.
-- **E2E**: pending after the integration push.
 - **Finding filed**: integration push from the linked worktree succeeded but
   emitted `fatal: unable to get credential storage lock in 1000 ms: Not a
   directory` because the local helper is `store --file=.git/.gh-credentials`
@@ -42,6 +41,10 @@ LastExecutionTime: 2026-07-08T19:28:41Z
   runtime policy violation, and host-pre-build forge credential mirror litmus
   fixture; duplicate guest-binary prerequisite failure recorded against
   order 211.
+- **Published-release e2e**: deferred for this cycle because the latest release
+  (`v0.3.260707.2`) was already curl-install smoke tested on
+  2026-07-07T21:45Z, and this cycle produced no newer release artifact after the
+  local-build gate stopped before install.
 
 ## Cycle 2026-07-08T00:20Z (forge — meta-orchestration worker slice)
 
