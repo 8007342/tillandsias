@@ -620,11 +620,17 @@ impl ImageBuilder for PodmanDirect {
         // Step 3: Execute podman (synchronous, for prod)
         // DEBUG NETWORK:
         let curl_out = std::process::Command::new("curl")
-            .args(["-v", "https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/APKINDEX.tar.gz"])
+            .args([
+                "-v",
+                "https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/APKINDEX.tar.gz",
+            ])
             .output();
         if let Ok(out) = curl_out {
             eprintln!("[debug] curl status: {:?}", out.status);
-            eprintln!("[debug] curl stderr: {}", String::from_utf8_lossy(&out.stderr));
+            eprintln!(
+                "[debug] curl stderr: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
         } else {
             eprintln!("[debug] curl failed to execute");
         }

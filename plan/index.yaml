@@ -2952,8 +2952,9 @@ plan_index:
       title: "Coordination: freeze sibling drift and integrate secure-wire + embedded-guest branches by merge"
       status: ready
       status_note: >
-        Windows evidence slice COMPLETE 2026-07-06 (see deliverable §Windows run
-        result). Remaining: macOS evidence slice + linux coordinator merge.
+        Windows and macOS evidence slices BOTH COMPLETE (see deliverable for
+        respective run results). Remaining: linux coordinator merge of both
+        siblings into linux-next.
       events:
         - type: claim
           ts: "2026-07-06T05:45:00Z"
@@ -2990,6 +2991,21 @@ plan_index:
             flag-OFF pending the order-145 atomic cutover. Evidence:
             plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md.
             Packet returned to ready for the macOS slice + coordinator merge.
+        - type: completed_slice
+          ts: "2026-07-08T22:10:00Z"
+          agent_id: "opencode-big-pickle-20260708T2210Z"
+          host: macos
+          commits: ["9308cf5c"]
+          summary: >
+            macOS evidence slice complete: origin/linux-next (baf52d88) merged into
+            osx-next (9308cf5c); all tests pass (58 macos-tray, 50 vm-layer, 12
+            secure-channel, 37 control-wire); ./build.sh --check (fmt + type-check
+            + strict clippy) all PASS; tray binary builds; GuestTransport facade and
+            EncryptedStream primitive intact on osx-next. Full live VM flag-OFF/flag-ON
+            smoke deferred to a macOS host with working Podman machine + VZ entitlement
+            (skip:no-podman-user-session on this dev host). Evidence:
+            plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md.
+            Packet remains ready for the linux coordinator merge.
       kind: integration
       deliverable: plan/issues/multi-host-secure-wire-integration-freeze-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder, embedded-guest-binary-linux-build]

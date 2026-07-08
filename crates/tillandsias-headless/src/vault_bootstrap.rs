@@ -93,11 +93,11 @@ pub fn set_in_vm_credentials(
         });
     }
 
-    if let Some(token) = root_token {
-        if let Ok(cache_dir) = crate::init_cache_dir() {
-            let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
-            let _ = std::fs::write(&fallback_file, token);
-        }
+    if let Some(token) = root_token
+        && let Ok(cache_dir) = crate::init_cache_dir()
+    {
+        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        let _ = std::fs::write(&fallback_file, token);
     }
 }
 
@@ -129,8 +129,17 @@ pub fn clear_pending_handover() {
 pub fn is_running_in_vm() -> bool {
     if let Some(cell) = IN_VM_CREDENTIALS.get()
         && let Ok(guard) = cell.lock()
+        && guard.is_some()
     {
-        return guard.is_some();
+        return true;
+    }
+    if std::env::var("TILLANDSIAS_HOST_KIND").is_ok() {
+        return true;
+    }
+    if let Ok(hostname) = std::fs::read_to_string("/proc/sys/kernel/hostname")
+        && hostname.trim() == "tillandsias-vm"
+    {
+        return true;
     }
     false
 }
@@ -1948,7 +1957,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 });
             }
 
-            // Also proactively update the fallback file so child processes (like GithubLogin) 
+            // Also proactively update the fallback file so child processes (like GithubLogin)
             // running right after init can use the fresh token before the host re-delivers it.
             if let Ok(cache_dir) = crate::init_cache_dir() {
                 let fallback_file = cache_dir.join("fallback_vault-root-token-v1");

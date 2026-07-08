@@ -107,3 +107,19 @@ order 190 while macOS checkpoints/cleans WIP before attempting the merge.
 - `cargo fmt --all --check`, `cargo check -p tillandsias-macos-tray`, all 53+12 tests green
 - Pushed to `origin/osx-next` at `39e9df27`
 - Branch drift from linux-next resolved. Order 193 (macos-vz-home-src-mount) unblocked.
+
+## macOS evidence slice 2026-07-08T22:10Z — merge + build + test complete
+
+Agent `opencode-big-pickle-20260708T2210Z` on `osx-next`:
+
+- **Merge**: `origin/linux-next` (baf52d88) merged into `osx-next` (9308cf5c). One conflict in `plan/loop_status.md` — resolved keeping both sides' cycle entries.
+- **Verification**: `cargo test` results on the merged tree:
+  - `tillandsias-macos-tray`: 58 passed, 1 ignored (e2e VM entitlement), 0 failed
+  - `tillandsias-vm-layer`: 50 passed, 1 ignored (live network), 0 failed
+  - `tillandsias-secure-channel`: 12 passed, 0 failed
+  - `tillandsias-control-wire`: 37 passed, 0 failed
+- **`./build.sh --check`**: formatting check, type-check, and strict clippy all PASS
+- **macOS tray binary build**: `cargo build -p tillandsias-macos-tray` PASS
+- **Secure-wire code intact**: `GuestTransport` facade (`transport_macos.rs`), `EncryptedStream` primitive (`secure_channel`), secure-or-plain opener (`action_host.rs`, `diagnose.rs`) all confirmed present and compiling. `TILLANDSIAS_SECURE_CONTROL_WIRE` gate (default OFF) present on all macOS call sites.
+- **VM provisioning improvements**: applied two stashed fixes — network wait loop before dnf install in VZ cloud-init (`vz.rs`), `HOME=/root` in fetch-headless/headless systemd units (`vz.rs`), and `TILLANDSIAS_HOST_KIND` + hostname-based VM detection (`vault_bootstrap.rs`).
+- **Remaining for full live VM evidence**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-user-session` (no functional Podman machine on this dev host — `krunkit` not installed, see `plan/issues/macos-embedded-guest-runtime-smoke-2026-07-05.md`). Flag-OFF/flag-ON live VM smoke requires a macOS host with working Podman machine + VZ entitlement to boot a Fedora 44 guest and prove the encrypted control wire end-to-end.

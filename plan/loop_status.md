@@ -1,6 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-08T20:34:30Z
+LastExecutionTime: 2026-07-08T22:15:00Z
+
+## Cycle 2026-07-08T22:03Z (macos — meta-orchestration, secure-wire integration + full local build)
+
+- **Host**: macOS arm64, `osx-next`.
+- **Start**: Dirty worktree (VM provisioning debug changes in vault_bootstrap.rs, vz.rs) + untracked artifacts. Stashed, merged, then restored useful changes.
+- **Credential guard**: `ok:gh-keyring`.
+- **Merge**: `origin/linux-next` (baf52d88) into `osx-next` (9308cf5c) — one conflict in `plan/loop_status.md` resolved (kept both sides).
+- **Worker drain — order 191 (multi-host-secure-wire-integration-freeze)**: macOS evidence slice COMPLETE. Origin/linux-next merged, all tests pass (58+50+12+37), `./build.sh --check` green, tray binary builds, secure-wire/transport code intact. Full flag-OFF/flag-ON VM smoke deferred (no Podman machine on this dev host — `skip:no-podman-user-session`). Evidence recorded in deliverable and plan/index.yaml.
+- **VM provisioning fixes applied**: (1) network wait loop before dnf in VZ cloud-init, (2) HOME=/root in fetch-headless/headless units, (3) TILLANDSIAS_HOST_KIND + hostname-based VM detection for vault_bootstrap.
+- **Verification**: `cargo test -p tillandsias-macos-tray`: 58 passed / 1 ignored / 0 failed; `cargo test -p tillandsias-vm-layer`: 50 passed / 1 ignored / 0 failed; `cargo test -p tillandsias-secure-channel`: 12 passed / 0 failed; `cargo test -p tillandsias-control-wire`: 37 passed / 0 failed; `./build.sh --check` (fmt + type-check + strict clippy): PASS.
+- **macOS tray build**: `cargo build -p tillandsias-macos-tray` — PASS. Binary ready for interaction.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-user-session`.
 
 ## Cycle 2026-07-08T20:29Z (linux_mutable — meta-orchestration worker + e2e slice)
 

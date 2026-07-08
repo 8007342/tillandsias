@@ -466,6 +466,12 @@ chown -R fedora:fedora /home/fedora/.ssh
 chmod 600 /home/fedora/.ssh/authorized_keys
 
 # Install podman + dependencies for the enclave
+echo "Waiting for network..."
+until curl -sI https://mirrors.fedoraproject.org >/dev/null 2>&1; do
+  echo "Still waiting for network..."
+  sleep 1
+done
+
 dnf install -y podman
 systemctl enable podman.socket
 systemctl start podman.socket
@@ -537,6 +543,7 @@ Before=tillandsias-headless.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+Environment=HOME=/root
 ExecStart=/usr/local/lib/tillandsias/fetch-headless.sh
 TimeoutStartSec=300s
 StandardOutput=journal+console
@@ -555,6 +562,7 @@ Requires=tillandsias-headless-fetch.service
 [Service]
 Type=exec
 ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
+Environment=HOME=/root
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 Environment=TILLANDSIAS_SECURE_CONTROL_WIRE=__SECURE_CONTROL_WIRE__
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420

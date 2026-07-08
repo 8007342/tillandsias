@@ -1828,8 +1828,11 @@ fn spawn_vm_status_poller(
                     {
                         let mut guard = menu_state.lock().unwrap();
                         let new_login_runtime_ready =
-                            matches!(phase, tillandsias_control_wire::VmPhase::Ready) && podman_ready;
-                        if guard.podman_ready != podman_ready || guard.login_runtime_ready != new_login_runtime_ready {
+                            matches!(phase, tillandsias_control_wire::VmPhase::Ready)
+                                && podman_ready;
+                        if guard.podman_ready != podman_ready
+                            || guard.login_runtime_ready != new_login_runtime_ready
+                        {
                             guard.podman_ready = podman_ready;
                             guard.login_runtime_ready = new_login_runtime_ready;
                             rebuild_needed = true;

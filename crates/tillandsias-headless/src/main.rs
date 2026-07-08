@@ -7886,18 +7886,24 @@ fn maybe_spawn_vsock_listener(
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                     continue;
                 }
-                
+
                 let mut cmd = tillandsias_podman::podman_cmd();
                 cmd.args(&["events", "--format", "json"]);
                 cmd.stdout(std::process::Stdio::piped());
-                
+
                 if let Ok(mut child) = cmd.spawn() {
                     if let Some(stdout) = child.stdout.take() {
                         let mut reader = tokio::io::BufReader::new(stdout).lines();
                         while let Ok(Some(line)) = reader.next_line().await {
                             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
-                                if let Some(action) = parsed.get("Action").and_then(|v| v.as_str()) {
-                                    if let Some(name) = parsed.get("Actor").and_then(|a| a.get("Attributes")).and_then(|a| a.get("name")).and_then(|v| v.as_str()) {
+                                if let Some(action) = parsed.get("Action").and_then(|v| v.as_str())
+                                {
+                                    if let Some(name) = parsed
+                                        .get("Actor")
+                                        .and_then(|a| a.get("Attributes"))
+                                        .and_then(|a| a.get("name"))
+                                        .and_then(|v| v.as_str())
+                                    {
                                         let display = match action {
                                             "create" | "start" | "init" => {
                                                 if name.contains("forge") {
@@ -7915,9 +7921,9 @@ fn maybe_spawn_vsock_listener(
                                                 } else {
                                                     Some("Setting up containers")
                                                 }
-                                            },
+                                            }
                                             "build" => Some("Building image"),
-                                            _ => None
+                                            _ => None,
                                         };
                                         if let Some(msg) = display {
                                             events_state.set_last_event(msg.to_string());
@@ -7929,7 +7935,7 @@ fn maybe_spawn_vsock_listener(
                     }
                     let _ = child.wait().await;
                 }
-                
+
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             }
         });
