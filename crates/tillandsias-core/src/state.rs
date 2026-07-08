@@ -126,6 +126,8 @@ impl TrayAppLifecycleState {
 pub enum BuildStatus {
     /// Build is currently in progress.
     InProgress,
+    /// Build has not emitted telemetry recently.
+    Stalled,
     /// Build completed successfully.
     Completed,
     /// Build failed with the given reason.
@@ -147,6 +149,8 @@ pub struct BuildProgress {
     pub started_at: Instant,
     /// When the build completed (success or failure). `None` while in progress.
     pub completed_at: Option<Instant>,
+    /// When the last telemetry event was received for this build.
+    pub last_updated_at: Instant,
 }
 
 /// Whether a container is a forge (Attach Here / OpenCode), maintenance (terminal / bash),
@@ -730,7 +734,7 @@ impl TrayState {
         let any_in_progress = self
             .active_builds
             .iter()
-            .any(|b| b.status == BuildStatus::InProgress);
+            .any(|b| b.status == BuildStatus::InProgress || b.status == BuildStatus::Stalled);
         if any_in_progress {
             return TrayIconState::Building;
         }
@@ -934,6 +938,7 @@ mod tests {
             status: BuildStatus::InProgress,
             started_at: Instant::now(),
             completed_at: None,
+            last_updated_at: Instant::now(),
         });
         assert_eq!(state.compute_icon_state(), TrayIconState::Building);
     }
@@ -951,6 +956,7 @@ mod tests {
             status: BuildStatus::Completed,
             started_at: Instant::now(),
             completed_at: Some(Instant::now()),
+            last_updated_at: Instant::now(),
         });
         assert_eq!(state.compute_icon_state(), TrayIconState::Blooming);
     }
