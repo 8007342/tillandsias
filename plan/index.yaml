@@ -4614,7 +4614,7 @@ plan_index:
     - packet_id: forge-git-mirror-agent-affordance
       order: 237
       title: "Research + implement: in-forge agent transparent git push to forge mirror (properly authenticated)"
-      status: blocked
+      status: in_progress
       kind: research+enhancement
       deliverable: plan/issues/forge-git-mirror-agent-affordance-2026-07-07.md
       depends_on: []
@@ -4671,6 +4671,23 @@ plan_index:
             mirror gitconfig active, or provide the git mirror container with a
             scoped upstream GitHub credential so pushes through the mirror reach
             origin/linux-next.
+        - type: progress
+          ts: "2026-07-08T00:35:00Z"
+          agent_id: "forge-codex-20260708T0000Z"
+          host: forge
+          lease_id: "forge-git-mirror-agent-affordance-20260708T0003Z"
+          summary: >
+            The direct HTTPS `origin` push failure was resolved for this cycle by
+            pushing the amended checkpoint through the intended enclave mirror
+            route: `git push git://tillandsias-git/tillandsias
+            HEAD:refs/heads/linux-next`. The mirror accepted the update and its
+            post-receive hook reported successful forwarding to
+            `https://github.com/8007342/tillandsias.git`. Direct HTTPS origin
+            remains credentialless inside this forge, so future forge checkouts
+            still need the injected mirror config active by default.
+          evidence:
+            - "git://tillandsias-git/tillandsias accepted 5343c856 on linux-next"
+            - "git-mirror post-receive reported: Push to origin (https://github.com/8007342/tillandsias.git): success"
       scope_note: >
         Agents inside the forge currently fail git push because `git push origin`
         prompts for credentials or errors with `could not read Username`. The

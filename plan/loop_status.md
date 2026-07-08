@@ -28,12 +28,17 @@ LastExecutionTime: 2026-07-08T00:20:00Z
   checks PASS for GitHub-origin fail-closed and mirror-resolved success;
   `tillandsias-policy validate-yaml` PASS for touched YAML. `./build.sh --check`
   blocked by the newly filed forge tooling gap.
-- **Residual**: order 237 remains in progress; full cryptographic per-session
-  mirror authentication remains for order 238 if enclave-scoped git-daemon
-  routing is insufficient. Push to GitHub `origin/linux-next` failed after
-  three fetch/rebase/push attempts with `fatal: could not read Username for
-  'https://github.com': No such device or address`; order 237 was marked
-  blocked on the external credential channel.
+- **Push**: direct HTTPS push to GitHub `origin/linux-next` failed after three
+  fetch/rebase/push attempts with `fatal: could not read Username for
+  'https://github.com': No such device or address`. The intended enclave mirror
+  route then succeeded: `git push git://tillandsias-git/tillandsias
+  HEAD:refs/heads/linux-next` accepted `5343c856`, and the mirror hook reported
+  successful forwarding to GitHub.
+- **Residual**: order 237 remains in progress rather than done: future forge
+  checkouts still need the injected project-specific mirror config active by
+  default so normal blind `git push origin linux-next` uses the route proven
+  above. Full cryptographic per-session mirror authentication remains for order
+  238 if enclave-scoped git-daemon routing is insufficient.
 
 ## Cycle 2026-07-07T21:45Z (linux_immutable — meta-orchestration + curl-install e2e)
 

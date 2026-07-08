@@ -48,7 +48,7 @@ It makes the existing credential-free mirror route explicit and falsifiable.
 If the project needs time-limited mirror auth tokens beyond git-daemon enclave
 scope, keep order 238 as the follow-up research packet.
 
-## Blocker
+## Push Path Evidence
 
 Pushing this checkpoint to GitHub `origin/linux-next` failed after three
 fetch/rebase/push attempts:
@@ -63,3 +63,21 @@ usable GitHub credential channel is present in the forge. Smallest next action:
 launch future forge checkouts with the injected project-specific mirror
 gitconfig active, or provide the git mirror container with a scoped upstream
 GitHub credential so mirror pushes reach `origin/linux-next`.
+
+After recording that blocker, the intended enclave route was tested directly:
+
+```bash
+git push git://tillandsias-git/tillandsias HEAD:refs/heads/linux-next
+```
+
+The mirror accepted commit `5343c856` and its post-receive hook reported:
+
+```text
+[git-mirror] Push to origin (https://github.com/8007342/tillandsias.git): success
+```
+
+So the direct HTTPS `origin` path remains unavailable inside this forge, but
+the credential-free mirror route works when used explicitly. Remaining work:
+make future forge checkouts activate the injected project-specific mirror config
+by default so agents can use the normal blind `git push origin linux-next`
+affordance.
