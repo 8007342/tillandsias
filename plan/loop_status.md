@@ -2388,3 +2388,14 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - **Next cycle suggestion**: run curl-install e2e against latest release
   v0.3.260707.2 (latest tested in plan: v0.3.260627.1) on a linux_immutable host;
   or pick up order 224 (litmus-command-portability-dsl-research) for `any` host.
+
+## Cycle 2026-07-08T18:56Z (forge — git-mirror credential validation)
+
+- **Validation request**: Validate that git-mirror is configured to push to remote transparently without credentials, and check related work packets in plan/.
+- **Host**: forge container, `main` (tracking `origin/main`), TILLANDSIAS_HOST_KIND=forge
+- **Credential guard**: `ok:forge-git-mirror` — but this is a **false positive**. `git push --dry-run origin main` fails: `fatal: could not read Username for 'https://github.com': No such device or address`.
+- **Root cause**: The guard's mirror-reachability probe (`git ls-remote origin HEAD`) succeeds against GitHub's public repo (anonymous read), NOT because a push credential channel exists. `origin` points to `https://github.com/8007342/tillandsias.git` directly — no `url.insteadOf` rewrite to the mirror, no GH_TOKEN, no .gh-credentials, no gh auth.
+- **Mirror design (images/git/)**: Correctly designed — entrypoint configures `TILLANDSIAS_PROJECT_REMOTE_URL` as upstream origin; post-receive hook fetches GitHub token from Vault at push time, constructs ephemeral auth URL, forwards pushed refs by explicit refspec. This design is sound but this forge is NOT wired through the mirror.
+- **Order 177 exit criteria**: Still pending — "mirror ls-remote and direct GitHub ls-remote agree on linux-next" and "upstream forwarding failure returns non-zero" both require a forge that actually pushes through the mirror.
+- **New finding filed**: `plan/issues/forge-credential-guard-push-channel-gap-2026-07-08.md` — the guard must distinguish between mirror-proxied and direct-GitHub origins.
+- **Blocked**: this cycle cannot push its findings (no credential channel). This matches the credential gap documented in the new finding.

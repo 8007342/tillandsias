@@ -2493,6 +2493,18 @@ plan_index:
             fail on HOME bind false-positive and missing openssl CLI. Push
             forwarding reached GitHub, but the forge mirror kept serving a stale
             linux-next ref afterward.
+        - type: progress
+          ts: "2026-07-08T18:56:00Z"
+          agent_id: "forge-big-pickle-20260708T1856Z"
+          host: forge
+          summary: >
+            Validation cycle found credential guard false-positive in the
+            direct-GitHub-origin topology. Mirror is NOT used by this forge
+            runtime (origin points to GitHub directly, no insteadOf rewrite).
+            Exit criteria "mirror ls-remote agrees with GitHub" and "failed
+            upstream forwarding returns non-zero" both require the forge
+            push path to go through the mirror. New blocker filed:
+            plan/issues/forge-credential-guard-push-channel-gap-2026-07-08.md.
 
     - packet_id: forge-image-creation-vs-firstrun-split-research
       order: 178
