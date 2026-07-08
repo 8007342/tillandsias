@@ -5006,3 +5006,33 @@ plan_index:
         without additional detail in compact output.
       exit_criteria:
         - "Run the tray parity litmus with verbose output, then either update the parity matrix evidence or fix the missing implementation/status entry so the post-build litmus passes"
+
+    - packet_id: ensure-git-login-target-as-prerequisite-failure
+      order: 244
+      title: "Fix: ensure_git_login fails because ensure_with satisfies the target node itself"
+      status: claimed
+      kind: bug
+      deliverable: plan/issues/github-login-ensure-target-as-prerequisite-failure-2026-07-08.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [rust, headless, vault, podman, github]
+      estimated_hours: 1
+      events:
+        - type: claim
+          ts: "2026-07-08T22:30:00Z"
+          agent_id: "linux-big-pickle-20260708T2230Z"
+          host: linux
+          lease_id: "ensure-git-login-target-as-prerequisite-failure-20260708T2230Z"
+          expires_at: "2026-07-09T02:30:00Z"
+      outcome: >
+        ensure_git_login() called ensure_with(Service::GitLogin, ...) which
+        calls satisfy() on every node in the dep graph including GitLogin
+        itself. The RealSatisfier::satisfy(GitLogin) returns an error because
+        GitLogin is a launch target, not a satisfiable prerequisite. Fix:
+        iterate the topological order in ensure_git_login and skip the GitLogin
+        node (satisfy only its prerequisites).
+      exit_criteria:
+        - "tillandsias --github-login --debug succeeds when vault and proxy are already running"
+        - "cargo test -p tillandsias-headless container_deps all pass"
+        - "./build.sh --check passes"

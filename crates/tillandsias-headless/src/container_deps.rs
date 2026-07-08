@@ -155,7 +155,21 @@ pub struct GitLoginReady;
 /// prerequisite order was enforced.
 pub fn ensure_git_login(debug: bool) -> Result<Up<GitLoginReady>, String> {
     let mut satisfier = RealSatisfier { debug };
-    ensure_with(Service::GitLogin, &mut satisfier)?;
+    // Satisfy all prerequisites but skip GitLogin itself — it's a launch
+    // target, not a satisfiable prerequisite.
+    let order = topo_order(Service::GitLogin)?;
+    for &service in &order {
+        if service == Service::GitLogin {
+            continue;
+        }
+        satisfier.satisfy(service).map_err(|e| {
+            format!(
+                "ensure {}: {} not satisfied: {e}",
+                Service::GitLogin.name(),
+                service.name()
+            )
+        })?;
+    }
     Ok(Up::new(GitLoginReady))
 }
 
@@ -421,20 +435,22 @@ mod tests {
 
     /// The `Up<T>` typestate witness cannot be constructed outside the module.
     /// This test verifies that `ensure_git_login` returns the correct witness
-    /// type — the compile-time proof is the return type `Up<GitLoginReady>`.
+    /// type — the compile-time proof is the return type `Result<Up<GitLoginReady>, String>`.
     #[test]
     fn ensure_git_login_returns_up_gitloginready() {
-        // In a no-Podman environment this will fail at runtime with a
-        // network/Podman error, but the RETURN TYPE at compile time is
-        // `Result<Up<GitLoginReady>, String>`. The test verifies the type
-        // signature is correct — a compile-check, not a runtime one.
-        let result = ensure_git_login(false);
-        // On forge (no Podman) this must return Err, but the function exists,
-        // has the correct signature, and compiles.
-        assert!(result.is_err(), "ensure_git_login expects Podman");
         // The important assertion: the return type matches our expectation
         // (this is a compile-time check — if `ensure_git_login` didn't return
         // `Result<Up<GitLoginReady>, String>` the test wouldn't compile).
+        //
+        // We only verify the type compiles — no runtime assertion on Ok/Err
+        // since the outcome depends on whether Podman/Vault are available
+        // on the test host (forge: Err, linux with vault: Ok).
+        let result = ensure_git_login(false);
+        // Document what platforms produce which outcome:
+        // - forge (no Podman): Err at ensure_vault_running
+        // - linux with vault already running: Ok
+        // - linux without vault: Err at ensure_vault_running
+        drop(result);
     }
 
     /// Compile-time check: `Up<GitLoginReady>` has no public constructor.
