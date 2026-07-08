@@ -1,6 +1,6 @@
 # Forge Harness Auth via Vault + Proxy Header Injection
 
-**Status:** `in_progress`
+**Status:** `resolved`
 **Owner:** linux
 **Date:** 2026-06-27
 **Research completed:** 2026-06-27T04:30Z

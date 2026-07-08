@@ -1,6 +1,248 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-06T20:30:00Z
+LastExecutionTime: 2026-07-08T20:34:30Z
+
+## Cycle 2026-07-08T20:29Z (linux_mutable — meta-orchestration worker + e2e slice)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Pulled latest remote state first; started from `origin/linux-next@f1d3dcc7`
+  before in-forge work advanced the branch to `origin/linux-next@7d534d8b`.
+- **Worker drain — order 211 (ci-full-guest-binary-prereq-gap), COMPLETED**:
+  selected the auto-cross-compile prerequisite fix. `./build.sh --ci-full
+  --install` now prepares local release inputs before pre-build CI by bumping
+  the local version, regenerating traces, and running
+  `scripts/build-guest-binaries.sh`. The guest-binary builder now has a Cargo
+  fallback when the Nix daemon is unavailable, including an aarch64 musl
+  `rust-lld` path for hosts without `aarch64-linux-musl-gcc`.
+- **Resolved prior e2e blockers**: follow-up run
+  `target/build-install-smoke-e2e/20260708T200628Z` showed version
+  monotonicity PASS (`01-build-install.log:230`), no-Python policy PASS
+  (`01-build-install.log:1383`), guest-binary embed integrity PASS
+  (`01-build-install.log:1498-1499`), pre-build litmus PASS
+  (`01-build-install.log:2280`), and portable launcher install PASS
+  (`01-build-install.log:2321`).
+- **Local-build e2e**: `./build.sh --ci-full --install` reached post-build
+  status smoke, then STOPPED at gate 1 with exit 1. Per the e2e runbook, the
+  destructive Podman reset was not reached and was not run. New ready packets
+  filed in `plan/issues/build-install-smoke-e2e-findings-2026-07-08.md` and
+  promoted in `plan/index.yaml`: order 241
+  (`forge-diagnostics-opencode-attached-exit`), order 242
+  (`opencode-prompt-e2e-loop-status-contract`), and order 243
+  (`tray-parity-matrix-complete-post-build`).
+- **In-forge commits observed**: the e2e-invoked forge advanced `linux-next`
+  through `34862ec3` (local install checkpoint), `c73decd1` (toolbox-exists
+  detection finding), and `7d534d8b` (order 239 completion / Python policy
+  fix). The local order-211 changes were reapplied on top of that pushed state.
+- **Final local install**: per operator request, ran plain `./build.sh
+  --install` after pushing the order-211 fix. It bumped `VERSION` to
+  `0.3.260708.3`, regenerated trace indexes, installed
+  `/home/tlatoani/.local/bin/tillandsias`, and the installed binary reports
+  `Tillandsias v0.3.260708.3`.
+
+## Cycle 2026-07-08T20:20Z (linux_mutable — meta-orchestration worker slice)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Started clean at `origin/linux-next@c73decd1`, credential guard
+  `ok:gh-credentials-store`.
+- **Worker drain — order 239 (silverblue-toolbox-builder), COMPLETED**:
+  `scripts/with-tillandsias-builder.sh` already existed and was already integrated
+  into `build.sh:32`. Applied one fix: removed `python3 python3-pyyaml` from the
+  dnf install list to comply with the `no-python-scripts` policy.
+  `scripts/check-no-python-scripts.sh` PASS. Filed deliverable at
+  `plan/issues/silverblue-toolbox-builder-2026-07-07.md`. This resolves the
+  `smoke-finding/silverblue-builder-python-runtime` finding from the prior e2e
+  gate cycle.
+- **Coordinator**: merged `origin/linux-next` (c73decd1) — no sibling drift to
+  integrate. Conflict-marker scan PASS, `plan/index.yaml` YAML parse PASS.
+- **E2E gate**: deferred — no destructive test.
+- **Published-release e2e**: deferred — no release artifact.
+
+## Cycle 2026-07-08T19:18Z (linux_mutable — meta-orchestration worker slice)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Started clean, fetched/pruned remote, fast-forwarded `linux-next` to
+  `origin/linux-next@a8932a6c`, and credential guard passed with
+  `ok:gh-credentials-store`.
+- **Worker drain — order 240 (forge-build-check-tooling-gap), COMPLETED**:
+  `build.sh` now detects `TILLANDSIAS_HOST_KIND=forge` check-only invocations
+  and skips host Podman registry/proxy setup before running the Rust checks.
+  `_require_host_build_tools` no longer requires `file` for `--check`; `file`
+  remains install-only for portable launcher validation. Added
+  `scripts/test-build-sh-forge-check-only.sh` to pin the branch.
+- **Verification**: `scripts/test-build-sh-forge-check-only.sh` PASS;
+  `TILLANDSIAS_HOST_KIND=forge ./build.sh --check` PASS with host Podman setup
+  skipped and fmt/type-check/clippy green; normal `./build.sh --check` PASS on
+  linux_mutable and still ran the non-forge Podman registry setup path.
+- **Coordinator**: integrated `origin/osx-next` and `origin/windows-next` into
+  a fresh `origin/linux-next` worktree. Resolved loop-status conflicts by
+  preserving the current Linux cache and reinserting the macOS 2026-07-07T17:08Z
+  and Windows 2026-07-07T23:25Z cycle notes. Fixed one trailing-space issue in
+  the imported macOS planning note. Verification on the integrated tree:
+  conflict-marker scan PASS, `plan/index.yaml` YAML parse PASS,
+  `cargo test -p tillandsias-windows-tray
+  wsl_fetch_script_installs_download_via_temp_file` PASS, `./build.sh --check`
+  PASS.
+- **Finding filed**: integration push from the linked worktree succeeded but
+  emitted `fatal: unable to get credential storage lock in 1000 ms: Not a
+  directory` because the local helper is `store --file=.git/.gh-credentials`
+  and `.git` is a file in linked worktrees. Filed
+  `plan/issues/git-credential-store-linked-worktree-lock-2026-07-08.md`.
+- **Local-build e2e**: eligible and started as
+  `target/build-install-smoke-e2e/20260708T193145Z`; STOPPED at gate 1
+  (`./build.sh --ci-full --install`, exit 1), so the destructive Podman reset
+  was not reached. Filed
+  `plan/issues/build-install-smoke-e2e-findings-2026-07-08.md`: new ready
+  packets for stale `VERSION` vs latest release, Silverblue builder Python
+  runtime policy violation, and host-pre-build forge credential mirror litmus
+  fixture; duplicate guest-binary prerequisite failure recorded against
+  order 211.
+- **Published-release e2e**: deferred for this cycle because the latest release
+  (`v0.3.260707.2`) was already curl-install smoke tested on
+  2026-07-07T21:45Z, and this cycle produced no newer release artifact after the
+  local-build gate stopped before install.
+
+## Cycle 2026-07-08T00:20Z (forge — meta-orchestration worker slice)
+
+- **Host**: forge (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`, started clean
+  after fast-forward to `origin/linux-next@ee94611c`; credential guard initially
+  reported `ok:forge-git-mirror`.
+- **Worker drain — order 237 (forge-git-mirror-agent-affordance), IN PROGRESS**:
+  implemented slice 1. `scripts/check-credential-channel.sh` now fails closed
+  in forge mode unless `git ls-remote --get-url origin` resolves to
+  `git://tillandsias-git/*` or `git://git-service/*`, then probes that resolved
+  mirror URL directly. `write_forge_gitconfig()` now injects the
+  project-specific mirror base `git://tillandsias-git/<project>` instead of the
+  incomplete `git://tillandsias-git/` base. Added litmus cases for the plain
+  GitHub-origin false positive and mirror-resolved pass path.
+- **Finding filed/promoted — order 240 (forge-build-check-tooling-gap)**:
+  `./build.sh --check` cannot run inside the forge because it requires host
+  Podman setup even though the forge is already inside a Podman container, then
+  also reports missing `file`. Filed
+  `plan/issues/forge-build-check-tooling-gap-2026-07-08.md` and promoted a
+  ready packet requiring the forge check-only path to skip host-Podman setup or
+  emit a precise delegation message.
+- **Verification**: `cargo fmt --all --check` PASS; conflict-marker scan PASS;
+  `cargo test --package tillandsias-headless write_forge_gitconfig` PASS (2
+  tests, with temporary HOME to avoid root-owned forge git config); direct guard
+  checks PASS for GitHub-origin fail-closed and mirror-resolved success;
+  `tillandsias-policy validate-yaml` PASS for touched YAML. `./build.sh --check`
+  blocked by the newly filed forge tooling gap.
+- **Push**: direct HTTPS push to GitHub `origin/linux-next` failed after three
+  fetch/rebase/push attempts with `fatal: could not read Username for
+  'https://github.com': No such device or address`. The intended enclave mirror
+  route then succeeded: `git push git://tillandsias-git/tillandsias
+  HEAD:refs/heads/linux-next` accepted `5343c856`, and the mirror hook reported
+  successful forwarding to GitHub.
+- **Residual**: order 237 remains in progress rather than done: future forge
+  checkouts still need the injected project-specific mirror config active by
+  default so normal blind `git push origin linux-next` uses the route proven
+  above. Full cryptographic per-session mirror authentication remains for order
+  238 if enclave-scoped git-daemon routing is insufficient.
+
+## Cycle 2026-07-07T23:25Z (windows — meta-orchestration)
+
+- **Host**: Windows, antigravity agent.
+- **Worker drain — `host-lifecycle-race-safeguards` (order 161), Windows R9
+  slice COMPLETED**:
+  - Implemented R9 safeguard for the Windows guest headless fetch script.
+  - The fetch script fallback now writes to a temporary file via `mktemp`, traps
+    cleanups on exit, and installs the binary atomically into
+    `/usr/local/bin/tillandsias-headless`.
+  - Added test `wsl_fetch_script_installs_download_via_temp_file` to
+    `wsl_lifecycle.rs` to assert correct atomic behavior.
+- **Merge & Sync**:
+  - Merged `origin/linux-next` into `windows-next`.
+  - Resolved plan ledger syntax errors caused by duplicate `events` keys in the
+    upstream merge under packets 152 and 161.
+- **Verification**:
+  - `cargo test -p tillandsias-windows-tray` PASS (55 tests).
+  - `cargo test -p tillandsias-host-shell` PASS (45 tests).
+  - `cargo run -p tillandsias-policy -- validate-yaml plan/index.yaml` PASS.
+
+## Cycle 2026-07-07T21:45Z (linux_immutable — meta-orchestration + curl-install e2e)
+
+- **Host**: Linux, `linux-next`, `linux_immutable` (clean, credential guard `ok:gh-keyring`).
+- **Worker drain — order 236 (container-microdnf-gpg-workaround)**: found already landed
+  in `9f4dd61d` (fix: `--nogpgcheck` to microdnf in `Containerfile.base` and
+  `Containerfile.core`). Updated plan: `ready`→`done` with completion event.
+  Noted residual: `Containerfile.framework` and `inference/Containerfile` still
+  lack `--nogpgcheck` (out of original scope).
+- **E2E Gate**: `eligible` (curl-install on linux_immutable; no local build).
+  Executed `/smoke-curl-install-and-test-e2e` for release `v0.3.260707.2`:
+  - Step 1: installed release binary successfully
+  - Step 2: `podman system reset --force` — clean
+  - Step 3: `tillandsias --debug --init` — all images built, Vault healthy,
+    networks created, exit 0
+  - Step 4: forge launched with `/meta-orchestration` — completed order 227
+    (`container-dependency-graph-satisfier-typestate`) inside forge:
+    `RealSatisfier` struct, `Up<T>` typestate witness, migrated `run_provider_login`
+    and `run_list_cloud_projects` to `ensure_git_login`, 10 new tests.
+- **Push**: forge committed and pushed to local mirror (`git://tillandsias-git/tillandsias`),
+  but git-mirror HTTPS upstream push failed (`fatal: could not read Username for
+  'https://github.com'`). GitHub `linux-next` still at `34738da7`; forge commits
+  (`92dce746`, `7bb02fae`, `d49fd7ef`) in forge mirror only.
+- **Findings**: no new product bugs. Known forge-mirror HTTPS credential limitation
+  documented in `plan/issues/smoke-e2e-findings-2026-07-07.md`.
+
+## Cycle 2026-07-07T19:48Z (forge — advance-work-from-plan: order 227)
+
+- **Host**: forge (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`, credential guard `ok:forge-git-mirror`.
+  Worktree clean at `34738da7` (reverted from pending 92dce746 by mirror credential collision).
+- **Worker drain — `container-dependency-graph-satisfier-typestate` (order 227), CLAIMED and COMPLETED**:
+  Implemented `RealSatisfier` — wraps `ensure_enclave_network`, `ensure_egress_network`,
+  `ensure_ca_bundle`, `ensure_vault_running`, `ensure_proxy_running` as `Satisfier` impl in
+  `container_deps.rs`. Added `Up<T>` typestate wrapper with module-private constructor + `GitLoginReady`
+  marker. Added `ensure_git_login() -> Result<Up<GitLoginReady>, String>` as the public entry point.
+  Migrated `run_provider_login` (main.rs:4741) — replaced ad-hoc `ensure_enclave_network` →
+  `ensure_vault_running` → `ensure_proxy_running` with `ensure_git_login(debug)?` under
+  `#[cfg(feature = "vault")]`, with fallback for `#[cfg(not(feature = "vault"))]`.
+  Migrated `run_list_cloud_projects` (main.rs:4989) — same migration. Updated 3 source-text
+  preflight-order tests to assert `ensure_git_login` instead of old individual ensure calls.
+  10 new container_deps tests (all pass), `cargo check` + clippy clean, total 119/120 pass
+  (pre-existing `launch_forge_agent_does_not_mount_user_home` forge-container false positive).
+- **Push**: local git-mirror accepted 2 commits (92dce746 claim + 7bb02fae implementation),
+  `origin/linux-next` = 7bb02fae. Upstream GitHub forwarding fails (mirror credential issue,
+  same as prior cycles). GitHub `linux-next` still at 34738da7.
+- **Plan ledger**: order 227 marked `done`, `plan/loop_status.md` updated.
+
+## Cycle 2026-07-07T17:08Z (macos — meta-orchestration, round 3)
+
+- **Host**: macOS arm64, `osx-next`.
+- **Start**: Clean worktree, 1 un-pushed commit (8cced871 —
+  `prevent-silent-failures` state model from prior agent). Pushed to origin
+  first.
+- **Credential guard**: `ok:gh-keyring`.
+- **Remote**: `linux-next` advanced 8 commits (version bump to 0.3.260707.2,
+  order-236 microdnf GPG fix, order-227-235 packet splits, CI musl fix).
+- **Merge**: `origin/linux-next` into `osx-next` — clean, no conflicts.
+  `cargo fmt --check`, YAML validation, `cargo check -p tillandsias-macos-tray`
+  all green. `cargo test`: **58+12+50 tests pass**.
+- **Worker drain**: No new macOS-ready packets. Both remaining macOS packets
+  (orders 155, 161) blocked on upstream `vm-headless-persistent-listener`
+  (order 153, Linux-owned, status ready).
+- **Untracked**: 2 openspec change proposals (`macos-app-signing`,
+  `prevent-silent-failures`) and a bug ticket (`macos-dmg-icon-missing`) left in
+  place — user/agent WIP not overwritten.
+- **E2E gate**: `skip:no-podman-user-session`.
+
+## Cycle 2026-07-07T08:18Z (linux_mutable — meta-orchestration)
+  macOS job previously fixed with `rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl`
+  (fix applied after v0.3.260707.1 macOS failure). Linux build benefited from Nix cache HIT
+  (v0.3.260707.1 PR merge warmed the cache) — 10m41s vs 12m25s cold build.
+- **Reduction engine — split 3 large packets into smaller ready slices**:
+  - `container-dependency-graph-impl` (order 122, 10h → 3 slices): slices 1-2 done, split into
+    successor packets 227 (satisfier+typestate, 3h), 228 (liveness probe, 2h), 229 (drift litmus, 1h).
+  - `vm-headless-persistent-listener` (order 153, 10h → 2 slices): slice 1 (VmStatus push) done,
+    split into successor packets 230 (LoginStatePush, 4h) and 231 (CloudProjectsPush, 4h).
+  - `enclave-container-lifecycle-races` (order 162, 12h → 4 slices): split into successor packets
+    232 (flock concurrency R4, 3h), 233 (shared cleanup guard R5, 3h), 234 (phase-aware self-heal R6, 3h),
+    235 (vault recreate mutex R7, 3h).
+- **Coordinator duties**: sibling drift checked — both `origin/osx-next` and `origin/windows-next`
+  at 0 commits ahead of `origin/linux-next` (clean, no merge needed).
+- **Plan ledger**: all 3 existing packets updated with `split_into` notes; 9 new `ready` packets
+  appended to `plan/index.yaml`; YAML validated via `ruby -ryaml`.
+- **Release artifacts**: waiting for macOS and Windows jobs to complete before verifying
+  published release.
 
 ## Cycle 2026-07-06T19:30Z (macos — /goal "drain the macos queue")
 
@@ -2270,3 +2512,29 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
   - `.github/workflows/release.yml`: +`rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl`
   - `.github/workflows/nix-cache-warm.yml`: removed `push` trigger (keep `schedule` + `workflow_dispatch`)
 - **Blocked**: orders 148/150/154 (Windows), 155/161b/198 (macOS) need their respective host agents. Order 145 (encrypted-channel-vsock-cutover) needs cross-host coordination. Order 129 needs user to run forge session for proxy logs.
+
+## Cycle 2026-07-07T19:17Z (linux_immutable — meta-orchestration, opencode)
+
+- **Host**: Linux immutable (Fedora Silverblue), `linux-next` (clean at `9f4dd61d`,
+  credential guard `ok:gh-keyring`).
+- **Order 236 (container-microdnf-gpg-workaround)**: Found already completed in
+  commit `9f4dd61d` but still marked `ready` in `plan/index.yaml`. Updated status
+  to `done` with completion event. Noted residual: `Containerfile.framework` and
+  `inference/Containerfile` still have `microdnf install` without `--nogpgcheck`.
+- **Reduction observation**: plan/index.yaml reported order 236 as `ready` for
+  ~11h after the fix commit landed — plan ledger lags behind `git log` when only
+  one side (code vs plan) is updated. No formal cross-packet staleness checker.
+- **Next cycle suggestion**: run curl-install e2e against latest release
+  v0.3.260707.2 (latest tested in plan: v0.3.260627.1) on a linux_immutable host;
+  or pick up order 224 (litmus-command-portability-dsl-research) for `any` host.
+
+## Cycle 2026-07-08T18:56Z (forge — git-mirror credential validation)
+
+- **Validation request**: Validate that git-mirror is configured to push to remote transparently without credentials, and check related work packets in plan/.
+- **Host**: forge container, `main` (tracking `origin/main`), TILLANDSIAS_HOST_KIND=forge
+- **Credential guard**: `ok:forge-git-mirror` — but this is a **false positive**. `git push --dry-run origin main` fails: `fatal: could not read Username for 'https://github.com': No such device or address`.
+- **Root cause**: The guard's mirror-reachability probe (`git ls-remote origin HEAD`) succeeds against GitHub's public repo (anonymous read), NOT because a push credential channel exists. `origin` points to `https://github.com/8007342/tillandsias.git` directly — no `url.insteadOf` rewrite to the mirror, no GH_TOKEN, no .gh-credentials, no gh auth.
+- **Mirror design (images/git/)**: Correctly designed — entrypoint configures `TILLANDSIAS_PROJECT_REMOTE_URL` as upstream origin; post-receive hook fetches GitHub token from Vault at push time, constructs ephemeral auth URL, forwards pushed refs by explicit refspec. This design is sound but this forge is NOT wired through the mirror.
+- **Order 177 exit criteria**: Still pending — "mirror ls-remote and direct GitHub ls-remote agree on linux-next" and "upstream forwarding failure returns non-zero" both require a forge that actually pushes through the mirror.
+- **New finding filed**: `plan/issues/forge-credential-guard-push-channel-gap-2026-07-08.md` — the guard must distinguish between mirror-proxied and direct-GitHub origins.
+- **Blocked**: this cycle cannot push its findings (no credential channel). This matches the credential gap documented in the new finding.

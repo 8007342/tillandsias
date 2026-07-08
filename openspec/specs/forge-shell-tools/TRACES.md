@@ -7,8 +7,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-core/tests/forge_shell_tools.rs#L2](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L2)
 - [crates/tillandsias-core/tests/forge_shell_tools.rs#L151](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L151)
-- [flake.nix#L214](../../../flake.nix#L214)
-- [flake.nix#L279](../../../flake.nix#L279)
+- [flake.nix#L220](../../../flake.nix#L220)
+- [flake.nix#L285](../../../flake.nix#L285)
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)
 - [images/default/config-overlay/mcp/git-tools.sh#L28](../../../images/default/config-overlay/mcp/git-tools.sh#L28)
 - [images/default/config-overlay/mcp/git-tools.sh#L37](../../../images/default/config-overlay/mcp/git-tools.sh#L37)
@@ -29,5 +29,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode-web.sh#L72](../../../images/default/entrypoint-forge-opencode-web.sh#L72)
 - [images/default/entrypoint-terminal.sh#L74](../../../images/default/entrypoint-terminal.sh#L74)
 - [images/default/lib-common.sh#L73](../../../images/default/lib-common.sh#L73)
-- [images/default/lib-common.sh#L500](../../../images/default/lib-common.sh#L500)
-- [images/default/lib-common.sh#L908](../../../images/default/lib-common.sh#L908)
+- [images/default/lib-common.sh#L512](../../../images/default/lib-common.sh#L512)
+- [images/default/lib-common.sh#L920](../../../images/default/lib-common.sh#L920)

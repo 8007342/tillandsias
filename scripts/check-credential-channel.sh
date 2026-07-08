@@ -75,12 +75,23 @@ credential_channel_verdict() {
     # present. Unlike a direct anonymous GitHub read, an ls-remote THROUGH the
     # mirror exercises the same rewrite path a push takes and proves the mirror
     # sidecar is up for this repo; a failure is definitive evidence it is unusable.
+    local effective_origin
+    effective_origin="$(git ls-remote --get-url origin 2>/dev/null || true)"
+    case "$effective_origin" in
+      git://tillandsias-git/*|git://git-service/*) ;;
+      *)
+        echo "[check-credential-channel] TILLANDSIAS_HOST_KIND=forge but origin does not resolve to the enclave git mirror (effective origin: ${effective_origin:-<missing>}): no usable push channel. Fix the forge gitconfig injection or provide a forge credential channel; do NOT import host credentials." >&2
+        echo "missing:no-credential-channel"
+        return 1
+        ;;
+    esac
     if [ "${TILLANDSIAS_CRED_SKIP_MIRROR_PROBE:-0}" = "1" ]; then
-      # Fixture seam: trust the env var without a network probe (deterministic).
+      # Fixture seam: verify URL rewriting first, then skip only the live
+      # network probe so host pre-build litmus does not depend on forge DNS.
       echo "ok:forge-git-mirror"
       return 0
     fi
-    if timeout 10 git ls-remote origin HEAD >/dev/null 2>&1; then
+    if timeout 10 git ls-remote "$effective_origin" HEAD >/dev/null 2>&1; then
       echo "ok:forge-git-mirror"
       return 0
     fi

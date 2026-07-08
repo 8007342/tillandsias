@@ -5,10 +5,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-core/src/state.rs#L443](../../../crates/tillandsias-core/src/state.rs#L443)
-- [crates/tillandsias-core/src/state.rs#L495](../../../crates/tillandsias-core/src/state.rs#L495)
-- [crates/tillandsias-core/src/state.rs#L1710](../../../crates/tillandsias-core/src/state.rs#L1710)
-- [crates/tillandsias-core/src/state.rs#L1724](../../../crates/tillandsias-core/src/state.rs#L1724)
-- [crates/tillandsias-core/src/state.rs#L1738](../../../crates/tillandsias-core/src/state.rs#L1738)
-- [crates/tillandsias-core/src/state.rs#L1761](../../../crates/tillandsias-core/src/state.rs#L1761)
-- [crates/tillandsias-core/src/state.rs#L1771](../../../crates/tillandsias-core/src/state.rs#L1771)
+- [crates/tillandsias-core/src/state.rs#L447](../../../crates/tillandsias-core/src/state.rs#L447)
+- [crates/tillandsias-core/src/state.rs#L499](../../../crates/tillandsias-core/src/state.rs#L499)
+- [crates/tillandsias-core/src/state.rs#L1716](../../../crates/tillandsias-core/src/state.rs#L1716)
+- [crates/tillandsias-core/src/state.rs#L1730](../../../crates/tillandsias-core/src/state.rs#L1730)
+- [crates/tillandsias-core/src/state.rs#L1744](../../../crates/tillandsias-core/src/state.rs#L1744)
+- [crates/tillandsias-core/src/state.rs#L1767](../../../crates/tillandsias-core/src/state.rs#L1767)
+- [crates/tillandsias-core/src/state.rs#L1777](../../../crates/tillandsias-core/src/state.rs#L1777)

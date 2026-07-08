@@ -1,17 +1,13 @@
 # Forge Build Telemetry Dashboard
 
-**Status: NO CURRENT METRICS** (dashboard refreshed 2026-07-06T00:15Z)
-
 Auto-generated metrics tracking the build performance and size of the forge image.
-Metrics are sourced from `$XDG_STATE_HOME/tillandsias/image-build-events.jsonl`.
-When no build events have been recorded, all charts display empty/zero data.
 
 ## Build Duration Over Time
 
 ```mermaid
 xychart-beta
     title "Forge Build Duration (seconds)"
-    x-axis "Builds" (no data)
+    x-axis "Builds" 1 -> 1
     y-axis "Seconds"
     line []
 ```
@@ -21,9 +17,9 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "Forge Image Size (MB)"
-    x-axis "Builds" (no data)
+    x-axis "Builds" 1 -> 1
     y-axis "MB"
-    bar []
+    bar [0]
 ```
 
 ## Download Size Over Time
@@ -31,19 +27,19 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "Forge Build Download Size (MB)"
-    x-axis "Builds" (no data)
+    x-axis "Builds" 1 -> 1
     y-axis "MB"
-    bar []
+    bar [0]
 ```
 
 ## Latest Build Summary
 
 | Metric | Value |
 |---|---|
-| Status | No build events recorded |
-| Source | `$XDG_STATE_HOME/tillandsias/image-build-events.jsonl` |
-| Last refreshed | 2026-07-06T00:15Z |
+| Duration | s |
+| Image Size | 0 MB |
+| Bytes Downloaded | 0 MB |
+| Cache Hits (steps) |  |
 
-*Metrics dashboard — source-derived data with explicit provenance. \
-When no metrics input exists, the dashboard MUST display empty/zero state and \
-MUST NOT be treated as a current performance signal.*
+*Metrics are extracted from the build metrics input via semantic distillation. \
+New in this version: download-size tracking, cache-hit tracking, and canonical ImageBuildEvent sink (`$XDG_STATE_HOME/tillandsias/image-build-events.jsonl`).*
