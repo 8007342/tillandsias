@@ -7780,7 +7780,7 @@ fn maybe_spawn_vsock_listener(
         });
 
         let udp_state = state.clone();
-        let udp_monitor = tokio::spawn(async move {
+        let _udp_monitor = tokio::spawn(async move {
             if let Ok(socket) = tokio::net::UdpSocket::bind("127.0.0.1:42421").await {
                 let mut buf = [0; 1024];
                 while let Ok((len, _)) = socket.recv_from(&mut buf).await {

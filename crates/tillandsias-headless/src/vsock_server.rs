@@ -593,7 +593,7 @@ async fn handle_connection(
                         seq_in_reply_to: seq,
                         phase: state.current_phase(),
                         podman_ready: state.podman_ready(),
-                        last_event: Some(state.last_event()),
+                        last_event: state.last_event(),
                     },
                 };
                 if write_envelope(&mut stream, &reply).await.is_err() {

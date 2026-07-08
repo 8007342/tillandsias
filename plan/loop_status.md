@@ -2311,3 +2311,6 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
   - `.github/workflows/release.yml`: +`rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl`
   - `.github/workflows/nix-cache-warm.yml`: removed `push` trigger (keep `schedule` + `workflow_dispatch`)
 - **Blocked**: orders 148/150/154 (Windows), 155/161b/198 (macOS) need their respective host agents. Order 145 (encrypted-channel-vsock-cutover) needs cross-host coordination. Order 129 needs user to run forge session for proxy logs.
+
+### Cycle 2026-07-08T14:00Z (macos — build-install-smoke-e2e)
+- **PASS**: Local build and smoke test e2e succeeded on `macos` (tested commit `b3e52235`). VM substrate wiped and cleanly re-provisioned.
