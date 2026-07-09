@@ -4542,13 +4542,20 @@ plan_index:
     - packet_id: container-dependency-graph-drift-litmus
       order: 229
       title: "Container deps slice 5: gated-launch drift litmus + compile-time dependency invariant"
-      status: ready
+      status: claimed
       kind: test+guardrail
       deliverable: crates/tillandsias-headless/src/container_deps/
       depends_on: [container-dependency-graph-liveness]
       pickup_role: linux
       capability_tags: [litmus, rust, testing]
       estimated_hours: 1
+      events:
+        - type: claim
+          ts: "2026-07-09T18:48:00Z"
+          agent_id: "linux-macuahuitl-bigpickle-20260709T1847Z"
+          host: linux
+          lease_id: "container-dependency-graph-drift-litmus"
+          expires_at: "2026-07-09T22:48:00Z"
       outcome: >
         Add the final gated-launch drift litmus: a launch that skips a
         prerequisite must be a compile error or litmus failure. Pins the
