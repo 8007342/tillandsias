@@ -4500,7 +4500,7 @@ plan_index:
     - packet_id: container-dependency-graph-liveness
       order: 228
       title: "Container deps slice 4: runtime liveness probe for all managed containers"
-      status: ready
+      status: claimed
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/container_deps/
       depends_on: [container-dependency-graph-satisfier-typestate]
@@ -4513,6 +4513,13 @@ plan_index:
         still running and healthy. A dead container triggers re-ensure
         (idempotent). Wire into VmPhase::Ready steady-state so the headless
         self-heals without a full restart.
+      events:
+        - type: claim
+          ts: "2026-07-09T18:37:00Z"
+          agent_id: "linux-macuahuitl-bigpickle-20260709T1837Z"
+          host: linux
+          lease_id: "container-dependency-graph-liveness-claim-1"
+          expires_at: "2026-07-09T22:37:00Z"
       exit_criteria:
         - "liveness check iterates all managed containers, reports pass/fail per container"
         - "a dead container is re-ensured (idempotent, no crash)"
