@@ -34,4 +34,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/tray/mod.rs#L4828](../../../crates/tillandsias-headless/src/tray/mod.rs#L4828)
 - [crates/tillandsias-headless/src/tray/mod.rs#L4866](../../../crates/tillandsias-headless/src/tray/mod.rs#L4866)
 - [crates/tillandsias-headless/src/tray/mod.rs#L4902](../../../crates/tillandsias-headless/src/tray/mod.rs#L4902)
-- [crates/tillandsias-headless/src/vault_bootstrap.rs#L624](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L624)
+- [crates/tillandsias-headless/src/vault_bootstrap.rs#L647](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L647)

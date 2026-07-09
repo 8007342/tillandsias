@@ -499,10 +499,8 @@ mod tests {
         assert!(args.contains(&"-v".to_string()));
         assert!(args.contains(&"/src:/workspace:rw".to_string()));
         assert!(args.contains(&"--mount".to_string()));
-        assert!(
-            args.iter()
-                .any(|arg| arg == "type=bind,source=/tmp/ca.crt,target=/etc/ca.crt,relabel=shared,readonly=true")
-        );
+        assert!(args.iter().any(|arg| arg
+            == "type=bind,source=/tmp/ca.crt,target=/etc/ca.crt,relabel=shared,readonly=true"));
     }
 
     #[test]

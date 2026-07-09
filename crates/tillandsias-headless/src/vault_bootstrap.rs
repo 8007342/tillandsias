@@ -872,7 +872,9 @@ pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
 /// expensive on-demand launch in `is_github_key_present` and `ensure_vault_running`.
 #[allow(dead_code)]
 fn vault_data_volume_exists() -> bool {
-    let dir = crate::init_cache_dir().unwrap_or_else(|_| PathBuf::from(".")).join("vault-data");
+    let dir = crate::init_cache_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("vault-data");
     dir.exists()
 }
 
@@ -1604,7 +1606,9 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
                  (volume exists but no Shamir share in keychain)"
             );
         }
-        let vault_dir = crate::init_cache_dir().unwrap_or_else(|_| PathBuf::from(".")).join("vault-data");
+        let vault_dir = crate::init_cache_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("vault-data");
         let _ = std::fs::remove_dir_all(vault_dir);
     } else if debug && vault_data_volume_exists() {
         eprintln!(
@@ -1648,8 +1652,11 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // /vault/data/core/_migration and `--github-login` then reports Vault as
     // not running. `:U` re-asserts ownership and self-repairs that drift.
     // @trace spec:tillandsias-vault
-    let vault_dir = crate::init_cache_dir().map_err(|e| e.to_string())?.join("vault-data");
-    std::fs::create_dir_all(&vault_dir).map_err(|e| format!("failed to create vault data dir: {}", e))?;
+    let vault_dir = crate::init_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("vault-data");
+    std::fs::create_dir_all(&vault_dir)
+        .map_err(|e| format!("failed to create vault data dir: {}", e))?;
     let volume_arg = format!("{}:/vault/data:U", vault_dir.display());
     let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
     let mut run_args: Vec<String> = vec![

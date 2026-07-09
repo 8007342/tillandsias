@@ -5,4 +5,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-headless/src/main.rs#L3260](../../../crates/tillandsias-headless/src/main.rs#L3260)
+- [crates/tillandsias-headless/src/main.rs#L3262](../../../crates/tillandsias-headless/src/main.rs#L3262)
