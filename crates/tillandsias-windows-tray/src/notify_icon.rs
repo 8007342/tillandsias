@@ -1094,12 +1094,172 @@ async fn live_client_request(
     Some(reply)
 }
 
+/// Apply a live `VmStatus` observation — from a poll reply or an unrequested
+/// `VmStatusPush` frame — to the shared `MenuState` and status chip: sets
+/// `podman_ready` (which gates per-project actions like "Attach Here" in
+/// `menu_state::build`) and refreshes the status line + tooltip from the live
+/// phase. Shared by `refresh_vm_status` (fallback poll) and
+/// `run_vm_status_push_listener` (order 154 push path) so both surfaces stay
+/// byte-identical.
+fn apply_vm_status(
+    phase: tillandsias_control_wire::VmPhase,
+    podman_ready: bool,
+    last_event: Option<&str>,
+    hwnd: HWND,
+) {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        let state = guard.get_or_insert_with(MenuState::initial);
+        state.podman_ready = podman_ready;
+        // Gate GitHub Login behind phase=Ready + podman up. This is the
+        // signal that vault+egress containers have had a chance to start
+        // (the headless only flips to Ready after podman is reachable).
+        state.login_runtime_ready =
+            matches!(phase, tillandsias_control_wire::VmPhase::Ready) && podman_ready;
+    }
+    // status_text + tooltip (own MENU_STATE lock inside). Appends the
+    // headless's `last_event` when present so the chip reflects in-VM
+    // activity (e.g. "Ready · forge-foo created"), not just the phase.
+    let base = vm_phase_status_text(phase, podman_ready);
+    update_status_text(&compose_chip_text(&base, last_event), hwnd);
+    // Clear the wire-degraded edge-trigger and surface a "wire
+    // recovered" balloon if we had previously toasted a degradation.
+    // No-op on the steady-state-Ready case (first poll after
+    // provisioning succeeds — that ground-truth confirmation lives
+    // in the spawn_provisioning Ok path's balloon).
+    mark_wire_recovered(hwnd);
+}
+
+/// True while the dedicated `VmStatus` push subscription (order 154 slice 1)
+/// is connected and delivering frames. Gates the steady-state fallback poll:
+/// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07);
+/// when the stream drops, the 30s tick resumes polling until the listener
+/// resubscribes.
+static VM_STATUS_PUSH_HEALTHY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// SC-07 gate: the steady-state `VmStatusRequest` poll is fallback-only —
+/// suppressed whenever the push subscription is delivering.
+fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
+    !push_stream_healthy
+}
+
+/// The exact topic set slice 1 subscribes to. LoginState/CloudProjects stay
+/// polled until the headless push sources land (orders 230/231) — widening
+/// this list is the follow-up slice's job, pinned by
+/// `vm_status_subscribe_topics_is_vmstatus_only_slice1`.
+fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
+    vec![tillandsias_control_wire::SubscriptionTopic::VmStatus]
+}
+
+/// Dedicated `VmStatus` push listener (order 154 slice 1): a persistent
+/// reader task on its own control-wire connection. Connect → handshake →
+/// `Subscribe{[VmStatus]}` → `SubscribeAck` → loop `next_envelope`, applying
+/// each `VmStatusPush` to the menu within milliseconds of the headless's
+/// VmPhase change (SC-09 handoff, <500ms end-to-end).
+///
+/// A separate connection (not `LIVE_CLIENT`) is deliberate: `LIVE_CLIENT`
+/// interleaves request/reply pairs, and an unsolicited push frame arriving
+/// between a request and its reply would be mis-consumed as the reply. The
+/// headless broadcasts pushes to every subscribed client, so a second
+/// connection gets the same stream without racing the request path.
+///
+/// Reconnects forever with the shared `BACKOFF_SCHEDULE` (250ms→4s), then
+/// 30s steady-state between attempts — while down, `VM_STATUS_PUSH_HEALTHY`
+/// is false and the tick loop's fallback poll covers status freshness.
+async fn run_vm_status_push_listener(hwnd: HWND) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::{BACKOFF_SCHEDULE, Client};
+
+    let mut backoff_idx: usize = 0;
+    loop {
+        VM_STATUS_PUSH_HEALTHY.store(false, std::sync::atomic::Ordering::SeqCst);
+        // Reconnect pacing: walk the shared schedule, then hold at 30s. The
+        // first connect attempt runs immediately (backoff_idx starts at 0 and
+        // the wait happens on failure, below).
+        let established = async {
+            let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT)
+                .await
+                .map_err(|e| format!("connect: {e}"))?;
+            let mut client = Client::from_stream(
+                stream,
+                Transport::Vsock {
+                    cid: 0,
+                    port: CONTROL_WIRE_VSOCK_PORT,
+                },
+            );
+            client
+                .handshake()
+                .await
+                .map_err(|e| format!("handshake: {e}"))?;
+            let seq = client.allocate_seq();
+            let sub = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body: ControlMessage::Subscribe {
+                    topics: vm_status_subscribe_topics(),
+                },
+            };
+            let reply = client
+                .request(&sub)
+                .await
+                .map_err(|e| format!("subscribe: {e}"))?;
+            match reply.body {
+                ControlMessage::SubscribeAck => Ok(client),
+                other => Err(format!("expected SubscribeAck, got {}", other.kind())),
+            }
+        }
+        .await;
+
+        let mut client = match established {
+            Ok(c) => c,
+            Err(err) => {
+                tracing::debug!(%err, "vm status push subscription unavailable; will retry");
+                let wait = BACKOFF_SCHEDULE
+                    .get(backoff_idx)
+                    .copied()
+                    .unwrap_or(std::time::Duration::from_secs(30));
+                backoff_idx = backoff_idx.saturating_add(1);
+                tokio::time::sleep(wait).await;
+                continue;
+            }
+        };
+
+        backoff_idx = 0;
+        VM_STATUS_PUSH_HEALTHY.store(true, std::sync::atomic::Ordering::SeqCst);
+        tracing::info!("vm status push subscription established (polls suppressed, SC-07)");
+
+        loop {
+            match client.next_envelope().await {
+                Ok(env) => match env.body {
+                    ControlMessage::VmStatusPush {
+                        phase,
+                        podman_ready,
+                        last_event,
+                        ..
+                    } => {
+                        apply_vm_status(phase, podman_ready, last_event.as_deref(), hwnd);
+                        tracing::debug!(?phase, podman_ready, "vm status pushed");
+                    }
+                    other => {
+                        tracing::debug!("push stream: ignoring frame {}", other.kind());
+                    }
+                },
+                Err(err) => {
+                    tracing::debug!(%err, "vm status push stream dropped; resubscribing");
+                    break;
+                }
+            }
+        }
+    }
+}
+
 /// Poll the in-VM `VmStatus` once over the control wire and reflect it in the
-/// shared `MenuState`: sets `podman_ready` (which gates per-project actions like
-/// "Attach Here" in `menu_state::build`) and refreshes the status line + tooltip
-/// from the live phase. Best-effort — a transient wire error leaves the last
-/// known state untouched (logged at debug). Uses `live_client_request` which
-/// reuses the persistent `LIVE_CLIENT` connection or reconnects transparently.
+/// shared `MenuState` via [`apply_vm_status`]. Best-effort — a transient wire
+/// error leaves the last known state untouched (logged at debug). Uses
+/// `live_client_request` which reuses the persistent `LIVE_CLIENT` connection
+/// or reconnects transparently. Steady-state this is fallback-only (SC-07):
+/// the tick loop skips it while [`VM_STATUS_PUSH_HEALTHY`] holds.
 async fn refresh_vm_status(hwnd: HWND) {
     use tillandsias_control_wire::ControlMessage;
 
@@ -1120,26 +1280,7 @@ async fn refresh_vm_status(hwnd: HWND) {
             last_event,
             ..
         } => {
-            if let Ok(mut guard) = MENU_STATE.lock() {
-                let state = guard.get_or_insert_with(MenuState::initial);
-                state.podman_ready = podman_ready;
-                // Gate GitHub Login behind phase=Ready + podman up. This is the
-                // signal that vault+egress containers have had a chance to start
-                // (the headless only flips to Ready after podman is reachable).
-                state.login_runtime_ready =
-                    matches!(phase, tillandsias_control_wire::VmPhase::Ready) && podman_ready;
-            }
-            // status_text + tooltip (own MENU_STATE lock inside). Appends the
-            // headless's `last_event` when present so the chip reflects in-VM
-            // activity (e.g. "Ready · forge-foo created"), not just the phase.
-            let base = vm_phase_status_text(phase, podman_ready);
-            update_status_text(&compose_chip_text(&base, last_event.as_deref()), hwnd);
-            // Clear the wire-degraded edge-trigger and surface a "wire
-            // recovered" balloon if we had previously toasted a degradation.
-            // No-op on the steady-state-Ready case (first poll after
-            // provisioning succeeds — that ground-truth confirmation lives
-            // in the spawn_provisioning Ok path's balloon).
-            mark_wire_recovered(hwnd);
+            apply_vm_status(phase, podman_ready, last_event.as_deref(), hwnd);
             tracing::debug!(?phase, podman_ready, "vm status polled");
         }
         // Per the control-dispatch convergence packet (5c67ddb9, aeb5499a) the
@@ -1950,17 +2091,23 @@ fn spawn_provisioning(hwnd: HWND) {
                 match lifecycle.spawn_keepalive(is_debug) {
                     Ok(_keepalive) => {
                         tracing::info!("VM keepalive holding the control wire warm");
-                        // Live status: poll VmStatus every tick (30 s) so the
-                        // menu reflects real VM health — podman_ready gates
-                        // per-project actions, and the status line tracks phase
-                        // (Ready/Draining/Stopping). Refresh cloud projects on
-                        // the first tick + every 10 ticks (~5 min) since
-                        // `gh repo list` is a slower-changing input than VM
-                        // status. Holds `_keepalive` for the tray's lifetime; on
+                        // Live status, push-first (order 154 slice 1): a
+                        // dedicated reader task subscribes to VmStatus and
+                        // applies pushes as they arrive; the 30s tick below
+                        // polls VmStatusRequest only while that subscription
+                        // is down (SC-07 fallback). Cloud projects + login
+                        // remain polled on the slow cadence until the headless
+                        // push sources for those topics land (orders 230/231).
+                        // Holds `_keepalive` for the tray's lifetime; on
                         // Quit the LocalSet drops the task → kill_on_drop.
+                        tokio::task::spawn_local(run_vm_status_push_listener(hwnd));
                         let mut tick: u32 = 0;
                         loop {
-                            refresh_vm_status(hwnd).await;
+                            if should_poll_vm_status(
+                                VM_STATUS_PUSH_HEALTHY.load(std::sync::atomic::Ordering::SeqCst),
+                            ) {
+                                refresh_vm_status(hwnd).await;
+                            }
                             // Slower polls every 10 ticks (~5 min). Local fs
                             // walks are virtually free vs `gh repo list`, so
                             // run local first to keep the menu fresh fast.
@@ -2479,6 +2626,34 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 154 slice 1 subscribes to VmStatus ONLY — LoginState and
+    /// CloudProjects stay on the poll path until the headless push sources
+    /// land (orders 230/231). Widening this list without those sources would
+    /// silently subscribe to topics that never push. When 230/231 land,
+    /// update this pin together with the topic list.
+    #[test]
+    fn vm_status_subscribe_topics_is_vmstatus_only_slice1() {
+        assert_eq!(
+            vm_status_subscribe_topics(),
+            vec![tillandsias_control_wire::SubscriptionTopic::VmStatus]
+        );
+    }
+
+    /// SC-07: the steady-state VmStatusRequest poll is fallback-only —
+    /// suppressed while the push subscription is healthy, restored the
+    /// moment it drops.
+    #[test]
+    fn vm_status_poll_is_fallback_only_when_push_healthy() {
+        assert!(
+            should_poll_vm_status(false),
+            "poll must run while the push stream is down"
+        );
+        assert!(
+            !should_poll_vm_status(true),
+            "poll must be suppressed while the push stream is healthy (SC-07)"
+        );
+    }
 
     /// Sanity: WM_TRAYICON is in the WM_APP private range so it cannot
     /// collide with system messages.

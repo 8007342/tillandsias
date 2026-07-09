@@ -1358,7 +1358,7 @@ plan_index:
     - packet_id: windows-tray-stream-refactor
       order: 154
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
-      status: claimed
+      status: ready
       events:
         - type: claim
           ts: "2026-07-09T21:15:00Z"
@@ -1371,6 +1371,38 @@ plan_index:
             after handshake + push-driven menu updates; VmStatusRequest demoted to
             fallback-only. LoginState/CloudProjects stay polled until linux lands
             orders 230/231 (headless push sources for those topics do not exist yet).
+        - type: progress
+          ts: "2026-07-09T21:40:00Z"
+          agent_id: "windows-bullo-claude-fable-20260709T2107Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-vmstatus-slice-1"
+          commits: [b6ca3290]
+          summary: >
+            Slice 1 (VmStatus topic) landed on windows-next. Dedicated reader
+            task run_vm_status_push_listener on its OWN connection (deliberate:
+            LIVE_CLIENT interleaves request/reply, so an unsolicited push
+            between send and recv would be mis-consumed as the reply; the
+            headless broadcasts to all subscribed clients, so a second
+            connection is race-free). Connect -> handshake -> Subscribe ->
+            SubscribeAck -> next_envelope loop applying VmStatusPush via the
+            extracted apply_vm_status (shared byte-identical with the poll
+            path). SC-07: VmStatusRequest suppressed while the subscription is
+            healthy (should_poll_vm_status gate + drift test); reconnect walks
+            host-shell BACKOFF_SCHEDULE then 30s steady, with poll fallback
+            while down. Shared primitives Client::{send_envelope,next_envelope}
+            added to tillandsias-host-shell with cross-platform duplex tests so
+            order 155 (macOS) reuses the identical reader-task shape.
+            Verification: cargo clippy exit 0 (no new warnings in touched
+            files); cargo test -p tillandsias-windows-tray (62 pass) +
+            -p tillandsias-host-shell (47 pass, includes 2 new duplex tests).
+            REMAINING for this packet: watch-channel topic fan-out +
+            menu-listener wakeups, eliminating the 30s tick entirely, and the
+            LoginState/CloudProjects subscription topics — BLOCKED BY orders
+            230/231 (headless LoginStatePush/CloudProjectsPush sources,
+            linux-owned): REQUEST to linux workers to land those so the next
+            windows slice can widen vm_status_subscribe_topics() and retire
+            the slow-cadence polls. Releasing lease; packet stays ready for
+            the next slice.
       kind: refactor
       deliverable: crates/tillandsias-windows-tray/src/notify_icon.rs
       depends_on: [vm-headless-persistent-listener]
