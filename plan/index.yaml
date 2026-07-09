@@ -207,7 +207,7 @@ plan_index:
     - packet_id: container-dependency-graph-impl
       order: 122
       title: "Implement: compile-time container dependency model"
-      status: ready
+      status: done
       split_into:
         - "227 — container-dependency-graph-satisfier-typestate (slice 3: real Satisfier + typestate Up<S> + trybuild)"
         - "228 — container-dependency-graph-liveness (slice 4: runtime liveness probe)"
@@ -250,12 +250,29 @@ plan_index:
             (ensure(GitLogin) brings up vault+proxy before GitLogin) and that a failed
             prerequisite aborts before the target. No live-podman wiring yet (slice 3
             connects a real Satisfier wrapping ensure_enclave_network/vault/proxy/ca).
+        - type: completed
+          ts: "2026-07-09T19:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-dependency-graph-impl-reconcile-20260709"
+          summary: >
+            Parent packet folded to done during ledger audit: slices 1-2 landed via
+            the progress events above; slices 3-5 completed as split orders 227
+            (satisfier typestate, commit 7bb02fae), 228 (liveness probe, commit
+            bf7f56d6), 229 (drift litmus, commit d247d7a8). github-login /
+            list-cloud-projects migrated (order 227 + order 244 fix 807a0950).
+            Residual "all launch paths route through the model" gap for
+            ensure_enclave_for_project + run_forge_agent_cli_mode is extracted to
+            order 252 (documented as known gaps by the order-229 source audit).
+          evidence_refs:
+            - "commits 7bb02fae, bf7f56d6, d247d7a8, 807a0950"
+            - "cargo test -p tillandsias-headless container_deps: 15/15 pass"
       exit_criteria:
         - "Slice 1: declarative graph + acyclic/completeness + topo-order tests — DONE"
         - "Slice 2: ensure_with topological driver + Satisfier trait + driver tests — DONE"
-        - "Slice 3: real Satisfier wraps ensure_* ; typestate Up<S> + trybuild; migrate callers — TODO"
-        - "All launch paths route through the dependency model — TODO"
-        - "Skipping a prerequisite is a compile error or litmus failure — TODO (slice 3/5)"
+        - "Slice 3: real Satisfier wraps ensure_* ; typestate Up<S> + trybuild; migrate callers — DONE (order 227)"
+        - "All launch paths route through the dependency model — PARTIAL (gaps extracted to order 252)"
+        - "Skipping a prerequisite is a compile error or litmus failure — DONE (order 229)"
         - "./build.sh --check and --test pass — DONE"
 
     - packet_id: host-guest-transport-normalization-spec
@@ -4585,6 +4602,10 @@ plan_index:
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
       depends_on: [vm-headless-persistent-listener]
+      dependency_note: >
+        Satisfied by order 153 slice 1 (already landed): vsock_server.rs has the
+        persistent listener, Subscribe handling, and the VmStatus broadcast
+        pattern to mirror. Order 153 stays open only for its remaining slices.
       pickup_role: linux
       capability_tags: [rust, headless, vault, vsock]
       estimated_hours: 4
@@ -4607,6 +4628,9 @@ plan_index:
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/remote_projects.rs
       depends_on: [vm-headless-persistent-listener]
+      dependency_note: >
+        Satisfied by order 153 slice 1 (already landed) — same basis as order
+        230's dependency_note.
       pickup_role: linux
       capability_tags: [rust, headless, github, vsock]
       estimated_hours: 4
@@ -4760,7 +4784,7 @@ plan_index:
     - packet_id: forge-git-mirror-agent-affordance
       order: 237
       title: "Research + implement: in-forge agent transparent git push to forge mirror (properly authenticated)"
-      status: in_progress
+      status: ready
       kind: research+enhancement
       deliverable: plan/issues/forge-git-mirror-agent-affordance-2026-07-07.md
       depends_on: []
@@ -4831,6 +4855,20 @@ plan_index:
             `https://github.com/8007342/tillandsias.git`. Direct HTTPS origin
             remains credentialless inside this forge, so future forge checkouts
             still need the injected mirror config active by default.
+        - type: expired
+          ts: "2026-07-09T19:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            Lease forge-git-mirror-agent-affordance-20260708T0003Z expired
+            2026-07-08T04:03Z; voided during the 2026-07-09 sole-Linux-builder
+            audit (operator-authorized). Slice 1 landed and was verified
+            end-to-end (guard fail-closed 5343c856; mirror push of that commit
+            forwarded to GitHub). Status returns to ready with the remaining
+            scope: make forge checkouts activate the injected project-specific
+            mirror gitconfig by default so the blind `git push origin
+            linux-next` affordance works without manual mirror URLs. Auth
+            research stays in order 238.
           evidence:
             - "git://tillandsias-git/tillandsias accepted 5343c856 on linux-next"
             - "git-mirror post-receive reported: Push to origin (https://github.com/8007342/tillandsias.git): success"
@@ -5187,6 +5225,18 @@ plan_index:
         - "Dependency Graph Awareness documented (how container_deps.rs should account for runtime context)"
         - "Platform Abstraction Layer mapped (Linux bare, WSL2, macOS VZ, Silverblue Toolbox — bridge/forwarding mechanism)"
         - "Spec/Cheatsheet patch list published with specific file:line references"
+      events:
+        - type: claim
+          ts: "2026-07-09T19:46:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "network-architecture-audit-linux-20260709T1946Z"
+          expires_at: "2026-07-09T23:46:00Z"
+          note: >
+            Research-phase drafting cycle (multi_cycle packet — completion still
+            gated on the 3 verification_required agents). Sole active Linux
+            builder per operator; producing the draft architecture document and
+            spec/cheatsheet patch list this cycle.
 
     - packet_id: credential-secrets-architecture-audit
       order: 246
@@ -5400,3 +5450,40 @@ plan_index:
         - "meta-orchestration skill updated to recognize long-running packets (don't mark done until N verified-by events)"
         - "plan/long-running.md created as filtered view of active long-running packets"
         - "Additive update policy documented (new sections/supersede annotations, no rewrites)"
+
+    - packet_id: launch-paths-route-through-dependency-model
+      order: 252
+      title: "Route ensure_enclave_for_project + run_forge_agent_cli_mode through container_deps"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, podman, container-deps]
+      estimated_hours: 4
+      outcome: >
+        Close the two launch-path gaps documented by the order-229 source audit
+        (all_launch_paths_route_through_dependency_model): the forge launch
+        chain (ensure_enclave_for_project, shared by tray launch_forge_agent and
+        CLI run_forge_agent_cli_mode) still brings up its prerequisites through
+        ad-hoc ensure_* calls instead of the container_deps topological model.
+        Extend the Service graph with the forge launch target (proxy, networks,
+        CA bundle, git mirror prerequisites), migrate both entry points, and
+        flip the order-229 litmus gap allowlist to empty so new bypasses fail
+        the drift litmus instead of being documented.
+      exit_criteria:
+        - "ensure_enclave_for_project satisfies prerequisites via container_deps::ensure_with (or an ensure_forge_launch wrapper)"
+        - "run_forge_agent_cli_mode routes through the same wrapper (no direct ad-hoc ensure_* chain)"
+        - "order-229 litmus known-gap allowlist emptied; test fails on any new bypass"
+        - "./build.sh --check and container_deps + launch-path tests pass"
+      events:
+        - type: filed
+          ts: "2026-07-09T19:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            Extracted from the order-122 completion audit: order 229's litmus
+            documents these two paths as known gaps rather than failures. The
+            2026-07-09 liveness probe (order 228) now auto-re-ensures vault and
+            proxy at runtime, which raises the cost of unmodeled launch paths —
+            they can race the probe's re-ensure (see orders 232-235).
