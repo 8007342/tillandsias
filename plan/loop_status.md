@@ -1,8 +1,25 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T10:24:00Z
+LastExecutionTime: 2026-07-09T18:38:00Z
 
-## Cycle 2026-07-09T10:24Z (linux — meta-orchestration worker slice)
+## Cycle 2026-07-09T18:38Z (linux_mutable — meta-orchestration worker slice)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Started with dirty worktree (SELinux `relabel=shared` test assertions, trace
+  regen, version 0.3.260709.2, convergence refresh) — committed as checkpoint.
+  Credential guard `ok:gh-keyring`.
+- **Worker drain — order 228 (container-dependency-graph-liveness), COMPLETED**:
+  Added `LivenessProbe` struct with `run_check()` that probes vault/proxy
+  containers via `podman inspect` and re-ensures dead ones through the
+  dependency satisfier (idempotent). Wired into `maybe_spawn_vsock_listener` as
+  a background heartbeat task during VmPhase::Ready (30s interval). 3 new unit
+  tests; `./build.sh --check` PASS; all 13 container_deps tests green.
+- **E2E gate**: `skip:smoke-lock-held` — no destructive test this cycle.
+- **Coordinator**: sibling drift checked — both `origin/osx-next` and
+  `origin/windows-next` at 0 commits ahead of `origin/linux-next` (clean).
+  Release deferred — small slice, no release PR in flight.
+- **Reduction engine**: no new unfiled findings from this cycle.
+
 
 - **Host**: Linux mutable, `linux-next`.
 - **Worker drain — order 112 (forge-harness-auth-device-flow), COMPLETED**:
