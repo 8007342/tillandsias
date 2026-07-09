@@ -1437,7 +1437,7 @@ plan_index:
     - packet_id: macos-tray-stream-refactor
       order: 155
       title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
-      status: ready
+      status: claimed
       kind: refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [vm-headless-persistent-listener]
@@ -1480,6 +1480,21 @@ plan_index:
             to ready for macOS pickup; verified on this host that the macOS
             tray currently has zero Subscribe/*Push consumers (30s polling in
             action_host.rs is the only propagation path today).
+        - type: claim
+          ts: "2026-07-09T22:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          lease_id: "macos-tray-stream-refactor-20260709T2205Z"
+          expires_at: "2026-07-10T02:05:00Z"
+          summary: >
+            Slice 1 scope, mirroring windows b6ca3290 (order 154 slice 1)
+            structurally: apply_vm_status extraction, dedicated
+            run_vm_status_push_listener reader task on its own control-wire
+            connection (Subscribe[VmStatus] -> SubscribeAck -> next_envelope
+            loop), VM_STATUS_PUSH_HEALTHY gate demoting the 30s
+            VmStatusRequest poll to fallback-only (SC-07). LoginState/
+            CloudProjects topics + watch-channel menu listeners are later
+            slices.
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
