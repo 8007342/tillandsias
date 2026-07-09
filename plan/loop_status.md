@@ -35,6 +35,29 @@ LastExecutionTime: 2026-07-09T22:00:00Z
   the wire macOS consumes); windows — order 154 actionable now.
 - **E2E gate**: `eligible` (first macOS cycle with a valid verdict).
 
+## Cycle 2026-07-09T20:13Z (windows — meta-orchestration, local-build e2e PASS)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Started clean; fast-forwarded `windows-next` onto
+  `origin/linux-next` (`a68c9825`) and pushed before work.
+- **E2E gate — `/build-install-and-smoke-test-e2e` (windows), PASS**:
+  build 2m53s → direct-copy install (freshness gate: embedded SHA == HEAD
+  `a68c9825`) → destructive `wsl --unregister tillandsias` + cache/VHDX wipe →
+  cold `--provision-once` exit 0 (`RESULT: VM Ready — control wire up ✓`) →
+  `--diagnose --json` exit 2 (degraded-as-expected idle), 17 schema keys.
+  Report: `plan/issues/build-install-smoke-e2e-findings-2026-07-09-windows.md`
+  (run_id `20260709T201326Z`).
+- **Reduction engine — 3 findings filed** (same report):
+  `smoke-finding/e2e-preflight-not-windows-aware` (eligibility probe emits
+  `skip:no-podman-binary` on every Windows host, contradicting the E2E Gates
+  table), `smoke-finding/windows-local-install-path-mismatch`
+  (`install-windows.ps1` is the curl installer; both skills' local-install
+  instructions are stale — direct-copy path used), and
+  `smoke-finding/tray-output-log-committed` (generated `tray_output.log`
+  tracked at repo root).
+- **Interactive**: installed tray launched post-run for attended smoke
+  (operator-requested; the unattended PASS does not cover the tray UX surface).
+
 ## Cycle 2026-07-09T20:07Z (linux_mutable — meta-orchestration worker slice, order 252)
 
 - **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.

@@ -1,0 +1,43 @@
+# @trace spec:podman-orchestration
+name: litmus:drain-vs-self-heal
+spec: podman-orchestration
+phase: pre-build
+description: >-
+  Order 234 (R6): container create/remove side effects consult the VmPhase
+  gate and refuse during Draining/Stopping, so a self-heal never recreates a
+  container the shutdown just removed and cleanup never races shutdown's own
+  teardown. STEP 1 runs the pure truth-table unit test (the gate logic is
+  tested un-globally on purpose — parallel tests legitimately write the
+  process-global mirror). STEP 2 source-audits that every mutation site
+  consults the gate and that the vsock listener mirrors phase transitions
+  into it. Single-line commands + explicit patterns per the order-256 runner
+  constraints.
+severity: high
+size: quick
+
+preconditions:
+  - cargo workspace builds
+
+critical_path:
+  - step: "pure gate logic: Draining/Stopping refuse, all other phases and CLI-unset allow"
+    command: "cargo test -p tillandsias-headless runtime_phase::tests::phase_gate_truth_table -- --exact 2>&1 | grep 'phase_gate_truth_table ... ok' && echo PHASE-GATE-LOGIC-OK"
+    timeout_ms: 120000
+    success_pattern: "PHASE-GATE-LOGIC-OK"
+    failure_pattern: "FAILED|panicked"
+  - step: "source audit: mutation sites consult the gate; listener mirrors set_phase"
+    command: "test $(grep -c container_mutations_allowed crates/tillandsias-headless/src/main.rs) -ge 6 && test $(grep -c container_mutations_allowed crates/tillandsias-headless/src/vault_bootstrap.rs) -ge 1 && test $(grep -c container_mutations_allowed crates/tillandsias-headless/src/container_deps.rs) -ge 1 && test $(grep -c set_runtime_phase crates/tillandsias-headless/src/vsock_server.rs) -ge 1 && echo PHASE-GATE-WIRED"
+    timeout_ms: 5000
+    success_pattern: "PHASE-GATE-WIRED"
+    failure_pattern: "No such file"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "PHASE-GATE-WIRED"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "drain-vs-self-heal"
+
+rollback:
+  on_failure: "a mutation site dropped its container_mutations_allowed() consult, or the listener no longer mirrors set_phase — see crates/tillandsias-headless/src/runtime_phase.rs"
+  command: "grep -n container_mutations_allowed crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/vault_bootstrap.rs crates/tillandsias-headless/src/container_deps.rs"
