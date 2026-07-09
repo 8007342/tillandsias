@@ -4561,7 +4561,7 @@ plan_index:
           agent_id: "linux-macuahuitl-bigpickle-20260709T1847Z"
           host: linux
           lease_id: "container-dependency-graph-drift-litmus"
-          commit_sha: "pending"
+          commit_sha: "d247d7a8"
       outcome: >
         Add the final gated-launch drift litmus: a launch that skips a
         prerequisite must be a compile error or litmus failure. Pins the
