@@ -1,6 +1,41 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T23:15:00Z
+LastExecutionTime: 2026-07-09T23:35:00Z
+
+## Cycle 2026-07-09T23:10Z (windows — meta-orchestration worker drain, order 258)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start at 521de7bd == origin/windows-next;
+  origin/linux-next (67bffc86) already merged — no sync needed.
+- **Worker drain — order 258 (windows-tray-parity-column-verify),
+  PARTIAL -> BLOCKED on operator (mirrors macOS order 257)**: rebuilt +
+  reinstalled the tray at HEAD (92675e8e, embedded SHA == HEAD freshness
+  gate), provisioned VM to Ready, and verified the unattended subset LIVE:
+  one-off status/probe cell -> done (--status-once --json reachable
+  wire_version=2 phase=Ready exit 0; --diagnose --json exit 0 full schema;
+  stopped-VM error path exercised; wsl.exe one-shot guest exec GUEST_OK).
+  Strong partial evidence recorded for local projects (host scan count=5 +
+  VM-side round-trip count=5), cloud refresh (graceful not-logged-in
+  count=0), login state (logged_in=false applied), status chip healthy path
+  (SC-07 suppression held after initial sync — slice 1+2 wiring observed
+  live at debug level). Remaining 7 required cells unknown -> todo;
+  consolidated 9-step attended checklist:
+  plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md.
+  NOTE: in-VM headless is v0.3.260707.2 (pre-744f4749) so login/cloud push
+  topics cannot fire on this VM yet; the designed startup fast-poll burst +
+  poll-while-unconfirmed fallback covered it exactly as intended (no bug).
+- **Reduction engine**: filed + promoted order 261
+  (parity-litmus-ruby-free-check): litmus:tray-parity-matrix-complete is a
+  ruby one-liner and Windows hosts have no ruby, so the order-243 per-host
+  gate can never execute on the Windows --ci-full lane and order 258's exit
+  criterion 4 is unsatisfiable as written — propose a tillandsias-policy
+  parity-matrix subcommand.
+- **E2E gate**: deferred — full destructive local-build e2e PASSED on this
+  host earlier today (run 20260709T201326Z); this cycle changed only
+  plan/openspec data files (matrix cells + ledgers), no runtime surface.
+- **Next windows work**: attended parity smoke (operator, order 258
+  checklist); order 154 watch-channel slice remains claimable (tick
+  retirement still waits on order 260, linux).
 
 ## Cycle 2026-07-09T22:38Z (windows — meta-orchestration worker drain, order 154 slice 2)
 
