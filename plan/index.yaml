@@ -5198,6 +5198,18 @@ plan_index:
         without additional detail in compact output.
       exit_criteria:
         - "Run the tray parity litmus with verbose output, then either update the parity matrix evidence or fix the missing implementation/status entry so the post-build litmus passes"
+      events:
+        - type: ping
+          ts: "2026-07-09T21:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          note: >
+            Elevated: reproduced on the 2026-07-09 local-build e2e
+            (run 20260709T195719Z) — this litmus fails on every --ci-full, so
+            gate 1 of /build-install-and-smoke-test-e2e cannot go green on
+            Linux until it is fixed. It gates ALL linux local-build e2e
+            acceptance, not just tray work. Recommend the next Linux worker
+            cycle claims this (estimated 1h).
 
     - packet_id: ensure-git-login-target-as-prerequisite-failure
       order: 244
@@ -5547,9 +5559,9 @@ plan_index:
     - packet_id: launch-paths-route-through-dependency-model
       order: 252
       title: "Route ensure_enclave_for_project + run_forge_agent_cli_mode through container_deps"
-      status: ready
+      status: completed
       kind: enhancement
-      deliverable: crates/tillandsias-headless/src/main.rs
+      deliverable: crates/tillandsias-headless/src/container_deps.rs
       depends_on: []
       pickup_role: linux
       capability_tags: [rust, headless, podman, container-deps]
@@ -5580,6 +5592,22 @@ plan_index:
             2026-07-09 liveness probe (order 228) now auto-re-ensures vault and
             proxy at runtime, which raises the cost of unmodeled launch paths —
             they can race the probe's re-ensure (see orders 232-235).
+        - type: completed
+          ts: "2026-07-09T20:07:38Z"
+          agent_id: "linux-macuahuitl-bigpickle-20260709T2007Z"
+          host: linux
+          summary: >
+            Added ForgeLaunch variant to container_deps::Service with its dependency
+            edges (EnclaveNetwork, EgressNetwork, CaBundle, Proxy). Created
+            ensure_forge_launch() wrapper and ForgeLaunchReady typestate witness.
+            Refactored ensure_enclave_for_project to call ensure_forge_launch
+            instead of ad-hoc ensure_ca_bundle/ensure_enclave_network/inline-proxy.
+            Removed the proxy inline bring-up (duplicated ensure_proxy_running).
+            Removed "proxy" from the ensure_versioned_images call (already handled
+            by ensure_proxy_running inside the satisfier). Emptied the order-229
+            litmus known-gap allowlist: both launch paths now gate through
+            container_deps. All container_deps tests (18/18) and litmus drift test
+            pass; ./build.sh --check clean.
 
     - packet_id: vault-image-in-init-declarative-set
       order: 253
@@ -5653,3 +5681,39 @@ plan_index:
             order-141 argv-allowlist surface — coordinate the test fix with
             the encrypted-control-channel owner rather than loosening the
             allowlist casually.
+
+    - packet_id: opencode-prompt-e2e-step5-race
+      order: 255
+      title: "Fix: litmus:opencode-prompt-e2e-shape STEP 5 races the in-forge cycle's final plan commit"
+      status: ready
+      kind: bug+litmus
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-09.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, smoke, forge, timing]
+      estimated_hours: 2
+      outcome: >
+        STEP 3 of litmus:opencode-prompt-e2e-shape launches a real in-forge
+        meta-orchestration cycle, STEP 4 sees HEAD advance, but STEP 5
+        ("verify a plan/ file was updated") samples the commit range before
+        the agent's final plan-ledger commit lands — producing a false
+        negative that failed the 2026-07-09 local-build e2e gate 1 even
+        though commit 3621fc74 (touching plan/loop_status.md +
+        plan/index.yaml) exists on the branch. Same race class previously
+        touched by b0ccc88f and c40f80c1. Fix: STEP 5 must wait for the forge
+        session's terminal state or re-fetch and re-evaluate the commit range
+        with a bounded retry window before failing.
+      exit_criteria:
+        - "STEP 5 re-checks with bounded retries (or blocks on forge session terminal state) before reporting FAIL"
+        - "A --ci-full run whose in-forge cycle commits a plan/ file passes STEP 5 deterministically"
+        - "A run whose in-forge cycle genuinely never touches plan/ still FAILS (no dead check)"
+      events:
+        - type: filed
+          ts: "2026-07-09T21:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            From local-build e2e run 20260709T195719Z (gate 1 FAIL analysis in
+            the deliverable). Third occurrence of this race class — consider a
+            shared "wait for in-forge cycle terminal state" helper for all
+            forge-launching litmus steps.
