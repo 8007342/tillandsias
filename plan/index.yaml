@@ -4926,7 +4926,40 @@ plan_index:
     - packet_id: container-vault-recreate-mutex
       order: 235
       title: "R7: vault recreate is mutually exclusive with lease holders (read/write lock)"
-      status: ready
+      status: done
+      events:
+        - type: claim
+          ts: "2026-07-09T23:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-vault-recreate-mutex-20260709T2320Z"
+          expires_at: "2026-07-10T03:20:00Z"
+        - type: completed
+          ts: "2026-07-10T00:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-vault-recreate-mutex-20260709T2320Z"
+          summary: >
+            Cross-process read/write semantics via flock LOCK_SH/LOCK_EX on the
+            existing "vault" resource: resource_lock gains acquire_shared;
+            ensure_vault_running keeps the exclusive lock (recreate waits for
+            in-flight holders and vice versa). Shared holders: is_github_key_present
+            (returns false on lock timeout — presence-probe skips a recreate
+            window), vault_kv_get_via_exec, write_github_token_to_vault and
+            write_provider_api_key (shared AFTER their on-demand ensure branch
+            — taking it first would self-deadlock against their own exclusive
+            bring-up), and mint_approle_secret_lease, whose AppRoleSecretLease
+            now CARRIES the shared guard for its whole lifetime so a recreate
+            waits for the full login flow, not just the mint. Health wait
+            retries transient "container is stopped"/"no such container" 3x2s
+            (bounded); the vault_ready_wait_uses_podman_health pin was
+            tightened in the same change (readiness stays delegated to podman
+            wait_healthy; backoff uses the runtime's async sleep and the pin
+            now also asserts the attempt cap exists).
+          evidence_refs:
+            - "litmus:vault-recreate-mutex PASS (RW flock proof + source audit; registered under tillandsias-vault)"
+            - "resource_lock tests 6/6 (incl. shared_holders_coexist + exclusive_and_shared_mutually_exclude)"
+            - "default tests 204/204; ./build.sh --check pass; listen-vsock clippy back to the 13 pre-existing warnings"
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
       depends_on: [container-concurrency-flock]
