@@ -2712,3 +2712,18 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - **Order 234 done** (`adcfd37e`): runtime_phase VmPhase gate (Draining/Stopping refuse) at every container create/remove site, fail-fast before lock waits; mirror is cfg(not(test)) — global writes leaked refusals across parallel test isolation. litmus:drain-vs-self-heal.
 - **Sibling coordination**: merged windows-next twice (order 154 claim, then slice 1 — their tray consumes VmStatusPush with polls demoted to fallback; e2e PASS + 3 findings) and osx-next (Darwin e2e-preflight VZ probe). Filed orders 257/258 (macos/windows parity-column verification — the per-host gate arrives as scheduled work, not a surprise red build); orders 154/155 dependency notes: all three push topics live; 155 promoted to ready.
 - **Queue after wave**: ready = 235 (R7 vault recreate mutex — last of the R-series), 254 (listen-vsock CI), 255 (litmus race), 256 (runner fail-loud), 237 residual, 257/258 (sibling-owned). Multi-cycle audits 245-251 still await verifier agents.
+
+## Cycle 2026-07-09T23:20Z (linux_mutable macuahuitl — R7 closes the race-safeguards ladder + blocked-work flags)
+
+- **Order 235 done** (`eac9813f`): vault recreate <-> lease-holder RW lock (flock LOCK_SH/LOCK_EX on the R4 vault resource); AppRoleSecretLease carries the shared guard for its whole lifetime; writers take shared AFTER their on-demand ensure (self-deadlock audit); health wait retries transient stopped/no-such-container 3x2s bounded; the podman-health pin was tightened, not evaded. **Orders 232-235 (R4-R7) all closed — order 162 parent folded to done.**
+- **Linux-claimable ready queue** (next cycles): 254 (listen-vsock CI lane + 2 drifted pty tests — coordinate the exec-allowlist fix with the order-141 owner), 255 (opencode-prompt litmus step-5 race), 256 (litmus runner fail-loud: exit codes ignored + folded commands parse to zero steps), 238 (mirror credential research), 144 (forge-harness ICAP), 141/137/145 (secure channel chain), 147/148/150/151/153/156/157/158 (streams/audit chain), 224/225 (litmus DSL), 125/128 (host-guest transport linux + conformance).
+
+### BLOCKED ON OTHER AGENTS (flagged per operator goal 2026-07-09)
+
+- **Orders 245-251 (multi_cycle audits)**: completion-gated on verified-by events from `opencode-bigpickle`, `antigravity-gemini`, `codex-gpt55-highthink` (+ `claude-opus-highthink` for 250). Order 245 has DRAFT v1 published and is ratification-ready; 246/247/248 have no draft yet (any of the named agents can start); 249/250 additionally depend on 245/246 completing.
+- **Order 257 (macos-tray-parity-column-verify)** + **order 155 (macos tray stream refactor, now ready)**: macOS host. Their next --ci-full gates on their parity column.
+- **Order 258 (windows-tray-parity-column-verify)** + **order 154 remaining slices**: Windows host (slice 1 landed 2026-07-09 and is integrated).
+- **Order 126 (host-guest-transport-macos)**: blocked, macOS-owned.
+- **Order 237 residual (forge mirror gitconfig default-on)** + **order 238**: need a forge-context session (in-forge agent or operator-launched).
+- **Order 129 (agent egress allowlist research)**: needs an operator-attended forge session for live proxy logs.
+- **Tray-parity release hold**: merge-to-main-and-release now reports 16 parity gaps (8 required features x macos+windows `unknown`) — release-with-gaps needs The Tlatoāni's recorded approval until 257/258 land.

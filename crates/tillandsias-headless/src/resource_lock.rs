@@ -54,10 +54,25 @@ fn lock_path(resource: &str) -> PathBuf {
     lock_dir().join(format!("resource-{resource}.lock"))
 }
 
+/// Lock mode: exclusive for check+act mutators, shared for operations that
+/// only require the resource to REMAIN STABLE while they run (order 235:
+/// vault exec readers/writers hold shared; a vault recreate holds exclusive,
+/// so it waits for in-flight lease holders and vice versa — flock(2) LOCK_SH
+/// vs LOCK_EX gives exactly read/write-lock semantics across processes).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LockMode {
+    Exclusive,
+    Shared,
+}
+
 #[cfg(unix)]
-fn try_exclusive(file: &File) -> Result<bool, String> {
+fn try_lock(file: &File, mode: LockMode) -> Result<bool, String> {
     use std::os::unix::io::AsRawFd;
-    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    let op = match mode {
+        LockMode::Exclusive => libc::LOCK_EX,
+        LockMode::Shared => libc::LOCK_SH,
+    };
+    let rc = unsafe { libc::flock(file.as_raw_fd(), op | libc::LOCK_NB) };
     if rc == 0 {
         return Ok(true);
     }
@@ -70,7 +85,7 @@ fn try_exclusive(file: &File) -> Result<bool, String> {
 }
 
 #[cfg(not(unix))]
-fn try_exclusive(_file: &File) -> Result<bool, String> {
+fn try_lock(_file: &File, _mode: LockMode) -> Result<bool, String> {
     // Non-unix hosts do not run the podman ensure paths these locks protect
     // (the Windows host manages containers inside the WSL2 Linux guest, where
     // the unix implementation is active). Degrade to no serialization rather
@@ -91,6 +106,25 @@ pub fn acquire(
     timeout: Duration,
     debug: bool,
 ) -> Result<ResourceLockGuard, String> {
+    acquire_mode(resource, LockMode::Exclusive, timeout, debug)
+}
+
+/// Shared-mode acquire (order 235): concurrent shared holders coexist; an
+/// exclusive holder excludes them all and vice versa.
+pub fn acquire_shared(
+    resource: &str,
+    timeout: Duration,
+    debug: bool,
+) -> Result<ResourceLockGuard, String> {
+    acquire_mode(resource, LockMode::Shared, timeout, debug)
+}
+
+fn acquire_mode(
+    resource: &str,
+    mode: LockMode,
+    timeout: Duration,
+    debug: bool,
+) -> Result<ResourceLockGuard, String> {
     let dir = lock_dir();
     fs::create_dir_all(&dir)
         .map_err(|e| format!("resource-lock: create lock dir {}: {e}", dir.display()))?;
@@ -105,20 +139,20 @@ pub fn acquire(
     let start = Instant::now();
     let mut reported_contention = false;
     loop {
-        if try_exclusive(&file)? {
+        if try_lock(&file, mode)? {
             return Ok(ResourceLockGuard { _file: file });
         }
         if !reported_contention {
             reported_contention = true;
             if debug {
                 eprintln!(
-                    "[tillandsias] waiting for '{resource}' lock (held by another tillandsias process)"
+                    "[tillandsias] waiting for '{resource}' lock ({mode:?}; held by another tillandsias process)"
                 );
             }
         }
         if start.elapsed() >= timeout {
             return Err(format!(
-                "resource-lock: timed out after {}s waiting for '{resource}' (held by another tillandsias process; see {})",
+                "resource-lock: timed out after {}s waiting for '{resource}' ({mode:?}; held by another tillandsias process; see {})",
                 timeout.as_secs(),
                 path.display()
             ));
@@ -205,5 +239,40 @@ mod tests {
         drop(guard);
         let reacquired = acquire(&resource, Duration::from_millis(500), false);
         assert!(reacquired.is_ok(), "lock not released on guard drop");
+    }
+
+    // ── Shared/exclusive semantics (order 235, R7) ──────────────────────────
+
+    /// Two shared holders coexist without waiting.
+    #[test]
+    fn shared_holders_coexist() {
+        let resource = format!("test-sh-coexist-{}", std::process::id());
+        let _a = acquire_shared(&resource, Duration::from_secs(5), false).unwrap();
+        let started = Instant::now();
+        let _b = acquire_shared(&resource, Duration::from_millis(500), false)
+            .expect("second shared holder must not wait");
+        assert!(started.elapsed() < Duration::from_millis(400));
+    }
+
+    /// An exclusive holder excludes shared acquirers (recreate blocks new
+    /// lease holders) and a shared holder excludes exclusive (recreate waits
+    /// for in-flight lease holders).
+    #[test]
+    fn exclusive_and_shared_mutually_exclude() {
+        let resource = format!("test-rw-excl-{}", std::process::id());
+        {
+            let _ex = acquire(&resource, Duration::from_secs(5), false).unwrap();
+            let err = acquire_shared(&resource, Duration::from_millis(250), false)
+                .expect_err("shared must wait behind exclusive");
+            assert!(err.contains("timed out"), "{err}");
+        }
+        {
+            let _sh = acquire_shared(&resource, Duration::from_secs(5), false).unwrap();
+            let err = acquire(&resource, Duration::from_millis(250), false)
+                .expect_err("exclusive must wait behind shared");
+            assert!(err.contains("timed out"), "{err}");
+        }
+        // Both released — either mode acquires immediately again.
+        assert!(acquire(&resource, Duration::from_millis(500), false).is_ok());
     }
 }

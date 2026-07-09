@@ -36,7 +36,10 @@ fn encode(phase: VmPhase) -> u8 {
 
 /// Mirror a phase transition (called by the vsock listener's
 /// `VmStateHandle::set_phase`; CLI mode never calls this).
-#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+/// dead_code also under cfg(test): the set_phase mirror write is
+/// cfg(not(test)) (test-isolation, see vsock_server), so test targets have
+/// no caller.
+#[cfg_attr(any(not(feature = "listen-vsock"), test), allow(dead_code))]
 pub fn set_runtime_phase(phase: VmPhase) {
     RUNTIME_PHASE.store(encode(phase), Ordering::SeqCst);
 }
