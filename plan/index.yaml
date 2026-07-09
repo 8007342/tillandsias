@@ -1343,7 +1343,19 @@ plan_index:
     - packet_id: windows-tray-stream-refactor
       order: 154
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
-      status: ready
+      status: claimed
+      events:
+        - type: claim
+          ts: "2026-07-09T21:15:00Z"
+          agent_id: "windows-bullo-claude-fable-20260709T2107Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-vmstatus-slice-1"
+          expires_at: "2026-07-10T01:15:00Z"
+          scope_note: >
+            Slice 1 only (mirrors the order-153 slice split): Subscribe{VmStatus}
+            after handshake + push-driven menu updates; VmStatusRequest demoted to
+            fallback-only. LoginState/CloudProjects stay polled until linux lands
+            orders 230/231 (headless push sources for those topics do not exist yet).
       kind: refactor
       deliverable: crates/tillandsias-windows-tray/src/notify_icon.rs
       depends_on: [vm-headless-persistent-listener]
