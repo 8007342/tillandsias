@@ -94,6 +94,19 @@ and 2 pty_handler tests that drifted from their implementations (child_env's
 enclave NO_PROXY injection; the order-141 exec allowlist rejecting the test's
 `/bin/sh -c` argv). Shaped as order 254.
 
+### F9 — technique: piped build gates false-green (2026-07-09 meta-orch cycle)
+
+Twice this session `./build.sh --check 2>&1 | tail -1` reported a green-looking
+tail while the real exit was 101, and once a warm-cache rerun inverted the
+verdict right after a source merge — the windows-tray collapsible-if reached
+`origin/linux-next` before a clean rerun caught it (mediated in 034c31f6).
+Rule captured: integration-gate verdicts must come from the command's OWN exit
+code captured explicitly (`cmd > log 2>&1; echo exit=$?`), never from a piped
+tail, and the post-merge gate run must not share a cargo invocation with a
+concurrent fmt/test. (Capture per the reduction-engine contract; technique
+note, no packet — the gate snippet in the skill already propagates exit codes
+when not piped.)
+
 ## Verification
 
 - `./build.sh --check` — clippy + check pass after F1/F2 fixes.

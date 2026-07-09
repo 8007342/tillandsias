@@ -6214,7 +6214,8 @@ plan_index:
     - packet_id: vault-ensure-name-in-use-race
       order: 259
       title: "P1: cold-VM first --github-login fails — tillandsias-vault name-in-use race between boot bootstrap and login satisfier"
-      status: ready
+      status: blocked
+      blocked_on: "macOS fresh-VM repro (exit criterion 3) — linux structural slice complete, see completed-analysis event"
       kind: bug
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
       depends_on: []
@@ -6254,3 +6255,29 @@ plan_index:
             (Finding 1). Attempt 1: exit 125 name-in-use; attempt 2: reached
             credential prompts — confirms 807a0950's ensure_git_login fix is
             live on macOS and this race is the remaining first-run blocker.
+        - type: progress
+          ts: "2026-07-09T23:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "vault-ensure-name-in-use-race-20260709T2305Z"
+          summary: >
+            Linux structural slice: the reported race was reproduced against
+            9cb47ff6, which PREDATES orders 232 (2790d84c) and 235 (eac9813f).
+            Source verification on current linux-next: ALL vault bring-up
+            paths (satisfier container_deps.rs:295, boot bootstrap
+            vsock_server.rs:977, remote_projects.rs:209, on-demand writer
+            branches) route through ensure_vault_running, which now takes the
+            exclusive "vault" flock BEFORE its running-check — the loser of a
+            concurrent bring-up waits, observes the winner's healthy
+            container, and early-returns instead of racing podman run.
+            launch_vault_container's rm -f preamble replaces any exited/
+            created name-holder (exit criterion 2 was already satisfied).
+            New pin test vault_launch_serializes_and_replaces_stale_name_holder
+            asserts lock-before-check ordering AND rm-before-run ordering
+            (exit criterion 4). Criteria 1/2/4 closed on linux; criterion 3
+            (fresh-VM first --github-login reaches prompts, no 125) needs the
+            macOS host — status blocked on that verification. If the fresh-VM
+            run still hits 125, the flock is not spanning processes as
+            designed (both processes must resolve the same
+            XDG_RUNTIME_DIR/tillandsias-locks path inside the guest — check
+            that first).

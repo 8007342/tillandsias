@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T22:40:00Z
+LastExecutionTime: 2026-07-09T23:10:00Z
+
+## Cycle 2026-07-09T22:40Z (linux_mutable macuahuitl — meta-orchestration: sibling integration x2, trunk-red mediation, order 259 linux slice)
+
+- **Credential guard**: ok:gh-keyring. Started clean at 990c0482.
+- **Sibling integration**: merged osx-next (+10: order 155 slice 1 — macOS tray VmStatus push subscription verified LIVE on the VZ VM, chip ~10s vs 30s poll; order 257 partial — ExecOneShot verified, 7 cells todo + attended-smoke checklist packet) and windows-next (+4: BUILD_COMMIT_SHA build.rs freshness fix, Windows-aware e2e preflight verdict). One loop_status.md conflict union-resolved per CRDT policy.
+- **Trunk-red mediation** (034c31f6): the windows build.rs fix tripped clippy collapsible-if under -D warnings on the merged tree; my pre-push gate false-greened on a warm cargo cache (captured as F9 in linux-audit-recent-work-2026-07-09.md — verdicts must come from explicit exit codes, never piped tails). Minimal mechanical let-chain collapse per the a105306e precedent; windows heads-up in the commit body.
+- **Order 259 linux slice** (blocked -> macOS verification): the reported name-in-use race was against 9cb47ff6, which predates orders 232/235; on current linux-next ALL vault bring-up paths route through the flocked ensure_vault_running (lock BEFORE running-check) and launch replaces stale name-holders. New pin test vault_launch_serializes_and_replaces_stale_name_holder. Criterion 3 (fresh-VM login repro) handed to macOS; if it still 125s, check both processes resolve the same tillandsias-locks dir in the guest.
+- **E2E gate**: skipped-with-cause — gate 1 is deterministically red on the KNOWN order-255 litmus race (unchanged since run 20260709T195719Z; duplicate-finding discipline). Order 255 is the top ready pick for the next worker drain; a full destructive run follows it.
+- **Release**: none — tray-parity release hold (16 gaps) requires The Tlatoani's recorded approval; daily Linux release is otherwise due (latest v0.3.260708.4).
+- **Queue**: linux ready = 255, 256, 254, 238, 144, security chain (137/141/145), streams chain (147/150/151/153/156/157/158), DSL (224/225), transport (125/128). Blocked-on-siblings list unchanged from 2026-07-09T23:20Z cycle + order 259 added (macOS verification).
 
 ## Cycle 2026-07-09T21:32Z (macos — advance-work-from-plan: queue drain, orders 257 + 155)
 
