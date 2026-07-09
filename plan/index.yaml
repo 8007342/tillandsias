@@ -6042,7 +6042,7 @@ plan_index:
             long-term shape.
 
     - packet_id: vault-ensure-name-in-use-race
-      order: 257
+      order: 259
       title: "P1: cold-VM first --github-login fails — tillandsias-vault name-in-use race between boot bootstrap and login satisfier"
       status: ready
       kind: bug

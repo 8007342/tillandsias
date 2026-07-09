@@ -37,7 +37,7 @@ image build, proxy) and on the second attempt reaches the interactive
 credential prompts (`matched: git author name`). Full credentialed login
 remains attended-m8-smoke territory.
 
-## FINDING 1 (bug, P1, linux pickup — promoted to plan/index.yaml order 257):
+## FINDING 1 (bug, P1, linux pickup — promoted to plan/index.yaml order 259):
 ## cold-VM first `--github-login` fails: `tillandsias-vault` name already in use
 
 First login attempt on the freshly provisioned VM:
@@ -119,7 +119,9 @@ closes.
 
 ## Flags for sibling hosts
 
-- **linux**: (1) NEW order 257 (vault ensure race/rm-on-reuse, Finding 1) —
+- **linux**: (1) NEW order 259 (vault ensure race/rm-on-reuse, Finding 1;
+  renumbered from 257 after a concurrent-append collision with linux's
+  macos-tray-parity-column-verify) —
   blocks acceptable first-run GitHub Login on macOS/Windows; overlaps ready
   orders 233/235, consider landing them together. (2) Order 153 residual:
   all push topics done via 230/231; only SC-10 timed-lag criterion + 4-agent

@@ -21,7 +21,7 @@ LastExecutionTime: 2026-07-09T22:00:00Z
   last_event propagation proven) + clean SIGTERM.
 - **GitHub Login verified**: 807a0950's ensure_git_login fix is live on macOS
   (bundled-guest staging works — guest reports v0.3.260709.4). Attempt 2
-  reaches credential prompts. NEW P1 filed+promoted (order 257): first cold
+  reaches credential prompts. NEW P1 filed+promoted (order 259): first cold
   attempt always fails — vault name-in-use race (boot bootstrap vs login
   satisfier, exit 125). Full report:
   plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md.
@@ -30,7 +30,7 @@ LastExecutionTime: 2026-07-09T22:00:00Z
   230/231). Order 153 progress event: residual = SC-10 timed test + 4-agent
   verification only (flagged for linux closure). Order 154 confirmed
   actionable for windows on the same basis.
-- **Flags for sibling hosts**: linux — order 257 (vault race, blocks first-run
+- **Flags for sibling hosts**: linux — order 259 (vault race, blocks first-run
   login UX), order 153 closure, order 254 (listen-vsock CI lane, 0 coverage on
   the wire macOS consumes); windows — order 154 actionable now.
 - **E2E gate**: `eligible` (first macOS cycle with a valid verdict).
