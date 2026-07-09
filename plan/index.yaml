@@ -5069,3 +5069,253 @@ plan_index:
         - "tillandsias --github-login --debug succeeds when vault and proxy are already running"
         - "cargo test -p tillandsias-headless container_deps all pass"
         - "./build.sh --check passes"
+
+    - packet_id: network-architecture-audit
+      order: 245
+      title: "Network Architecture Audit — Runtime Taxonomy & End-to-End Design"
+      status: ready
+      kind: audit+design
+      deliverable: plan/issues/network-architecture-audit-2026-07-09.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      multi_cycle: true
+      capability_tags: [network, architecture, design, spec, all-platforms]
+      estimated_hours: 16
+      phase: research
+      verification_required:
+        agents:
+          - id: opencode-bigpickle
+            criteria: [NA-01, NA-02, NA-03, NA-04, NA-05, NA-06]
+          - id: antigravity-gemini
+            criteria: [NA-01, NA-02, NA-03, NA-05]
+          - id: codex-gpt55-highthink
+            criteria: [NA-01, NA-03, NA-04, NA-06]
+        completion_gate: >
+          ALL 3 agents must emit verified-by events with all assigned criteria
+          marked pass. Any disagreement requires revision and re-verification
+          from scratch.
+      outcome: >
+        Produce a ratified network architecture document covering: runtime
+        taxonomy (HOST/GUEST/CONTAINER/COMPILE), network scenarios per runtime,
+        dependency graph awareness for runtime context, platform abstraction
+        layer for each host OS, and a patch list for affected specs/cheatsheets.
+      exit_criteria:
+        - "Runtime Taxonomy Table ratified (HOST, GUEST, CONTAINER, COMPILE/BUILD — each with network topology, egress rules, DNS config, proxy awareness)"
+        - "Network Scenarios Catalog published (which topology applies to init/login/forge/cloud/diagnostics)"
+        - "Dependency Graph Awareness documented (how container_deps.rs should account for runtime context)"
+        - "Platform Abstraction Layer mapped (Linux bare, WSL2, macOS VZ, Silverblue Toolbox — bridge/forwarding mechanism)"
+        - "Spec/Cheatsheet patch list published with specific file:line references"
+
+    - packet_id: credential-secrets-architecture-audit
+      order: 246
+      title: "Credential & Secrets Architecture Audit"
+      status: ready
+      kind: audit+security+design
+      deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
+      depends_on: [network-architecture-audit]
+      pickup_role: any
+      owner_host: any
+      multi_cycle: true
+      capability_tags: [security, vault, credentials, design, all-platforms]
+      estimated_hours: 16
+      phase: research
+      verification_required:
+        agents:
+          - id: opencode-bigpickle
+            criteria: [CS-01, CS-02, CS-03, CS-04, CS-05, CS-06]
+          - id: antigravity-gemini
+            criteria: [CS-01, CS-02, CS-03, CS-05]
+          - id: codex-gpt55-highthink
+            criteria: [CS-02, CS-04, CS-05, CS-06]
+        completion_gate: >
+          ALL 3 agents must emit verified-by events with all assigned criteria
+          marked pass. Any disagreement requires revision and re-verification.
+      outcome: >
+        Ratified credential architecture: git identity moved to Vault KV,
+        per-project credential injection via scoped podman secrets, token
+        lifecycle policy with TTLs and rotation, credential quarantine
+        completion audit.
+      exit_criteria:
+        - "Credential Store Inventory published (every secret type mapped to storage backend + lifecycle)"
+        - "Vault-Mediated Git Identity design ratified (git name/email -> secret/git/identity, podman secret injection per project)"
+        - "Per-Project Credential Scope design ratified (scoped podman secrets per project mount)"
+        - "Token Lifecycle & Rotation Policy published (TTLs, renewal, revocation)"
+        - "Credential Quarantine completion litmus added (order 170 coverage audit)"
+        - "Spec/Cheatsheet patch list published"
+
+    - packet_id: proxy-git-mirror-configuration-audit
+      order: 247
+      title: "Proxy & Git Mirror Configuration Audit"
+      status: ready
+      kind: audit+bug-fix
+      deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
+      depends_on: [network-architecture-audit]
+      pickup_role: any
+      owner_host: any
+      multi_cycle: true
+      capability_tags: [proxy, git, network, security, all-platforms]
+      estimated_hours: 12
+      phase: research
+      verification_required:
+        agents:
+          - id: opencode-bigpickle
+            criteria: [PG-01, PG-02, PG-03, PG-04, PG-05]
+          - id: antigravity-gemini
+            criteria: [PG-01, PG-03, PG-04]
+          - id: codex-gpt55-highthink
+            criteria: [PG-02, PG-03, PG-05]
+        completion_gate: >
+          ALL 3 agents must emit verified-by events with all assigned criteria
+          marked pass. Any disagreement requires revision and re-verification.
+      outcome: >
+        Audited proxy config (allowlist, TLS cert chain, health), verified git
+        mirror forwarding end-to-end, proxy health litmus added.
+      exit_criteria:
+        - "Proxy Configuration Inventory published (squid.conf, allowlist.txt, env injection points)"
+        - "TLS Certificate Chain Audit complete (CA from generation through podman secrets to container trust stores)"
+        - "Git Mirror Forwarding end-to-end verified (forge -> mirror -> GitHub, ref consistency litmus)"
+        - "litmus:proxy-end-to-end-health added and green"
+        - "Spec/Cheatsheet patch list published"
+
+    - packet_id: spec-cheatsheet-contradiction-audit
+      order: 248
+      title: "Spec & Cheatsheet Organic Growth Contradiction Audit"
+      status: ready
+      kind: audit+documentation
+      deliverable: plan/issues/spec-cheatsheet-contradiction-audit-2026-07-09.md
+      depends_on: [network-architecture-audit, credential-secrets-architecture-audit, proxy-git-mirror-configuration-audit]
+      pickup_role: any
+      owner_host: any
+      multi_cycle: true
+      capability_tags: [documentation, spec, audit, all-platforms]
+      estimated_hours: 12
+      phase: research
+      verification_required:
+        agents:
+          - id: claude-opus-highthink
+            criteria: [SC-01, SC-02, SC-03, SC-04, SC-05]
+          - id: opencode-bigpickle
+            criteria: [SC-01, SC-02, SC-05]
+          - id: antigravity-gemini
+            criteria: [SC-02, SC-03, SC-04]
+        completion_gate: >
+          ALL 3 agents must emit verified-by events with all assigned criteria
+          marked pass. Any disagreement requires revision and re-verification.
+      outcome: >
+        Cross-reference matrix of all 167 spec dirs, contradiction report with
+        file:line references, reconciliation plan, and minimum litmus set to
+        prevent future drift.
+      exit_criteria:
+        - "Cross-Reference Matrix published (every spec mapped to dependencies and dependents)"
+        - "Contradiction Report with specific file:line references"
+        - "Reconciliation Plan for each contradiction (which spec supersedes or new unified spec)"
+        - "Cheatsheet cross-reference against spec matrix"
+        - "Minimum litmus set to prevent spec drift (litmus:spec-*)"
+
+    - packet_id: event-push-architecture
+      order: 249
+      title: "Event Push Architecture — Container & Git Lifecycle Events to Tray"
+      status: ready
+      kind: design+enhancement
+      deliverable: plan/issues/event-push-architecture-2026-07-09.md
+      depends_on: [network-architecture-audit, credential-secrets-architecture-audit]
+      pickup_role: any
+      owner_host: any
+      multi_cycle: true
+      capability_tags: [ux, transport, events, tray, all-platforms]
+      estimated_hours: 12
+      phase: research
+      verification_required:
+        agents:
+          - id: opencode-bigpickle
+            criteria: [EP-01, EP-02, EP-03, EP-04, EP-05, EP-06]
+          - id: antigravity-gemini
+            criteria: [EP-01, EP-02, EP-04]
+          - id: codex-gpt55-highthink
+            criteria: [EP-03, EP-05, EP-06]
+        completion_gate: >
+          ALL 3 agents must emit verified-by events with all assigned criteria
+          marked pass. Any disagreement requires revision and re-verification.
+      outcome: >
+        Ratified event taxonomy with priority levels, push channel extending
+        the control wire protocol, tray status integration at 37-char budget,
+        and event deduplication rules.
+      exit_criteria:
+        - "Event Taxonomy published (types: container_launch, git_clone, git_push, build, auth, error — with priority levels)"
+        - "Priority-Based Display Rule defined (highest-priority event in last 20-60s wins, sticky-until-seen)"
+        - "Push Channel design extending control wire protocol (order 152 push variants)"
+        - "37-char event message templates for each event type"
+        - "Event deduplication rules (coalesce same-type within N seconds)"
+        - "Spec/Cheatsheet entries for event taxonomy and push protocol"
+
+    - packet_id: ultra-minimalistic-tray-ux
+      order: 250
+      title: "Ultra-Minimalistic Tray UX — Most Important Notification in Status Line"
+      status: ready
+      kind: ux+design
+      deliverable: plan/issues/ultra-minimalistic-tray-ux-2026-07-09.md
+      depends_on: [event-push-architecture]
+      pickup_role: any
+      owner_host: any
+      multi_cycle: true
+      capability_tags: [ux, tray, accessibility, all-platforms]
+      estimated_hours: 8
+      phase: research
+      verification_required:
+        agents:
+          - id: claude-opus-highthink
+            criteria: [TU-01, TU-02, TU-03, TU-04, TU-05, TU-06]
+          - id: opencode-bigpickle
+            criteria: [TU-01, TU-02, TU-04]
+          - id: antigravity-gemini
+            criteria: [TU-03, TU-05, TU-06]
+        completion_gate: >
+          ALL 3 agents must emit verified-by events with all assigned criteria
+          marked pass. Any disagreement requires revision and re-verification.
+      outcome: >
+        Design for a single status line that reduces the latest events to the
+        single most important one, with priority ordering, 37-char templates,
+        sticky-until-seen semantics, and accessibility support.
+      exit_criteria:
+        - "State-vs-Event model defined (steady state = phase, transition = event with TTL)"
+        - "Priority ordering of all possible status messages (error > auth failure > push > commit > clone > build > health)"
+        - "37-char max event message templates for every event type"
+        - "Sticky-until-seen behavior: event stays until ack (tray menu open) or superseded"
+        - "Accessibility: status line exposed as live region for screen readers"
+        - "Implementation plan mapped to Linux headless, Windows tray, macOS tray"
+
+    - packet_id: long-running-work-packet-methodology
+      order: 251
+      title: "Meta: Long-Running Work Packet Methodology + Multi-Agent Verification Ledger"
+      status: ready
+      kind: methodology
+      deliverable: plan/issues/long-running-work-packet-methodology-2026-07-09.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      multi_cycle: true
+      capability_tags: [methodology, meta, plan, all-platforms]
+      estimated_hours: 6
+      phase: research
+      verification_required:
+        agents:
+          - id: opencode-bigpickle
+            criteria: [LM-01, LM-02, LM-03, LM-04, LM-05]
+          - id: antigravity-gemini
+            criteria: [LM-01, LM-02, LM-04]
+          - id: codex-gpt55-highthink
+            criteria: [LM-03, LM-04, LM-05]
+        completion_gate: >
+          ALL 3 agents must emit verified-by events with all assigned criteria
+          marked pass. Any disagreement requires revision and re-verification.
+      outcome: >
+        Updated methodology.yaml, distributed-work.yaml, and meta-orchestration
+        skill to support long-running multi-cycle packets with multi-agent
+        verification. Plan sub-queue at plan/long-running.md.
+      exit_criteria:
+        - "Long-running packet schema added to distributed-work.yaml (multi_cycle, phase, verification_required)"
+        - "Verified-by event protocol published (standard event format for agent verification)"
+        - "meta-orchestration skill updated to recognize long-running packets (don't mark done until N verified-by events)"
+        - "plan/long-running.md created as filtered view of active long-running packets"
+        - "Additive update policy documented (new sections/supersede annotations, no rewrites)"
