@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-07-08T21:21:19Z",
+  "generated_at": "2026-07-09T18:32:00Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 99,
-  "sparkline_closed": "██▁███████████████████████████▁██▁██████▅█████▁█▁█▁███████▇███▆▇██████▇██████████████▇█▇████▇▇▇▇██▇",
-  "sparkline_residual": "▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▁▁█▁▁▁▁▁▁▄▁▁▁▁▁█▁█▁█▁▁▁▁▁▁▁▂▁▁▁▃▂▁▁▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▁▂▁▁▁▁▂▂▂▂▁▁▂",
-  "alert_level": "red",
+  "record_count": 100,
+  "sparkline_closed": "██▁███████████████████████████▁██▁██████▅█████▁█▁█▁███████▇███▆▇██████▇██████████████▇█▇████▇▇▇▇██▇█",
+  "sparkline_residual": "▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▁▁█▁▁▁▁▁▁▄▁▁▁▁▁█▁█▁█▁▁▁▁▁▁▁▂▁▁▁▃▂▁▁▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▁▂▁▁▁▁▂▂▂▂▁▁▂▁",
+  "alert_level": "green",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
     "yellow_below_percent_closed": 95
   },
   "trend_metrics": {
     "pass_rate_7d_percent": 28.57142857142857,
-    "coverage_avg_7d_percent": 88.06349206349208
+    "coverage_avg_7d_percent": 89.26278659611994
   },
   "metrics": {"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"disk_read_bytes_per_sec":0.0,"disk_write_bytes_per_sec":0.0,"disk_iops":0.0,"disk_io_percent":0.0,"cpu_psi_percent":0.0,"memory_psi_percent":0.0,"io_psi_percent":0.0,"psi_available":false,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"},
   "dashboard_contract": {
@@ -94,27 +94,27 @@
     "kind": "closed",
     "start_release": "0.3.260623.1",
     "start_commit": "6cdaa8ac221a",
-    "end_release": "0.3.260707.1",
-    "end_commit": "f1d3dcc78f8c",
-    "count": 3,
-    "closed": "██▇",
-    "residual": "▁▁▂"
+    "end_release": "0.3.260708.4",
+    "end_commit": "70f819d6758b",
+    "count": 4,
+    "closed": "██▇█",
+    "residual": "▁▁▂▁"
   }
 ],
   "latest": {
-  "release": "0.3.260707.1",
-  "date": "2026-07-08T21:01:49Z",
-  "commit": "f1d3dcc78f8c",
+  "release": "0.3.260708.4",
+  "date": "2026-07-08T21:19:08Z",
+  "commit": "70f819d6758b",
   "total_cc": 810,
-  "earned_cc": 630,
-  "residual_cc": 180,
-  "percent_closed": 77.77777777777779,
-  "worst_spec": "spec:podman-orchestration",
-  "worst_reason": "Check failed: tray-contract",
+  "earned_cc": 770,
+  "residual_cc": 40,
+  "percent_closed": 95.06172839506173,
+  "worst_spec": "spec:dev-build",
+  "worst_reason": "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)",
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "FAIL",
-  "ci_run_id": "local-ci-20260708T210149Z",
+  "ci_run_id": "local-ci-20260708T211908Z",
   "trend_glyph": ""
 },
   "history": [
@@ -1700,6 +1700,22 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "FAIL",
     "ci_run_id": "local-ci-20260708T210149Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.3.260708.4",
+    "date": "2026-07-08T21:19:08Z",
+    "commit": "70f819d6758b",
+    "total_cc": 810,
+    "earned_cc": 770,
+    "residual_cc": 40,
+    "percent_closed": 95.06172839506173,
+    "worst_spec": "spec:dev-build",
+    "worst_reason": "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "FAIL",
+    "ci_run_id": "local-ci-20260708T211908Z",
     "trend_glyph": ""
   }
 ]

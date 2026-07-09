@@ -10274,11 +10274,9 @@ mod tests {
         assert!(has_arg(&args, "-d"));
         assert!(has_arg(&args, "--name"));
         assert!(has_arg(&args, "tillandsias-browser-visual-chess"));
-        assert!(
-            args.iter().any(|arg| {
-                arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true"
-            })
-        );
+        assert!(args.iter().any(|arg| {
+            arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true"
+        }));
         assert!(has_arg(
             &args,
             "TILLANDSIAS_CA_BUNDLE=/etc/tillandsias/ca.crt"
@@ -10479,14 +10477,10 @@ mod tests {
         assert!(has_arg(&args, ENCLAVE_NET));
         assert!(has_arg(&args, "--name"));
         assert!(has_arg(&args, "tillandsias-observatorium-project"));
-        assert!(
-            args.iter()
-                .any(|arg| arg
-                    == "type=bind,source=/tmp/project,target=/var/www/source,readonly=true")
-        );
-        assert!(args.iter().any(|arg| {
-            arg == "type=bind,source=/tmp/runtime/observatorium,target=/var/www/observatorium,readonly=true"
-        }));
+        assert!(args.iter().any(|arg| arg
+            == "type=bind,source=/tmp/project,target=/var/www/source,relabel=shared,readonly=true"));
+        assert!(args.iter().any(|arg| arg
+            == "type=bind,source=/tmp/runtime/observatorium,target=/var/www/observatorium,relabel=shared,readonly=true"));
         assert_eq!(
             args.last().map(|s| s.as_str()),
             Some("tillandsias-web:v1.2.3")
