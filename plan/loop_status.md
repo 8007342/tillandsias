@@ -1,6 +1,39 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T22:00:00Z
+LastExecutionTime: 2026-07-09T22:40:00Z
+
+## Cycle 2026-07-09T21:32Z (macos — advance-work-from-plan: queue drain, orders 257 + 155)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z. Merged fresh
+  `origin/linux-next` (order 234 R6, windows e2e PASS merge) before work.
+- **Order 257 (macos-tray-parity-column-verify) — PARTIAL, now BLOCKED on
+  operator**: ExecOneShot cell verified live (`--exec-guest` ok/exit 0) ->
+  done; 7 remaining required cells unknown -> todo with strong partial
+  evidence recorded (--list-cloud-projects full chain to graceful
+  not-logged-in 404; InteractiveStream via live PtyOpen expect session).
+  Consolidated gap packet with 8-step attended checklist:
+  plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md.
+  NOTE: litmus:tray-parity-matrix-complete is RED on macOS --ci-full until
+  the attended pass — order 243's intended design, not a build break.
+- **Order 155 (macos-tray-stream-refactor) slice 1 — COMPLETE (ceb8ded5)**:
+  VmStatus push subscription on a dedicated control-wire connection with
+  SC-07 poll suppression, mirroring windows b6ca3290 via the shared
+  host-shell primitives. Verified LIVE on the provisioned VZ VM: chip
+  renders ~10s after launch via push+initial-sync (vs 30s+ poll). Found and
+  fixed the change-gated-push cold-join gap (initial-sync VmStatusRequest on
+  the subscription connection); heads-up event added to order 154 in case
+  windows shares the gap. Packet back to ready for remaining slices
+  (LoginState/CloudProjects consumers, watch-channel listeners).
+- **Queue state after drain**: no macOS-eligible ready work remains
+  claimable by an unattended agent. Order 257 blocked on operator-attended
+  smoke; order 155 residual slices are claimable next cycle; order 126
+  (host-guest-transport-macos) still blocked on Linux order 128 conformance
+  harness + packaged/entitled VM substrate.
+- **Blocked-work flags**: linux — order 259 (vault name-in-use race, blocks
+  first-run login), order 153 closure (SC-10 + 4-agent verification), order
+  254 (listen-vsock CI lane); windows — order 154 cold-join gap heads-up;
+  operator — attended parity smoke (order 257 checklist).
 
 ## Cycle 2026-07-09T21:05Z (macos — meta-orchestration: integration + full local-build e2e + login/event verification)
 

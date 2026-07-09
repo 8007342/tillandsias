@@ -1403,6 +1403,22 @@ plan_index:
             windows slice can widen vm_status_subscribe_topics() and retire
             the slow-cadence polls. Releasing lease; packet stays ready for
             the next slice.
+        - type: progress
+          ts: "2026-07-09T22:38:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          summary: >
+            Cross-host heads-up from the order 155 macOS port (ceb8ded5),
+            found by LIVE run: pushes are change-gated, so a subscriber that
+            connects to a steady-state-Ready VM receives NOTHING until the
+            next transition — and SC-07 suppresses the fallback poll exactly
+            because the stream is healthy, leaving the chip un-primed
+            (observed live: 180s with no status render). macOS fix: after
+            SubscribeAck, send one VmStatusRequest on the SAME subscription
+            connection and let the reader loop accept VmStatusReply alongside
+            VmStatusPush (race-free by construction). If windows' first tick
+            poll can lose the race with subscription establishment, port the
+            same initial-sync prime.
       kind: refactor
       deliverable: crates/tillandsias-windows-tray/src/notify_icon.rs
       depends_on: [vm-headless-persistent-listener]
@@ -1437,7 +1453,7 @@ plan_index:
     - packet_id: macos-tray-stream-refactor
       order: 155
       title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
-      status: claimed
+      status: ready
       kind: refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [vm-headless-persistent-listener]
@@ -1495,6 +1511,28 @@ plan_index:
             VmStatusRequest poll to fallback-only (SC-07). LoginState/
             CloudProjects topics + watch-channel menu listeners are later
             slices.
+        - type: progress
+          ts: "2026-07-09T22:35:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          commits: [ceb8ded5]
+          summary: >
+            Slice 1 COMPLETE and verified LIVE against the provisioned VZ VM:
+            run_vm_status_push_listener (dedicated connection, Subscribe ->
+            SubscribeAck -> initial-sync VmStatusRequest -> next_envelope
+            loop applying VmStatusPush/VmStatusReply), SC-07 poll suppression
+            via VM_STATUS_PUSH_HEALTHY, apply_vm_status/dispatch_rebuild
+            extraction shared by both surfaces, shared vm_ever_ready +
+            last_logged_phase. Live evidence: 'push subscription established'
+            then chip render at ~10s (vs 30s+ poll), clean SIGTERM. The
+            initial-sync request covers the change-gated-push cold-join gap
+            (found live: steady-state-Ready VM emits no push to a new
+            subscriber; windows slice 1 likely shares this gap — flagged for
+            the order 154 owner). 61/61 tray tests, build check clean.
+            Remaining slices: LoginState/CloudProjects tray consumers (guest
+            sources landed, orders 230/231), watch-channel menu listeners,
+            SC-01/02 sleep elimination in the projects/login cadence. Lease
+            released for the next macOS cycle.
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
