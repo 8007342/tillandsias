@@ -426,6 +426,10 @@ fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient,
 /// healthy. Called automatically from `run_init`; the previous `--with-vault`
 /// opt-in is now a no-op.
 pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
+    // Order 234 (R6): refuse before waiting on the lock during drain/stop.
+    if !crate::runtime_phase::container_mutations_allowed() {
+        return Err(crate::runtime_phase::refusal("ensure tillandsias-vault"));
+    }
     // Order 232 (R4): serialize the whole running-check + build + launch +
     // init/unseal window. 600s bound: a cold vault image build plus first
     // init is the slowest ensure path. The liveness probe (order 228) takes

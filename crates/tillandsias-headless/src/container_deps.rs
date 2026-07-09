@@ -276,6 +276,15 @@ fn satisfy_ca_bundle(debug: bool) -> Result<(), String> {
 
 impl Satisfier for RealSatisfier {
     fn satisfy(&mut self, service: Service) -> Result<(), String> {
+        // Order 234 (R6): no container mutations while the VM is
+        // draining/stopping — a self-heal must not recreate what shutdown
+        // just removed. CLI mode (no listener) never sets the gate.
+        if !crate::runtime_phase::container_mutations_allowed() {
+            return Err(crate::runtime_phase::refusal(&format!(
+                "ensure {}",
+                service.name()
+            )));
+        }
         match service {
             Service::EnclaveNetwork => crate::ensure_enclave_network(self.debug),
             Service::EgressNetwork => crate::ensure_egress_network(self.debug),

@@ -79,6 +79,8 @@ mod runtime_assets;
 mod vault_bootstrap;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
+// Process-global VmPhase mirror gating container mutations (order 234, R6).
+mod runtime_phase;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -1540,6 +1542,12 @@ fn ensure_image_exists(
     // a cold forge/chromium build takes minutes; the loser should wait for
     // the winner's image, not race it. Recursion into base images (forge ->
     // forge-base) nests DISTINCT locks in one direction only — no cycle.
+    // Order 234 (R6): image builds are container-substrate mutations too.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal(&format!(
+            "ensure image {image_name}"
+        )));
+    }
     let _image_lock = resource_lock::acquire(
         &format!("image-{image_name}"),
         std::time::Duration::from_secs(900),
@@ -1642,6 +1650,10 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
     // Order 232 (R4): serialize check+create so parallel launches never race
     // `podman network create` for the same network. Held across the nested
     // egress ensure (distinct lock, one-directional nesting — no cycle).
+    // Order 234 (R6): no network creation during drain/stop.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal("ensure tillandsias-enclave network"));
+    }
     let _net_lock =
         resource_lock::acquire("network-enclave", std::time::Duration::from_secs(60), debug)?;
     // The dual-homed proxy/git-service need the egress network to exist on every
@@ -1804,6 +1816,10 @@ fn render_enclave_resolved_config(gateway: &str) -> String {
 fn ensure_egress_network(debug: bool) -> Result<(), String> {
     // Order 232 (R4): the exists-check + create below is exactly the
     // check+act race window; serialize it.
+    // Order 234 (R6): no network creation during drain/stop.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal("ensure tillandsias-egress network"));
+    }
     let _net_lock =
         resource_lock::acquire("network-egress", std::time::Duration::from_secs(60), debug)?;
     if tillandsias_podman::network_exists_sync(EGRESS_NET) {
@@ -2108,6 +2124,11 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
 ///
 /// @trace spec:proxy-container, plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
 fn ensure_proxy_running(debug: bool) -> Result<(), String> {
+    // Order 234 (R6): refuse before waiting on the lock — a drain-time
+    // caller should fail fast, not queue behind a mutation it may not make.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal("ensure tillandsias-proxy"));
+    }
     // Order 232 (R4): the running-check below plus the rm+run act section is
     // the R4 race window (two parallel launches both saw "not running" and
     // both ran `podman run --name tillandsias-proxy`). 300s bound covers a
@@ -2994,6 +3015,15 @@ fn build_forge_common_args(
 /// too, which tore the shared stack out from under any OTHER project's live
 /// forge on every per-project cleanup.
 async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
+    // Order 234 (R6): removals also race shutdown's own teardown — skip
+    // during drain/stop (the shutdown path owns teardown then).
+    if !runtime_phase::container_mutations_allowed() {
+        eprintln!(
+            "[tillandsias] {}",
+            runtime_phase::refusal("project cleanup")
+        );
+        return;
+    }
     let _ = client
         .remove_container(&format!("tillandsias-git-{project_name}"))
         .await;
@@ -3010,6 +3040,14 @@ async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
 /// [`cleanup_shared_stack_if_no_running_forge`]. Router is deliberately
 /// absent: it is supervisor-owned and never torn down by session cleanup.
 async fn remove_shared_stack_containers(client: &PodmanClient) {
+    // Order 234 (R6): see cleanup_stack_containers — shutdown owns teardown.
+    if !runtime_phase::container_mutations_allowed() {
+        eprintln!(
+            "[tillandsias] {}",
+            runtime_phase::refusal("shared stack removal")
+        );
+        return;
+    }
     let _ = client.remove_container("tillandsias-proxy").await;
     let _ = client.remove_container("tillandsias-inference").await;
 }
