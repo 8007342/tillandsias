@@ -7953,6 +7953,46 @@ fn maybe_spawn_vsock_listener(
                 tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             }
         });
+        // Login-state probe (order 230): while at least one connection is
+        // subscribed to the LoginState topic and the VM is Ready, watch the
+        // Vault github-token presence and push LoginStatePush on change.
+        // Presence-level detection on purpose: the vsock server never reads
+        // the raw token (matching the GithubLoginStatusRequest handler's
+        // no-token-in-process rule); a full in-container username probe runs
+        // only when presence flips or no baseline exists yet. Explicit
+        // GithubLoginStatusRequest probes piggyback into the same broadcast,
+        // so rotations that keep presence constant converge on request.
+        let login_probe_state = state.clone();
+        let login_probe = tokio::spawn(async move {
+            let mut last_presence: Option<bool> = None;
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                if login_probe_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
+                    || !login_probe_state.has_login_state_subscribers()
+                {
+                    // Nobody listening (or VM not steady): skip the podman
+                    // exec entirely and drop the baseline so the next
+                    // subscriber gets a fresh push.
+                    last_presence = None;
+                    continue;
+                }
+                let presence = tokio::task::spawn_blocking(vault_bootstrap::is_github_key_present)
+                    .await
+                    .unwrap_or(false);
+                if last_presence == Some(presence) {
+                    continue;
+                }
+                // Presence changed (or first observation): resolve the handle
+                // with the containerized probe, then push (change-gated in
+                // set_login_state).
+                let handle =
+                    tokio::task::spawn_blocking(|| remote_projects::probe_github_username(false))
+                        .await
+                        .unwrap_or(None);
+                login_probe_state.set_login_state(handle.is_some(), handle);
+                last_presence = Some(presence);
+            }
+        });
 
         // Podman events monitor: reads `podman events --format json`
         // and pushes curated step names to the tray.
@@ -8049,6 +8089,13 @@ fn maybe_spawn_vsock_listener(
         let _ = watcher.await;
         events_monitor.abort();
         let _ = events_monitor.await;
+        // liveness + login probe were missing from this abort sequence when
+        // order 228 landed (2026-07-09 audit F7): without the aborts they
+        // outlive the listener and keep polling during shutdown.
+        liveness.abort();
+        let _ = liveness.await;
+        login_probe.abort();
+        let _ = login_probe.await;
     }))
 }
 

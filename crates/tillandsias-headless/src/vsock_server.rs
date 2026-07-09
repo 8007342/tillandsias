@@ -125,18 +125,45 @@ pub struct VmStateHandle {
     /// receiver that never polls just lags and drops old frames instead of
     /// growing memory unboundedly.
     vm_status_tx: broadcast::Sender<ControlMessage>,
+    /// Broadcast fan-out for `LoginStatePush` (order 230). Same subscriber
+    /// semantics as `vm_status_tx`.
+    login_state_tx: broadcast::Sender<ControlMessage>,
+    /// Last observed login state, `None` until first probed. Kept so
+    /// `set_login_state` only pushes on a real transition — and so the very
+    /// first observation after boot always pushes (order 230 exit criteria:
+    /// no redundant push on unchanged state).
+    login_state: LoginStateCell,
+    /// Broadcast fan-out for `CloudProjectsPush` (order 231). Same
+    /// subscriber semantics as `vm_status_tx`.
+    cloud_projects_tx: broadcast::Sender<ControlMessage>,
+    /// Last pushed project list, `None` until first fetched. Full-replacement
+    /// compare: `set_cloud_projects` pushes only when the list differs.
+    cloud_projects: Arc<RwLock<Option<Vec<CloudProjectEntry>>>>,
     /// Monotonic counter for the `seq` field carried inside each push
     /// message (distinct from the per-request `ControlEnvelope.seq`, which
-    /// pushes don't have a request to reply to).
+    /// pushes don't have a request to reply to). Shared across all push
+    /// topics so the host can totally order pushes from this headless.
     push_seq: Arc<std::sync::atomic::AtomicU64>,
     /// Last event message.
     last_event: Arc<RwLock<String>>,
 }
 
+/// Last observed login state shared between the handle clones: `None` until
+/// first probed, then `(logged_in, handle)`.
+type LoginStateCell = Arc<RwLock<Option<(bool, Option<String>)>>>;
+
 /// Bounded capacity of the `VmStatusPush` broadcast channel. VmPhase changes
 /// are infrequent (a handful over a VM's lifetime), so this only needs to
 /// cover the gap between two pushes for the slowest realistic subscriber.
 const VM_STATUS_PUSH_CAPACITY: usize = 16;
+/// Bounded capacity of the `LoginStatePush` channel (order 230). Login
+/// transitions are rarer than phase changes; the latest frame always carries
+/// the full current state, so lagging only loses intermediate flips.
+const LOGIN_STATE_PUSH_CAPACITY: usize = 16;
+/// Bounded capacity of the `CloudProjectsPush` channel (order 231). Each
+/// frame is a full-replacement list, so only the newest frame matters; a
+/// small buffer bounds memory for the larger payload.
+const CLOUD_PROJECTS_PUSH_CAPACITY: usize = 8;
 
 impl VmStateHandle {
     /// Construct with default `Starting` phase and the conventional podman
@@ -144,10 +171,16 @@ impl VmStateHandle {
     /// [`set_podman_socket`] to drive transitions.
     pub fn new() -> Self {
         let (vm_status_tx, _) = broadcast::channel(VM_STATUS_PUSH_CAPACITY);
+        let (login_state_tx, _) = broadcast::channel(LOGIN_STATE_PUSH_CAPACITY);
+        let (cloud_projects_tx, _) = broadcast::channel(CLOUD_PROJECTS_PUSH_CAPACITY);
         Self {
             phase: Arc::new(RwLock::new(VmPhase::Starting)),
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
             vm_status_tx,
+            login_state_tx,
+            login_state: Arc::new(RwLock::new(None)),
+            cloud_projects_tx,
+            cloud_projects: Arc::new(RwLock::new(None)),
             push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             last_event: Arc::new(RwLock::new(SERVER_NAME.to_string())),
         }
@@ -159,6 +192,79 @@ impl VmStateHandle {
     /// the sender.
     pub fn subscribe_vm_status(&self) -> broadcast::Receiver<ControlMessage> {
         self.vm_status_tx.subscribe()
+    }
+
+    /// Subscribe to the `LoginState` push topic (order 230). Same
+    /// independent-receiver semantics as [`subscribe_vm_status`].
+    pub fn subscribe_login_state(&self) -> broadcast::Receiver<ControlMessage> {
+        self.login_state_tx.subscribe()
+    }
+
+    /// Subscribe to the `CloudProjects` push topic (order 231). Same
+    /// independent-receiver semantics as [`subscribe_vm_status`].
+    pub fn subscribe_cloud_projects(&self) -> broadcast::Receiver<ControlMessage> {
+        self.cloud_projects_tx.subscribe()
+    }
+
+    /// True when at least one connection is subscribed to `LoginState`.
+    /// The periodic vault probe uses this to avoid spending a podman exec
+    /// per interval when nobody is listening.
+    pub fn has_login_state_subscribers(&self) -> bool {
+        self.login_state_tx.receiver_count() > 0
+    }
+
+    /// Record a login-state observation and push `LoginStatePush` to all
+    /// `LoginState` subscribers IFF the state actually changed. The first
+    /// observation after boot always pushes (subscribers start with no
+    /// baseline). Mirrors the [`set_phase`] change-only contract
+    /// (order 230; no redundant push on unchanged state).
+    pub fn set_login_state(&self, logged_in: bool, handle: Option<String>) {
+        let changed = match self.login_state.write() {
+            Ok(mut guard) => {
+                let next = Some((logged_in, handle.clone()));
+                let changed = *guard != next;
+                *guard = next;
+                changed
+            }
+            Err(_) => false,
+        };
+        if changed {
+            let seq = self
+                .push_seq
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1;
+            let _ = self.login_state_tx.send(ControlMessage::LoginStatePush {
+                seq,
+                logged_in,
+                handle,
+            });
+        }
+    }
+
+    /// Record the latest cloud project list and push `CloudProjectsPush`
+    /// (full replacement) to all `CloudProjects` subscribers IFF the list
+    /// differs from the previous one (order 231). The first fetch always
+    /// pushes.
+    pub fn set_cloud_projects(&self, projects: Vec<CloudProjectEntry>) {
+        let changed = match self.cloud_projects.write() {
+            Ok(mut guard) => {
+                let changed = guard.as_ref() != Some(&projects);
+                if changed {
+                    *guard = Some(projects.clone());
+                }
+                changed
+            }
+            Err(_) => false,
+        };
+        if changed {
+            let seq = self
+                .push_seq
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1;
+            let _ = self
+                .cloud_projects_tx
+                .send(ControlMessage::CloudProjectsPush { seq, projects });
+        }
     }
 
     /// Update the reported phase. The vsock handler reads this on every
@@ -451,6 +557,10 @@ async fn handle_connection(
     // not subscribed — the branch below is disabled entirely (never polled)
     // via the `if` guard, so an unsubscribed connection pays zero cost.
     let mut vm_status_rx: Option<broadcast::Receiver<ControlMessage>> = None;
+    // Orders 230/231: LoginState + CloudProjects topics, same
+    // subscribe-gated zero-cost-when-unsubscribed contract as VmStatus.
+    let mut login_state_rx: Option<broadcast::Receiver<ControlMessage>> = None;
+    let mut cloud_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
 
     loop {
         tokio::select! {
@@ -498,6 +608,67 @@ async fn handle_connection(
                         // Sender dropped (should not happen — VmStateHandle
                         // outlives connections) — stop polling this branch.
                         vm_status_rx = None;
+                    }
+                }
+                continue;
+            }
+            // Server-push: LoginStatePush (order 230). Same lag-skip contract
+            // as the VmStatus branch above.
+            push = async {
+                loop {
+                    match login_state_rx.as_mut()?.recv().await {
+                        Ok(msg) => return Some(msg),
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(spec = "vsock-transport", skipped, "LoginState push receiver lagged; skipping to latest");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            }, if login_state_rx.is_some() => {
+                match push {
+                    Some(body) => {
+                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
+                        if write_envelope(&mut stream, &env).await.is_err() {
+                            debug!(spec = "vsock-transport", "vsock write failed during LoginStatePush; closing connection");
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                    }
+                    None => {
+                        login_state_rx = None;
+                    }
+                }
+                continue;
+            }
+            // Server-push: CloudProjectsPush (order 231). Same lag-skip
+            // contract; each frame is a full replacement so skipping to the
+            // latest loses nothing durable.
+            push = async {
+                loop {
+                    match cloud_projects_rx.as_mut()?.recv().await {
+                        Ok(msg) => return Some(msg),
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(spec = "vsock-transport", skipped, "CloudProjects push receiver lagged; skipping to latest");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            }, if cloud_projects_rx.is_some() => {
+                match push {
+                    Some(body) => {
+                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
+                        if write_envelope(&mut stream, &env).await.is_err() {
+                            debug!(spec = "vsock-transport", "vsock write failed during CloudProjectsPush; closing connection");
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                    }
+                    None => {
+                        cloud_projects_rx = None;
                     }
                 }
                 continue;
@@ -600,14 +771,18 @@ async fn handle_connection(
                     return;
                 }
             }
-            // Order 153 slice 1: only the VmStatus topic is wired to a real
-            // push source so far; LoginState/CloudProjects subscriptions are
-            // accepted (SubscribeAck) but don't yet deliver pushes — those
-            // land in follow-on slices once the vault/cloud-refresh call
-            // sites gain their own broadcast sources.
+            // Order 153 slice 1 wired VmStatus; orders 230/231 wire the
+            // LoginState and CloudProjects topics to their broadcast
+            // sources (vault probe task + cloud refresh handler below).
             ControlMessage::Subscribe { topics } => {
                 if topics.contains(&tillandsias_control_wire::SubscriptionTopic::VmStatus) {
                     vm_status_rx = Some(state.subscribe_vm_status());
+                }
+                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::LoginState) {
+                    login_state_rx = Some(state.subscribe_login_state());
+                }
+                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::CloudProjects) {
+                    cloud_projects_rx = Some(state.subscribe_cloud_projects());
                 }
                 let ack = ControlEnvelope {
                     wire_version: WIRE_VERSION,
@@ -646,6 +821,12 @@ async fn handle_connection(
                 let projects = tokio::task::spawn_blocking(fetch_cloud_projects)
                     .await
                     .unwrap_or_default();
+                // Order 231: an explicit refresh is also a push source — fan
+                // the (possibly changed) list out to every CloudProjects
+                // subscriber on OTHER connections. The requester gets the
+                // reply below either way; set_cloud_projects only pushes on
+                // a real change.
+                state.set_cloud_projects(projects.clone());
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -667,6 +848,10 @@ async fn handle_connection(
                 .await
                 .unwrap_or(None);
                 let logged_in = handle.is_some();
+                // Order 230: every explicit probe doubles as a push source so
+                // LoginState subscribers on other connections converge without
+                // waiting for the periodic vault probe. Change-gated inside.
+                state.set_login_state(logged_in, handle.clone());
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -1085,6 +1270,89 @@ mod tests {
             Err(broadcast::error::TryRecvError::Lagged(_)) => {}
             other => panic!("expected Lagged, got {other:?}"),
         }
+    }
+
+    // ── LoginState / CloudProjects push sources (orders 230/231) ────────────
+
+    /// Order 230: the first login-state observation after boot pushes (no
+    /// baseline), and the payload carries the observed state.
+    #[tokio::test]
+    async fn set_login_state_pushes_on_change() {
+        let state = VmStateHandle::new();
+        let mut rx = state.subscribe_login_state();
+        state.set_login_state(true, Some("octocat".to_string()));
+        match rx.try_recv().expect("first observation must push") {
+            ControlMessage::LoginStatePush {
+                logged_in, handle, ..
+            } => {
+                assert!(logged_in);
+                assert_eq!(handle.as_deref(), Some("octocat"));
+            }
+            other => panic!("expected LoginStatePush, got {other:?}"),
+        }
+    }
+
+    /// Order 230 exit criterion: no redundant push on unchanged state.
+    #[tokio::test]
+    async fn set_login_state_does_not_push_when_unchanged() {
+        let state = VmStateHandle::new();
+        state.set_login_state(true, Some("octocat".to_string()));
+        let mut rx = state.subscribe_login_state();
+        state.set_login_state(true, Some("octocat".to_string()));
+        assert!(matches!(
+            rx.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
+        // A real transition (logout) pushes again.
+        state.set_login_state(false, None);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(ControlMessage::LoginStatePush {
+                logged_in: false,
+                ..
+            })
+        ));
+    }
+
+    /// Order 231: full-replacement compare — identical list is silent,
+    /// changed list pushes.
+    #[tokio::test]
+    async fn set_cloud_projects_pushes_on_change_only() {
+        let entry = |repo: &str| CloudProjectEntry {
+            label: format!("octocat/{repo}"),
+            owner: "octocat".to_string(),
+            repo: repo.to_string(),
+            default_branch: String::new(),
+        };
+        let state = VmStateHandle::new();
+        let mut rx = state.subscribe_cloud_projects();
+        state.set_cloud_projects(vec![entry("tillandsias")]);
+        assert!(
+            matches!(rx.try_recv(), Ok(ControlMessage::CloudProjectsPush { projects, .. }) if projects.len() == 1),
+            "first fetch must push"
+        );
+        state.set_cloud_projects(vec![entry("tillandsias")]);
+        assert!(
+            matches!(rx.try_recv(), Err(broadcast::error::TryRecvError::Empty)),
+            "identical list must not push"
+        );
+        state.set_cloud_projects(vec![entry("tillandsias"), entry("zeroclaw")]);
+        assert!(
+            matches!(rx.try_recv(), Ok(ControlMessage::CloudProjectsPush { projects, .. }) if projects.len() == 2),
+            "changed list must push"
+        );
+    }
+
+    /// Order 230: the periodic vault probe is subscriber-gated so an idle
+    /// headless spends zero podman execs on login polling.
+    #[test]
+    fn login_probe_gate_reflects_subscriber_count() {
+        let state = VmStateHandle::new();
+        assert!(!state.has_login_state_subscribers());
+        let rx = state.subscribe_login_state();
+        assert!(state.has_login_state_subscribers());
+        drop(rx);
+        assert!(!state.has_login_state_subscribers());
     }
 
     #[test]
