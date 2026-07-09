@@ -1,6 +1,47 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T23:10:00Z
+LastExecutionTime: 2026-07-09T23:15:00Z
+
+## Cycle 2026-07-09T22:38Z (windows — meta-orchestration worker drain, order 154 slice 2)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start; merged `origin/linux-next` twice
+  (990c0482 at cycle start, 67bffc86 pre-push) — both clean, integration gate
+  green each time (conflict-marker scan, YAML validate, clippy+tests on the
+  merged tree).
+- **Worker drain — order 154 (windows-tray-stream-refactor), slice 2
+  COMPLETED (ea03e08e), lease released, packet stays ready**: orders 230/231
+  cleared slice 1's blocker, so the push listener now subscribes to all THREE
+  topics (VmStatus+LoginState+CloudProjects); LoginStatePush/CloudProjectsPush
+  applied via shared appliers byte-identical with the poll reply arms;
+  GithubLoginStatusRequest/CloudRefreshRequest demoted to fallback-only
+  (should_poll_login_and_cloud gate, drift-pinned; fast-poll bursts still
+  force a confirming round); one initial-sync poll round after SubscribeAck
+  because pushes are change-gated. windows-tray 63 tests green, clippy
+  --all-targets zero warnings, fmt clean. Live e2e of the new topics needs
+  the in-VM headless refreshed past 744f4749 (this VM predates it) —
+  initial-sync polls cover the gap until then.
+- **Bonus (2abfcb30)**: fixed 6 clippy warnings in windows-cfg /
+  windows-feature-set code Linux strict-clippy never compiles (hvsocket.rs,
+  windows-tray build.rs, vm-layer materialize/{cache,oci}.rs,
+  materialize-cli.rs). Note: linux's 034c31f6 trunk-red mediation collapsed
+  the same build.rs if-let in parallel — both edits merged clean at 67bffc86,
+  post-merge clippy zero warnings.
+- **Reduction engine**: filed
+  `plan/issues/windows-tray-local-projects-push-gap-2026-07-09.md` and
+  promoted it to ready order 260 (linux-owned): EnumerateLocalProjects is the
+  last poll-only topic, blocking order 154's tick-elimination exit criterion.
+  Started `plan/issues/windows-next-work-queue-2026-07.md` (the per-host
+  work-queue ledger the worker protocol names did not exist for windows).
+- **E2E gate**: deferred — full destructive local-build e2e PASSED on this
+  host 2.5h ago (run 20260709T201326Z) and this cycle's delta is tray-side
+  push wiring already covered by unit+drift tests; live push verification is
+  blocked on a headless refresh (see above), so a re-run now would re-prove
+  the morning's result without exercising the new code.
+- **Next windows work**: order 258 (windows-tray-parity-column-verify, filed
+  22:35Z, 4h live-tray verification) — exceeds this cycle's remaining budget;
+  first candidate for the next windows cycle. Order 154's watch-channel slice
+  is unblocked for wiring but tick retirement waits on order 260.
 
 ## Cycle 2026-07-09T22:40Z (linux_mutable macuahuitl — meta-orchestration: sibling integration x2, trunk-red mediation, order 259 linux slice)
 

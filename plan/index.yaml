@@ -1358,8 +1358,36 @@ plan_index:
     - packet_id: windows-tray-stream-refactor
       order: 154
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
-      status: claimed
+      status: ready
       events:
+        - type: progress
+          ts: "2026-07-09T23:10:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2238Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-topics-slice-2"
+          commits: [ea03e08e]
+          summary: >
+            Slice 2 (LoginState+CloudProjects topics) landed on windows-next.
+            The push listener now subscribes to all three topics and applies
+            LoginStatePush/CloudProjectsPush via shared appliers
+            (apply_github_login, apply_cloud_projects — byte-identical with
+            the poll reply arms, mirroring apply_vm_status). Slow-cadence
+            GithubLoginStatusRequest/CloudRefreshRequest polls demoted to
+            fallback-only (should_poll_login_and_cloud gate, drift-pinned;
+            fast-poll bursts still force a confirming round). Pushes are
+            change-gated, so the listener runs one initial-sync poll round
+            over LIVE_CLIENT after SubscribeAck. Verification: cargo clippy
+            --all-targets zero warnings; cargo test -p
+            tillandsias-windows-tray 63 pass (52+8+3); fmt clean. Live e2e of
+            the new topics needs the in-VM headless refreshed to a build
+            containing 744f4749 (this host's provisioned VM predates it) —
+            initial-sync polls cover the gap meanwhile. REMAINING for this
+            packet: watch-channel topic fan-out + menu-listener wakeups, and
+            retiring the 30s tick — which CANNOT fully land until a
+            LocalProjects push topic exists (EnumerateLocalProjects is still
+            poll-only; filed as windows-tray-local-projects-push-gap, order
+            260, linux-owned wire+headless half). Releasing lease; packet
+            stays ready for the watch-channel slice.
         - type: claim
           ts: "2026-07-09T22:45:00Z"
           agent_id: "windows-bullo-fable5-20260709T2238Z"
@@ -6296,3 +6324,44 @@ plan_index:
             designed (both processes must resolve the same
             XDG_RUNTIME_DIR/tillandsias-locks path inside the guest — check
             that first).
+
+    - packet_id: windows-tray-local-projects-push-gap
+      order: 260
+      title: "Control wire + headless: LocalProjects push topic (last poll blocking tick-loop retirement)"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/vsock_server.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [rust, headless, vsock, control-wire]
+      estimated_hours: 3
+      outcome: >
+        Order 154 slice 2 retired the slow-cadence login/cloud polls, but the
+        windows tray's 30s tick loop cannot be eliminated (exit criterion
+        "No tokio::time::sleep in notify_icon.rs transport path") because
+        EnumerateLocalProjects is the one remaining topic with no push
+        source. Add SubscriptionTopic::LocalProjects + a LocalProjectsPush
+        trailing variant to control-wire (additive, no WIRE_VERSION bump —
+        coordinate via this packet since control-wire is cross-host shared
+        scope), and a change-gated push source in vsock_server.rs following
+        the set_login_state/set_cloud_projects pattern from 744f4749 (source:
+        the VM-side project reconciliation that backs LocalProjectsReply).
+        The windows (and later macos) tray then widens its topic list and
+        deletes its last steady-state poll; the tick loop shrinks to a
+        pure fallback path gated on subscription health.
+      exit_criteria:
+        - "SubscriptionTopic::LocalProjects + LocalProjectsPush on the wire (additive; wire tests updated)"
+        - "change-gated LocalProjectsPush source in the headless (no redundant push on unchanged list)"
+        - "unit test: VM-side project list change emits LocalProjectsPush"
+        - "./build.sh --check and --test pass"
+      events:
+        - type: filed
+          ts: "2026-07-09T23:10:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2238Z"
+          host: windows
+          summary: >
+            Filed from order 154 slice 2 (windows): reduction-engine capture —
+            the packet's tick-elimination exit criterion is unreachable while
+            local projects are poll-only. Full context in
+            plan/issues/windows-tray-local-projects-push-gap-2026-07-09.md.
