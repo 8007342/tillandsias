@@ -470,28 +470,18 @@ mod tests {
     }
 
     /// RealSatisfier delegates each Service to the correct match arm.
-    /// We verify the mapping structurally — each arm dispatches to the
-    /// corresponding ensure_* function (proven by compilation), and the
-    /// GitLogin arm rejects its service name as expected.
+    /// Exhaustiveness is already a compile-time property: `satisfy` matches
+    /// on `Service` without a wildcard arm, so adding a variant without an
+    /// arm fails compilation — no runtime loop needed. Only the GitLogin
+    /// arm is safe to execute here; every other arm shells out to podman
+    /// and would mutate host container state (audit 2026-07-09).
     #[test]
     fn real_satisfier_match_arms_cover_all_services() {
         let mut s = RealSatisfier { debug: false };
-        for svc in ALL {
-            let _result = s.satisfy(svc);
-            // Every call compiles and dispatches to a match arm.
-            // Runtime outcome depends on Podman availability; we only
-            // assert that the GitLogin arm rejects its own service.
-            if svc == Service::GitLogin {
-                assert!(
-                    _result.is_err(),
-                    "GitLogin must be rejected as a prerequisite"
-                );
-            }
-        }
-        // Structural proof: all 6 Service variants compile through Satisfier
-        // without hitting an armless match error.  If a new variant is added to
-        // Service without adding a RealSatisfier arm, this test won't compile
-        // (non-exhaustive match).
+        assert!(
+            s.satisfy(Service::GitLogin).is_err(),
+            "GitLogin must be rejected as a prerequisite"
+        );
     }
 
     /// The `Up<T>` typestate witness cannot be constructed outside the module.
@@ -501,17 +491,13 @@ mod tests {
     fn ensure_git_login_returns_up_gitloginready() {
         // The important assertion: the return type matches our expectation
         // (this is a compile-time check — if `ensure_git_login` didn't return
-        // `Result<Up<GitLoginReady>, String>` the test wouldn't compile).
+        // `Result<Up<GitLoginReady>, String>` the coercion wouldn't compile).
         //
-        // We only verify the type compiles — no runtime assertion on Ok/Err
-        // since the outcome depends on whether Podman/Vault are available
-        // on the test host (forge: Err, linux with vault: Ok).
-        let result = ensure_git_login(false);
-        // Document what platforms produce which outcome:
-        // - forge (no Podman): Err at ensure_vault_running
-        // - linux with vault already running: Ok
-        // - linux without vault: Err at ensure_vault_running
-        drop(result);
+        // Deliberately NOT invoked: `ensure_git_login` drives the
+        // RealSatisfier, which shells out to podman and can create networks
+        // and start Vault/proxy containers. A unit test must never mutate
+        // host container state (audit 2026-07-09).
+        let _typecheck: fn(bool) -> Result<Up<GitLoginReady>, String> = ensure_git_login;
     }
 
     /// Compile-time check: `Up<GitLoginReady>` has no public constructor.

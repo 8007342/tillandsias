@@ -7915,7 +7915,6 @@ fn maybe_spawn_vsock_listener(
         // Drives self-healing during VmPhase::Ready without a full restart.
         let liveness_state = state.clone();
         let liveness = tokio::spawn(async move {
-            let mut probe = container_deps::LivenessProbe::new(false);
             loop {
                 // Only probe during Ready phase — containers aren't expected
                 // to be up during Starting/Draining/Stopping.
@@ -7924,7 +7923,16 @@ fn maybe_spawn_vsock_listener(
                     tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                     continue;
                 }
-                match probe.run_check() {
+                // run_check shells out to podman (container_running +
+                // RealSatisfier::satisfy are blocking); keep it off the
+                // async workers so a slow podman never stalls the vsock
+                // listener sharing this runtime.
+                let check = tokio::task::spawn_blocking(|| {
+                    container_deps::LivenessProbe::new(false).run_check()
+                })
+                .await
+                .unwrap_or_else(|join_err| Err(format!("liveness task panicked: {join_err}")));
+                match check {
                     Ok(result) => {
                         if !result.all_running() {
                             eprintln!(
