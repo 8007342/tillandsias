@@ -202,6 +202,23 @@ impl Client {
         self.next_seq()
     }
 
+    /// Send a single envelope without awaiting a reply. Subscription-stream
+    /// half of the tray reader-task pattern (orders 154/155): the caller sends
+    /// `Subscribe` once, then drains pushes via [`Client::next_envelope`].
+    pub async fn send_envelope(&mut self, envelope: &ControlEnvelope) -> io::Result<()> {
+        self.send(envelope).await
+    }
+
+    /// Receive the next inbound envelope without sending anything. This is the
+    /// push-stream read primitive: after `Subscribe`/`SubscribeAck`, the
+    /// headless emits `VmStatusPush`/`LoginStatePush`/`CloudProjectsPush`
+    /// frames unprompted, and a dedicated reader task loops on this call.
+    /// Shared here (not per-tray) so the Windows and macOS reader tasks stay
+    /// structurally identical.
+    pub async fn next_envelope(&mut self) -> io::Result<ControlEnvelope> {
+        self.recv().await
+    }
+
     async fn send(&mut self, envelope: &ControlEnvelope) -> io::Result<()> {
         let bytes = encode(envelope).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         if bytes.len() > MAX_MESSAGE_BYTES {
@@ -305,6 +322,139 @@ mod capability_tests {
                 STANDARD_HOST_CAPABILITIES.contains(cap),
                 "STANDARD_HOST_CAPABILITIES must include \"{cap}\""
             );
+        }
+    }
+}
+
+// Cross-platform (duplex-stream) tests — no OS socket, so they run on the
+// Windows host too, unlike the `unix`-gated module below.
+#[cfg(test)]
+mod push_stream_tests {
+    use super::*;
+
+    fn encode_frame(env: &ControlEnvelope) -> Vec<u8> {
+        let bytes = encode(env).expect("encode");
+        let mut framed = (bytes.len() as u32).to_be_bytes().to_vec();
+        framed.extend_from_slice(&bytes);
+        framed
+    }
+
+    /// `next_envelope` reads unsolicited frames (the `Subscribe` →
+    /// `SubscribeAck` → `VmStatusPush`… stream shape from order 152/153)
+    /// without sending anything — the reader-task primitive for the tray
+    /// stream refactors (orders 154/155).
+    ///
+    /// @trace spec:host-shell-architecture, spec:vsock-transport
+    #[tokio::test]
+    async fn next_envelope_reads_unsolicited_push_frames() {
+        let (host_side, mut guest_side) = tokio::io::duplex(4096);
+        let mut client = Client::from_stream(
+            Box::new(host_side),
+            Transport::Vsock {
+                cid: 0,
+                port: CONTROL_WIRE_VSOCK_PORT,
+            },
+        );
+
+        // Guest pushes SubscribeAck then two VmStatusPush frames, unprompted.
+        let frames = [
+            ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::SubscribeAck,
+            },
+            ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::VmStatusPush {
+                    seq: 2,
+                    phase: tillandsias_control_wire::VmPhase::Starting,
+                    podman_ready: false,
+                    last_event: None,
+                },
+            },
+            ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 3,
+                body: ControlMessage::VmStatusPush {
+                    seq: 3,
+                    phase: tillandsias_control_wire::VmPhase::Ready,
+                    podman_ready: true,
+                    last_event: Some("tillandsias-in-vm".to_string()),
+                },
+            },
+        ];
+        for env in &frames {
+            guest_side.write_all(&encode_frame(env)).await.unwrap();
+        }
+        guest_side.flush().await.unwrap();
+
+        assert!(matches!(
+            client.next_envelope().await.unwrap().body,
+            ControlMessage::SubscribeAck
+        ));
+        assert!(matches!(
+            client.next_envelope().await.unwrap().body,
+            ControlMessage::VmStatusPush {
+                phase: tillandsias_control_wire::VmPhase::Starting,
+                podman_ready: false,
+                ..
+            }
+        ));
+        match client.next_envelope().await.unwrap().body {
+            ControlMessage::VmStatusPush {
+                phase,
+                podman_ready,
+                last_event,
+                ..
+            } => {
+                assert_eq!(phase, tillandsias_control_wire::VmPhase::Ready);
+                assert!(podman_ready);
+                assert_eq!(last_event.as_deref(), Some("tillandsias-in-vm"));
+            }
+            other => panic!("expected VmStatusPush, got {other:?}"),
+        }
+    }
+
+    /// `send_envelope` writes a correctly framed envelope the peer can decode
+    /// — the Subscribe-send half of the reader-task pattern.
+    #[tokio::test]
+    async fn send_envelope_frames_subscribe_for_peer() {
+        let (host_side, mut guest_side) = tokio::io::duplex(4096);
+        let mut client = Client::from_stream(
+            Box::new(host_side),
+            Transport::Vsock {
+                cid: 0,
+                port: CONTROL_WIRE_VSOCK_PORT,
+            },
+        );
+
+        let seq = client.allocate_seq();
+        client
+            .send_envelope(&ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body: ControlMessage::Subscribe {
+                    topics: vec![tillandsias_control_wire::SubscriptionTopic::VmStatus],
+                },
+            })
+            .await
+            .unwrap();
+
+        let mut len_buf = [0u8; 4];
+        guest_side.read_exact(&mut len_buf).await.unwrap();
+        let len = u32::from_be_bytes(len_buf) as usize;
+        let mut body = vec![0u8; len];
+        guest_side.read_exact(&mut body).await.unwrap();
+        let env = decode(&body).unwrap();
+        match env.body {
+            ControlMessage::Subscribe { topics } => {
+                assert_eq!(
+                    topics,
+                    vec![tillandsias_control_wire::SubscriptionTopic::VmStatus]
+                );
+            }
+            other => panic!("expected Subscribe, got {other:?}"),
         }
     }
 }
