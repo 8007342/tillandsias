@@ -1,0 +1,35 @@
+# @trace spec:podman-orchestration
+name: litmus:shared-containers-survive-per-project-cleanup
+spec: podman-orchestration
+phase: pre-build
+description: >-
+  Order 233 (R5): per-project cleanup must never remove SHARED containers
+  (proxy, inference, router). Runs the source-shape unit test proving
+  cleanup_stack_containers touches only per-project names and that the
+  shared remover is reachable exclusively through the no-running-forge
+  guard. Single-line command + explicit patterns per the order-256 runner
+  constraints.
+severity: high
+size: quick
+
+preconditions:
+  - cargo workspace builds
+
+critical_path:
+  - step: "source-shape proof: shared containers unreachable from per-project cleanup"
+    command: "cargo test -p tillandsias-headless tests::per_project_cleanup_never_removes_shared_containers -- --exact 2>&1 | grep 'per_project_cleanup_never_removes_shared_containers ... ok' && echo SHARED-STACK-GUARDED"
+    timeout_ms: 120000
+    success_pattern: "SHARED-STACK-GUARDED"
+    failure_pattern: "FAILED|panicked"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "SHARED-STACK-GUARDED"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "shared-containers-survive-per-project-cleanup"
+
+rollback:
+  on_failure: "a shared container name re-entered cleanup_stack_containers, or a second remove_shared_stack_containers call site bypasses the guard"
+  command: "grep -n 'remove_shared_stack_containers\\|tillandsias-proxy' crates/tillandsias-headless/src/main.rs"

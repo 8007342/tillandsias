@@ -10,11 +10,19 @@ set -e
 # plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md candidate 1).
 #
 # Verdict grammar (falsifiable): ^(eligible|skip:[a-z0-9-]+)$
-#   skip:no-podman-binary       podman not on PATH
+#   skip:no-podman-binary       podman not on PATH (Linux/Windows path)
 #   skip:no-podman-user-session no rootless runtime dir (XDG_RUNTIME_DIR / /run/user/<uid>)
 #   skip:smoke-lock-held        another local-build smoke owns the host lock
 #   skip:podman-not-functional  runtime dir present but `podman info` fails
-#   eligible                    rootless podman is usable for local-build e2e
+#   skip:no-macos-hypervisor    Darwin host without Hypervisor.framework support
+#   eligible                    host substrate is usable for local-build e2e
+#
+# Darwin note: the macOS local-build e2e substrate is the Virtualization.framework
+# VM, not rootless Podman, so the Darwin branch probes kern.hv_support instead of
+# /run/user/<uid> (which never exists on macOS and used to permanently mis-verdict
+# macOS hosts as skip:no-podman-user-session). An explicitly-set XDG_RUNTIME_DIR
+# is still honored on Darwin so the deterministic no-session and smoke-lock litmus
+# pins hold on every platform.
 smoke_lock_is_held() {
   local runtime lock_root lock_name lock_file lock_dir fd
   runtime="$1"
@@ -39,6 +47,28 @@ smoke_lock_is_held() {
 }
 
 e2e_eligibility_verdict() {
+  if [ "$(uname -s)" = "Darwin" ]; then
+    local runtime
+    if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+      if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+        echo "skip:no-podman-user-session"
+        return 0
+      fi
+      runtime="$XDG_RUNTIME_DIR"
+    else
+      runtime="${TMPDIR:-/tmp}"
+    fi
+    if smoke_lock_is_held "$runtime"; then
+      echo "skip:smoke-lock-held"
+      return 0
+    fi
+    if [ "$(sysctl -n kern.hv_support 2>/dev/null)" != "1" ]; then
+      echo "skip:no-macos-hypervisor"
+      return 0
+    fi
+    echo "eligible"
+    return 0
+  fi
   if ! command -v podman >/dev/null 2>&1; then
     echo "skip:no-podman-binary"
     return 0
