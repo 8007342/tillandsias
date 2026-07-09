@@ -2625,3 +2625,18 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - **Order 177 exit criteria**: Still pending — "mirror ls-remote and direct GitHub ls-remote agree on linux-next" and "upstream forwarding failure returns non-zero" both require a forge that actually pushes through the mirror.
 - **New finding filed**: `plan/issues/forge-credential-guard-push-channel-gap-2026-07-08.md` — the guard must distinguish between mirror-proxied and direct-GitHub origins.
 - **Blocked**: this cycle cannot push its findings (no credential channel). This matches the credential gap documented in the new finding.
+
+## Cycle 2026-07-09T19:23Z (linux_mutable macuahuitl — sole-builder session: audits + worker drain + e2e)
+
+- **Agent**: linux-macuahuitl-fable5-20260709T1923Z (operator-directed: void stale leases, take over work, audit other agents, full destructive e2e as needed).
+- **Startup**: pulled 226 commits; sibling heads main `1684c111`, linux-next `8424f392`, windows-next `1c89b835` (integrated), osx-next `1780cfb3` (integrated). Credential guard `ok:gh-keyring`; e2e preflight `eligible`.
+- **Cycle 1 — audit of recent agent work** (`3b018a15`, `133538ef`):
+  - FIXED F1: container_deps unit tests executed the real satisfier (cargo test could create networks / start Vault+proxy); reduced to compile-time assertions.
+  - FIXED F2: order-228 liveness probe ran blocking podman calls on async workers → spawn_blocking.
+  - Reconciled: order 122 → done (slices via 227/228/229); order 237 expired lease voided → ready with residual; 230/231 dependency_note (153 slice 1 landed); filed order 252.
+  - Full narrative: `plan/issues/linux-audit-recent-work-2026-07-09.md` (F1-F8).
+- **Cycle 2 — order 245 network-architecture-audit** (`11f20ef5`): DRAFT v1 in the deliverable — runtime taxonomy, source-verified container network matrix, scenarios S0-S5, container_deps RuntimeContext proposal, platform matrix, patch list P1-P7. Vault-missing-from-init CONFIRMED → order 253 filed. gh-login 401 network-exonerated (no_bump CONNECT tunnel; dual-homed helper) → order 246 scope. Ratification pending (3 named verifier agents).
+- **Cycle 3 — orders 230/231 done** (`744f4749`, `4c7babc3`): LoginStatePush + CloudProjectsPush wired to change-gated broadcast sources (subscriber-gated 60s vault presence probe — raw token never read in the vsock process; request piggyback). 20/20 vsock_server tests. FIXED F7 (liveness/login tasks now aborted at listener shutdown). Filed order 254 (listen-vsock feature combo never linted/tested in CI: 13 warnings + 2 drifted pty_handler tests). 249 got a design-input note (not claimed — deps 245/246 unratified).
+- **Cycle 4 — destructive local-build e2e** (run `20260709T195719Z` @ `4c7babc3`): **STOPPED at gate 1** per runbook — compile/clippy/tests/install-prep PASSED; post-build status smoke 4/6: `litmus:opencode-prompt-e2e-shape` STEP 5 is a timing-race false negative (the in-forge cycle's plan commit `3621fc74` exists — order 255 filed) and `litmus:tray-parity-matrix-complete` is the KNOWN order-243 failure (ping appended: it gates ALL linux local-build e2e acceptance). **No podman reset performed.** Findings: `plan/issues/build-install-smoke-e2e-findings-2026-07-09.md`.
+- **Bonus**: the gate-1 smoke's in-forge agent implemented order 252 mid-run (`ce70c788`, completed `3621fc74`); audited PASS (wrapper outside block_on, both entry points routed, order-229 gap allowlist eliminated).
+- **Queue after session**: next Linux picks = order 243 (1h, unblocks the e2e gate), 253 (2h vault-in-init), 232-235 (concurrency safeguards — elevated by the F3 liveness-race note), 254, 255, 237 residual. Multi-cycle audits 245-251 await verifier agents (opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink).
