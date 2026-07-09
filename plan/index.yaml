@@ -114,15 +114,19 @@ plan_index:
     - packet_id: forge-harness-auth-device-flow
       order: 112
       title: "Research + implement: forge harness auth via Vault + proxy header injection"
-      status: claimed
+      status: completed
       kind: research+enhancement
       events:
-        - type: claim
-          ts: "2026-07-09T10:24Z"
+        - type: completed
+          ts: "2026-07-09T10:27Z"
           agent_id: "linux-antigravity-20260709T1024Z"
           host: linux
           lease_id: "forge-harness-auth-device-flow-1"
-          expires_at: "2026-07-09T14:24Z"
+          summary: >
+            Slice 1 was completed by previous agent. Phase 2 (ICAP proxy) has
+            been extracted to a dedicated plan packet `forge-harness-icap-proxy`
+            to formally close this packet. CLI subcommands were already extracted to
+            order 132/143.
         - type: claim
           ts: "2026-06-27T04:10Z"
           agent_id: "linux-macuahuitl-sonnet46-20260627T0410Z"
@@ -702,6 +706,27 @@ plan_index:
         - "in-container validation rejects a bad key before the Vault write"
         - "autonomous forge run consumes the stored key with zero interactive prompt"
         - "tray distinguishes api-key vs oauth presence per provider; --check + --test pass"
+
+    - packet_id: forge-harness-icap-proxy
+      order: 144
+      title: "Phase 2: ICAP proxy header injection for forge harness auth"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
+      depends_on: [forge-harness-auth-device-flow]
+      pickup_role: linux
+      capability_tags: [rust, proxy, vault]
+      estimated_hours: 8
+      outcome: >
+        Implement a small ICAP REQMOD service in the proxy container (Rust or c-icap).
+        ICAP server reads provider API keys from Vault on each request.
+        Squid forwards api.anthropic.com / api.openai.com traffic through the ICAP adapter.
+        Forge containers become truly credential-free.
+      exit_criteria:
+        - "ICAP REQMOD service implemented in the proxy container"
+        - "ICAP server fetches API keys from Vault dynamically"
+        - "Squid proxy routes provider API requests through ICAP"
+        - "Forge harness authenticates transparently without ENV vars"
 
     - packet_id: plan-ledger-archival
       order: 134
