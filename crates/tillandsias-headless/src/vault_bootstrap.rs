@@ -2513,6 +2513,49 @@ mod tests {
         );
     }
 
+    /// Order 259: the cold-VM first-login name-in-use race is closed by TWO
+    /// invariants that must both hold: (a) every vault bring-up serializes
+    /// behind the order-232 exclusive flock BEFORE the running-check (so the
+    /// loser observes the winner's container and early-returns instead of
+    /// racing `podman run`), and (b) the launch replaces any exited/created
+    /// name-holder (`podman rm -f` preamble) instead of erroring on it.
+    #[test]
+    fn vault_launch_serializes_and_replaces_stale_name_holder() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let ensure = source
+            .split("pub fn ensure_vault_running(")
+            .nth(1)
+            .expect("ensure_vault_running source");
+        let lock_idx = ensure
+            .find("resource_lock::acquire(\"vault\"")
+            .expect("ensure_vault_running must take the order-232 vault flock");
+        let running_check_idx = ensure
+            .find("container_running(VAULT_CONTAINER_NAME)")
+            .expect("ensure_vault_running must early-return on a running vault");
+        assert!(
+            lock_idx < running_check_idx,
+            "the exclusive vault flock must be held BEFORE the running-check (order 259)"
+        );
+        let launch = source
+            .split("fn launch_vault_container(")
+            .nth(1)
+            .expect("launch_vault_container source");
+        let rm_idx = launch
+            .find("[\"rm\", \"-f\", VAULT_CONTAINER_NAME]")
+            .expect("launch must rm -f any stale name-holder before podman run (order 259)");
+        let run_idx = launch
+            .find("podman run")
+            .or_else(|| launch.find("run_args"))
+            .expect("launch must run the vault container");
+        assert!(
+            rm_idx < run_idx,
+            "stale-name replacement must precede the run (order 259)"
+        );
+    }
+
     #[test]
     fn vault_ready_wait_uses_podman_health() {
         let source = include_str!(concat!(

@@ -1330,11 +1330,26 @@ plan_index:
             intentionally unbounded, unchanged by this slice). Not
             claiming/blocking the packet — releasing for the next slice
             (LoginState or CloudProjects push, whichever host picks it up).
+        - type: progress
+          ts: "2026-07-09T21:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2105Z"
+          host: macos
+          summary: >
+            Ledger reconciliation from macOS: slices 230 and 231 are both done
+            (commit 744f4749), so every push-topic exit criterion is now met.
+            Residual scope blocking closure is ONLY: (a) the SC-10 slow-client
+            1000ms-lag criterion (slice-1 test covers lag-skip semantics;
+            confirm it satisfies SC-10 or add the timed test) and (b) the
+            4-agent verification_required gate. Flagged for linux pickup —
+            closing this formally unblocks the downstream tray stream
+            refactors (orders 144/154/155) cleanly instead of via
+            dependency_note carve-outs. Downstream order 155 returned to
+            ready by this cycle on the strength of the landed slices.
       exit_criteria:
         - "Connection persists after VmStatusRequest reply (SC-08) — DONE (was already true before this packet)"
         - "VmStatusPush sent to all clients on VmPhase change (SC-09, <500ms) — DONE"
-        - "LoginStatePush sent on Vault token change — TODO"
-        - "CloudProjectsPush sent when gh repo list result changes — TODO"
+        - "LoginStatePush sent on Vault token change — DONE (order 230, commit 744f4749)"
+        - "CloudProjectsPush sent when gh repo list result changes — DONE (order 231, commit 744f4749)"
         - "Per-client reader task uses select! over message type + shutdown signal — DONE"
         - "All in-memory channels bounded; documented capacity in code — DONE for VmStatus; PTY mpsc channel remains unbounded (pre-existing, out of this slice's scope)"
         - "Slow client (simulated 1000ms lag) does not affect fast client (SC-10)"
@@ -1403,6 +1418,22 @@ plan_index:
             windows slice can widen vm_status_subscribe_topics() and retire
             the slow-cadence polls. Releasing lease; packet stays ready for
             the next slice.
+        - type: progress
+          ts: "2026-07-09T22:38:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          summary: >
+            Cross-host heads-up from the order 155 macOS port (ceb8ded5),
+            found by LIVE run: pushes are change-gated, so a subscriber that
+            connects to a steady-state-Ready VM receives NOTHING until the
+            next transition — and SC-07 suppresses the fallback poll exactly
+            because the stream is healthy, leaving the chip un-primed
+            (observed live: 180s with no status render). macOS fix: after
+            SubscribeAck, send one VmStatusRequest on the SAME subscription
+            connection and let the reader loop accept VmStatusReply alongside
+            VmStatusPush (race-free by construction). If windows' first tick
+            poll can lose the race with subscription establishment, port the
+            same initial-sync prime.
       kind: refactor
       deliverable: crates/tillandsias-windows-tray/src/notify_icon.rs
       depends_on: [vm-headless-persistent-listener]
@@ -1466,6 +1497,57 @@ plan_index:
             pending until the persistent listener/server-push stream lands.
           blocker_refs:
             - vm-headless-persistent-listener
+        - type: unblocked
+          ts: "2026-07-09T21:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2105Z"
+          host: macos
+          summary: >
+            Dependency substantively satisfied: order 153 slice 1 (VmStatus
+            broadcast + Subscribe wiring) plus slices 230/231 (LoginStatePush,
+            CloudProjectsPush sources, commit 744f4749) are all done — every
+            push topic the tray needs now has a live guest-side source. Order
+            153 itself stays open only for its 4-agent verification + SC-10
+            lag criterion (flagged for linux closure). Returning this packet
+            to ready for macOS pickup; verified on this host that the macOS
+            tray currently has zero Subscribe/*Push consumers (30s polling in
+            action_host.rs is the only propagation path today).
+        - type: claim
+          ts: "2026-07-09T22:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          lease_id: "macos-tray-stream-refactor-20260709T2205Z"
+          expires_at: "2026-07-10T02:05:00Z"
+          summary: >
+            Slice 1 scope, mirroring windows b6ca3290 (order 154 slice 1)
+            structurally: apply_vm_status extraction, dedicated
+            run_vm_status_push_listener reader task on its own control-wire
+            connection (Subscribe[VmStatus] -> SubscribeAck -> next_envelope
+            loop), VM_STATUS_PUSH_HEALTHY gate demoting the 30s
+            VmStatusRequest poll to fallback-only (SC-07). LoginState/
+            CloudProjects topics + watch-channel menu listeners are later
+            slices.
+        - type: progress
+          ts: "2026-07-09T22:35:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          commits: [ceb8ded5]
+          summary: >
+            Slice 1 COMPLETE and verified LIVE against the provisioned VZ VM:
+            run_vm_status_push_listener (dedicated connection, Subscribe ->
+            SubscribeAck -> initial-sync VmStatusRequest -> next_envelope
+            loop applying VmStatusPush/VmStatusReply), SC-07 poll suppression
+            via VM_STATUS_PUSH_HEALTHY, apply_vm_status/dispatch_rebuild
+            extraction shared by both surfaces, shared vm_ever_ready +
+            last_logged_phase. Live evidence: 'push subscription established'
+            then chip render at ~10s (vs 30s+ poll), clean SIGTERM. The
+            initial-sync request covers the change-gated-push cold-join gap
+            (found live: steady-state-Ready VM emits no push to a new
+            subscriber; windows slice 1 likely shares this gap — flagged for
+            the order 154 owner). 61/61 tray tests, build check clean.
+            Remaining slices: LoginState/CloudProjects tray consumers (guest
+            sources landed, orders 230/231), watch-channel menu listeners,
+            SC-01/02 sleep elimination in the projects/login cadence. Lease
+            released for the next macOS cycle.
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
@@ -5994,7 +6076,7 @@ plan_index:
     - packet_id: macos-tray-parity-column-verify
       order: 257
       title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: blocked
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6030,6 +6112,46 @@ plan_index:
             Filed per operator direction (macOS/Windows hosts active; request
             sibling work via plan). Heads-up packet so the per-host parity
             gate lands as scheduled work, not a surprise red build.
+        - type: claim
+          ts: "2026-07-09T21:35:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          lease_id: "macos-tray-parity-column-verify-20260709T2135Z"
+          expires_at: "2026-07-10T01:35:00Z"
+        - type: progress
+          ts: "2026-07-09T21:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          summary: >
+            Unattended-verifiable subset done on live tray/VM (commit
+            evidence: macos-build-install-smoke-e2e-findings-2026-07-09.md):
+            ExecOneShot cell -> done ({"status":"ok","exit_code":0} live
+            --exec-guest runs). Strong partial evidence recorded for
+            --list-cloud-projects (full chain to graceful not-logged-in 404)
+            and InteractiveStream (live PtyOpen expect session via
+            --github-login probe). Remaining 7 required cells set unknown ->
+            todo, single consolidated gap packet filed:
+            plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md
+            (per-cell enumeration inside).
+        - type: blocked
+          ts: "2026-07-09T21:56:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          reason: >
+            7 required cells (menus, popup-terminal login, attach UX, status
+            indicator states, credentialed cloud listing) cannot be honestly
+            verified without an ATTENDED interactive session — code reading
+            is disallowed by this packet and osascript UI driving is not
+            available unattended. Until the attended pass,
+            litmus:tray-parity-matrix-complete stays RED on macOS --ci-full
+            by order 243 design.
+          blocker: "operator-attended m8-style smoke at the macOS tray"
+          owner: "operator (Tlatoāni) + macOS agent recording"
+          smallest_next_action: >
+            Run the 8-step attended checklist in
+            plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md,
+            flip evidenced cells to done, re-run the tray-app post-build
+            litmus.
 
     - packet_id: windows-tray-parity-column-verify
       order: 258
@@ -6103,3 +6225,74 @@ plan_index:
             ignored). Overlaps orders 224/225 (litmus command DSL) — this
             packet is the fail-loud fix; the DSL packets are the readable
             long-term shape.
+
+    - packet_id: vault-ensure-name-in-use-race
+      order: 259
+      title: "P1: cold-VM first --github-login fails — tillandsias-vault name-in-use race between boot bootstrap and login satisfier"
+      status: blocked
+      blocked_on: "macOS fresh-VM repro (exit criterion 3) — linux structural slice complete, see completed-analysis event"
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, vault, podman, concurrency]
+      estimated_hours: 3
+      outcome: >
+        On a freshly provisioned macOS VM the first tillandsias-tray
+        --github-login always fails: the headless boot-path vault bootstrap
+        and the login flow's RealSatisfier (a separate tillandsias-headless
+        process via control-wire exec) race the vault bring-up, and the loser
+        dies on plain `podman run --name tillandsias-vault` with "name already
+        in use" (exit 125), leaving `tillandsias-vault Exited (143)` holding
+        the name. Order 232's advisory flock did not prevent this — either
+        vault_bootstrap does not take the per-resource lock, or the losing
+        path lacks start-or-replace handling for an existing created/exited
+        container. Retry converges, so impact is a guaranteed bad first-run
+        login UX on macOS/Windows VM hosts. Same rm-on-reuse class as the
+        fixed proxy P0 (forge-launch-proxy-not-idempotent-2026-07-04.md).
+        Overlaps ready orders 233 (R5) and 235 (R7 vault recreate mutex) —
+        consider landing together.
+      exit_criteria:
+        - "vault check+act holds the order-232 per-resource flock in BOTH the boot bootstrap and satisfier paths"
+        - "podman run --name tillandsias-vault path adopts/starts/replaces an existing created/exited container instead of erroring"
+        - "repro: fresh VM, first --github-login reaches the credential prompts (no 125)"
+        - "unit test pinning the exited-container-adoption branch"
+      events:
+        - type: filed
+          ts: "2026-07-09T21:58:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2105Z"
+          host: macos
+          summary: >
+            Found by /build-install-and-smoke-test-e2e (macos) extended
+            GitHub-Login probe on commit 9cb47ff6. Full evidence and guest
+            post-mortem in
+            plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md
+            (Finding 1). Attempt 1: exit 125 name-in-use; attempt 2: reached
+            credential prompts — confirms 807a0950's ensure_git_login fix is
+            live on macOS and this race is the remaining first-run blocker.
+        - type: progress
+          ts: "2026-07-09T23:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "vault-ensure-name-in-use-race-20260709T2305Z"
+          summary: >
+            Linux structural slice: the reported race was reproduced against
+            9cb47ff6, which PREDATES orders 232 (2790d84c) and 235 (eac9813f).
+            Source verification on current linux-next: ALL vault bring-up
+            paths (satisfier container_deps.rs:295, boot bootstrap
+            vsock_server.rs:977, remote_projects.rs:209, on-demand writer
+            branches) route through ensure_vault_running, which now takes the
+            exclusive "vault" flock BEFORE its running-check — the loser of a
+            concurrent bring-up waits, observes the winner's healthy
+            container, and early-returns instead of racing podman run.
+            launch_vault_container's rm -f preamble replaces any exited/
+            created name-holder (exit criterion 2 was already satisfied).
+            New pin test vault_launch_serializes_and_replaces_stale_name_holder
+            asserts lock-before-check ordering AND rm-before-run ordering
+            (exit criterion 4). Criteria 1/2/4 closed on linux; criterion 3
+            (fresh-VM first --github-login reaches prompts, no 125) needs the
+            macOS host — status blocked on that verification. If the fresh-VM
+            run still hits 125, the flock is not spanning processes as
+            designed (both processes must resolve the same
+            XDG_RUNTIME_DIR/tillandsias-locks path inside the guest — check
+            that first).

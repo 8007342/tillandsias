@@ -1,6 +1,82 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T22:00:00Z
+LastExecutionTime: 2026-07-09T23:10:00Z
+
+## Cycle 2026-07-09T22:40Z (linux_mutable macuahuitl — meta-orchestration: sibling integration x2, trunk-red mediation, order 259 linux slice)
+
+- **Credential guard**: ok:gh-keyring. Started clean at 990c0482.
+- **Sibling integration**: merged osx-next (+10: order 155 slice 1 — macOS tray VmStatus push subscription verified LIVE on the VZ VM, chip ~10s vs 30s poll; order 257 partial — ExecOneShot verified, 7 cells todo + attended-smoke checklist packet) and windows-next (+4: BUILD_COMMIT_SHA build.rs freshness fix, Windows-aware e2e preflight verdict). One loop_status.md conflict union-resolved per CRDT policy.
+- **Trunk-red mediation** (034c31f6): the windows build.rs fix tripped clippy collapsible-if under -D warnings on the merged tree; my pre-push gate false-greened on a warm cargo cache (captured as F9 in linux-audit-recent-work-2026-07-09.md — verdicts must come from explicit exit codes, never piped tails). Minimal mechanical let-chain collapse per the a105306e precedent; windows heads-up in the commit body.
+- **Order 259 linux slice** (blocked -> macOS verification): the reported name-in-use race was against 9cb47ff6, which predates orders 232/235; on current linux-next ALL vault bring-up paths route through the flocked ensure_vault_running (lock BEFORE running-check) and launch replaces stale name-holders. New pin test vault_launch_serializes_and_replaces_stale_name_holder. Criterion 3 (fresh-VM login repro) handed to macOS; if it still 125s, check both processes resolve the same tillandsias-locks dir in the guest.
+- **E2E gate**: skipped-with-cause — gate 1 is deterministically red on the KNOWN order-255 litmus race (unchanged since run 20260709T195719Z; duplicate-finding discipline). Order 255 is the top ready pick for the next worker drain; a full destructive run follows it.
+- **Release**: none — tray-parity release hold (16 gaps) requires The Tlatoani's recorded approval; daily Linux release is otherwise due (latest v0.3.260708.4).
+- **Queue**: linux ready = 255, 256, 254, 238, 144, security chain (137/141/145), streams chain (147/150/151/153/156/157/158), DSL (224/225), transport (125/128). Blocked-on-siblings list unchanged from 2026-07-09T23:20Z cycle + order 259 added (macOS verification).
+
+## Cycle 2026-07-09T21:32Z (macos — advance-work-from-plan: queue drain, orders 257 + 155)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z. Merged fresh
+  `origin/linux-next` (order 234 R6, windows e2e PASS merge) before work.
+- **Order 257 (macos-tray-parity-column-verify) — PARTIAL, now BLOCKED on
+  operator**: ExecOneShot cell verified live (`--exec-guest` ok/exit 0) ->
+  done; 7 remaining required cells unknown -> todo with strong partial
+  evidence recorded (--list-cloud-projects full chain to graceful
+  not-logged-in 404; InteractiveStream via live PtyOpen expect session).
+  Consolidated gap packet with 8-step attended checklist:
+  plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md.
+  NOTE: litmus:tray-parity-matrix-complete is RED on macOS --ci-full until
+  the attended pass — order 243's intended design, not a build break.
+- **Order 155 (macos-tray-stream-refactor) slice 1 — COMPLETE (ceb8ded5)**:
+  VmStatus push subscription on a dedicated control-wire connection with
+  SC-07 poll suppression, mirroring windows b6ca3290 via the shared
+  host-shell primitives. Verified LIVE on the provisioned VZ VM: chip
+  renders ~10s after launch via push+initial-sync (vs 30s+ poll). Found and
+  fixed the change-gated-push cold-join gap (initial-sync VmStatusRequest on
+  the subscription connection); heads-up event added to order 154 in case
+  windows shares the gap. Packet back to ready for remaining slices
+  (LoginState/CloudProjects consumers, watch-channel listeners).
+- **Queue state after drain**: no macOS-eligible ready work remains
+  claimable by an unattended agent. Order 257 blocked on operator-attended
+  smoke; order 155 residual slices are claimable next cycle; order 126
+  (host-guest-transport-macos) still blocked on Linux order 128 conformance
+  harness + packaged/entitled VM substrate.
+- **Blocked-work flags**: linux — order 259 (vault name-in-use race, blocks
+  first-run login), order 153 closure (SC-10 + 4-agent verification), order
+  254 (listen-vsock CI lane); windows — order 154 cold-join gap heads-up;
+  operator — attended parity smoke (order 257 checklist).
+
+## Cycle 2026-07-09T21:05Z (macos — meta-orchestration: integration + full local-build e2e + login/event verification)
+
+- **Host**: macOS arm64, `osx-next`. Credential guard `ok:gh-keyring`. Started
+  clean; fast-forwarded `linux-next` +35, merged into `osx-next` (clean FF to
+  `2790d84c`, pushed). `./build.sh --check` PASS; 157 tests green
+  (control-wire 37, macos-tray 58, secure-channel 12, vm-layer 50).
+- **Preflight fix (9cb47ff6)**: `scripts/e2e-preflight.sh` Darwin branch —
+  macOS hosts were permanently mis-verdicted `skip:no-podman-user-session`;
+  now probes `kern.hv_support` (VZ substrate). Verdict on this host flipped to
+  `eligible` for the first time. Litmus e2e-eligibility-probe-shape 3/3 PASS
+  (smoke-lock step made portable to flock-less macOS).
+- **Local-build e2e (/build-install-and-smoke-test-e2e, macos lane)**: gates
+  1-3 PASS (build+codesign+install+freshness 9cb47ff6; destroy 2.0G substrate;
+  cold provision 528MB rootfs + diagnose exit 0). Gate 4 forge: n/a. Extended:
+  cold VM boot → phase Ready → control wire PASS; installed tray live-launch
+  logged `vm-status: phase=Ready podman_ready=true event=…` (guest→host
+  last_event propagation proven) + clean SIGTERM.
+- **GitHub Login verified**: 807a0950's ensure_git_login fix is live on macOS
+  (bundled-guest staging works — guest reports v0.3.260709.4). Attempt 2
+  reaches credential prompts. NEW P1 filed+promoted (order 259): first cold
+  attempt always fails — vault name-in-use race (boot bootstrap vs login
+  satisfier, exit 125). Full report:
+  plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md.
+- **Ledger reconciliation**: order 155 (macos-tray-stream-refactor)
+  pending→ready — its dependency's push topics all landed (153 slice 1 +
+  230/231). Order 153 progress event: residual = SC-10 timed test + 4-agent
+  verification only (flagged for linux closure). Order 154 confirmed
+  actionable for windows on the same basis.
+- **Flags for sibling hosts**: linux — order 259 (vault race, blocks first-run
+  login UX), order 153 closure, order 254 (listen-vsock CI lane, 0 coverage on
+  the wire macOS consumes); windows — order 154 actionable now.
+- **E2E gate**: `eligible` (first macOS cycle with a valid verdict).
 
 ## Cycle 2026-07-09T21:07Z (windows — meta-orchestration worker drain, order 154 slice 1)
 
