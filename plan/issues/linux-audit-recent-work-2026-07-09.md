@@ -78,6 +78,22 @@ references in prose are ambiguous. Recommendation (not done here to avoid
 cross-host churn): future packets take the next free number from the tail;
 never renumber existing packets.
 
+### F7 — FIXED: order-228 liveness task never aborted at listener shutdown
+
+`maybe_spawn_vsock_listener` aborts advancer/watcher/events_monitor when the
+listener exits, but the order-228 liveness task was left out — it outlived the
+listener and kept polling during shutdown. Fixed in commit 744f4749 (both the
+liveness task and the new order-230 login probe are now aborted with the
+others).
+
+### F8 — OPEN → order 254: listen-vsock feature combo is never linted/tested in CI
+
+`./build.sh --check` clippies default features only. Running clippy + tests
+with `--features listen-vsock` (2026-07-09) surfaced 13 accumulated warnings
+and 2 pty_handler tests that drifted from their implementations (child_env's
+enclave NO_PROXY injection; the order-141 exec allowlist rejecting the test's
+`/bin/sh -c` argv). Shaped as order 254.
+
 ## Verification
 
 - `./build.sh --check` — clippy + check pass after F1/F2 fixes.

@@ -4598,7 +4598,34 @@ plan_index:
     - packet_id: headless-loginstatus-push
       order: 230
       title: "Headless: emit LoginStatePush on Vault token change"
-      status: ready
+      status: done
+      events:
+        - type: claim
+          ts: "2026-07-09T20:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "headless-loginstatus-push-20260709T2035Z"
+          expires_at: "2026-07-10T00:35:00Z"
+        - type: completed
+          ts: "2026-07-09T21:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "headless-loginstatus-push-20260709T2035Z"
+          summary: >
+            Implemented in vsock_server.rs (not vault_bootstrap.rs as the
+            deliverable hint suggested — the broadcast source lives beside the
+            other push topics): VmStateHandle::set_login_state /
+            subscribe_login_state with change-gated pushes; Subscribe wiring +
+            select! branch; sources are (a) a subscriber-gated 60s vault
+            presence probe task in main.rs (never reads the raw token in the
+            vsock process; full containerized username probe only on presence
+            flips) and (b) piggyback from every GithubLoginStatusRequest.
+            Rotation with constant presence converges via (b) — documented
+            limitation of the privacy-preserving presence check.
+          evidence_refs:
+            - "commit 744f4749"
+            - "tests set_login_state_pushes_on_change, set_login_state_does_not_push_when_unchanged, login_probe_gate_reflects_subscriber_count (20/20 vsock_server tests pass)"
+            - "./build.sh --check pass; cargo test -p tillandsias-headless --features listen-vsock: only 2 pre-existing pty_handler failures (order 254)"
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
       depends_on: [vm-headless-persistent-listener]
@@ -4624,7 +4651,30 @@ plan_index:
     - packet_id: headless-cloudprojects-push
       order: 231
       title: "Headless: emit CloudProjectsPush on gh repo list result change"
-      status: ready
+      status: done
+      events:
+        - type: claim
+          ts: "2026-07-09T20:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "headless-cloudprojects-push-20260709T2035Z"
+          expires_at: "2026-07-10T00:35:00Z"
+        - type: completed
+          ts: "2026-07-09T21:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "headless-cloudprojects-push-20260709T2035Z"
+          summary: >
+            Implemented in vsock_server.rs: VmStateHandle::set_cloud_projects /
+            subscribe_cloud_projects with full-replacement change compare;
+            CloudRefreshRequest handler fans each fetched list out to
+            subscribers on other connections (requester still gets its reply).
+            No standalone periodic gh poll was added on purpose — refreshes
+            are triggered by requests today; a timer source can be layered on
+            when order 249's design lands.
+          evidence_refs:
+            - "commit 744f4749"
+            - "test set_cloud_projects_pushes_on_change_only (20/20 vsock_server tests pass)"
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/remote_projects.rs
       depends_on: [vm-headless-persistent-listener]
@@ -5371,6 +5421,26 @@ plan_index:
       order: 249
       title: "Event Push Architecture — Container & Git Lifecycle Events to Tray"
       status: ready
+      events:
+        - type: progress
+          ts: "2026-07-09T21:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            Design input (not a claim — depends_on 245/246 are unratified):
+            the push substrate this design builds on is now complete. All
+            three Subscribe topics deliver real pushes (VmStatusPush order
+            153; LoginStatePush order 230 and CloudProjectsPush order 231,
+            commit 744f4749), each with bounded broadcast, change-gating,
+            lag-skip, and a shared seq for total ordering. The existing
+            container-lifecycle source is the podman events monitor
+            (main.rs ~7995: podman events --format json -> curated step
+            string -> set_last_event -> VmStatusPush.last_event). The
+            deliverable's event taxonomy should formalize that string into a
+            typed EventPush{kind, priority, ts, text} additive wire variant;
+            priority/dedup/sticky rules then live host-side in the tray
+            reducers (order 250) with the headless only guaranteeing typed,
+            ordered, deduplicated-at-source emission.
       kind: design+enhancement
       deliverable: plan/issues/event-push-architecture-2026-07-09.md
       depends_on: [network-architecture-audit, credential-secrets-architecture-audit]
@@ -5543,3 +5613,43 @@ plan_index:
           summary: >
             Ratification-independent extraction from the order-245 DRAFT v1
             (root-cause note 1/3): source-confirmed gap, structural fix.
+
+    - packet_id: listen-vsock-feature-matrix-ci-gap
+      order: 254
+      title: "CI: clippy+test the listen-vsock feature; fix the 2 pty_handler tests that drifted"
+      status: ready
+      kind: fix+ci
+      deliverable: crates/tillandsias-headless/src/pty_handler.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, ci, vsock, pty]
+      estimated_hours: 3
+      outcome: >
+        ./build.sh --check clippies only default features, so the
+        listen-vsock combo (the entire in-VM guest path: vsock_server,
+        pty_handler) is never linted or tested in CI. Consequences found
+        2026-07-09: 13 accumulated clippy warnings and 2 pty_handler tests
+        that silently drifted from their implementations — child_env now
+        (correctly) injects enclave no_proxy/NO_PROXY but the test still
+        expects PATH-only, and the PTY exec allowlist rejects the test's
+        /bin/sh -c argv ("exec allowlist violation"), so
+        duplicate_session_id_returns_error can no longer even open its first
+        session. Add the feature to the check/test matrix, fix both tests to
+        the current contracts (assert the no_proxy injection; use an
+        allowlisted argv or a test-scoped allowlist entry), and burn down the
+        13 warnings.
+      exit_criteria:
+        - "./build.sh --check (or a dedicated CI lane) runs clippy with --features listen-vsock"
+        - "cargo test -p tillandsias-headless --features listen-vsock: 0 failures"
+        - "clippy warnings under the feature: 0"
+      events:
+        - type: filed
+          ts: "2026-07-09T21:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            Found while implementing orders 230/231 (first session to run the
+            feature-gated suite in a while). The allowlist rejection is the
+            order-141 argv-allowlist surface — coordinate the test fix with
+            the encrypted-control-channel owner rather than loosening the
+            allowlist casually.
