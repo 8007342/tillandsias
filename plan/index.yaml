@@ -4841,7 +4841,39 @@ plan_index:
     - packet_id: container-phase-self-heal
       order: 234
       title: "R6: self-heal and container-creating side effects consult VmPhase"
-      status: ready
+      status: done
+      events:
+        - type: claim
+          ts: "2026-07-09T22:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-phase-self-heal-20260709T2245Z"
+          expires_at: "2026-07-10T02:45:00Z"
+        - type: completed
+          ts: "2026-07-09T23:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-phase-self-heal-20260709T2245Z"
+          summary: >
+            New runtime_phase module: process-global VmPhase mirror (atomic),
+            written by VmStateHandle::set_phase in the listener runtime,
+            defaulting to ALLOWED when never set (CLI mode has no phase).
+            container_mutations_allowed() refuses only Draining/Stopping
+            (Failed allows — recovery ensures are the way out). Consulted
+            fail-fast (before the R4 lock wait) at: RealSatisfier::satisfy
+            (covers the order-228 liveness self-heal), ensure_proxy_running,
+            ensure_vault_running, ensure_enclave/egress_network,
+            ensure_image_exists, and the removal side (cleanup_stack_containers,
+            remove_shared_stack_containers) so cleanup cannot race shutdown's
+            own teardown. The mirror write is cfg(not(test)): parallel unit
+            tests legitimately drive set_phase(Draining/Stopping) and a global
+            write leaked refusals across test isolation (4 remote_projects
+            tests flaked); the production binary always mirrors and the litmus
+            source-audits the wiring.
+          evidence_refs:
+            - "litmus:drain-vs-self-heal PASS (truth-table test + source audit; podman-orchestration suite 8/8)"
+            - "default tests 202/202; listen-vsock 179 passed with only the 2 pre-existing order-254 pty failures"
+            - "./build.sh --check pass; no new listen-vsock clippy warnings (still 13 pre-existing)"
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/
       depends_on: [container-shared-cleanup-guard]

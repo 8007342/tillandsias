@@ -273,6 +273,16 @@ impl VmStateHandle {
     /// phase actually changes (order 153 SC-09) — a no-op write (same phase
     /// set twice) does not spam subscribers with redundant pushes.
     pub fn set_phase(&self, phase: VmPhase) {
+        // Order 234 (R6): mirror every transition into the process-global
+        // gate so free-function ensure/cleanup paths can refuse container
+        // mutations during Draining/Stopping without threading this handle.
+        // cfg(not(test)): unit tests drive set_phase(Draining/Stopping) in
+        // parallel with unrelated tests that exercise ensure paths; a global
+        // write here would leak refusals across test isolation boundaries
+        // (observed: 4 remote_projects tests flaking). The production binary
+        // always mirrors; litmus:drain-vs-self-heal audits this wiring.
+        #[cfg(not(test))]
+        crate::runtime_phase::set_runtime_phase(phase);
         let changed = match self.phase.write() {
             Ok(mut guard) => {
                 let changed = *guard != phase;
