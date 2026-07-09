@@ -1925,7 +1925,19 @@ plan_index:
     - packet_id: enclave-container-lifecycle-races
       order: 162
       title: "Headless: shared-container ownership + ensure_* concurrency safety"
-      status: ready
+      status: done
+      completion_note: >
+        2026-07-10T00:10Z linux-macuahuitl-fable5-20260709T1923Z: parent folded
+        to done — all four split slices delivered with litmus coverage: 232
+        (2790d84c, resource flocks), 233 (ab3fea87, shared-cleanup guard), 234
+        (adcfd37e, VmPhase gate), 235 (eac9813f, vault RW mutex + transient
+        retry). Exit criteria map: name-conflict class -> concurrent-ensure
+        litmus; shared survive parallel launches -> shared-containers litmus;
+        recreate-under-lease -> vault-recreate-mutex litmus (lease-held
+        guard); transient health retry -> bounded 3x2s; no creation during
+        drain -> drain-vs-self-heal litmus. The two-parallel-cloud-launches
+        LIVE criterion remains for the next destructive e2e run (gate
+        currently red only on the order-255 litmus race).
       split_into:
         - "232 — container-concurrency-flock (R4: advisory flock per resource)"
         - "233 — container-shared-cleanup-guard (R5: shared containers not removed)"
