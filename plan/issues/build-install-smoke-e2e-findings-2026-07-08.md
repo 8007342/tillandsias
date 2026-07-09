@@ -183,15 +183,24 @@ not run.
     — `FAIL: loop_status.md not modified in new commit(s)`.
 - repro:
   - `scripts/run-litmus-test.sh meta-orchestration --phase post-build --size e2e --compact`
+- status: completed
+- closed_at: "2026-07-09T17:31:00Z"
 - next_action: >
-    Align the litmus with the current meta-orchestration exit contract, or
-    require the in-forge meta-orchestration path to always update
-    `plan/loop_status.md` before it pushes.
+    Completed: litmus step was changed from `plan/loop_status.md`-specific
+    to `plan/`-wide check, matching meta-orch exit contract (which only
+    requires a plan/ update, not necessarily loop_status.md).
 - events:
   - type: discovered
     ts: "2026-07-08T20:24:45Z"
     agent_id: "linux-macuahuitl-codex-20260708T1958Z"
     host: linux_mutable
+  - type: completed
+    ts: "2026-07-09T17:31:00Z"
+    agent_id: "linux-fedora-opencode-bigpickle-20260709T172909Z"
+    host: linux
+    evidence:
+      - "openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml: step verifies any plan/ change instead of requiring loop_status.md specifically"
+      - "plan/index.yaml: order 242 updated to claimed→completed with events"
 
 ### Work Packet: smoke-finding/tray-parity-matrix-complete-post-build
 

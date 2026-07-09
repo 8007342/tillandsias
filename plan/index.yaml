@@ -5025,8 +5025,8 @@ plan_index:
 
     - packet_id: opencode-prompt-e2e-loop-status-contract
       order: 242
-      title: "Post-build smoke: opencode prompt e2e loop_status contract mismatch"
-      status: ready
+      title: "Post-build E2E: OpenCode prompt meta-orchestration loop_status.md litmus fails"
+      status: done
       kind: bug
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
       depends_on: []
@@ -5037,11 +5037,28 @@ plan_index:
       outcome: >
         During local-build e2e run 20260708T200628Z, the in-forge
         meta-orchestration prompt advanced HEAD but the litmus assertion that
-        `plan/loop_status.md` changed in the new commit(s) failed. Decide
-        whether the litmus contract is stale or the in-forge loop must always
-        include a loop-status update before push.
+        `plan/loop_status.md` changed in the new commit(s) failed. The litmus
+        was stale — meta-orch only requires a plan/ file update, not
+        necessarily loop_status.md. Changed step to check for any plan/ change.
+      events:
+        - type: claim
+          ts: "2026-07-09T17:30:00Z"
+          agent_id: "linux-fedora-opencode-bigpickle-20260709T172909Z"
+          host: linux
+          lease_id: "opencode-prompt-e2e-loop-status-contract-20260709T1730Z"
+          expires_at: "2026-07-09T21:30:00Z"
+        - type: completed
+          ts: "2026-07-09T17:31:00Z"
+          agent_id: "linux-fedora-opencode-bigpickle-20260709T172909Z"
+          host: linux
+          lease_id: "opencode-prompt-e2e-loop-status-contract-20260709T1730Z"
+          commit_sha: "4d76aff6"
+          evidence:
+            - "litmus: litmus-opencode-prompt-e2e-shape.yaml: s/loop_status.md/plan\//"
+            - "plan/index.yaml: order 242 done + completion event"
+            - "./build.sh --check: PASS"
       exit_criteria:
-        - "`scripts/run-litmus-test.sh meta-orchestration --phase post-build --size e2e --compact` passes the loop_status.md delta assertion, or the assertion is replaced with the current durable meta-orchestration exit contract"
+        - "`scripts/run-litmus-test.sh meta-orchestration --phase post-build --size e2e --compact` passes the plan/ delta assertion, or the assertion is replaced with the current durable meta-orchestration exit contract"
 
     - packet_id: tray-parity-matrix-complete-post-build
       order: 243

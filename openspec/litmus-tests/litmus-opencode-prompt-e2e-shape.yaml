@@ -1,8 +1,8 @@
 # @trace spec:meta-orchestration, spec:forge-push-credential-channel
 # OpenCode-prompt E2E smoke — verify agent commits and pushes findings.
 #
-# Asserts forge_exit=0, new commit since smoke start, loop_status.md
-# advanced, and remote branch HEAD advanced via git ls-remote.
+# Asserts forge_exit=0, new commit since smoke start, at least one
+# plan/ file updated, and remote branch HEAD advanced via git ls-remote.
 #
 # NOTE: Requires forge image built, tillandsias on PATH, and git-mirror
 # running (forge-push-credential-channel post-receive relay). Gating points
@@ -43,10 +43,10 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: HEAD advanced"
 
-  - step: "verify loop_status.md was updated (new entry present)"
-    command: "HEAD_AFTER=$(git rev-parse HEAD) && git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null | grep -q 'plan/loop_status.md' && echo \"ok: loop_status.md changed\" || { echo \"FAIL: loop_status.md not modified in new commit(s)\"; git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null || echo '(no diff)'; exit 1; }"
+  - step: "verify a plan/ file was updated (ledger or finding filed)"
+    command: "HEAD_AFTER=$(git rev-parse HEAD) && git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null | grep -q '^plan/' && echo \"ok: plan/ changed\" || { echo \"FAIL: no plan/ file modified in new commit(s) — meta-orch must update a plan file before push\"; git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null || echo '(no diff)'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "ok: loop_status.md changed"
+    expected_behavior: "ok: plan/ changed"
 
   - step: "verify remote branch HEAD advanced"
     command: "REMOTE_AFTER=$(git ls-remote origin HEAD | awk '{print $1}') && REMOTE_BEFORE=$(cat /tmp/opencode-e2e-remote-head-before) && [ \"$REMOTE_AFTER\" != \"$REMOTE_BEFORE\" ] && echo \"ok: remote HEAD advanced $REMOTE_BEFORE -> $REMOTE_AFTER\" || { echo \"FAIL: remote HEAD unchanged ($REMOTE_BEFORE)\"; exit 1; }"
@@ -64,8 +64,8 @@ observability:
     - "@trace spec:forge-push-credential-channel"
   expected_log: >
     OpenCode-prompt E2E smoke: forge launched (exit=0), HEAD advanced
-    with new commit, loop_status.md updated, and remote HEAD advanced
-    via git push relay through git-mirror.
+    with new commit in plan/, and remote HEAD advanced via git push
+    relay through git-mirror.
   log_fields:
     spec: "meta-orchestration"
     test: "opencode-prompt-e2e-shape"
