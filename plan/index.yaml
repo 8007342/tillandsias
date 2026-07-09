@@ -5184,7 +5184,7 @@ plan_index:
     - packet_id: tray-parity-matrix-complete-post-build
       order: 243
       title: "Post-build smoke: tray parity matrix completeness litmus fails"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
       depends_on: []
@@ -5210,6 +5210,12 @@ plan_index:
             Linux until it is fixed. It gates ALL linux local-build e2e
             acceptance, not just tray work. Recommend the next Linux worker
             cycle claims this (estimated 1h).
+        - type: claim
+          ts: "2026-07-09T20:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "tray-parity-matrix-complete-20260709T2040Z"
+          expires_at: "2026-07-10T00:40:00Z"
 
     - packet_id: ensure-git-login-target-as-prerequisite-failure
       order: 244
