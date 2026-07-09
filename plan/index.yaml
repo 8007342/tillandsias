@@ -5237,6 +5237,29 @@ plan_index:
             gated on the 3 verification_required agents). Sole active Linux
             builder per operator; producing the draft architecture document and
             spec/cheatsheet patch list this cycle.
+        - type: progress
+          ts: "2026-07-09T20:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "network-architecture-audit-linux-20260709T1946Z"
+          summary: >
+            DRAFT v1 published into the deliverable file: runtime taxonomy
+            (HOST mutable/immutable, GUEST WSL2/VZ, CONTAINER, BUILD), 9-row
+            source-verified container network matrix, scenario catalog S0-S5
+            with per-operation mapping, container_deps RuntimeContext proposal,
+            platform abstraction matrix, 7-item spec/cheatsheet patch list
+            (P1-P7), and root-cause notes for all three observed failures:
+            (1) vault absent from run_init image list (main.rs:3742) and built
+            on demand at vault_bootstrap.rs:1071 — CONFIRMED; (2) gh-auth 401
+            is a credential-chain fault, network exonerated (no_bump CONNECT
+            tunnel; dual-homed helper) — handed to order 246; (3) login-path
+            vault rebuilds are a corollary of (1). Filed order 253
+            (vault-image-in-init) as the ratification-independent fix.
+            Remaining: verified-by events from the 3 named agents; spec patches
+            P1-P7 land after ratification.
+          evidence_refs:
+            - "plan/issues/network-architecture-audit-2026-07-09.md (DRAFT v1 section)"
+            - "exit criteria NA-01..NA-06 drafted with file:line citations"
 
     - packet_id: credential-secrets-architecture-audit
       order: 246
@@ -5487,3 +5510,36 @@ plan_index:
             2026-07-09 liveness probe (order 228) now auto-re-ensures vault and
             proxy at runtime, which raises the cost of unmodeled launch paths —
             they can race the probe's re-ensure (see orders 232-235).
+
+    - packet_id: vault-image-in-init-declarative-set
+      order: 253
+      title: "Build the vault image in --init's declarative set (stop on-demand build in login path)"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, vault, images]
+      estimated_hours: 2
+      outcome: >
+        run_init's image list (main.rs:3742) omits vault, so the vault image is
+        built on demand at vault_bootstrap.rs:1071 inside --github-login /
+        provider login — the direct cause of two of the three order-245
+        observations (missing vault at login on fresh runtime; vault rebuilds
+        during repeated login attempts on cache misses). Add vault to the
+        declarative init set so login is a pure runtime operation; keep the
+        on-demand path as a fallback with a loud diagnostic so a skipped init
+        still works.
+      exit_criteria:
+        - "vault appears in the run_init image list and builds during --init"
+        - "provider login on an initialized runtime performs zero image builds"
+        - "fallback on-demand build logs an actionable 'run tillandsias --init' hint"
+        - "./build.sh --check passes; init/build-state tests updated"
+      events:
+        - type: filed
+          ts: "2026-07-09T20:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            Ratification-independent extraction from the order-245 DRAFT v1
+            (root-cause note 1/3): source-confirmed gap, structural fix.
