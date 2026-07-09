@@ -6184,7 +6184,7 @@ plan_index:
     - packet_id: windows-tray-parity-column-verify
       order: 258
       title: "Windows: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: claimed
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6209,6 +6209,24 @@ plan_index:
           host: linux
           summary: >
             Filed per operator direction — see order 257's rationale.
+        - type: claim
+          ts: "2026-07-09T23:15:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2310Z"
+          host: windows
+          lease_id: "windows-tray-parity-column-verify-20260709T2315Z"
+          expires_at: "2026-07-10T03:15:00Z"
+          scope_note: >
+            Mirror the order 257 macOS pattern: verify the unattended-
+            verifiable subset live on this host's provisioned WSL VM +
+            installed tray (CLI probes --status-once/--diagnose, launch
+            tray and read data-path log evidence for local/cloud/login
+            state), flip evidenced cells to done, set the rest todo with a
+            consolidated attended-smoke gap packet, then mark this packet
+            blocked on the operator-attended session. Windows note: the
+            tray has no --exec-guest/--list-cloud-projects CLI (macOS-only
+            probes) and uses wsl.exe's console<->in-VM-PTY bridge instead
+            of control-wire PtyOpen for interactive flows — evidence will
+            be recorded against the capability, not the macOS mechanism.
 
     - packet_id: litmus-runner-step-exit-code-ignored
       order: 256
