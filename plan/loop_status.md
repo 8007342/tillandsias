@@ -1,6 +1,23 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T18:55:00Z
+LastExecutionTime: 2026-07-09T20:07:38Z
+
+## Cycle 2026-07-09T20:07Z (linux_mutable — meta-orchestration worker slice, order 252)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Started with dirty worktree (leftover trace/convergence artifacts from previous
+  cycle) — committed as checkpoint (a68c9825, pushed). Credential guard `ok:gh-keyring`.
+- **Worker drain — order 252 (launch-paths-route-through-dependency-model), COMPLETED**:
+  Added `ForgeLaunch` variant to `container_deps::Service` with dep edges
+  (EnclaveNetwork, EgressNetwork, CaBundle, Proxy). Created `ensure_forge_launch()`
+  wrapper + `ForgeLaunchReady` typestate witness. Refactored `ensure_enclave_for_project`
+  to call `ensure_forge_launch` instead of ad-hoc ensure_*/inline proxy bring-up.
+  Removed proxy inline code (duplicated `ensure_proxy_running`). Emptied the order-229
+  litmus known-gap allowlist; both launch paths now gate through `container_deps`.
+  18/18 container_deps tests, litmus drift test pass; `./build.sh --check` clean.
+- **E2E gate**: `skip:smoke-lock-held` — no destructive test this cycle.
+- **Coordinator**: deferred — small slice, no sibling drift expected.
+- **Reduction engine**: no new unfiled findings from this cycle.
 
 ## Cycle 2026-07-09T18:48Z (linux_mutable — meta-orchestration worker slice, order 229)
 
