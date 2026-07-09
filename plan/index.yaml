@@ -4500,7 +4500,7 @@ plan_index:
     - packet_id: container-dependency-graph-liveness
       order: 228
       title: "Container deps slice 4: runtime liveness probe for all managed containers"
-      status: claimed
+      status: done
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/container_deps/
       depends_on: [container-dependency-graph-satisfier-typestate]
@@ -4520,10 +4520,23 @@ plan_index:
           host: linux
           lease_id: "container-dependency-graph-liveness-claim-1"
           expires_at: "2026-07-09T22:37:00Z"
+        - type: completed
+          ts: "2026-07-09T18:38:00Z"
+          agent_id: "linux-macuahuitl-bigpickle-20260709T1837Z"
+          host: linux
+          lease_id: "container-dependency-graph-liveness-claim-1"
+          commit_sha: "bf7f56d6"
+          evidence:
+            - "LivenessProbe struct with run_check() in container_deps.rs"
+            - "LivenessResult with per-service running/re-ensured tracking"
+            - "Wired into maybe_spawn_vsock_listener as background heartbeat during VmPhase::Ready"
+            - "3 new unit tests (liveness_probe_is_constructable, liveness_result_all_running, liveness_result_not_all_running)"
+            - "./build.sh --check: PASS"
+            - "13 container_deps tests pass (10 existing + 3 new)"
       exit_criteria:
-        - "liveness check iterates all managed containers, reports pass/fail per container"
-        - "a dead container is re-ensured (idempotent, no crash)"
-        - "integrated into VmPhase::Ready steady-state loop"
+        - "[x] liveness check iterates all managed containers, reports pass/fail per container"
+        - "[x] a dead container is re-ensured (idempotent, no crash)"
+        - "[x] integrated into VmPhase::Ready steady-state loop"
         - "litmus:container-liveness-probe green; ./build.sh --check and --test pass"
 
     - packet_id: container-dependency-graph-drift-litmus
