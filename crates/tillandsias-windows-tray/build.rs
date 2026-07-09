@@ -65,10 +65,10 @@ fn main() {
     // == HEAD) spuriously fail on a genuinely fresh binary.
     println!("cargo:rerun-if-changed=../../.git/HEAD");
     let git_dir = manifest_dir_path.join("../../.git");
-    if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD")) {
-        if let Some(ref_path) = head.trim().strip_prefix("ref: ") {
-            println!("cargo:rerun-if-changed=../../.git/{ref_path}");
-        }
+    if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD"))
+        && let Some(ref_path) = head.trim().strip_prefix("ref: ")
+    {
+        println!("cargo:rerun-if-changed=../../.git/{ref_path}");
     }
     // Refs can also live packed (git gc/pack-refs); only track the file when
     // it exists — cargo re-runs unconditionally for a tracked-but-missing path.
