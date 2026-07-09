@@ -68,6 +68,44 @@ LastExecutionTime: 2026-07-09T22:40:00Z
   the wire macOS consumes); windows — order 154 actionable now.
 - **E2E gate**: `eligible` (first macOS cycle with a valid verdict).
 
+## Cycle 2026-07-09T21:07Z (windows — meta-orchestration worker drain, order 154 slice 1)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start; merged `origin/linux-next` twice
+  mid-cycle (2790d84c, f347053e) — one loop_status.md prepend conflict
+  union-resolved.
+- **Worker drain — order 154 (windows-tray-stream-refactor), slice 1
+  COMPLETED, lease released, packet stays ready**: dedicated
+  `run_vm_status_push_listener` reader task on its own connection
+  (Subscribe{[VmStatus]} → SubscribeAck → next_envelope loop);
+  VmStatusRequest poll demoted to fallback-only while the subscription is
+  healthy (SC-07, drift-pinned). Shared
+  `Client::{send_envelope,next_envelope}` added to host-shell with
+  cross-platform duplex tests so order 155 (macOS) reuses the identical
+  shape. windows-tray 62 tests + host-shell 47 tests green; clippy clean.
+- **Cross-host request (BLOCKING next windows slice)**: linux to land orders
+  230/231 (headless LoginStatePush/CloudProjectsPush sources) so the next
+  slice can widen the topic list and retire the slow-cadence polls.
+- **Cleanup of work blocking Windows**: `smoke-finding/e2e-preflight-not-
+  windows-aware` implemented + closed — `e2e_eligibility_verdict` grew a
+  MINGW*/MSYS*/CYGWIN* branch probing `wsl.exe` (new reason `skip:no-wsl`),
+  mirroring the Darwin branch that landed upstream at f347053e; this host now
+  reports `eligible` (was `skip:no-podman-binary` — every Windows e2e gate
+  would have been skipped by an obedient loop).
+- **Reduction engine**: filed
+  `plan/issues/windows-workspace-cargo-check-gap-2026-07-09.md` (enhancement:
+  no per-host crate allowlist for the Integration Verification Gate's compile
+  step; headless unix-isms make `./build.sh --check` impossible on Windows).
+- **Live verification + bonus fix**: rebuilt + reinstalled + relaunched the
+  tray against the morning's freshly provisioned VM — log shows
+  `vm status push subscription established (polls suppressed, SC-07)` ~0.5s
+  after keepalive on two consecutive launches (order 154 slice 1 exercised
+  end-to-end, not just unit-tested). Doing so surfaced + fixed
+  `smoke-finding/windows-build-commit-sha-stale-on-rebuild`: windows-tray
+  build.rs only tracked `.git/HEAD`, so same-branch commits left
+  BUILD_COMMIT_SHA stale on incremental rebuilds (would spuriously fail the
+  e2e freshness gate); now tracks the resolved ref file + packed-refs.
+
 ## Cycle 2026-07-09T20:13Z (windows — meta-orchestration, local-build e2e PASS)
 
 - **Host**: Windows 11 native, `windows-next`. Credential guard

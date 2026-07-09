@@ -40,7 +40,7 @@ an attended tray smoke follows this run.
 - id: `smoke-finding/e2e-preflight-not-windows-aware`
 - owner_host: any
 - capability_tags: [testing, e2e, windows, tooling]
-- status: ready
+- status: done
 - discovered_by: `/build-install-and-smoke-test-e2e` on `windows-next@a68c9825`
 - evidence:
   - `scripts/e2e-preflight.sh:42-45` — the eligibility verdict emits
@@ -60,11 +60,27 @@ an attended tray smoke follows this run.
     `wsl.exe` availability (and optionally WSL2 kernel presence) instead of a
     host podman binary; keep the podman probes for Linux. Pin with a litmus
     update to `litmus:e2e-eligibility-probe-shape`.
+- resolution: >
+    Fixed on windows-next: `e2e_eligibility_verdict` now has a MINGW*/MSYS*/
+    CYGWIN* branch (mirroring the Darwin branch a linux/macos worker landed at
+    f347053e in the interim) that keeps the deterministic XDG_RUNTIME_DIR
+    no-session + smoke-lock branches and probes `wsl.exe` instead of host
+    podman, emitting `skip:no-wsl` or `eligible`. Verified on this host:
+    verdict flipped skip:no-podman-binary -> eligible; XDG override still
+    yields skip:no-podman-user-session; grammar check emits exactly one
+    well-formed line. Litmus grammar `^(eligible|skip:[a-z0-9-]+)$` unchanged
+    (additive reason, same pattern the Darwin branch's skip:no-macos-hypervisor
+    followed).
 - events:
   - type: discovered
     ts: "2026-07-09T20:13:26Z"
     agent_id: "windows-bullo-claude-fable-20260709T2013Z"
     host: windows
+  - type: completed
+    ts: "2026-07-09T21:55:00Z"
+    agent_id: "windows-bullo-claude-fable-20260709T2107Z"
+    host: windows
+    summary: "Windows branch added to scripts/e2e-preflight.sh (skip:no-wsl reason); verified eligible on this host."
 
 ### Work Packet: smoke-finding/windows-local-install-path-mismatch
 
@@ -100,6 +116,38 @@ an attended tray smoke follows this run.
     ts: "2026-07-09T20:13:26Z"
     agent_id: "windows-bullo-claude-fable-20260709T2013Z"
     host: windows
+
+### Work Packet: smoke-finding/windows-build-commit-sha-stale-on-rebuild
+
+- id: `smoke-finding/windows-build-commit-sha-stale-on-rebuild`
+- owner_host: windows
+- capability_tags: [windows, build-script, freshness]
+- status: done
+- discovered_by: `/advance-work-from-plan` (windows), order 154 cycle
+- evidence: >
+    After committing b6ca3290..8797003f (same branch), `cargo build --release
+    -p tillandsias-windows-tray` produced a binary whose `--version` still
+    reported the pre-merge SHA `a68c9825`: build.rs only declared
+    `rerun-if-changed=../../.git/HEAD`, and same-branch commits rewrite
+    `.git/refs/heads/<branch>`, not HEAD. A stale embedded SHA breaks triage
+    (`--diagnose` build_commit lies) and would make the e2e freshness gate
+    (embedded SHA == HEAD) spuriously FAIL a genuinely fresh binary.
+- resolution: >
+    build.rs now additionally tracks the resolved ref file (parsed from
+    `.git/HEAD`) and `.git/packed-refs` when present. Verified: rebuild after
+    the fix reports `0.3.260709.4 (8797003f)` == `git rev-parse --short HEAD`.
+    macOS tray build.rs already mitigates via `rerun-if-changed=.git/index`;
+    the Windows script lacked any second trigger.
+- events:
+  - type: discovered
+    ts: "2026-07-09T21:58:00Z"
+    agent_id: "windows-bullo-claude-fable-20260709T2107Z"
+    host: windows
+  - type: completed
+    ts: "2026-07-09T22:05:00Z"
+    agent_id: "windows-bullo-claude-fable-20260709T2107Z"
+    host: windows
+    summary: "Ref-file + packed-refs rerun tracking added to windows-tray build.rs; embedded SHA verified fresh."
 
 ### Work Packet: smoke-finding/tray-output-log-committed
 

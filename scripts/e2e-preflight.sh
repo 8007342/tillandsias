@@ -47,6 +47,38 @@ smoke_lock_is_held() {
 }
 
 e2e_eligibility_verdict() {
+  # Windows (Git Bash / MSYS): the local-build e2e substrate is the WSL2
+  # distro — podman lives INSIDE it, so probing for a host podman binary is
+  # meaningless here (it made every Windows host emit skip:no-podman-binary
+  # and unconditionally skip an eligible gate; see
+  # plan/issues/build-install-smoke-e2e-findings-2026-07-09-windows.md,
+  # smoke-finding/e2e-preflight-not-windows-aware). Probe wsl.exe instead.
+  # The XDG_RUNTIME_DIR override branch mirrors Darwin's so the litmus
+  # no-session/smoke-lock steps stay deterministic on every platform.
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      local runtime
+      if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+          echo "skip:no-podman-user-session"
+          return 0
+        fi
+        runtime="$XDG_RUNTIME_DIR"
+      else
+        runtime="${TEMP:-/tmp}"
+      fi
+      if smoke_lock_is_held "$runtime"; then
+        echo "skip:smoke-lock-held"
+        return 0
+      fi
+      if ! command -v wsl.exe >/dev/null 2>&1; then
+        echo "skip:no-wsl"
+        return 0
+      fi
+      echo "eligible"
+      return 0
+      ;;
+  esac
   if [ "$(uname -s)" = "Darwin" ]; then
     local runtime
     if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
