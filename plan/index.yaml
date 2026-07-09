@@ -5963,7 +5963,7 @@ plan_index:
     - packet_id: macos-tray-parity-column-verify
       order: 257
       title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: claimed
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -5999,6 +5999,12 @@ plan_index:
             Filed per operator direction (macOS/Windows hosts active; request
             sibling work via plan). Heads-up packet so the per-host parity
             gate lands as scheduled work, not a surprise red build.
+        - type: claim
+          ts: "2026-07-09T21:35:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          lease_id: "macos-tray-parity-column-verify-20260709T2135Z"
+          expires_at: "2026-07-10T01:35:00Z"
 
     - packet_id: windows-tray-parity-column-verify
       order: 258
