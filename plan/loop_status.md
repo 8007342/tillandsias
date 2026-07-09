@@ -30,6 +30,15 @@ LastExecutionTime: 2026-07-09T22:00:00Z
   `plan/issues/windows-workspace-cargo-check-gap-2026-07-09.md` (enhancement:
   no per-host crate allowlist for the Integration Verification Gate's compile
   step; headless unix-isms make `./build.sh --check` impossible on Windows).
+- **Live verification + bonus fix**: rebuilt + reinstalled + relaunched the
+  tray against the morning's freshly provisioned VM — log shows
+  `vm status push subscription established (polls suppressed, SC-07)` ~0.5s
+  after keepalive on two consecutive launches (order 154 slice 1 exercised
+  end-to-end, not just unit-tested). Doing so surfaced + fixed
+  `smoke-finding/windows-build-commit-sha-stale-on-rebuild`: windows-tray
+  build.rs only tracked `.git/HEAD`, so same-branch commits left
+  BUILD_COMMIT_SHA stale on incremental rebuilds (would spuriously fail the
+  e2e freshness gate); now tracks the resolved ref file + packed-refs.
 
 ## Cycle 2026-07-09T20:13Z (windows — meta-orchestration, local-build e2e PASS)
 

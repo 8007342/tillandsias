@@ -117,6 +117,38 @@ an attended tray smoke follows this run.
     agent_id: "windows-bullo-claude-fable-20260709T2013Z"
     host: windows
 
+### Work Packet: smoke-finding/windows-build-commit-sha-stale-on-rebuild
+
+- id: `smoke-finding/windows-build-commit-sha-stale-on-rebuild`
+- owner_host: windows
+- capability_tags: [windows, build-script, freshness]
+- status: done
+- discovered_by: `/advance-work-from-plan` (windows), order 154 cycle
+- evidence: >
+    After committing b6ca3290..8797003f (same branch), `cargo build --release
+    -p tillandsias-windows-tray` produced a binary whose `--version` still
+    reported the pre-merge SHA `a68c9825`: build.rs only declared
+    `rerun-if-changed=../../.git/HEAD`, and same-branch commits rewrite
+    `.git/refs/heads/<branch>`, not HEAD. A stale embedded SHA breaks triage
+    (`--diagnose` build_commit lies) and would make the e2e freshness gate
+    (embedded SHA == HEAD) spuriously FAIL a genuinely fresh binary.
+- resolution: >
+    build.rs now additionally tracks the resolved ref file (parsed from
+    `.git/HEAD`) and `.git/packed-refs` when present. Verified: rebuild after
+    the fix reports `0.3.260709.4 (8797003f)` == `git rev-parse --short HEAD`.
+    macOS tray build.rs already mitigates via `rerun-if-changed=.git/index`;
+    the Windows script lacked any second trigger.
+- events:
+  - type: discovered
+    ts: "2026-07-09T21:58:00Z"
+    agent_id: "windows-bullo-claude-fable-20260709T2107Z"
+    host: windows
+  - type: completed
+    ts: "2026-07-09T22:05:00Z"
+    agent_id: "windows-bullo-claude-fable-20260709T2107Z"
+    host: windows
+    summary: "Ref-file + packed-refs rerun tracking added to windows-tray build.rs; embedded SHA verified fresh."
+
 ### Work Packet: smoke-finding/tray-output-log-committed
 
 - id: `smoke-finding/tray-output-log-committed`
