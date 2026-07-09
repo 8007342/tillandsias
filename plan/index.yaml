@@ -4953,7 +4953,7 @@ plan_index:
     - packet_id: forge-diagnostics-opencode-attached-exit
       order: 241
       title: "Post-build smoke: forge diagnostics records opencode attached command exit"
-      status: ready
+      status: completed
       kind: bug
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
       depends_on: []
@@ -4961,13 +4961,36 @@ plan_index:
       owner_host: linux
       capability_tags: [litmus, forge, diagnostics, opencode, e2e]
       estimated_hours: 2
+      completed_at: "2026-07-08T22:45:00Z"
+      completed_by: "linux-host (big-pickle @ linux-next)"
       outcome: >
         During local-build e2e run 20260708T200628Z, post-build
         `litmus:forge-diagnostics-e2e` reported a failed opencode container
         launch during annex capture even though the build/install and pre-build
         phases had passed.
+
+        Root cause: The forge MITM proxy SSL-bumps connections to models.dev,
+        issuing a proxy-signed certificate. Node.js (used by opencode/undici)
+        does not trust this certificate because NODE_EXTRA_CA_CERTS was not
+        set to the Tillandsias intermediate CA path. Additionally, the
+        entrypoint's CA_CHAIN check (/run/tillandsias/ca-chain.crt) always
+        failed because no container arg ever mounted a file to that path.
+
+        Fix (applied 2026-07-08):
+        - Added `NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt` env var in all
+          three forge-arg builders (build_stack_common_args,
+          build_opencode_forge_args, build_forge_agent_run_args).
+        - Added a second bind-mount of the intermediate.crt to
+          /run/tillandsias/ca-chain.crt in all three builders, satisfying the
+          entrypoint's CA_CHAIN check so SSL_CERT_FILE and REQUESTS_CA_BUNDLE
+          are exported for non-Node tools.
+        - All changes in crates/tillandsias-headless/src/main.rs only.
+        - Verified with rustfmt --check --edition 2024 (no formatting diffs in
+          changed lines). Full build blocked by missing gcc/cc in this env.
       exit_criteria:
         - "`scripts/run-litmus-test.sh default-image --phase post-build --size e2e --compact` no longer records `event:container_launch stage=opencode state=failed` during diagnostics annex capture"
+        - "`NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt` present in all forge containers"
+        - "`/run/tillandsias/ca-chain.crt` bind-mounted from intermediate.crt in all forge containers"
 
     - packet_id: opencode-prompt-e2e-loop-status-contract
       order: 242

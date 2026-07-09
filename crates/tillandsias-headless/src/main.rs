@@ -2019,6 +2019,24 @@ fn build_stack_common_args(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
+        // NODE_EXTRA_CA_CERTS (order 241): tell Node.js to trust the
+        // Tillandsias intermediate CA so opencode (which uses undici under
+        // the hood) can validate the proxy-issued TLS certificate during
+        // SSL bump. Without this, `opencode run --diagnostics` fails with
+        // a TLS validation error when connecting to models.dev through the
+        // MITM proxy, causing the diagnostics annex to record state=failed.
+        "--env".into(),
+        "NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt".into(),
+        // Mount the same CA cert at the path lib-common.sh's entrypoint
+        // expects ($CA_CHAIN) so the forge container builds a combined
+        // bundle that includes both the system CAs and the Tillandsias CA,
+        // exported as SSL_CERT_FILE / REQUESTS_CA_BUNDLE for non-Node
+        // tools (curl, pip, git, etc.).
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        ),
     ]);
     append_git_identity_env_args(&mut args);
     args
@@ -3188,6 +3206,13 @@ fn build_opencode_forge_args(
         "--mount".into(),
         format!(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        ),
+        "--env".into(),
+        "NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt".into(),
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
@@ -7513,6 +7538,15 @@ pub(crate) fn build_forge_agent_run_args(
         spec = spec.bind_mount(
             ca_cert.display().to_string(),
             "/etc/tillandsias/ca.crt",
+            true,
+        );
+    }
+    // NODE_EXTRA_CA_CERTS (order 241): Node.js TLS trust for proxy SSL bump.
+    spec = spec.env("NODE_EXTRA_CA_CERTS", "/etc/tillandsias/ca.crt");
+    if ca_cert.exists() {
+        spec = spec.bind_mount(
+            ca_cert.display().to_string(),
+            "/run/tillandsias/ca-chain.crt",
             true,
         );
     }
