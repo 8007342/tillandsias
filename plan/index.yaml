@@ -1343,8 +1343,23 @@ plan_index:
     - packet_id: windows-tray-stream-refactor
       order: 154
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
-      status: ready
+      status: claimed
       events:
+        - type: claim
+          ts: "2026-07-09T22:45:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2238Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-topics-slice-2"
+          expires_at: "2026-07-10T02:45:00Z"
+          scope_note: >
+            Slice 2: orders 230/231 landed (744f4749) so the blocker is cleared.
+            Widen the push subscription to all three topics
+            (VmStatus+LoginState+CloudProjects), apply LoginStatePush /
+            CloudProjectsPush in the reader task via shared appliers, and demote
+            the slow-cadence GithubLoginStatusRequest / CloudRefreshRequest
+            polls to fallback-only (healthy subscription suppresses them;
+            fast-poll bursts and local-projects enumeration stay polled —
+            EnumerateLocalProjects has no push topic yet).
         - type: claim
           ts: "2026-07-09T21:15:00Z"
           agent_id: "windows-bullo-claude-fable-20260709T2107Z"
