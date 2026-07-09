@@ -560,8 +560,9 @@ specs:
   - litmus:container-naming
   - litmus:podman-path-availability
   - litmus:podman-idiomatic-launch-routing
+  - litmus:concurrent-container-ensure-no-race
   coverage_ratio: 100
-  last_verified: '2026-05-16'
+  last_verified: '2026-07-09'
 - spec_id: podman-container-spec
   status: active
   litmus_tests:

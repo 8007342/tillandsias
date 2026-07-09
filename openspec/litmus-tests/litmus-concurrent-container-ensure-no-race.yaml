@@ -1,0 +1,44 @@
+# @trace spec:podman-orchestration
+name: litmus:concurrent-container-ensure-no-race
+spec: podman-orchestration
+phase: pre-build
+description: >-
+  Order 232 (R4): every shared-resource ensure path (proxy, vault, enclave +
+  egress networks, per-image builds) serializes its check+act window behind an
+  advisory per-resource flock, and the lock itself provably serializes
+  contending threads. STEP 1 runs the in-process concurrency proof (4 threads,
+  same resource, zero critical-section overlap). STEP 2 source-audits that the
+  ensure sites acquire the lock so a refactor cannot silently drop it.
+  Commands are single-line with explicit success/failure patterns because the
+  litmus runner neither parses folded commands nor checks step exit codes
+  (order 256).
+severity: high
+size: quick
+
+preconditions:
+  - cargo workspace builds
+  - ruby is available in PATH
+
+critical_path:
+  - step: "in-process proof: contending threads on one resource never overlap critical sections"
+    command: "cargo test -p tillandsias-headless resource_lock::tests::same_resource_serializes_check_and_act -- --exact 2>&1 | grep 'same_resource_serializes_check_and_act ... ok' && echo LOCK-SERIALIZES-OK"
+    timeout_ms: 120000
+    success_pattern: "LOCK-SERIALIZES-OK"
+    failure_pattern: "FAILED|panicked"
+  - step: "source audit: ensure_proxy/networks/images and ensure_vault_running acquire the resource lock"
+    command: "test $(grep -c resource_lock::acquire crates/tillandsias-headless/src/main.rs) -ge 4 && test $(grep -c resource_lock::acquire crates/tillandsias-headless/src/vault_bootstrap.rs) -ge 1 && echo ENSURE-SITES-LOCKED"
+    timeout_ms: 5000
+    success_pattern: "ENSURE-SITES-LOCKED"
+    failure_pattern: "No such file"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "ENSURE-SITES-LOCKED"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "concurrent-container-ensure-no-race"
+
+rollback:
+  on_failure: "a resource_lock::acquire call was removed from an ensure path, or the lock no longer serializes — see crates/tillandsias-headless/src/resource_lock.rs"
+  command: "grep -n resource_lock::acquire crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/vault_bootstrap.rs"

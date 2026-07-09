@@ -426,6 +426,13 @@ fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient,
 /// healthy. Called automatically from `run_init`; the previous `--with-vault`
 /// opt-in is now a no-op.
 pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
+    // Order 232 (R4): serialize the whole running-check + build + launch +
+    // init/unseal window. 600s bound: a cold vault image build plus first
+    // init is the slowest ensure path. The liveness probe (order 228) takes
+    // this same lock, so its self-heal can no longer race a user login's
+    // vault bring-up.
+    let _vault_lock =
+        crate::resource_lock::acquire("vault", std::time::Duration::from_secs(600), debug)?;
     let certs_dir = tls_material_dir(debug)?;
     ensure_vault_tls_leaf(&certs_dir, debug)?;
 
@@ -1054,12 +1061,23 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
         dependency_digests,
     )?;
 
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] building image vault with tag {}",
-            identity.canonical_tag
-        );
+    // Order 253: --init pre-builds vault into this same identity tag, so the
+    // login path is zero-build on an initialized runtime. Skipping here also
+    // stops every login from re-invoking `podman build` (the repeated-login
+    // rebuild observed in the order-245 audit). The build below stays as the
+    // fail-soft fallback for runtimes that skipped --init.
+    if tillandsias_podman::image_exists_sync(&identity.canonical_tag) {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] image {} already built; skipping build",
+                identity.canonical_tag
+            );
+        }
+        return Ok(identity.canonical_tag);
     }
+    eprintln!(
+        "[tillandsias-vault] vault image missing — building on demand; run `tillandsias --init` to pre-build it (order 253)"
+    );
 
     let cache_dir = crate::init_cache_dir()?;
     let log_file = if debug {
