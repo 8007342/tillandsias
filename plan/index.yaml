@@ -3828,7 +3828,18 @@ plan_index:
         resolution mechanism, migration strategy, escape hatch) with a
         concrete choice plus a 3-5 file working prototype before the
         implementation packet starts.
-      events: []
+      events:
+        - type: ping
+          ts: "2026-07-09T21:10:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          note: >
+            New motivating case from order 243: a folded (>-) multi-line
+            command: parses to ZERO steps in the current extractor, so
+            litmus:tray-parity-matrix-complete had never executed its check
+            since authoring. The DSL design should make multi-line/structured
+            commands first-class (or impossible), not silently droppable.
+            Fail-loud interim fix tracked as order 256.
       exit_criteria:
         - "a written design decision (not just options) for each of the 5 questions in the deliverable"
         - "a working prototype: 3-5 real existing command: fields rewritten in the chosen token form, passing identically to their raw form"
@@ -5184,7 +5195,7 @@ plan_index:
     - packet_id: tray-parity-matrix-complete-post-build
       order: 243
       title: "Post-build smoke: tray parity matrix completeness litmus fails"
-      status: claimed
+      status: done
       kind: bug
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
       depends_on: []
@@ -5216,6 +5227,31 @@ plan_index:
           host: linux
           lease_id: "tray-parity-matrix-complete-20260709T2040Z"
           expires_at: "2026-07-10T00:40:00Z"
+        - type: completed
+          ts: "2026-07-09T21:10:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "tray-parity-matrix-complete-20260709T2040Z"
+          summary: >
+            Root cause was NOT matrix content: the litmus runner's step parser
+            only extracts single-line double-quoted command: values, and this
+            litmus used a folded (>-) multi-line command since authoring — zero
+            steps parsed, so it failed structurally on every run. Fix is a
+            semantic split honoring the parity ledger's intent: (1) the
+            post-build litmus now gates the CURRENT host's column only
+            (single-line command + explicit success/failure patterns — also
+            required because the runner ignores step exit codes, see order
+            256), so each host's build drives verifying its own column without
+            sibling debt blocking Linux; (2) the ALL-platform completeness
+            check moved to skills/merge-to-main-and-release/SKILL.md §0 as an
+            operator-overridable release hold (currently reports 16 gaps:
+            8 required features x macos+windows unknown). Verified both
+            directions on linux: PASS on current matrix; FAIL with diagnostic
+            when a linux cell is flipped to todo.
+          evidence_refs:
+            - "scripts/run-litmus-test.sh tray-app --phase post-build: PASS (STEP 1/1 executes)"
+            - "negative test: linux cell todo -> FAIL with 'Host linux missing required: ...'"
+            - "release gate one-liner: exit 1, 'parity gaps: 16' on current matrix"
 
     - packet_id: ensure-git-login-target-as-prerequisite-failure
       order: 244
@@ -5723,3 +5759,47 @@ plan_index:
             the deliverable). Third occurrence of this race class — consider a
             shared "wait for in-forge cycle terminal state" helper for all
             forge-launching litmus steps.
+
+    - packet_id: litmus-runner-step-exit-code-ignored
+      order: 256
+      title: "Litmus runner: a step's non-zero exit code never fails the step (dead-check trap)"
+      status: ready
+      kind: bug+litmus-infra
+      deliverable: scripts/run-litmus-test.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, shell, testing, infrastructure]
+      estimated_hours: 3
+      outcome: >
+        Two silent-dead-check traps found while fixing order 243, both in
+        scripts/run-litmus-test.sh: (1) a critical_path step's exit code is
+        captured but never evaluated — success is judged ONLY by
+        success_pattern (when declared) or the expected_behavior heuristic, so
+        a patternless step passes even when its command exits 1 (only timeout
+        124 fails it); (2) the step parser only extracts single-line
+        double-quoted command: values — a folded (>-) multi-line command parses
+        to ZERO steps and the file fails as "Check implementation" with no
+        diagnostic. Fix both fail-loud: non-zero exit without an explicit
+        expectation MUST fail the step, and a critical_path entry whose
+        command cannot be extracted MUST name the parse failure (file, line,
+        reason) instead of the generic message. Then audit existing litmus
+        files for patternless steps whose commands can exit non-zero (they are
+        all currently dead checks) and for folded commands (structurally
+        failing since authoring).
+      exit_criteria:
+        - "step with exit != 0 and no success_pattern/expected_behavior FAILS with the exit code in the diagnostic"
+        - "folded/multi-line command: values either execute correctly or fail with an explicit parse error naming the file"
+        - "repo audit: list of currently-dead patternless steps + structurally-failing folded commands filed as follow-up fixes"
+        - "litmus:launch-skips-prerequisite-fails and the full pre-build suite still pass"
+      events:
+        - type: filed
+          ts: "2026-07-09T21:10:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            Discovered during order 243: the parity litmus had NEVER executed
+            its check (folded command, zero steps) and my first rewrite passed
+            its negative test only after adding explicit patterns (exit code
+            ignored). Overlaps orders 224/225 (litmus command DSL) — this
+            packet is the fail-loud fix; the DSL packets are the readable
+            long-term shape.
