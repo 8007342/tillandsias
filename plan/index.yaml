@@ -5963,7 +5963,7 @@ plan_index:
     - packet_id: macos-tray-parity-column-verify
       order: 257
       title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: claimed
+      status: blocked
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6005,6 +6005,40 @@ plan_index:
           host: macos
           lease_id: "macos-tray-parity-column-verify-20260709T2135Z"
           expires_at: "2026-07-10T01:35:00Z"
+        - type: progress
+          ts: "2026-07-09T21:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          summary: >
+            Unattended-verifiable subset done on live tray/VM (commit
+            evidence: macos-build-install-smoke-e2e-findings-2026-07-09.md):
+            ExecOneShot cell -> done ({"status":"ok","exit_code":0} live
+            --exec-guest runs). Strong partial evidence recorded for
+            --list-cloud-projects (full chain to graceful not-logged-in 404)
+            and InteractiveStream (live PtyOpen expect session via
+            --github-login probe). Remaining 7 required cells set unknown ->
+            todo, single consolidated gap packet filed:
+            plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md
+            (per-cell enumeration inside).
+        - type: blocked
+          ts: "2026-07-09T21:56:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z"
+          host: macos
+          reason: >
+            7 required cells (menus, popup-terminal login, attach UX, status
+            indicator states, credentialed cloud listing) cannot be honestly
+            verified without an ATTENDED interactive session — code reading
+            is disallowed by this packet and osascript UI driving is not
+            available unattended. Until the attended pass,
+            litmus:tray-parity-matrix-complete stays RED on macOS --ci-full
+            by order 243 design.
+          blocker: "operator-attended m8-style smoke at the macOS tray"
+          owner: "operator (Tlatoāni) + macOS agent recording"
+          smallest_next_action: >
+            Run the 8-step attended checklist in
+            plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md,
+            flip evidenced cells to done, re-run the tray-app post-build
+            litmus.
 
     - packet_id: windows-tray-parity-column-verify
       order: 258
