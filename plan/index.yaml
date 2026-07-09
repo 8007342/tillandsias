@@ -5654,7 +5654,7 @@ plan_index:
     - packet_id: vault-image-in-init-declarative-set
       order: 253
       title: "Build the vault image in --init's declarative set (stop on-demand build in login path)"
-      status: ready
+      status: done
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -5683,6 +5683,34 @@ plan_index:
           summary: >
             Ratification-independent extraction from the order-245 DRAFT v1
             (root-cause note 1/3): source-confirmed gap, structural fix.
+        - type: claim
+          ts: "2026-07-09T21:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "vault-image-in-init-20260709T2115Z"
+          expires_at: "2026-07-10T01:15:00Z"
+        - type: completed
+          ts: "2026-07-09T21:30:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "vault-image-in-init-20260709T2115Z"
+          summary: >
+            Three-part fix: (1) "vault" added to run_init's declarative image
+            list — image_specs already mapped vault -> images/vault and the
+            init loop builds every listed image through the same
+            image_identity system build_vault_image uses, so init and login
+            now share one canonical tag; (2) build_vault_image gains an
+            exists-skip on identity.canonical_tag — this also stops EVERY
+            login from re-invoking podman build (the repeated-login rebuild
+            from the order-245 audit), because the old path built
+            unconditionally; (3) when the image is genuinely missing at login
+            the on-demand fallback remains and logs an actionable hint
+            ("run tillandsias --init to pre-build"). Curated build status
+            "Securing Vault" added for the tray event stream.
+          evidence_refs:
+            - "./build.sh --check pass; init_/vault targeted tests pass"
+            - "instant pre-build litmus suite 119/119 PASS"
+            - "runtime zero-build-on-login criterion verifiable at next --init e2e (gate currently red only on unrelated order-255 race)"
 
     - packet_id: listen-vsock-feature-matrix-ci-gap
       order: 254

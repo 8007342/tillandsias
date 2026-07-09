@@ -1054,12 +1054,23 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
         dependency_digests,
     )?;
 
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] building image vault with tag {}",
-            identity.canonical_tag
-        );
+    // Order 253: --init pre-builds vault into this same identity tag, so the
+    // login path is zero-build on an initialized runtime. Skipping here also
+    // stops every login from re-invoking `podman build` (the repeated-login
+    // rebuild observed in the order-245 audit). The build below stays as the
+    // fail-soft fallback for runtimes that skipped --init.
+    if tillandsias_podman::image_exists_sync(&identity.canonical_tag) {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] image {} already built; skipping build",
+                identity.canonical_tag
+            );
+        }
+        return Ok(identity.canonical_tag);
     }
+    eprintln!(
+        "[tillandsias-vault] vault image missing — building on demand; run `tillandsias --init` to pre-build it (order 253)"
+    );
 
     let cache_dir = crate::init_cache_dir()?;
     let log_file = if debug {

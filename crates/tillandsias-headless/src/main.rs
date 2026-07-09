@@ -3738,9 +3738,15 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
     let runtime_manifest_digest = runtime_assets::root_manifest_digest(&root).ok();
+    // "vault" belongs in this declarative set (order 253): it was previously
+    // built on demand inside the provider-login path only, so a fresh runtime
+    // hit its first vault build mid-login and every login re-invoked podman
+    // build. Login stays a pure runtime operation when init has run;
+    // build_vault_image keeps a fail-soft on-demand fallback.
     let images = [
         "proxy",
         "git",
+        "vault",
         "inference",
         "router",
         "chromium-core",
@@ -4100,6 +4106,7 @@ pub(crate) fn build_image_with_logging(
         "git" => "Setting up Git",
         "router" => "Routing Traffic",
         "web" => "Serving Web",
+        "vault" => "Securing Vault",
         _ => "Setting up containers",
     };
     push_udp_event(curated_name);
