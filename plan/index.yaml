@@ -4715,7 +4715,34 @@ plan_index:
     - packet_id: container-concurrency-flock
       order: 232
       title: "R4: ensure_proxy/vault/network/images concurrency-safe (advisory flock per resource)"
-      status: ready
+      status: done
+      events:
+        - type: claim
+          ts: "2026-07-09T21:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-concurrency-flock-20260709T2140Z"
+          expires_at: "2026-07-10T01:40:00Z"
+        - type: completed
+          ts: "2026-07-09T22:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-concurrency-flock-20260709T2140Z"
+          summary: >
+            New resource_lock module (flock(2) RAII guard, bounded LOCK_NB
+            poll, locks under XDG_RUNTIME_DIR/tillandsias-locks, per-uid tmp
+            fallback, non-unix pass-through). Acquired across the full
+            check+act window at all R4 sites: ensure_proxy_running (300s),
+            ensure_vault_running (600s — also serializes the order-228
+            liveness probe against user logins, closing audit finding F3's
+            sharpest edge), ensure_enclave_network + ensure_egress_network
+            (60s), ensure_image_exists per-image (900s; forge->forge-base
+            nesting is one-directional, no cycle). Lock ordering forms a DAG;
+            timeout is a loud error, never an unserialized fallback.
+          evidence_refs:
+            - "4 resource_lock unit tests incl. 4-thread zero-overlap proof"
+            - "litmus:concurrent-container-ensure-no-race PASS (runtime proof + source audit; registered in litmus-bindings under podman-orchestration)"
+            - "./build.sh --check pass; headless default-feature tests 200/200; instant pre-build 119/119"
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/
       depends_on: [enclave-container-lifecycle-races]

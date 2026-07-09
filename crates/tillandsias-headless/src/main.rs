@@ -77,6 +77,8 @@ mod runtime_assets;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
+// Advisory per-resource flocks for container check+act sections (order 232, R4).
+mod resource_lock;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -1533,6 +1535,16 @@ fn ensure_image_exists(
     image_tag: &str,
     debug: bool,
 ) -> Result<(), String> {
+    // Order 232 (R4): serialize the exists-check + build per image so two
+    // parallel launches never build the same image concurrently. 900s bound:
+    // a cold forge/chromium build takes minutes; the loser should wait for
+    // the winner's image, not race it. Recursion into base images (forge ->
+    // forge-base) nests DISTINCT locks in one direction only — no cycle.
+    let _image_lock = resource_lock::acquire(
+        &format!("image-{image_name}"),
+        std::time::Duration::from_secs(900),
+        debug,
+    )?;
     let (containerfile, context_dir) = image_specs(root, image_name)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -1627,6 +1639,11 @@ fn ensure_versioned_images(
 }
 
 fn ensure_enclave_network(debug: bool) -> Result<(), String> {
+    // Order 232 (R4): serialize check+create so parallel launches never race
+    // `podman network create` for the same network. Held across the nested
+    // egress ensure (distinct lock, one-directional nesting — no cycle).
+    let _net_lock =
+        resource_lock::acquire("network-enclave", std::time::Duration::from_secs(60), debug)?;
     // The dual-homed proxy/git-service need the egress network to exist on every
     // path that ensures the enclave, so ensure it first — even when the enclave
     // network already exists (early return below would otherwise skip it).
@@ -1785,6 +1802,10 @@ fn render_enclave_resolved_config(gateway: &str) -> String {
 /// runtime after `podman system reset --force`.
 /// @trace spec:enclave-network, spec:proxy-container
 fn ensure_egress_network(debug: bool) -> Result<(), String> {
+    // Order 232 (R4): the exists-check + create below is exactly the
+    // check+act race window; serialize it.
+    let _net_lock =
+        resource_lock::acquire("network-egress", std::time::Duration::from_secs(60), debug)?;
     if tillandsias_podman::network_exists_sync(EGRESS_NET) {
         return Ok(());
     }
@@ -2087,6 +2108,11 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
 ///
 /// @trace spec:proxy-container, plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
 fn ensure_proxy_running(debug: bool) -> Result<(), String> {
+    // Order 232 (R4): the running-check below plus the rm+run act section is
+    // the R4 race window (two parallel launches both saw "not running" and
+    // both ran `podman run --name tillandsias-proxy`). 300s bound covers a
+    // cold proxy image ensure inside.
+    let _proxy_lock = resource_lock::acquire("proxy", std::time::Duration::from_secs(300), debug)?;
     if crate::vault_bootstrap::container_running("tillandsias-proxy") {
         if debug {
             eprintln!("[tillandsias] enclave proxy already running");
