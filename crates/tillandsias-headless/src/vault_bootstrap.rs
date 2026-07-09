@@ -579,6 +579,10 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
         ensure_vault_running(debug)
             .map_err(|e| format!("could not bring Vault up to store the GitHub token: {e}"))?;
     }
+    // Order 235 (R7): AFTER the on-demand bring-up (ensure holds the same
+    // resource exclusively — taking shared first would self-deadlock), hold
+    // shared so a concurrent recreate waits for this write to finish.
+    let _stability = vault_stability_lease(debug)?;
     let rt = tokio_runtime()?;
     let base_url = vault_api_base_url();
     let root_token = read_and_handover_root_token(debug)?;
@@ -656,8 +660,25 @@ fn vault_exec_command(root_token: &str, vault_args: &[&str]) -> std::process::Co
 /// `remote_projects::is_github_logged_in` instead.
 ///
 /// @trace spec:tillandsias-vault, spec:tray-minimal-ux
+/// Order 235 (R7): shared vault-stability lock for every exec-based Vault
+/// accessor. Holders require only that the vault container REMAINS STABLE
+/// while they run; a recreate (ensure_vault_running's exclusive lock on the
+/// same resource) waits for them to drain, and they wait out a recreate
+/// instead of hitting "container is stopped" / stale state. 120s bound: long
+/// enough to sit out a container relaunch, loud on a wedged recreate.
+fn vault_stability_lease(debug: bool) -> Result<crate::resource_lock::ResourceLockGuard, String> {
+    crate::resource_lock::acquire_shared("vault", Duration::from_secs(120), debug)
+}
+
+// Only caller today is the order-230 login probe inside the listen-vsock-gated
+// listener, so the default feature set sees this as dead.
 #[allow(dead_code)]
 pub(crate) fn is_github_key_present() -> bool {
+    // Order 235: skip the probe (presence unknown ≈ absent) rather than read
+    // through a recreate window.
+    let Ok(_stability) = vault_stability_lease(false) else {
+        return false;
+    };
     if !vault_data_volume_exists() {
         return false;
     }
@@ -693,6 +714,8 @@ pub(crate) fn vault_kv_get_via_exec(
     field: &str,
     debug: bool,
 ) -> Result<String, String> {
+    // Order 235 (R7): wait out any in-flight recreate instead of racing it.
+    let _stability = vault_stability_lease(debug)?;
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err(format!("{VAULT_CONTAINER_NAME} is not running"));
     }
@@ -789,6 +812,9 @@ pub fn write_provider_api_key(provider: ProviderId, key: &str, debug: bool) -> R
             )
         })?;
     }
+    // Order 235 (R7): shared AFTER the on-demand ensure (see
+    // write_github_token_to_vault for the self-deadlock rationale).
+    let _stability = vault_stability_lease(debug)?;
     let rt = tokio_runtime()?;
     let base_url = vault_api_base_url();
     let root_token = read_and_handover_root_token(debug)?;
@@ -967,6 +993,11 @@ pub async fn mint_approle_token_for_container(
 #[allow(dead_code)]
 pub struct AppRoleSecretLease {
     secret_name: String,
+    /// Order 235 (R7): shared vault-stability lock held for the lease's whole
+    /// lifetime — a vault recreate (exclusive holder) waits for this lease to
+    /// drop, so the container consuming the minted secret never observes the
+    /// vault container being replaced mid-flow.
+    _stability: crate::resource_lock::ResourceLockGuard,
 }
 
 impl AppRoleSecretLease {
@@ -994,13 +1025,18 @@ pub fn mint_approle_secret_lease(
     container_instance: &str,
     debug: bool,
 ) -> Result<AppRoleSecretLease, String> {
+    // Order 235 (R7): acquired BEFORE minting and held by the returned lease.
+    let stability = vault_stability_lease(debug)?;
     let runtime = tokio_runtime()?;
     let (_token, secret_name) = runtime.block_on(mint_approle_token_for_container(
         role,
         container_instance,
         debug,
     ))?;
-    Ok(AppRoleSecretLease { secret_name })
+    Ok(AppRoleSecretLease {
+        secret_name,
+        _stability: stability,
+    })
 }
 
 /// Drain and revoke every per-container token recorded in the in-process
@@ -1794,7 +1830,38 @@ fn wait_for_vault_ready(
     if debug {
         eprintln!("[tillandsias-vault] waiting for podman health status=healthy");
     }
-    if let Err(e) = rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME)) {
+    // Order 235 (R7): "container is stopped" / "no such container" during the
+    // recreate window is TRANSIENT — the old container is being replaced
+    // (observed on Silverblue, see the launch_vault_container --rm note).
+    // Bounded retry (3 attempts, 2s apart) before treating it as the
+    // permanent crash it usually is outside that window.
+    let mut wait_result = Ok(());
+    for attempt in 1..=3 {
+        wait_result = rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME));
+        match &wait_result {
+            Ok(()) => break,
+            Err(e) => {
+                let msg = e.to_string();
+                let transient =
+                    msg.contains("container is stopped") || msg.contains("no such container");
+                if !transient || attempt == 3 {
+                    break;
+                }
+                if debug {
+                    eprintln!(
+                        "[tillandsias-vault] health wait transient ({msg}); retry {attempt}/3"
+                    );
+                }
+                // Inter-attempt backoff only — readiness detection itself
+                // stays delegated to podman's wait_healthy above (the
+                // vault_ready_wait_uses_podman_health pin forbids local
+                // readiness sleep-POLLING; this bounded backoff between
+                // wait_healthy attempts is not a readiness poll).
+                rt.block_on(tokio::time::sleep(Duration::from_secs(2)));
+            }
+        }
+    }
+    if let Err(e) = wait_result {
         // The container likely crashed on boot. With no `--rm` it still exists,
         // so dump its logs + last state to make the failure diagnosable instead
         // of the opaque "no such container" / "did not report healthy".
@@ -2463,6 +2530,14 @@ mod tests {
         assert!(
             !window.contains("thread::sleep"),
             "Vault readiness must not use a local polling sleep loop"
+        );
+        // Order 235: the transient-error retry around wait_healthy must stay
+        // BOUNDED (attempt cap present) — readiness detection remains
+        // delegated to podman; only the inter-attempt backoff may sleep, and
+        // never unboundedly.
+        assert!(
+            window.contains("attempt == 3"),
+            "transient health-wait retry must keep its bounded attempt cap"
         );
     }
 

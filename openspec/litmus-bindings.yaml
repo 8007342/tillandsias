@@ -874,8 +874,9 @@ specs:
   - litmus:vault-github-token-capture-shape
   - litmus:vault-https-shape
   - litmus:vault-entrypoint-hardened-shape
+  - litmus:vault-recreate-mutex
   coverage_ratio: 100
-  last_verified: '2026-06-08'
+  last_verified: '2026-07-09'
 - spec_id: headless-mode
   status: active
   litmus_tests:
