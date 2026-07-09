@@ -38,6 +38,9 @@ pub enum Service {
     /// The `tillandsias-git` container used by `--github-login` and
     /// `--list-cloud-projects` (reads/writes Vault, egresses via Proxy).
     GitLogin,
+    /// The forge launch target: ensures proxy, networks, CA bundle, and git
+    /// mirror prerequisites before starting the per-project forge containers.
+    ForgeLaunch,
 }
 
 impl Service {
@@ -50,6 +53,7 @@ impl Service {
             Service::Vault => "tillandsias-vault",
             Service::Proxy => "tillandsias-proxy",
             Service::GitLogin => "tillandsias-git-login",
+            Service::ForgeLaunch => "tillandsias-forge-launch",
         }
     }
 }
@@ -76,6 +80,15 @@ const DEPS: &[(Service, &[Service])] = &[
     (
         Service::GitLogin,
         &[Service::Vault, Service::Proxy, Service::CaBundle],
+    ),
+    (
+        Service::ForgeLaunch,
+        &[
+            Service::EnclaveNetwork,
+            Service::EgressNetwork,
+            Service::CaBundle,
+            Service::Proxy,
+        ],
     ),
 ];
 
@@ -174,6 +187,38 @@ pub fn ensure_git_login(debug: bool) -> Result<Up<GitLoginReady>, String> {
     Ok(Up::new(GitLoginReady))
 }
 
+/// Marker: all prerequisites for `Service::ForgeLaunch` are satisfied.
+/// Constructed exclusively by [`ensure_forge_launch`].
+pub struct ForgeLaunchReady;
+
+/// Satisfy all ForgeLaunch prerequisites and return a compile-time witness.
+///
+/// The caller receives a `Up<ForgeLaunchReady>` which proves that the enclave
+/// networks, CA bundle, and proxy are all running — all prerequisites needed
+/// before launching the per-project forge containers (git mirror, inference,
+/// and the forge agent itself).
+///
+/// This is the shared wrapper that both `ensure_enclave_for_project` (tray
+/// launch) and `run_forge_agent_cli_mode` (CLI launch) route through, closing
+/// the order-229 drift-litmus gap (order 252).
+pub fn ensure_forge_launch(debug: bool) -> Result<Up<ForgeLaunchReady>, String> {
+    let mut satisfier = RealSatisfier { debug };
+    let order = topo_order(Service::ForgeLaunch)?;
+    for &service in &order {
+        if service == Service::ForgeLaunch {
+            continue;
+        }
+        satisfier.satisfy(service).map_err(|e| {
+            format!(
+                "ensure {}: {} not satisfied: {e}",
+                Service::ForgeLaunch.name(),
+                service.name()
+            )
+        })?;
+    }
+    Ok(Up::new(ForgeLaunchReady))
+}
+
 /// Brings a single [`Service`] up (idempotently). Implemented by the headless
 /// runtime in slice 3 (wrapping `ensure_enclave_network` / `ensure_vault_running`
 /// / `ensure_proxy_running` / `ensure_ca_bundle`); the driver below calls
@@ -252,6 +297,10 @@ impl Satisfier for RealSatisfier {
                 "{} is a launch target, not a satisfiable prerequisite",
                 service.name()
             )),
+            Service::ForgeLaunch => Err(format!(
+                "{} is a launch target, not a satisfiable prerequisite",
+                service.name()
+            )),
         }
     }
 }
@@ -320,13 +369,14 @@ impl LivenessProbe {
 mod tests {
     use super::*;
 
-    const ALL: [Service; 6] = [
+    const ALL: [Service; 7] = [
         Service::EnclaveNetwork,
         Service::EgressNetwork,
         Service::CaBundle,
         Service::Vault,
         Service::Proxy,
         Service::GitLogin,
+        Service::ForgeLaunch,
     ];
 
     /// Verifiable closure for slice 1: the graph is complete (every node and
@@ -387,6 +437,17 @@ mod tests {
             assert!(deps(s).is_empty(), "{} should be a leaf", s.name());
             assert_eq!(topo_order(s).unwrap(), vec![s]);
         }
+    }
+
+    #[test]
+    fn forge_launch_brings_up_networks_ca_and_proxy_before_itself() {
+        let order = topo_order(Service::ForgeLaunch).unwrap();
+        let pos = |s: Service| order.iter().position(|x| *x == s).unwrap();
+        assert!(pos(Service::EnclaveNetwork) < pos(Service::ForgeLaunch));
+        assert!(pos(Service::EgressNetwork) < pos(Service::ForgeLaunch));
+        assert!(pos(Service::CaBundle) < pos(Service::ForgeLaunch));
+        assert!(pos(Service::Proxy) < pos(Service::ForgeLaunch));
+        assert_eq!(*order.last().unwrap(), Service::ForgeLaunch);
     }
 
     /// Records every `satisfy` call so tests can assert bring-up order; can be
@@ -469,6 +530,17 @@ mod tests {
         );
     }
 
+    /// RealSatisfier refuses to satisfy ForgeLaunch (it is a launch target).
+    #[test]
+    fn real_satisfier_rejects_forge_launch_as_prerequisite() {
+        let mut s = RealSatisfier { debug: false };
+        let err = s.satisfy(Service::ForgeLaunch).unwrap_err();
+        assert!(
+            err.contains("tillandsias-forge-launch"),
+            "must name the forge-launch service: {err}"
+        );
+    }
+
     /// RealSatisfier delegates each Service to the correct match arm.
     /// Exhaustiveness is already a compile-time property: `satisfy` matches
     /// on `Service` without a wildcard arm, so adding a variant without an
@@ -498,6 +570,12 @@ mod tests {
         // and start Vault/proxy containers. A unit test must never mutate
         // host container state (audit 2026-07-09).
         let _typecheck: fn(bool) -> Result<Up<GitLoginReady>, String> = ensure_git_login;
+    }
+
+    /// Compile-time check: `ensure_forge_launch` returns the correct witness type.
+    #[test]
+    fn ensure_forge_launch_returns_up_forgelaunchready() {
+        let _typecheck: fn(bool) -> Result<Up<ForgeLaunchReady>, String> = ensure_forge_launch;
     }
 
     /// Compile-time check: `Up<GitLoginReady>` has no public constructor.
@@ -556,7 +634,7 @@ mod tests {
     /// "just works, no deps" exception for launch targets.
     #[test]
     fn all_launch_targets_have_prerequisites() {
-        let launch_targets = [Service::GitLogin];
+        let launch_targets = [Service::GitLogin, Service::ForgeLaunch];
         for &target in &launch_targets {
             let order = topo_order(target).unwrap();
             assert!(

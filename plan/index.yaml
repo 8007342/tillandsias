@@ -5547,9 +5547,9 @@ plan_index:
     - packet_id: launch-paths-route-through-dependency-model
       order: 252
       title: "Route ensure_enclave_for_project + run_forge_agent_cli_mode through container_deps"
-      status: ready
+      status: completed
       kind: enhancement
-      deliverable: crates/tillandsias-headless/src/main.rs
+      deliverable: crates/tillandsias-headless/src/container_deps.rs
       depends_on: []
       pickup_role: linux
       capability_tags: [rust, headless, podman, container-deps]
@@ -5580,6 +5580,22 @@ plan_index:
             2026-07-09 liveness probe (order 228) now auto-re-ensures vault and
             proxy at runtime, which raises the cost of unmodeled launch paths —
             they can race the probe's re-ensure (see orders 232-235).
+        - type: completed
+          ts: "2026-07-09T20:07:38Z"
+          agent_id: "linux-macuahuitl-bigpickle-20260709T2007Z"
+          host: linux
+          summary: >
+            Added ForgeLaunch variant to container_deps::Service with its dependency
+            edges (EnclaveNetwork, EgressNetwork, CaBundle, Proxy). Created
+            ensure_forge_launch() wrapper and ForgeLaunchReady typestate witness.
+            Refactored ensure_enclave_for_project to call ensure_forge_launch
+            instead of ad-hoc ensure_ca_bundle/ensure_enclave_network/inline-proxy.
+            Removed the proxy inline bring-up (duplicated ensure_proxy_running).
+            Removed "proxy" from the ensure_versioned_images call (already handled
+            by ensure_proxy_running inside the satisfier). Emptied the order-229
+            litmus known-gap allowlist: both launch paths now gate through
+            container_deps. All container_deps tests (18/18) and litmus drift test
+            pass; ./build.sh --check clean.
 
     - packet_id: vault-image-in-init-declarative-set
       order: 253

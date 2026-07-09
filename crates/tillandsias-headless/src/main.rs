@@ -7341,12 +7341,18 @@ pub(crate) fn ensure_enclave_for_project(
     project_path: Option<&Path>,
     debug: bool,
 ) -> Result<PathBuf, String> {
+    // Prerequisites: enclave/egress networks, CA bundle, proxy — satisfied
+    // through the container_deps topological model (order 252).  The proxy
+    // image is verified by ensure_proxy_running inside the satisfier.
+    let _witness = container_deps::ensure_forge_launch(debug)
+        .map_err(|e| format!("[forge-launch] prerequisites: {e}"))?;
+
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
+    // ensure_ca_bundle is idempotent (our caller needs the certs_dir PathBuf).
     let certs_dir = ensure_ca_bundle(debug)?;
-    ensure_enclave_network(debug)?;
 
-    let images = ["proxy", "git", "inference", "forge"];
+    let images = ["git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
 
     let project_remote_url = project_path.and_then(read_host_project_origin_url);
@@ -7363,7 +7369,7 @@ pub(crate) fn ensure_enclave_for_project(
         cleanup_stack_containers(&client, project_name).await;
 
         // Step 15 slice 2: bring the router up BEFORE the per-project
-        // proxy/git/inference/forge spawn so the enclave's `router` alias
+        // git/inference/forge spawn so the enclave's `router` alias
         // is live by the time Squid's cache_peer / git-service HTTPS
         // upstream try to resolve it. ensure_router_running is idempotent.
         //
@@ -7375,34 +7381,12 @@ pub(crate) fn ensure_enclave_for_project(
         };
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
-        // Idempotent proxy bring-up (mirrors ensure_router_running above and
-        // ensure_proxy_running): REUSE a running proxy, and clear any stale/exited
-        // one so `podman run --name tillandsias-proxy` does not fail "name already
-        // in use". Without this, a forge launch fails at the proxy stage whenever
-        // a tillandsias-proxy already exists (started by --init, or left by a prior
-        // / crashed session) — which blocks launching a Codex/Claude/OpenCode
-        // session even though the proxy is fine. (ensure_proxy_running itself
-        // runs its own tokio runtime, so it cannot be called from inside this
-        // block_on; inline the same guard.)
-        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
-        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
-            if debug {
-                eprintln!("[tillandsias] forge-launch: reusing already-running enclave proxy");
-            }
-        } else {
-            let _ = podman_cmd_sync()
-                .args(["rm", "--ignore", "tillandsias-proxy"])
-                .output();
-            client
-                .run_container_observed(
-                    "forge-launch-proxy",
-                    "tillandsias-proxy",
-                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                    debug,
-                )
-                .await
-                .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
-        }
+        // The enclave proxy is already running (ensured by ensure_forge_launch
+        // above via the RealSatisfier → ensure_proxy_running path).  No inline
+        // proxy bring-up needed here — the order-252 migration removed the
+        // ad-hoc proxy container start that duplicated ensure_proxy_running.
+        // @trace plan/issues/launch-paths-route-through-dependency-model
+
         let git_container_name = format!("tillandsias-git-{project_name}");
         let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
@@ -9790,72 +9774,52 @@ mod tests {
     fn all_launch_paths_route_through_dependency_model() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
 
-        // Launch paths known to route through the dependency model:
-        //   --github-login       via run_provider_login  → ensure_git_login
-        //   --list-cloud-projects via run_list_cloud_projects → ensure_git_login
-        //
-        // Known gap: ensure_enclave_for_project (forge agent CLI mode) and
-        // run_forge_agent_cli_mode do NOT route through the dependency model
-        // yet — they manually call ensure_enclave_network + ensure_proxy_running
-        // etc.  The assertions below document this gap so it is not silently
-        // forgotten — a future slice should migrate it onto the dependency graph.
-        let manual_sites: Vec<&str> = source
-            .split("fn ensure_enclave_for_project(")
-            .skip(1)
-            .collect();
-        assert!(
-            !manual_sites.is_empty(),
-            "ensure_enclave_for_project must still exist"
-        );
-        let forge_sites: Vec<&str> = source
-            .split("fn run_forge_agent_cli_mode(")
-            .skip(1)
-            .collect();
-        assert!(
-            !forge_sites.is_empty(),
-            "run_forge_agent_cli_mode must still exist"
-        );
-
-        // The dependency model entry points exist in main.rs.
-        let dep_refs: Vec<&str> = source
-            .match_indices("ensure_git_login")
+        // All containerized launch paths must route through the dependency
+        // model (container_deps module).  Each launch function's body must
+        // reference the module directly or delegate to another function that
+        // does.  The order-229 known-gap allowlist is eliminated (order 252):
+        //   --github-login         via run_provider_login  → ensure_git_login
+        //   --list-cloud-projects  via run_list_cloud_projects → ensure_git_login
+        //   --<agent> CLI          via run_forge_agent_cli_mode → ensure_enclave_for_project → ensure_forge_launch
+        //   tray launch            via ensure_enclave_for_project → ensure_forge_launch
+        let dep_model_refs: Vec<&str> = source
+            .match_indices("container_deps::")
             .map(|(_, s)| s)
             .collect();
         assert!(
-            dep_refs.len() >= 2,
-            "dependency model must be referenced by at least 2 launch paths, found {}",
-            dep_refs.len()
+            dep_model_refs.len() >= 6,
+            "container_deps must be referenced by at least 6 locations, found {}",
+            dep_model_refs.len()
         );
 
-        // Each function that dispatches a containerized launch must either
-        // call ensure_git_login or be listed in the known-gap allowlist.
-        let launch_fns = [
-            "fn run_provider_login(",
-            "fn run_list_cloud_projects(debug: bool)",
-            "fn run_forge_agent_cli_mode(",
-            "fn ensure_enclave_for_project(",
+        // Each function that dispatches a containerized launch must route
+        // through the dependency model, directly or transitively.
+        let launch_fns: [(&str, Option<&[&str]>); 4] = [
+            ("fn run_provider_login(", None),
+            ("fn run_list_cloud_projects(debug: bool)", None),
+            (
+                "fn run_forge_agent_cli_mode(",
+                Some(&["ensure_enclave_for_project"]),
+            ),
+            (
+                "fn ensure_enclave_for_project(",
+                Some(&["container_deps::"]),
+            ),
         ];
-        for fn_sig in &launch_fns {
+        for (fn_sig, expected_refs) in &launch_fns {
             let window = source_window(source, fn_sig);
-            let routes_through_dep_model = window.contains("ensure_git_login");
-            match *fn_sig {
-                "fn ensure_enclave_for_project(" | "fn run_forge_agent_cli_mode(" => {
-                    // Documented gap — do not yet route through the model.
-                    // Assert they have the manual ensures so the gap is visible.
+            let directly_routes =
+                window.contains("ensure_git_login") || window.contains("container_deps::");
+            assert!(
+                directly_routes || expected_refs.is_some(),
+                "launch path {fn_sig} must route through the container dependency model \
+                 (found neither ensure_git_login nor container_deps:: in its body)"
+            );
+            if let Some(refs) = expected_refs {
+                for r in *refs {
                     assert!(
-                        !routes_through_dep_model,
-                        "{fn_sig} should route through dep model in future"
-                    );
-                    assert!(
-                        window.contains("ensure_enclave_network")
-                            || window.contains("ensure_enclave_for_project"),
-                        "{fn_sig} must at minimum ensure enclave network"
-                    );
-                }
-                _ => {
-                    assert!(
-                        routes_through_dep_model,
-                        "launch path {fn_sig} must route through the container dependency model"
+                        window.contains(r),
+                        "{fn_sig} must reference {r} in its body"
                     );
                 }
             }
