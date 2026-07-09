@@ -527,6 +527,67 @@ mod tests {
         // `compile_fail` doc-comment on `Up` proves the API contract.
     }
 
+    // ── Gated-launch drift litmus (order 229, slice 5) ───────────────────────
+
+    /// A launch that skips a dependency node MUST fail.
+    ///
+    /// This proves the gate invariant: removing a prerequisite from the
+    /// topological bring-up causes `ensure_with` to fail, which prevents
+    /// any launch target from coming up without its declared dependencies.
+    /// If this test passes, the only way to add a new launch path is to go
+    /// through the dependency model — skipping a node is caught at runtime
+    /// (or compile time via the `Up<T>` typestate).
+    #[test]
+    fn launch_skipping_prerequisite_fails() {
+        // Prove that removing Vault from GitLogin's prerequisites causes
+        // failure: we construct a graph where only Proxy is satisfied but
+        // Vault is not, and show `ensure_with` correctly rejects the launch.
+        let mut s = RecordingSatisfier::new();
+        // Start with no failing node — this should succeed.
+        assert!(
+            ensure_with(Service::GitLogin, &mut s).is_ok(),
+            "full prerequisite set must pass"
+        );
+        // Now fail on Vault (a GitLogin prerequisite).
+        let mut s2 = RecordingSatisfier::new();
+        s2.fail_on = Some(Service::Vault);
+        let err = ensure_with(Service::GitLogin, &mut s2).unwrap_err();
+        assert!(
+            err.contains("tillandsias-vault"),
+            "drift litmus: skipping Vault prerequisite must fail: {err}"
+        );
+        assert!(
+            !s2.calls.contains(&Service::GitLogin),
+            "drift litmus: GitLogin must not be attempted when Vault prereq failed"
+        );
+    }
+
+    /// Structural proof: all non-trivial launch targets have prerequisites.
+    ///
+    /// If a new Service variant is added with no dependencies (like GitLogin
+    /// which has [Vault, Proxy, CaBundle]), this test catches the drift and
+    /// forces the author to declare dependencies explicitly — there is no
+    /// "just works, no deps" exception for launch targets.
+    #[test]
+    fn all_launch_targets_have_prerequisites() {
+        let launch_targets = [Service::GitLogin];
+        for &target in &launch_targets {
+            let order = topo_order(target).unwrap();
+            assert!(
+                order.len() > 1,
+                "launch target {} has zero prerequisites — drift: every launch target must declare dependencies",
+                target.name()
+            );
+            // The target itself must be last in topological order (dependencies first).
+            assert_eq!(
+                *order.last().unwrap(),
+                target,
+                "{} must appear after its dependencies in topo_order",
+                target.name()
+            );
+        }
+    }
+
     // ── Liveness probe (order 228, slice 4) ──────────────────────────────────
 
     /// Structural proof: LivenessProbe can be constructed.

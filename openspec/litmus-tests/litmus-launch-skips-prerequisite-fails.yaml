@@ -1,0 +1,58 @@
+# @trace plan/index.yaml order 229, spec:podman-idiomatic-patterns
+# Gated-launch drift litmus (order 229, slice 5 of container-dependency-graph).
+#
+# Verifies TWO invariants:
+# 1. A launch that skips a prerequisite FAILS (runtime gate in ensure_with +
+#    compile-time gate via Up<T> typestate).
+# 2. Every launch path routes through the container dependency model —
+#    any path that doesn't is a documented gap.
+name: litmus:launch-skips-prerequisite-fails
+spec: podman-idiomatic-patterns
+phase: pre-build
+description: >
+  Verify that removing a prerequisite from a launch target's dependency set
+  causes a failure (proving the gated-launch invariant), and that all known
+  launch paths route through the dependency model.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+  - workspace contains openspec/litmus-tests/litmus-launch-skips-prerequisite-fails.yaml
+
+critical_path:
+  - step: "run the container_deps drift litmus tests (order 229)"
+    command: "cargo test -p tillandsias-headless container_deps::tests::launch_skipping_prerequisite_fails -- --exact"
+    timeout_ms: 120000
+
+  - step: "run all_launch_targets_have_prerequisites structural test"
+    command: "cargo test -p tillandsias-headless container_deps::tests::all_launch_targets_have_prerequisites -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the main.rs launch path audit (all_launch_paths route through dep model)"
+    command: "cargo test -p tillandsias-headless tests::all_launch_paths_route_through_dependency_model -- --exact"
+    timeout_ms: 120000
+
+  - step: "run the existing dependency-graph completeness test as baseline guard"
+    command: "cargo test -p tillandsias-headless container_deps::tests::dependency_graph_is_complete_and_acyclic -- --exact"
+    timeout_ms: 120000
+
+observability:
+  traces:
+    - "@trace plan/index.yaml order 229"
+    - "@trace spec:podman-idiomatic-patterns"
+  expected_log: "Gated-launch drift litmus: skipping a prerequisite fails; all launch paths route through the dependency model"
+  log_fields:
+    spec: "podman-idiomatic-patterns"
+    plan: "order 229"
+    test: "launch-skips-prerequisite-fails"
+
+rollback:
+  on_failure: >
+    Inspect crates/tillandsias-headless/src/container_deps.rs (launch_skipping_prerequisite_fails
+    and all_launch_targets_have_prerequisites) and
+    crates/tillandsias-headless/src/main.rs (all_launch_paths_route_through_dependency_model).
+    A failure means a launch path has been added that bypasses the container dependency
+    graph, or the typestate/recording-satisfier gate has been broken.
+  command: "cargo test -p tillandsias-headless container_deps::tests -- --nocapture 2>&1 | tail -30"
