@@ -1,6 +1,39 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T20:07:38Z
+LastExecutionTime: 2026-07-09T22:00:00Z
+
+## Cycle 2026-07-09T21:05Z (macos — meta-orchestration: integration + full local-build e2e + login/event verification)
+
+- **Host**: macOS arm64, `osx-next`. Credential guard `ok:gh-keyring`. Started
+  clean; fast-forwarded `linux-next` +35, merged into `osx-next` (clean FF to
+  `2790d84c`, pushed). `./build.sh --check` PASS; 157 tests green
+  (control-wire 37, macos-tray 58, secure-channel 12, vm-layer 50).
+- **Preflight fix (9cb47ff6)**: `scripts/e2e-preflight.sh` Darwin branch —
+  macOS hosts were permanently mis-verdicted `skip:no-podman-user-session`;
+  now probes `kern.hv_support` (VZ substrate). Verdict on this host flipped to
+  `eligible` for the first time. Litmus e2e-eligibility-probe-shape 3/3 PASS
+  (smoke-lock step made portable to flock-less macOS).
+- **Local-build e2e (/build-install-and-smoke-test-e2e, macos lane)**: gates
+  1-3 PASS (build+codesign+install+freshness 9cb47ff6; destroy 2.0G substrate;
+  cold provision 528MB rootfs + diagnose exit 0). Gate 4 forge: n/a. Extended:
+  cold VM boot → phase Ready → control wire PASS; installed tray live-launch
+  logged `vm-status: phase=Ready podman_ready=true event=…` (guest→host
+  last_event propagation proven) + clean SIGTERM.
+- **GitHub Login verified**: 807a0950's ensure_git_login fix is live on macOS
+  (bundled-guest staging works — guest reports v0.3.260709.4). Attempt 2
+  reaches credential prompts. NEW P1 filed+promoted (order 257): first cold
+  attempt always fails — vault name-in-use race (boot bootstrap vs login
+  satisfier, exit 125). Full report:
+  plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md.
+- **Ledger reconciliation**: order 155 (macos-tray-stream-refactor)
+  pending→ready — its dependency's push topics all landed (153 slice 1 +
+  230/231). Order 153 progress event: residual = SC-10 timed test + 4-agent
+  verification only (flagged for linux closure). Order 154 confirmed
+  actionable for windows on the same basis.
+- **Flags for sibling hosts**: linux — order 257 (vault race, blocks first-run
+  login UX), order 153 closure, order 254 (listen-vsock CI lane, 0 coverage on
+  the wire macOS consumes); windows — order 154 actionable now.
+- **E2E gate**: `eligible` (first macOS cycle with a valid verdict).
 
 ## Cycle 2026-07-09T20:07Z (linux_mutable — meta-orchestration worker slice, order 252)
 

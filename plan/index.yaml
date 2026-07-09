@@ -1330,11 +1330,26 @@ plan_index:
             intentionally unbounded, unchanged by this slice). Not
             claiming/blocking the packet — releasing for the next slice
             (LoginState or CloudProjects push, whichever host picks it up).
+        - type: progress
+          ts: "2026-07-09T21:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2105Z"
+          host: macos
+          summary: >
+            Ledger reconciliation from macOS: slices 230 and 231 are both done
+            (commit 744f4749), so every push-topic exit criterion is now met.
+            Residual scope blocking closure is ONLY: (a) the SC-10 slow-client
+            1000ms-lag criterion (slice-1 test covers lag-skip semantics;
+            confirm it satisfies SC-10 or add the timed test) and (b) the
+            4-agent verification_required gate. Flagged for linux pickup —
+            closing this formally unblocks the downstream tray stream
+            refactors (orders 144/154/155) cleanly instead of via
+            dependency_note carve-outs. Downstream order 155 returned to
+            ready by this cycle on the strength of the landed slices.
       exit_criteria:
         - "Connection persists after VmStatusRequest reply (SC-08) — DONE (was already true before this packet)"
         - "VmStatusPush sent to all clients on VmPhase change (SC-09, <500ms) — DONE"
-        - "LoginStatePush sent on Vault token change — TODO"
-        - "CloudProjectsPush sent when gh repo list result changes — TODO"
+        - "LoginStatePush sent on Vault token change — DONE (order 230, commit 744f4749)"
+        - "CloudProjectsPush sent when gh repo list result changes — DONE (order 231, commit 744f4749)"
         - "Per-client reader task uses select! over message type + shutdown signal — DONE"
         - "All in-memory channels bounded; documented capacity in code — DONE for VmStatus; PTY mpsc channel remains unbounded (pre-existing, out of this slice's scope)"
         - "Slow client (simulated 1000ms lag) does not affect fast client (SC-10)"
@@ -1371,7 +1386,7 @@ plan_index:
     - packet_id: macos-tray-stream-refactor
       order: 155
       title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
-      status: pending
+      status: ready
       kind: refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [vm-headless-persistent-listener]
@@ -1396,6 +1411,20 @@ plan_index:
             pending until the persistent listener/server-push stream lands.
           blocker_refs:
             - vm-headless-persistent-listener
+        - type: unblocked
+          ts: "2026-07-09T21:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2105Z"
+          host: macos
+          summary: >
+            Dependency substantively satisfied: order 153 slice 1 (VmStatus
+            broadcast + Subscribe wiring) plus slices 230/231 (LoginStatePush,
+            CloudProjectsPush sources, commit 744f4749) are all done — every
+            push topic the tray needs now has a live guest-side source. Order
+            153 itself stays open only for its 4-agent verification + SC-10
+            lag criterion (flagged for linux closure). Returning this packet
+            to ready for macOS pickup; verified on this host that the macOS
+            tray currently has zero Subscribe/*Push consumers (30s polling in
+            action_host.rs is the only propagation path today).
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
@@ -5858,3 +5887,47 @@ plan_index:
             ignored). Overlaps orders 224/225 (litmus command DSL) — this
             packet is the fail-loud fix; the DSL packets are the readable
             long-term shape.
+
+    - packet_id: vault-ensure-name-in-use-race
+      order: 257
+      title: "P1: cold-VM first --github-login fails — tillandsias-vault name-in-use race between boot bootstrap and login satisfier"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, vault, podman, concurrency]
+      estimated_hours: 3
+      outcome: >
+        On a freshly provisioned macOS VM the first tillandsias-tray
+        --github-login always fails: the headless boot-path vault bootstrap
+        and the login flow's RealSatisfier (a separate tillandsias-headless
+        process via control-wire exec) race the vault bring-up, and the loser
+        dies on plain `podman run --name tillandsias-vault` with "name already
+        in use" (exit 125), leaving `tillandsias-vault Exited (143)` holding
+        the name. Order 232's advisory flock did not prevent this — either
+        vault_bootstrap does not take the per-resource lock, or the losing
+        path lacks start-or-replace handling for an existing created/exited
+        container. Retry converges, so impact is a guaranteed bad first-run
+        login UX on macOS/Windows VM hosts. Same rm-on-reuse class as the
+        fixed proxy P0 (forge-launch-proxy-not-idempotent-2026-07-04.md).
+        Overlaps ready orders 233 (R5) and 235 (R7 vault recreate mutex) —
+        consider landing together.
+      exit_criteria:
+        - "vault check+act holds the order-232 per-resource flock in BOTH the boot bootstrap and satisfier paths"
+        - "podman run --name tillandsias-vault path adopts/starts/replaces an existing created/exited container instead of erroring"
+        - "repro: fresh VM, first --github-login reaches the credential prompts (no 125)"
+        - "unit test pinning the exited-container-adoption branch"
+      events:
+        - type: filed
+          ts: "2026-07-09T21:58:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2105Z"
+          host: macos
+          summary: >
+            Found by /build-install-and-smoke-test-e2e (macos) extended
+            GitHub-Login probe on commit 9cb47ff6. Full evidence and guest
+            post-mortem in
+            plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md
+            (Finding 1). Attempt 1: exit 125 name-in-use; attempt 2: reached
+            credential prompts — confirms 807a0950's ensure_git_login fix is
+            live on macOS and this race is the remaining first-run blocker.
