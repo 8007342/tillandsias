@@ -86,5 +86,8 @@ images/default/cheatsheet-sources/
 # Generated per-image build logs (build-image.sh writes build-<IMAGE>.log)
 build-*.log
 
+# Generated diagnostic dumps (forge diagnostics, etc.)
+/plan/diagnostics/
+
 # Generated headless binaries for Windows tray embed
 crates/tillandsias-windows-tray/assets/tillandsias-headless-*
