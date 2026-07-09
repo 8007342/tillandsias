@@ -2985,18 +2985,33 @@ fn build_forge_common_args(
     )
 }
 
+/// Remove the PER-PROJECT containers for `project_name` only.
+///
+/// Order 233 (R5, order-160 ratification): SHARED containers (proxy,
+/// inference, router) are ensure-only — owned by the vsock supervisor and
+/// removed exclusively through [`cleanup_shared_stack_if_no_running_forge`].
+/// This function used to remove tillandsias-proxy and tillandsias-inference
+/// too, which tore the shared stack out from under any OTHER project's live
+/// forge on every per-project cleanup.
 async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
-    let _ = client.remove_container("tillandsias-proxy").await;
     let _ = client
         .remove_container(&format!("tillandsias-git-{project_name}"))
         .await;
-    let _ = client.remove_container("tillandsias-inference").await;
     let _ = client
         .remove_container(&format!("tillandsias-{project_name}-forge"))
         .await;
     let _ = client
         .remove_container(&format!("tillandsias-browser-{project_name}"))
         .await;
+}
+
+/// Remove the SHARED stack containers. Callers MUST have verified no forge
+/// is running (order 233) — reach this only through
+/// [`cleanup_shared_stack_if_no_running_forge`]. Router is deliberately
+/// absent: it is supervisor-owned and never torn down by session cleanup.
+async fn remove_shared_stack_containers(client: &PodmanClient) {
+    let _ = client.remove_container("tillandsias-proxy").await;
+    let _ = client.remove_container("tillandsias-inference").await;
 }
 
 async fn cleanup_shared_stack_if_no_running_forge(
@@ -3032,10 +3047,11 @@ async fn cleanup_shared_stack_if_no_running_forge(
 
     if debug {
         eprintln!(
-            "[tillandsias] no active forge containers; cleaning project stack for {project_name}"
+            "[tillandsias] no active forge containers; cleaning project + shared stack for {project_name}"
         );
     }
     cleanup_stack_containers(client, project_name).await;
+    remove_shared_stack_containers(client).await;
 }
 
 fn build_status_check_forge_args(
@@ -4541,6 +4557,9 @@ fn run_status_check(debug: bool) -> Result<(), String> {
 
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         client
             .run_container_observed(
@@ -5950,6 +5969,9 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             );
 
         cleanup_stack_containers(&client, project_name).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         // Step 15: bring the router up BEFORE any project containers so the
         // enclave's `router` network alias is already resolvable when proxy /
@@ -6998,6 +7020,9 @@ pub(crate) fn run_opencode_web_mode(
             );
 
         cleanup_stack_containers(&client, project_name).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
         // See the forge-launch-proxy site for the full rationale.
@@ -7400,6 +7425,9 @@ pub(crate) fn ensure_enclave_for_project(
     let client = PodmanClient::new();
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         // Step 15 slice 2: bring the router up BEFORE the per-project
         // git/inference/forge spawn so the enclave's `router` alias
@@ -9794,6 +9822,62 @@ mod tests {
         assert!(
             health_idx < fetch_idx,
             "All preflight must complete before the gh invocation: run_list_cloud_projects"
+        );
+    }
+
+    /// Order 233 (R5): per-project cleanup must NEVER remove SHARED
+    /// containers. `cleanup_stack_containers` removing tillandsias-proxy /
+    /// tillandsias-inference tore the shared stack out from under another
+    /// project's live forge; only the no-running-forge guard may reach
+    /// `remove_shared_stack_containers`.
+    #[test]
+    fn per_project_cleanup_never_removes_shared_containers() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        // source_window ends at the next `fn ` and would run past the
+        // following `async fn remove_shared_stack_containers` (which
+        // legitimately names the shared containers); cut the window at that
+        // signature explicitly.
+        let cleanup_start = source
+            .find("async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str)")
+            .expect("cleanup_stack_containers signature present");
+        let cleanup_end = source
+            .find("async fn remove_shared_stack_containers")
+            .expect("remove_shared_stack_containers signature present");
+        assert!(
+            cleanup_start < cleanup_end,
+            "cleanup_stack_containers must precede remove_shared_stack_containers"
+        );
+        let cleanup = &source[cleanup_start..cleanup_end];
+        for shared in [
+            "tillandsias-proxy",
+            "tillandsias-inference",
+            "tillandsias-router",
+        ] {
+            assert!(
+                !cleanup.contains(shared),
+                "per-project cleanup_stack_containers must not touch shared container {shared}"
+            );
+        }
+        // The shared remover exists and is reached ONLY via the
+        // no-running-forge guard (exactly one call site). Needles are
+        // assembled at runtime so this test's own string literals do not
+        // count as matches (the test lives inside the file it audits).
+        let call_needle = format!("remove_shared_stack_containers({}).await", "client");
+        let ref_call_needle = format!("remove_shared_stack_containers({}client).await", "&");
+        let call_count =
+            source.matches(&call_needle).count() + source.matches(&ref_call_needle).count();
+        assert_eq!(
+            call_count, 1,
+            "remove_shared_stack_containers must be called exactly once (inside the guard)"
+        );
+        let guard = source_window(source, "async fn cleanup_shared_stack_if_no_running_forge(");
+        assert!(
+            guard.contains(&call_needle),
+            "the guard must be the one shared-remover call site"
+        );
+        assert!(
+            guard.contains("running_forges != 0"),
+            "the guard must gate on running forges before shared removal"
         );
     }
 

@@ -561,6 +561,7 @@ specs:
   - litmus:podman-path-availability
   - litmus:podman-idiomatic-launch-routing
   - litmus:concurrent-container-ensure-no-race
+  - litmus:shared-containers-survive-per-project-cleanup
   coverage_ratio: 100
   last_verified: '2026-07-09'
 - spec_id: podman-container-spec

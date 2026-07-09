@@ -1347,6 +1347,13 @@ plan_index:
       kind: refactor
       deliverable: crates/tillandsias-windows-tray/src/notify_icon.rs
       depends_on: [vm-headless-persistent-listener]
+      dependency_note: >
+        2026-07-09: ALL THREE push topics now deliver from the headless —
+        VmStatusPush (order 153 slice 1), LoginStatePush (order 230) and
+        CloudProjectsPush (order 231, commit 744f4749). Subscribe once after
+        Hello/HelloAck with the topics you consume; pushes are change-gated
+        and lag-skipping, so the reader task + watch channels can fully
+        replace the 30s poll.
       pickup_role: windows
       capability_tags: [windows, tray, transport, streams]
       estimated_hours: 8
@@ -1371,10 +1378,14 @@ plan_index:
     - packet_id: macos-tray-stream-refactor
       order: 155
       title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
-      status: pending
+      status: ready
       kind: refactor
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: [vm-headless-persistent-listener]
+      dependency_note: >
+        2026-07-09: promoted pending -> ready; all three push topics now
+        deliver from the headless (see order 154's dependency_note for the
+        contract). Claimable by the macOS host alongside order 257.
       pickup_role: macos
       capability_tags: [macos, tray, transport, streams]
       estimated_hours: 8
@@ -4765,7 +4776,36 @@ plan_index:
     - packet_id: container-shared-cleanup-guard
       order: 233
       title: "R5: cleanup_stack_containers stops removing SHARED containers"
-      status: ready
+      status: done
+      events:
+        - type: claim
+          ts: "2026-07-09T22:10:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-shared-cleanup-guard-20260709T2210Z"
+          expires_at: "2026-07-10T02:10:00Z"
+        - type: completed
+          ts: "2026-07-09T22:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          lease_id: "container-shared-cleanup-guard-20260709T2210Z"
+          summary: >
+            cleanup_stack_containers now removes ONLY per-project containers
+            (git-<p>, <p>-forge, browser-<p>); the shared set (proxy,
+            inference) moved to remove_shared_stack_containers, reachable
+            exclusively through cleanup_shared_stack_if_no_running_forge
+            (router stays untouchable by session cleanup). The 4 direct
+            pre-launch call sites keep unconditional per-project cleanup
+            (stale-name safety) and gained the gated shared removal — a
+            parallel project's live forge now keeps proxy/inference alive
+            through another project's launch/cleanup. Source-shape unit test
+            builds its needles at runtime (the test lives inside the file it
+            audits) and pins: no shared name in per-project cleanup, exactly
+            one shared-remover call site, inside the gate.
+          evidence_refs:
+            - "test tests::per_project_cleanup_never_removes_shared_containers ok"
+            - "litmus:shared-containers-survive-per-project-cleanup PASS (podman-orchestration suite 7/7)"
+            - "./build.sh --check pass"
       kind: bug-fix+enhancement
       deliverable: crates/tillandsias-headless/src/
       depends_on: [container-concurrency-flock]
@@ -5814,6 +5854,75 @@ plan_index:
             the deliverable). Third occurrence of this race class — consider a
             shared "wait for in-forge cycle terminal state" helper for all
             forge-launching litmus steps.
+
+    - packet_id: macos-tray-parity-column-verify
+      order: 257
+      title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
+      status: ready
+      kind: verification
+      deliverable: openspec/tray-parity-matrix.yaml
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, tray, verification, parity]
+      estimated_hours: 4
+      outcome: >
+        Order 243 reshaped litmus:tray-parity-matrix-complete into a per-host
+        column gate: the NEXT macOS --ci-full will FAIL until the 8 required
+        features currently marked `unknown` in the macos column of
+        openspec/tray-parity-matrix.yaml are verified. For each capability
+        (6-leaf per-project submenu, github-login popup terminal, cloud
+        submenu + overflow, local ~/src submenu, enclave status indicator,
+        --list-cloud-projects, InteractiveStream attach, ExecOneShot probe):
+        exercise it on a live macOS tray, set the cell to `done` with commit
+        evidence in the completion event, or set `todo` and file a gap packet
+        per miss. Do NOT mark done from code reading alone — the matrix is
+        the operator's parity acceptance surface. The all-platform
+        completeness release hold reads this same matrix
+        (skills/merge-to-main-and-release §0).
+      exit_criteria:
+        - "macos column has no `unknown` cells on required rows"
+        - "every `done` cell cites live-tray evidence in the completion event"
+        - "every non-done cell has a filed gap packet"
+        - "litmus:tray-parity-matrix-complete passes on the macOS host"
+      events:
+        - type: filed
+          ts: "2026-07-09T22:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            Filed per operator direction (macOS/Windows hosts active; request
+            sibling work via plan). Heads-up packet so the per-host parity
+            gate lands as scheduled work, not a surprise red build.
+
+    - packet_id: windows-tray-parity-column-verify
+      order: 258
+      title: "Windows: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
+      status: ready
+      kind: verification
+      deliverable: openspec/tray-parity-matrix.yaml
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, tray, verification, parity]
+      estimated_hours: 4
+      outcome: >
+        Mirror of order 257 for the windows column: the same 8 required
+        features are `unknown`; the reshaped per-host litmus fails the next
+        Windows --ci-full until each is exercised on a live tray and recorded
+        as done-with-evidence or todo-with-gap-packet.
+      exit_criteria:
+        - "windows column has no `unknown` cells on required rows"
+        - "every `done` cell cites live-tray evidence in the completion event"
+        - "every non-done cell has a filed gap packet"
+        - "litmus:tray-parity-matrix-complete passes on the Windows host"
+      events:
+        - type: filed
+          ts: "2026-07-09T22:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          host: linux
+          summary: >
+            Filed per operator direction — see order 257's rationale.
 
     - packet_id: litmus-runner-step-exit-code-ignored
       order: 256
