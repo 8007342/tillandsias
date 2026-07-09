@@ -35,7 +35,7 @@ critical_path:
     expected_behavior: "skip:no-podman-user-session"
 
   - step: "a held build-install smoke lock yields a deterministic lock skip verdict"
-    command: "tmp=$(mktemp -d) && mkdir -p \"$tmp/tillandsias-locks\" && { exec 9>\"$tmp/tillandsias-locks/build-install-smoke-e2e.lock\"; flock -n 9; XDG_RUNTIME_DIR=\"$tmp\" bash scripts/e2e-preflight.sh eligibility; rc=$?; rm -rf \"$tmp\"; exit \"$rc\"; }"
+    command: "tmp=$(mktemp -d) && mkdir -p \"$tmp/tillandsias-locks\" && { if command -v flock >/dev/null 2>&1; then exec 9>\"$tmp/tillandsias-locks/build-install-smoke-e2e.lock\"; flock -n 9; else mkdir -p \"$tmp/tillandsias-locks/build-install-smoke-e2e.lockdir\"; fi; XDG_RUNTIME_DIR=\"$tmp\" bash scripts/e2e-preflight.sh eligibility; rc=$?; rm -rf \"$tmp\"; exit \"$rc\"; }"
     timeout_ms: 5000
     expected_behavior: "skip:smoke-lock-held"
 
