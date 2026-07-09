@@ -40,7 +40,7 @@ an attended tray smoke follows this run.
 - id: `smoke-finding/e2e-preflight-not-windows-aware`
 - owner_host: any
 - capability_tags: [testing, e2e, windows, tooling]
-- status: ready
+- status: done
 - discovered_by: `/build-install-and-smoke-test-e2e` on `windows-next@a68c9825`
 - evidence:
   - `scripts/e2e-preflight.sh:42-45` — the eligibility verdict emits
@@ -60,11 +60,27 @@ an attended tray smoke follows this run.
     `wsl.exe` availability (and optionally WSL2 kernel presence) instead of a
     host podman binary; keep the podman probes for Linux. Pin with a litmus
     update to `litmus:e2e-eligibility-probe-shape`.
+- resolution: >
+    Fixed on windows-next: `e2e_eligibility_verdict` now has a MINGW*/MSYS*/
+    CYGWIN* branch (mirroring the Darwin branch a linux/macos worker landed at
+    f347053e in the interim) that keeps the deterministic XDG_RUNTIME_DIR
+    no-session + smoke-lock branches and probes `wsl.exe` instead of host
+    podman, emitting `skip:no-wsl` or `eligible`. Verified on this host:
+    verdict flipped skip:no-podman-binary -> eligible; XDG override still
+    yields skip:no-podman-user-session; grammar check emits exactly one
+    well-formed line. Litmus grammar `^(eligible|skip:[a-z0-9-]+)$` unchanged
+    (additive reason, same pattern the Darwin branch's skip:no-macos-hypervisor
+    followed).
 - events:
   - type: discovered
     ts: "2026-07-09T20:13:26Z"
     agent_id: "windows-bullo-claude-fable-20260709T2013Z"
     host: windows
+  - type: completed
+    ts: "2026-07-09T21:55:00Z"
+    agent_id: "windows-bullo-claude-fable-20260709T2107Z"
+    host: windows
+    summary: "Windows branch added to scripts/e2e-preflight.sh (skip:no-wsl reason); verified eligible on this host."
 
 ### Work Packet: smoke-finding/windows-local-install-path-mismatch
 
