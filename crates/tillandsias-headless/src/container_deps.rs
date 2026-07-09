@@ -1,5 +1,6 @@
 //! Declarative container dependency graph (order 122, slice 1).
 //!
+//!
 //! Single source of truth for "what must be satisfied before launching X".
 //! Four consecutive P0s (orders 116/118/119/120) were all caused by an implicit,
 //! runtime-discovered container dependency — most directly order 120, where the
@@ -255,6 +256,66 @@ impl Satisfier for RealSatisfier {
     }
 }
 
+/// Result of a single liveness probe cycle.
+#[derive(Debug, Clone)]
+pub struct LivenessResult {
+    pub re_ensured: Vec<Service>,
+    pub running: Vec<Service>,
+}
+
+impl LivenessResult {
+    pub fn all_running(&self) -> bool {
+        self.re_ensured.is_empty()
+    }
+}
+
+/// Periodic liveness probe for container-backed managed services.
+///
+/// Checks that each managed container (vault, proxy, etc.) is still running
+/// and re-ensures any that have stopped. Intended to run as a background
+/// heartbeat task during VmPhase::Ready.
+pub struct LivenessProbe {
+    debug: bool,
+}
+
+impl LivenessProbe {
+    pub fn new(debug: bool) -> Self {
+        LivenessProbe { debug }
+    }
+
+    /// Run one liveness check cycle.
+    ///
+    /// For each managed container: if running, record it; if not, re-ensure
+    /// it through the dependency satisfier (idempotent). Returns the set of
+    /// re-ensured services, which is empty when all are healthy.
+    pub fn run_check(&mut self) -> Result<LivenessResult, String> {
+        let mut satisfier = RealSatisfier { debug: self.debug };
+        let mut result = LivenessResult {
+            re_ensured: Vec::new(),
+            running: Vec::new(),
+        };
+
+        // Container-backed services that should always be running in steady
+        // state (CaBundle is a file, not a container; networks are idempotent
+        // by nature; GitLogin is a transient launch target).
+        let services = [Service::Vault, Service::Proxy];
+
+        for &service in &services {
+            if crate::vault_bootstrap::container_running(service.name()) {
+                result.running.push(service);
+            } else {
+                eprintln!("[liveness] {} not running — re-ensuring", service.name());
+                satisfier.satisfy(service).map_err(|e| {
+                    format!("liveness: failed to re-ensure {}: {e}", service.name())
+                })?;
+                result.re_ensured.push(service);
+            }
+        }
+
+        Ok(result)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,5 +525,33 @@ mod tests {
     fn up_constructor_is_module_private() {
         // Can't test this directly (we're inside the module), but the
         // `compile_fail` doc-comment on `Up` proves the API contract.
+    }
+
+    // ── Liveness probe (order 228, slice 4) ──────────────────────────────────
+
+    /// Structural proof: LivenessProbe can be constructed.
+    #[test]
+    fn liveness_probe_is_constructable() {
+        let _probe = LivenessProbe::new(false);
+    }
+
+    /// LivenessResult reports all_running when re_ensured is empty.
+    #[test]
+    fn liveness_result_all_running() {
+        let result = LivenessResult {
+            re_ensured: vec![],
+            running: vec![Service::Vault, Service::Proxy],
+        };
+        assert!(result.all_running());
+    }
+
+    /// LivenessResult reports not all_running when some were re-ensured.
+    #[test]
+    fn liveness_result_not_all_running() {
+        let result = LivenessResult {
+            re_ensured: vec![Service::Proxy],
+            running: vec![Service::Vault],
+        };
+        assert!(!result.all_running());
     }
 }

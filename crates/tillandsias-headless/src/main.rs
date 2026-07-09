@@ -7910,6 +7910,42 @@ fn maybe_spawn_vsock_listener(
                 .watch_shutdown_and_mark_stopping(watcher_shutdown)
                 .await;
         });
+        // Liveness probe: periodically check managed containers are still
+        // running and re-ensure any that died (order 228, slice 4).
+        // Drives self-healing during VmPhase::Ready without a full restart.
+        let liveness_state = state.clone();
+        let liveness = tokio::spawn(async move {
+            let mut probe = container_deps::LivenessProbe::new(false);
+            loop {
+                // Only probe during Ready phase — containers aren't expected
+                // to be up during Starting/Draining/Stopping.
+                let phase = liveness_state.current_phase();
+                if phase != tillandsias_control_wire::VmPhase::Ready {
+                    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                    continue;
+                }
+                match probe.run_check() {
+                    Ok(result) => {
+                        if !result.all_running() {
+                            eprintln!(
+                                "[liveness] re-ensured {} container(s): {:?}",
+                                result.re_ensured.len(),
+                                result
+                                    .re_ensured
+                                    .iter()
+                                    .map(|s| s.name())
+                                    .collect::<Vec<_>>()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[liveness] check failed: {e}");
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            }
+        });
+
         // Podman events monitor: reads `podman events --format json`
         // and pushes curated step names to the tray.
         let events_state = state.clone();
