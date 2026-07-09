@@ -1694,6 +1694,250 @@ fn rebuild_menu_main_thread(
     }
 }
 
+/// True while the dedicated `VmStatus` push subscription (order 155 slice 1)
+/// is connected and delivering frames. Gates the steady-state fallback poll:
+/// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07);
+/// when the stream drops, the 30s tick resumes polling until the listener
+/// resubscribes. Mirrors windows-tray's `VM_STATUS_PUSH_HEALTHY` (b6ca3290)
+/// so the two trays keep structurally identical stream architectures.
+static VM_STATUS_PUSH_HEALTHY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// SC-07 gate: the steady-state `VmStatusRequest` poll is fallback-only —
+/// suppressed whenever the push subscription is delivering.
+fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
+    !push_stream_healthy
+}
+
+/// The exact topic set slice 1 subscribes to. LoginState/CloudProjects stay
+/// polled until their tray-side consumers land in the next slice (the guest
+/// push sources shipped in orders 230/231) — widening this list is that
+/// slice's job, pinned by `vm_status_subscribe_topics_is_vmstatus_only_slice1`.
+fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
+    vec![tillandsias_control_wire::SubscriptionTopic::VmStatus]
+}
+
+/// Apply a live `VmStatus` observation — from a poll reply or an unrequested
+/// `VmStatusPush` frame — to the shared `MenuState` and status chip. Returns
+/// whether the menu needs a rebuild (podman_ready / login gating changed).
+/// Shared by the 30s fallback poll and `run_vm_status_push_listener` (order
+/// 155 slice 1) so both surfaces stay byte-identical; mirrors windows-tray's
+/// `apply_vm_status` (b6ca3290).
+///
+/// `last_logged_phase` is shared across both sources so a phase transition is
+/// logged exactly once regardless of which surface observed it first (m8 F2:
+/// a Failed VM must never be silent in the log).
+#[allow(clippy::too_many_arguments)]
+fn apply_vm_status(
+    phase: tillandsias_control_wire::VmPhase,
+    podman_ready: bool,
+    last_event: Option<&str>,
+    last_logged_phase: &Arc<Mutex<Option<tillandsias_control_wire::VmPhase>>>,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_text: &Arc<Mutex<String>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) -> bool {
+    {
+        let mut logged = last_logged_phase.lock().unwrap();
+        if *logged != Some(phase) {
+            *logged = Some(phase);
+            eprintln!(
+                "[tillandsias-tray] vm-status: phase={phase:?} podman_ready={podman_ready}{}",
+                last_event
+                    .map(|e| format!(" event={e}"))
+                    .unwrap_or_default()
+            );
+        }
+    }
+    let mut rebuild_needed = false;
+    {
+        let mut guard = menu_state.lock().unwrap();
+        let new_login_runtime_ready =
+            matches!(phase, tillandsias_control_wire::VmPhase::Ready) && podman_ready;
+        if guard.podman_ready != podman_ready
+            || guard.login_runtime_ready != new_login_runtime_ready
+        {
+            guard.podman_ready = podman_ready;
+            guard.login_runtime_ready = new_login_runtime_ready;
+            rebuild_needed = true;
+        }
+    }
+    let base = vm_phase_status_text(phase, podman_ready);
+    let text_for_dispatch = compose_chip_text(&base, last_event);
+    let chip_status_text = status_text.clone();
+    let chip_status_item = status_item.clone();
+    let chip_status_menu_item = status_menu_item.clone();
+    dispatch_to_main_thread(move || {
+        *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
+        apply_status_text_main_thread(
+            &text_for_dispatch,
+            &chip_status_item,
+            &chip_status_menu_item,
+        );
+    });
+    rebuild_needed
+}
+
+/// Dedicated `VmStatus` push listener (order 155 slice 1): a persistent
+/// reader task on its own control-wire connection. Connect → handshake →
+/// `Subscribe{[VmStatus]}` → `SubscribeAck` → loop `next_envelope`, applying
+/// each `VmStatusPush` to the chip/menu within milliseconds of the guest's
+/// VmPhase or last_event change (SC-09, <500ms end-to-end) instead of up to
+/// 30s later on the next poll tick.
+///
+/// A separate connection (not the per-poll one-shots) is deliberate: the
+/// request/reply helpers would mis-consume an unsolicited push frame arriving
+/// between a request and its reply. The headless broadcasts pushes to every
+/// subscribed client, so a dedicated connection gets the stream without
+/// racing the request path. Mirrors windows-tray `run_vm_status_push_listener`
+/// (b6ca3290) on the macOS `GuestTransport`/VZ stream + secure-wire path.
+///
+/// Reconnects forever with the shared `BACKOFF_SCHEDULE` (250ms→4s), then
+/// holds at 30s between attempts — while down, `VM_STATUS_PUSH_HEALTHY` is
+/// false and the tick loop's fallback poll covers status freshness.
+#[allow(clippy::too_many_arguments)]
+async fn run_vm_status_push_listener(
+    vz: Arc<VzRuntime>,
+    status_text: Arc<Mutex<String>>,
+    status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+    last_logged_phase: Arc<Mutex<Option<tillandsias_control_wire::VmPhase>>>,
+    vm_ever_ready: Arc<std::sync::atomic::AtomicBool>,
+) {
+    use std::sync::atomic::Ordering;
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::{BACKOFF_SCHEDULE, Client};
+
+    let mut backoff_idx: usize = 0;
+    loop {
+        VM_STATUS_PUSH_HEALTHY.store(false, Ordering::SeqCst);
+        let established = async {
+            let stream =
+                open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
+                    .await?;
+            let mut client = Client::from_stream(
+                Box::new(stream),
+                Transport::Vsock {
+                    cid: TILLANDSIAS_GUEST_CID,
+                    port: CONTROL_WIRE_VSOCK_PORT,
+                },
+            );
+            client
+                .handshake()
+                .await
+                .map_err(|e| format!("handshake: {e}"))?;
+            let sub = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: client.allocate_seq(),
+                body: ControlMessage::Subscribe {
+                    topics: vm_status_subscribe_topics(),
+                },
+            };
+            let reply = client
+                .request(&sub)
+                .await
+                .map_err(|e| format!("subscribe: {e}"))?;
+            match reply.body {
+                ControlMessage::SubscribeAck => Ok(client),
+                other => Err(format!("expected SubscribeAck, got {}", other.kind())),
+            }
+        }
+        .await;
+
+        let mut client = match established {
+            Ok(c) => c,
+            Err(err) => {
+                // Routine while the VM boots — the fallback poll owns
+                // loud logging for a genuinely stuck wire (m8 F2).
+                tracing::debug!(%err, "vm-status push subscription unavailable; will retry");
+                let wait = BACKOFF_SCHEDULE
+                    .get(backoff_idx)
+                    .copied()
+                    .unwrap_or(Duration::from_secs(30));
+                backoff_idx = backoff_idx.saturating_add(1);
+                tokio::time::sleep(wait).await;
+                continue;
+            }
+        };
+
+        backoff_idx = 0;
+        VM_STATUS_PUSH_HEALTHY.store(true, Ordering::SeqCst);
+        eprintln!(
+            "[tillandsias-tray] vm-status push subscription established \
+             (poll demoted to fallback, SC-07)"
+        );
+
+        // Initial sync on the SAME connection: pushes are change-gated
+        // (set_phase/set_last_event emit only on transitions), so a
+        // subscriber joining a steady-state-Ready VM would otherwise render
+        // nothing until the next transition — while SC-07 suppresses the
+        // fallback poll precisely because this stream is healthy. One
+        // VmStatusRequest primes the chip; the reader loop below accepts
+        // the VmStatusReply alongside pushes, so an interleaved push can
+        // never be mis-consumed as the reply.
+        let seq = client.allocate_seq();
+        let prime = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: client.allocate_seq(),
+            body: ControlMessage::VmStatusRequest { seq },
+        };
+        if let Err(err) = client.send_envelope(&prime).await {
+            tracing::debug!(%err, "vm-status initial-sync request failed; reconnecting");
+            continue;
+        }
+
+        loop {
+            match client.next_envelope().await {
+                Ok(env) => match env.body {
+                    ControlMessage::VmStatusPush {
+                        phase,
+                        podman_ready,
+                        last_event,
+                        ..
+                    }
+                    | ControlMessage::VmStatusReply {
+                        phase,
+                        podman_ready,
+                        last_event,
+                        ..
+                    } => {
+                        vm_ever_ready.store(true, Ordering::SeqCst);
+                        let rebuild_needed = apply_vm_status(
+                            phase,
+                            podman_ready,
+                            last_event.as_deref(),
+                            &last_logged_phase,
+                            &menu_state,
+                            &status_text,
+                            &status_item,
+                            &status_menu_item,
+                        );
+                        if rebuild_needed {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
+                    other => {
+                        tracing::debug!("push stream: ignoring frame {}", other.kind());
+                    }
+                },
+                Err(err) => {
+                    tracing::debug!(%err, "vm-status push stream dropped; resubscribing");
+                    break;
+                }
+            }
+        }
+    }
+}
+
 fn spawn_vm_status_poller(
     vz: Arc<VzRuntime>,
     status_text: Arc<Mutex<String>>,
@@ -1702,6 +1946,26 @@ fn spawn_vm_status_poller(
     menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
     self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
 ) {
+    // Shared across the push listener and the fallback poll so phase
+    // transitions log exactly once and early poll-noise suppression
+    // works no matter which surface saw the VM first.
+    let last_logged_phase: Arc<Mutex<Option<tillandsias_control_wire::VmPhase>>> =
+        Arc::new(Mutex::new(None));
+    let vm_ever_ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // Push-first (order 155 slice 1): the dedicated reader task applies
+    // VmStatusPush frames as they arrive; the 30s tick below polls
+    // VmStatusRequest only while that subscription is down (SC-07).
+    tokio::spawn(run_vm_status_push_listener(
+        vz.clone(),
+        status_text.clone(),
+        status_item.clone(),
+        status_menu_item.clone(),
+        menu_state.clone(),
+        self_handle.clone(),
+        last_logged_phase.clone(),
+        vm_ever_ready.clone(),
+    ));
     tokio::spawn(async move {
         // Tick counter for the cloud-projects cadence. Matches windows-
         // tray's "first tick + every 10 ticks" pattern (commit
@@ -1719,12 +1983,8 @@ fn spawn_vm_status_poller(
         // github* connect errors until the VM has reported ready at least once;
         // the vm-status poll below keeps logging its own errors, so a genuinely
         // stuck boot still surfaces. See plan: macos-tray/cold-boot-vsock-poll-races.
-        let mut vm_ever_ready = false;
-        // Last VM phase we logged, so phase transitions surface in the log
-        // exactly once (no per-poll spam). A Failed/degraded VM must NOT be
-        // silent — m8 finding F2: the chip showed "VM Failed" while the log said
-        // nothing, leaving the failure undiagnosable.
-        let mut last_logged_phase: Option<tillandsias_control_wire::VmPhase> = None;
+        // (Shared with the push listener — a healthy push subscription also
+        // proves the VM came up, and the poll may be suppressed by SC-07.)
         loop {
             // Cloud + local projects: first tick + every 10 ticks.
             // The cadence rationale (slower than VmStatus) is in the
@@ -1749,7 +2009,7 @@ fn spawn_vm_status_poller(
                         drop(guard);
                     }
                     Err(e) => {
-                        if vm_ever_ready {
+                        if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
                             eprintln!("[tillandsias-tray] local-projects poll: {e}");
                         }
                     }
@@ -1770,7 +2030,7 @@ fn spawn_vm_status_poller(
                         drop(guard);
                     }
                     Err(e) => {
-                        if vm_ever_ready {
+                        if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
                             eprintln!("[tillandsias-tray] cloud-projects poll: {e}");
                         }
                     }
@@ -1789,7 +2049,7 @@ fn spawn_vm_status_poller(
                         drop(guard);
                     }
                     Err(e) => {
-                        if vm_ever_ready {
+                        if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
                             eprintln!("[tillandsias-tray] github-login poll: {e}");
                         }
                     }
@@ -1799,59 +2059,36 @@ fn spawn_vm_status_poller(
             tokio::time::sleep(Duration::from_secs(30)).await;
             tick = tick.wrapping_add(1);
 
+            // SC-07: while the push subscription is delivering, the poll is
+            // suppressed entirely — the reader task owns status freshness.
+            if !should_poll_vm_status(
+                VM_STATUS_PUSH_HEALTHY.load(std::sync::atomic::Ordering::SeqCst),
+            ) {
+                if rebuild_needed {
+                    dispatch_rebuild(&menu_state, &status_item, &status_menu_item, &self_handle);
+                }
+                continue;
+            }
+
             match poll_vm_status_once(&vz).await {
                 Ok((phase, podman_ready, last_event)) => {
                     // A successful VmStatus reply means the in-guest vsock agent
                     // is up; from here on the projects/github poll errors are
                     // real (mid-session) and worth logging — end cold-boot
                     // warmup suppression.
-                    vm_ever_ready = true;
-                    // Log phase transitions once so a Failed/degraded VM is
-                    // never silent in the log (m8 F2). Especially: phase=Failed
-                    // with podman_ready=false is the macOS "VM Failed" the user
-                    // sees — surface it + any agent-provided last_event reason.
-                    if last_logged_phase != Some(phase) {
-                        last_logged_phase = Some(phase);
-                        eprintln!(
-                            "[tillandsias-tray] vm-status: phase={phase:?} podman_ready={podman_ready}{}",
-                            last_event
-                                .as_deref()
-                                .map(|e| format!(" event={e}"))
-                                .unwrap_or_default()
-                        );
+                    vm_ever_ready.store(true, std::sync::atomic::Ordering::SeqCst);
+                    if apply_vm_status(
+                        phase,
+                        podman_ready,
+                        last_event.as_deref(),
+                        &last_logged_phase,
+                        &menu_state,
+                        &status_text,
+                        &status_item,
+                        &status_menu_item,
+                    ) {
+                        rebuild_needed = true;
                     }
-                    // Reflect podman_ready into the held MenuState so
-                    // the menu rebuild flips per-project action gating
-                    // (`Attach Here` etc.). Same pattern windows-tray
-                    // uses. A change here triggers the same rebuild
-                    // dispatch the cloud-projects branch uses.
-                    {
-                        let mut guard = menu_state.lock().unwrap();
-                        let new_login_runtime_ready =
-                            matches!(phase, tillandsias_control_wire::VmPhase::Ready)
-                                && podman_ready;
-                        if guard.podman_ready != podman_ready
-                            || guard.login_runtime_ready != new_login_runtime_ready
-                        {
-                            guard.podman_ready = podman_ready;
-                            guard.login_runtime_ready = new_login_runtime_ready;
-                            rebuild_needed = true;
-                        }
-                    }
-                    let base = vm_phase_status_text(phase, podman_ready);
-                    let text = compose_chip_text(&base, last_event.as_deref());
-                    let text_for_dispatch = text.clone();
-                    let chip_status_text = status_text.clone();
-                    let chip_status_item = status_item.clone();
-                    let chip_status_menu_item = status_menu_item.clone();
-                    dispatch_to_main_thread(move || {
-                        *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
-                        apply_status_text_main_thread(
-                            &text_for_dispatch,
-                            &chip_status_item,
-                            &chip_status_menu_item,
-                        );
-                    });
                 }
                 Err(e) => {
                     // Mid-session wire failure (headless crash, VM
@@ -1901,26 +2138,102 @@ fn spawn_vm_status_poller(
             // main-thread tasks and the chip update doesn't depend
             // on the new menu being installed.
             if rebuild_needed {
-                let rebuild_menu_state = menu_state.clone();
-                let rebuild_status_item = status_item.clone();
-                let rebuild_status_menu_item = status_menu_item.clone();
-                let rebuild_self_handle = self_handle.clone();
-                dispatch_to_main_thread(move || {
-                    rebuild_menu_main_thread(
-                        &rebuild_menu_state,
-                        &rebuild_status_item,
-                        &rebuild_status_menu_item,
-                        &rebuild_self_handle,
-                    );
-                });
+                dispatch_rebuild(&menu_state, &status_item, &status_menu_item, &self_handle);
             }
         }
+    });
+}
+
+/// Queue an NSMenu rebuild on the AppKit main thread from the held
+/// MenuState. Shared by the fallback-poll tick loop and the push
+/// listener so both trigger the identical rebuild path.
+fn dispatch_rebuild(
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    self_handle: &Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+) {
+    let rebuild_menu_state = menu_state.clone();
+    let rebuild_status_item = status_item.clone();
+    let rebuild_status_menu_item = status_menu_item.clone();
+    let rebuild_self_handle = self_handle.clone();
+    dispatch_to_main_thread(move || {
+        rebuild_menu_main_thread(
+            &rebuild_menu_state,
+            &rebuild_status_item,
+            &rebuild_status_menu_item,
+            &rebuild_self_handle,
+        );
     });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SC-07 pin: the fallback poll runs exactly when the push
+    /// subscription is NOT delivering. Mirrors windows-tray's
+    /// `should_poll_vm_status` gate (order 154/155 parity).
+    #[test]
+    fn should_poll_vm_status_is_pure_fallback_gate() {
+        assert!(!should_poll_vm_status(true));
+        assert!(should_poll_vm_status(false));
+    }
+
+    /// Slice-1 topic pin: widening the Subscribe set to LoginState/
+    /// CloudProjects is the NEXT slice's job (tray-side consumers for
+    /// the order 230/231 push sources). This test fails loud if the
+    /// topic list drifts without that slice's menu wiring.
+    #[test]
+    fn vm_status_subscribe_topics_is_vmstatus_only_slice1() {
+        assert_eq!(
+            vm_status_subscribe_topics(),
+            vec![tillandsias_control_wire::SubscriptionTopic::VmStatus]
+        );
+    }
+
+    /// `apply_vm_status` flips MenuState gating + reports a rebuild
+    /// exactly on change (idempotent on repeat). Chip dispatch is
+    /// queued to the (never-running-in-tests) main queue — harmless.
+    #[test]
+    fn apply_vm_status_updates_menu_state_and_reports_rebuild_on_change() {
+        let last_logged = Arc::new(Mutex::new(None));
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let status_text = Arc::new(Mutex::new(String::new()));
+        let status_item = Arc::new(Mutex::new(None));
+        let status_menu_item = Arc::new(Mutex::new(None));
+
+        let first = apply_vm_status(
+            tillandsias_control_wire::VmPhase::Ready,
+            true,
+            Some("Securing Vault"),
+            &last_logged,
+            &menu_state,
+            &status_text,
+            &status_item,
+            &status_menu_item,
+        );
+        assert!(first, "Ready+podman transition must request a rebuild");
+        {
+            let guard = menu_state.lock().unwrap();
+            assert!(guard.podman_ready);
+            assert!(guard.login_runtime_ready);
+        }
+
+        let second = apply_vm_status(
+            tillandsias_control_wire::VmPhase::Ready,
+            true,
+            Some("Securing Vault"),
+            &last_logged,
+            &menu_state,
+            &status_text,
+            &status_item,
+            &status_menu_item,
+        );
+        assert!(!second, "unchanged status must not re-request a rebuild");
+    }
 
     #[test]
     fn project_launch_lease_rejects_duplicate_until_released() {
