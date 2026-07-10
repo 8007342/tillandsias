@@ -122,11 +122,24 @@ shoot() {
 # Dump the active `screen` PTY surface (e.g. the GitHub-login attach terminal).
 pty_dump() {
   local out="$1"
-  local sid
-  sid=$(screen -ls 2>/dev/null | grep -oE '[0-9]+\.[^ \t]+' | head -1 || true)
-  [[ -n "$sid" ]] || die "no active screen session to hardcopy"
-  screen -S "$sid" -X hardcopy "$out"
+  local sid="${2:-}"
+  # F-F (order 269): resolve the session robustly. `screen -ls` exits
+  # non-zero when a session is Attached AND prints tab-indented lines like
+  # "\t86884.ttys002.host\t(Attached)"; the old `[0-9]+\.[^ \t]+` + head
+  # could yield an empty sid that then became `screen -S "" -X hardcopy`,
+  # whose failure ("No screen session found") looked like "no session"
+  # even though one was listed. Take an explicit session as $2, else match
+  # the full pid.tty[.host] token on any listing line (attached or
+  # detached), and fail loud with the raw listing if none is found.
+  if [[ -z "$sid" ]]; then
+    sid=$(screen -ls 2>/dev/null | grep -oE '[0-9]+\.[A-Za-z0-9._-]+' | head -1 || true)
+  fi
+  if [[ -z "$sid" ]]; then
+    die "no active screen session to hardcopy; screen -ls said: $(screen -ls 2>&1 | tr '\n' ' ')"
+  fi
+  screen -S "$sid" -X hardcopy "$out" || die "hardcopy failed for session '$sid'"
   sleep 0.5
+  [[ -s "$out" ]] || die "hardcopy produced no output for session '$sid'"
   echo "dumped session $sid -> $out"
 }
 
@@ -137,6 +150,6 @@ case "$cmd" in
   click)        [[ $# -ge 1 ]] || die "click needs <substr>"; ax_click "$1" ;;
   icon-present) ax_icon_present ;;
   screenshot)   [[ $# -ge 1 ]] || die "screenshot needs <out.png>"; shoot "$1" ;;
-  pty-dump)     [[ $# -ge 1 ]] || die "pty-dump needs <out.txt>"; pty_dump "$1" ;;
+  pty-dump)     [[ $# -ge 1 ]] || die "pty-dump needs <out.txt> [session]"; pty_dump "$1" "${2:-}" ;;
   *) die "unknown command: '${cmd:-}' (menu|assert-item|click|icon-present|screenshot|pty-dump)" ;;
 esac
