@@ -123,11 +123,29 @@ Cosmetic but misleads ("has been Securing Vault for a while now" — operator,
 live). Consider clearing the event suffix after Ready settles, or
 timestamping it.
 
+### F-H severity upgrade (SSH post-mortem)
+
+The in-VM forge build runs as a child of the attach session: when the host
+worker closed the PTY it reaped the build. Evidence: empty-ID `image build`
+journal events for both attempts, 59 dangling layers, no tagged forge
+image, zero build processes, load 0.05. First-use attach can NEVER succeed
+on a slow network; retries only advance the layer cache. Order 270 gained
+exit criterion 4 (build survives PTY loss). Session workaround: forge-base +
+forge built manually over SSH under nohup (headless-identical tags) to
+unblock the InteractiveStream / 6-leaf verification.
+
 ### Also observed
 
 - Guest journal is dominated by full-label podman exec/exec_died event pairs
   every 60s (vault liveness + login presence probes) — forensics
   signal-to-noise problem, batched into order 270's scope note.
+- The headless logs entire `gh api` JSON bodies (private-repo metadata) into
+  the journal — noise + mild privacy concern, batched into order 270's
+  scope note.
+- SELinux is permissive in the guest: steady AVC denial stream from
+  vault_container_t (curl exec, port 8200 name_connect) that would be
+  ENFORCING breakage — pre-existing hardening debt worth a dedicated packet
+  when SELinux enforcement lands on the roadmap.
 
 ## Residual verification (needs fresh provision + one more login)
 

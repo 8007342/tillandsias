@@ -6941,21 +6941,32 @@ plan_index:
         the PTY with no message — the operator's Terminal shows '[screen is
         terminating]' or a stuck window, indistinguishable from a hang
         (guest journal confirmed healthy podman image builds in flight).
-        Wanted: (1) surface materialization progress into the attach PTY —
-        at minimum an explicit 'building forge image, first use takes
-        minutes…' line; (2) the worker must not close the PTY while the
-        in-VM launch is legitimately building — keep-alive until build
-        completion or a LOUD failure line with the guest-side error; (3) a
-        retry after the build completes must succeed (image cached). Guest
-        cooperation (progress frames on the wire) may spawn a linux slice —
-        coordinate via this packet. Also noted: guest journal drowns in
-        60s podman exec/exec_died label dumps from the liveness probes —
-        consider quieting for forensics signal-to-noise. Full context:
+        SEVERITY UPGRADE (post-mortem over SSH): the in-VM build runs as a
+        child of the attach session, so when the host worker gives up and
+        closes the PTY it REAPS THE BUILD — both attempts left only
+        dangling layers (empty-ID 'image build' journal events, no tagged
+        image, no build process, load 0.05). First-use attach can therefore
+        NEVER succeed on a slow network; each retry only advances the layer
+        cache incrementally. Wanted: (1) surface materialization progress
+        into the attach PTY — at minimum an explicit 'building forge image,
+        first use takes minutes…' line; (2) the worker must not close the
+        PTY while the in-VM launch is legitimately building — keep-alive
+        until build completion or a LOUD failure line with the guest-side
+        error; (3) the build must survive PTY loss (guest-side detach:
+        systemd-run / setsid) so an impatient close doesn't waste the work;
+        (4) a retry after the build completes must succeed (image cached).
+        Guest cooperation (progress frames on the wire, detached build) may
+        spawn a linux slice — coordinate via this packet. Also noted: guest
+        journal drowns in 60s podman exec/exec_died label dumps from the
+        liveness probes, and the headless logs entire gh api JSON bodies
+        (private-repo metadata into the journal) — quieting both is in
+        scope for forensics signal-to-noise. Full context:
         plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-H).
       exit_criteria:
         - "fresh-VM first attach shows an explicit materialization message in the popup terminal within 5s of click"
         - "the PTY stays open through a healthy multi-minute image build and lands in the live agent session"
         - "worker give-up paths print a loud error line to the PTY before closing"
+        - "an in-flight image build survives the attach PTY closing (verify: close terminal mid-build, image still completes)"
       events:
         - type: filed
           ts: "2026-07-10T03:20:00Z"
