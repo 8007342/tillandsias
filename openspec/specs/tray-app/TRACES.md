@@ -51,4 +51,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [locales/en.toml#L38](../../../locales/en.toml#L38)
 - [locales/en.toml#L48](../../../locales/en.toml#L48)
 - [locales/es.toml#L30](../../../locales/es.toml#L30)
-- [scripts/local-ci.sh#L854](../../../scripts/local-ci.sh#L854)
+- [scripts/local-ci.sh#L880](../../../scripts/local-ci.sh#L880)

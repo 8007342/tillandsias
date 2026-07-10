@@ -52,4 +52,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/git/post-receive-hook.sh#L2](../../../images/git/post-receive-hook.sh#L2)
 - [images/git/post-receive-hook.sh#L23](../../../images/git/post-receive-hook.sh#L23)
 - [images/git/post-receive-hook.sh#L114](../../../images/git/post-receive-hook.sh#L114)
+- [images/git/pre-receive-hook.sh#L2](../../../images/git/pre-receive-hook.sh#L2)
 - [scripts/build-sidecar.sh#L73](../../../scripts/build-sidecar.sh#L73)
