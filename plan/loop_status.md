@@ -1,6 +1,62 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T04:25:00Z
+LastExecutionTime: 2026-07-10T05:50:00Z
+
+## Cycle 2026-07-10T04:10Z→05:50Z (linux_mutable macuahuitl — OPERATOR-DIRECTED drain: 275+268+276+260 completed, both siblings integrated)
+
+- **Credential guard**: ok:gh-keyring. Clean start at f685b1e3; merged
+  osx-next (+10: attended smoke — 6 parity cells done live, orders 269-275
+  filed, PTY debug tee, home-src mount persistence) and windows-next (+8:
+  order 261 ruby-free parity gate done live, order 251 long-running-packet
+  protocol slice, 2 windows local-build e2e PASS). Merged tree --check
+  green.
+- **Order 275 (operator-priority) COMPLETED**: tillandsias-policy
+  plan-orders uniqueness gate (fail exit 1 on any duplicate order group
+  containing an open packet; done-only groups grandfathered by status
+  rule; 5 unit tests) + litmus:plan-index-order-uniqueness (runner PASS)
+  bound under methodology-accountability. Historic cleanup: icap-proxy
+  144→278, host-lifecycle-race-safeguards 161→279,
+  microsoft-linux-guest-migration 161→280 (renumber events +
+  renumbered_from). Live ledger: 145 packets, 0 open collisions. NOTE for
+  all hosts: "order 144/161" in pre-2026-07-10 notes are ambiguous —
+  check renumbered_from. Follow-up: wire plan-orders into the order-263
+  mirror hook at the next git-mirror image rebuild.
+- **Order 268 COMPLETED**: inference cold path — proxy-resolvability
+  guard (unsets baked proxy env when 'proxy' cannot resolve; enclave
+  untouched), direct-retry fallback, curl max-time 600 (tarball is
+  1.34 GiB), fail-loud exit when no ollama binary. Verified cold
+  end-to-end (labeled bare shape): download → install → serve →
+  qwen2.5:0.5b ready. Litmus rewrite recipe (product launch shape +
+  current strings) appended to order 267's deliverable.
+- **Order 276 COMPLETED**: guest login-transition funnel —
+  apply_login_transition pushes LoginState AND refreshes+pushes
+  CloudProjects exactly on the logged-in flip; satisfier-completion
+  sentinel (2s stat) kills the 60s lag (attended-smoke F-C/F-D). TRAYS:
+  drop the interim primes (macos b365deaf; windows mirror) once guests
+  carry this.
+- **Order 260 COMPLETED**: SubscriptionTopic::LocalProjects +
+  LocalProjectsPush (trailing, additive, no WIRE_VERSION bump) +
+  change-gated guest source + subscriber-gated 15s guest rescan.
+  WINDOWS: widen topic list, delete the 30s tick poll (fallback only) —
+  the order-154 exit criterion is now reachable. 66 workspace suites +
+  38 wire tests green.
+- **E2E gate**: preflight `eligible`; local-build destructive gate
+  deliberately SKIPPED-WITH-CAUSE — the operator is interactively using
+  this host's substrate (directive: install delivered 03:20Z tonight),
+  and the full gate already ran this same night (run 20260710T021654Z,
+  sole red root-caused + fixed as order 268). Next unattended linux
+  cycle should run the full destructive e2e; expect green modulo order
+  267 (litmus file rewrites incl. the inference litmus).
+- **Release**: none — tray-parity hold: macOS closed 6 cells tonight
+  (attended); remaining hold rides on the windows attended checklist
+  (order 258) + The Tlatoāni's recorded release approval.
+- **Queue after drain** (linux/any, ~31 open): 267 (litmus corpus, has
+  full recipes), 265 (liveness research), 273 (attach login flow), 129
+  (egress research), 271 (methodology doc), 249/250 (tray UX/event
+  audits), security chain (137/141/145/142), streams chain
+  (147/148/150/151/153/156/157/158), 225 (litmus DSL impl), 278 (ICAP,
+  ex-144), audits (245-248). Blocked-on-operator: windows attended smoke
+  (258), release approval, bar-raise slice 3.
 
 ## Cycle 2026-07-10T02:02Z (macos — ATTENDED meta-orchestration: order 257 six cells closed live, 3 fixes verified, orders 274-278-era packets filed (renumbered thrice; see merge notes), isolation correction)
 
