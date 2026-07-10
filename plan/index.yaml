@@ -7209,7 +7209,7 @@ plan_index:
     - packet_id: methodology-idiomatic-layers-for-agents
       order: 271
       title: "Methodology: agents develop and debug THROUGH the idiomatic layers — no ssh/root/side channels into the guest"
-      status: ready
+      status: completed
       kind: methodology
       deliverable: methodology/multi-host-development.yaml
       depends_on: []
@@ -7249,6 +7249,23 @@ plan_index:
             Filed at The Tlatoani's direction after the agent's ssh/root
             workaround in the attended smoke. Companion: order 272 closes
             the backdoor itself.
+        - type: completed
+          ts: "2026-07-10T05:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0531Z"
+          host: linux_mutable
+          lease_id: "methodology-idiomatic-layers-for-agents (claim-ledger-node.sh)"
+          summary: >
+            Canonical block methodology/multi-host-development.yaml
+            idiomatic_layers_for_agents (sanctioned surfaces incl.
+            ExecOneShot + TILLANDSIAS_PTY_DEBUG tee; file-a-packet-instead
+            rule with the 268/272 precedents; audit rule: ssh/root/debug
+            keys are findings). Grepable cross-references added to
+            skills/advance-work-from-plan (hard rules) and
+            skills/build-install-and-smoke-test-e2e (guardrails). Pinned by
+            litmus:idiomatic-layers-doctrine-shape (5 steps: block + all
+            three sub-rules + surfaces + both skill wirings + YAML parse)
+            bound under methodology-accountability; suite PASS. All three
+            exit criteria met.
 
     - packet_id: guest-ssh-backdoor-closure
       order: 272

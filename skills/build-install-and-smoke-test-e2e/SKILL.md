@@ -360,6 +360,13 @@ the convergence record shows the build was exercised on this host.
   it wipes Podman/WSL/VM state. The wipe is the test precondition. The only
   supported opt-out is `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, which must produce
   a pushed plan blocker instead of a partial smoke.
+- **Debug failures THROUGH the idiomatic layers only** — control wire,
+  `--diagnose`, ExecOneShot, PTY attach (+`TILLANDSIAS_PTY_DEBUG` tee). No ssh
+  into the guest, no root shells, no debug keys, no host-mounted guest disks —
+  a forensic need the layer cannot meet is a product gap to FILE (packet
+  extending the layer), never a license to side-step. Canonical:
+  `methodology/multi-host-development.yaml` `idiomatic_layers_for_agents`
+  (The Tlatoāni, 2026-07-10, order 271).
 - **Never** substitute a published-release binary for the local build — this
   skill tests the *locally built* tray (use `/smoke-curl-install-and-test-e2e`
   to test a published release instead).

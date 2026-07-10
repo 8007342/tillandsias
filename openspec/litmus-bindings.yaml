@@ -480,6 +480,7 @@ specs:
   - litmus:no-duplicate-rust-item-defs
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
+  - litmus:idiomatic-layers-doctrine-shape
   coverage_ratio: 100
   last_verified: '2026-07-10'
 - spec_id: meta-orchestration
