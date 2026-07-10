@@ -6642,9 +6642,8 @@ plan_index:
         lifecycle with a minimal plan touch instead of real work). Option
         (a) or (c) preserve the gate's falsifiability; (b) does not.
       exit_criteria:
-        - "an in-forge cycle launched by the litmus completes inside the step budget deterministically (drain bounded or smoke-scoped)"
-        - "litmus:opencode-prompt-e2e-shape passes all 7 steps standalone on a healthy host"
-        - "the greedy-drain doctrine for NON-litmus forge cycles is unchanged"
+        - "forge-hosted cycles drain at most ONE packet and split oversized packets instead of implementing (skill + methodology state it; canonical: distributed-work.yaml worker_agent_protocol.forge_cycle_budget)"
+        - "litmus:opencode-prompt-e2e-shape passes all 7 steps against a live in-forge cycle under the new doctrine"
       events:
         - type: filed
           ts: "2026-07-10T01:58:00Z"
@@ -6655,3 +6654,104 @@ plan_index:
             (target/litmus-rerun-20260710/run.log: STEP 3 TIMEOUT). The
             in-forge agent did excellent real work (order 263) in the wrong
             budget envelope — the tension is structural, not agent error.
+        - type: decision
+          ts: "2026-07-10T02:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            The Tlatoāni (2026-07-10) chose the doctrine change over the
+            env-var option: agents INSIDE a forge run at most ONE packet per
+            cycle, splitting a packet into smaller ready children when it
+            will not fit the launch envelope. Applies to ALL forge cycles
+            (the old exit criterion preserving greedy drain for non-litmus
+            forge cycles is superseded by this decision). Heartbeat/liveness
+            signals to replace timeout inference deferred to order 265.
+        - type: progress
+          ts: "2026-07-10T02:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          summary: >
+            Doctrine implemented: skills/meta-orchestration/SKILL.md worker
+            drain, skills/advance-work-from-plan/SKILL.md constraint 4, and
+            new canonical block methodology/distributed-work.yaml
+            worker_agent_protocol.forge_cycle_budget. Verification (all 7
+            litmus steps under the new doctrine) rides on this cycle's
+            final --ci-full --install gate; completion event to follow.
+
+    - packet_id: forge-agent-liveness-signals
+      order: 265
+      title: "Research: forge agent heartbeat/liveness signals so gates stop inferring death from timeouts"
+      status: ready
+      kind: research
+      deliverable: plan/issues/forge-agent-liveness-signals-research.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, observability, litmus, vsock]
+      estimated_hours: 4
+      outcome: >
+        Operator direction (The Tlatoāni, 2026-07-10): we own the forge
+        launch and its whole container stack, so the host can OBSERVE
+        whether the in-forge agent is alive and progressing instead of
+        inferring death from a fixed step timeout. Research the minimal
+        reliable liveness signal — candidates: agent-side heartbeat file on
+        the shared mount, commit cadence via the git mirror, podman
+        events/exec probes, a vsock pulse on the control wire — and how
+        litmus STEP 3 (plus with-smoke-lock waiters) should consume it:
+        liveness past the soft budget is progress, dead-air is failure, a
+        hard cap stays as backstop. Complements order 264's one-packet
+        doctrine (bounded work makes liveness windows short).
+      exit_criteria:
+        - "research verdict comparing candidate signals with a chosen minimal design"
+        - "fixture-level prototype: a gate distinguishes 'alive past soft budget' from 'dead agent' deterministically"
+        - "hard-cap backstop preserved (no unbounded waits)"
+      events:
+        - type: filed
+          ts: "2026-07-10T02:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Filed per The Tlatoāni's 2026-07-10 direction during the order
+            264 decision ("perhaps we could later add better heartbeat and
+            alive signals so we don't rely on timeouts").
+
+    - packet_id: ci-full-all-features-clippy-lane
+      order: 266
+      title: "Approved bar-raise slice 2: all-features clippy lane in --ci-full"
+      status: completed
+      kind: enhancement
+      deliverable: methodology/convergence.yaml
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [ci, clippy, gating]
+      estimated_hours: 1
+      outcome: >
+        Implements the approved slice 2 of
+        plan/issues/integration-gate-feature-coverage-gap-2026-07-10.md:
+        `cargo clippy --workspace --all-targets --all-features -- -D
+        warnings` as a named check (rust-clippy-all-features) in
+        scripts/local-ci.sh, running in the non-fast pre-build phase
+        (--ci-full) and explicitly skipped under --fast (--ci). Approval
+        recorded in methodology/convergence.yaml approved_bar_raises
+        (id ci-full-all-features-clippy). Slice 3 (promotion into --check)
+        remains unapproved.
+      exit_criteria:
+        - "approval recorded (who/when/scope) in methodology/convergence.yaml"
+        - "rust-clippy-all-features runs under --ci-full and is skipped under --ci/--fast"
+        - "lane green at enablement (baseline sweep exit 0)"
+      events:
+        - type: approved
+          ts: "2026-07-10T02:10:00Z"
+          agent_id: "The Tlatoāni (recorded by linux-macuahuitl-fable5-20260710T0009Z)"
+          host: operator
+          summary: >
+            "I approve — record it." Scope: slice 2 only (ci-full lane).
+        - type: completed
+          ts: "2026-07-10T02:30:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Registry entry added (approved_bar_raises); lane wired into
+            scripts/local-ci.sh (check ids, timeout 180s, spec trace,
+            failure message, execution block gated on FAST_MODE); baseline
+            sweep green pre-enablement (exit 0, post-order-254 tree).
+            End-to-end validation: this cycle's final --ci-full --install
+            runs the lane in anger.
