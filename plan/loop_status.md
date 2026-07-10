@@ -2,6 +2,39 @@
 
 LastExecutionTime: 2026-07-10T04:05:00Z
 
+## Cycle 2026-07-10T02:39Z→03:50Z (windows — meta-orchestration: linux-next merged, order 251 implemented → verification, local-build e2e PASS @ 45cfd526)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start at 00076813 == origin.
+- **Integration**: merged origin/linux-next f685b1e3 (union-resolved
+  plan/index.yaml: windows order-261 events + linux orders 262-268;
+  validate-yaml ok), pushed e0fcab24. Windows-buildable crate subset
+  (`-p windows-tray -p host-shell -p control-wire -p vm-layer -p policy`)
+  compiles clean on the merged tree; `./build.sh --check` remains
+  un-runnable on Windows (known gap, windows-workspace-cargo-check-gap).
+- **Worker drain — order 251 (long-running-work-packet-methodology)
+  IMPLEMENTATION-COMPLETE → phase: verification (45cfd526)**: canonical
+  `long_running_packets` section in methodology/distributed-work.yaml
+  (multi_cycle schema + cycle-scoped claims, verified-by event protocol,
+  additive update policy), meta-orchestration + advance-work-from-plan
+  skill recognition, plan/long-running.md sub-queue view (orders 245-251).
+  Completion gated on verified-by from opencode-bigpickle,
+  antigravity-gemini, codex-gpt55-highthink — packet stays `ready` for
+  them per its own protocol. Only dependency-free ready+any packet;
+  258 stays operator-blocked (attended parity smoke), 260 is linux-owned.
+- **Local-build e2e: PASS @ 45cfd526** (first Windows e2e over the
+  f685b1e3 merge): build 1m56s → freshness gate embedded==HEAD → distro
+  destroy → cold provision (rootfs re-download, dnf 135 pkgs, `RESULT: VM
+  Ready — control wire up ✓`, handshake attempt=1) → diagnose exit 2
+  degraded-as-expected, build_commit fresh. Filed
+  smoke-finding/windows-provision-log-wsl-utf16-mojibake (wsl.exe UTF-16LE
+  bytes forwarded raw into UTF-8 provision log). Report: Run 2 section of
+  plan/issues/build-install-smoke-e2e-findings-2026-07-10-windows.md.
+- **Release**: n/a (windows host; release hold unchanged).
+- **Next windows work**: attended parity smoke (operator, order 258);
+  order 251 awaits its 3 verifiers; windows coordination slice of order
+  267 (chip litmus rewrite) when linux ratifies scope.
+
 ## Cycle 2026-07-10T02:05Z→04:05Z (linux_mutable macuahuitl — OPERATOR-DIRECTED: bar-raise approved+enabled, one-packet forge doctrine, orders 256/264/266 done, 265/267/268 filed, install delivered)
 
 - **The Tlatoāni's directives executed (recorded 2026-07-10)**:

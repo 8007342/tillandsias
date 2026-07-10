@@ -73,3 +73,68 @@ loop_status), no release newer than the plan's latest tested.
     ts: "2026-07-10T00:55:00Z"
     agent_id: "windows-bullo-fable5-20260710T0010Z"
     host: windows
+
+---
+
+# Run 2 — 2026-07-10T02:49Z series — PASS
+
+- discovered_by: `/build-install-and-smoke-test-e2e` (windows)
+- branch: `windows-next`
+- commit tested: `45cfd526` (linux-next merge f685b1e3 — first Windows e2e
+  covering the merged headless changes (pty_handler/remote_projects/
+  cloud_projects, VERSION 0.3.260710.3) — plus order 251 methodology docs)
+- version: `0.3.260710.3`
+- run_id: `20260710T024952Z`
+- evidence: `target/build-install-smoke-e2e/20260710T024952Z/*`
+
+## Result: PASS — all Windows gates green
+
+| Gate | Result |
+|---|---|
+| 0 preflight | PASS — clean tree, branch `windows-next`, HEAD `45cfd526`, e2e-preflight `eligible` |
+| 1 build (`scripts/build-windows-tray.ps1`) | PASS — exit 0, 1m56s |
+| 1 install (direct copy to `%LOCALAPPDATA%\Programs\Tillandsias`) | PASS — `--version` → `tillandsias-tray 0.3.260710.3 (45cfd526)`, embedded SHA == HEAD (probe via `cmd /c ... 2>&1` per run-1 finding) |
+| 2 destroy (`wsl --unregister tillandsias` + cache/logs dirs) | PASS — distro no longer listed, cache + logs removed |
+| 3 cold re-provision (`--provision-once`) | PASS — exit 0, rootfs re-downloaded, dnf transaction 135 pkgs, headless services enabled, `RESULT: VM Ready — control wire up ✓`, handshake `wire_version=2 attempt=1` |
+| 3 diagnose (`--diagnose --json`) | PASS — exit 2 (degraded-as-expected: distro idle after provision process exit), `build_commit=45cfd526`, wire error is the documented hvsocket not-started shape |
+| 4 forge lane | n/a (linux-only lane) |
+
+Schema note: 17 top-level diagnose keys + nested `wire{5}` this run vs the
+"21 keys" recorded in run 1 — counting-method difference (nested vs flat),
+no missing field observed; not filed as a finding.
+
+Curl-install e2e not run this cycle: release hold still active (16 parity
+gaps per loop_status); latest release unchanged since the plan's last
+curl-install test.
+
+### Work Packet: smoke-finding/windows-provision-log-wsl-utf16-mojibake
+
+- id: `smoke-finding/windows-provision-log-wsl-utf16-mojibake`
+- owner_host: windows
+- capability_tags: [windows, tray, logging, provision]
+- status: ready
+- kind: optimization
+- discovered_by: `/build-install-and-smoke-test-e2e` on `windows-next@45cfd526`
+- evidence: >
+    03-provision.log (run 20260710T024952Z) interleaves mojibake lines like
+    "L op<?>ration a r<?>ussi." between provision phases: wsl.exe emits
+    UTF-16LE (localized) output, and the provision path forwards those raw
+    bytes into an otherwise UTF-8 log stream. Harmless to the gates, but
+    every log consumer (and future distillation tooling) sees NUL-padded
+    garbage, and greps against provision logs need tr -d '\0' guards.
+- impact: >
+    Log hygiene only — but it taxes every future automated log parse on
+    Windows and can mask real errors localized by Windows (the garbled text
+    IS wsl.exe's success/error message).
+- repro: run `--provision-once` on a French-locale Windows host; inspect the log bytes.
+- next_action: >
+    In the Windows provision/wsl-invocation layer (tillandsias-vm-layer wsl
+    path), decode wsl.exe child stdout/stderr as UTF-16LE when the BOM/NUL
+    pattern is detected (or pass WSL_UTF8=1 env, supported by modern wsl.exe)
+    before writing to the log; one-crate change + a unit test on a captured
+    UTF-16 sample.
+- events:
+  - type: discovered
+    ts: "2026-07-10T03:40:00Z"
+    agent_id: "windows-bullo-fable5-20260710T0240Z"
+    host: windows
