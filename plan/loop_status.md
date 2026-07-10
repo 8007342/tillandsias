@@ -138,6 +138,39 @@ LastExecutionTime: 2026-07-10T04:25:00Z
   fix pattern may also apply to any OTHER guest exec path that omits
   XDG_RUNTIME_DIR; windows flags: orders 260 (new), 154 cold-join, 258.
 
+## Cycle 2026-07-10T02:39Z→03:50Z (windows — meta-orchestration: linux-next merged, order 251 implemented → verification, local-build e2e PASS @ 45cfd526)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start at 00076813 == origin.
+- **Integration**: merged origin/linux-next f685b1e3 (union-resolved
+  plan/index.yaml: windows order-261 events + linux orders 262-268;
+  validate-yaml ok), pushed e0fcab24. Windows-buildable crate subset
+  (`-p windows-tray -p host-shell -p control-wire -p vm-layer -p policy`)
+  compiles clean on the merged tree; `./build.sh --check` remains
+  un-runnable on Windows (known gap, windows-workspace-cargo-check-gap).
+- **Worker drain — order 251 (long-running-work-packet-methodology)
+  IMPLEMENTATION-COMPLETE → phase: verification (45cfd526)**: canonical
+  `long_running_packets` section in methodology/distributed-work.yaml
+  (multi_cycle schema + cycle-scoped claims, verified-by event protocol,
+  additive update policy), meta-orchestration + advance-work-from-plan
+  skill recognition, plan/long-running.md sub-queue view (orders 245-251).
+  Completion gated on verified-by from opencode-bigpickle,
+  antigravity-gemini, codex-gpt55-highthink — packet stays `ready` for
+  them per its own protocol. Only dependency-free ready+any packet;
+  258 stays operator-blocked (attended parity smoke), 260 is linux-owned.
+- **Local-build e2e: PASS @ 45cfd526** (first Windows e2e over the
+  f685b1e3 merge): build 1m56s → freshness gate embedded==HEAD → distro
+  destroy → cold provision (rootfs re-download, dnf 135 pkgs, `RESULT: VM
+  Ready — control wire up ✓`, handshake attempt=1) → diagnose exit 2
+  degraded-as-expected, build_commit fresh. Filed
+  smoke-finding/windows-provision-log-wsl-utf16-mojibake (wsl.exe UTF-16LE
+  bytes forwarded raw into UTF-8 provision log). Report: Run 2 section of
+  plan/issues/build-install-smoke-e2e-findings-2026-07-10-windows.md.
+- **Release**: n/a (windows host; release hold unchanged).
+- **Next windows work**: attended parity smoke (operator, order 258);
+  order 251 awaits its 3 verifiers; windows coordination slice of order
+  267 (chip litmus rewrite) when linux ratifies scope.
+
 ## Cycle 2026-07-10T02:05Z→04:05Z (linux_mutable macuahuitl — OPERATOR-DIRECTED: bar-raise approved+enabled, one-packet forge doctrine, orders 256/264/266 done, 265/267/268 filed, install delivered)
 
 - **The Tlatoāni's directives executed (recorded 2026-07-10)**:
@@ -3139,3 +3172,11 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - **Order 237 residual (forge mirror gitconfig default-on)** + **order 238**: need a forge-context session (in-forge agent or operator-launched).
 - **Order 129 (agent egress allowlist research)**: needs an operator-attended forge session for live proxy logs.
 - **Tray-parity release hold**: merge-to-main-and-release now reports 16 parity gaps (8 required features x macos+windows `unknown`) — release-with-gaps needs The Tlatoāni's recorded approval until 257/258 land.
+
+## Cycle 2026-07-10T00:10Z (windows bullo — order 261 drain: ruby-free parity gate)
+
+- **Agent**: windows-bullo-fable5-20260710T0010Z (meta-orchestration worker drain; branch windows-next, linux-next already fully merged at startup).
+- **Order 261 done** (`d2f0c908`): `tillandsias-policy parity-matrix` subcommand replicates the litmus:tray-parity-matrix-complete ruby one-liner exactly (valid status words on all cells, no `regressed` anywhere, current host column done on `parity: required` rows; identical output lines). 9 unit tests incl. a repo-matrix pin (linux green, windows red-by-design). Litmus command repointed cargo-first with the ruby one-liner as fallback where cargo is absent; timeout raised 5s→120s for cold cargo builds. Verified live on this no-ruby host: default run exits 1 with the 7 expected `missing required:` lines; `--host linux` exits 0. **Order 258 exit criterion 4 is now executable on Windows** (stays red until the attended smoke flips the column, by design).
+- **Verification**: cargo test -p tillandsias-policy 22/22; clippy --all-targets clean; fmt-check clean; touched YAML validated via `tillandsias-policy validate-yaml`.
+- **Local-build e2e gate PASS** @ `c52a1e2e` (preflight `eligible`): full destructive Windows cycle — build 1m43s, direct-copy install with fresh embedded SHA, `wsl --unregister` + cache/VHDX wipe, cold `--provision-once` → `RESULT: VM Ready — control wire up ✓` exit 0, `--diagnose --json` exit 2 degraded-as-expected with `build_commit=c52a1e2e`. First e2e covering order 154 slice 2 (ea03e08e push-topic tray transport). Report: `plan/issues/build-install-smoke-e2e-findings-2026-07-10-windows.md` (+1 optimization packet: PS5.1 stderr quirk makes the freshness probe brittle). Curl-install e2e skipped: release hold active, no newer release than last tested.
+- **Queue after cycle (windows)**: order 258 remains blocked-on-operator (attended smoke checklist `plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md`); order 260 (LocalProjects push topic) is linux-owned; orders 224/225/256 (litmus DSL/runner) remain any-host candidates.

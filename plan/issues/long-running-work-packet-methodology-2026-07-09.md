@@ -72,3 +72,23 @@ At least 3 agents must verify this packet as complete:
 5. **Additive Update Policy**: Document the rule that methodology/spec updates from
    audit packets must be additive (new file, new section, or clearly marked
    supersede annotation) to avoid merge conflicts between concurrent agents.
+
+## Implementation (2026-07-10, windows-bullo-fable5-20260710T0240Z)
+
+All 5 deliverables landed; packet at `phase: verification` awaiting the 3
+named agents' `verified-by` events. Canonical text:
+
+- **Schema + verified-by protocol + additive policy (LM-01/02/05)**:
+  `methodology/distributed-work.yaml` → `long_running_packets` (new
+  section; extends `work_item_schema` additively). Notable decisions:
+  claims on multi_cycle packets are cycle-scoped (status returns to
+  `ready` between cycles); `progress_summary` is update-in-place under the
+  same exception as `status`; per-event `verdict: pass|fail|pass-with-notes`
+  replaces the sketched compound verdict string so a fail can name its
+  criterion; advisory verified-by from unlisted agents is recorded but
+  does not count toward the gate.
+- **Skill recognition (LM-03)**: `skills/meta-orchestration/SKILL.md`
+  (Worker Drain → "Long-Running (multi_cycle) Packets") and
+  `skills/advance-work-from-plan/SKILL.md` (§2 selection note; §7
+  completion guard — implementing agent never emits `completed`).
+- **Sub-queue view (LM-04)**: `plan/long-running.md` (orders 245–251).

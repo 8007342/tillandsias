@@ -226,6 +226,23 @@ Release with `scripts/claim-ledger-node.sh release <node-id>` after the closure
 is committed; expired leases (default TTL 4h) are auto-reclaimed. Pinned by
 `litmus:ledger-node-claim-shape`.
 
+### Long-Running (multi_cycle) Packets
+
+Packets marked `multi_cycle: true` in `plan/index.yaml` follow
+`methodology/distributed-work.yaml` → `long_running_packets` (plan order 251):
+
+- Claims are **cycle-scoped**; the packet returns to `ready` after each
+  cycle's commit. A `ready` multi_cycle packet with prior progress events is
+  normal, not stalled.
+- Do NOT mark one `done` — even with all exit criteria implemented — until
+  its `verification_required.completion_gate` is satisfied by `verified-by`
+  events from every named agent. Implementation-complete means
+  `phase: verification`, not `completed`.
+- Treat a packet sitting at `phase: verification` as a dispatch item for the
+  named verifier agents and surface it during coordination.
+- The active set is mirrored in `plan/long-running.md`; keep that view in
+  sync in the same commit as any phase/status/verification change.
+
 ## E2E Gates
 
 Run eligible e2e gates after worker drain:

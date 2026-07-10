@@ -1,7 +1,8 @@
 # Finding: litmus:tray-parity-matrix-complete cannot run on Windows hosts (ruby dependency) — 2026-07-09
 
 - class: enhancement (litmus infrastructure / host portability)
-- status: open — promoted to plan/index.yaml order 261
+- status: resolved 2026-07-10 — order 261 done at d2f0c908 (tillandsias-policy
+  parity-matrix subcommand; litmus repointed with ruby retained as fallback)
 - trace: openspec/litmus-tests/litmus-tray-parity-matrix-complete.yaml,
   plan/index.yaml orders 243, 258, 224/225 (litmus command DSL),
   plan/issues/windows-yaml-validation cheat: `tillandsias-policy validate-yaml`

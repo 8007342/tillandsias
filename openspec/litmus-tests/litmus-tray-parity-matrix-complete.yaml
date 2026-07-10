@@ -20,17 +20,22 @@ description: >-
   the previous folded (>-) multi-line form parsed to ZERO steps, so this
   litmus failed structurally on every run regardless of matrix content
   (see order 243 completion event; orders 224/225 track a real command DSL).
+  The check itself is `tillandsias-policy parity-matrix` (order 261) —
+  Windows hosts have no ruby, so the previous ruby-only one-liner could
+  never execute on the very host class it gates (see
+  plan/issues/parity-litmus-ruby-dependency-windows-2026-07-09.md); the
+  ruby one-liner is retained only as a fallback where cargo is absent.
 severity: high
 size: quick
 
 preconditions:
   - workspace contains openspec/tray-parity-matrix.yaml
-  - ruby is available in PATH
+  - cargo is available in PATH (preferred), or ruby as fallback
 
 critical_path:
   - step: "current host column done for required rows; statuses valid; no regressions anywhere"
-    command: "ruby -ryaml -e 'host = RUBY_PLATFORM =~ /darwin/ ? %q(macos) : (RUBY_PLATFORM =~ /linux/ ? %q(linux) : %q(windows)); valid = %w(done partial todo unknown regressed n/a); data = YAML.load_file(%q(openspec/tray-parity-matrix.yaml)); failed = false; data[%q(features)].each { |f| [%q(linux), %q(macos), %q(windows)].each { |p| c = f[p]; (puts %q(Invalid status ) + c.to_s + %q( on ) + p + %q( for ) + f[%q(capability)].to_s; failed = true) unless valid.include?(c); (puts %q(REGRESSION: ) + f[%q(capability)].to_s + %q( on ) + p; failed = true) if c == %q(regressed) }; next unless f[%q(parity)] == %q(required); (puts %q(Host ) + host + %q( missing required: ) + f[%q(capability)].to_s + %q( status=) + f[host].to_s; failed = true) if f[host] != %q(done) }; puts %q(Tray parity: host column complete, statuses valid, no regressions) unless failed; exit 1 if failed'"
-    timeout_ms: 5000
+    command: "if command -v cargo >/dev/null 2>&1; then cargo run -q -p tillandsias-policy -- parity-matrix; else ruby -ryaml -e 'host = RUBY_PLATFORM =~ /darwin/ ? %q(macos) : (RUBY_PLATFORM =~ /linux/ ? %q(linux) : %q(windows)); valid = %w(done partial todo unknown regressed n/a); data = YAML.load_file(%q(openspec/tray-parity-matrix.yaml)); failed = false; data[%q(features)].each { |f| [%q(linux), %q(macos), %q(windows)].each { |p| c = f[p]; (puts %q(Invalid status ) + c.to_s + %q( on ) + p + %q( for ) + f[%q(capability)].to_s; failed = true) unless valid.include?(c); (puts %q(REGRESSION: ) + f[%q(capability)].to_s + %q( on ) + p; failed = true) if c == %q(regressed) }; next unless f[%q(parity)] == %q(required); (puts %q(Host ) + host + %q( missing required: ) + f[%q(capability)].to_s + %q( status=) + f[host].to_s; failed = true) if f[host] != %q(done) }; puts %q(Tray parity: host column complete, statuses valid, no regressions) unless failed; exit 1 if failed'; fi"
+    timeout_ms: 120000
     success_pattern: "Tray parity: host column complete, statuses valid, no regressions"
     failure_pattern: "missing required:|Invalid status|REGRESSION:"
 

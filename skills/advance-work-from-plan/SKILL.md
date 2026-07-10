@@ -54,8 +54,9 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     -   **Spec gap fills**: `openspec/specs/<spec>/spec.md` requirements without implementation coverage. Focus on `headless-mode`, `podman-idiomatic-patterns`, `runtime-diagnostics-stream`, `logging-accountability`, `observability-metrics`.
     -   **Drift-protection litmus**: instant-phase tests pinning surfaces that recent work added (formatter literals, env-var contracts, public API names, unit-test names).
     -   **Clippy / idiomatic-podman hardening**.
-4.  **Constraint**: ONE logical commit per cycle. If a slice estimates >2h, split it and ship the first half. (Forge-hosted sessions (`TILLANDSIAS_HOST_KIND=forge`) are stricter, not looser: **at most ONE packet per session**, and if the packet will not fit the launch envelope — litmus-launched sessions live inside a 600s step budget — **split it into smaller ready packets instead of implementing**. The shaping commit is the session's output. Decided by The Tlatoāni 2026-07-10, order 264; canonical: `methodology/distributed-work.yaml` `worker_agent_protocol.forge_cycle_budget`.)
-5.  **Delegate Parallelizable Research**: Use sub-agents for file inventories, grep searches, etc., but keep ownership of specs, verification, and commits.
+4.  **Long-running packets** (`multi_cycle: true`): claims are CYCLE-SCOPED — you claim one session's slice, not the packet. A `ready` multi_cycle packet with prior progress events is claimable (that's the design, not a stale lease). Canonical rules: `methodology/distributed-work.yaml` → `long_running_packets`.
+5.  **Constraint**: ONE logical commit per cycle. If a slice estimates >2h, split it and ship the first half. (Forge-hosted sessions (`TILLANDSIAS_HOST_KIND=forge`) are stricter, not looser: **at most ONE packet per session**, and if the packet will not fit the launch envelope — litmus-launched sessions live inside a 600s step budget — **split it into smaller ready packets instead of implementing**. The shaping commit is the session's output. Decided by The Tlatoāni 2026-07-10, order 264; canonical: `methodology/distributed-work.yaml` `worker_agent_protocol.forge_cycle_budget`.)
+6.  **Delegate Parallelizable Research**: Use sub-agents for file inventories, grep searches, etc., but keep ownership of specs, verification, and commits.
 
 ---
 
@@ -189,6 +190,16 @@ If the 2h integration cron fired in the last 10 min (check the latest `### Cycle
 ## 7 — Submit Completion or Yield
 
 ### Submit Completion
+
+**Long-running packets** (`multi_cycle: true` with `verification_required`):
+you MUST NOT emit `completed` or flip status to `done` yourself, even with
+every exit criterion implemented. Instead: append a `progress` event stating
+implementation-complete, set `phase: verification`, update
+`progress_summary` and `plan/long-running.md` in the same commit, and leave
+status `ready`. The packet closes only when every agent named in
+`verification_required` has emitted passing `verified-by` events
+(`methodology/distributed-work.yaml` → `long_running_packets`).
+
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
 2.  **Emit Completed Event**: Update the task's YAML block:
     -   Append a `completed` event to `events:` listing all commit SHAs and validation log paths.

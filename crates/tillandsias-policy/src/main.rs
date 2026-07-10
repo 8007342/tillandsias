@@ -21,6 +21,7 @@ fn main() {
         Some("regenerate-cheatsheet-index") => regenerate_cheatsheet_index(&args[2..]),
         Some("fetch-cheatsheet-source") => fetch_cheatsheet_source(&args[2..]),
         Some("validate-yaml") => validate_yaml(&args[2..]),
+        Some("parity-matrix") => parity_matrix(&args[2..]),
         Some("run-in-pty") => run_in_pty_cmd(&args[2..]),
         Some("--help") | Some("-h") | None => usage(),
         Some(other) => {
@@ -55,6 +56,9 @@ fn usage() {
         "  tillandsias-policy fetch-cheatsheet-source [--repo-root <path>] --tier=bundled [--max-age-days N] [--dry-run]"
     );
     eprintln!("  tillandsias-policy validate-yaml <file>...");
+    eprintln!(
+        "  tillandsias-policy parity-matrix [--matrix <path>] [--host <linux|macos|windows>]"
+    );
     eprintln!("  tillandsias-policy run-in-pty <command>...");
 }
 
@@ -477,6 +481,132 @@ fn validate_yaml(files: &[String]) {
 
     if failed {
         process::exit(1);
+    }
+}
+
+// ===========================================================================
+// `parity-matrix` subcommand — ruby-free implementation of
+// litmus:tray-parity-matrix-complete (plan/index.yaml order 261). Windows
+// hosts have no ruby, so the original `ruby -ryaml` one-liner gate could
+// never execute there; this subcommand reproduces its exact semantics:
+//   1. every cell on every platform column uses a valid status word,
+//   2. no cell anywhere is 'regressed',
+//   3. the CURRENT host's column is 'done' for every row with
+//      `parity: required` (sibling columns being unverified does not fail
+//      this host's build — each host verifies its own column).
+// Output lines match the litmus's success/failure patterns verbatim.
+//
+// @trace spec:tray-app
+// ===========================================================================
+
+const PARITY_PLATFORMS: [&str; 3] = ["linux", "macos", "windows"];
+const PARITY_VALID_STATUSES: [&str; 6] = ["done", "partial", "todo", "unknown", "regressed", "n/a"];
+const PARITY_SUCCESS_LINE: &str =
+    "Tray parity: host column complete, statuses valid, no regressions";
+
+fn parity_matrix(args: &[String]) {
+    let mut matrix_path = PathBuf::from("openspec/tray-parity-matrix.yaml");
+    let mut host = default_parity_host().to_string();
+
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--matrix" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--matrix requires a path");
+                    process::exit(2);
+                };
+                matrix_path = PathBuf::from(value);
+            }
+            "--host" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--host requires one of: linux, macos, windows");
+                    process::exit(2);
+                };
+                if !PARITY_PLATFORMS.contains(&value.as_str()) {
+                    eprintln!("--host must be one of: linux, macos, windows (got '{value}')");
+                    process::exit(2);
+                }
+                host = value.clone();
+            }
+            other => {
+                eprintln!("usage: parity-matrix [--matrix <path>] [--host <linux|macos|windows>]");
+                eprintln!("unexpected argument: {other}");
+                process::exit(2);
+            }
+        }
+        idx += 1;
+    }
+
+    let text = fs::read_to_string(&matrix_path).unwrap_or_else(|err| {
+        eprintln!("{}: {err}", matrix_path.display());
+        process::exit(2);
+    });
+
+    match parity_matrix_check(&text, &host) {
+        Ok(()) => println!("{PARITY_SUCCESS_LINE}"),
+        Err(failures) => {
+            for line in &failures {
+                println!("{line}");
+            }
+            process::exit(1);
+        }
+    }
+}
+
+fn default_parity_host() -> &'static str {
+    match env::consts::OS {
+        "macos" => "macos",
+        "linux" => "linux",
+        _ => "windows",
+    }
+}
+
+/// Core check, kept pure for unit testing. Returns Ok(()) when the matrix
+/// passes for `host`, or the ordered list of failure lines (matching the
+/// litmus failure_pattern `missing required:|Invalid status|REGRESSION:`).
+fn parity_matrix_check(yaml_text: &str, host: &str) -> Result<(), Vec<String>> {
+    let data: serde_yaml::Value = serde_yaml::from_str(yaml_text)
+        .map_err(|err| vec![format!("Invalid status matrix: not parseable YAML: {err}")])?;
+    let features = data
+        .get("features")
+        .and_then(|v| v.as_sequence())
+        .ok_or_else(|| vec!["Invalid status matrix: missing 'features' sequence".to_string()])?;
+
+    let mut failures = Vec::new();
+    for feature in features {
+        let capability = feature
+            .get("capability")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        for platform in PARITY_PLATFORMS {
+            let cell = feature.get(platform).and_then(|v| v.as_str()).unwrap_or("");
+            if !PARITY_VALID_STATUSES.contains(&cell) {
+                failures.push(format!(
+                    "Invalid status {cell} on {platform} for {capability}"
+                ));
+            }
+            if cell == "regressed" {
+                failures.push(format!("REGRESSION: {capability} on {platform}"));
+            }
+        }
+        if feature.get("parity").and_then(|v| v.as_str()) != Some("required") {
+            continue;
+        }
+        let host_cell = feature.get(host).and_then(|v| v.as_str()).unwrap_or("");
+        if host_cell != "done" {
+            failures.push(format!(
+                "Host {host} missing required: {capability} status={host_cell}"
+            ));
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures)
     }
 }
 
@@ -4714,6 +4844,96 @@ fn run_in_pty_cmd(args: &[String]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // @trace spec:tray-app — litmus:tray-parity-matrix-complete semantics
+    const PARITY_FIXTURE: &str = "features:\n  - capability: \"Feature A\"\n    linux: \"done\"\n    macos: \"todo\"\n    windows: \"todo\"\n    parity: \"required\"\n  - capability: \"Feature B\"\n    linux: \"n/a\"\n    macos: \"n/a\"\n    windows: \"n/a\"\n    parity: \"platform-specific\"\n";
+
+    #[test]
+    fn parity_matrix_passes_when_host_column_done_on_required_rows() {
+        assert!(parity_matrix_check(PARITY_FIXTURE, "linux").is_ok());
+    }
+
+    #[test]
+    fn parity_matrix_fails_host_with_incomplete_required_cell() {
+        let failures = parity_matrix_check(PARITY_FIXTURE, "windows").unwrap_err();
+        assert_eq!(
+            failures,
+            vec!["Host windows missing required: Feature A status=todo".to_string()]
+        );
+    }
+
+    #[test]
+    fn parity_matrix_skips_non_required_rows_for_host_check() {
+        // Feature B is n/a everywhere but parity: platform-specific, so no
+        // host is asked to have it done (matches the ruby `next unless
+        // f[parity] == required`).
+        assert!(parity_matrix_check(PARITY_FIXTURE, "linux").is_ok());
+    }
+
+    #[test]
+    fn parity_matrix_rejects_invalid_status_words_on_any_column() {
+        let text = PARITY_FIXTURE.replace("macos: \"todo\"", "macos: \"wip\"");
+        // Sibling column invalid → fails even though linux's own column is done.
+        let failures = parity_matrix_check(&text, "linux").unwrap_err();
+        assert_eq!(
+            failures,
+            vec!["Invalid status wip on macos for Feature A".to_string()]
+        );
+    }
+
+    #[test]
+    fn parity_matrix_rejects_missing_cell_as_invalid_status() {
+        let text = PARITY_FIXTURE.replace("    windows: \"todo\"\n", "");
+        let failures = parity_matrix_check(&text, "linux").unwrap_err();
+        assert_eq!(
+            failures,
+            vec!["Invalid status  on windows for Feature A".to_string()]
+        );
+    }
+
+    #[test]
+    fn parity_matrix_rejects_regression_anywhere_even_on_sibling_columns() {
+        let text = PARITY_FIXTURE.replace("macos: \"n/a\"", "macos: \"regressed\"");
+        let failures = parity_matrix_check(&text, "linux").unwrap_err();
+        assert_eq!(failures, vec!["REGRESSION: Feature B on macos".to_string()]);
+    }
+
+    #[test]
+    fn parity_matrix_reports_both_invalid_and_missing_for_host() {
+        let text = PARITY_FIXTURE.replace("linux: \"done\"", "linux: \"bogus\"");
+        let failures = parity_matrix_check(&text, "linux").unwrap_err();
+        assert_eq!(
+            failures,
+            vec![
+                "Invalid status bogus on linux for Feature A".to_string(),
+                "Host linux missing required: Feature A status=bogus".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn parity_matrix_rejects_unparseable_or_shapeless_yaml() {
+        assert!(parity_matrix_check(":\n  - not yaml", "linux").is_err());
+        assert!(parity_matrix_check("features: {}", "linux").is_err());
+    }
+
+    #[test]
+    fn parity_matrix_accepts_committed_repo_matrix_for_linux_column() {
+        // The real matrix must stay green for the linux column (its done
+        // column per plan/issues/tray-feature-parity-matrix-2026-06-28.md)
+        // and red for windows/macos until their attended passes (by design).
+        let text = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../openspec/tray-parity-matrix.yaml"),
+        )
+        .expect("repo matrix readable");
+        assert!(parity_matrix_check(&text, "linux").is_ok());
+        let windows_failures = parity_matrix_check(&text, "windows").unwrap_err();
+        assert!(
+            windows_failures
+                .iter()
+                .all(|line| line.contains("missing required:"))
+        );
+    }
 
     #[test]
     fn parses_frontmatter_with_multiline_fields() {
