@@ -218,15 +218,22 @@ impl VmStateHandle {
     /// observation after boot always pushes (subscribers start with no
     /// baseline). Mirrors the [`set_phase`] change-only contract
     /// (order 230; no redundant push on unchanged state).
-    pub fn set_login_state(&self, logged_in: bool, handle: Option<String>) {
-        let changed = match self.login_state.write() {
+    ///
+    /// Returns `true` when this observation TRANSITIONED the state into
+    /// logged-in (previously logged-out or no baseline). Order 276:
+    /// callers use the flip to trigger the auth-gated cloud-projects
+    /// refresh exactly once per login instead of waiting for a
+    /// CloudRefreshRequest that SC-07 suppresses on healthy push streams.
+    pub fn set_login_state(&self, logged_in: bool, handle: Option<String>) -> bool {
+        let (changed, flipped_in) = match self.login_state.write() {
             Ok(mut guard) => {
+                let was_logged_in = guard.as_ref().map(|(l, _)| *l).unwrap_or(false);
                 let next = Some((logged_in, handle.clone()));
                 let changed = *guard != next;
                 *guard = next;
-                changed
+                (changed, logged_in && !was_logged_in)
             }
-            Err(_) => false,
+            Err(_) => (false, false),
         };
         if changed {
             let seq = self
@@ -238,6 +245,26 @@ impl VmStateHandle {
                 logged_in,
                 handle,
             });
+        }
+        flipped_in
+    }
+
+    /// Order 276: apply a login-state observation AND, when it transitions
+    /// into logged-in, refresh the auth-gated cloud project list through
+    /// `fetch` and push it (change-gated in [`set_cloud_projects`]). This is
+    /// the single funnel every login-state source uses — the periodic vault
+    /// probe, the explicit `GithubLoginStatusRequest` handler, and the
+    /// satisfier-completion sentinel — so subscribers converge on both
+    /// topics without any inbound request. `fetch` is injectable so the
+    /// contract is unit-testable without podman.
+    pub async fn apply_login_transition<F>(&self, logged_in: bool, handle: Option<String>, fetch: F)
+    where
+        F: FnOnce() -> Vec<CloudProjectEntry> + Send + 'static,
+    {
+        let flipped_in = self.set_login_state(logged_in, handle);
+        if flipped_in {
+            let projects = tokio::task::spawn_blocking(fetch).await.unwrap_or_default();
+            self.set_cloud_projects(projects);
         }
     }
 
@@ -861,7 +888,11 @@ async fn handle_connection(
                 // Order 230: every explicit probe doubles as a push source so
                 // LoginState subscribers on other connections converge without
                 // waiting for the periodic vault probe. Change-gated inside.
-                state.set_login_state(logged_in, handle.clone());
+                // Order 276: a logged-in flip also refreshes + pushes the
+                // auth-gated cloud list through the shared transition funnel.
+                state
+                    .apply_login_transition(logged_in, handle.clone(), fetch_cloud_projects)
+                    .await;
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -1129,7 +1160,23 @@ fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
 /// because the wire field is not used by the host tray menu renderer.
 ///
 /// @trace spec:host-shell-architecture, spec:tillandsias-vault
-fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
+/// Order 276: cross-process completion signal from the login satisfier.
+/// `--github-login` runs as its own headless invocation, so it cannot call
+/// the resident server's transition funnel in-process; instead it touches
+/// this sentinel after a successful token store, and the server's probe
+/// loop stats it every 2s (cheap) and runs the full transition — killing
+/// the up-to-60s presence-poll lag the operator hit in the 2026-07-10
+/// attended smoke (F-D). A stale sentinel is harmless: the probe re-derives
+/// truth and every push is change-gated.
+pub(crate) fn login_transition_sentinel_path() -> std::path::PathBuf {
+    let run_dir = std::path::Path::new("/run/tillandsias");
+    if run_dir.is_dir() || std::fs::create_dir_all(run_dir).is_ok() {
+        return run_dir.join("login-transition");
+    }
+    std::env::temp_dir().join("tillandsias-login-transition")
+}
+
+pub(crate) fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
     match crate::remote_projects::discover_github_projects_result_with_debug(false) {
         Ok(projects) => projects
             .into_iter()
@@ -1290,7 +1337,8 @@ mod tests {
     async fn set_login_state_pushes_on_change() {
         let state = VmStateHandle::new();
         let mut rx = state.subscribe_login_state();
-        state.set_login_state(true, Some("octocat".to_string()));
+        let flipped = state.set_login_state(true, Some("octocat".to_string()));
+        assert!(flipped, "first logged-in observation is a transition");
         match rx.try_recv().expect("first observation must push") {
             ControlMessage::LoginStatePush {
                 logged_in, handle, ..
@@ -1300,6 +1348,90 @@ mod tests {
             }
             other => panic!("expected LoginStatePush, got {other:?}"),
         }
+    }
+
+    /// Order 276 exit criterion: the logged-out -> logged-in transition
+    /// produces BOTH pushes (LoginStatePush + CloudProjectsPush) through the
+    /// shared funnel with NO inbound request — the cloud fetch is injected,
+    /// so the contract runs without podman.
+    #[tokio::test]
+    async fn login_transition_pushes_login_state_and_cloud_projects() {
+        let state = VmStateHandle::new();
+        let mut login_rx = state.subscribe_login_state();
+        let mut cloud_rx = state.subscribe_cloud_projects();
+
+        state
+            .apply_login_transition(true, Some("octocat".to_string()), || {
+                vec![CloudProjectEntry {
+                    label: "octocat/tillandsias".to_string(),
+                    owner: "octocat".to_string(),
+                    repo: "tillandsias".to_string(),
+                    default_branch: "main".to_string(),
+                }]
+            })
+            .await;
+
+        assert!(
+            matches!(
+                login_rx.try_recv(),
+                Ok(ControlMessage::LoginStatePush {
+                    logged_in: true,
+                    ..
+                })
+            ),
+            "transition must push LoginState"
+        );
+        assert!(
+            matches!(
+                cloud_rx.try_recv(),
+                Ok(ControlMessage::CloudProjectsPush { projects, .. }) if projects.len() == 1
+            ),
+            "transition must refresh + push CloudProjects"
+        );
+    }
+
+    /// Order 276: an observation that does NOT flip into logged-in must not
+    /// invoke the cloud fetch at all (logged-in -> logged-in is a no-op;
+    /// logged-in -> logged-out pushes LoginState only).
+    #[tokio::test]
+    async fn login_transition_fetches_only_on_the_logged_in_flip() {
+        let state = VmStateHandle::new();
+        state.set_login_state(true, Some("octocat".to_string()));
+        let mut login_rx = state.subscribe_login_state();
+        let mut cloud_rx = state.subscribe_cloud_projects();
+
+        // Unchanged logged-in: no fetch, no pushes.
+        state
+            .apply_login_transition(true, Some("octocat".to_string()), || {
+                panic!("fetch must not run without a logged-in flip")
+            })
+            .await;
+        assert!(
+            login_rx.try_recv().is_err(),
+            "unchanged state must not push"
+        );
+        assert!(cloud_rx.try_recv().is_err(), "no flip => no cloud refresh");
+
+        // Logged-in -> logged-out: LoginState pushes, cloud fetch still not invoked.
+        state
+            .apply_login_transition(false, None, || {
+                panic!("fetch must not run on the logged-out transition")
+            })
+            .await;
+        assert!(
+            matches!(
+                login_rx.try_recv(),
+                Ok(ControlMessage::LoginStatePush {
+                    logged_in: false,
+                    ..
+                })
+            ),
+            "logout must push LoginState"
+        );
+        assert!(
+            cloud_rx.try_recv().is_err(),
+            "logout must not refresh cloud"
+        );
     }
 
     /// Order 230 exit criterion: no redundant push on unchanged state.

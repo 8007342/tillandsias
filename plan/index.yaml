@@ -7001,7 +7001,7 @@ plan_index:
     - packet_id: headless-login-transition-refresh
       order: 276
       title: "Headless: logged-in transition must refresh cloud projects + push LoginState immediately (attended smoke F-C/F-D)"
-      status: ready
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -7038,6 +7038,28 @@ plan_index:
             Attended-smoke capture (operator present, login run live twice).
             Tray-side interim prime landed on osx-next; guest-side is the
             durable fix and is linux-owned.
+        - type: completed
+          ts: "2026-07-10T05:10:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0410Z"
+          host: linux_mutable
+          lease_id: "headless-login-transition-refresh (claim-ledger-node.sh)"
+          summary: >
+            Guest-side transition funnel landed. set_login_state now reports
+            the logged-in flip; new VmStateHandle::apply_login_transition
+            (injectable fetch) pushes LoginState AND, on the flip, refreshes
+            + pushes CloudProjects — wired into the periodic probe, the
+            GithubLoginStatusRequest handler, and a NEW satisfier-completion
+            sentinel: the login flow (separate process) touches
+            /run/tillandsias/login-transition after the vault write; the
+            probe loop stats it every 2s (cheap) and runs the funnel
+            immediately, killing the 60s presence-poll lag (F-D). Heavy
+            vault presence check keeps its 60s cadence. Unit tests: flip
+            produces BOTH pushes with no inbound request; no flip = no
+            fetch; logout pushes LoginState only. ./build.sh --check green
+            (incl. listen-vsock clippy lane); 12 login-scoped tests pass.
+            Trays can drop the interim prime (macos b365deaf; windows
+            mirror) once this reaches their guests — flagged in
+            loop_status.
 
     - packet_id: macos-oneshot-cli-live-tray-coexistence
       order: 277

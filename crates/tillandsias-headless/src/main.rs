@@ -5107,6 +5107,17 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         secret_name = config.provider.vault_secret_name(),
         "{provider_name} authentication and secret rotation completed successfully"
     );
+
+    // Order 276: signal the resident control server (separate process) that a
+    // login just completed so it re-probes NOW instead of on the 60s presence
+    // cadence — the attended-smoke operator re-ran a login that had already
+    // succeeded because the tray stayed visually logged-out (F-D). The
+    // resident server only exists in listen-vsock builds (the in-guest
+    // binary); host builds without the feature have no probe to nudge.
+    #[cfg(feature = "listen-vsock")]
+    {
+        let _ = std::fs::write(vsock_server::login_transition_sentinel_path(), b"1");
+    }
     if let Some(username) = username.filter(|value| !value.is_empty()) {
         println!("[tillandsias] {provider_name} authentication complete for {username}");
     } else {
@@ -8048,8 +8059,24 @@ fn maybe_spawn_vsock_listener(
         let login_probe_state = state.clone();
         let login_probe = tokio::spawn(async move {
             let mut last_presence: Option<bool> = None;
+            // Order 276: 2s ticks. Each tick stats the satisfier-completion
+            // sentinel (cheap); the HEAVY vault presence check keeps its 60s
+            // cadence (every 30th tick) — is_github_key_present costs a
+            // stability lease + container check + vault exec, far too heavy
+            // for the fast path.
+            let mut ticks_since_presence: u32 = 30; // first heavy check on the first eligible tick
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let sentinel = vsock_server::login_transition_sentinel_path();
+                let sentinel_hit = std::fs::metadata(&sentinel).is_ok();
+                if sentinel_hit {
+                    let _ = std::fs::remove_file(&sentinel);
+                }
+                ticks_since_presence = ticks_since_presence.saturating_add(1);
+                let heavy_due = ticks_since_presence >= 30;
+                if !sentinel_hit && !heavy_due {
+                    continue;
+                }
                 if login_probe_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
                     || !login_probe_state.has_login_state_subscribers()
                 {
@@ -8057,8 +8084,32 @@ fn maybe_spawn_vsock_listener(
                     // exec entirely and drop the baseline so the next
                     // subscriber gets a fresh push.
                     last_presence = None;
+                    if heavy_due {
+                        ticks_since_presence = 0;
+                    }
                     continue;
                 }
+                if sentinel_hit {
+                    // Satisfier just completed: resolve the handle NOW and
+                    // run the transition funnel (LoginStatePush + cloud
+                    // refresh on the logged-in flip). Baseline resets so the
+                    // next heavy tick re-derives presence cleanly.
+                    let handle = tokio::task::spawn_blocking(|| {
+                        remote_projects::probe_github_username(false)
+                    })
+                    .await
+                    .unwrap_or(None);
+                    login_probe_state
+                        .apply_login_transition(
+                            handle.is_some(),
+                            handle,
+                            vsock_server::fetch_cloud_projects,
+                        )
+                        .await;
+                    last_presence = None;
+                    continue;
+                }
+                ticks_since_presence = 0;
                 let presence = tokio::task::spawn_blocking(vault_bootstrap::is_github_key_present)
                     .await
                     .unwrap_or(false);
@@ -8072,7 +8123,15 @@ fn maybe_spawn_vsock_listener(
                     tokio::task::spawn_blocking(|| remote_projects::probe_github_username(false))
                         .await
                         .unwrap_or(None);
-                login_probe_state.set_login_state(handle.is_some(), handle);
+                // Order 276: the transition funnel also refreshes + pushes
+                // cloud projects when this observation flips to logged-in.
+                login_probe_state
+                    .apply_login_transition(
+                        handle.is_some(),
+                        handle,
+                        vsock_server::fetch_cloud_projects,
+                    )
+                    .await;
                 last_presence = Some(presence);
             }
         });
