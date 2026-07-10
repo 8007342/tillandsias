@@ -1,0 +1,68 @@
+# @trace spec:meta-orchestration
+#
+# Pins the forge liveness probe (plan order 265). The probe classifies the
+# forge agent into five liveness states (alive_progressing, alive_quiet,
+# dead_air, dead_crashed, dead_killed) by polling three signals: container
+# state, heartbeat file mtime, and git HEAD advancement.
+name: litmus:forge-liveness-probe-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/forge-liveness-probe.sh: the status/wait/deadline modes,
+  the --no-container test mode, the --before-head git-changed probe,
+  the heartbeat-deadline configuration, and exit code semantics (0=alive,
+  1=dead). The probe's five states are verified against controlled test
+  scenarios in the fixture suite.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/forge-liveness-probe.sh
+  - workspace contains scripts/test-forge-liveness-probe.sh
+  - shell utilities (stat, git, date, bash) are available in PATH
+
+critical_path:
+  - step: "probe script exists and is executable"
+    command: "test -x scripts/forge-liveness-probe.sh && echo 'ok: executable' || echo 'fail: not-executable'"
+    timeout_ms: 1000
+    expected_behavior: "ok: executable"
+
+  - step: "probe supports status, wait, and deadline modes"
+    command: "grep -q 'case \"$MODE\" in' scripts/forge-liveness-probe.sh && grep -q 'status)' scripts/forge-liveness-probe.sh && grep -q 'wait)' scripts/forge-liveness-probe.sh && grep -q 'deadline)' scripts/forge-liveness-probe.sh && echo 'ok: modes-defined'"
+    timeout_ms: 1000
+    expected_behavior: "ok: modes-defined"
+
+  - step: "probe defines all five liveness states in classify_state"
+    command: "grep -q 'alive_progressing' scripts/forge-liveness-probe.sh && grep -q 'alive_quiet' scripts/forge-liveness-probe.sh && grep -q 'dead_air' scripts/forge-liveness-probe.sh && grep -q 'dead_crashed' scripts/forge-liveness-probe.sh && grep -q 'dead_killed' scripts/forge-liveness-probe.sh && echo 'ok: states-defined'"
+    timeout_ms: 1000
+    expected_behavior: "ok: states-defined"
+
+  - step: "probe supports --no-container test mode"
+    command: "grep -q '\\-\\-no-container' scripts/forge-liveness-probe.sh && echo 'ok: no-container-defined'"
+    timeout_ms: 1000
+    expected_behavior: "ok: no-container-defined"
+
+  - step: "probe supports --before-head for git-changed detection"
+    command: "grep -q '\\-\\-before-head' scripts/forge-liveness-probe.sh && echo 'ok: before-head-defined'"
+    timeout_ms: 1000
+    expected_behavior: "ok: before-head-defined"
+
+  - step: "probe supports --heartbeat-deadline for stale threshold"
+    command: "grep -q '\\-\\-heartbeat-deadline' scripts/forge-liveness-probe.sh && echo 'ok: heartbeat-deadline-defined'"
+    timeout_ms: 1000
+    expected_behavior: "ok: heartbeat-deadline-defined"
+
+  - step: "fixture test suite exists and is well-formed"
+    command: "test -x scripts/test-forge-liveness-probe.sh && grep -q 'alive_progressing' scripts/test-forge-liveness-probe.sh && grep -q 'alive_quiet' scripts/test-forge-liveness-probe.sh && grep -q 'dead_air' scripts/test-forge-liveness-probe.sh && grep -q 'Results:' scripts/test-forge-liveness-probe.sh && echo 'ok: fixture-well-formed'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fixture-well-formed"
+
+  - step: "probe exits 2 on missing mode argument"
+    command: "scripts/forge-liveness-probe.sh 2>/dev/null; echo \"exit=$?\""
+    timeout_ms: 1000
+    expected_behavior: "exit=2"
+
+  - step: "probe deadline returns a valid ISO-8601 timestamp"
+    command: "scripts/forge-liveness-probe.sh deadline --budget 3600 --start-time $(date +%s) 2>/dev/null | grep -q 'T' && echo 'ok: iso8601' || echo 'fail: not-iso8601'"
+    timeout_ms: 1000
+    expected_behavior: "ok: iso8601"

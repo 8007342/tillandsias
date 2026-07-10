@@ -491,6 +491,7 @@ specs:
   - litmus:ledger-node-claim-shape
   - litmus:git-delta-wait-shape
   - litmus:opencode-prompt-e2e-shape
+  - litmus:forge-liveness-probe-shape
   coverage_ratio: 100
   last_verified: '2026-07-10'
 - spec_id: logging-levels
