@@ -1,6 +1,22 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T06:25:00Z
+LastExecutionTime: 2026-07-10T07:20:00Z
+
+## Cycle 2026-07-10T06:21Z→07:20Z (linux_mutable macuahuitl — overnight loop 2/8: siblings merged, gate-1 burn-down ×3, env-isolation rewritten)
+
+- Merged osx-next (272 SSH backdoor closed + 277) and windows-next (274
+  progress, 154 slice 3 claim); merged tree --check green; one
+  loop_status union-resolve.
+- Gate 1 attempted ×3, each red understood + acted on (full table:
+  plan/issues/build-install-e2e-gate-attempts-20260710-iter2.md):
+  test race FIXED (63e0a497) → env-isolation flake, file REWRITTEN
+  (8ac2abdd) → inference shim red (parked, next 267 slice: product-path
+  launch) + FIRST one-packet STEP 3 timeout (no push landed; order-265
+  data point — recurrence bumps its priority).
+- Destructive gates 2-4 correctly not reached; next iteration rewrites
+  the inference litmus then retries gate 1 → 2-4.
+- Positives: all-features lane 3/3 green; opencode litmus greens #2-3 at
+  062934Z; 268 proxy guard held in the bad shape.
 
 ## Cycle 2026-07-10T05:35Z→05:58Z (windows — meta-orchestration recurring loop 1/8: linux-next FF sync, order 274 criteria 1+2)
 
