@@ -6264,6 +6264,28 @@ plan_index:
             plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md,
             flip evidenced cells to done, re-run the tray-app post-build
             litmus.
+        - type: progress
+          ts: "2026-07-10T04:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            ATTENDED SESSION COMPLETE (The Tlatoani at the tray + agent
+            driving AX harness): 6 of the 7 blocked cells flipped to done
+            with live evidence — 6-leaf submenu (AX-enumerated), login
+            popup (3 real-PAT completions, never inline), cloud submenu +
+            overflow (23 repos), local ~/src submenu (fstab-persistent
+            across reboot), enclave indicator (healthy + degraded live),
+            remote listing. Residual: InteractiveStream stays todo,
+            blocked on NEW order 273 (agent attach runs the github-login
+            flow and exits 0 without launching the agent — verbatim PTY
+            capture via the TILLANDSIAS_PTY_DEBUG tee added this session).
+            litmus:tray-parity-matrix-complete correctly RED on the one
+            todo cell. Session also fixed F-A/F-B/F-C (chip clobber,
+            fstab mount persistence, post-login cloud prime) and filed
+            orders 267-273. Packet stays blocked, now on order 273 (linux)
+            instead of the operator.
+          blocker_refs:
+            - guest-agent-attach-runs-login-flow
 
     - packet_id: windows-tray-parity-column-verify
       order: 258
@@ -7062,3 +7084,57 @@ plan_index:
             forensics surfaced how open it is. Companion to order 271
             (methodology) and order 268 (idiomatic one-shot coexistence,
             which removes the temptation).
+
+    - packet_id: guest-agent-attach-runs-login-flow
+      order: 273
+      title: "Guest headless: agent-attach argv (--cloud <p> --opencode) runs the github-login flow and exits 0 — agent never launches"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, pty, dispatch, forge]
+      estimated_hours: 4
+      outcome: >
+        2026-07-10 attended smoke, verbatim PTY capture via the new
+        TILLANDSIAS_PTY_DEBUG tee (b365deaf tree, guest headless
+        v0.3.260710.2): clicking OpenCode on local project 'tillandsias'
+        sends the correct host-side argv (launch_spec: /bin/bash -lc
+        '... && exec tillandsias-headless --cloud tillandsias --opencode')
+        but the PTY session streams EXACTLY the interactive github-login
+        flow — 'Git author name [saved]:', 'Git author email [saved]:',
+        'Git identity saved', 'Paste your GitHub authentication token',
+        '[tillandsias] GitHub authentication complete for 8007342' — then
+        PtyClose code=0. run_opencode_mode's stack launch / TUI attach
+        never emits a byte. All four leaves (Claude/Codex/OpenCode/
+        Maintenance) show the same operator-visible outcome (flash ->
+        blank -> screen terminates). NOTE the inconsistency that narrows
+        the search: a CLOUD attach on an uncloned repo (lakanoa) DID run
+        the --cloud resolve (clone lines streamed, clone completed) before
+        going silent — so argv reaches the guest; the login flow is
+        entered from INSIDE the launch path. Candidate paths to check:
+        (a) ensure_git_login / ensure_provider_auth chain invoking
+        run_provider_login's interactive prompts (prompt_and_store_git_identity
+        writes /root/.cache/tillandsias/secrets/git/.gitconfig — matches
+        the capture) and then something returning early with success;
+        (b) require_desktop_user_session lane classification for
+        PTY-handler children (HeadlessServiceAccount vs desktop lane) —
+        if it errors, why code=0 and no Error line on the PTY?
+        Repro loop for whoever picks this up: install tray at >= b365deaf,
+        TILLANDSIAS_PTY_DEBUG=1, click an agent leaf, read tray stderr.
+        Fix must end with: agent TUI paints in the popup, PtyClose only on
+        user exit. Full session context:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-J).
+      exit_criteria:
+        - "agent leaf click on a resolved local project lands in the agent TUI (PtyData shows TUI init, not login prompts)"
+        - "root cause named + pinned by a unit test on the guest dispatch path"
+        - "InteractiveStream macOS parity cell flips done with live evidence"
+      events:
+        - type: filed
+          ts: "2026-07-10T04:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Root-caused to the wire with the PTY tee during the attended
+            session; guest-side dispatch is linux-owned so filed for linux
+            pickup with the verbatim capture and a one-click repro loop.

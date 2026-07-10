@@ -179,6 +179,24 @@ XDG_RUNTIME_DIR=/run/user/0, root podman). The fully-user-runtime posture
 The Tlatoāni articulated suggests a rootless-guest target; needs a
 dedicated research packet when prioritized — noted here so it isn't lost.
 
+## Session close-out — parity verdicts
+
+Matrix flips (openspec/tray-parity-matrix.yaml, macOS column, all with live
+evidence in this file): per-project 6-leaf submenu (AX-enumerated all six),
+GitHub login popup (3 completions, real PAT, never inline), cloud submenu +
+overflow (23 repos + CloudOverflow click), local ~/src submenu (2 entries,
+fstab-persistent across reboot), enclave status indicator (healthy 🟢 +
+degraded 🔴 via AX), remote project listing (menu chain live). Residual:
+**InteractiveStream stays todo** — blocked on order 273 (agent attach runs
+the login flow and exits 0; verbatim PTY capture in the packet).
+
+Litmus post-build run: litmus:tray-parity-matrix-complete RED as designed
+(one todo cell). litmus:binary-e2e-smoke FAIL is a PORTABILITY GAP, not a
+product failure: its step 1 defaults to $HOME/.local/bin/tillandsias (the
+Linux install path); macOS installs ~/Applications/Tillandsias.app. Needs a
+per-host default (or TILLANDSIAS_STATUS_CHECK_BIN wiring) — same class as
+order 261's ruby gap; flagged for the litmus-portability chain (224/225/261).
+
 ## Residual verification (needs fresh provision + one more login)
 
 Re-provision with F-B's fstab fix + current headless, re-login (operator),

@@ -1,6 +1,57 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T02:05:00Z
+LastExecutionTime: 2026-07-10T04:25:00Z
+
+## Cycle 2026-07-10T02:02Z (macos — ATTENDED meta-orchestration: order 257 six cells closed live, 3 fixes verified, orders 267-273 filed, isolation correction)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z, **The Tlatoāni at the
+  terminal** (attended interactive packets). Credential guard `ok:gh-keyring`.
+  Merged `origin/linux-next` twice (2bcced8e, d80a13c6) — second merge
+  collided AGAIN on orders 262/263 (linux filed its own in parallel);
+  renumbered mine to **265** (wsl lock-namespace) and **266** (order
+  uniqueness — the finding demonstrating itself twice in one day).
+- **Order 257 attended smoke — 6 of 7 cells DONE live** (AX harness +
+  operator): 6-leaf submenu, login popup (3 real-PAT completions), cloud
+  submenu + overflow (23 repos), local ~/src submenu, enclave indicator
+  (healthy 🟢 + degraded 🔴), remote listing. InteractiveStream residual
+  blocked on order 273. Parity litmus correctly RED on that one cell.
+- **Fixes landed + verified live this session**: (F-A) chip clobbered back
+  to Booting… by rebuilds — MenuState.status_text sync + pin test; (F-B)
+  virtio-fs ~/src mount evaporated after first boot — fstab persistence,
+  verified across a real reboot; (F-C tray side) post-login cloud prime on
+  LoginStatePush — verified: 23 repos rendered the instant login state
+  arrived. Plus TILLANDSIAS_PTY_DEBUG tee in the bridge (product-layer PTY
+  forensics) which root-caused F-J to the wire.
+- **Order 273 (NEW, linux, top macOS-blocking)**: agent attach argv
+  (--cloud <p> --opencode) runs the github-login flow and PtyCloses code=0
+  — the agent NEVER launches (all four leaves). Verbatim PTY capture in the
+  packet + one-click repro loop. This is the last blocker on the macOS
+  parity column.
+- **Isolation correction (The Tlatoāni, recorded)**: agent used the
+  cloud-init SSH key + NAT sshd to run root guest forensics/rebuilds —
+  vetoed. Orders **271** (methodology: agents develop THROUGH the idiomatic
+  layers; ssh/root side channels forbidden; "good enough for development =
+  good enough for user runtime") and **272** (close the SSH backdoor:
+  remove key injection, disable NAT sshd, drift-pin; audit WSL2) filed.
+  Rootless-guest posture captured as research candidate.
+- **Also filed**: 267 (headless: login transition must push LoginState
+  immediately + refresh cloud — 60s-probe gap confirmed 3x tonight, and on
+  boot 2 the probe's first observation never arrived at all: add to 267's
+  repro), 268 (one-shot CLI vs live tray disk-lock collision), 269 (login
+  popup dead-shell + pty-dump session resolution), 270 (first-use attach
+  reaps the in-VM image build — PTY close kills the build; severity
+  upgraded with journal evidence). litmus:binary-e2e-smoke macOS path gap
+  flagged to the 224/225/261 portability chain (findings file).
+- **E2E gate**: attended interactive session on a fresh destructive
+  re-provision (substrate destroyed + cold provision at b365deaf) IS this
+  cycle's runtime verification; full findings file:
+  plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md.
+- **Queue after session**: macOS blocked on linux orders 273 (attach) and
+  267 (login push); orders 268/269/270 macOS-claimable next unattended
+  cycle; 271 any-host; 272 macOS. Order 155 residual (watch-channel menu
+  listeners) still claimable. Linux: 273 is the hot one — full verbatim
+  repro in the packet.
 
 ## Cycle 2026-07-10T00:40Z (macos — meta-orchestration: linux/windows merge + order collision renumber, order 155 slice 3 SC-16, order 263 filed)
 
