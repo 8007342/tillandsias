@@ -128,24 +128,23 @@ pub fn flatten_to_tar<R: Read>(oci_reader: R, output_tar: &Path) -> Result<(), O
             let mut entry = entry?;
             let path = entry.path()?.to_path_buf();
 
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with(".wh.") {
-                    // Whiteout file: remove the target file/dir.
-                    let target_name = &name[4..];
-                    let mut target_path = rootfs_dir.clone();
-                    if let Some(parent) = path.parent() {
-                        target_path.push(parent);
-                    }
-                    target_path.push(target_name);
-                    if target_path.exists() {
-                        if target_path.is_dir() {
-                            std::fs::remove_dir_all(target_path)?;
-                        } else {
-                            std::fs::remove_file(target_path)?;
-                        }
-                    }
-                    continue;
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && let Some(target_name) = name.strip_prefix(".wh.")
+            {
+                // Whiteout file: remove the target file/dir.
+                let mut target_path = rootfs_dir.clone();
+                if let Some(parent) = path.parent() {
+                    target_path.push(parent);
                 }
+                target_path.push(target_name);
+                if target_path.exists() {
+                    if target_path.is_dir() {
+                        std::fs::remove_dir_all(target_path)?;
+                    } else {
+                        std::fs::remove_file(target_path)?;
+                    }
+                }
+                continue;
             }
 
             entry.unpack_in(&rootfs_dir)?;

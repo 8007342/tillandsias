@@ -1360,6 +1360,49 @@ plan_index:
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
       status: ready
       events:
+        - type: progress
+          ts: "2026-07-09T23:10:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2238Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-topics-slice-2"
+          commits: [ea03e08e]
+          summary: >
+            Slice 2 (LoginState+CloudProjects topics) landed on windows-next.
+            The push listener now subscribes to all three topics and applies
+            LoginStatePush/CloudProjectsPush via shared appliers
+            (apply_github_login, apply_cloud_projects — byte-identical with
+            the poll reply arms, mirroring apply_vm_status). Slow-cadence
+            GithubLoginStatusRequest/CloudRefreshRequest polls demoted to
+            fallback-only (should_poll_login_and_cloud gate, drift-pinned;
+            fast-poll bursts still force a confirming round). Pushes are
+            change-gated, so the listener runs one initial-sync poll round
+            over LIVE_CLIENT after SubscribeAck. Verification: cargo clippy
+            --all-targets zero warnings; cargo test -p
+            tillandsias-windows-tray 63 pass (52+8+3); fmt clean. Live e2e of
+            the new topics needs the in-VM headless refreshed to a build
+            containing 744f4749 (this host's provisioned VM predates it) —
+            initial-sync polls cover the gap meanwhile. REMAINING for this
+            packet: watch-channel topic fan-out + menu-listener wakeups, and
+            retiring the 30s tick — which CANNOT fully land until a
+            LocalProjects push topic exists (EnumerateLocalProjects is still
+            poll-only; filed as windows-tray-local-projects-push-gap, order
+            260, linux-owned wire+headless half). Releasing lease; packet
+            stays ready for the watch-channel slice.
+        - type: claim
+          ts: "2026-07-09T22:45:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2238Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-topics-slice-2"
+          expires_at: "2026-07-10T02:45:00Z"
+          scope_note: >
+            Slice 2: orders 230/231 landed (744f4749) so the blocker is cleared.
+            Widen the push subscription to all three topics
+            (VmStatus+LoginState+CloudProjects), apply LoginStatePush /
+            CloudProjectsPush in the reader task via shared appliers, and demote
+            the slow-cadence GithubLoginStatusRequest / CloudRefreshRequest
+            polls to fallback-only (healthy subscription suppresses them;
+            fast-poll bursts and local-projects enumeration stay polled —
+            EnumerateLocalProjects has no push topic yet).
         - type: claim
           ts: "2026-07-09T21:15:00Z"
           agent_id: "windows-bullo-claude-fable-20260709T2107Z"
@@ -6141,7 +6184,8 @@ plan_index:
     - packet_id: windows-tray-parity-column-verify
       order: 258
       title: "Windows: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: blocked
+      blocked_on: "operator-attended interactive smoke at the Windows tray (7 UI cells) — see plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md"
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6166,6 +6210,67 @@ plan_index:
           host: linux
           summary: >
             Filed per operator direction — see order 257's rationale.
+        - type: claim
+          ts: "2026-07-09T23:15:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2310Z"
+          host: windows
+          lease_id: "windows-tray-parity-column-verify-20260709T2315Z"
+          expires_at: "2026-07-10T03:15:00Z"
+          scope_note: >
+            Mirror the order 257 macOS pattern: verify the unattended-
+            verifiable subset live on this host's provisioned WSL VM +
+            installed tray (CLI probes --status-once/--diagnose, launch
+            tray and read data-path log evidence for local/cloud/login
+            state), flip evidenced cells to done, set the rest todo with a
+            consolidated attended-smoke gap packet, then mark this packet
+            blocked on the operator-attended session. Windows note: the
+            tray has no --exec-guest/--list-cloud-projects CLI (macOS-only
+            probes) and uses wsl.exe's console<->in-VM-PTY bridge instead
+            of control-wire PtyOpen for interactive flows — evidence will
+            be recorded against the capability, not the macOS mechanism.
+        - type: progress
+          ts: "2026-07-09T23:30:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2310Z"
+          host: windows
+          lease_id: "windows-tray-parity-column-verify-20260709T2315Z"
+          summary: >
+            Unattended-verifiable subset done LIVE on the rebuilt+reinstalled
+            tray (windows-next@92675e8e, embedded SHA == HEAD) against the
+            provisioned tillandsias WSL distro. One-off status/probe cell ->
+            done: --status-once --json {reachable:true, wire_version:2,
+            phase:Ready, podman_ready:true, exit 0}; --diagnose --json exit 0
+            full schema; stopped-VM error path exercised live too; one-off
+            guest exec via wsl.exe bridge GUEST_OK (mechanism note recorded —
+            windows probes ride VmStatusRequest + wsl.exe, not the
+            ExecOneShot frame). Strong partial evidence for local projects
+            (host scan count=5 + VM-side round-trip count=5), cloud refresh
+            (graceful not-logged-in count=0), login state (logged_in=false
+            applied), status chip healthy path (phase=Ready applied; SC-07
+            suppression held after initial sync). Remaining 7 required cells
+            unknown -> todo, consolidated gap packet:
+            plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md
+            (9-step attended checklist; refresh in-VM headless past 744f4749
+            first — this VM's guest is v0.3.260707.2, so push topics for
+            login/cloud cannot fire yet; designed poll fallback covered it).
+        - type: blocked
+          ts: "2026-07-09T23:31:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2310Z"
+          host: windows
+          reason: >
+            7 required cells (menus, popup-terminal login, attach UX, status
+            indicator states, credentialed cloud listing) cannot be honestly
+            verified without an ATTENDED interactive session — code reading
+            is disallowed by this packet and there is no unattended way to
+            drive the Win32 notification-area menu. Until the attended pass,
+            litmus:tray-parity-matrix-complete stays RED on Windows --ci-full
+            by order 243 design.
+          blocker: "operator-attended interactive smoke at the Windows tray"
+          owner: "operator (Tlatoāni) + windows agent recording"
+          smallest_next_action: >
+            Run the 9-step attended checklist in
+            plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md,
+            flip evidenced cells to done, re-run the tray-app post-build
+            litmus.
 
     - packet_id: litmus-runner-step-exit-code-ignored
       order: 256
@@ -6281,3 +6386,82 @@ plan_index:
             designed (both processes must resolve the same
             XDG_RUNTIME_DIR/tillandsias-locks path inside the guest — check
             that first).
+
+    - packet_id: windows-tray-local-projects-push-gap
+      order: 260
+      title: "Control wire + headless: LocalProjects push topic (last poll blocking tick-loop retirement)"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/vsock_server.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [rust, headless, vsock, control-wire]
+      estimated_hours: 3
+      outcome: >
+        Order 154 slice 2 retired the slow-cadence login/cloud polls, but the
+        windows tray's 30s tick loop cannot be eliminated (exit criterion
+        "No tokio::time::sleep in notify_icon.rs transport path") because
+        EnumerateLocalProjects is the one remaining topic with no push
+        source. Add SubscriptionTopic::LocalProjects + a LocalProjectsPush
+        trailing variant to control-wire (additive, no WIRE_VERSION bump —
+        coordinate via this packet since control-wire is cross-host shared
+        scope), and a change-gated push source in vsock_server.rs following
+        the set_login_state/set_cloud_projects pattern from 744f4749 (source:
+        the VM-side project reconciliation that backs LocalProjectsReply).
+        The windows (and later macos) tray then widens its topic list and
+        deletes its last steady-state poll; the tick loop shrinks to a
+        pure fallback path gated on subscription health.
+      exit_criteria:
+        - "SubscriptionTopic::LocalProjects + LocalProjectsPush on the wire (additive; wire tests updated)"
+        - "change-gated LocalProjectsPush source in the headless (no redundant push on unchanged list)"
+        - "unit test: VM-side project list change emits LocalProjectsPush"
+        - "./build.sh --check and --test pass"
+      events:
+        - type: filed
+          ts: "2026-07-09T23:10:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2238Z"
+          host: windows
+          summary: >
+            Filed from order 154 slice 2 (windows): reduction-engine capture —
+            the packet's tick-elimination exit criterion is unreachable while
+            local projects are poll-only. Full context in
+            plan/issues/windows-tray-local-projects-push-gap-2026-07-09.md.
+
+    - packet_id: parity-litmus-ruby-free-check
+      order: 261
+      title: "tillandsias-policy parity-matrix subcommand: ruby-free litmus:tray-parity-matrix-complete (gate cannot execute on Windows)"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-policy
+      depends_on: []
+      pickup_role: any
+      capability_tags: [rust, litmus, policy, portability]
+      estimated_hours: 2
+      outcome: >
+        litmus:tray-parity-matrix-complete is a ruby -ryaml one-liner with
+        precondition "ruby in PATH" — Windows hosts have no ruby (the same
+        gap that made tillandsias-policy validate-yaml the sanctioned
+        Windows YAML validator), so the per-host parity gate order 243
+        designed can NEVER execute on the Windows --ci-full lane, and order
+        258's exit criterion 4 is unsatisfiable as written. Add a
+        parity-matrix check subcommand to tillandsias-policy implementing
+        the same semantics (current host column done on required rows,
+        valid status words, no regressed cell anywhere), point the litmus
+        command at it (ruby one-liner as fallback where cargo is absent),
+        and pin with unit tests. Full finding:
+        plan/issues/parity-litmus-ruby-dependency-windows-2026-07-09.md.
+        Overlaps orders 224/225 (litmus DSL) but is a one-command slice.
+      exit_criteria:
+        - "tillandsias-policy parity-matrix (or equivalent) exits 0/1 with the litmus's exact semantics + unit tests"
+        - "litmus:tray-parity-matrix-complete command runs without ruby on Windows"
+        - "litmus passes on linux (done column) and fails on windows/macos until their attended passes (by design)"
+      events:
+        - type: filed
+          ts: "2026-07-09T23:33:00Z"
+          agent_id: "windows-bullo-fable5-20260709T2310Z"
+          host: windows
+          summary: >
+            Reduction-engine capture from order 258: exit criterion 4 asks a
+            check to pass that cannot even execute on this host class — an
+            advisory-only gate. Filed + promoted per capture rule.

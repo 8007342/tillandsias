@@ -110,9 +110,7 @@ fn run() -> Result<(), String> {
     let result = mat
         .run(&recipe, &manifest, args.arch)
         .map_err(|e| format!("materialize: {e}"))?;
-    let tar_path = match result {
-        MaterializedRootfs::Tar(p) => p,
-    };
+    let MaterializedRootfs::Tar(tar_path) = result;
 
     let sha =
         sha256_file(&tar_path).map_err(|e| format!("sha256 of {}: {e}", tar_path.display()))?;
@@ -196,10 +194,10 @@ fn parse_args<I: Iterator<Item = String>>(mut iter: I) -> Result<Args, String> {
 }
 
 fn default_cache_root() -> PathBuf {
-    if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
-        if !xdg.is_empty() {
-            return PathBuf::from(xdg).join("tillandsias").join("recipe-cache");
-        }
+    if let Ok(xdg) = std::env::var("XDG_CACHE_HOME")
+        && !xdg.is_empty()
+    {
+        return PathBuf::from(xdg).join("tillandsias").join("recipe-cache");
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
     PathBuf::from(home)
