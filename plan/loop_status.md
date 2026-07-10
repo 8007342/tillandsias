@@ -1,8 +1,63 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T23:35:00Z
+LastExecutionTime: 2026-07-10T02:05:00Z
 
-## Cycle 2026-07-09T23:10Z (windows — meta-orchestration worker drain, order 258)
+## Cycle 2026-07-10T00:09Z (linux_mutable macuahuitl — meta-orchestration: windows integration, litmus chain 255→262→264, e2e gate 1, in-forge drained 254+263)
+
+- **Credential guard**: ok:gh-keyring. Started clean at 67bffc86.
+- **Sibling integration** (a4092688): merged windows-next +8 (order 154 slice 2
+  LoginState+CloudProjects push topics; order 258 unattended parity subset; 6
+  windows clippy fixes). Merged tree: --check green + 66 workspace test suites
+  green. Verification exposed that `cargo check/clippy --workspace` never
+  compiles non-default-feature units (garbage injected into vm-layer
+  materialize/oci.rs → exit 0): fixed the latent vm-layer fake.rs lints
+  (f39f79e4), filed integration-gate-feature-coverage-gap-2026-07-10.md with a
+  Tlatoāni-gated ci-full bar-raise proposal. The headless all-features reds
+  were order 254's known scope (since drained — see below).
+- **Order 255 completed** (2bcced8e): the "STEP 5 race" was a misdiagnosis —
+  STEP 5 referenced $HEAD_BEFORE that no step ever set (runner steps are
+  separate bash -c subshells), collapsing its range to HEAD..HEAD: a
+  deterministic false negative since introduction. Shared bounded-retry probe
+  scripts/litmus-git-delta-wait.sh (local-head/plan-commit/remote-head, 120s
+  window/5s poll, exit 0/1/2 grammar) now backs litmus steps 4-6; new
+  litmus:git-delta-wait-shape (9 steps) pins it incl. mid-window re-sample +
+  no-dead-check negative. Criterion 2 discharged live: steps 4-5 PASS in this
+  cycle's ci-full forge cycle.
+- **E2E gate (local-build, run 20260710T003451Z): gate 1 exit 1, stopped
+  per runbook** — pre-build litmus 146/146, coverage 100%, security 16/16,
+  musl launcher installed (v0.3.260710.1); post-build e2e 5/6. Sole red:
+  STEP 6 asserted `ls-remote origin HEAD` whose symref is refs/heads/main —
+  a linux-next push never moves it (bug-behind-a-bug, unmasked by 255).
+  **Order 262 filed + fixed + completed**: branch-scoped recorder + probe,
+  shape-litmus regression pin (non-default-branch fixture where origin HEAD
+  resolves to nothing), live probe PASS against the real push window
+  129a85dd→e433b96f. Destructive gates 2-4 NOT reached (substrate intact);
+  next cycle should run the full destructive e2e expecting gate 1 green
+  modulo order 264.
+- **In-forge activity (sanctioned mid-build actors, audited)**: ci-full's
+  litmus cycle drained order 254 (61abd3bf: listen-vsock CI lane in --check +
+  pty test fixes) but pushed a mis-indented plan/index.yaml — committed
+  ledger did not parse; coordinator mediated mechanically and filed order 263
+  (mirror pre-receive YAML gate). The 262-verification run's in-forge cycle
+  then IMPLEMENTED order 263 (e433b96f: 150-line pre-receive hook + 10-step
+  shape litmus; coordinator audit PASS 2/2; gate binds on next git-mirror
+  image rebuild) — and blew STEP 3's 600s budget doing it → **order 264
+  filed** (bug+design: litmus budget vs in-forge greedy-drain doctrine;
+  options enumerated, ready). e433b96f also lacks Generated-By trailers and
+  its ledger event was misattributed (corrected; addendum in the 2026-07-10
+  findings file — consider a trailer rider on the 263 hook if it recurs).
+- **Release**: none — tray-parity release hold (16 gaps) still requires The
+  Tlatoāni's recorded approval; daily Linux release remains due behind it
+  (latest v0.3.260708.4).
+- **Queue after cycle**: linux ready = 264 (new), 256, 238, 144, 261
+  (any-host), 260, security chain (137/141/145), streams chain
+  (147/150/151/153/156/157/158), DSL (224/225), transport (125/128).
+  Windows: orders 230/231 confirmed landed → order 154 slice 3 unblocked;
+  order 258 blocked on attended smoke. macOS: order 259 criterion-3
+  verification still requested; order 155 residual slices claimable.
+  Blocked-on-operator: attended parity smokes (orders 257/258), tray-parity
+  release hold, feature-coverage bar-raise approval (see
+  integration-gate-feature-coverage-gap-2026-07-10.md).
 
 - **Host**: Windows 11 native, `windows-next`. Credential guard
   `ok:gh-credentials-store`. Clean start at 521de7bd == origin/windows-next;

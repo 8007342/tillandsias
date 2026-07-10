@@ -6504,7 +6504,7 @@ plan_index:
     - packet_id: opencode-prompt-e2e-step6-wrong-ref
       order: 262
       title: "Fix: litmus:opencode-prompt-e2e-shape STEP 6 asserts origin HEAD (default branch) instead of the branch under test"
-      status: in_progress
+      status: completed
       kind: bug+litmus
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-10.md
       depends_on: []
@@ -6542,6 +6542,22 @@ plan_index:
             nothing). Instant pre-build suite 4/4 PASS
             (git-delta-wait-shape 9/9). Live standalone e2e litmus re-run
             in flight; completion event to follow with its verdict.
+        - type: completed
+          ts: "2026-07-10T01:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Criterion 1 pinned (shape litmus 9/9 incl. the non-default-branch
+            regression fixture). Criterion 2 evidenced compositely: steps
+            4-5 passed live in ci-full run 20260710T003451Z, and the fixed
+            remote-head probe executed live against the real origin push
+            window 129a85dd -> e433b96f ("ok: remote HEAD advanced ...",
+            exit 0). The standalone all-7-step run could not complete for an
+            UNRELATED cause: STEP 3 timed out at its 600s budget because the
+            in-forge cycle implemented all of order 263 (e433b96f) —
+            steps 4-6 were never reached. That budget tension is order 264;
+            the full-chain green rides on it, not on this packet's defect,
+            which is closed and pinned.
 
     - packet_id: git-mirror-ledger-yaml-gate
       order: 263
@@ -6580,9 +6596,9 @@ plan_index:
             ledger reach origin/linux-next; the mirror is the single choke
             point that can make it a constraint for every forge push.
         - type: done
-          ts: "2026-07-10T01:20:00Z"
-          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
-          host: linux_mutable
+          ts: "2026-07-10T01:12:11Z"
+          agent_id: "linux-forge-inlitmus-20260710 (untrailered — commit e433b96f, author-date-corrected; original event misattributed to macuahuitl and predated the filed event)"
+          host: forge
           summary: >
             Implementation complete: added pre-receive YAML validation gate
             (images/git/pre-receive-hook.sh) with tillandsias-policy + ruby
@@ -6590,4 +6606,52 @@ plan_index:
             entrypoint.sh (installs pre-receive hook). Shape litmus
             litmus:git-mirror-yaml-gate-shape passes (10/10 steps).
             Build check passes (format, type, clippy). Tests pass (141/142
-            — one unrelated network failure).
+            — one unrelated network failure). Coordinator audit 2026-07-10:
+            litmus re-run PASS on macuahuitl (git-mirror-service suite 2/2);
+            gate goes LIVE only when the git-mirror image is rebuilt
+            (next --init / image build), not retroactively on running
+            mirrors. NOTE the commit lacks Generated-By trailers — see the
+            attribution addendum in the deliverable issue.
+
+    - packet_id: opencode-e2e-forge-budget-tension
+      order: 264
+      title: "litmus:opencode-prompt-e2e-shape STEP 3 600s budget vs the in-forge greedy-drain doctrine"
+      status: ready
+      kind: bug+design
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-10.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, forge, meta-orchestration, budgets]
+      estimated_hours: 3
+      outcome: >
+        STEP 3 launches `./repeat --times 1` with timeout_ms 600000, but the
+        meta-orchestration skill instructs forge-hosted cycles to IGNORE the
+        recurring-loop budget and drain as many ready packets as possible.
+        Concrete collision 2026-07-10: the standalone verification run's
+        in-forge cycle implemented the whole of order 263 (e433b96f,
+        pre-receive hook + litmus + wiring) and blew the 600s budget — STEP
+        3 TIMEOUT, steps 4-7 unreached, gate red even though both the agent
+        and the fixed assertions were healthy. The gate's failure mode is
+        indistinguishable from a hung forge. Design options (pick one, pin
+        it): (a) litmus-launched cycles pass an explicit drain budget the
+        skill honors (e.g. TILLANDSIAS_FORGE_DRAIN_BUDGET=1 packet or
+        time-boxed), keeping the litmus fast and deterministic; (b) raise
+        step timeout and have the litmus treat "agent still coherently
+        committing" as progress (weakens determinism); (c) a dedicated
+        no-drain smoke prompt for the litmus (verifies the commit+push
+        lifecycle with a minimal plan touch instead of real work). Option
+        (a) or (c) preserve the gate's falsifiability; (b) does not.
+      exit_criteria:
+        - "an in-forge cycle launched by the litmus completes inside the step budget deterministically (drain bounded or smoke-scoped)"
+        - "litmus:opencode-prompt-e2e-shape passes all 7 steps standalone on a healthy host"
+        - "the greedy-drain doctrine for NON-litmus forge cycles is unchanged"
+      events:
+        - type: filed
+          ts: "2026-07-10T01:58:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Reduction-engine capture from the order 262 verification run
+            (target/litmus-rerun-20260710/run.log: STEP 3 TIMEOUT). The
+            in-forge agent did excellent real work (order 263) in the wrong
+            budget envelope — the tension is structural, not agent error.

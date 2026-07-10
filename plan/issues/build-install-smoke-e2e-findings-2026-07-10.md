@@ -74,3 +74,36 @@ completion event in `plan/index.yaml` for the verdict and evidence log
 deliberately deferred to the next cycle: gate 1's red was litmus-infra-only,
 the substrate is intact, and the fixed gate needs one clean pass before the
 expensive destructive lane re-runs.
+
+## Live re-run outcome (order 262 verification) + two more captures
+
+The standalone re-run (`target/litmus-rerun-20260710/run.log`) reached STEP 3
+and TIMED OUT at the 600s budget — steps 4-7 unreached, so the timeout is
+unrelated to the order-262 fix. Cause: the in-forge cycle it launched
+implemented the ENTIRE order 263 (git-mirror pre-receive YAML gate,
+`e433b96f`: hook + Containerfile/entrypoint wiring + 10-step shape litmus)
+— the meta-orchestration skill's in-forge greedy-drain doctrine structurally
+fights STEP 3's fixed budget. Filed as **order 264** (bug+design, ready).
+
+Order 262 itself is closed on composite evidence: shape-litmus regression
+pin 9/9; steps 4-5 live PASS in run 20260710T003451Z; the fixed remote-head
+probe executed live against the real origin push window
+`129a85dd -> e433b96f` ("ok: remote HEAD advanced …", exit 0). The full
+7-step standalone green now rides on order 264.
+
+### Attribution addendum (capture)
+
+`e433b96f` carries no `Generated-By:` trailers and its ledger `done` event
+was stamped with the COORDINATOR's agent_id and a timestamp predating the
+packet's filed event (copy-paste). Coordinator corrected the event
+(author-date, forge host, untrailered note). The commit-attribution
+discipline (order 53 / cheatsheet) is prose-only on the forge lane — same
+enforcement-gap family as order 263; if it recurs, shape a pre-receive
+trailer check rider onto the order-263 hook rather than a new mechanism.
+
+### Coordinator audit of the in-forge order-263 work: PASS
+
+`litmus:git-mirror-yaml-gate-shape` re-run on the coordinator host: PASS
+(git-mirror-service suite 2/2). Ledger and bindings parse. Note the gate
+binds when the git-mirror IMAGE is next rebuilt (`--init` / image build);
+running mirrors are not retroactively gated.
