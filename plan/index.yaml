@@ -3997,7 +3997,7 @@ plan_index:
     - packet_id: litmus-command-portability-dsl-research
       order: 224
       title: "Research: readable, portable building-block primitives for litmus command: fields"
-      status: ready
+      status: completed
       kind: research
       deliverable: plan/issues/litmus-command-portability-dsl-research-2026-07-06.md
       depends_on: []
@@ -4032,6 +4032,21 @@ plan_index:
             since authoring. The DSL design should make multi-line/structured
             commands first-class (or impossible), not silently droppable.
             Fail-loud interim fix tracked as order 256.
+        - type: completed
+          ts: "2026-07-10T02:35:00Z"
+          agent_id: "opencode-bigpickle-20260710T0227Z"
+          host: linux_mutable
+          lease_id: "litmus-command-portability-dsl-research-20260710"
+          summary: >
+            All 5 design questions resolved with concrete choices.
+            D1: shell functions in sourced scripts/litmus-stdlib.sh (model b).
+            D2: 8 core primitives mined from 1044-command corpus (mf_literal,
+            mf_literal_count, mf_regex, mf_regex_count, mf_absent,
+            mf_threshold, mf_file_exists, mf_assert_count). D3: single file
+            with case-branching per OS. D4: lint+pin+lazy migration. D5: raw
+            command: remains valid as escape hatch. 5 real prototype rewrites
+            included in deliverable. Corpus: 198 files, 1044 commands, 74%
+            grep-based, ~64 affected by dialect-sensitive escape class.
       exit_criteria:
         - "a written design decision (not just options) for each of the 5 questions in the deliverable"
         - "a working prototype: 3-5 real existing command: fields rewritten in the chosen token form, passing identically to their raw form"
