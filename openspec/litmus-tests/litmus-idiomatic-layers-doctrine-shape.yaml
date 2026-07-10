@@ -1,0 +1,73 @@
+# @trace spec:methodology-accountability
+#
+# Pins the idiomatic-layers-for-agents doctrine (plan order 271, decided by
+# The Tlatoāni in the 2026-07-10 attended session after a macOS agent ssh'd
+# into the guest as root to read journals): the control wire / --diagnose /
+# ExecOneShot / PTY-attach surfaces are the ONLY sanctioned guest access for
+# agents — development included; a task the layer cannot do is a product gap
+# to file, and root exec anywhere in guest/forge is a finding, not a tool.
+# This litmus falsifies drift in the canonical methodology block and its
+# skill cross-references so unattended agents keep inheriting the rule.
+name: litmus:idiomatic-layers-doctrine-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin methodology/multi-host-development.yaml idiomatic_layers_for_agents
+  (rule + file-a-packet-instead + audit rule) and the grepable
+  cross-references in skills/advance-work-from-plan and
+  skills/build-install-and-smoke-test-e2e.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains methodology/multi-host-development.yaml
+  - workspace contains skills/advance-work-from-plan/SKILL.md
+  - workspace contains skills/build-install-and-smoke-test-e2e/SKILL.md
+
+critical_path:
+  - step: "canonical block exists with all three sub-rules"
+    command: "grep -q 'idiomatic_layers_for_agents:' methodology/multi-host-development.yaml && grep -q 'when_the_layer_cannot_do_it:' methodology/multi-host-development.yaml && grep -q 'audit_rule:' methodology/multi-host-development.yaml && echo 'ok: canonical-block'"
+    timeout_ms: 3000
+    expected_behavior: "ok: canonical-block"
+
+  - step: "the block names the sanctioned surfaces and the never-root rule"
+    command: "grep -q 'ExecOneShot' methodology/multi-host-development.yaml && grep -q 'TILLANDSIAS_PTY_DEBUG' methodology/multi-host-development.yaml && grep -qi 'root is never required' methodology/multi-host-development.yaml && echo 'ok: surfaces-named'"
+    timeout_ms: 3000
+    expected_behavior: "ok: surfaces-named"
+
+  - step: "worker skill references the canonical block"
+    command: "grep -q 'idiomatic_layers_for_agents' skills/advance-work-from-plan/SKILL.md && echo 'ok: worker-skill-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: worker-skill-wired"
+
+  - step: "e2e skill references the canonical block"
+    command: "grep -q 'idiomatic_layers_for_agents' skills/build-install-and-smoke-test-e2e/SKILL.md && echo 'ok: e2e-skill-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: e2e-skill-wired"
+
+  - step: "methodology file still parses as YAML"
+    command: "if command -v cargo >/dev/null 2>&1; then cargo run -q -p tillandsias-policy -- validate-yaml methodology/multi-host-development.yaml >/dev/null && echo 'ok: yaml-parses'; else ruby -ryaml -e 'YAML.load_file(%q(methodology/multi-host-development.yaml)); puts %q(ok: yaml-parses)'; fi"
+    timeout_ms: 120000
+    expected_behavior: "ok: yaml-parses"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "idiomatic-layers doctrine pinned (canonical block + surfaces + worker/e2e skill wiring + parseable)"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "idiomatic-layers-doctrine-shape"
+    artifact: "methodology/multi-host-development.yaml + 2 SKILL.md cross-refs"
+
+rollback:
+  on_failure: >
+    The idiomatic-layers doctrine drifted. Restore the
+    idiomatic_layers_for_agents block (rule naming the sanctioned surfaces
+    incl. ExecOneShot and the TILLANDSIAS_PTY_DEBUG tee and the
+    root-never-required isolation statement; when_the_layer_cannot_do_it
+    file-a-packet-instead rule; audit_rule making ssh/root a review finding)
+    in methodology/multi-host-development.yaml, and keep the grepable
+    idiomatic_layers_for_agents cross-references in
+    skills/advance-work-from-plan/SKILL.md and
+    skills/build-install-and-smoke-test-e2e/SKILL.md.
+  command: "grep -n 'idiomatic_layers_for_agents' methodology/multi-host-development.yaml skills/advance-work-from-plan/SKILL.md skills/build-install-and-smoke-test-e2e/SKILL.md"

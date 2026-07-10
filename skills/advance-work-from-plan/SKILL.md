@@ -122,6 +122,7 @@ cargo test -p <crate-you-touched>      # targeted, fast
 
 Hard rules:
 - **Never bypass the idiomatic-podman layer.** The test `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` enforces routing through `PodmanClient` — no direct `Command::new("podman")` in production launch paths.
+- **Develop THROUGH the idiomatic layers — no ssh/root/side channels into the guest.** The control wire / `--diagnose` / ExecOneShot / PTY-attach (+`TILLANDSIAS_PTY_DEBUG` tee) surfaces are the ONLY sanctioned guest access, for forensics and debugging exactly as for runtime. A task the layer cannot do is a product gap: file a packet extending the layer instead of side-stepping. Root exec anywhere in guest/forge is a finding, not a tool. Canonical: `methodology/multi-host-development.yaml` `idiomatic_layers_for_agents` (The Tlatoāni, 2026-07-10, order 271).
 - **Container security flags are non-negotiable**: `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, `--rm`.
 - **Pre-commit hooks and release signing** are not optional.
 - **Acquire the smoke lock for source-mutating migrations**: Destructive, file-moving, or source-mutating directory migrations (e.g., file-restructuring tasks) MUST run under the shared smoke lock `build-install-smoke-e2e` (using `scripts/with-smoke-lock.sh`) or a corresponding lease, so that concurrent E2E gates do not read or execute from a half-migrated or half-restructured tree.
