@@ -28,3 +28,17 @@ Residual known-open on the litmus infrastructure (order 267 tail):
 strict-exit default flip + [PARSE WARNING]→FAIL promotion + the parked
 command:-regex anchor, all gated on the corpus staying green under
 TILLANDSIAS_LITMUS_STRICT_EXIT=1 sweeps.
+
+## Follow-up runs (iteration 7): strict-default gate findings + STEP 3 liveness wiring
+
+Run 104117Z red: alpine:latest fallbacks in the slice-2 helper scripts
+(base-policy drift — pinned) and run-observatorium.sh's unqualified +
+bump-window image reference (a REAL launcher bug the patternless step had
+always legacy-passed — fixed with qualified resolution + newest-web
+fallback, verified live). Run 104930Z red: post-build strict surfaced (a)
+one forge opencode-stage exit 1 at 10:56Z inside container-start-health —
+single occurrence, transient-suspect, promote to a packet on recurrence;
+(b) the SECOND alive-past-budget STEP 3 timeout (the in-forge agent
+pushed 260cbbfd after the wall) — per the recorded rule this bumped the
+order-265 wiring, now DONE: STEP 3 runs the liveness probe past a 600s
+soft budget (alive extends, dead_* fails fast, 1500s hard cap).
