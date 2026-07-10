@@ -1,7 +1,49 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T05:50:00Z
+LastExecutionTime: 2026-07-10T06:25:00Z
 
+
+## Cycle 2026-07-10T05:57Z (macos — overnight autonomous 2/8: order 277 done + verified both ways)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 2 of 8).
+  Credential guard `ok:gh-keyring`. Clean start, linux-next unchanged since
+  cycle 1; windows-next advanced (not merged here — linux coordinates).
+- **Order 277 COMPLETED + verified live**: VM-booting one-shot modes probe
+  the tray singleton (acquire-and-drop) and exit 3 with operator guidance
+  when a live tray owns the VM — no more opaque VZ storage error. Verified
+  both branches live: refusal against a running tray; GUEST_OK exit 0 via
+  --exec-guest after quit. Pin test covers all four dispatch branches.
+- **E2E gate**: skipped-with-cause — full destructive local-build e2e
+  PASSED on this host <1h ago (cycle 1 report); this cycle runtime delta
+  (the guard) was live-verified directly on the installed build.
+- **Queue next**: macOS-claimable = 269 (ux residue), 270 (attach
+  materialization blackout — NOTE partially entangled with linux order 273:
+  273 may reveal the attach never reaches the build path on macOS), 155
+  residual. Order 273 still linux-open — the hot macOS blocker.
+
+## Cycle 2026-07-10T05:33Z (macos — overnight autonomous 1/8: order 272 done + verified on fresh provision, destructive e2e PASS)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight loop 1 of 8,
+  hourly). Credential guard `ok:gh-keyring`. Clean start; fast-forwarded
+  onto origin/linux-next 50fdd0bb (orders 275/276/260/268 landed — the
+  uniqueness gate, the login-transition funnel, and the LocalProjects push
+  all shipped by linux tonight).
+- **Order 272 COMPLETED (33151e4d) + verified live**: cloud-init injects no
+  SSH keys; sshd.service/.socket masked; systemd-ssh-generator nulled (the
+  AF_VSOCK ssh surface behind the boot banner). Pin test scoped to the
+  user-data window. Fresh destructive provision probed via --exec-guest
+  (idiomatic layer, no ssh per orders 271/272): sshd masked+inactive, zero
+  :22 listeners, zero key material (empty image-stub files only), fstab
+  home-src mount present. wsl.rs audit clean.
+- **E2E gate (destructive, local-build)**: preflight `eligible`; build +
+  codesign v0.3.260710.3 + install (SHA == HEAD) + 2.1G wipe + 528MB cold
+  provision exit 0; report
+  plan/issues/macos-e2e-overnight-cycle1-2026-07-10.md. Tray installed but
+  NOT launched (unattended; operator relaunch in the morning picks up the
+  hardened template).
+- **Queue next**: macOS-claimable = 277, 269, 270, 271 (any), 155 residual;
+  linux flag: order 273 (attach runs login flow) still the hot macOS
+  blocker — untouched tonight so far.
 ## Cycle 2026-07-10T04:10Z→05:50Z (linux_mutable macuahuitl — OPERATOR-DIRECTED drain: 275+268+276+260 completed, both siblings integrated)
 
 - **Credential guard**: ok:gh-keyring. Clean start at f685b1e3; merged

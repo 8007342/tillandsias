@@ -7088,7 +7088,7 @@ plan_index:
     - packet_id: macos-oneshot-cli-live-tray-coexistence
       order: 277
       title: "macOS one-shot CLI modes vs running tray: disk-lock collision with opaque VZ error (attended smoke F-E)"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-macos-tray/src/main.rs
       depends_on: []
@@ -7119,6 +7119,20 @@ plan_index:
           summary: >
             Attended-smoke capture: every guest forensics attempt this
             session had to be abandoned or routed around the running tray.
+        - type: completed
+          ts: "2026-07-10T06:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0557Z"
+          host: macos
+          summary: >
+            All three criteria closed. The four VM-booting one-shot modes
+            (--exec-guest/--github-login/--list-cloud-projects/--opencode)
+            probe the tray's own singleton lock (acquire-and-drop, no
+            side effects) and exit 3 with operator guidance when a live
+            tray holds it; no-tray behavior unchanged; source pin test on
+            all four branches. Verified LIVE both ways: refusal + exit 3
+            against a running tray, then GUEST_OK exit 0 via --exec-guest
+            after quitting it. This also un-blocks in-session forensics
+            guidance (the F-E temptation order 271's methodology bans).
 
     - packet_id: macos-attended-smoke-ux-residue
       order: 269
@@ -7270,7 +7284,7 @@ plan_index:
     - packet_id: guest-ssh-backdoor-closure
       order: 272
       title: "Close the guest debug backdoor: cloud-init SSH key injection + NAT-reachable sshd violate secure-socket-only isolation"
-      status: ready
+      status: done
       kind: security
       deliverable: crates/tillandsias-vm-layer/src/vz.rs
       depends_on: []
@@ -7308,6 +7322,22 @@ plan_index:
             forensics surfaced how open it is. Companion to order 271
             (methodology) and order 268 (idiomatic one-shot coexistence,
             which removes the temptation).
+        - type: completed
+          ts: "2026-07-10T05:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0533Z"
+          host: macos
+          commits: [33151e4d]
+          summary: >
+            All three criteria closed. Cloud-init injects no keys and masks
+            sshd.service/sshd.socket + systemd-ssh-generator's AF_VSOCK and
+            local sockets (the generator itself nulled). Source pin test
+            scoped to the user-data window. Verified LIVE on a fresh
+            destructive provision via --exec-guest (idiomatic layer, no
+            ssh): sshd masked+inactive, zero listeners on :22, zero SSH key
+            material (the authorized_keys files present are EMPTY cloud-init
+            image stubs from the Fedora image itself, harmless with sshd
+            masked). wsl.rs audited clean — no WSL2 sibling packet needed.
+            Report: plan/issues/macos-e2e-overnight-cycle1-2026-07-10.md.
 
     - packet_id: guest-agent-attach-runs-login-flow
       order: 273
