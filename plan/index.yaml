@@ -1533,6 +1533,27 @@ plan_index:
             sources landed, orders 230/231), watch-channel menu listeners,
             SC-01/02 sleep elimination in the projects/login cadence. Lease
             released for the next macOS cycle.
+        - type: progress
+          ts: "2026-07-10T00:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z"
+          host: macos
+          commits: [2a492797]
+          summary: >
+            Slice 2 COMPLETE and verified LIVE on a fresh VZ VM: Subscribe set
+            widened to [VmStatus, LoginState, CloudProjects]; reader loop
+            consumes LoginStatePush/CloudProjectsPush (and their reply twins)
+            through new map_login_state/apply_login_state/apply_cloud_projects
+            helpers shared byte-identically with the fallback poll path;
+            initial-sync extended to all three topics (login/cloud primes on
+            the same connection, tolerated Error while logged out); SC-07 gate
+            widened (VM_STATUS_PUSH_HEALTHY -> PUSH_SUBSCRIPTION_HEALTHY) so
+            the 10-tick login/cloud polls are suppressed while the stream is
+            healthy. LocalProjects has no push topic and keeps polling. Live
+            evidence: 'push subscription established (vm-status/login/cloud
+            polls demoted to fallback, SC-07)' then Ready chip via push, clean
+            SIGTERM. 64/64 tray tests (topic pin now slice-2 shape). Remaining
+            slices: watch-channel menu listeners, SC-01/02 sleep elimination
+            in the tick loop. Lease released.
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
@@ -6214,8 +6235,7 @@ plan_index:
     - packet_id: vault-ensure-name-in-use-race
       order: 259
       title: "P1: cold-VM first --github-login fails — tillandsias-vault name-in-use race between boot bootstrap and login satisfier"
-      status: blocked
-      blocked_on: "macOS fresh-VM repro (exit criterion 3) — linux structural slice complete, see completed-analysis event"
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
       depends_on: []
@@ -6281,3 +6301,63 @@ plan_index:
             designed (both processes must resolve the same
             XDG_RUNTIME_DIR/tillandsias-locks path inside the guest — check
             that first).
+        - type: completed
+          ts: "2026-07-10T00:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z"
+          host: macos
+          commits: [77b0ba92]
+          summary: >
+            Criterion 3 verified after one more fix. Fresh-VM repro on the
+            merged tree (2a492797, includes the linux structural slice) STILL
+            hit exit 125 — the linux hypothesis was exactly right: the two
+            guest processes resolved disjoint lock namespaces. The headless
+            unit (vz.rs) set HOME=/root but no XDG_RUNTIME_DIR, so
+            resource_lock::lock_dir() fell back to /tmp/tillandsias-locks-0,
+            while the tray's github-login exec preamble exports
+            XDG_RUNTIME_DIR=/run/user/0 — flocks on different files never
+            contend. Fix 77b0ba92 pins Environment=XDG_RUNTIME_DIR=/run/user/0
+            in the headless unit + two source pin tests (vm-layer unit line,
+            macos-tray preamble export) so the values fail loud on drift.
+            Re-verified on a fully re-provisioned fresh VM: first
+            --github-login reaches 'matched: git author name' with no 125 and
+            no podman error (evidence: macos-build-install-smoke-e2e-findings-
+            2026-07-09.md run 2). All four exit criteria now closed. Windows
+            residual promoted to order 260 (wsl.rs unit sets neither HOME nor
+            XDG_RUNTIME_DIR).
+
+    - packet_id: wsl-headless-unit-lock-namespace
+      order: 260
+      title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, vault, concurrency]
+      estimated_hours: 2
+      outcome: >
+        Same class as the macOS order 259 root cause, found by inspection
+        while fixing it: the WSL2 tillandsias-headless.service (wsl.rs ~:350)
+        sets neither HOME nor XDG_RUNTIME_DIR, so the boot-path bootstrap's
+        resource_lock::lock_dir() falls back to /tmp/tillandsias-locks-<uid>
+        while any exec'd satisfier path that exports XDG_RUNTIME_DIR (mirror
+        of macos-tray diagnose.rs preamble) locks under
+        /run/user/<uid>/tillandsias-locks. flock(2) on different files never
+        contends, so the vault name-in-use race (exit 125 on fresh-distro
+        first login) can reproduce on Windows exactly as it did on macOS.
+        Fix mirror: pin Environment=XDG_RUNTIME_DIR (and HOME) in the wsl.rs
+        unit to the satisfier's values + source pin tests on both sides, per
+        77b0ba92 on osx-next. Then re-run the fresh-distro first-login probe.
+      exit_criteria:
+        - "wsl.rs headless unit pins HOME and XDG_RUNTIME_DIR to the exec-preamble values"
+        - "source pin tests fail loud if the unit and any exec preamble drift apart"
+        - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
+      events:
+        - type: filed
+          ts: "2026-07-10T00:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z"
+          host: macos
+          summary: >
+            Filed during order 259 macOS verification (fix 77b0ba92). See
+            plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md
+            run 2 for the full lock-namespace post-mortem this mirrors.

@@ -1,6 +1,41 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T23:10:00Z
+LastExecutionTime: 2026-07-10T00:30:00Z
+
+## Cycle 2026-07-09T23:10Z (macos — meta-orchestration: order 155 slice 2, order 259 root-caused + fixed + verified, full destructive e2e ×2)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z. Credential guard
+  `ok:gh-keyring`. Started clean at b6d657a2; merged `origin/linux-next`
+  (67bffc86, clean) before work.
+- **Order 155 slice 2 — COMPLETE (2a492797), verified LIVE**: Subscribe
+  widened to all three topics; LoginStatePush/CloudProjectsPush consumers in
+  the reader loop via apply helpers shared with the poll path; initial sync
+  extended to login/cloud on the same connection; SC-07 gate widened
+  (PUSH_SUBSCRIPTION_HEALTHY) to suppress the 10-tick login/cloud polls.
+  Live: 'push subscription established (vm-status/login/cloud polls demoted
+  to fallback, SC-07)', Ready chip via push, clean SIGTERM. 64/64 tests.
+  Remaining: watch-channel menu listeners, SC-01/02 sleep elimination.
+- **Order 259 — COMPLETED (77b0ba92)**: fresh-VM repro on the merged tree
+  STILL hit exit 125; root cause exactly the linux agent's hypothesis —
+  disjoint lock namespaces (headless unit: no XDG_RUNTIME_DIR →
+  /tmp/tillandsias-locks-0; login exec preamble: /run/user/0). Fix pins
+  Environment=XDG_RUNTIME_DIR=/run/user/0 in the vz.rs unit + drift pin
+  tests both sides. Re-provisioned fresh VM: first --github-login reaches
+  the git-author-name prompt, no 125, no podman error. All four exit
+  criteria closed. Windows sibling gap promoted to **order 260** (ready,
+  windows pickup: wsl.rs unit sets neither HOME nor XDG_RUNTIME_DIR).
+- **E2E gate (local-build, destructive, ×2)**: gates 1–3 + diagnose PASS on
+  both 2a492797 and 77b0ba92 (build/codesign/install/freshness; 2.1G destroy;
+  528MB cold provision). Forge lane n/a. Findings file run-2 section:
+  plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md.
+- **Captures**: control-wire-prime-seq-double-allocation-2026-07-09.md
+  (optimization: primes allocate two seqs each, both trays).
+- **Queue after drain**: macOS-eligible ready residue = order 155 remaining
+  slices (claimable next cycle); order 257 still blocked on operator-attended
+  smoke; order 126 still blocked on linux order 128. Linux flag: order 259's
+  fix pattern may also apply to any OTHER guest exec path that omits
+  XDG_RUNTIME_DIR; windows flags: orders 260 (new), 154 cold-join, 258.
 
 ## Cycle 2026-07-09T22:40Z (linux_mutable macuahuitl — meta-orchestration: sibling integration x2, trunk-red mediation, order 259 linux slice)
 
