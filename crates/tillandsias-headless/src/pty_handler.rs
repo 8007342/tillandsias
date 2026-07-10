@@ -31,7 +31,7 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd, OwnedFd};
 use std::os::unix::process::CommandExt;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -116,32 +116,29 @@ impl PtySessionStore {
             "/bin/bash" => argv.len() >= 2 && (argv[1] == "-l" || argv[1] == "-lc"),
             "tillandsias" => argv.len() == 3 && argv[1] == "--agent",
             "tillandsias-headless" => argv.len() >= 2 && argv[1] == "--github-login",
-            "podman" => {
-                if argv.len() >= 4 && argv[1] == "exec" && argv[2] == "-it" {
-                    let target = &argv[3];
-                    if target.starts_with("tillandsias-") && target.ends_with("-forge") {
-                        let project = &target["tillandsias-".len()..target.len() - "-forge".len()];
-                        let project_valid = !project.is_empty()
-                            && project
-                                .chars()
-                                .all(|c| c.is_ascii_alphanumeric() || c == '-');
+            "podman" if argv.len() >= 4 && argv[1] == "exec" && argv[2] == "-it" => {
+                let target = &argv[3];
+                if target.starts_with("tillandsias-") && target.ends_with("-forge") {
+                    let project = &target["tillandsias-".len()..target.len() - "-forge".len()];
+                    let project_valid = !project.is_empty()
+                        && project
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '-');
 
-                        let subcmd = argv.get(4).map(|s| s.as_str());
-                        let subcmd_valid = match subcmd {
-                            Some("/bin/bash") => {
-                                argv.len() >= 6 && (argv[5] == "-l" || argv[5] == "-lc")
-                            }
-                            Some("tillandsias") => argv.len() == 7 && argv[5] == "--agent",
-                            Some(_) | None => false,
-                        };
-                        project_valid && subcmd_valid
-                    } else {
-                        false
-                    }
+                    let subcmd = argv.get(4).map(|s| s.as_str());
+                    let subcmd_valid = match subcmd {
+                        Some("/bin/bash") => {
+                            argv.len() >= 6 && (argv[5] == "-l" || argv[5] == "-lc")
+                        }
+                        Some("tillandsias") => argv.len() == 7 && argv[5] == "--agent",
+                        Some(_) | None => false,
+                    };
+                    project_valid && subcmd_valid
                 } else {
                     false
                 }
             }
+            "podman" => false,
             _ => false,
         };
 
@@ -217,9 +214,9 @@ impl PtySessionStore {
         //    returns Ok(0) on EOF or Err(EIO) on slave-close, which
         //    drives the pump's break-and-reap path.
         let master_raw = master.as_raw_fd();
-        let flags = fcntl(master_raw, FcntlArg::F_GETFL).map_err(|e| PtyOpenError::Openpty(e))?;
+        let flags = fcntl(master_raw, FcntlArg::F_GETFL).map_err(PtyOpenError::Openpty)?;
         let new_flags = OFlag::from_bits_truncate(flags) | OFlag::O_NONBLOCK;
-        fcntl(master_raw, FcntlArg::F_SETFL(new_flags)).map_err(|e| PtyOpenError::Openpty(e))?;
+        fcntl(master_raw, FcntlArg::F_SETFL(new_flags)).map_err(PtyOpenError::Openpty)?;
         let master_async = AsyncFd::with_interest(master, Interest::READABLE | Interest::WRITABLE)
             .map_err(PtyOpenError::Spawn)?;
         let master_arc = Arc::new(master_async);
@@ -626,14 +623,18 @@ mod tests {
         assert_eq!(paths, vec!["/custom/bin"], "exactly one, caller's PATH");
     }
 
-    /// Empty env still yields a usable PATH.
+    /// Empty env still yields a usable PATH + proxy-exemption vars.
     #[test]
-    fn child_env_empty_input_gets_path() {
+    fn child_env_empty_input_gets_path_and_proxy_exemption() {
         let out = child_env(&[]);
-        assert_eq!(
-            out,
-            vec![("PATH".to_string(), DEFAULT_CHILD_PATH.to_string())]
-        );
+        let path = out
+            .iter()
+            .find(|(k, _)| k == "PATH")
+            .map(|(_, v)| v.as_str());
+        assert_eq!(path, Some(DEFAULT_CHILD_PATH));
+        assert!(out.iter().any(|(k, _)| k == "no_proxy"));
+        assert!(out.iter().any(|(k, _)| k == "NO_PROXY"));
+        assert_eq!(out.len(), 3);
     }
 
     /// End-to-end smoke: open a PTY for `echo hi`, observe the `hi\r\n`
@@ -727,22 +728,25 @@ mod tests {
                 42,
                 24,
                 80,
-                vec![
-                    "/bin/sh".to_string(),
-                    "-c".to_string(),
-                    "sleep 30".to_string(),
-                ],
+                vec!["/bin/bash".to_string(), "-l".to_string()],
                 vec![],
                 None,
             )
             .await
             .expect("first open succeeds");
         let err = store
-            .open(42, 24, 80, vec!["/bin/sh".to_string()], vec![], None)
+            .open(
+                42,
+                24,
+                80,
+                vec!["/bin/bash".to_string(), "-l".to_string()],
+                vec![],
+                None,
+            )
             .await
             .expect_err("duplicate session id must error");
         matches!(err, PtyOpenError::DuplicateSession(42));
-        // Cleanup: shut down the sleeping child.
+        // Cleanup: shut down the first child.
         store.shutdown_all().await;
     }
 

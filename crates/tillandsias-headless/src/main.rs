@@ -8090,48 +8090,53 @@ fn maybe_spawn_vsock_listener(
                 }
 
                 let mut cmd = tillandsias_podman::podman_cmd();
-                cmd.args(&["events", "--format", "json"]);
+                cmd.args(["events", "--format", "json"]);
                 cmd.stdout(std::process::Stdio::piped());
 
                 if let Ok(mut child) = cmd.spawn() {
                     if let Some(stdout) = child.stdout.take() {
                         let mut reader = tokio::io::BufReader::new(stdout).lines();
                         while let Ok(Some(line)) = reader.next_line().await {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
-                                if let Some(action) = parsed.get("Action").and_then(|v| v.as_str())
-                                {
-                                    if let Some(name) = parsed
-                                        .get("Actor")
-                                        .and_then(|a| a.get("Attributes"))
-                                        .and_then(|a| a.get("name"))
-                                        .and_then(|v| v.as_str())
-                                    {
-                                        let display = match action {
-                                            "create" | "start" | "init" => {
-                                                if name.contains("forge") {
-                                                    Some("Building Forge")
-                                                } else if name.contains("chromium") {
-                                                    Some("Polishing Chromium")
-                                                } else if name.contains("inference") {
-                                                    Some("Loading Inference")
-                                                } else if name.contains("vault") {
-                                                    Some("Securing Vault")
-                                                } else if name.contains("proxy") {
-                                                    Some("Routing Proxy")
-                                                } else if name.contains("git") {
-                                                    Some("Setting up Git")
-                                                } else {
-                                                    Some("Setting up containers")
-                                                }
-                                            }
-                                            "build" => Some("Building image"),
-                                            _ => None,
-                                        };
-                                        if let Some(msg) = display {
-                                            events_state.set_last_event(msg.to_string());
-                                        }
+                            let parsed = match serde_json::from_str::<serde_json::Value>(&line) {
+                                Ok(p) => p,
+                                _ => continue,
+                            };
+                            let action = match parsed.get("Action").and_then(|v| v.as_str()) {
+                                Some(a) => a,
+                                _ => continue,
+                            };
+                            let name = match parsed
+                                .get("Actor")
+                                .and_then(|a| a.get("Attributes"))
+                                .and_then(|a| a.get("name"))
+                                .and_then(|v| v.as_str())
+                            {
+                                Some(n) => n,
+                                _ => continue,
+                            };
+                            let display = match action {
+                                "create" | "start" | "init" => {
+                                    if name.contains("forge") {
+                                        Some("Building Forge")
+                                    } else if name.contains("chromium") {
+                                        Some("Polishing Chromium")
+                                    } else if name.contains("inference") {
+                                        Some("Loading Inference")
+                                    } else if name.contains("vault") {
+                                        Some("Securing Vault")
+                                    } else if name.contains("proxy") {
+                                        Some("Routing Proxy")
+                                    } else if name.contains("git") {
+                                        Some("Setting up Git")
+                                    } else {
+                                        Some("Setting up containers")
                                     }
                                 }
+                                "build" => Some("Building image"),
+                                _ => None,
+                            };
+                            if let Some(msg) = display {
+                                events_state.set_last_event(msg.to_string());
                             }
                         }
                     }

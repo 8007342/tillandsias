@@ -194,11 +194,11 @@ impl RemoteVaultLease {
         #[cfg(test)]
         {
             let _ = debug;
-            return Ok(Self {
+            Ok(Self {
                 secret_name: "test-vault-token".to_string(),
                 #[cfg(feature = "vault")]
                 _lease: None,
-            });
+            })
         }
         #[cfg(all(not(test), feature = "vault"))]
         {

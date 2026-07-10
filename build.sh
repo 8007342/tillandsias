@@ -720,6 +720,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -- -D warnings 2>&1
     _info "Clippy passed"
 
+    _step "Running clippy (strict + listen-vsock)..."
+    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-headless --features listen-vsock -- -D warnings 2>&1
+    _info "Clippy (listen-vsock) passed"
+
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
