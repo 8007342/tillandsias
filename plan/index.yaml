@@ -7549,6 +7549,25 @@ plan_index:
             Filed per The Tlatoāni's 2026-07-10 direction during the order
             264 decision ("perhaps we could later add better heartbeat and
             alive signals so we don't rely on timeouts").
+        - type: progress
+          ts: "2026-07-10T07:00:00Z"
+          agent_id: "linux-bigp pickle-20260710T065445Z"
+          host: linux_mutable
+          summary: >
+            Research verdict + fixture prototype complete. Evaluated 5
+            candidates: heartbeat file (best primary), git commit cadence
+            (complementary), podman container exec (secondary), vsock pulse
+            (deferred to order 153), podman events (already exists). Chose
+            3-signal layered design: container state + heartbeat mtime + git
+            HEAD. Implemented scripts/forge-liveness-probe.sh (status/wait/
+            deadline modes, 5 liveness states: alive_progressing, alive_quiet,
+            dead_air, dead_crashed, dead_killed). Implemented fixture test
+            suite scripts/test-forge-liveness-probe.sh (8 scenarios, all pass).
+            Authored litmus:forge-liveness-probe-shape (9 steps, all pass).
+            Registered in litmus-bindings.yaml. Research deliverable:
+            plan/issues/forge-agent-liveness-signals-research.md.
+            Residual: add heartbeat touch to forge entrypoint, wire into
+            repeat script, wire into litmus STEP 3 timeout diagnostics.
 
     - packet_id: ci-full-all-features-clippy-lane
       order: 266
