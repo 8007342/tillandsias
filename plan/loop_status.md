@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T07:25:00Z
+LastExecutionTime: 2026-07-10T07:45:00Z
 
 ## Cycle 2026-07-10T06:58Z (macos — overnight autonomous 3/8: order 269 done + verified live, order 281 filed from PTY-tee capture)
 
@@ -3438,7 +3438,15 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - **Work**: Verified `litmus:forge-liveness-probe-shape` — 8/8 static checks PASS, 8/8 fixture suite PASS, full instant pre-build suite 124/124 PASS (100%).
 - **E2E eligibility**: `skip:smoke-lock-held`.
 - **Coordinator**: Merged `origin/windows-next` (order 154 slice 3: push subscription widened, version-skew fallback). Resolved plan/loop_status.md union conflict. `build --check` green.
-- **Next**: order 267 remaining (folded command steps, strict-exit default), order 281 (guest overlay corruption self-heal), order 273 (attach login).
+- **Next**: order 267 remaining (promote [PARSE WARNING] to per-step FAIL, flip strict-exit default ON), order 281 (guest overlay corruption self-heal), order 273 (attach login).
+
+## Cycle 2026-07-10T07:45Z (linux-mutable — meta-orchestration: litmus:forge-liveness-probe-shape re-verified; order 267 slice 2 COMPLETE)
+
+- **Host**: Linux x86_64, `linux-next`, agent opencode/big-pickle. Credential guard `ok:gh-keyring`. Clean start at 0e056e3d (checkpointed auto-generated traces/metrics).
+- **Work**: Re-verified `litmus:forge-liveness-probe-shape` — 8/8 static checks PASS, 8/8 fixture suite PASS (all five liveness states, deadline iso8601, exit codes). Order 267 slice 2: rewrote all 31 folded/multi-line command steps across 8 files into runner-compatible single-line commands, extracted 5 helper scripts under scripts/. ruby -ryaml parses 200/200, zero remaining folded commands.
+- **E2E eligibility**: `skip:smoke-lock-held`.
+- **Coordinator**: Both platform branches (windows-next, osx-next) already merged. No new platform work.
+- **Next**: order 267 remaining — promote [PARSE WARNING] to per-step FAIL, flip strict-exit default ON. Also order 281, order 273.
 
 ## Cycle 2026-07-10T06:38Z→06:48Z (linux-mutable — meta-orchestration: order 267 slice 1: 4 YAML-invalid files repaired)
 

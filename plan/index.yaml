@@ -7739,6 +7739,28 @@ plan_index:
             block-scalar rollback command indentation + escape. Remaining:
             rewrite 31 folded/multi-line command steps across 8 files,
             promote [PARSE WARNING] to per-step FAIL, flip strict-exit default ON.
+        - type: progress
+          ts: "2026-07-10T07:45:00Z"
+          agent_id: "opencode/big-pickle"
+          host: linux_mutable
+          summary: >
+            Slice 2 complete: rewrote all 31 folded/multi-line command steps
+            (from `|` literal blocks, `>` folded scalars, and `\n`-escaped
+            double-quoted YAML) into single-line runner-compatible commands.
+            Extracted 5 helper scripts under scripts/ for complex integration
+            test steps: litmus-helper-storage-isolation.sh (11 steps),
+            litmus-helper-event-driven.sh (9 steps),
+            litmus-helper-tray-network-bootstrap.sh (5 steps),
+            litmus-helper-browser-isolation.sh (1 step),
+            litmus-helper-nix-cache-size.sh (1 step).
+            Fixed 3 files with `command: >` folded scalars
+            (litmus-integration-strategy-consistency.yaml,
+            litmus-no-raw-error-in-status-chip.yaml) and 2 with `\n`-escaped
+            patterns (litmus-init-command-shape.yaml,
+            litmus-browser-isolation-e2e.yaml step 11).
+            ruby -ryaml parses 200/200, zero remaining folded/multi-line commands.
+            Remaining: promote [PARSE WARNING] to per-step FAIL,
+            flip strict-exit default ON.
 
     - packet_id: inference-firstrun-ollama-download
       order: 268

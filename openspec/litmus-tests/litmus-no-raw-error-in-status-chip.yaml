@@ -46,8 +46,7 @@ critical_path:
   # on no-match (good) and exits non-zero if a match is found (bad).
 
   - step: "windows-tray: no raw format-error passed to update_status_text"
-    command: >
-      ! grep -nE 'update_status_text\s*\(\s*&\s*format!\s*\(\s*".*\{.*err.*\}|update_status_text\s*\(\s*&\s*format!\s*\(\s*".*\{.*:.*\?.*\}' crates/tillandsias-windows-tray/src/notify_icon.rs
+    command: "! grep -nE 'update_status_text\\s*\\(\\s*&\\s*format!\\s*\\(\\s*\".*\\{.*err.*\\}|update_status_text\\s*\\(\\s*&\\s*format!\\s*\\(\\s*\".*\\{.*:.*\\?.*\\}' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "succeeds"
     timeout_ms: 3000
 

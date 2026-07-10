@@ -15,10 +15,7 @@ preconditions:
 
 critical_path:
   - step: "Verify no stray rebase instructions for cross-branch integration exist"
-    command: >
-      ! grep -riE "pull-integration and rebase pass" skills/ &&
-      ! grep -riE "cross-branch.*rebase" methodology/ skills/ | grep -v "not merge, for cross-branch" &&
-      echo "ok: strategy consistent"
+    command: "! grep -riE 'pull-integration and rebase pass' skills/ && ! grep -riE 'cross-branch.*rebase' methodology/ skills/ | grep -v 'not merge, for cross-branch' && echo 'ok: strategy consistent'"
     timeout_ms: 3000
     expected_behavior: "ok: strategy consistent"
 

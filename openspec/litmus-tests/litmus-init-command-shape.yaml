@@ -13,15 +13,15 @@ preconditions:
 
 critical_path:
   - step: "verify --init, --force, and --debug CLI flag registration"
-    command: "rg 'let init = user_args\\.iter\\(\\)\\.any\\(|a| a == \"--init\"\\);' crates/tillandsias-headless/src/main.rs && rg 'let force = user_args\\.iter\\(\\)\\.any\\(|a| a == \"--force\"\\);' crates/tillandsias-headless/src/main.rs && rg 'let debug = user_args\\.iter\\(\\)\\.any\\(|a| a == \"--debug\"\\);' crates/tillandsias-headless/src/main.rs"
+    command: "rg ' let init = user_args.iter().any(|a| a == \"--init\");' crates/tillandsias-headless/src/main.rs && rg ' let force = user_args.iter().any(|a| a == \"--force\");' crates/tillandsias-headless/src/main.rs && rg ' let debug = user_args.iter().any(|a| a == \"--debug\");' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 5000
 
   - step: "verify the help text matches the spec"
-    command: "rg 'println!\\(\"       tillandsias --init \\[--force\\] \\[--debug\\]\"\\);' crates/tillandsias-headless/src/main.rs"
+    command: "rg 'println!(\"       tillandsias --init [--force] [--debug]\");' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 5000
 
   - step: "verify the eight images are defined in the canonical order"
-    command: "rg -U 'let images = \\[\n\\s+\"proxy\",\n\\s+\"git\",\n\\s+\"inference\",\n\\s+\"router\",\n\\s+\"chromium-core\",\n\\s+\"chromium-framework\",\n\\s+\"forge\",\n\\s+\"web\",\n\\s+\\];' crates/tillandsias-headless/src/main.rs"
+    command: "rg -z 'let images = \\[\\n\\s+\"proxy\",\\n\\s+\"git\",\\n\\s+\"inference\",\\n\\s+\"router\",\\n\\s+\"chromium-core\",\\n\\s+\"chromium-framework\",\\n\\s+\"forge\",\\n\\s+\"web\",\\n\\s+\\];' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 5000
 
   - step: "verify run_init uses PodmanClient for build orchestration"
