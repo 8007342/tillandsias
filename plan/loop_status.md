@@ -1,6 +1,57 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T02:35:00Z
+LastExecutionTime: 2026-07-10T04:05:00Z
+
+## Cycle 2026-07-10T02:05Z→04:05Z (linux_mutable macuahuitl — OPERATOR-DIRECTED: bar-raise approved+enabled, one-packet forge doctrine, orders 256/264/266 done, 265/267/268 filed, install delivered)
+
+- **The Tlatoāni's directives executed (recorded 2026-07-10)**:
+  (1) Bar-raise slice 2 APPROVED → registry entry
+  methodology/convergence.yaml approved_bar_raises
+  (ci-full-all-features-clippy), lane rust-clippy-all-features wired into
+  scripts/local-ci.sh non-fast pre-build (--ci-full only; --ci/--fast
+  skips). Baseline sweep green; negative control (planted warning in a
+  fake-feature unit) fails the lane exit 101; PASSED in anger in the final
+  gate. Slice 3 (--check promotion) remains unapproved. Order 266 completed.
+  (2) One-packet forge doctrine (order 264, chosen over env-var approach):
+  forge-hosted cycles drain AT MOST ONE packet, split oversized packets
+  into ready children. Canonical:
+  methodology/distributed-work.yaml worker_agent_protocol.forge_cycle_budget;
+  skills/meta-orchestration + advance-work-from-plan updated. VERIFIED
+  LIVE: gate run 20260710T021654Z's in-forge cycle drained exactly order
+  224 (litmus-stdlib research) inside the 600s budget.
+  (3) Heartbeat/liveness signals filed as order 265 (research, ready) —
+  replace timeout inference with positive liveness; hard cap stays.
+- **litmus:opencode-prompt-e2e-shape: 7/7 PASS — first fully-green run in
+  its history** (orders 255+262+264 all discharged live; branch-scoped
+  STEP 6 probe passed against the in-forge push).
+- **Order 256 slice 1 (done, split → 267)**: litmus runner exit-code
+  authority staged behind TILLANDSIAS_LITMUS_STRICT_EXIT=1 (strict dry run
+  exposed 8 litmuses red behind the dead-check trap + an empty-step-name
+  exit-127 mis-parse class); legacy mode prints [DEAD-CHECK WARNING] (24
+  visible in the full suite); [PARSE WARNING] for unparseable commands (31
+  folded steps across 8 files skipped since authoring); zero-step files
+  fail with a named parse error. Order 267 (ready) owns burn-down, folded
+  rewrites, 4 YAML-invalid file repairs, strict default flip
+  (plan/issues/litmus-corpus-parse-health-2026-07-10.md).
+- **Final gate (run 20260710T021654Z): exit 1 with exactly ONE red** —
+  litmus:inference-deferred-model-pulls cold path: first-run ollama binary
+  download FAILED → exit 127 (product, graceful-degradation path;
+  unrelated to this cycle's changes). Filed as order 268 (ready) with
+  evidence (plan/issues/build-install-e2e-gate-20260710T021654Z.md).
+  Everything else green: pre-build 147/147 incl. the new all-features
+  lane, security 17/17, post-build 7/8.
+- **Install delivered**: /home/tlatoani/.local/bin/tillandsias
+  v0.3.260710.3 (40M), fresh from 39186723(+relay).
+- **Coordination**: windows-next (00076813) and osx-next (86105319)
+  advanced late in the cycle — integration deferred to the next recurring
+  linux cycle (this cycle was operator-directed; no tree mutations during
+  the running gate). Doctrine + lane changes are on linux-next for
+  siblings to pick up; the windows-owned chip litmus rewrite inside order
+  267 needs windows coordination.
+- **Queue after cycle**: linux ready = 268 (new), 267, 265, 260, 261,
+  225 (224 research done by in-forge), 144, security chain, streams chain,
+  transport. Blocked-on-operator: attended parity smokes (257/258),
+  tray-parity release hold, bar-raise slice 3 (unapproved).
 
 ## This Loop (2026-07-10T02:27Z, linux_mutable — big-pickle reduction: litmus-stdlib-research)
 

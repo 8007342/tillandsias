@@ -6655,7 +6655,7 @@ plan_index:
     - packet_id: opencode-e2e-forge-budget-tension
       order: 264
       title: "litmus:opencode-prompt-e2e-shape STEP 3 600s budget vs the in-forge greedy-drain doctrine"
-      status: ready
+      status: completed
       kind: bug+design
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-10.md
       depends_on: []
@@ -6715,6 +6715,21 @@ plan_index:
             worker_agent_protocol.forge_cycle_budget. Verification (all 7
             litmus steps under the new doctrine) rides on this cycle's
             final --ci-full --install gate; completion event to follow.
+        - type: completed
+          ts: "2026-07-10T03:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          lease_id: "opencode-e2e-forge-budget-tension (claim-ledger-node.sh)"
+          summary: >
+            Verified live in gate run 20260710T021654Z:
+            litmus:opencode-prompt-e2e-shape passed ALL 7 STEPS for the
+            first time in its history. STEP 3's in-forge cycle obeyed the
+            one-packet doctrine (drained exactly order 224, 16078687),
+            completed inside the 600s budget, and its push satisfied the
+            branch-scoped STEP 6 probe — discharging this packet's both
+            criteria and order 262's residual full-chain criterion in the
+            same run. Timeout inference remains interim pending order 265
+            (heartbeat/liveness).
 
     - packet_id: forge-agent-liveness-signals
       order: 265
@@ -6836,3 +6851,40 @@ plan_index:
             standalone-context artifact). Slice-able file-by-file; each
             file is an independent child if a picker needs smaller
             packets.
+
+    - packet_id: inference-firstrun-ollama-download
+      order: 268
+      title: "Inference first-run: ollama binary download fails (exit 127) — cold path red in litmus:inference-deferred-model-pulls"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/build-install-e2e-gate-20260710T021654Z.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, containers, network, litmus]
+      estimated_hours: 3
+      outcome: >
+        Gate run 20260710T021654Z post-build: with the model cache wiped,
+        the inference container's first-run entrypoint failed to download
+        the ollama binary ("ollama download FAILED — will retry next
+        launch"), hit `ollama: command not found` (exit 127), and the
+        litmus's 185s cold-launch window failed — the gate's only red.
+        Product effect is degraded-but-graceful (retry next launch);
+        the cold path must actually work. Investigate: egress route of the
+        tarball fetch in the litmus's bare `podman run` shape (no
+        --network flag — enclave proxy vs direct), possible proxy env
+        leakage, URL/checksum staleness, and why prior gates passed (warm
+        binary cache). NOTE: the litmus file is one of the four
+        YAML-invalid files in order 267's scope — coordinate edits.
+      exit_criteria:
+        - "root cause identified with evidence (network route / URL / env)"
+        - "cold first-run launch (wiped cache) reaches 'Pulling T0|T1 ready' within the litmus window on this host"
+        - "litmus:inference-deferred-model-pulls passes in a full gate run"
+      events:
+        - type: filed
+          ts: "2026-07-10T04:00:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Sole red of gate run 20260710T021654Z (7/8 post-build;
+            everything operator-directed passed). Full evidence excerpt in
+            the deliverable.
