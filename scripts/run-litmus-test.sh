@@ -690,7 +690,7 @@ run_litmus_test_file() {
                 current_step_expected=""
                 current_step_success_pattern=""
                 current_step_failure_pattern=""
-            elif [[ "$line" =~ command:\ \"(.+)\" ]]; then
+            elif [[ "$line" =~ ^[[:space:]]*command:\ \"(.+)\" ]]; then
                 # YAML escapes \" as a double-quote inside a double-quoted
                 # string. The bash regex above captures the raw bytes between
                 # the outer "s, so the captured value retains the backslashes.

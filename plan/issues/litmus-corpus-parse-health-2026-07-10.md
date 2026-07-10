@@ -187,3 +187,24 @@ REVERTED for now; re-apply in the same commit as the remaining folded
 rewrites (or make step/expected pairing robust first). The agent's three
 sibling fixes (podman-build alias grep to "$PODMAN", spec-traceability
 doc path, entrypoint-test stubs) were verified strict-green and adopted.
+
+## Iteration-5 tail status: strict flip blocked on exactly ONE litmus
+
+Fixed this iteration (all strict-verified): init-command-shape steps 1-3
+(rg regex-vs-literal: -F for exact source lines; -z→-U multiline; the
+canonical image pin updated 8→10 images per orders 253/76);
+headless-init harness step quoting (single→double-quoted scalar — it had
+NEVER executed) + rustup env (RUSTUP_HOME/CARGO_HOME pinned before the
+HOME override); the command:-regex anchor RE-APPLIED safely post-slice-2
+(a doc comment containing the literal pattern reproduced the mid-string
+match bug — the anchor now guards it).
+
+REMAINING BLOCKER (the only one): litmus-headless-init-status-check-
+source-built STEP 3+ — the harness cargo test
+source_built_init_and_status_check_smoke_uses_fake_podman "passes" in
+0.07s WITHOUT writing the calls log (self-short-circuit; a hermetic
+skip disguised as pass). Rust-side investigation: find the early-return
+condition (env probe? fake-podman detection?) and make the test fail
+loud when its preconditions are absent. Until then the strict-exit
+default flip stays off; this file alone produces DEAD-CHECK warnings in
+legacy mode.
