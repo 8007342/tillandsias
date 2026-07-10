@@ -6068,7 +6068,7 @@ plan_index:
     - packet_id: opencode-prompt-e2e-step5-race
       order: 255
       title: "Fix: litmus:opencode-prompt-e2e-shape STEP 5 races the in-forge cycle's final plan commit"
-      status: ready
+      status: completed
       kind: bug+litmus
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-09.md
       depends_on: []
@@ -6100,6 +6100,29 @@ plan_index:
             the deliverable). Third occurrence of this race class — consider a
             shared "wait for in-forge cycle terminal state" helper for all
             forge-launching litmus steps.
+        - type: completed
+          ts: "2026-07-10T00:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          lease_id: "opencode-prompt-e2e-step5-race (claim-ledger-node.sh)"
+          summary: >
+            Root cause is deterministic, not (only) a race: STEP 5 referenced
+            $HEAD_BEFORE without populating it — runner steps are separate
+            `bash -c` subshells, so STEP 4's variable never carries over. The
+            empty expansion collapsed the diff range to HEAD..HEAD, making
+            STEP 5 fail on every run since introduction (a6a211a7) — matching
+            the "deterministically red" gate observed 2026-07-09. Fix: shared
+            bounded-retry probe scripts/litmus-git-delta-wait.sh
+            (local-head/plan-commit/remote-head; reads the before-sha from the
+            file, immediate first probe, 5s poll, 120s window, exit 0/1/2
+            grammar) now backs steps 4-6 of the e2e litmus (relay-lag
+            hardening for the genuine race half of the diagnosis). New
+            litmus:git-delta-wait-shape (9 steps, includes mid-window
+            re-sample + no-dead-check negative + before-file fail-loud)
+            registered in litmus-bindings; meta-orchestration instant
+            pre-build suite 4/4 PASS. Exit criteria 1+3 pinned; criterion 2
+            (deterministic pass in a real --ci-full forge run) is validated
+            by the next post-build e2e gate.
 
     - packet_id: macos-tray-parity-column-verify
       order: 257

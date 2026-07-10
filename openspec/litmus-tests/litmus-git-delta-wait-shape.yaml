@@ -1,0 +1,94 @@
+# @trace spec:meta-orchestration
+#
+# Pins scripts/litmus-git-delta-wait.sh (plan order 255,
+# opencode-prompt-e2e-step5-race): the shared bounded-retry git-delta probe
+# used by forge-launching litmus steps. The in-forge cycle's commits reach
+# the host checkout asynchronously (git-mirror relay), so assertion steps
+# must re-sample within a bounded window instead of sampling once — and the
+# window must still fail loud when the condition genuinely never holds (no
+# dead check). Also pins the falsifiable verdict grammar, the fail-loud
+# handling of a missing/invalid before-file (the original STEP 5 defect was
+# an unpopulated $HEAD_BEFORE silently collapsing the range), and the e2e
+# litmus's wiring to the helper.
+name: litmus:git-delta-wait-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/litmus-git-delta-wait.sh: warm-path pass without waiting,
+  bounded-window FAIL with exit 1 (no dead check), mid-window re-sampling
+  that observes a commit landing after the probe starts, exit 2 fail-loud on
+  a missing before-file, the remote-head ls-remote path, and the
+  opencode-prompt e2e litmus consulting the helper for steps 4-6.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/litmus-git-delta-wait.sh
+  - workspace contains openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml
+  - shell utilities (git, grep, awk, mktemp, sleep) are available in PATH
+
+critical_path:
+  - step: "probe is executable and defines the three mode probes"
+    command: "test -x scripts/litmus-git-delta-wait.sh && grep -q 'probe_local_head()' scripts/litmus-git-delta-wait.sh && grep -q 'probe_plan_commit()' scripts/litmus-git-delta-wait.sh && grep -q 'probe_remote_head()' scripts/litmus-git-delta-wait.sh && echo 'ok: probe-defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe-defined"
+
+  - step: "no arguments is a usage error: FAIL grammar + exit 2"
+    command: "out=$(bash scripts/litmus-git-delta-wait.sh 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '^FAIL: usage' && [ \"$rc\" = 2 ] && echo 'ok: usage-grammar' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: usage-grammar"
+
+  - step: "local-head warm path passes in one probe when HEAD already advanced"
+    command: "S=$PWD/scripts/litmus-git-delta-wait.sh; d=$(mktemp -d); git -C \"$d\" init -q; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one; git -C \"$d\" rev-parse HEAD > \"$d/before\"; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m two; out=$(cd \"$d\" && bash \"$S\" local-head \"$d/before\" 5); rc=$?; rm -rf \"$d\"; printf '%s' \"$out\" | grep -q '^ok: HEAD advanced' && [ \"$rc\" = 0 ] && echo 'ok: local-head-pass' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: local-head-pass"
+
+  - step: "local-head bounded window fails loud with exit 1 when HEAD never moves"
+    command: "S=$PWD/scripts/litmus-git-delta-wait.sh; d=$(mktemp -d); git -C \"$d\" init -q; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one; git -C \"$d\" rev-parse HEAD > \"$d/before\"; out=$(cd \"$d\" && LITMUS_GIT_DELTA_POLL_S=1 bash \"$S\" local-head \"$d/before\" 1); rc=$?; rm -rf \"$d\"; printf '%s' \"$out\" | grep -q '^FAIL: HEAD unchanged' && [ \"$rc\" = 1 ] && echo 'ok: bounded-fail' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: bounded-fail"
+
+  - step: "plan-commit re-samples: a plan/ commit landing mid-window flips the probe to ok"
+    command: "S=$PWD/scripts/litmus-git-delta-wait.sh; d=$(mktemp -d); git -C \"$d\" init -q; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one; git -C \"$d\" rev-parse HEAD > \"$d/before\"; (sleep 2; mkdir -p \"$d/plan\"; echo x > \"$d/plan/f\"; git -C \"$d\" add plan/f; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q -m plan) & out=$(cd \"$d\" && LITMUS_GIT_DELTA_POLL_S=1 bash \"$S\" plan-commit \"$d/before\" 10); rc=$?; wait; rm -rf \"$d\"; [ \"$out\" = 'ok: plan/ changed' ] && [ \"$rc\" = 0 ] && echo 'ok: mid-window-resample' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: mid-window-resample"
+
+  - step: "plan-commit still fails when new commits never touch plan/ (no dead check)"
+    command: "S=$PWD/scripts/litmus-git-delta-wait.sh; d=$(mktemp -d); git -C \"$d\" init -q; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one; git -C \"$d\" rev-parse HEAD > \"$d/before\"; echo y > \"$d/src\"; git -C \"$d\" add src; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q -m nonplan; out=$(cd \"$d\" && LITMUS_GIT_DELTA_POLL_S=1 bash \"$S\" plan-commit \"$d/before\" 1); rc=$?; rm -rf \"$d\"; printf '%s' \"$out\" | grep -q '^FAIL: no plan/ file modified' && [ \"$rc\" = 1 ] && echo 'ok: no-dead-check' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: no-dead-check"
+
+  - step: "missing before-file fails loud with exit 2 (the original STEP 5 defect class)"
+    command: "out=$(bash scripts/litmus-git-delta-wait.sh plan-commit /nonexistent-before-file 1 2>&1); rc=$?; printf '%s' \"$out\" | grep -q '^FAIL: before-file' && [ \"$rc\" = 2 ] && echo 'ok: fail-loud-missing-before' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: fail-loud-missing-before"
+
+  - step: "remote-head observes an origin advance via ls-remote"
+    command: "S=$PWD/scripts/litmus-git-delta-wait.sh; b=$(mktemp -d); git init -q --bare -b main \"$b\"; d=$(mktemp -d); git clone -q \"$b\" \"$d\" 2>/dev/null; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one; git -C \"$d\" push -q origin HEAD; git -C \"$d\" ls-remote origin HEAD | awk '{print $1}' > \"$d/before\"; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m two; git -C \"$d\" push -q origin HEAD; out=$(cd \"$d\" && bash \"$S\" remote-head \"$d/before\" 5); rc=$?; rm -rf \"$d\" \"$b\"; printf '%s' \"$out\" | grep -q '^ok: remote HEAD advanced' && [ \"$rc\" = 0 ] && echo 'ok: remote-head-pass' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: remote-head-pass"
+
+  - step: "opencode-prompt e2e litmus steps 4-6 consult the helper"
+    command: "c=$(grep -c 'scripts/litmus-git-delta-wait.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml); [ \"$c\" -ge 3 ] && echo 'ok: e2e-steps-wired' || { echo \"FAIL: only $c references\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: e2e-steps-wired"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "git-delta-wait probe pinned (warm pass, bounded fail-loud, mid-window re-sample, before-file guard, remote path, e2e wiring)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "git-delta-wait-shape"
+    artifact: "scripts/litmus-git-delta-wait.sh + openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml"
+
+rollback:
+  on_failure: >
+    The git-delta-wait probe drifted. Restore scripts/litmus-git-delta-wait.sh
+    with modes local-head/plan-commit/remote-head reading the before sha from
+    the file argument (never from ambient shell variables), an immediate first
+    probe plus LITMUS_GIT_DELTA_POLL_S-cadence re-sampling until the bounded
+    window elapses, verdict grammar ^(ok: .*|FAIL: .*)$ with exit 0/1/2
+    (observed / window elapsed / usage or bad before-file), and keep
+    litmus-opencode-prompt-e2e-shape.yaml steps 4-6 invoking the helper.
+  command: "ls -l scripts/litmus-git-delta-wait.sh && grep -n 'litmus-git-delta-wait.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml"
