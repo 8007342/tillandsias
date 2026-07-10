@@ -1597,6 +1597,34 @@ plan_index:
             SIGTERM. 64/64 tray tests (topic pin now slice-2 shape). Remaining
             slices: watch-channel menu listeners, SC-01/02 sleep elimination
             in the tick loop. Lease released.
+        - type: progress
+          ts: "2026-07-10T01:35:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0040Z"
+          host: macos
+          summary: >
+            Slice 3 COMPLETE (SC-16 watch-channel health signal), verified
+            LIVE. New shared primitive
+            tillandsias_host_shell::subscription_health::SubscriptionHealth
+            (tokio::sync::watch-backed, change-gated set, 4 unit tests)
+            replaces the macOS tray's PUSH_SUBSCRIPTION_HEALTHY AtomicBool —
+            the exact AtomicBool+sleep signaling pattern SC-16 forbids. The
+            tick loop now selects on health transitions
+            (wait_tick_or_subscription_drop): a subscription drop ends the
+            30s wait immediately and rewinds to tick 0, so the full fallback
+            round (local/cloud/login + VmStatus) runs at once instead of up
+            to 300s later on the 10-tick cadence; an up-transition never
+            shortens the period; a closed channel degrades to the plain
+            timer. Paused-clock tests pin all three behaviors (tokio
+            test-util, per tillandsias-metrics precedent). 67/67 tray +
+            57/57 host-shell tests, build check clean; live: signed build,
+            push subscription established, Ready push applied, 75s alive,
+            clean SIGTERM. WINDOWS FLAG (order 154 watch-channel slice):
+            adopt the shared SubscriptionHealth in notify_icon.rs — replace
+            VM_STATUS_PUSH_HEALTHY AtomicBool + tick re-read with the same
+            select-on-transition wait so both trays keep identical stream
+            architectures. Remaining slices: watch-channel menu listeners
+            (MenuState propagation), SC-01/02 full sleep elimination
+            (blocked on order 260 LocalProjects push). Lease released.
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
@@ -6571,3 +6599,43 @@ plan_index:
             run 2 for the full lock-namespace post-mortem this mirrors.
             Renumbered 260 -> 262 during the 2026-07-10 osx-next merge
             (order collision with windows-tray-local-projects-push-gap).
+
+    - packet_id: plan-index-order-uniqueness
+      order: 263
+      title: "plan/index.yaml order-number uniqueness: fail-loud check + historic duplicate cleanup"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-policy
+      depends_on: []
+      pickup_role: any
+      capability_tags: [rust, policy, litmus, plan-hygiene]
+      estimated_hours: 2
+      outcome: >
+        Seven order numbers (144, 160, 161, 196, 197, 201, 224) are each
+        shared by 2-3 different packets — parallel-filing collisions that
+        merged silently, making every historical "order N" reference in
+        loop_status, commit messages, and cross-host flags ambiguous.
+        Detection is currently manual eyeballing during merge conflict
+        resolution (the 2026-07-10 osx merge caught its own 260 collision
+        only because both sides conflicted textually). Add a fail-loud
+        uniqueness check to tillandsias-policy (validate-yaml or a dedicated
+        plan-orders subcommand) rejecting duplicate order values among
+        non-done packets, with an explicit grandfather allowlist for the
+        historic done-status duplicates; pin with
+        litmus:plan-index-order-uniqueness. Renumber any still-open
+        duplicates with a renumber event. Ruby-free per order 261 precedent.
+        Full finding: plan/issues/plan-index-duplicate-order-numbers-2026-07-10.md.
+      exit_criteria:
+        - "policy check exits non-zero on a duplicate order among non-done packets, 0 otherwise (unit tests)"
+        - "litmus:plan-index-order-uniqueness pins the check and passes on the current ledger"
+        - "no still-open (ready/blocked/in-progress) packet shares an order with any other packet"
+      events:
+        - type: filed
+          ts: "2026-07-10T00:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0040Z"
+          host: macos
+          summary: >
+            Reduction-engine capture during the osx-next merge: uniqueness
+            scan after resolving the 260 collision found 7 pre-existing
+            duplicate order numbers already merged. Filed + promoted per
+            capture rule.

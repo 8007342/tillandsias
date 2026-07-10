@@ -1,6 +1,47 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T00:30:00Z
+LastExecutionTime: 2026-07-10T01:40:00Z
+
+## Cycle 2026-07-10T00:40Z (macos — meta-orchestration: linux/windows merge + order collision renumber, order 155 slice 3 SC-16, order 263 filed)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260710T0040Z. Credential guard
+  `ok:gh-keyring`. Started clean at 2afc2d72; merged `origin/linux-next`
+  (2bcced8e — brings windows order 154 slice 2, order 258 partial, order 261,
+  litmus order 255 fix).
+- **Merge mediation**: plan/index.yaml order collision as predicted — my
+  order 260 (wsl-headless-unit-lock-namespace) vs windows' 260
+  (windows-tray-local-projects-push-gap). Renumbered mine to **262** (all
+  references updated: index event, loop_status, findings file). Integration
+  gate on merged tree: build check + 217 tests green.
+- **Order 155 slice 3 — COMPLETE, verified LIVE (SC-16)**: new shared
+  `tillandsias_host_shell::subscription_health::SubscriptionHealth`
+  (watch-backed, change-gated) replaces the tray's
+  PUSH_SUBSCRIPTION_HEALTHY AtomicBool; tick loop selects on health
+  transitions — a subscription drop now triggers an immediate full fallback
+  round (was: unnoticed up to 300s on the 10-tick cadence); up-transitions
+  never shorten the period; closed channel degrades to plain timer.
+  Paused-clock unit tests pin all three. 67/67 tray + 57/57 host-shell,
+  build check clean; live: signed build, push subscription established,
+  Ready push applied, 75s alive, clean SIGTERM. **Windows flag (order 154)**:
+  adopt SubscriptionHealth in notify_icon.rs (same AtomicBool pattern).
+- **Captures**: plan-index-duplicate-order-numbers-2026-07-10.md filed +
+  promoted to ready **order 263** (pickup any): 7 order numbers (144, 160,
+  161, 196, 197, 201, 224) are each shared by 2-3 packets — silent
+  parallel-filing collisions; propose fail-loud uniqueness check in
+  tillandsias-policy + litmus. (Order 155's own "mirrors order 144" text is
+  a live symptom — the windows tray refactor is 154, and 144 now names two
+  other packets.)
+- **E2E gate**: skipped-with-cause — full destructive local-build e2e PASSED
+  twice on this host <2h ago (findings file runs 1-2 @ 2a492797/77b0ba92);
+  this cycle's runtime delta (slice 3) was live-verified against the
+  provisioned VM directly (subscription-up path) with the drop path pinned
+  by paused-clock unit tests.
+- **Queue after drain**: macOS-eligible ready residue = order 155 remaining
+  slices (watch-channel menu listeners; SC-01/02 closure blocked on linux
+  order 260 LocalProjects push), orders 261/263 (pickup any, claimable next
+  cycle). Order 257 still blocked on operator-attended smoke; order 126
+  still blocked on linux order 128.
 
 ## Cycle 2026-07-09T23:10Z (macos — meta-orchestration: order 155 slice 2, order 259 root-caused + fixed + verified, full destructive e2e ×2)
 
