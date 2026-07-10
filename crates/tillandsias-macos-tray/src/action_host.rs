@@ -1694,23 +1694,76 @@ fn rebuild_menu_main_thread(
     }
 }
 
-/// True while the dedicated push subscription (order 155 slices 1+2) is
-/// connected and delivering frames. Gates the steady-state fallback polls:
-/// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07)
-/// and the 10-tick `GithubLoginStatusRequest`/`CloudRefreshRequest` polls are
-/// suppressed too (slice 2 — all three topics ride this one connection);
-/// when the stream drops, the tick loop resumes polling until the listener
-/// resubscribes. Grew out of windows-tray's `VM_STATUS_PUSH_HEALTHY`
-/// (b6ca3290, VmStatus-only) — windows adopts the widened gate in its own
-/// slice 2 so the two trays keep structurally identical stream architectures.
-static PUSH_SUBSCRIPTION_HEALTHY: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+// True while the dedicated push subscription (order 155 slices 1+2) is
+// connected and delivering frames. Gates the steady-state fallback polls:
+// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07)
+// and the 10-tick `GithubLoginStatusRequest`/`CloudRefreshRequest` polls are
+// suppressed too (slice 2 — all three topics ride this one connection);
+// when the stream drops, the tick loop resumes polling until the listener
+// resubscribes. Grew out of windows-tray's `VM_STATUS_PUSH_HEALTHY`
+// (b6ca3290, VmStatus-only) — windows adopts the widened gate in its own
+// slice 2 so the two trays keep structurally identical stream architectures.
+//
+// Slice 3 (SC-16): the signal is a shared watch-backed
+// [`tillandsias_host_shell::subscription_health::SubscriptionHealth`]
+// (created in `spawn_vm_status_poller`, written by `run_push_listener`) —
+// not an `AtomicBool` the tick loop re-reads after each sleep. The tick
+// loop selects on the health transition, so a subscription drop triggers
+// an immediate fallback poll round instead of surfacing up to 300s later
+// on the 10-tick login/cloud cadence.
 
 /// SC-07 gate: every steady-state request poll (VmStatus each tick,
 /// LoginState/CloudProjects on the 10-tick cadence) is fallback-only —
 /// suppressed whenever the push subscription is delivering.
 fn should_poll_fallback(push_stream_healthy: bool) -> bool {
     !push_stream_healthy
+}
+
+/// What ended one tick-loop wait (slice 3, SC-16).
+#[derive(Debug, PartialEq, Eq)]
+enum TickWake {
+    /// The poll period elapsed normally.
+    Timer,
+    /// The push subscription dropped mid-wait — the fallback polls own
+    /// freshness again and should run a full round now, not up to 300s
+    /// later when the 10-tick cadence next comes around.
+    SubscriptionDropped,
+}
+
+/// Wait out one poll period, waking early only on a healthy→down transition
+/// of the push subscription. Up-transitions don't end the wait (pushes own
+/// freshness again; there is nothing to poll), and a closed channel (listener
+/// task gone) degrades to the plain timer instead of spinning.
+async fn wait_tick_or_subscription_drop(
+    period: Duration,
+    health: &mut tokio::sync::watch::Receiver<bool>,
+) -> TickWake {
+    let sleep = tokio::time::sleep(period);
+    tokio::pin!(sleep);
+    loop {
+        tokio::select! {
+            _ = &mut sleep => return TickWake::Timer,
+            changed = health.changed() => {
+                if changed.is_err() {
+                    sleep.as_mut().await;
+                    return TickWake::Timer;
+                }
+                if !*health.borrow_and_update() {
+                    return TickWake::SubscriptionDropped;
+                }
+            }
+        }
+    }
+}
+
+/// Next tick counter after a wake. A subscription drop rewinds to tick 0 so
+/// the next iteration replays the first-tick full round (local + cloud +
+/// login, then VmStatus below) instead of waiting out the 10-tick cadence.
+fn tick_after_wake(tick: u32, wake: &TickWake) -> u32 {
+    match wake {
+        TickWake::Timer => tick.wrapping_add(1),
+        TickWake::SubscriptionDropped => 0,
+    }
 }
 
 /// The exact topic set the dedicated push connection subscribes to. Slice 2
@@ -1856,8 +1909,9 @@ fn apply_vm_status(
 /// (windows follows in its own slice 2).
 ///
 /// Reconnects forever with the shared `BACKOFF_SCHEDULE` (250ms→4s), then
-/// holds at 30s between attempts — while down, `PUSH_SUBSCRIPTION_HEALTHY`
-/// is false and the tick loop's fallback polls cover freshness.
+/// holds at 30s between attempts — while down, the shared
+/// [`SubscriptionHealth`](tillandsias_host_shell::subscription_health::SubscriptionHealth)
+/// signal is false and the tick loop's fallback polls cover freshness.
 #[allow(clippy::too_many_arguments)]
 async fn run_push_listener(
     vz: Arc<VzRuntime>,
@@ -1868,6 +1922,7 @@ async fn run_push_listener(
     self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
     last_logged_phase: Arc<Mutex<Option<tillandsias_control_wire::VmPhase>>>,
     vm_ever_ready: Arc<std::sync::atomic::AtomicBool>,
+    health: Arc<tillandsias_host_shell::subscription_health::SubscriptionHealth>,
 ) {
     use std::sync::atomic::Ordering;
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
@@ -1876,7 +1931,7 @@ async fn run_push_listener(
 
     let mut backoff_idx: usize = 0;
     loop {
-        PUSH_SUBSCRIPTION_HEALTHY.store(false, Ordering::SeqCst);
+        health.set(false);
         let established = async {
             let stream =
                 open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
@@ -1927,7 +1982,7 @@ async fn run_push_listener(
         };
 
         backoff_idx = 0;
-        PUSH_SUBSCRIPTION_HEALTHY.store(true, Ordering::SeqCst);
+        health.set(true);
         eprintln!(
             "[tillandsias-tray] push subscription established \
              (vm-status/login/cloud polls demoted to fallback, SC-07)"
@@ -2067,6 +2122,11 @@ fn spawn_vm_status_poller(
     // Push-first (order 155 slices 1+2): the dedicated reader task applies
     // VmStatusPush/LoginStatePush/CloudProjectsPush frames as they arrive;
     // the tick loop below polls only while that subscription is down (SC-07).
+    // Slice 3 (SC-16): subscription health is a shared watch signal — the
+    // listener writes it, the tick loop both reads it at poll decision
+    // points and selects on its transitions while waiting.
+    let health = Arc::new(tillandsias_host_shell::subscription_health::SubscriptionHealth::new());
+    let mut health_rx = health.subscribe();
     tokio::spawn(run_push_listener(
         vz.clone(),
         status_text.clone(),
@@ -2076,6 +2136,7 @@ fn spawn_vm_status_poller(
         self_handle.clone(),
         last_logged_phase.clone(),
         vm_ever_ready.clone(),
+        health.clone(),
     ));
     tokio::spawn(async move {
         // Tick counter for the cloud-projects cadence. Matches windows-
@@ -2130,9 +2191,7 @@ fn spawn_vm_status_poller(
                 // CloudProjectsPush (plus the cold-join initial sync) own
                 // these topics. LocalProjects has no push topic yet, so its
                 // poll above always runs.
-                if should_poll_fallback(
-                    PUSH_SUBSCRIPTION_HEALTHY.load(std::sync::atomic::Ordering::SeqCst),
-                ) {
+                if should_poll_fallback(health.is_healthy()) {
                     match poll_cloud_projects_once(&vz).await {
                         Ok(projects) => {
                             if apply_cloud_projects(projects, &menu_state) {
@@ -2160,14 +2219,17 @@ fn spawn_vm_status_poller(
                 }
             }
 
-            tokio::time::sleep(Duration::from_secs(30)).await;
-            tick = tick.wrapping_add(1);
+            // SC-16: not a plain sleep — a healthy→down transition of the
+            // push subscription ends the wait immediately and rewinds to
+            // tick 0, so the full fallback round (local + cloud + login
+            // above, VmStatus below) runs now instead of up to 300s later.
+            let wake =
+                wait_tick_or_subscription_drop(Duration::from_secs(30), &mut health_rx).await;
+            tick = tick_after_wake(tick, &wake);
 
             // SC-07: while the push subscription is delivering, the poll is
             // suppressed entirely — the reader task owns status freshness.
-            if !should_poll_fallback(
-                PUSH_SUBSCRIPTION_HEALTHY.load(std::sync::atomic::Ordering::SeqCst),
-            ) {
+            if !should_poll_fallback(health.is_healthy()) {
                 if rebuild_needed {
                     dispatch_rebuild(&menu_state, &status_item, &status_menu_item, &self_handle);
                 }
@@ -2282,6 +2344,69 @@ mod tests {
     fn should_poll_fallback_is_pure_fallback_gate() {
         assert!(!should_poll_fallback(true));
         assert!(should_poll_fallback(false));
+    }
+
+    /// Slice-3 (SC-16) pin: a healthy→down transition ends the tick wait
+    /// immediately (no 30s sleep-out), an up-transition does NOT end it,
+    /// and a closed health channel degrades to the plain timer instead of
+    /// spinning or panicking.
+    #[tokio::test(start_paused = true)]
+    async fn tick_wait_wakes_early_only_on_subscription_drop() {
+        use tillandsias_host_shell::subscription_health::SubscriptionHealth;
+
+        // Down-transition wakes early.
+        let health = SubscriptionHealth::new();
+        health.set(true);
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        let wait = wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx);
+        tokio::pin!(wait);
+        tokio::select! {
+            biased;
+            _ = &mut wait => panic!("wait ended with no transition and no timer"),
+            _ = tokio::task::yield_now() => {}
+        }
+        health.set(false);
+        assert_eq!(wait.await, TickWake::SubscriptionDropped);
+
+        // Up-transition keeps waiting; the timer ends the wait.
+        let health = SubscriptionHealth::new();
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        let started = tokio::time::Instant::now();
+        let wait = wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx);
+        tokio::pin!(wait);
+        tokio::select! {
+            biased;
+            _ = &mut wait => panic!("wait ended before any event"),
+            _ = tokio::task::yield_now() => {}
+        }
+        health.set(true);
+        assert_eq!(wait.await, TickWake::Timer);
+        assert!(
+            started.elapsed() >= Duration::from_secs(30),
+            "up-transition must not shorten the poll period"
+        );
+
+        // Closed channel: sender dropped mid-wait → plain timer, no spin.
+        let health = SubscriptionHealth::new();
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        drop(health);
+        assert_eq!(
+            wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx).await,
+            TickWake::Timer
+        );
+    }
+
+    /// Slice-3 pin: a subscription drop rewinds the cadence to tick 0 so
+    /// the next iteration replays the first-tick full round; a timer wake
+    /// advances normally (with wraparound).
+    #[test]
+    fn tick_after_wake_rewinds_on_drop_and_advances_on_timer() {
+        assert_eq!(tick_after_wake(4, &TickWake::Timer), 5);
+        assert_eq!(tick_after_wake(u32::MAX, &TickWake::Timer), 0);
+        assert_eq!(tick_after_wake(7, &TickWake::SubscriptionDropped), 0);
     }
 
     /// Slice-2 topic pin: the dedicated push connection subscribes to all

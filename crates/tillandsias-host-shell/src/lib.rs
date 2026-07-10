@@ -22,6 +22,7 @@ pub mod provisioning;
 /// cross-platform core. OS backends (ConPTY / openpty) layer on top.
 pub mod pty;
 pub mod scanner;
+pub mod subscription_health;
 pub mod vsock_client;
 
 /// Host shell crate version — returns the workspace release version
