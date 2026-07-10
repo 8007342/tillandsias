@@ -1,6 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T08:45:00Z
+LastExecutionTime: 2026-07-10T09:35:00Z
+
+## Cycle 2026-07-10T08:45Z→09:35Z (linux_mutable macuahuitl — overnight loop 5/8: strict burn-down to ONE named blocker)
+
+- Siblings merged x2 (osx: 155 slice 4 LocalProjects adoption + their own
+  destructive e2e PASS + 281 corruption cleared; windows: 154 slice 4).
+- Order 267 tail: init-command-shape repaired (rg -F/-U regex-vs-literal
+  class, canonical image pin updated 8→10 per orders 253/76);
+  headless-init harness step EXECUTED for the first time since authoring
+  (single-quoted scalar + rustup env) and exposed the next layer — the
+  Rust harness test self-short-circuits in 0.07s without writing the
+  calls log. That is now the SOLE strict-flip blocker (named in the 267
+  issue). Parser command:-anchor re-applied safely post-slice-2 and
+  immediately proved itself. Strict pre-build sweep: 155/156.
+- Generated-file stragglers (metrics/TRACES/nested-target stub) committed
+  or removed; tree clean.
 
 ## Cycle 2026-07-10T08:07Z→08:45Z (windows — meta-orchestration recurring loop 3/8: order 154 slice 4 SC-16, helpers hoisted to host-shell)
 
