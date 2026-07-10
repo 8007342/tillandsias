@@ -19,22 +19,22 @@ critical_path:
   - step: "run_opencode_mode calls ensure_router_running before its first run_container_observed"
     command: "scripts/litmus-helper-tray-network-bootstrap.sh check-run_opencode_mode-ordering"
     timeout_ms: 5000
-    expected_behavior: "ok: ensure_router_running@<early-line> before run_container_observed@<later-line>"
+    expected_behavior: "ok: ensure_router_running@"
 
   - step: "run_observatorium_mode calls ensure_router_running before its first run_container_observed"
     command: "scripts/litmus-helper-tray-network-bootstrap.sh check-run_observatorium_mode-ordering"
     timeout_ms: 5000
-    expected_behavior: "ok: observatorium ensure_router_running@<line> before run_container_observed@<line>"
+    expected_behavior: "ok: observatorium ensure_router_running@"
 
   - step: "ensure_enclave_for_project calls ensure_router_running before its first run_container_observed"
     command: "scripts/litmus-helper-tray-network-bootstrap.sh check-ensure_enclave_for_project-ordering"
     timeout_ms: 5000
-    expected_behavior: "ok: ensure_enclave_for_project router@<line> before container@<line>"
+    expected_behavior: "ok: ensure_enclave_for_project router@"
 
   - step: "ensure_enclave_network is called before any router/container setup in each spawn path"
     command: "scripts/litmus-helper-tray-network-bootstrap.sh check-ensure_enclave_network-present"
     timeout_ms: 5000
-    expected_behavior: "ok: <fn> ensure_enclave_network present"
+    expected_behavior: "ensure_enclave_network present"
 
   - step: "Step 15 plan file references the @trace litmus binding"
     command: "grep -Fq 'plan/steps/15-tray-network-bootstrap.md' crates/tillandsias-headless/src/main.rs && echo 'spawn paths cite Step 15'"

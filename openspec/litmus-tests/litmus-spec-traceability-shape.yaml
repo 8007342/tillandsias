@@ -18,7 +18,7 @@ critical_path:
     timeout_ms: 5000
 
   - step: "verify the spec keeps its observability anchors and source-of-truth references"
-    command: "grep -F 'cheatsheets/observability/cheatsheet-metrics.md' openspec/specs/spec-traceability/spec.md && grep -F 'docs/cheatsheets/openspec-methodology.md' openspec/specs/spec-traceability/spec.md"
+    command: "grep -F 'cheatsheets/observability/cheatsheet-metrics.md' openspec/specs/spec-traceability/spec.md && grep -F 'cheatsheets/agents/openspec.md' openspec/specs/spec-traceability/spec.md"
     timeout_ms: 3000
 
   - step: "verify the owning cheatsheet and methodology docs are present"

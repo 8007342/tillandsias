@@ -175,3 +175,15 @@ its own bug packet instead of retrying.
   TILMANDSIAS_ env-var typo in the cached-run step and the pre-order-168
   success strings ("Pulling T0|T1 ready" → "default model .* ready" /
   "ready (cached)").
+
+## Parser-anchor change parked (gate-4 orphan triage, 2026-07-10T08:1xZ)
+
+The gate-4 in-forge agent's `^[[:space:]]*command:` anchor in
+run-litmus-test.sh is correct in intent (stops mid-string/rollback
+`command:` matches — the empty-step-name exit-127 class) but re-pairs
+steps/expecteds in files still carrying folded commands
+(litmus:tray-network-bootstrap STEP 1 fails while printing its ok line).
+REVERTED for now; re-apply in the same commit as the remaining folded
+rewrites (or make step/expected pairing robust first). The agent's three
+sibling fixes (podman-build alias grep to "$PODMAN", spec-traceability
+doc path, entrypoint-test stubs) were verified strict-green and adopted.
