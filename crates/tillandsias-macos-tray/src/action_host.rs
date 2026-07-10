@@ -1769,12 +1769,17 @@ fn tick_after_wake(tick: u32, wake: &TickWake) -> u32 {
 /// The exact topic set the dedicated push connection subscribes to. Slice 2
 /// widened this from `[VmStatus]` to all three topics now that the tray
 /// consumes the order 230/231 guest push sources; pinned by
-/// `push_subscribe_topics_is_all_three_slice2`.
+/// `push_subscribe_topics_is_all_four_slice3`. Slice 3 (order 155) added
+/// LocalProjects now that order 260 shipped its guest-side push source —
+/// so the tick loop's last steady-state poll (local projects) can be
+/// demoted to fallback-only like the others (SC-07), which is what lets
+/// the timer become a pure fallback path (SC-01/02).
 fn push_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
     vec![
         tillandsias_control_wire::SubscriptionTopic::VmStatus,
         tillandsias_control_wire::SubscriptionTopic::LoginState,
         tillandsias_control_wire::SubscriptionTopic::CloudProjects,
+        tillandsias_control_wire::SubscriptionTopic::LocalProjects,
     ]
 }
 
@@ -1827,6 +1832,27 @@ fn apply_cloud_projects(
     guard.cloud_projects = projects;
     drop(guard);
     eprintln!("[tillandsias-tray] cloud-projects: menu_state updated ({new_count} entries)");
+    true
+}
+
+/// Apply a live local-projects observation — from a poll reply or an
+/// unrequested `LocalProjectsPush` frame (full replacement list) — to the
+/// shared `MenuState`. Returns whether the menu needs a rebuild; idempotent
+/// on repeat. Slice 3 (order 155): shared by the push listener and the
+/// fallback tick poll so both surfaces stay byte-identical, mirroring
+/// `apply_cloud_projects`.
+fn apply_local_projects(
+    projects: Vec<tillandsias_host_shell::menu_state::ProjectEntry>,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+) -> bool {
+    let new_count = projects.len();
+    let mut guard = menu_state.lock().unwrap();
+    if guard.local_projects == projects {
+        return false;
+    }
+    guard.local_projects = projects;
+    drop(guard);
+    eprintln!("[tillandsias-tray] local-projects: menu_state updated ({new_count} entries)");
     true
 }
 
@@ -1995,7 +2021,7 @@ async fn run_push_listener(
         health.set(true);
         eprintln!(
             "[tillandsias-tray] push subscription established \
-             (vm-status/login/cloud polls demoted to fallback, SC-07)"
+             (vm-status/login/cloud/local polls demoted to fallback, SC-07)"
         );
 
         // Initial sync on the SAME connection: pushes are change-gated
@@ -2036,6 +2062,20 @@ async fn run_push_listener(
         };
         if let Err(err) = client.send_envelope(&prime_cloud).await {
             tracing::debug!(%err, "cloud-projects initial-sync request failed; reconnecting");
+            continue;
+        }
+        // Slice 3 (order 155): prime local projects too — its push is
+        // change-gated like the others, so a subscriber joining a
+        // steady-state VM needs one EnumerateLocalProjects to render the
+        // current list. Reply routes through the LocalProjectsReply arm.
+        let seq = client.allocate_seq();
+        let prime_local = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: client.allocate_seq(),
+            body: ControlMessage::EnumerateLocalProjects { seq },
+        };
+        if let Err(err) = client.send_envelope(&prime_local).await {
+            tracing::debug!(%err, "local-projects initial-sync request failed; reconnecting");
             continue;
         }
 
@@ -2128,6 +2168,22 @@ async fn run_push_listener(
                             );
                         }
                     }
+                    ControlMessage::LocalProjectsPush { entries, .. }
+                    | ControlMessage::LocalProjectsReply { entries, .. } => {
+                        // Slice 3 (order 155): LocalProjects now has a push
+                        // source (order 260), so the tick loop's last
+                        // steady-state poll rides the stream too. Same
+                        // shared applier as the fallback poll.
+                        let mapped = entries.iter().map(local_entry_to_menu).collect();
+                        if apply_local_projects(mapped, &menu_state) {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());
                     }
@@ -2202,33 +2258,25 @@ fn spawn_vm_status_poller(
             // because `~/src/` walks are virtually free vs `gh`.
             let mut rebuild_needed = false;
             if tick.is_multiple_of(10) {
-                match poll_local_projects_once(&vz).await {
-                    Ok(projects) => {
-                        let new_count = projects.len();
-                        let mut guard = menu_state.lock().unwrap();
-                        if guard.local_projects != projects {
-                            guard.local_projects = projects;
-                            rebuild_needed = true;
-                            eprintln!(
-                                "[tillandsias-tray] local-projects: \
-                                 menu_state updated ({} entries)",
-                                new_count
-                            );
-                        }
-                        drop(guard);
-                    }
-                    Err(e) => {
-                        if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
-                            eprintln!("[tillandsias-tray] local-projects poll: {e}");
-                        }
-                    }
-                }
-                // SC-07 (slice 2): the login/cloud polls are fallback-only —
-                // while the push subscription is delivering, LoginStatePush/
-                // CloudProjectsPush (plus the cold-join initial sync) own
-                // these topics. LocalProjects has no push topic yet, so its
-                // poll above always runs.
+                // SC-07 (slice 3): local projects are now push-backed too
+                // (order 260 shipped LocalProjectsPush), so ALL three
+                // slow-cadence polls — local, cloud, login — are
+                // fallback-only. While the push subscription is delivering,
+                // the reader task owns every topic and this whole block is
+                // skipped; the tick loop is a pure fallback path (SC-01/02).
                 if should_poll_fallback(health.is_healthy()) {
+                    match poll_local_projects_once(&vz).await {
+                        Ok(projects) => {
+                            if apply_local_projects(projects, &menu_state) {
+                                rebuild_needed = true;
+                            }
+                        }
+                        Err(e) => {
+                            if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
+                                eprintln!("[tillandsias-tray] local-projects poll: {e}");
+                            }
+                        }
+                    }
                     match poll_cloud_projects_once(&vz).await {
                         Ok(projects) => {
                             if apply_cloud_projects(projects, &menu_state) {
@@ -2452,19 +2500,51 @@ mod tests {
         assert_eq!(tick_after_wake(7, &TickWake::SubscriptionDropped), 0);
     }
 
-    /// Slice-2 topic pin: the dedicated push connection subscribes to all
-    /// three topics now that the tray consumes the order 230/231 guest
-    /// push sources. This test fails loud if the topic list drifts
-    /// without matching reader-loop consumers.
+    /// Slice-3 topic pin: the dedicated push connection subscribes to all
+    /// FOUR topics now that order 260 shipped LocalProjectsPush and the
+    /// tray consumes it. Fails loud if the topic list drifts without
+    /// matching reader-loop consumers (each topic here MUST have an arm in
+    /// run_push_listener + an initial-sync prime).
     #[test]
-    fn push_subscribe_topics_is_all_three_slice2() {
+    fn push_subscribe_topics_is_all_four_slice3() {
         assert_eq!(
             push_subscribe_topics(),
             vec![
                 tillandsias_control_wire::SubscriptionTopic::VmStatus,
                 tillandsias_control_wire::SubscriptionTopic::LoginState,
                 tillandsias_control_wire::SubscriptionTopic::CloudProjects,
+                tillandsias_control_wire::SubscriptionTopic::LocalProjects,
             ]
+        );
+    }
+
+    /// `apply_local_projects` reports a rebuild exactly on change and is
+    /// idempotent on repeat (slice 3 — shared by the push listener and the
+    /// fallback tick poll, mirroring apply_cloud_projects).
+    #[test]
+    fn apply_local_projects_reports_rebuild_only_on_change() {
+        use tillandsias_host_shell::menu_state::ProjectEntry;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let mk = || {
+            vec![ProjectEntry {
+                name: "tillandsias".into(),
+                path: "/home/forge/src/tillandsias".into(),
+                ready: false,
+            }]
+        };
+        assert!(
+            apply_local_projects(mk(), &menu_state),
+            "first non-empty local list must request a rebuild"
+        );
+        assert!(
+            !apply_local_projects(mk(), &menu_state),
+            "identical local list must not re-request a rebuild"
+        );
+        assert!(
+            apply_local_projects(Vec::new(), &menu_state),
+            "clearing the list is a change and must request a rebuild"
         );
     }
 
