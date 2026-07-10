@@ -70,7 +70,7 @@ critical_path:
     expected_behavior: "accountability field correctly optional"
 
   - step: "verify serialization skips false accountability"
-    command: "grep -q '#\[serde(skip_serializing_if = \"is_false\")\]' crates/tillandsias-logging/src/log_entry.rs && grep -q 'fn is_false' crates/tillandsias-logging/src/log_entry.rs && echo 'Serialization correctly skips false accountability values'"
+    command: "grep -q '#\\[serde(skip_serializing_if = \"is_false\")\\]' crates/tillandsias-logging/src/log_entry.rs && grep -q 'fn is_false' crates/tillandsias-logging/src/log_entry.rs && echo 'Serialization correctly skips false accountability values'"
     timeout_ms: 3000
     expected_behavior: "Serialization correctly"
 
@@ -144,20 +144,7 @@ observability:
 
 rollback:
   on_failure: "Review breaking changes in LogEntry struct and update golden schema accordingly"
-  command: |
-    echo "=== BREAKING CHANGE ANALYSIS ===" && \
-    echo "Golden schema all_fields:" && \
-    jq -r '.all_fields | .[]' docs/cheatsheets/log-schema-golden.json && \
-    echo "" && \
-    echo "Current LogEntry fields:" && \
-    sed -n '/^pub struct LogEntry/,/^}/p' crates/tillandsias-logging/src/log_entry.rs | \
-    grep "pub " | awk '{print $2}' | cut -d: -f1 && \
-    echo "" && \
-    echo "To fix:" && \
-    echo "1. Review the field differences above" && \
-    echo "2. Update docs/cheatsheets/log-schema-golden.json all_fields array" && \
-    echo "3. Increment schema_version if breaking" && \
-    echo "4. Document migration path in CHANGELOG.md"
+  command: "echo '=== BREAKING CHANGE ANALYSIS ===' && jq -r '.all_fields | .[]' docs/cheatsheets/log-schema-golden.json && echo '---' && sed -n '/^pub struct LogEntry/,/^}/p' crates/tillandsias-logging/src/log_entry.rs | grep -v '//' | grep 'pub ' | awk '{print $2}' | cut -d: -f1 && echo '---' && echo 'To fix: 1) Review field differences; 2) Update golden schema; 3) Increment schema_version; 4) Document in CHANGELOG.md'"
 
 notes: |
   @trace gap:OBS-001 — Log Field Name Stability Litmus Test

@@ -37,6 +37,38 @@ mod vz_lifecycle;
 mod menu_disabled_v2;
 mod terminal_attach;
 
+/// Order 277: true iff a live tray process holds the app singleton.
+/// The one-shot CLI modes boot their own VZ VM against the same root
+/// disk the tray's VM has attached, so VZ fails with the opaque
+/// "storage device attachment is invalid" (hit live in the 2026-07-10
+/// attended smoke, blocking every in-session forensics attempt). Probe
+/// the tray's own singleton lock instead of pattern-matching that
+/// error: acquiring and immediately dropping the guard is side-effect
+/// free when the lock is free, and `Ok(None)` (WouldBlock) means a
+/// running tray owns the VM. A probe infrastructure error returns
+/// false — the one-shot proceeds and at worst surfaces the raw VZ
+/// error as before, never a false refusal.
+#[cfg(target_os = "macos")]
+fn live_tray_holds_singleton() -> bool {
+    matches!(
+        tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray"),
+        Ok(None)
+    )
+}
+
+/// Order 277 enforcement for VM-booting one-shot modes: fail fast with
+/// operator guidance instead of the raw VZ storage error.
+#[cfg(target_os = "macos")]
+fn require_no_live_tray(mode: &str) {
+    if live_tray_holds_singleton() {
+        eprintln!(
+            "Error: {mode} needs to boot the VM, but a running Tillandsias tray owns it.\n\
+             Use the tray menu instead, or quit the tray (menu bar \u{2192} \u{274C} Quit Tillandsias) and re-run."
+        );
+        std::process::exit(3);
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn main() {
     // Argv-driven sub-modes (mirrors windows-tray's `--diagnose`
@@ -98,6 +130,7 @@ fn main() {
     // current-thread runtime for exactly that. See
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
+        require_no_live_tray("--exec-guest");
         // Join remaining args into a shell command string so the user can write
         // --exec-guest "ls -la" or --exec-guest tillandsias --debug --init
         // without needing to pre-split argv themselves.
@@ -111,15 +144,18 @@ fn main() {
     // via the proven expect-style PTY input path; token never enters argv/logs.
     //   tillandsias-tray --github-login
     if args.iter().any(|a| a == "--github-login") {
+        require_no_live_tray("--github-login");
         std::process::exit(diagnose::github_login_main());
     }
     // List GitHub cloud projects using the token stored in guest Vault.
     // Mirrors the Linux `tillandsias --list-cloud-projects` CLI mode.
     if args.iter().any(|a| a == "--list-cloud-projects") {
+        require_no_live_tray("--list-cloud-projects");
         std::process::exit(diagnose::list_cloud_projects_main());
     }
     // `--opencode <path> [--prompt <text>]`: boot VM and launch forge in guest.
     if let Some(oc_idx) = args.iter().position(|a| a == "--opencode") {
+        require_no_live_tray("--opencode");
         let path = args
             .get(oc_idx + 1)
             .cloned()
@@ -170,8 +206,10 @@ mod tests {
     #[test]
     fn singleton_guard_applies_only_to_appkit_tray_mode() {
         let source = include_str!("main.rs");
+        // rfind: the LAST acquisition is the app-mode guard in main();
+        // the first occurrence is order 277's live-tray probe helper.
         let guard_idx = source
-            .find("SingletonGuard::try_acquire(\"tillandsias-macos-tray\")")
+            .rfind("SingletonGuard::try_acquire(\"tillandsias-macos-tray\")")
             .expect("macOS tray must acquire a non-destructive singleton guard");
         let diagnose_idx = source
             .find("diagnose::main(format)")
@@ -188,5 +226,35 @@ mod tests {
             guard_idx < appkit_idx,
             "AppKit tray mode must acquire the singleton guard before launch"
         );
+    }
+
+    /// Order 277 pin: every VM-booting one-shot mode fails fast with
+    /// operator guidance when a live tray owns the VM, instead of the
+    /// opaque VZ storage-attachment error. Source-scan: each dispatch
+    /// branch calls `require_no_live_tray` before its diagnose:: entry.
+    #[test]
+    fn vm_booting_oneshots_guard_against_live_tray() {
+        let source = include_str!("main.rs");
+        for (mode, entry) in [
+            ("--exec-guest", "diagnose::exec_guest_main"),
+            ("--github-login", "diagnose::github_login_main()"),
+            (
+                "--list-cloud-projects",
+                "diagnose::list_cloud_projects_main()",
+            ),
+            ("--opencode", "diagnose::opencode_main"),
+        ] {
+            let guard_call = format!("require_no_live_tray(\"{mode}\")");
+            let g = source
+                .find(&guard_call)
+                .unwrap_or_else(|| panic!("{mode} must call require_no_live_tray (order 277)"));
+            let e = source
+                .find(entry)
+                .unwrap_or_else(|| panic!("{entry} dispatch must exist"));
+            assert!(
+                g < e,
+                "{mode}: require_no_live_tray must run before {entry} (order 277)"
+            );
+        }
     }
 }

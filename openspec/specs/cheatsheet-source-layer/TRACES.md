@@ -6,11 +6,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [cheatsheets/license-allowlist.toml#L37](../../../cheatsheets/license-allowlist.toml#L37)
-- [crates/tillandsias-policy/src/main.rs#L817](../../../crates/tillandsias-policy/src/main.rs#L817)
-- [crates/tillandsias-policy/src/main.rs#L1209](../../../crates/tillandsias-policy/src/main.rs#L1209)
-- [crates/tillandsias-policy/src/main.rs#L2588](../../../crates/tillandsias-policy/src/main.rs#L2588)
-- [crates/tillandsias-policy/src/main.rs#L3810](../../../crates/tillandsias-policy/src/main.rs#L3810)
-- [crates/tillandsias-policy/src/main.rs#L3814](../../../crates/tillandsias-policy/src/main.rs#L3814)
+- [crates/tillandsias-policy/src/main.rs#L949](../../../crates/tillandsias-policy/src/main.rs#L949)
+- [crates/tillandsias-policy/src/main.rs#L1341](../../../crates/tillandsias-policy/src/main.rs#L1341)
+- [crates/tillandsias-policy/src/main.rs#L2720](../../../crates/tillandsias-policy/src/main.rs#L2720)
+- [crates/tillandsias-policy/src/main.rs#L3942](../../../crates/tillandsias-policy/src/main.rs#L3942)
+- [crates/tillandsias-policy/src/main.rs#L3946](../../../crates/tillandsias-policy/src/main.rs#L3946)
 - [images/default/cheatsheets/license-allowlist.toml#L37](../../../images/default/cheatsheets/license-allowlist.toml#L37)
 - [scripts/audit-cheatsheet-sources.sh#L22](../../../scripts/audit-cheatsheet-sources.sh#L22)
 - [scripts/bind-provenance-local-paths.sh#L4](../../../scripts/bind-provenance-local-paths.sh#L4)

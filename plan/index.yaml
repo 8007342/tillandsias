@@ -7187,7 +7187,7 @@ plan_index:
     - packet_id: macos-oneshot-cli-live-tray-coexistence
       order: 277
       title: "macOS one-shot CLI modes vs running tray: disk-lock collision with opaque VZ error (attended smoke F-E)"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-macos-tray/src/main.rs
       depends_on: []
@@ -7218,6 +7218,20 @@ plan_index:
           summary: >
             Attended-smoke capture: every guest forensics attempt this
             session had to be abandoned or routed around the running tray.
+        - type: completed
+          ts: "2026-07-10T06:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0557Z"
+          host: macos
+          summary: >
+            All three criteria closed. The four VM-booting one-shot modes
+            (--exec-guest/--github-login/--list-cloud-projects/--opencode)
+            probe the tray's own singleton lock (acquire-and-drop, no
+            side effects) and exit 3 with operator guidance when a live
+            tray holds it; no-tray behavior unchanged; source pin test on
+            all four branches. Verified LIVE both ways: refusal + exit 3
+            against a running tray, then GUEST_OK exit 0 via --exec-guest
+            after quitting it. This also un-blocks in-session forensics
+            guidance (the F-E temptation order 271's methodology bans).
 
     - packet_id: macos-attended-smoke-ux-residue
       order: 269
@@ -7369,7 +7383,7 @@ plan_index:
     - packet_id: guest-ssh-backdoor-closure
       order: 272
       title: "Close the guest debug backdoor: cloud-init SSH key injection + NAT-reachable sshd violate secure-socket-only isolation"
-      status: ready
+      status: done
       kind: security
       deliverable: crates/tillandsias-vm-layer/src/vz.rs
       depends_on: []
@@ -7407,6 +7421,22 @@ plan_index:
             forensics surfaced how open it is. Companion to order 271
             (methodology) and order 268 (idiomatic one-shot coexistence,
             which removes the temptation).
+        - type: completed
+          ts: "2026-07-10T05:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0533Z"
+          host: macos
+          commits: [33151e4d]
+          summary: >
+            All three criteria closed. Cloud-init injects no keys and masks
+            sshd.service/sshd.socket + systemd-ssh-generator's AF_VSOCK and
+            local sockets (the generator itself nulled). Source pin test
+            scoped to the user-data window. Verified LIVE on a fresh
+            destructive provision via --exec-guest (idiomatic layer, no
+            ssh): sshd masked+inactive, zero listeners on :22, zero SSH key
+            material (the authorized_keys files present are EMPTY cloud-init
+            image stubs from the Fedora image itself, harmless with sshd
+            masked). wsl.rs audited clean — no WSL2 sibling packet needed.
+            Report: plan/issues/macos-e2e-overnight-cycle1-2026-07-10.md.
 
     - packet_id: guest-agent-attach-runs-login-flow
       order: 273
@@ -7502,7 +7532,7 @@ plan_index:
     - packet_id: forge-agent-liveness-signals
       order: 265
       title: "Research: forge agent heartbeat/liveness signals so gates stop inferring death from timeouts"
-      status: ready
+      status: completed
       kind: research
       deliverable: plan/issues/forge-agent-liveness-signals-research.md
       depends_on: []
@@ -7534,6 +7564,48 @@ plan_index:
             Filed per The Tlatoāni's 2026-07-10 direction during the order
             264 decision ("perhaps we could later add better heartbeat and
             alive signals so we don't rely on timeouts").
+        - type: completed
+          ts: "2026-07-10T07:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0621Z (ADOPTION — work authored by the in-forge cycle of gate run 20260710T064525Z, which exceeded its 600s envelope and died unpushed; its worktree output was audited and completed by the coordinator)"
+          host: linux_mutable
+          lease_id: "forge-agent-liveness-signals (claim-ledger-node.sh)"
+          summary: >
+            Fitting irony, gracefully resolved: the agent implementing the
+            liveness probe was itself killed by the timeout the probe
+            replaces. Deliverables (adopted from its orphaned worktree
+            output, audited executably): research verdict
+            plan/issues/forge-agent-liveness-signals-research.md comparing
+            candidate signals; scripts/forge-liveness-probe.sh (three
+            signals — container state, heartbeat mtime, git HEAD delta —
+            folded into a five-state grammar alive_progressing/alive_quiet/
+            dead_air/dead_crashed/dead_killed, exit 0 alive / 1 dead / 2
+            usage, wait + deadline modes, hard-cap budget preserved);
+            scripts/test-forge-liveness-probe.sh 8/8 PASS after the
+            coordinator completed its final unguarded expected-nonzero call
+            (set -e); litmus:forge-liveness-probe-shape PASS via the runner
+            and bound under meta-orchestration. Residual (next packet when
+            prioritized): wire the probe into
+            litmus:opencode-prompt-e2e-shape STEP 3 so liveness-past-budget
+            extends the window and dead-air fails fast.
+        - type: progress
+          ts: "2026-07-10T07:00:00Z"
+          agent_id: "linux-bigp pickle-20260710T065445Z"
+          host: linux_mutable
+          summary: >
+            Research verdict + fixture prototype complete. Evaluated 5
+            candidates: heartbeat file (best primary), git commit cadence
+            (complementary), podman container exec (secondary), vsock pulse
+            (deferred to order 153), podman events (already exists). Chose
+            3-signal layered design: container state + heartbeat mtime + git
+            HEAD. Implemented scripts/forge-liveness-probe.sh (status/wait/
+            deadline modes, 5 liveness states: alive_progressing, alive_quiet,
+            dead_air, dead_crashed, dead_killed). Implemented fixture test
+            suite scripts/test-forge-liveness-probe.sh (8 scenarios, all pass).
+            Authored litmus:forge-liveness-probe-shape (9 steps, all pass).
+            Registered in litmus-bindings.yaml. Research deliverable:
+            plan/issues/forge-agent-liveness-signals-research.md.
+            Residual: add heartbeat touch to forge entrypoint, wire into
+            repeat script, wire into litmus STEP 3 timeout diagnostics.
 
     - packet_id: ci-full-all-features-clippy-lane
       order: 266
@@ -7619,6 +7691,21 @@ plan_index:
             standalone-context artifact). Slice-able file-by-file; each
             file is an independent child if a picker needs smaller
             packets.
+        - type: progress
+          ts: "2026-07-10T06:39:00Z"
+          agent_id: "linux-bigp pickle-20260710T063952Z"
+          host: linux_mutable
+          summary: >
+            Slice 1 complete: repaired all 4 YAML-invalid litmus files
+            (ruby -ryaml now parses 200/200). litmus-binary-e2e-smoke.yaml:
+            fixed \| escape in rollback grep. litmus-environment-isolation.yaml:
+            rewrote 4 single-quoted commands with embedded bash '"'"' quoting
+            as double-quoted YAML scalars. litmus-inference-deferred-model-pulls.yaml:
+            fixed \| and \. escapes in rollback grep. litmus-log-field-stability-schema.yaml:
+            fixed \[, \(, \), \$ escapes in critical_path step and fixed
+            block-scalar rollback command indentation + escape. Remaining:
+            rewrite 31 folded/multi-line command steps across 8 files,
+            promote [PARSE WARNING] to per-step FAIL, flip strict-exit default ON.
 
     - packet_id: inference-firstrun-ollama-download
       order: 268

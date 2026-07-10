@@ -59,4 +59,4 @@ observability:
 
 rollback:
   on_failure: "inspect tillandsias binary invocation and cleanup logic"
-  command: "grep -r 'fn main\|fn run\|fn cleanup' crates/tillandsias-headless/src/main.rs"
+  command: "grep -r 'fn main\\|fn run\\|fn cleanup' crates/tillandsias-headless/src/main.rs"

@@ -9,7 +9,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-claude.sh#L78](../../../images/default/entrypoint-forge-claude.sh#L78)
 - [images/git/entrypoint.sh#L23](../../../images/git/entrypoint.sh#L23)
 - [images/git/entrypoint.sh#L36](../../../images/git/entrypoint.sh#L36)
-- [images/inference/entrypoint.sh#L75](../../../images/inference/entrypoint.sh#L75)
+- [images/inference/entrypoint.sh#L103](../../../images/inference/entrypoint.sh#L103)
 - [images/proxy/entrypoint.sh#L17](../../../images/proxy/entrypoint.sh#L17)
 - [images/proxy/entrypoint.sh#L25](../../../images/proxy/entrypoint.sh#L25)
 - [scripts/cleanup-secrets.sh#L13](../../../scripts/cleanup-secrets.sh#L13)
