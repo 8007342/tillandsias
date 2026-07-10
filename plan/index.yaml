@@ -7253,7 +7253,7 @@ plan_index:
     - packet_id: guest-ssh-backdoor-closure
       order: 272
       title: "Close the guest debug backdoor: cloud-init SSH key injection + NAT-reachable sshd violate secure-socket-only isolation"
-      status: ready
+      status: done
       kind: security
       deliverable: crates/tillandsias-vm-layer/src/vz.rs
       depends_on: []
@@ -7291,6 +7291,22 @@ plan_index:
             forensics surfaced how open it is. Companion to order 271
             (methodology) and order 268 (idiomatic one-shot coexistence,
             which removes the temptation).
+        - type: completed
+          ts: "2026-07-10T05:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0533Z"
+          host: macos
+          commits: [33151e4d]
+          summary: >
+            All three criteria closed. Cloud-init injects no keys and masks
+            sshd.service/sshd.socket + systemd-ssh-generator's AF_VSOCK and
+            local sockets (the generator itself nulled). Source pin test
+            scoped to the user-data window. Verified LIVE on a fresh
+            destructive provision via --exec-guest (idiomatic layer, no
+            ssh): sshd masked+inactive, zero listeners on :22, zero SSH key
+            material (the authorized_keys files present are EMPTY cloud-init
+            image stubs from the Fedora image itself, harmless with sshd
+            masked). wsl.rs audited clean — no WSL2 sibling packet needed.
+            Report: plan/issues/macos-e2e-overnight-cycle1-2026-07-10.md.
 
     - packet_id: guest-agent-attach-runs-login-flow
       order: 273
