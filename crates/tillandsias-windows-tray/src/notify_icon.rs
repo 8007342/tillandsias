@@ -1129,17 +1129,28 @@ fn apply_vm_status(
     mark_wire_recovered(hwnd);
 }
 
-/// True while the dedicated `VmStatus` push subscription (order 154 slice 1)
-/// is connected and delivering frames. Gates the steady-state fallback poll:
-/// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07);
-/// when the stream drops, the 30s tick resumes polling until the listener
+/// True while the dedicated push subscription (order 154 slices 1-3) is
+/// connected and delivering frames. Gates the steady-state fallback polls:
+/// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07)
+/// and the 10-tick login/cloud/local-projects polls are suppressed too;
+/// when the stream drops, the tick loop resumes polling until the listener
 /// resubscribes.
-static VM_STATUS_PUSH_HEALTHY: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+///
+/// Slice 4 (SC-16): the signal is the shared watch-backed
+/// [`tillandsias_host_shell::subscription_health::SubscriptionHealth`] —
+/// not an `AtomicBool` the tick loop re-reads after each sleep. The tick
+/// loop selects on the health transition
+/// (`wait_tick_or_subscription_drop`), so a subscription drop triggers an
+/// immediate full fallback round instead of surfacing up to 300s later on
+/// the 10-tick slow cadence. Mirrors macOS order 155 slice 3; the wait
+/// helpers live in host-shell so the two tick loops cannot drift.
+static VM_STATUS_PUSH_HEALTH: std::sync::LazyLock<
+    tillandsias_host_shell::subscription_health::SubscriptionHealth,
+> = std::sync::LazyLock::new(tillandsias_host_shell::subscription_health::SubscriptionHealth::new);
 
 /// True while the current push subscription includes
 /// `SubscriptionTopic::LocalProjects` (order 154 slice 3). Distinct from
-/// [`VM_STATUS_PUSH_HEALTHY`] because of version skew: against a guest that
+/// [`VM_STATUS_PUSH_HEALTH`] because of version skew: against a guest that
 /// predates order 260 the listener falls back to the legacy three-topic
 /// subscribe (see `run_vm_status_push_listener`), and the local-projects
 /// wire poll must then stay active even though the subscription is healthy.
@@ -1256,7 +1267,7 @@ fn apply_local_projects(entries: &[tillandsias_control_wire::LocalProjectEntry])
 /// connection gets the same stream without racing the request path.
 ///
 /// Reconnects forever with the shared `BACKOFF_SCHEDULE` (250ms→4s), then
-/// 30s steady-state between attempts — while down, `VM_STATUS_PUSH_HEALTHY`
+/// 30s steady-state between attempts — while down, `VM_STATUS_PUSH_HEALTH`
 /// is false and the tick loop's fallback poll covers status freshness.
 async fn run_vm_status_push_listener(hwnd: HWND) {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
@@ -1265,7 +1276,9 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
 
     let mut backoff_idx: usize = 0;
     loop {
-        VM_STATUS_PUSH_HEALTHY.store(false, std::sync::atomic::Ordering::SeqCst);
+        // Change-gated: redundant set(false) on every reconnect attempt does
+        // not wake the tick loop's transition waiter.
+        VM_STATUS_PUSH_HEALTH.set(false);
         LOCAL_PROJECTS_PUSH_SUBSCRIBED.store(false, std::sync::atomic::Ordering::SeqCst);
         // One connect+handshake+subscribe attempt for a given topic list.
         // A FRESH connection per attempt is deliberate: a guest that cannot
@@ -1340,7 +1353,7 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
         };
 
         backoff_idx = 0;
-        VM_STATUS_PUSH_HEALTHY.store(true, std::sync::atomic::Ordering::SeqCst);
+        VM_STATUS_PUSH_HEALTH.set(true);
         LOCAL_PROJECTS_PUSH_SUBSCRIBED
             .store(local_topic_subscribed, std::sync::atomic::Ordering::SeqCst);
         if local_topic_subscribed {
@@ -1409,7 +1422,7 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
 /// error leaves the last known state untouched (logged at debug). Uses
 /// `live_client_request` which reuses the persistent `LIVE_CLIENT` connection
 /// or reconnects transparently. Steady-state this is fallback-only (SC-07):
-/// the tick loop skips it while [`VM_STATUS_PUSH_HEALTHY`] holds.
+/// the tick loop skips it while [`VM_STATUS_PUSH_HEALTH`] holds.
 async fn refresh_vm_status(hwnd: HWND) {
     use tillandsias_control_wire::ControlMessage;
 
@@ -2245,11 +2258,13 @@ fn spawn_provisioning(hwnd: HWND) {
                         // Holds `_keepalive` for the tray's lifetime; on
                         // Quit the LocalSet drops the task → kill_on_drop.
                         tokio::task::spawn_local(run_vm_status_push_listener(hwnd));
+                        // SC-16 (slice 4): hold a watch receiver so the tick
+                        // wait ends early on a healthy→down transition and
+                        // the fallback round runs immediately.
+                        let mut health_rx = VM_STATUS_PUSH_HEALTH.subscribe();
                         let mut tick: u32 = 0;
                         loop {
-                            if should_poll_vm_status(
-                                VM_STATUS_PUSH_HEALTHY.load(std::sync::atomic::Ordering::SeqCst),
-                            ) {
+                            if should_poll_vm_status(VM_STATUS_PUSH_HEALTH.is_healthy()) {
                                 refresh_vm_status(hwnd).await;
                             }
                             // Slower polls every 10 ticks (~5 min). Local fs
@@ -2265,8 +2280,7 @@ fn spawn_provisioning(hwnd: HWND) {
                                 // fallback-only. The host-side ~/src scanner
                                 // is untouched — it never hits the wire.
                                 if should_poll_local_projects(
-                                    VM_STATUS_PUSH_HEALTHY
-                                        .load(std::sync::atomic::Ordering::SeqCst)
+                                    VM_STATUS_PUSH_HEALTH.is_healthy()
                                         && LOCAL_PROJECTS_PUSH_SUBSCRIBED
                                             .load(std::sync::atomic::Ordering::SeqCst),
                                     fast_poll > 0,
@@ -2280,8 +2294,7 @@ fn spawn_provisioning(hwnd: HWND) {
                                 // which forces a confirming round after a
                                 // user action (see should_poll_login_and_cloud).
                                 if should_poll_login_and_cloud(
-                                    VM_STATUS_PUSH_HEALTHY
-                                        .load(std::sync::atomic::Ordering::SeqCst),
+                                    VM_STATUS_PUSH_HEALTH.is_healthy(),
                                     fast_poll > 0,
                                 ) {
                                     refresh_cloud_projects(hwnd).await;
@@ -2298,8 +2311,24 @@ fn spawn_provisioning(hwnd: HWND) {
                                         .store(fast_poll - 1, std::sync::atomic::Ordering::SeqCst);
                                 }
                             }
-                            tick = tick.wrapping_add(1);
-                            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                            // SC-16 (slice 4): wait out the period, waking
+                            // early only on a healthy→down transition — the
+                            // drop rewinds to tick 0 so the next iteration
+                            // replays the full first-tick fallback round
+                            // (local + cloud + login + VmStatus) immediately
+                            // instead of up to 300s later on the 10-tick
+                            // cadence. Up-transitions never shorten the
+                            // period; a closed channel degrades to the
+                            // plain 30s timer.
+                            let wake =
+                                tillandsias_host_shell::subscription_health::wait_tick_or_subscription_drop(
+                                    std::time::Duration::from_secs(30),
+                                    &mut health_rx,
+                                )
+                                .await;
+                            tick = tillandsias_host_shell::subscription_health::tick_after_wake(
+                                tick, &wake,
+                            );
                         }
                     }
                     Err(err) => {
