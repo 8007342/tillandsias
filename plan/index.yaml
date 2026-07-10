@@ -8091,3 +8091,40 @@ plan_index:
             robustness is linux-owned; filed with verbatim evidence + an
             --exec-guest storage probe. Cross-references order 270 (root
             cause of the corruption).
+
+    - packet_id: smoke-lock-fd-leaks-into-forge-sessions
+      order: 283
+      title: "with-smoke-lock fd leaks into launched forge agent sessions — orphaned agents deadlock the next gate"
+      status: ready
+      kind: bug
+      deliverable: scripts/with-smoke-lock.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [shell, locking, forge, e2e]
+      estimated_hours: 2
+      outcome: >
+        2026-07-10T11:27Z: gate pipeline attempt 3 queued 16 minutes on the
+        build-install-smoke-e2e flock while the holder was an ORPHANED
+        opencode agent session (timeout 5400 opencode run ...) from attempt
+        2's killed litmus STEP 3 — the flock fd was inherited through the
+        exec chain into the forge launch, so a litmus-step kill that
+        orphans the agent leaves the lock held for up to the agent's own
+        90-minute cap. The coordinator reclaimed manually (agent had
+        pushed its packet 20+ minutes earlier and gone quiet). Fix:
+        with-smoke-lock must open the lock fd close-on-exec (or re-exec
+        the payload with the fd closed) so ONLY the wrapper's own lifetime
+        holds the lease; add a shape-litmus fixture proving a child
+        surviving the wrapper does NOT retain the lock. Also consider the
+        liveness probe's dead_air verdict as an auto-reclaim input for
+        gate queuing.
+      exit_criteria:
+        - "a child process outliving with-smoke-lock does not hold the flock (fixture litmus)"
+        - "a queued second wrapper acquires within poll cadence of the first wrapper's exit"
+      events:
+        - type: filed
+          ts: "2026-07-10T11:30:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T1127Z"
+          host: linux_mutable
+          summary: >
+            Reduction-engine capture from the final overnight-loop
+            iteration; manual reclaim unblocked pipeline attempt 3.
