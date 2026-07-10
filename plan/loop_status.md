@@ -2,6 +2,24 @@
 
 LastExecutionTime: 2026-07-10T07:20:00Z
 
+## Cycle 2026-07-10T06:54Z (linux_mutable opencode/big-pickle — meta-orch worker drain: order 265 research verdict + fixture prototype)
+
+- **Host**: linux_mutable, `linux-next @ 9e7e47cc` → `047a5849`
+- **Credential guard**: `ok:gh-keyring`
+- **E2E eligibility**: `skip:smoke-lock-held`
+- **Worker drain**: Completed order 265 (forge-agent-liveness-signals). Research
+  verdict: 3-signal layered design (container state + heartbeat mtime + git HEAD).
+  Evaluated 5 candidates (heartbeat file, git cadence, podman exec, vsock pulse,
+  podman events). Implemented `scripts/forge-liveness-probe.sh` (status/wait/
+  deadline modes, 5 liveness states). Fixture test suite `scripts/test-forge-
+  liveness-probe.sh` (8 scenarios, all pass). Litmus `litmus:forge-liveness-
+  probe-shape` registered and passing (9 steps). Hard-cap backstop preserved.
+  Residual: forge entrypoint heartbeat touch, repeat script integration, litmus
+  STEP 3 timeout diagnostics wiring.
+- **Siblings**: windows-next `fd0706ca`, osx-next `dd2b21ea` — both ancestors
+  of linux-next; no merge needed.
+- **Commit**: `047a5849` pushed to `origin/linux-next`.
+
 ## Cycle 2026-07-10T06:21Z→07:20Z (linux_mutable macuahuitl — overnight loop 2/8: siblings merged, gate-1 burn-down ×3, env-isolation rewritten)
 
 - Merged osx-next (272 SSH backdoor closed + 277) and windows-next (274
