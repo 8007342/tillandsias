@@ -1,7 +1,40 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T12:10:00Z
+LastExecutionTime: 2026-07-10T12:15:00Z
 
+## Cycle 2026-07-10T11:57Z (macos — overnight autonomous 8/8 FINAL: merge + verified-green macOS handoff)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 8 of 8, final).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next ba3e5acd.
+- **Order collision resolved (uniqueness gate)**: linux filed its own order
+  283 (smoke-lock-fd-leaks) + 284 (P1 forge-opencode outage) in parallel
+  with my cycle-7 order 283 (headless-podman-test-gate). Kept linux's
+  283/284, renumbered mine to **285**; the order-275 uniqueness gate
+  confirmed clean (150 packets, no open-packet duplicates). This is the
+  gate's textbook use case — three hosts filing packets in parallel
+  overnight, caught mechanically.
+- **No macOS-actionable ready work this cycle**: 273 operator-blocked
+  (agent leaves auth-gated); 155 contested criteria (proposal pending);
+  270/283/284/285 linux-owned; 284 is a P1 but it's the linux forge lane
+  (upstream opencode-ai@latest publish broke the in-enclave postinstall),
+  not macOS-fixable.
+- **Final action — verified-green macOS handoff**: re-ran the macOS-owned +
+  cycle-7-fixed crates on the merged final tree — all green
+  (macos-tray 69, host-shell 59, vm-layer 51, control-wire 38,
+  gh_auth_deploy_key 5/5 with the keyring hermeticity fix holding). Build
+  check clean. The macOS trunk is solid at loop close.
+- **E2E gate**: skipped-with-cause — destructive local-build e2e PASSED
+  cycle 6 (merged HEAD) + cycle 4; no runtime delta this cycle (merge +
+  verification only).
+- **macOS night summary (8 cycles)**: order 272 (ssh backdoor closed,
+  verified), 277 (one-shot CLI vs live tray), 269 (session-end banner +
+  pty-dump), 155 slice 4 (LocalProjects push) + tick-wait dedup onto the
+  shared module; fixes: chip clobber, fstab mount persistence, post-login
+  cloud prime, keyring test hermeticity. Filed for siblings: 267/276 (login
+  push), 270 (guest-side attach), 281 (overlay self-heal), 283/285
+  (test-gate). Two destructive e2e PASSes. Open macOS residual: 273
+  (operator), 155 (criteria decision). Parity column: 6/7 cells done,
+  InteractiveStream blocked on 273.
 ## Cycle 2026-07-10T10:40Z→12:10Z (linux_mutable macuahuitl — overnight loop 7-8/8 CLOSE: strict default proved in gates, P1 forge-lane outage filed)
 
 - Iteration 7: strict-default's first gates surfaced and FIXED two real
