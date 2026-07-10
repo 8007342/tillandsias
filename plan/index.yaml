@@ -1368,8 +1368,32 @@ plan_index:
     - packet_id: windows-tray-stream-refactor
       order: 154
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
-      status: claimed
+      status: ready
       events:
+        - type: progress
+          ts: "2026-07-10T08:40:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-tick-retirement-slice-4"
+          commits: [0083f362]
+          summary: >
+            Slice 4 (SC-16) landed on windows-next: VM_STATUS_PUSH_HEALTHY
+            AtomicBool replaced by the shared host-shell SubscriptionHealth;
+            tick loop waits via wait_tick_or_subscription_drop and rewinds
+            to tick 0 on a drop, so a dropped subscription triggers an
+            immediate full fallback round instead of up to 300s later.
+            HOIST NOTE (macOS order 155 pickup): TickWake /
+            wait_tick_or_subscription_drop / tick_after_wake now live in
+            host-shell::subscription_health with the paused-clock pins
+            (dev-deps grew tokio test-util) — action_host.rs should swap
+            its local copies for the shared ones so the two tick loops
+            cannot drift. Live at this HEAD: legacy-topic fallback engaged
+            twice, mid-run 'wsl --terminate' survived (keepalive respawn →
+            resubscribe, 31s end-to-end). host-shell 53 tests, windows-tray
+            65, clippy 0. REMAINING for this packet: watch-channel menu
+            listener wakeups + eliminating the 30s tick task entirely
+            (needs the menu render path to consume MenuState transitions
+            event-driven). Releasing lease; packet stays ready.
         - type: claim
           ts: "2026-07-10T08:15:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"
