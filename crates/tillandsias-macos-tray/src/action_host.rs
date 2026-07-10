@@ -1863,6 +1863,8 @@ fn apply_vm_status(
             );
         }
     }
+    let base = vm_phase_status_text(phase, podman_ready);
+    let text_for_dispatch = compose_chip_text(&base, last_event);
     let mut rebuild_needed = false;
     {
         let mut guard = menu_state.lock().unwrap();
@@ -1875,9 +1877,17 @@ fn apply_vm_status(
             guard.login_runtime_ready = new_login_runtime_ready;
             rebuild_needed = true;
         }
+        // The status row is re-rendered from MenuState on every rebuild
+        // (render() reads state.status_text). Without this write the state
+        // keeps its BOOT_STATUS_TEXT default, so the rebuild triggered by
+        // the very transition we're applying (e.g. -> Ready) clobbers the
+        // chip back to "Booting…" right after the direct setTitle below —
+        // the 2026-07-10 attended smoke caught the menu stuck there while
+        // stderr showed phase=Ready (m8 F2 class: status must never lie).
+        if guard.status_text != text_for_dispatch {
+            guard.status_text = text_for_dispatch.clone();
+        }
     }
-    let base = vm_phase_status_text(phase, podman_ready);
-    let text_for_dispatch = compose_chip_text(&base, last_event);
     let chip_status_text = status_text.clone();
     let chip_status_item = status_item.clone();
     let chip_status_menu_item = status_menu_item.clone();
@@ -2280,6 +2290,12 @@ fn spawn_vm_status_poller(
                             guard.login_runtime_ready = false;
                             rebuild_needed = true;
                         }
+                        // Keep MenuState's status row in sync so the rebuild
+                        // below doesn't resurrect a stale label (same clobber
+                        // class apply_vm_status fixes for the healthy path).
+                        if guard.status_text != WIRE_UNREACHABLE_CHIP_TEXT {
+                            guard.status_text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
+                        }
                     }
                     let text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
                     let text_for_dispatch = text.clone();
@@ -2528,6 +2544,55 @@ mod tests {
             &status_menu_item,
         );
         assert!(!second, "unchanged status must not re-request a rebuild");
+    }
+
+    /// Chip-clobber regression pin (2026-07-10 attended smoke): render()
+    /// re-derives the status row from MenuState.status_text on every
+    /// rebuild, so apply_vm_status MUST write the composed chip text into
+    /// MenuState — otherwise the rebuild its own transition triggers
+    /// resurrects the BOOT_STATUS_TEXT default and the menu shows
+    /// "Booting…" forever while stderr says Ready.
+    #[test]
+    fn apply_vm_status_syncs_menu_state_status_text_for_rebuilds() {
+        let last_logged = Arc::new(Mutex::new(None));
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let status_text = Arc::new(Mutex::new(String::new()));
+        let status_item = Arc::new(Mutex::new(None));
+        let status_menu_item = Arc::new(Mutex::new(None));
+
+        assert_eq!(
+            menu_state.lock().unwrap().status_text,
+            tillandsias_host_shell::menu_state::BOOT_STATUS_TEXT,
+            "precondition: fresh MenuState carries the boot default"
+        );
+        apply_vm_status(
+            tillandsias_control_wire::VmPhase::Ready,
+            true,
+            None,
+            &last_logged,
+            &menu_state,
+            &status_text,
+            &status_item,
+            &status_menu_item,
+        );
+        let synced = menu_state.lock().unwrap().status_text.clone();
+        assert_ne!(
+            synced,
+            tillandsias_host_shell::menu_state::BOOT_STATUS_TEXT,
+            "apply_vm_status left MenuState.status_text at the boot default — \
+             the next rebuild will clobber the chip back to Booting…"
+        );
+        assert_eq!(
+            synced,
+            compose_chip_text(
+                &vm_phase_status_text(tillandsias_control_wire::VmPhase::Ready, true),
+                None
+            ),
+            "MenuState.status_text must carry the same composed chip text \
+             the direct setTitle path applies"
+        );
     }
 
     #[test]
