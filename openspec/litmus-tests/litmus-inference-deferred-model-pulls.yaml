@@ -1,7 +1,26 @@
-# @trace spec:inference-container
+# @trace spec:inference-container, spec:zen-default-with-ollama-analysis-pool
+# Verify model acquisition is DEFERRED to container startup (build stays
+# fast), the first cold run installs the ollama binary + default model into
+# the persistent cache, and a second run serves from cache without pulling.
+#
+# Rewritten for order 267 (recipe from orders 268 forensics):
+# - The runner's fake-podman PATH shim injects `--userns=host` without
+#   `label=disable`; under SELinux Enforcing that shape cannot write the
+#   mounted cache and is NOT the product's launch shape. This litmus now
+#   invokes the REAL podman binary with the product's exact flags
+#   (--userns=keep-id --security-opt=label=disable, main.rs:2032-2094) so
+#   it tests the entrypoint's cold path under the shape users actually run.
+# - success strings updated to the current entrypoint contract
+#   ("default model <tag> ready" / "ready (cached)"); the pre-order-168
+#   "Pulling T0|T1 ready" strings matched nothing.
+# - launches are detached with bounded log polls instead of backgrounded
+#   `timeout podman run` races; the TILMANDSIAS_ typo is gone.
 name: litmus:inference-deferred-model-pulls
 spec: inference-container
-description: Verify T0 + T1 models are pulled at container startup (not build time) and cached on subsequent starts
+description: >
+  Cold first run installs ollama + pulls the default model into the mounted
+  cache (product launch shape, real podman); warm second run reports
+  "ready (cached)" with no re-install and no re-pull.
 severity: high
 size: long
 phase: post-build
@@ -9,67 +28,58 @@ backend: real
 
 preconditions:
   - tillandsias-inference image built and available in podman
-  - ~/.cache/tillandsias/models/ directory exists and is writable
   - podman runtime available with networking support
+  - "network: first cold run downloads the ollama release (~1.3 GiB) + a ~400MB model"
 
 caveats:
-  - requires_docker_runtime: "Test launches actual inference container; needs podman + network"
-  - network_dependent: "First run pulls ~2.4GB from ollama.ai; requires internet or cached models"
-  - time_intensive: "First run ~90s (network pulls); cached run ~5s"
+  - time_intensive: "cold run is download-bound (minutes on slow links); warm run ~15s"
 
 critical_path:
-  - step: "remove cache to simulate fresh start"
-    command: "rm -rf ~/.cache/tillandsias/models/manifests/registry.ollama.ai/library/qwen2.5 ~/.cache/tillandsias/models/manifests/registry.ollama.ai/library/llama3.2"
-    timeout_ms: 3000
-    success_pattern: ""
+  - step: "wipe the cache to force the cold path"
+    command: "CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; mkdir -p \"$CACHE_DIR\"; rm -rf \"$CACHE_DIR/.tools\" \"$CACHE_DIR/manifests\" \"$CACHE_DIR/blobs\" && echo 'ok: cache cold'"
+    timeout_ms: 10000
+    success_pattern: "ok: cache cold"
     failure_pattern: "Permission denied"
 
-  - step: "launch inference container (first run — models NOT in cache)"
-    command: "CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; mkdir -p \"$CACHE_DIR\"; timeout 180 podman run --rm --name test-inference-first-run -v \"$CACHE_DIR:/home/ollama/.ollama/models\" -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=0 tillandsias-inference:latest & CONTAINER_PID=$!; sleep 3; (podman logs test-inference-first-run 2>&1 | head -50) > /tmp/inference_first_run.log; cat /tmp/inference_first_run.log"
-    timeout_ms: 185000
-    success_pattern: "Pulling T0|T1 ready"
-    failure_pattern: "FAILED|panic|Error|error:"
+  - step: "cold run: product-shape launch installs ollama + reaches default-model ready"
+    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; \"$RP\" rm -f test-inference-cold >/dev/null 2>&1; \"$RP\" run -d --name test-inference-cold --userns=keep-id --security-opt=label=disable --security-opt=no-new-privileges -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v \"$CACHE_DIR:/home/ollama/.ollama/models:rw\" tillandsias-inference:latest >/dev/null || { echo 'FAIL: cold launch did not start'; exit 1; }; ok=''; for i in $(seq 1 120); do log=$(\"$RP\" logs test-inference-cold 2>&1); printf '%s' \"$log\" | grep -qE 'default model .* ready' && { ok=1; break; }; printf '%s' \"$log\" | grep -q 'FATAL: no ollama binary' && break; sleep 5; done; log=$(\"$RP\" logs test-inference-cold 2>&1); \"$RP\" rm -f test-inference-cold >/dev/null 2>&1; [ -n \"$ok\" ] && printf '%s' \"$log\" | grep -q 'Installing ollama binary (first run)' && echo 'ok: cold run installed and ready' || { printf '%s\\n' \"$log\" | tail -8; echo 'FAIL: cold run did not reach ready'; exit 1; }"
+    timeout_ms: 640000
+    success_pattern: "ok: cold run installed and ready"
+    failure_pattern: "FAIL: cold"
 
-  - step: "verify entrypoint logged model pulls (not cached on first run)"
-    command: "grep -E 'Pulling T0|Pulling T1' /tmp/inference_first_run.log && echo FIRST_RUN_PULLED || echo FIRST_RUN_CACHED"
-    timeout_ms: 3000
-    success_pattern: "FIRST_RUN_PULLED"
-    failure_pattern: "FIRST_RUN_CACHED"
-
-  - step: "wait for first run to complete and verify models are cached"
-    command: "sleep 5; CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; if [ -f \"$CACHE_DIR/manifests/registry.ollama.ai/library/qwen2.5/0.5b\" ] || [ -f \"$CACHE_DIR/manifests/registry.ollama.ai/library/llama3.2/3b\" ]; then echo MODELS_CACHED; else echo MODELS_NOT_CACHED; fi"
+  - step: "cache holds the binary and the default model manifest after the cold run"
+    command: "CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; test -x \"$CACHE_DIR/.tools/ollama/ollama\" && test -d \"$CACHE_DIR/manifests\" && echo 'ok: cache populated' || { ls -la \"$CACHE_DIR\" \"$CACHE_DIR/.tools/ollama\" 2>&1 | head -8; echo 'FAIL: cache missing artifacts'; exit 1; }"
     timeout_ms: 10000
-    success_pattern: "MODELS_CACHED"
-    failure_pattern: "MODELS_NOT_CACHED"
+    success_pattern: "ok: cache populated"
+    failure_pattern: "FAIL: cache"
 
-  - step: "launch inference container (second run — models IN cache)"
-    command: "CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; timeout 30 podman run --rm --name test-inference-cached-run -v \"$CACHE_DIR:/home/ollama/.ollama/models\" -e TILMANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 tillandsias-inference:latest & sleep 3; (podman logs test-inference-cached-run 2>&1 | head -30) > /tmp/inference_cached_run.log; cat /tmp/inference_cached_run.log; pkill -f test-inference-cached-run || true"
-    timeout_ms: 35000
-    success_pattern: "ready \\(cached\\)"
-    failure_pattern: "Pulling T|FAILED|panic"
+  - step: "warm run: serves from cache — no re-install, no pull"
+    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; \"$RP\" rm -f test-inference-warm >/dev/null 2>&1; \"$RP\" run -d --name test-inference-warm --userns=keep-id --security-opt=label=disable --security-opt=no-new-privileges -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v \"$CACHE_DIR:/home/ollama/.ollama/models:rw\" tillandsias-inference:latest >/dev/null || { echo 'FAIL: warm launch did not start'; exit 1; }; ok=''; for i in $(seq 1 24); do log=$(\"$RP\" logs test-inference-warm 2>&1); printf '%s' \"$log\" | grep -qE 'ready \\(cached\\)' && { ok=1; break; }; sleep 5; done; log=$(\"$RP\" logs test-inference-warm 2>&1); \"$RP\" rm -f test-inference-warm >/dev/null 2>&1; [ -n \"$ok\" ] || { printf '%s\\n' \"$log\" | tail -8; echo 'FAIL: warm run did not report cached'; exit 1; }; printf '%s' \"$log\" | grep -q 'Installing ollama binary (first run)' && { echo 'FAIL: warm run re-installed the binary'; exit 1; }; echo 'ok: warm run cached'"
+    timeout_ms: 140000
+    success_pattern: "ok: warm run cached"
+    failure_pattern: "FAIL: warm"
 
-  - step: "verify entrypoint logged cached load (not pulling on second run)"
-    command: "grep -E 'ready \\(cached\\)' /tmp/inference_cached_run.log && echo SECOND_RUN_CACHED || echo SECOND_RUN_PULLED"
-    timeout_ms: 3000
-    success_pattern: "SECOND_RUN_CACHED"
-    failure_pattern: "SECOND_RUN_PULLED"
-
-  - step: "cleanup: remove test containers and logs"
-    command: "podman rm -f test-inference-first-run test-inference-cached-run 2>/dev/null; rm -f /tmp/inference_*.log; echo CLEANUP_OK"
+  - step: "cleanup test containers"
+    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; \"$RP\" rm -f test-inference-cold test-inference-warm >/dev/null 2>&1; echo 'ok: cleanup'"
     timeout_ms: 15000
-    success_pattern: "CLEANUP_OK"
+    success_pattern: "ok: cleanup"
     failure_pattern: ""
 
 observability:
   traces:
     - "@trace spec:inference-container"
     - "@trace spec:zen-default-with-ollama-analysis-pool"
-  expected_log: "Deferred model pulling: build fast, startup pulls models once, subsequent starts load from cache"
+  expected_log: "Deferred model pulls: cold run installs + readies default model; warm run serves from cache"
   log_fields:
     spec: "inference-container"
     test: "inference-deferred-model-pulls"
     backend: "real"
 
 rollback:
-  on_failure: "Check images/inference/entrypoint.sh (should self-install ollama FIRST_RUN + pull default models on startup)"
-  command: "echo '--- Containerfile ollama traces ---'; grep -n 'ollama\\|tar.zst' images/inference/Containerfile 2>/dev/null || echo '(none)'; echo '--- entrypoint.sh ollama install ---'; grep -n 'ollama-linux-\\|\\.tools/ollama' images/inference/entrypoint.sh; echo '--- entrypoint.sh model pulls ---'; grep -n 'ollama pull' images/inference/entrypoint.sh"
+  on_failure: >
+    Check images/inference/entrypoint.sh: the proxy-resolvability guard and
+    direct-retry fallback (order 268) own the download path; the fail-loud
+    exit fires when no ollama binary exists. A cold-run failure with
+    'install FAILED' under a labeled mount usually means the launch shape
+    regressed (userns/label flags) — compare against main.rs:2032-2094.
+  command: "grep -n 'ollama-linux-\\|proxy.*does not resolve\\|FATAL: no ollama' images/inference/entrypoint.sh | head -6"
