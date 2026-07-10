@@ -8128,3 +8128,49 @@ plan_index:
           summary: >
             Reduction-engine capture from the final overnight-loop
             iteration; manual reclaim unblocked pipeline attempt 3.
+
+    - packet_id: forge-opencode-harness-broken-by-upstream-latest
+      order: 284
+      title: "P1: forge opencode lane down — opencode-ai@latest refresh mid-night broke the harness (postinstall incomplete in-enclave)"
+      status: ready
+      kind: bug
+      deliverable: images/default/lib-common.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, npm, proxy, supply-chain]
+      estimated_hours: 4
+      outcome: >
+        Every forge launch fails since 2026-07-10T10:56Z: the opencode
+        harness exits 1 at startup demanding "cd node_modules/opencode-ai
+        && node postinstall.mjs" (repro: TILLANDSIAS_NO_TRAY=1 tillandsias
+        . --opencode --prompt anything). Chain: tonight's destructive
+        resets wiped the persistent npm tool cache; the 24h-rate-limited
+        harness refresh reinstalled opencode-ai@latest; upstream published
+        THREE dev/beta releases during our overnight window (npm timeline:
+        beta at 10:17Z, minutes before the first failure) and the fresh
+        install's postinstall did not complete inside the enclave —
+        suspected proxy/allowlist block of its platform-binary download
+        (order 129/130 territory) or an upstream-broken publish. Killed
+        the last three gate attempts (dead_crashed via the order-265
+        probe, which fast-failed exactly as designed). Fix direction:
+        (1) pin a TESTED opencode-ai version in lib-common.sh's harness
+        list (test in-container before pinning; upstream's 0.0.0-dev/beta
+        chaotic tagging makes @latest structurally unsafe for an isolated
+        enclave); (2) make the updater roll back to the cached-working
+        install when a fresh install fails a smoke probe (opencode
+        --version + a no-op run); (3) capture the postinstall's egress
+        target and add it to the proxy allowlist research (order 129).
+      exit_criteria:
+        - "forge launch green again (minimal repro exits 0)"
+        - "harness updater survives a broken upstream publish (rollback or pinned, litmus-pinned)"
+        - "postinstall egress target identified and dispositioned (allowlist or offline bundle)"
+      events:
+        - type: filed
+          ts: "2026-07-10T12:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T1127Z"
+          host: linux_mutable
+          summary: >
+            Filed at overnight-loop close with the full evidence chain
+            (gate runs 104930Z + 111150Z, npm publish timeline, minimal
+            repro). TOP PICK for the next linux cycle — the forge lane is
+            the loop's engine.

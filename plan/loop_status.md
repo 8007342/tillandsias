@@ -1,6 +1,32 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T10:20:00Z
+LastExecutionTime: 2026-07-10T12:10:00Z
+
+## Cycle 2026-07-10T10:40Z→12:10Z (linux_mutable macuahuitl — overnight loop 7-8/8 CLOSE: strict default proved in gates, P1 forge-lane outage filed)
+
+- Iteration 7: strict-default's first gates surfaced and FIXED two real
+  bugs — alpine:latest fallbacks in the slice-2 helpers (base policy) and
+  run-observatorium.sh's unqualified + bump-window image reference
+  (launcher verified live). Order-265 probe WIRED into opencode STEP 3
+  after the second alive-past-budget collision (soft 600s + liveness
+  extension + 1500s hard cap).
+- Iteration 8: reclaimed the smoke lock from an orphaned agent session
+  holding an inherited flock fd (order 283 filed — close-on-exec fix);
+  then the probe fast-failed dead_crashed and exposed the real outage:
+  **P1 order 284 — the forge opencode lane is DOWN since 10:56Z.**
+  Upstream opencode-ai published 3 dev/beta releases during our window;
+  the post-reset harness refresh pulled one whose postinstall cannot
+  complete in-enclave. Minimal repro + npm timeline + fix direction
+  (tested pin, updater rollback, egress disposition) in the packet. TOP
+  PICK for the next linux cycle.
+- Gate state at close: pre-build matrix 156/156 under the strict default
+  (proved twice); post-build green EXCEPT the three forge-launching
+  litmuses, all red on the order-284 outage; destructive gates 2-4 not
+  reached tonight after the 073536Z full PASS (substrate remains from
+  that provision).
+- The 8-iteration overnight loop is COMPLETE. Cross-host: siblings ran
+  their own loops throughout (macOS adopted 260 + passed destructive e2e;
+  windows on 154 slices); ~15 packets closed across hosts tonight.
 
 ## Cycle 2026-07-10T09:57Z (macos — overnight autonomous 6/8: reduction pass — order 270 re-scoped guest-side, order-155-criteria proposal filed, destructive e2e on merged HEAD)
 
