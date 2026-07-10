@@ -6814,3 +6814,154 @@ plan_index:
             capture rule. Renumbered 263 -> 266 in the second 2026-07-10
             merge (collision with linux's git-mirror-ledger-yaml-gate —
             the finding demonstrating itself).
+
+    - packet_id: headless-login-transition-refresh
+      order: 267
+      title: "Headless: logged-in transition must refresh cloud projects + push LoginState immediately (attended smoke F-C/F-D)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, vsock, control-wire, vault]
+      estimated_hours: 3
+      outcome: >
+        2026-07-10 attended macOS smoke: after a successful GitHub login the
+        tray showed "no repos" indefinitely and stayed visually logged-out
+        for up to 60s+. Root causes guest-side: (1) set_cloud_projects (the
+        CloudProjectsPush source) is invoked ONLY by the CloudRefreshRequest
+        handler, which SC-07 suppresses on healthy push streams — nothing
+        re-derives the auth-gated cloud list after login; (2) LoginStatePush
+        rides a 60s presence-poll cadence and the login satisfier's own
+        completion does not push, so the operator re-ran a login that had
+        already succeeded. Fix: on the login-probe's (or satisfier's)
+        logged-out->logged-in transition, push LoginState immediately AND
+        refresh + push the cloud project list, so every subscriber converges
+        without tray-side workarounds. The macOS tray landed an interim
+        prime (b365deaf: CloudRefreshRequest on LoginStatePush logged-in);
+        windows should mirror until this packet closes, then both trays can
+        drop the prime. Full analysis:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-C, F-D).
+      exit_criteria:
+        - "logged-out->logged-in transition emits LoginStatePush within the satisfier's completion path (no 60s cadence wait)"
+        - "the same transition triggers a guest-side cloud refresh whose result pushes CloudProjectsPush (change-gated)"
+        - "unit test: login transition with subscribers produces both pushes without any inbound request"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Attended-smoke capture (operator present, login run live twice).
+            Tray-side interim prime landed on osx-next; guest-side is the
+            durable fix and is linux-owned.
+
+    - packet_id: macos-oneshot-cli-live-tray-coexistence
+      order: 268
+      title: "macOS one-shot CLI modes vs running tray: disk-lock collision with opaque VZ error (attended smoke F-E)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-macos-tray/src/main.rs
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, tray, vz, cli, ux]
+      estimated_hours: 3
+      outcome: >
+        --exec-guest and --list-cloud-projects unconditionally start their
+        own VZ VM; with the tray holding the root disk they fail with
+        'Invalid virtual machine configuration. The storage device
+        attachment is invalid.' — fine in e2e (nothing else running),
+        broken for a real operator whose tray is always up, and it blocks
+        in-session guest forensics (hit live in the 2026-07-10 attended
+        smoke). Wanted: detect the live VM first (control-wire probe or pid
+        /lock file) and either route the one-shot through it or fail with a
+        clear 'tray owns the VM — use the tray menu or quit it first'
+        message. Full context:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-E).
+      exit_criteria:
+        - "one-shot modes against a live tray either succeed through the running VM or fail with an explicit tray-owns-VM message (no raw VZ storage error)"
+        - "one-shot modes with no VM running behave exactly as today (e2e paths unchanged)"
+        - "pin test on the detection branch"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Attended-smoke capture: every guest forensics attempt this
+            session had to be abandoned or routed around the running tray.
+
+    - packet_id: macos-attended-smoke-ux-residue
+      order: 269
+      title: "Attended-smoke small residue: login popup dead-shell exit + ax-smoke pty-dump session resolution (F-F, F-G)"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-macos-tray/src/
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, tray, ux, harness]
+      estimated_hours: 2
+      outcome: >
+        Two small operator-facing rough edges from the 2026-07-10 attended
+        smoke, batched: (F-G) the GitHub-login popup terminal ends at a dead
+        shell printing '[screen is terminating]' after a SUCCESSFUL flow —
+        close the window on success (osascript) or print an unmistakable
+        success line; (F-F) scripts/macos-tray-ax-smoke.sh pty-dump reports
+        'No screen session found' while screen -ls lists the attached login
+        session — resolve the session via screen -ls (or accept a -S arg)
+        so harness dumps work against the real login PTY. Details:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md.
+      exit_criteria:
+        - "completing the login flow leaves no orphaned dead-shell window (or prints an explicit success banner)"
+        - "pty-dump hardcopies the live login session without a manual -S workaround"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Attended-smoke capture per the nothing-gets-lost rule; both
+            observed live with the operator present.
+
+    - packet_id: macos-attach-first-use-materialization-blackout
+      order: 270
+      title: "Agent attach on fresh VM: PTY dies silently during first-use forge-image build (attended smoke F-H)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-macos-tray/src/terminal_attach.rs
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, tray, pty, vz, ux, materialize]
+      estimated_hours: 4
+      outcome: >
+        2026-07-10 attended smoke, fresh VM: first agent attach triggers the
+        in-VM forge-image materialization (multi-minute, network-bound
+        recipe build). The attach PTY streams early output (cloud clone
+        lines) then goes silent; the host attach worker eventually closes
+        the PTY with no message — the operator's Terminal shows '[screen is
+        terminating]' or a stuck window, indistinguishable from a hang
+        (guest journal confirmed healthy podman image builds in flight).
+        Wanted: (1) surface materialization progress into the attach PTY —
+        at minimum an explicit 'building forge image, first use takes
+        minutes…' line; (2) the worker must not close the PTY while the
+        in-VM launch is legitimately building — keep-alive until build
+        completion or a LOUD failure line with the guest-side error; (3) a
+        retry after the build completes must succeed (image cached). Guest
+        cooperation (progress frames on the wire) may spawn a linux slice —
+        coordinate via this packet. Also noted: guest journal drowns in
+        60s podman exec/exec_died label dumps from the liveness probes —
+        consider quieting for forensics signal-to-noise. Full context:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-H).
+      exit_criteria:
+        - "fresh-VM first attach shows an explicit materialization message in the popup terminal within 5s of click"
+        - "the PTY stays open through a healthy multi-minute image build and lands in the live agent session"
+        - "worker give-up paths print a loud error line to the PTY before closing"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Attended-smoke capture: operator hit this live on both a cloud
+            and a local attach; SSH forensics (cloud-init injected key)
+            confirmed builds in flight while both PTYs were already dead.

@@ -87,6 +87,48 @@ first match (or take a session arg).
 After flow completion the popup window prints `[screen is terminating]` and
 drops to a bare prompt. Should close itself or print a clear success line.
 
+## Round 2 (fresh provision @ b365deaf, operator re-login) — fix verdicts + new findings
+
+- **F-B mount fix VERIFIED (first boot)**: local-projects populated pre-login
+  (1 entry), and the in-VM lakanoa clone into `/home/forge/src` appeared in
+  host `~/src` with its files — share live end-to-end. fstab persistence
+  (second boot) verified separately below.
+- **F-C prime VERIFIED**: the instant LoginStatePush arrived, the tray primed
+  and rendered 23 real repos (log lines adjacent). Cloud overflow row click
+  dispatched CloudOverflow.
+- **F-D CONFIRMED at full strength**: operator had time to run the login
+  THREE times before the guest's 60s presence probe pushed the state. Order
+  267 is the fix (satisfier-completion push).
+
+### F-H (NEW, promoted order 270): first-use agent attach dies silently during in-VM image materialization
+
+On the fresh VM, cloud attach (lakanoa) streamed the clone lines then went
+silent; local OpenCode attach opened a Terminal that printed
+`[screen is terminating]` immediately. Guest journal (via SSH): two `podman
+image build` events in flight — the forge image chain builds from the recipe
+on first use, multi-minute and network-bound, while the attach PTY shows
+NOTHING and the host-side attach worker gives up/closes the PTY silently
+(screen sessions gone from `screen -ls`). Operator experience: dead/blank
+terminals with no explanation, indistinguishable from a hang. Wanted:
+stream materialization progress into the attach PTY (or at minimum a
+"building forge image, first use takes minutes…" line + keep the PTY open
+until the build concludes), and a loud error line when the worker gives up.
+
+### F-I (NEW, filed): status chip event text goes stale
+
+Chip stayed `🟢 Ready · Securing Vault` long after vault bootstrap
+completed — last_event only changes when the guest emits a NEW event, so the
+last provisioning event lingers indefinitely as if still in progress.
+Cosmetic but misleads ("has been Securing Vault for a while now" — operator,
+live). Consider clearing the event suffix after Ready settles, or
+timestamping it.
+
+### Also observed
+
+- Guest journal is dominated by full-label podman exec/exec_died event pairs
+  every 60s (vault liveness + login presence probes) — forensics
+  signal-to-noise problem, batched into order 270's scope note.
+
 ## Residual verification (needs fresh provision + one more login)
 
 Re-provision with F-B's fstab fix + current headless, re-login (operator),
