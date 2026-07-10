@@ -5925,6 +5925,22 @@ plan_index:
         - "meta-orchestration skill updated to recognize long-running packets (don't mark done until N verified-by events)"
         - "plan/long-running.md created as filtered view of active long-running packets"
         - "Additive update policy documented (new sections/supersede annotations, no rewrites)"
+      events:
+        - type: claim
+          ts: "2026-07-10T02:50:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0240Z"
+          host: windows
+          lease_id: "long-running-work-packet-methodology-20260710T0250Z"
+          expires_at: "2026-07-10T06:50:00Z"
+          note: >
+            Implementation cycle (multi_cycle packet — completion still gated
+            on the 3 verification_required agents; status stays ready across
+            cycles per the very policy this packet introduces). Only
+            dependency-free ready+any packet this cycle; doc/methodology work
+            fits the Windows host. Scope: distributed-work.yaml
+            long_running_packets section (schema + verified-by protocol +
+            additive update policy), meta-orchestration + advance-work skill
+            recognition, plan/long-running.md sub-queue view.
 
     - packet_id: launch-paths-route-through-dependency-model
       order: 252
