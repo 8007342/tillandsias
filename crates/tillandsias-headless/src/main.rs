@@ -10408,6 +10408,10 @@ mod tests {
 
     #[test]
     fn write_forge_gitconfig_produces_valid_config_with_origin_redirect() {
+        // This test mutates HOME: serialize with every other env-mutating
+        // test or a parallel thread's set_var races the read inside
+        // write_forge_gitconfig (first fired in gate run 20260710T062345Z).
+        let _guard = env_lock();
         // Create a temp directory with a minimal git repo to test reading the origin URL.
         let tmp = tempfile::tempdir().expect("temp dir");
         let project_path = tmp.path().join("my-project");
@@ -10497,6 +10501,8 @@ mod tests {
 
     #[test]
     fn write_forge_gitconfig_handles_ssh_origin_with_https_redirect() {
+        // HOME-mutating: same serialization requirement as the sibling test.
+        let _guard = env_lock();
         let tmp = tempfile::tempdir().expect("temp dir");
         let project_path = tmp.path().join("another-project");
         std::fs::create_dir_all(&project_path).expect("create project dir");
