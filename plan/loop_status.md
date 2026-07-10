@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T07:20:00Z
+LastExecutionTime: 2026-07-10T07:25:00Z
 
 ## Cycle 2026-07-10T06:58Z (macos — overnight autonomous 3/8: order 269 done + verified live, order 281 filed from PTY-tee capture)
 
@@ -3431,6 +3431,14 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - **Verification**: cargo test -p tillandsias-policy 22/22; clippy --all-targets clean; fmt-check clean; touched YAML validated via `tillandsias-policy validate-yaml`.
 - **Local-build e2e gate PASS** @ `c52a1e2e` (preflight `eligible`): full destructive Windows cycle — build 1m43s, direct-copy install with fresh embedded SHA, `wsl --unregister` + cache/VHDX wipe, cold `--provision-once` → `RESULT: VM Ready — control wire up ✓` exit 0, `--diagnose --json` exit 2 degraded-as-expected with `build_commit=c52a1e2e`. First e2e covering order 154 slice 2 (ea03e08e push-topic tray transport). Report: `plan/issues/build-install-smoke-e2e-findings-2026-07-10-windows.md` (+1 optimization packet: PS5.1 stderr quirk makes the freshness probe brittle). Curl-install e2e skipped: release hold active, no newer release than last tested.
 - **Queue after cycle (windows)**: order 258 remains blocked-on-operator (attended smoke checklist `plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md`); order 260 (LocalProjects push topic) is linux-owned; orders 224/225/256 (litmus DSL/runner) remain any-host candidates.
+
+## Cycle 2026-07-10T07:25Z (linux-mutable — meta-orchestration: litmus:forge-liveness-probe-shape verified PASS; merged windows-next)
+
+- **Host**: Linux x86_64, `linux-next`, agent opencode/big-pickle. Credential guard `ok:gh-keyring`. Clean start at be966855 + committed auto-generated traces/metrics.
+- **Work**: Verified `litmus:forge-liveness-probe-shape` — 8/8 static checks PASS, 8/8 fixture suite PASS, full instant pre-build suite 124/124 PASS (100%).
+- **E2E eligibility**: `skip:smoke-lock-held`.
+- **Coordinator**: Merged `origin/windows-next` (order 154 slice 3: push subscription widened, version-skew fallback). Resolved plan/loop_status.md union conflict. `build --check` green.
+- **Next**: order 267 remaining (folded command steps, strict-exit default), order 281 (guest overlay corruption self-heal), order 273 (attach login).
 
 ## Cycle 2026-07-10T06:38Z→06:48Z (linux-mutable — meta-orchestration: order 267 slice 1: 4 YAML-invalid files repaired)
 
