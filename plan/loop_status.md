@@ -35,6 +35,49 @@ LastExecutionTime: 2026-07-10T07:20:00Z
   now with order 281 as its downstream evidence), 155 residual. Order 273
   still the hot linux blocker on the macOS attach cell.
 
+## Cycle 2026-07-10T06:07Z→07:20Z (windows — meta-orchestration recurring loop 2/8: order 154 slice 3 + version-skew fallback, verified live)
+
+- **Host**: Windows 11 native, `windows-next`, agent
+  windows-bullo-fable5-20260710T0536Z. Credential guard
+  `ok:gh-credentials-store`. Clean start at eaee1c94 == origin;
+  origin/linux-next (7bdc4c1d) unchanged since loop 1/8 — already
+  integrated, no merge needed. osx-next advanced twice mid-cycle (macOS
+  loop active); its integration belongs to the linux coordinator.
+- **Worker drain — order 154 (windows-tray-stream-refactor) slice 3
+  COMPLETED (5c459070), lease released, packet stays ready**: push
+  subscription widened to all FOUR topics (order 260's LocalProjectsPush),
+  shared apply_local_projects applier, last steady-state wire poll
+  (EnumerateLocalProjects) demoted to fallback-only, initial-sync prime
+  extended. Found + fixed a REAL version-skew hazard while implementing:
+  a pre-260 guest cannot decode the new trailing SubscriptionTopic
+  variant and drops the connection — naive widening would have regressed
+  ALL push topics to polls on every stale guest. Added a legacy
+  three-topic fallback on a fresh connection with a separate
+  LOCAL_PROJECTS_PUSH_SUBSCRIBED gate so local projects keep polling in
+  legacy mode. VERIFIED LIVE against this host's stale-guest VM (guest @
+  45cfd526-era, pre-260): 'subscribe: early eof' → legacy resubscribe in
+  ~0.8s → login/cloud polls suppressed, local-projects poll continued at
+  ~5min cadence, clean shutdown; VM returned to stopped as found.
+  windows-tray 65 tests, clippy 0 warnings, fmt clean.
+- **Cross-host flag (macOS order 155)**: adopt the version-skew fallback
+  BEFORE widening the macOS topic list — the postcard decode failure is
+  platform-independent. Pin shape: legacy_topics_are_full_topics_minus_
+  local_projects.
+- **Observation (not re-filed, duplicate discipline)**: stale guest's boot
+  log showed '[vsock] vault bootstrap after DeliverCredentials failed:
+  Failed to create runtime asset parent: Permission denied (os error 13)'
+  — same os-error-13 vault family as smoke-e2e-findings-v0.3.260704.2 /
+  vault-selinux-label-rootless-crash-2026-07-02; guest predates current
+  HEAD where tonight's linux gate ran the vault chain green. Re-check on
+  a FRESH guest at the next destructive e2e before filing anything new.
+- **E2E gate**: deferred-with-cause — the slice's live verification above
+  exercised the changed code directly (the destructive gate would boot a
+  fresh guest that hides the fallback path this slice needed to prove);
+  next destructive run verifies the full-topic path + order 274
+  criterion 3.
+- **Next windows work**: order 154 final slice (tick-task retirement:
+  watch-channel wakeups + SubscriptionHealth adoption); order 258 still
+  operator-blocked; order 251 awaits verifiers.
 ## Cycle 2026-07-10T06:54Z (linux_mutable opencode/big-pickle — meta-orch worker drain: order 265 research verdict + fixture prototype)
 
 - **Host**: linux_mutable, `linux-next @ 9e7e47cc` → `047a5849`

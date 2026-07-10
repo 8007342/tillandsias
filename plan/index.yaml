@@ -1368,8 +1368,41 @@ plan_index:
     - packet_id: windows-tray-stream-refactor
       order: 154
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
-      status: claimed
+      status: ready
       events:
+        - type: progress
+          ts: "2026-07-10T07:15:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-localprojects-slice-3"
+          commits: [5c459070]
+          summary: >
+            Slice 3 (LocalProjects topic) landed on windows-next. The push
+            listener subscribes to all FOUR topics; LocalProjectsPush applied
+            via shared apply_local_projects (byte-identical with the
+            LocalProjectsReply poll arm); the every-10-ticks
+            EnumerateLocalProjects poll — the last steady-state wire poll —
+            demoted to fallback-only (should_poll_local_projects gate,
+            drift-pinned); initial-sync prime extended to local projects.
+            VERSION-SKEW NOTE for macOS order 155 (adopt before widening!):
+            SubscriptionTopic::LocalProjects is a trailing postcard variant,
+            so a pre-260 guest cannot DECODE the new Subscribe — it drops
+            the connection (verified live: 'subscribe: early eof'), which
+            would regress ALL push topics on stale guests. The listener
+            therefore falls back to the legacy three-topic list on a fresh
+            connection and keeps the local-projects poll active
+            (LOCAL_PROJECTS_PUSH_SUBSCRIBED gate;
+            legacy_topics_are_full_topics_minus_local_projects pin).
+            Verified LIVE against this host's stale-guest VM: fallback
+            engaged + recovered in ~0.8s, subscription healthy on legacy
+            topics, login/cloud polls suppressed, local projects polled
+            ~5min cadence, clean shutdown. windows-tray 65 tests green,
+            clippy --all-targets 0 warnings, fmt clean. REMAINING for this
+            packet (next slice): retire the 30s tick task via watch-channel
+            wakeups + adopt shared SubscriptionHealth (order 155 slice 3
+            pattern); full push verification against a fresh guest rides
+            the next destructive e2e (also closes the fallback's live
+            full-topic path). Releasing lease; packet stays ready.
         - type: claim
           ts: "2026-07-10T06:12:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"
