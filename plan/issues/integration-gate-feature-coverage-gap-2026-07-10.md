@@ -71,3 +71,14 @@ feature lanes manually when merged files live under feature gates.
 `./build.sh --ci-full` (or `--check` if slice 3 approved) fails on a
 deliberately introduced warning inside a non-default-feature unit
 (negative control), and passes on the clean tree (positive control).
+
+## APPROVED (slice 2) — 2026-07-10
+
+The Tlatoāni approved slice 2 on 2026-07-10 ("I approve — record it").
+Recorded in `methodology/convergence.yaml` `approved_bar_raises`
+(id `ci-full-all-features-clippy`) and implemented as plan order 266:
+`rust-clippy-all-features` in `scripts/local-ci.sh`, non-fast pre-build
+phase only (`--ci-full`; skipped under `--ci`/`--fast`). Baseline sweep was
+green at enablement (exit 0 — order 254's in-forge fix cleared the last
+failures). Slice 1 had already landed via order 254. **Slice 3 (promotion
+into `--check`) remains unapproved** and needs its own recorded decision.

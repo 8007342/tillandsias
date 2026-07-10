@@ -1,0 +1,116 @@
+# Litmus corpus parse health — folded commands, patternless steps, YAML-invalid files
+
+- **Filed**: 2026-07-10T02:50Z
+- **Agent**: linux-macuahuitl-fable5-20260710T0009Z (order 256 slice-1 audit)
+- **Classification**: enhancement (litmus infrastructure)
+- **Status**: open — remediation promoted to plan/index.yaml order 267
+- **Related**: order 256 (runner exit-code/diagnostics slice, done), orders
+  224/225 (litmus command DSL — the durable fix for this class), order 263
+  (mirror YAML gate — will reject edits to the YAML-invalid files below)
+
+## Audit method (reproducible)
+
+```bash
+ruby -ryaml -e '
+folded = []; patternless = []
+Dir["openspec/litmus-tests/*.yaml"].sort.each do |f|
+  begin; y = YAML.load_file(f); rescue => e; puts "PARSE-BROKEN: #{f}"; next; end
+  (y["critical_path"] || []).each do |s|
+    next unless s.is_a?(Hash)
+    folded << "#{f} :: #{s["step"]}" if s["command"].is_a?(String) && s["command"].include?("\n")
+    patternless << "#{f} :: #{s["step"]}" if !s.key?("expected_behavior") && !s.key?("success_pattern")
+  end
+end
+puts folded; puts "patternless: #{patternless.size}"'
+```
+
+## Findings (2026-07-10 snapshot)
+
+### A. 31 folded/multi-line `command:` steps across 8 files — SKIPPED since authoring
+
+The bash runner only extracts single-line double-quoted `command:` scalars;
+folded (`>`/`>-`) values were silently dropped, so these files ran with
+thinner coverage than authored (or zero steps → generic fail). As of order
+256 slice 1 the runner emits a loud `[PARSE WARNING]` per affected step;
+promotion to a hard per-step FAIL waits for the rewrites (order 267).
+
+| File | folded steps |
+|---|---|
+| litmus-podman-idiomatic-storage-isolation-runtime.yaml | 11 |
+| litmus-podman-idiomatic-event-driven.yaml | 9 |
+| litmus-tray-network-bootstrap.yaml | 5 |
+| litmus-browser-isolation-e2e.yaml | 2 |
+| litmus-init-command-shape.yaml | 1 |
+| litmus-integration-strategy-consistency.yaml | 1 |
+| litmus-nix-cache-size-signal.yaml | 1 |
+| litmus-no-raw-error-in-status-chip.yaml (windows-owned scope — coordinate) | 1 |
+
+### B. 4 litmus files are not valid YAML at all (Psych rejects)
+
+- litmus-binary-e2e-smoke.yaml
+- litmus-environment-isolation.yaml
+- litmus-inference-deferred-model-pulls.yaml
+- litmus-log-field-stability-schema.yaml
+
+The regex-based runner tolerates them today, but `tillandsias-policy
+validate-yaml`, the ruby fallback, AND the order-263 git-mirror pre-receive
+gate all reject them — the first agent to EDIT one of these files will have
+its push refused until the file is repaired. Repair proactively.
+
+### C. 164 patternless steps (no expected_behavior, no success_pattern)
+
+Before order 256 these were dead checks: only timeout could fail them; a
+non-zero exit passed silently. Runner slice 1 makes the exit code
+authoritative for exactly this class, so they are now LIVE checks — no
+rewrite needed, but any that start failing were failing invisibly before
+(treat as real findings, not regressions). Count by the audit one-liner;
+mostly `cargo test …` wrappers.
+
+## Remediation (order 267)
+
+1. Rewrite the 31 folded steps as single-line double-quoted scalars (or
+   extract helper scripts under scripts/ where a one-liner is unreadable —
+   preferred for the 9-step podman-event and 11-step storage-isolation
+   files). Coordinate the windows-owned chip litmus with the windows
+   terminal per sibling-scope discipline.
+2. Repair the 4 YAML-invalid files (they also block the order-263 gate on
+   next edit).
+3. Promote the runner's `[PARSE WARNING]` to a hard per-step parse FAIL
+   (flip documented at the warning site in run-litmus-test.sh).
+4. Re-run the full suite matrix; zero warnings, zero parse errors.
+
+## Strict-mode dry run results (2026-07-10T02:55Z — order 267's burn-down list)
+
+Full pre-build suite with exit-code authority unconditionally ON
+(evidence: scratchpad prebuild-suite-strict.log of session
+20260710T0009Z; reproduce with TILLANDSIAS_LITMUS_STRICT_EXIT=1):
+
+Newly-red litmuses (were passing as dead checks):
+
+1. litmus:clickable-trace-index-observatorium-skeleton — STEP 1 "launch
+   observatorium" exit 1 (patternless).
+2. litmus:headless-init-status-check-source-built — PARSE WARNING (bash
+   parser could not extract at least one command — file is ruby-valid, so
+   the bash/ruby parse gap is BROADER than folded scalars: quote-style
+   variants) + STEP 2 exit 2 cascade.
+3. litmus:host-browser-mcp-frame-shape — STEP 1 has an EMPTY name and
+   exits 127: the parser mis-associates lines and executes a fragment
+   ("command not found"). Structural mis-parse class.
+4. litmus:runtime-diagnostics-typed-events-shape — same empty-name exit
+   127 class.
+5. litmus:diagnostics-envelope-shape — same empty-name exit 127 class.
+6. litmus:init-command-shape — STEP 3 exit 1 (also carries 1 folded step).
+7. litmus:podman-build-command-shape — STEP 4 "human aliases refreshed"
+   exit 1.
+8. litmus:spec-traceability-shape — STEP 2 exit 1.
+9. litmus:guest-binary-embed-integrity — pattern-based fail, standalone
+   context only (guest binaries are staged by --ci-full's prepare step;
+   not a strict-exit casualty; verify it stays green inside the gate).
+
+Runner state after order 256 slice 1: strict mode exists behind
+TILLANDSIAS_LITMUS_STRICT_EXIT=1 (default off); legacy mode passes these
+but prints [DEAD-CHECK WARNING] per occurrence; folded/unparsed steps
+print [PARSE WARNING]; zero-step files fail with a named parse error.
+Order 267 owns: repairing items 1-8, the 31 folded rewrites, the 4
+YAML-invalid files, then flipping strict-exit default on and promoting
+parse warnings to per-step FAIL.

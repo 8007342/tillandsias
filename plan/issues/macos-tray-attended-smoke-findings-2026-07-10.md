@@ -40,7 +40,7 @@ provisioning-day version). Fix: persist `home-src /home/forge/src virtiofs
 nofail 0 0` in `/etc/fstab` via cloud-init; drift-pinned in the vz.rs source
 test. VERIFICATION REQUIRES RE-PROVISION (cloud-init change) — see residuals.
 
-## F-C (tray-side mitigation FIXED; headless side OPEN → promoted order 267):
+## F-C (tray-side mitigation FIXED; headless side OPEN → promoted order 276, filed as 267):
 cloud list never refreshes after login
 
 `set_cloud_projects` (the CloudProjectsPush source) is called ONLY from the
@@ -50,7 +50,7 @@ Post-login the menu shows "no repos" forever. There is a periodic guest
 probe for login presence (60s) but none for cloud. Tray-side mitigation
 landed: on a LoginStatePush logged-in transition the macOS reader now sends
 one CloudRefreshRequest prime on the push connection (windows should mirror
-— order 154 flag). Headless-side residual (linux, order 267): the login
+— order 154 flag). Headless-side residual (linux, order 276): the login
 probe's logged-in transition should also refresh the cloud list guest-side
 so ALL subscribers converge without a tray-side prime.
 
@@ -98,7 +98,7 @@ drops to a bare prompt. Should close itself or print a clear success line.
   dispatched CloudOverflow.
 - **F-D CONFIRMED at full strength**: operator had time to run the login
   THREE times before the guest's 60s presence probe pushed the state. Order
-  267 is the fix (satisfier-completion push).
+  276 (filed as 267) is the fix (satisfier-completion push).
 
 ### F-H (NEW, promoted order 270): first-use agent attach dies silently during in-VM image materialization
 

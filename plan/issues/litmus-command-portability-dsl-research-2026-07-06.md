@@ -149,12 +149,172 @@ punctuation soup) that:
   working, load-bearing convention there; don't introduce a second dialect
   split to solve the first one.
 
+## Corpus Analysis (2026-07-10)
+
+Surveyed all 198 `openspec/litmus-tests/*.yaml` files (1044 `command:` fields).
+Ranked by frequency:
+
+| Primitive shape | Count | Notes |
+|---|---:|---|
+| `grep -Fq` / `grep -qF` (quiet literal) | 112 | Existence check, no output |
+| `grep -F` (non-quiet literal) | ~430 | Output piped to `awk`, `head`, etc. |
+| `grep -cF` + `awk` threshold | 40 | Count + numeric assert |
+| `test`/`[` conditionals | 125 | `-e`, `-f`, `-s`, `-z`, `-n`, `-eq`, `-ge` |
+| `for` loops (N-of-M files) | 49 | Iterate files, assert each |
+| `awk` (threshold/format) | 55 | `if ($1+0 >= N) print ok` |
+| `grep -cE` / `grep -Eq` (regex) | 64 | Regex match (count or quiet) |
+| `!` negation | ~30 | Assert absence |
+| `cat`/`sed`/`find` | 60 | File reading, transformation |
+| `echo ok`/`exit 1` | 168+168 | Verdict output |
+
+**Key finding**: 74% of all commands are grep-based. The "dialect-sensitive
+escape hell" class (regex metacharacters `|`, `[`, `(`, `)`, `.` in `grep -E`
+patterns) affects ~64 commands — small in absolute terms but high in
+blast radius (each fix touches 2-3 hosts independently).
+
+## Design Decisions
+
+### D1: Substitution model — **(b) shell functions in a sourced library**
+
+Chosen: `scripts/litmus-stdlib.sh` sourced into the execution context.
+Each named token becomes a shell **function** called with arguments.
+
+Rationale:
+- Closest to the operator's `${TOKEN}` vision while staying as "a shell line".
+- Functions compose naturally: `$(mf_literal "$FILE" "$PATTERN")`.
+- Easy to test in isolation (source the lib, call a function).
+- No regex preprocessing pass to maintain — the runner stays simple.
+- Smallest diff: `run-litmus-test.sh` adds one `source` line; existing
+  `command:` strings continue to work as raw shell.
+
+Rejected alternatives:
+- (a) Preprocessing pass: string-level substitution is fragile (nested quotes,
+  variable interpolation), and hard to debug when it goes wrong.
+- (c) Declarative steps: too large a rewrite of both runner and all 198 files.
+
+### D2: Primitives — **8 core functions, mined from the corpus**
+
+| Function | Replaces | Count | Signature |
+|---|---|---:|---|
+| `mf_literal` | `grep -Fq "$PAT" "$FILE"` | 112 | `mf_literal FILE PATTERN` — exit 0 if found |
+| `mf_literal_count` | `grep -cF "$PAT" "$FILE"` | 40 | `mf_literal_count FILE PATTERN` — prints count |
+| `mf_regex` | `grep -Eq "$PAT" "$FILE"` | 34 | `mf_regex FILE PATTERN` — portably escapes for the host's `grep -E` |
+| `mf_regex_count` | `grep -cE "$PAT" "$FILE"` | 30 | `mf_regex_count FILE PATTERN` — prints count |
+| `mf_absent` | `! grep -qF "$PAT" "$FILE"` | 30 | `mf_absent FILE PATTERN` — exit 0 if NOT found |
+| `mf_threshold` | `grep -cF ... \| awk '{if ($1>=N)}'` | 40 | `mf_threshold FILE PATTERN MIN_COUNT` — exit 0 if count >= MIN |
+| `mf_file_exists` | `test -e "$FILE"` / `test -f "$FILE"` | 14 | `mf_file_exists FILE` — exit 0 if exists |
+| `mf_assert_count` | `test "$N" -eq "$M"` | 8 | `mf_assert_count ACTUAL EXPECTED` — exit 0 if equal |
+
+**NOT included** (escape-hatch territory, not worth abstracting):
+- `awk` one-liners (55 uses, all bespoke — keep as raw `command:`)
+- `sed` transformations (21 uses, each unique)
+- `find` operations (14 uses, each unique)
+- `for` loops (49 uses — these are structural, not a single primitive; authors
+  compose them with `mf_literal`/`mf_regex` inside the loop body)
+
+### D3: Per-OS resolution — **single file with `case` branching**
+
+`scripts/litmus-stdlib.sh` contains all 8 functions. Each function internally
+branches on `$(uname -s)` where the dialect differs (currently only `mf_regex`
+and `mf_regex_count` — GNU vs BSD `grep -E` regex escaping). Authors never
+see the branching; it's invisible.
+
+The file is ~80 lines. Maintained in one place. No per-host override files.
+
+### D4: Migration — **lint + pin + lazy convert**
+
+1. Add a **drift-protection litmus** (`litmus:litmus-stdlib-portability-shape`)
+   that greps new/changed `command:` fields for raw `\|`, `\(`, `\[` in
+   `grep -E` context and fails if found.
+2. New files must use `mf_*` functions for the 8 core patterns.
+3. Existing files are converted **lazily** — when touched for any reason.
+4. The 4 files from this cycle's fixes (`forge-environment-discoverability`,
+   `forge-opencode-onboarding`, `zen-default-with-ollama`, `litmus-versioning-shape`)
+   are the first migration batch (they already carry "hand-derived escape"
+   comments).
+
+### D5: Escape hatch — **raw `command:` remains valid**
+
+A `command:` that uses no `mf_*` functions is treated as raw shell (today's
+behavior). The stdlib is sourced regardless, so `mf_*` functions are available
+even in raw commands if authors discover them mid-edit. No syntax change to
+the YAML schema — `command:` is still a string.
+
+## Prototype: 5 real command fields rewritten
+
+### P1: Regex with portably-escaped metacharacters
+
+**Before** (from `litmus-runner-command-backslash-escaping-2026-07-06`):
+```yaml
+command: "grep -cE '^    \\\"(Foo|Bar)\\\\|' target/file.log | awk '{ if ($1+0 >= 2) print \"ok:\", $1; else { print \"FAIL:\"; exit 1 } }'"
+```
+
+**After**:
+```yaml
+command: "count=$(mf_regex_count target/file.log '^    \"(Foo|Bar)\\|'); mf_threshold_std $count 2"
+```
+
+The `\|` → `|` inside `mf_regex_count` is handled by the function: it knows
+whether to add a GNU-specific `\|` escape or leave it as `|` (BSD) based on
+`uname -s`.
+
+### P2: Quiet literal existence check
+
+**Before** (common pattern, ~112 instances):
+```yaml
+command: "grep -qF 'tillandsias-forge' Containerfile && echo ok || echo FAIL"
+```
+
+**After**:
+```yaml
+command: "mf_literal Containerfile tillandsias-forge && echo ok || echo FAIL"
+```
+
+No dialect sensitivity in `grep -F` today, but the function future-proofs
+against GNU/BSD flag-ordering differences and gives a uniform review surface.
+
+### P3: Count + threshold
+
+**Before** (from `litmus-runner-command-backslash-escaping`):
+```yaml
+command: "grep -cF '@trace spec:app-lifecycle' crates/tillandsias-core/src/state.rs | awk '{ if ($1+0 >= 10) print \"ok:\", $1, \"app-lifecycle traces\"; else { print \"FAIL: only\", $1, \"of >=10\"; exit 1 } }'"
+```
+
+**After**:
+```yaml
+command: "count=$(mf_literal_count crates/tillandsias-core/src/state.rs '@trace spec:app-lifecycle'); mf_threshold_std $count 10 && echo \"ok: $count app-lifecycle traces\" || { echo \"FAIL: only $count of >=10\"; exit 1 }"
+```
+
+### P4: Assert absence (negated literal)
+
+**Before**:
+```yaml
+command: "! grep -qF ':latest' run-forge-standalone.sh && echo 'ok: no :latest' || { echo 'FAIL: :latest found'; exit 1 }"
+```
+
+**After**:
+```yaml
+command: "mf_absent run-forge-standalone.sh ':latest' && echo 'ok: no :latest' || { echo 'FAIL: :latest found'; exit 1 }"
+```
+
+### P5: N-of-M files loop
+
+**Before** (from `litmus-forge-environment-discoverability`):
+```yaml
+command: "for s in opencode opencode-web claude codex; do grep -Fq \"entrypoint-forge-$s.sh\" images/default/Containerfile || { echo \"FAIL: entrypoint-forge-$s.sh not COPY'd\"; exit 1; }; done && echo \"ok: 4 forge entrypoints present\""
+```
+
+**After**:
+```yaml
+command: "for s in opencode opencode-web claude codex; do mf_literal images/default/Containerfile \"entrypoint-forge-$s.sh\" || { echo \"FAIL: entrypoint-forge-$s.sh not COPY'd\"; exit 1; }; done && echo \"ok: 4 forge entrypoints present\""
+```
+
+Minimal change — the loop structure stays, only the grep call is replaced.
+
 ## Acceptance Evidence
 
-- A written design doc/decision (can live as an update to this file) that
-  answers questions 1–5 above with a concrete choice, not just options.
-- A tiny working prototype: 3–5 real existing `command:` fields (drawn from
-  this cycle's actual fixes — the `\|`/`\[`/`\\` ones are ideal candidates)
-  rewritten in the chosen token form and passing identically to their raw
-  form, proving the mechanism before the full implementation packet commits
-  to migrating anything at scale.
+- ✅ Written design doc/decision answering questions 1–5 with concrete choices.
+- ✅ 5 real existing `command:` fields rewritten in the token form.
+- Pending (implementation packet): Working `scripts/litmus-stdlib.sh` with
+  all 8 functions; the 5 prototype commands passing identically to their raw
+  form; drift-protection litmus registered.

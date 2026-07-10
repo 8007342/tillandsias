@@ -2,14 +2,14 @@
 
 LastExecutionTime: 2026-07-10T04:25:00Z
 
-## Cycle 2026-07-10T02:02Z (macos — ATTENDED meta-orchestration: order 257 six cells closed live, 3 fixes verified, orders 267-273 filed, isolation correction)
+## Cycle 2026-07-10T02:02Z (macos — ATTENDED meta-orchestration: order 257 six cells closed live, 3 fixes verified, orders 274-278-era packets filed (renumbered thrice; see merge notes), isolation correction)
 
 - **Host**: macOS arm64, `osx-next`, agent
   macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z, **The Tlatoāni at the
   terminal** (attended interactive packets). Credential guard `ok:gh-keyring`.
   Merged `origin/linux-next` twice (2bcced8e, d80a13c6) — second merge
   collided AGAIN on orders 262/263 (linux filed its own in parallel);
-  renumbered mine to **265** (wsl lock-namespace) and **266** (order
+  renumbered mine to **265** and **266** — then AGAIN to **274** (wsl) and **275** (order
   uniqueness — the finding demonstrating itself twice in one day).
 - **Order 257 attended smoke — 6 of 7 cells DONE live** (AX harness +
   operator): 6-leaf submenu, login popup (3 real-PAT completions), cloud
@@ -35,10 +35,10 @@ LastExecutionTime: 2026-07-10T04:25:00Z
   good enough for user runtime") and **272** (close the SSH backdoor:
   remove key injection, disable NAT sshd, drift-pin; audit WSL2) filed.
   Rootless-guest posture captured as research candidate.
-- **Also filed**: 267 (headless: login transition must push LoginState
+- **Also filed** (final numbers after the THIRD collision renumber — linux independently filed 265-268): 276 (headless: login transition must push LoginState
   immediately + refresh cloud — 60s-probe gap confirmed 3x tonight, and on
   boot 2 the probe's first observation never arrived at all: add to 267's
-  repro), 268 (one-shot CLI vs live tray disk-lock collision), 269 (login
+  repro), 277 (one-shot CLI vs live tray disk-lock collision), 269 (login
   popup dead-shell + pty-dump session resolution), 270 (first-use attach
   reaps the in-VM image build — PTY close kills the build; severity
   upgraded with journal evidence). litmus:binary-e2e-smoke macOS path gap
@@ -47,8 +47,13 @@ LastExecutionTime: 2026-07-10T04:25:00Z
   re-provision (substrate destroyed + cold provision at b365deaf) IS this
   cycle's runtime verification; full findings file:
   plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md.
+- **Process slip (F9 recurrence, self-caught)**: the 04:30Z pre-push merge's
+  conflict exit code was masked by a `| tail` pipe, so the gate + push ran
+  against a mid-merge tree (push harmlessly sent pre-merge HEAD). Same
+  lesson as linux F9 (linux-audit-recent-work-2026-07-09.md): verdicts from
+  explicit exit codes, never piped tails. No new filing — F9 already owns it.
 - **Queue after session**: macOS blocked on linux orders 273 (attach) and
-  267 (login push); orders 268/269/270 macOS-claimable next unattended
+  276 (login push); orders 277/269/270 macOS-claimable next unattended
   cycle; 271 any-host; 272 macOS. Order 155 residual (watch-channel menu
   listeners) still claimable. Linux: 273 is the hot one — full verbatim
   repro in the packet.
@@ -66,7 +71,7 @@ LastExecutionTime: 2026-07-10T04:25:00Z
   references updated: index event, loop_status, findings file). Integration
   gate on merged tree: build check + 217 tests green. [Superseded: the
   02:02Z merge collided AGAIN with linux's parallel 262/263 filings —
-  final numbers are 265 (wsl) and 266 (uniqueness).]
+  final numbers after the 04:30Z third collision: 274 (wsl) and 275 (uniqueness).]
 - **Order 155 slice 3 — COMPLETE, verified LIVE (SC-16)**: new shared
   `tillandsias_host_shell::subscription_health::SubscriptionHealth`
   (watch-backed, change-gated) replaces the tray's
@@ -79,7 +84,7 @@ LastExecutionTime: 2026-07-10T04:25:00Z
   Ready push applied, 75s alive, clean SIGTERM. **Windows flag (order 154)**:
   adopt SubscriptionHealth in notify_icon.rs (same AtomicBool pattern).
 - **Captures**: plan-index-duplicate-order-numbers-2026-07-10.md filed +
-  promoted to ready **order 266** (pickup any; filed as 263, renumbered in
+  promoted to ready **order 275** (pickup any; filed as 263, renumbered TWICE more in
   the 02:02Z merge): 7 order numbers (144, 160,
   161, 196, 197, 201, 224) are each shared by 2-3 packets — silent
   parallel-filing collisions; propose fail-loud uniqueness check in
@@ -93,7 +98,7 @@ LastExecutionTime: 2026-07-10T04:25:00Z
   by paused-clock unit tests.
 - **Queue after drain**: macOS-eligible ready residue = order 155 remaining
   slices (watch-channel menu listeners; SC-01/02 closure blocked on linux
-  order 260 LocalProjects push), orders 261/266 (pickup any, claimable next
+  order 260 LocalProjects push), orders 261/275 (pickup any, claimable next
   cycle). Order 257 still blocked on operator-attended smoke; order 126
   still blocked on linux order 128.
 
@@ -118,7 +123,7 @@ LastExecutionTime: 2026-07-10T04:25:00Z
   Environment=XDG_RUNTIME_DIR=/run/user/0 in the vz.rs unit + drift pin
   tests both sides. Re-provisioned fresh VM: first --github-login reaches
   the git-author-name prompt, no 125, no podman error. All four exit
-  criteria closed. Windows sibling gap promoted to **order 265** (ready,
+  criteria closed. Windows sibling gap promoted to **order 274** (ready,
   windows pickup: wsl.rs unit sets neither HOME nor XDG_RUNTIME_DIR;
   renumbered 260 -> 262 -> 265 across the two 2026-07-10 merge collisions).
 - **E2E gate (local-build, destructive, ×2)**: gates 1–3 + diagnose PASS on
@@ -132,6 +137,75 @@ LastExecutionTime: 2026-07-10T04:25:00Z
   smoke; order 126 still blocked on linux order 128. Linux flag: order 259's
   fix pattern may also apply to any OTHER guest exec path that omits
   XDG_RUNTIME_DIR; windows flags: orders 260 (new), 154 cold-join, 258.
+
+## Cycle 2026-07-10T02:05Z→04:05Z (linux_mutable macuahuitl — OPERATOR-DIRECTED: bar-raise approved+enabled, one-packet forge doctrine, orders 256/264/266 done, 265/267/268 filed, install delivered)
+
+- **The Tlatoāni's directives executed (recorded 2026-07-10)**:
+  (1) Bar-raise slice 2 APPROVED → registry entry
+  methodology/convergence.yaml approved_bar_raises
+  (ci-full-all-features-clippy), lane rust-clippy-all-features wired into
+  scripts/local-ci.sh non-fast pre-build (--ci-full only; --ci/--fast
+  skips). Baseline sweep green; negative control (planted warning in a
+  fake-feature unit) fails the lane exit 101; PASSED in anger in the final
+  gate. Slice 3 (--check promotion) remains unapproved. Order 266 completed.
+  (2) One-packet forge doctrine (order 264, chosen over env-var approach):
+  forge-hosted cycles drain AT MOST ONE packet, split oversized packets
+  into ready children. Canonical:
+  methodology/distributed-work.yaml worker_agent_protocol.forge_cycle_budget;
+  skills/meta-orchestration + advance-work-from-plan updated. VERIFIED
+  LIVE: gate run 20260710T021654Z's in-forge cycle drained exactly order
+  224 (litmus-stdlib research) inside the 600s budget.
+  (3) Heartbeat/liveness signals filed as order 265 (research, ready) —
+  replace timeout inference with positive liveness; hard cap stays.
+- **litmus:opencode-prompt-e2e-shape: 7/7 PASS — first fully-green run in
+  its history** (orders 255+262+264 all discharged live; branch-scoped
+  STEP 6 probe passed against the in-forge push).
+- **Order 256 slice 1 (done, split → 267)**: litmus runner exit-code
+  authority staged behind TILLANDSIAS_LITMUS_STRICT_EXIT=1 (strict dry run
+  exposed 8 litmuses red behind the dead-check trap + an empty-step-name
+  exit-127 mis-parse class); legacy mode prints [DEAD-CHECK WARNING] (24
+  visible in the full suite); [PARSE WARNING] for unparseable commands (31
+  folded steps across 8 files skipped since authoring); zero-step files
+  fail with a named parse error. Order 267 (ready) owns burn-down, folded
+  rewrites, 4 YAML-invalid file repairs, strict default flip
+  (plan/issues/litmus-corpus-parse-health-2026-07-10.md).
+- **Final gate (run 20260710T021654Z): exit 1 with exactly ONE red** —
+  litmus:inference-deferred-model-pulls cold path: first-run ollama binary
+  download FAILED → exit 127 (product, graceful-degradation path;
+  unrelated to this cycle's changes). Filed as order 268 (ready) with
+  evidence (plan/issues/build-install-e2e-gate-20260710T021654Z.md).
+  Everything else green: pre-build 147/147 incl. the new all-features
+  lane, security 17/17, post-build 7/8.
+- **Install delivered**: /home/tlatoani/.local/bin/tillandsias
+  v0.3.260710.3 (40M), fresh from 39186723(+relay).
+- **Coordination**: windows-next (00076813) and osx-next (86105319)
+  advanced late in the cycle — integration deferred to the next recurring
+  linux cycle (this cycle was operator-directed; no tree mutations during
+  the running gate). Doctrine + lane changes are on linux-next for
+  siblings to pick up; the windows-owned chip litmus rewrite inside order
+  267 needs windows coordination.
+- **Queue after cycle**: linux ready = 268 (new), 267, 265, 260, 261,
+  225 (224 research done by in-forge), 144, security chain, streams chain,
+  transport. Blocked-on-operator: attended parity smokes (257/258),
+  tray-parity release hold, bar-raise slice 3 (unapproved).
+
+## This Loop (2026-07-10T02:27Z, linux_mutable — big-pickle reduction: litmus-stdlib-research)
+
+- **Cycle type**: meta-orchestration worker drain + reduction on mutable Linux.
+- **Startup**: `linux-next @ 39186723`, worktree dirty with tracked changes from a prior incomplete cycle (TRACES.md, VERSION bump, convergence dashboard). Committed as checkpoint `57f264f2` and pushed. Clean worktree after.
+- **Credential guard**: `ok:gh-keyring`.
+- **E2E gate**: `skip:smoke-lock-held` — no local-build gate this cycle.
+- **Worker drain**: Claimed and completed `litmus-command-portability-dsl-research` (order 224).
+  - Corpus analysis: 198 litmus files, 1044 command fields, 74% grep-based.
+  - D1: shell functions in sourced `scripts/litmus-stdlib.sh` (model b).
+  - D2: 8 core primitives: `mf_literal`, `mf_literal_count`, `mf_regex`, `mf_regex_count`, `mf_absent`, `mf_threshold`, `mf_file_exists`, `mf_assert_count`.
+  - D3: single file with `case` branching per OS.
+  - D4: lint + pin + lazy migration.
+  - D5: raw `command:` remains valid as escape hatch.
+  - 5 real prototype rewrites in deliverable.
+- **Verification**: `plan/index.yaml` validated with `ruby -ryaml`. 121/121 instant litmus PASS.
+- **Coordinator**: windows-next `00076813` and osx-next `86105319` — checked but no merge needed this cycle.
+- **Push state**: pushed `linux-next` (checkpoint `57f264f2` + research `16078687`).
 
 ## Cycle 2026-07-10T00:09Z (linux_mutable macuahuitl — meta-orchestration: windows integration, litmus chain 255→262→264, e2e gate 1, in-forge drained 254+263)
 

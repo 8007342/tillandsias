@@ -434,3 +434,17 @@ bar_raise_governance:
     bar-raise is a deliberate scope decision the operator owns, keeping the
     convergence point clear instead of letting an ever-rising bar make "done"
     unreachable by construction.
+
+approved_bar_raises:
+  - id: ci-full-all-features-clippy
+    approved_by: "The Tlatoāni"
+    approved_at: "2026-07-10"
+    proposal: plan/issues/integration-gate-feature-coverage-gap-2026-07-10.md
+    scope: >
+      Slice 2 ONLY: `cargo clippy --workspace --all-targets --all-features --
+      -D warnings` becomes a lane of `--ci-full` (NOT `--check`). Warnings
+      surfaced by this lane are in-scope findings for the reduction engine.
+      Enablement baseline verified green 2026-07-10 (sweep exit 0 after order
+      254 landed). Slice 3 (promotion into `--check`) remains unapproved and
+      requires its own recorded decision.
+    recorded_by: "linux-macuahuitl-fable5-20260710T0009Z (plan order 266)"

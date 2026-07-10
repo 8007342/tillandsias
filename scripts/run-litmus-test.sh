@@ -628,11 +628,19 @@ run_litmus_test_file() {
     local -a step_expecteds=()
     local -a step_success_patterns=()
     local -a step_failure_patterns=()
+    local -a unparsed_step_names=()
     local success_criteria=()
     local failure_criteria=()
 
     append_step() {
-        [[ -z "$current_step_command" ]] && return 0
+        # A named step whose command: could not be extracted is a PARSE
+        # failure, not a silently droppable entry (order 256: a folded `>-`
+        # command parsed to zero steps and the litmus failed as a generic
+        # "Check implementation" with no diagnostic since authoring).
+        if [[ -z "$current_step_command" ]]; then
+            [[ -n "$current_step_name" ]] && unparsed_step_names+=("$current_step_name")
+            return 0
+        fi
         step_names+=("$current_step_name")
         step_commands+=("$current_step_command")
         step_timeouts+=("$current_step_timeout")
@@ -732,7 +740,24 @@ run_litmus_test_file() {
 
     append_step
 
+    # Surface parse gaps instead of silently thinning coverage (order 256
+    # slice 1). The 2026-07-10 audit found 31 folded/multi-line command:
+    # values across 8 files that this runner has skipped since authoring;
+    # rewriting them is order 267 — until it lands, an affected step is a
+    # loud WARNING (not a step fail) so currently-green suites do not flip
+    # red wholesale. Once 267 rewrites the corpus, promote this to a hard
+    # per-step parse FAIL.
+    if [[ "${#unparsed_step_names[@]}" -gt 0 ]]; then
+        printf '  %b[PARSE WARNING]%b %s\n' "${YELLOW}" "${NC}" "$test_file" >&2
+        for us in "${unparsed_step_names[@]}"; do
+            printf '%s\n' "         step '${us}': command: not extractable (single-line double-quoted scalar required; folded '>'/'>-' unsupported) — step SKIPPED, coverage is thinner than authored (order 267)" >&2
+        done
+    fi
+
+    # A file with ZERO parseable steps has always failed — but generically
+    # ("Check implementation"). Name the real reason (order 256).
     if [[ "${#step_commands[@]}" -eq 0 ]]; then
+        printf '  %b[PARSE ERROR]%b %s: no parseable critical_path steps (each step needs a single-line double-quoted command: scalar)\n' "${RED}" "${NC}" "$test_file" >&2
         return 1
     fi
 
@@ -764,6 +789,28 @@ run_litmus_test_file() {
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
             return 1
+        fi
+
+        # Patternless non-zero exits (order 256): when a step declares
+        # neither success_pattern nor expected_behavior, its exit code is
+        # the only signal it has — a non-zero exit SHOULD fail the step
+        # instead of passing silently (dead-check trap). The 2026-07-10
+        # strict-mode audit exposed multiple litmuses that have been red
+        # for a while behind this trap (observatorium skeleton, the
+        # source-built init harness, host-browser-mcp frame shape, …), so
+        # per migration discipline the authority is staged: strict mode
+        # behind TILLANDSIAS_LITMUS_STRICT_EXIT=1 first, burn-down of the
+        # exposed reds + default flip tracked by order 267. Legacy mode
+        # still passes the step but says so loudly.
+        if [[ $exit_code -ne 0 && -z "$step_success_pattern" && -z "$step_expected" ]]; then
+            if [[ "${TILLANDSIAS_LITMUS_STRICT_EXIT:-0}" == "1" ]]; then
+                printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+                printf '%s\n' "         exit_code=${exit_code} (no success_pattern/expected_behavior declared — non-zero exit fails the step; strict-exit mode)" >&2
+                printf '%s\n' "         output=${step_output}" >&2
+                return 1
+            fi
+            printf ' %b[DEAD-CHECK WARNING]%b\n' "${YELLOW}" "${NC}" >&2
+            printf '%s\n' "         exit_code=${exit_code} with no declared pattern — PASSING via legacy behavior; will FAIL once TILLANDSIAS_LITMUS_STRICT_EXIT defaults on (order 267)" >&2
         fi
 
         # If success_pattern is declared, use check_signal() which is
