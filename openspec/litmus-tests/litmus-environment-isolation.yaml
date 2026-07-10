@@ -15,6 +15,7 @@ description: >
   an isolation failure.
 severity: high
 size: e2e
+phase: post-build
 
 preconditions:
   - forge image is built (tillandsias-forge)
@@ -22,22 +23,27 @@ preconditions:
 
 critical_path:
   - step: "resolve forge image and pre-warm one container start"
-    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}\"; test -n \"$FORGE_IMAGE\" || { echo 'FAIL: no tillandsias-forge image present'; exit 1; }; podman run --rm \"$FORGE_IMAGE\" true >/dev/null 2>&1 && echo \"ok: image warm ($FORGE_IMAGE)\" || { echo \"FAIL: forge container did not start\"; exit 1; }"
+    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1)}\"; test -n \"$FORGE_IMAGE\" || { echo 'FAIL: no tillandsias-forge image present'; exit 1; }; podman run --rm --entrypoint /bin/true \"$FORGE_IMAGE\" >/dev/null 2>&1 && echo \"ok: image warm ($FORGE_IMAGE)\" || { echo \"FAIL: forge container did not start\"; exit 1; }"
     timeout_ms: 60000
     expected_behavior: "ok: image warm"
 
-  - step: "forge env var count is within the minimal band (3-10)"
-    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}\"; n=$(podman run --rm \"$FORGE_IMAGE\" env | wc -l); [ \"$n\" -ge 3 ] && [ \"$n\" -le 10 ] && echo \"ok: forge env count $n in band\" || { echo \"FAIL: forge env count $n outside 3-10\"; podman run --rm \"$FORGE_IMAGE\" env | sort; exit 1; }"
+  # The historic "3-10 vars" band was a stale proxy for "minimal": today's
+  # legitimate surface is 9 image-baked toolchain/identity vars + podman's
+  # HOSTNAME + the 6 enclave proxy vars injected host-wide by the
+  # tillandsias containers.conf. An explicit key allowlist is strictly
+  # stronger than any count band — anything unexpected fails loud by name.
+  - step: "every forge env key is on the explicit allowlist (no unexpected vars)"
+    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1)}\"; unexpected=$(podman run --rm --entrypoint /usr/bin/env \"$FORGE_IMAGE\" | cut -d= -f1 | grep -vxE 'CARGO_HOME|container|DART_ROOT|FLUTTER_ROOT|HOME|LANG|PATH|TILLANDSIAS_CHEATSHEETS|USER|HOSTNAME|https?_proxy|HTTPS?_PROXY|no_proxy|NO_PROXY' || true); [ -z \"$unexpected\" ] && echo 'ok: forge env keys all allowlisted' || { echo \"FAIL: unexpected forge env keys: $unexpected\"; exit 1; }"
     timeout_ms: 30000
-    expected_behavior: "ok: forge env count"
+    expected_behavior: "ok: forge env keys all allowlisted"
 
   - step: "no host session/display vars leak into the forge"
-    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}\"; leaks=$(podman run --rm \"$FORGE_IMAGE\" env | grep -cE 'DOCKER_HOST|SESSION_MANAGER|DBUS_SESSION_BUS_ADDRESS|XDG_' || true); [ \"$leaks\" = 0 ] && echo 'ok: zero host session vars' || { echo \"FAIL: $leaks host session/display vars leaked\"; exit 1; }"
+    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1)}\"; leaks=$(podman run --rm --entrypoint /usr/bin/env \"$FORGE_IMAGE\" | grep -cE 'DOCKER_HOST|SESSION_MANAGER|DBUS_SESSION_BUS_ADDRESS|XDG_' || true); [ \"$leaks\" = 0 ] && echo 'ok: zero host session vars' || { echo \"FAIL: $leaks host session/display vars leaked\"; exit 1; }"
     timeout_ms: 30000
     expected_behavior: "ok: zero host session vars"
 
   - step: "toolchain PATH resolves cargo inside the forge"
-    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}\"; p=$(podman run --rm \"$FORGE_IMAGE\" which cargo); case \"$p\" in */cargo) echo \"ok: cargo at $p\" ;; *) echo \"FAIL: cargo not resolvable ($p)\"; exit 1 ;; esac"
+    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1)}\"; p=$(podman run --rm --entrypoint /usr/bin/which \"$FORGE_IMAGE\" cargo); case \"$p\" in */cargo) echo \"ok: cargo at $p\" ;; *) echo \"FAIL: cargo not resolvable ($p)\"; exit 1 ;; esac"
     timeout_ms: 30000
     expected_behavior: "ok: cargo at"
 
