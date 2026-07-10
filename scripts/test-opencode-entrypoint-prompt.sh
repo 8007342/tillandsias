@@ -45,6 +45,9 @@ clone_project_from_mirror() { :; }
 require_opencode() { :; }
 require_openspec() { :; }
 apply_opencode_config_overlay() { :; }
+ensure_forge_prebuilt_tools() { :; }
+ensure_forge_harnesses() { :; }
+inject_startup_context() { :; }
 curl() { return 1; }
 export_ssh_env() { :; }
 find_project_dir() { PROJECT_DIR="$PROJECT_DIR"; }

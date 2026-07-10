@@ -38,6 +38,37 @@ LastExecutionTime: 2026-07-10T08:45:00Z
   full destructive e2e as the next cycle's primary item (closes three
   pending live-verification residuals at once).
 
+## Cycle 2026-07-10T07:12Z→08:25Z (linux_mutable macuahuitl — overnight loop 3-4/8: FULL DESTRUCTIVE E2E PASS, all four gates green)
+
+- **THE MILESTONE**: run 20260710T073536Z — first fully-green destructive
+  local-build e2e on this host. Gate 1 ci-full exit 0 (all litmuses incl.
+  the night's three rewrites + all-features lane), gate 2 podman reset
+  zero-residue, gate 3 cold --init full rebuild exit 0 (order-263 mirror
+  YAML gate now LIVE in the rebuilt git image), gate 4 forge lane exit 0.
+  PASS report: plan/issues/build-install-smoke-e2e-PASS-20260710T073536Z.md.
+- Getting there (iterations 3-4): inference litmus rewritten on the
+  product launch shape (real podman, keep-id+label=disable, current
+  strings) — PASS standalone then in-gate; env-isolation resolution +
+  entrypoint overrides + env-key allowlist (the 3-10 band was stale: 9
+  baked + HOSTNAME + 6 containers.conf proxy vars); in-forge agents
+  contributed 267 slice 2 (all 31 folded steps rewritten, mid-gate) and
+  the gate-4 orphan fixes (adopted after strict-green verification;
+  runner regex anchor REVERTED + parked — it re-pairs steps/expecteds in
+  folded-legacy shapes); coordinator repaired the slice-2 placeholder
+  expecteds. Full instant sweep green post-everything.
+- Siblings: osx merged (269 + 281 filed); windows merged (154 slices 3-4
+  — LocalProjects topic adoption underway on my order-260 wire work).
+- Order 265 completed via ADOPTION with a correction event: the in-forge
+  agent implementing the liveness probe outlived its litmus window
+  (alive_quiet per its own grammar), pushed late, and the coordinator
+  contributed the final test guard — the probe's thesis demonstrated by
+  its own birth. STEP 3 wiring = evidenced next packet.
+- Remaining 267 tail: strict-exit default flip + PARSE-WARNING→FAIL
+  promotion + parked anchor, gated on strict sweeps staying green.
+- Queue: next linux picks = 267 tail, 273, 129, 225, security chain,
+  streams chain, 249/250, audits. Blocked-on-operator unchanged (windows
+  attended smoke 258, release approval, bar-raise slice 3).
+
 ## Cycle 2026-07-10T06:58Z (macos — overnight autonomous 3/8: order 269 done + verified live, order 281 filed from PTY-tee capture)
 
 - **Host**: macOS arm64, `osx-next`, unattended (overnight 3 of 8).
