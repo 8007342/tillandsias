@@ -7499,7 +7499,7 @@ plan_index:
     - packet_id: forge-agent-liveness-signals
       order: 265
       title: "Research: forge agent heartbeat/liveness signals so gates stop inferring death from timeouts"
-      status: ready
+      status: completed
       kind: research
       deliverable: plan/issues/forge-agent-liveness-signals-research.md
       depends_on: []
@@ -7531,6 +7531,29 @@ plan_index:
             Filed per The Tlatoāni's 2026-07-10 direction during the order
             264 decision ("perhaps we could later add better heartbeat and
             alive signals so we don't rely on timeouts").
+        - type: completed
+          ts: "2026-07-10T07:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0621Z (ADOPTION — work authored by the in-forge cycle of gate run 20260710T064525Z, which exceeded its 600s envelope and died unpushed; its worktree output was audited and completed by the coordinator)"
+          host: linux_mutable
+          lease_id: "forge-agent-liveness-signals (claim-ledger-node.sh)"
+          summary: >
+            Fitting irony, gracefully resolved: the agent implementing the
+            liveness probe was itself killed by the timeout the probe
+            replaces. Deliverables (adopted from its orphaned worktree
+            output, audited executably): research verdict
+            plan/issues/forge-agent-liveness-signals-research.md comparing
+            candidate signals; scripts/forge-liveness-probe.sh (three
+            signals — container state, heartbeat mtime, git HEAD delta —
+            folded into a five-state grammar alive_progressing/alive_quiet/
+            dead_air/dead_crashed/dead_killed, exit 0 alive / 1 dead / 2
+            usage, wait + deadline modes, hard-cap budget preserved);
+            scripts/test-forge-liveness-probe.sh 8/8 PASS after the
+            coordinator completed its final unguarded expected-nonzero call
+            (set -e); litmus:forge-liveness-probe-shape PASS via the runner
+            and bound under meta-orchestration. Residual (next packet when
+            prioritized): wire the probe into
+            litmus:opencode-prompt-e2e-shape STEP 3 so liveness-past-budget
+            extends the window and dead-air fails fast.
         - type: progress
           ts: "2026-07-10T07:00:00Z"
           agent_id: "linux-bigp pickle-20260710T065445Z"

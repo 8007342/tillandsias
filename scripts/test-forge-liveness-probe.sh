@@ -122,8 +122,10 @@ echo ""
 echo "=== Test 8: status exits 1 for dead states ==="
 DIR8="$TMPDIR/test8"
 mkdir -p "$DIR8"
-"$PROBE" status --project-dir "$DIR8" --heartbeat-file ".forge-heartbeat" $NC --start-time "$(date +%s)" >/dev/null 2>&1
-EXIT8=$?
+# Expected-nonzero call must be guarded or `set -e` kills the suite here
+# (the dead in-forge agent's last unfixed line, completed by adoption).
+EXIT8=0
+"$PROBE" status --project-dir "$DIR8" --heartbeat-file ".forge-heartbeat" $NC --start-time "$(date +%s)" >/dev/null 2>&1 || EXIT8=$?
 TOTAL=$((TOTAL + 1))
 if [[ "$EXIT8" == "1" ]]; then
     echo "  PASS: dead status exits 1"
