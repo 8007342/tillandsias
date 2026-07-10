@@ -7461,7 +7461,7 @@ plan_index:
     - packet_id: inference-firstrun-ollama-download
       order: 268
       title: "Inference first-run: ollama binary download fails (exit 127) — cold path red in litmus:inference-deferred-model-pulls"
-      status: ready
+      status: completed
       kind: bug
       deliverable: plan/issues/build-install-e2e-gate-20260710T021654Z.md
       depends_on: []
@@ -7494,3 +7494,31 @@ plan_index:
             Sole red of gate run 20260710T021654Z (7/8 post-build;
             everything operator-directed passed). Full evidence excerpt in
             the deliverable.
+        - type: completed
+          ts: "2026-07-10T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0410Z"
+          host: linux_mutable
+          lease_id: "inference-firstrun-ollama-download (claim-ledger-node.sh)"
+          summary: >
+            Root cause chain (all diagnosed empirically): (1) the image
+            bakes HTTP(S)_PROXY=http://proxy:3128; outside the enclave
+            network the name cannot resolve and curl exits 5 before
+            touching the wire — the enclave proxy-exemption class (orders
+            116/118/119); (2) the litmus's bare --userns=host run without
+            label=disable is a launch shape the product never uses
+            (SELinux Enforcing denies the cache mount; product uses
+            keep-id + label=disable, main.rs:2032-2094); (3) the litmus's
+            success strings pin a pre-order-168 entrypoint. Product fixes
+            in images/inference/entrypoint.sh: proxy-resolvability guard
+            (unsets proxy env once when the proxy host does not resolve —
+            fixes curl AND the ollama daemon's model pulls; enclave shape
+            untouched), curl fallback direct on proxied-download failure,
+            max-time 120->600 (tarball is 1.34 GiB), fail-loud early exit
+            when no ollama binary exists (was a banner-then-die exit 127
+            cascade). VERIFIED cold end-to-end in the labeled bare shape:
+            wiped cache -> guard -> direct download -> install into
+            mounted cache -> serve -> qwen2.5:0.5b pulled -> "default
+            model qwen2.5:0.5b ready". Exit criterion 3 (litmus passes in
+            a full gate) rides on order 267's rewrite of the YAML-invalid
+            litmus file — full recipe appended to its deliverable. Dead
+            /usr/bin/ollama serve args in main.rs captured there too.

@@ -30,6 +30,21 @@ export OLLAMA_MAX_LOADED_MODELS=1
 # Shared model cache — persisted via volume mount.
 export OLLAMA_MODELS=/home/ollama/.ollama/models/
 
+# ── Proxy reachability guard (order 268) ────────────────────────────────
+# The image bakes HTTP(S)_PROXY=http://proxy:3128 for enclave operation.
+# Outside the enclave network (bare `podman run`, litmus shapes, dev loops)
+# the name `proxy` does not resolve, and every network client — curl here
+# AND the ollama daemon's own model pulls — dies before touching the wire
+# (curl exit 5, the 2026-07-10 gate red). Enclave proxy-exemption class
+# (orders 116/118/119): when the configured proxy host cannot resolve,
+# clear the proxy env ONCE at startup and run direct; when it resolves
+# (enclave shape), leave everything routed through Squid untouched.
+_proxy_host="$(printf '%s' "${HTTP_PROXY:-${http_proxy:-}}" | sed -E 's|^[a-z]+://||; s|:[0-9]+/?$||')"
+if [ -n "$_proxy_host" ] && ! getent hosts "$_proxy_host" >/dev/null 2>&1; then
+    echo "[inference] configured proxy '$_proxy_host' does not resolve — running direct (non-enclave shape)"
+    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+fi
+
 # ── Self-install ollama binary (FIRST_RUN into persistent model cache) ──
 # @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180 ollama sub-slice)
 # Download the latest ollama release, extracting only bin/ollama (skipping
@@ -48,9 +63,22 @@ if [ ! -x "$OLLAMA_BIN" ]; then
     if [ -n "$OLLAMA_ARCH" ]; then
         TMP_O="$(mktemp -d 2>/dev/null)" || true
         if [ -n "$TMP_O" ]; then
-            if curl -fsSL --max-time 120 --retry 2 --retry-delay 3 \
-                "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${OLLAMA_ARCH}.tar.zst" \
-                -o "$TMP_O/ollama.tar.zst" 2>/dev/null; then
+            # The image bakes HTTP(S)_PROXY=http://proxy:3128 for enclave
+            # operation, but outside the enclave network (bare `podman run`,
+            # litmus shapes, dev loops) the name `proxy` does not resolve and
+            # curl dies with exit 5 before touching the network (order 268 —
+            # the enclave proxy-exemption class, orders 116/118/119). Try the
+            # configured route first; on ANY failure retry once with the
+            # proxy env cleared. Inside the enclave the direct retry is
+            # harmlessly blocked by the internal network; outside it, it is
+            # the path that actually works.
+            OLLAMA_URL="https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${OLLAMA_ARCH}.tar.zst"
+            if curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
+                "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst" 2>/dev/null \
+                || { echo "[inference] proxied download failed — retrying direct (no proxy)" >&2; \
+                     env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+                         curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
+                         "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst" 2>/dev/null; }; then
                 if zstd -d "$TMP_O/ollama.tar.zst" -o "$TMP_O/ollama.tar" 2>/dev/null \
                     && tar -xf "$TMP_O/ollama.tar" -C "$TMP_O" bin/ollama 2>/dev/null \
                     && install -m 0755 "$TMP_O/bin/ollama" "$OLLAMA_BIN" 2>/dev/null; then
@@ -112,6 +140,16 @@ if [ -d /opt/baked-models ]; then
             || (cd /opt/baked-models && tar cf - . | tar xf - -C "$OLLAMA_MODELS")
         echo "[inference] Cache seeded"
     fi
+fi
+
+# @trace spec:inference-container — order 268 fail-loud guard
+# Without any ollama binary (self-install failed and none baked/system),
+# every later step is a confusing `command not found` cascade ending in a
+# banner-then-die exit 127. Exit early with one clear line instead; the
+# container dying IS the "retry next launch" mechanism.
+if ! command -v ollama >/dev/null 2>&1; then
+    echo "[inference] FATAL: no ollama binary available (self-install failed above) — exiting so the next launch retries" >&2
+    exit 1
 fi
 
 # @trace spec:inference-container

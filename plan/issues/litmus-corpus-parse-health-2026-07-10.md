@@ -114,3 +114,32 @@ print [PARSE WARNING]; zero-step files fail with a named parse error.
 Order 267 owns: repairing items 1-8, the 31 folded rewrites, the 4
 YAML-invalid files, then flipping strict-exit default on and promoting
 parse warnings to per-step FAIL.
+
+## Order-268 forensics: the exact rewrite recipe for litmus-inference-deferred-model-pulls.yaml
+
+The 2026-07-10 gate red was three stacked shape divergences, all in the
+LITMUS's launch command, none in the product launch (which uses
+`--userns=keep-id --security-opt=label=disable` on the enclave network,
+main.rs:2032-2094):
+
+1. `--userns=host` + no `label=disable`: SELinux (Enforcing) denies BOTH
+   traversal of the enclave-written cache and writes into the mounted
+   cache — the entrypoint's `install` into `.tools/ollama` fails silently.
+2. No `--network`: the image's baked `HTTP(S)_PROXY=http://proxy:3128`
+   cannot resolve → `curl: (5)` before touching the wire (fixed
+   product-side by the order-268 proxy-resolvability guard, but the litmus
+   should still launch product-shaped).
+3. `success_pattern: "Pulling T0|T1 ready"` pins a pre-order-168
+   entrypoint revision; the current strings are
+   `pulling default model <tag> (first run)...` /
+   `default model <tag> ready` / `ready (cached)`.
+
+Rewrite recipe: single-line commands; launch shape
+`podman run --userns=keep-id --security-opt=label=disable --rm -e
+TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v <cache>:/home/ollama/.ollama/models:rw`;
+assert the order-268 guard line (`does not resolve — running direct`) in
+the bare shape, then `default model .* ready`; generous timeout (the
+tarball is 1.34 GiB — 600s curl cap product-side). Also: main.rs's
+`/usr/bin/ollama serve` trailing args to this container are DEAD (the
+entrypoint ignores "$@"; no /usr/bin/ollama exists in the image) — remove
+them in a separate hygiene commit when touching that launch path.
