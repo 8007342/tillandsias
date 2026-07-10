@@ -1368,8 +1368,29 @@ plan_index:
     - packet_id: windows-tray-stream-refactor
       order: 154
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
-      status: ready
+      status: claimed
       events:
+        - type: claim
+          ts: "2026-07-10T06:12:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-localprojects-slice-3"
+          expires_at: "2026-07-10T10:12:00Z"
+          scope_note: >
+            Slice 3: linux order 260 landed SubscriptionTopic::LocalProjects
+            + LocalProjectsPush (7bdc4c1d), clearing slice 2's blocker.
+            Widen vm_status_subscribe_topics() to all FOUR topics, apply
+            LocalProjectsPush in the reader loop via a shared
+            apply_local_projects (byte-identical with the
+            LocalProjectsReply poll arm), demote the every-10-ticks
+            EnumerateLocalProjects poll to fallback-only behind a
+            should_poll_local_projects gate (fast-poll bursts still force a
+            confirming round), and add the local-projects initial-sync
+            prime after SubscribeAck (pushes are change-gated). Tick-loop
+            ELIMINATION (watch-channel wakeups + SubscriptionHealth
+            adoption per macOS order 155 slice 3) is deliberately the NEXT
+            slice — this slice makes every topic push-first, which is its
+            prerequisite.
         - type: progress
           ts: "2026-07-09T23:10:00Z"
           agent_id: "windows-bullo-fable5-20260709T2238Z"
@@ -6939,6 +6960,51 @@ plan_index:
         - "source pin tests fail loud if the unit and any exec preamble drift apart"
         - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
       events:
+        - type: progress
+          ts: "2026-07-10T05:56:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          lease_id: "wsl-headless-unit-lock-namespace-unit-env-pin"
+          commits: [d41b3493]
+          summary: >
+            Exit criteria 1+2 CLOSED (d41b3493 on windows-next): the legacy
+            WslRuntime::provision unit (wsl.rs step 4) now pins
+            Environment=HOME=/root + Environment=XDG_RUNTIME_DIR=/run/user/0
+            and creates /run/user/0 via the same ExecStartPre mkdir+chmod
+            pair the recipe-path unit carries, matching the host-shell pty
+            preamble's /run/user/$(id -u) resolution for root. New source
+            pin test wsl::tests::wsl_provision_unit_pins_lock_namespace_env
+            (vz.rs 2115-2139 shape; runs on every platform since the unit is
+            a string literal) fails loud on drift; the recipe-path writer was
+            already pinned by wsl_lifecycle wsl_headless_service_prepares_
+            runtime_env. Verification: cargo fmt --check clean, clippy
+            --all-targets exit 0, cargo test -p tillandsias-vm-layer 23/23.
+            RESIDUAL (criterion 3): fresh-distro first --github-login probe —
+            rides this host's next destructive local-build e2e (the recipe
+            path a cold provision exercises was already pinned before this
+            packet; the legacy trait path has no live caller — see new
+            finding wsl-legacy-provision-unit-writer-drift-2026-07-10.md
+            proposing consolidation/retirement). Releasing lease; packet
+            stays ready for the criterion-3 probe.
+        - type: claim
+          ts: "2026-07-10T05:40:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          lease_id: "wsl-headless-unit-lock-namespace-unit-env-pin"
+          expires_at: "2026-07-10T09:40:00Z"
+          scope_note: >
+            Exit criteria 1+2: pin Environment=HOME=/root and
+            Environment=XDG_RUNTIME_DIR=/run/user/0 (plus the
+            ExecStartPre /run/user/0 mkdir+chmod the recipe-path unit
+            already carries) in the vm-layer WslRuntime::provision legacy
+            unit writer (wsl.rs step 4), mirroring vz.rs order-259 fix
+            77b0ba92; add source pin tests (vz.rs 2115-2139 shape) so the
+            two Windows unit writers (wsl.rs + windows-tray
+            wsl_lifecycle.rs, which is already pinned at :507-508) cannot
+            drift apart silently. Criterion 3 (fresh-distro first-login
+            probe) exercises the recipe path, which is already pinned —
+            scheduled to ride this host's next destructive local-build
+            e2e rather than a dedicated re-provision.
         - type: filed
           ts: "2026-07-10T00:25:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z"
