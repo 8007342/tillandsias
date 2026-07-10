@@ -1689,6 +1689,38 @@ plan_index:
             architectures. Remaining slices: watch-channel menu listeners
             (MenuState propagation), SC-01/02 full sleep elimination
             (blocked on order 260 LocalProjects push). Lease released.
+        - type: progress
+          ts: "2026-07-10T08:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0757Z"
+          host: macos
+          commits: [34838feb]
+          summary: >
+            Slice 4 (LocalProjects push consumption) — order 260's blocker
+            cleared, so the tray's LAST steady-state poll now rides the
+            stream. Subscribe widened to all FOUR topics; new shared
+            apply_local_projects helper consumes LocalProjectsPush/
+            LocalProjectsReply byte-identically with the fallback poll;
+            initial-sync primes EnumerateLocalProjects on the same
+            connection. The tick loop's entire slow-cadence block (local +
+            cloud + login) is now INSIDE the SC-07 fallback gate — a healthy
+            subscription skips it entirely, so the timer is a pure fallback
+            path (SC-01/02 satisfied for the projects/login cadence). Topic
+            pin updated to four-topic slice-3 shape;
+            apply_local_projects change/idempotence test. 71/71 tray tests,
+            build check clean. Live-verified this cycle on a fresh cold
+            provision (also cleared order 281 corruption): establish line
+            'push subscription established (vm-status/login/cloud/LOCAL polls
+            demoted to fallback, SC-07)' + 'local-projects: menu_state
+            updated (4 entries)' — the reader loop consumed the
+            LocalProjectsReply from the new initial-sync prime via
+            apply_local_projects, NOT the steady-state poll. (The ~/src menu
+            SECTION is auth-gated (logged-out renders only GitHub Login, per
+            the Linux golden menu) so it shows post-login; the data path is
+            what this slice wires and it is proven.) Windows flag:
+            adopt LocalProjectsPush in notify_icon.rs for the same
+            tick-elimination. Remaining residual: watch-channel MENU
+            listeners (the tick loop still exists as fallback; full removal
+            + SC-01 zero-sleep in the transport path is the last slice).
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"

@@ -1,6 +1,35 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T07:45:00Z
+LastExecutionTime: 2026-07-10T08:20:00Z
+
+## Cycle 2026-07-10T07:57Z (macos — overnight autonomous 4/8: order 155 slice 4 LocalProjects push, destructive e2e PASS, order 281 corruption cleared)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 4 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next 2cc5a066
+  (linux deep in order 267 litmus-corpus rewrites; order 273 STILL open —
+  the macOS attach cell's blocker).
+- **Order 155 slice 4 COMPLETE + verified live**: order 260's LocalProjects
+  push source (landed cycle 1) let the tray's LAST steady-state poll ride
+  the stream. Subscribe widened to all FOUR topics; new shared
+  apply_local_projects consumes LocalProjectsPush/Reply; initial-sync primes
+  EnumerateLocalProjects. The tick loop's entire slow-cadence block (local +
+  cloud + login) is now inside the SC-07 fallback gate — a healthy
+  subscription skips it, timer is pure fallback (SC-01/02 for the
+  projects/login cadence). Live: 'push subscription established
+  (vm-status/login/cloud/local polls demoted to fallback, SC-07)' +
+  'local-projects: menu_state updated (4 entries)' via the reader loop, not
+  the poll; clean SIGTERM. 71/71 tray tests. Windows flag: adopt
+  LocalProjectsPush in notify_icon.rs for the same tick-elimination.
+  Residual: watch-channel MENU listeners (last 155 slice; tick loop still
+  exists as fallback).
+- **E2E gate (destructive, local-build) PASS**: preflight eligible; build
+  v0.3.260710.8 + install (SHA==HEAD 34838feb) + substrate wipe + 528MB cold
+  provision exit 0. This destructive re-provision ALSO cleared cycle 3's
+  order-281 corrupt overlay store — the osx-next VM is clean again. Report:
+  plan/issues/macos-e2e-overnight-cycle4-2026-07-10.md.
+- **Queue next**: macOS-claimable = 155 final residual (watch-channel menu
+  listeners), 270 (attach materialization — still entangled with 273). Order
+  273 remains the hot linux blocker; re-checked each cycle.
 
 ## Cycle 2026-07-10T06:58Z (macos — overnight autonomous 3/8: order 269 done + verified live, order 281 filed from PTY-tee capture)
 
