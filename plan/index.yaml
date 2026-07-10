@@ -6914,7 +6914,7 @@ plan_index:
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
-      status: claimed
+      status: ready
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -6939,6 +6939,32 @@ plan_index:
         - "source pin tests fail loud if the unit and any exec preamble drift apart"
         - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
       events:
+        - type: progress
+          ts: "2026-07-10T05:56:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          lease_id: "wsl-headless-unit-lock-namespace-unit-env-pin"
+          commits: [d41b3493]
+          summary: >
+            Exit criteria 1+2 CLOSED (d41b3493 on windows-next): the legacy
+            WslRuntime::provision unit (wsl.rs step 4) now pins
+            Environment=HOME=/root + Environment=XDG_RUNTIME_DIR=/run/user/0
+            and creates /run/user/0 via the same ExecStartPre mkdir+chmod
+            pair the recipe-path unit carries, matching the host-shell pty
+            preamble's /run/user/$(id -u) resolution for root. New source
+            pin test wsl::tests::wsl_provision_unit_pins_lock_namespace_env
+            (vz.rs 2115-2139 shape; runs on every platform since the unit is
+            a string literal) fails loud on drift; the recipe-path writer was
+            already pinned by wsl_lifecycle wsl_headless_service_prepares_
+            runtime_env. Verification: cargo fmt --check clean, clippy
+            --all-targets exit 0, cargo test -p tillandsias-vm-layer 23/23.
+            RESIDUAL (criterion 3): fresh-distro first --github-login probe —
+            rides this host's next destructive local-build e2e (the recipe
+            path a cold provision exercises was already pinned before this
+            packet; the legacy trait path has no live caller — see new
+            finding wsl-legacy-provision-unit-writer-drift-2026-07-10.md
+            proposing consolidation/retirement). Releasing lease; packet
+            stays ready for the criterion-3 probe.
         - type: claim
           ts: "2026-07-10T05:40:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"

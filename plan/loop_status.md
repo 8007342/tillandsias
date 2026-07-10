@@ -1,6 +1,48 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T05:50:00Z
+LastExecutionTime: 2026-07-10T05:58:00Z
+
+## Cycle 2026-07-10T05:35Z→05:58Z (windows — meta-orchestration recurring loop 1/8: linux-next FF sync, order 274 criteria 1+2)
+
+- **Host**: Windows 11 native, `windows-next`, agent
+  windows-bullo-fable5-20260710T0536Z. Credential guard
+  `ok:gh-credentials-store`. Clean start at c61601a8; merged
+  origin/linux-next 7bdc4c1d — resolved as a pure fast-forward (windows-next
+  was already fully merged into linux-next by the 05:50Z coordinator cycle),
+  pushed. Recurring-loop context: this host runs 8 scheduled
+  meta-orchestration cycles ~hourly tonight; linux + macOS hosts are running
+  the same loop, so cycles stay one-packet-sized and lease-disciplined.
+- **Worker drain — order 274 (wsl-headless-unit-lock-namespace), criteria
+  1+2 CLOSED (d41b3493), lease released, packet stays ready**: the legacy
+  WslRuntime::provision unit (vm-layer wsl.rs step 4) now pins
+  Environment=HOME=/root + Environment=XDG_RUNTIME_DIR=/run/user/0 and
+  creates /run/user/0 (ExecStartPre mkdir+chmod, matching the recipe-path
+  unit), so the boot-path bootstrap and exec'd satisfiers share one
+  $XDG_RUNTIME_DIR/tillandsias-locks flock namespace — the macOS order-259
+  vault name-in-use race can no longer reproduce through the tarball path.
+  New source pin test wsl::tests::wsl_provision_unit_pins_lock_namespace_env
+  (runs on all platforms). fmt clean, clippy --all-targets 0 warnings,
+  vm-layer 23/23. RESIDUAL: criterion 3 (fresh-distro first --github-login
+  probe) rides this host's next destructive local-build e2e.
+- **Reduction engine**: filed
+  plan/issues/wsl-legacy-provision-unit-writer-drift-2026-07-10.md
+  (enhancement): Windows has TWO independent headless-unit writers (legacy
+  wsl.rs trait path vs live wsl_lifecycle.rs recipe path) and order 274 is
+  the demonstrated drift mode — the 259 fix reached one writer but not the
+  other. Proposes consolidating to one unit-template constant or retiring
+  the legacy tarball path.
+- **E2E gate**: deferred-with-cause — local-build e2e PASSED twice on this
+  host tonight (runs @ c52a1e2e and 45cfd526, <4h ago) and this cycle's
+  delta is the LEGACY provision path, which a recipe-path cold provision
+  does not exercise; a re-run now would re-prove tonight's result without
+  touching the changed code. Next destructive run doubles as the order-274
+  criterion-3 probe.
+- **Next windows work**: order 154 watch-channel slice is now FULLY
+  unblocked (linux order 260 landed SubscriptionTopic::LocalProjects at
+  7bdc4c1d — widen topic list, retire the 30s tick, adopt SubscriptionHealth
+  per macOS order 155 slice 3); order 276 note: drop the interim login-prime
+  once guests carry the transition push. Order 258 stays blocked on
+  operator-attended smoke; order 251 awaits its 3 verifiers.
 
 ## Cycle 2026-07-10T04:10Z→05:50Z (linux_mutable macuahuitl — OPERATOR-DIRECTED drain: 275+268+276+260 completed, both siblings integrated)
 
