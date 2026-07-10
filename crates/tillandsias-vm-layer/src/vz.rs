@@ -477,7 +477,16 @@ systemctl enable podman.socket
 systemctl start podman.socket
 
 # Mount host ~/src via virtio-fs when the VZ config provides the home-src tag.
+# PERSISTED via /etc/fstab (2026-07-10 attended-smoke finding): cloud-init
+# runs first boot only, so a mount issued here evaporates on every
+# subsequent boot — the guest then scans an empty /home/forge/src
+# (EnumerateLocalProjects returns []) and fetch-headless.sh can't see the
+# staged guest binary. nofail keeps boots green when the VZ config omits
+# the share.
 mkdir -p /home/forge/src
+if ! grep -q "^home-src " /etc/fstab; then
+  echo "home-src /home/forge/src virtiofs nofail 0 0" >> /etc/fstab
+fi
 if ! mountpoint -q /home/forge/src; then
   mount -t virtiofs home-src /home/forge/src || true
 fi
@@ -2131,6 +2140,15 @@ mod tests {
         assert!(
             !headless_unit.contains("Requires=podman.socket"),
             "podman.socket is a wanted readiness input, not a hard dependency for diagnostics"
+        );
+        // 2026-07-10 attended smoke: cloud-init runs first boot only, so
+        // the home-src virtio-fs mount MUST be persisted to /etc/fstab or
+        // every subsequent boot scans an empty /home/forge/src (local
+        // projects vanish from the tray, staged headless never picked up).
+        assert!(
+            source.contains("home-src /home/forge/src virtiofs nofail 0 0"),
+            "cloud-init must persist the home-src virtio-fs mount in /etc/fstab \
+             (first-boot-only mounts evaporate on reboot)"
         );
     }
 

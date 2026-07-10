@@ -2080,13 +2080,40 @@ async fn run_push_listener(
                     | ControlMessage::GithubLoginStatusReply {
                         logged_in, handle, ..
                     } => {
-                        if apply_login_state(map_login_state(logged_in, handle), &menu_state) {
+                        let changed =
+                            apply_login_state(map_login_state(logged_in, handle), &menu_state);
+                        if changed {
                             dispatch_rebuild(
                                 &menu_state,
                                 &status_item,
                                 &status_menu_item,
                                 &self_handle,
                             );
+                        }
+                        // Login-transition burst (2026-07-10 attended smoke):
+                        // the cloud list is auth-derived, but its ONLY push
+                        // source is the CloudRefreshRequest handler and SC-07
+                        // suppresses the tray's fallback poll while this
+                        // stream is healthy — without this prime a fresh
+                        // login renders "no repos" until the subscription
+                        // reconnects. One request on this same connection;
+                        // the reply routes through the CloudProjectsPush/
+                        // CloudRefreshReply arm below. Mirrors the windows
+                        // fast-poll-burst intent (order 154) push-natively.
+                        if changed && logged_in {
+                            let seq = client.allocate_seq();
+                            let prime_cloud = ControlEnvelope {
+                                wire_version: WIRE_VERSION,
+                                seq: client.allocate_seq(),
+                                body: ControlMessage::CloudRefreshRequest { seq },
+                            };
+                            if let Err(err) = client.send_envelope(&prime_cloud).await {
+                                tracing::debug!(
+                                    %err,
+                                    "post-login cloud prime failed; reconnecting"
+                                );
+                                break;
+                            }
                         }
                     }
                     ControlMessage::CloudProjectsPush { projects, .. }
