@@ -22,6 +22,7 @@ fn main() {
         Some("fetch-cheatsheet-source") => fetch_cheatsheet_source(&args[2..]),
         Some("validate-yaml") => validate_yaml(&args[2..]),
         Some("parity-matrix") => parity_matrix(&args[2..]),
+        Some("plan-orders") => plan_orders(&args[2..]),
         Some("run-in-pty") => run_in_pty_cmd(&args[2..]),
         Some("--help") | Some("-h") | None => usage(),
         Some(other) => {
@@ -59,6 +60,7 @@ fn usage() {
     eprintln!(
         "  tillandsias-policy parity-matrix [--matrix <path>] [--host <linux|macos|windows>]"
     );
+    eprintln!("  tillandsias-policy plan-orders [--index <path>]");
     eprintln!("  tillandsias-policy run-in-pty <command>...");
 }
 
@@ -4841,6 +4843,140 @@ fn run_in_pty_cmd(args: &[String]) {
     }
 }
 
+// ===========================================================================
+// `plan-orders` subcommand — fail-loud order-number uniqueness for
+// plan/index.yaml (plan order 275, plan-index-order-uniqueness). Parallel
+// filing across hosts repeatedly minted the same `order:` value for
+// different packets; the collisions merged silently and made "order N"
+// references ambiguous (7 historical groups as of 2026-07-10). Rule: an
+// order value shared by two or more packets FAILS when at least one packet
+// in the group is still open (status outside the done-set); groups whose
+// members are ALL retired are grandfathered so historical references stay
+// untouched. Ruby-free per the order-261 precedent; composed into the
+// git-mirror pre-receive gate via tillandsias-policy availability.
+//
+// Verdict grammar (stdout, one line):
+//   ok: plan orders unique among open packets (<n> packets, <g> grandfathered done-only duplicate groups)
+//   duplicate-order:<N>: <packet_id>(<status>), ...   [one line per group, stderr]
+// Exit codes: 0 unique-among-open; 1 violation; 2 usage/parse failure.
+//
+// @trace spec:methodology-accountability
+// ===========================================================================
+
+const PLAN_ORDER_DONE_STATUSES: [&str; 5] =
+    ["done", "completed", "success", "obsoleted", "obsolete"];
+
+fn plan_orders_check(yaml: &serde_yaml::Value) -> Result<(usize, usize), Vec<String>> {
+    let steps = yaml
+        .get("plan_index")
+        .and_then(|p| p.get("steps"))
+        .and_then(|s| s.as_sequence())
+        .ok_or_else(|| vec!["plan_index.steps sequence not found".to_string()])?;
+
+    let mut by_order: std::collections::BTreeMap<i64, Vec<(String, String)>> =
+        std::collections::BTreeMap::new();
+    let mut packet_count = 0usize;
+    for step in steps {
+        let Some(order) = step.get("order").and_then(|o| o.as_i64()) else {
+            continue;
+        };
+        packet_count += 1;
+        let id = step
+            .get("packet_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("<missing packet_id>")
+            .to_string();
+        let status = step
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("<missing status>")
+            .to_string();
+        by_order.entry(order).or_default().push((id, status));
+    }
+
+    let mut violations = Vec::new();
+    let mut grandfathered = 0usize;
+    for (order, group) in &by_order {
+        if group.len() < 2 {
+            continue;
+        }
+        let any_open = group
+            .iter()
+            .any(|(_, status)| !PLAN_ORDER_DONE_STATUSES.contains(&status.as_str()));
+        if any_open {
+            let members = group
+                .iter()
+                .map(|(id, status)| format!("{id}({status})"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            violations.push(format!("duplicate-order:{order}: {members}"));
+        } else {
+            grandfathered += 1;
+        }
+    }
+
+    if violations.is_empty() {
+        Ok((packet_count, grandfathered))
+    } else {
+        Err(violations)
+    }
+}
+
+fn plan_orders(args: &[String]) {
+    let mut index_path = PathBuf::from("plan/index.yaml");
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--index" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--index requires a path");
+                    process::exit(2);
+                };
+                index_path = PathBuf::from(value);
+            }
+            other => {
+                eprintln!("unknown plan-orders argument: {other}");
+                process::exit(2);
+            }
+        }
+        idx += 1;
+    }
+
+    let content = match fs::read_to_string(&index_path) {
+        Ok(content) => content,
+        Err(err) => {
+            eprintln!("{}: {err}", index_path.display());
+            process::exit(2);
+        }
+    };
+    let yaml: serde_yaml::Value = match serde_yaml::from_str(&content) {
+        Ok(yaml) => yaml,
+        Err(err) => {
+            eprintln!("{}: {err}", index_path.display());
+            process::exit(2);
+        }
+    };
+
+    match plan_orders_check(&yaml) {
+        Ok((packets, grandfathered)) => {
+            println!(
+                "ok: plan orders unique among open packets ({packets} packets, {grandfathered} grandfathered done-only duplicate groups)"
+            );
+        }
+        Err(violations) => {
+            for line in &violations {
+                eprintln!("{line}");
+            }
+            eprintln!(
+                "plan-orders: {} duplicate order group(s) contain open packets — renumber the open packet(s) with a renumber event",
+                violations.len()
+            );
+            process::exit(1);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5119,5 +5255,70 @@ trailing"#;
         // Digits without a trailing % do not match the grep pattern.
         assert_eq!(parse_completeness_pct("Completeness: 9 / 12"), None);
         assert_eq!(parse_completeness_pct("no completeness here"), None);
+    }
+
+    // @trace spec:methodology-accountability — plan order 275
+    fn plan_orders_fixture(entries: &[(&str, i64, &str)]) -> serde_yaml::Value {
+        let steps = entries
+            .iter()
+            .map(|(id, order, status)| {
+                format!("    - packet_id: {id}\n      order: {order}\n      status: {status}\n")
+            })
+            .collect::<String>();
+        serde_yaml::from_str(&format!("plan_index:\n  steps:\n{steps}")).unwrap()
+    }
+
+    #[test]
+    fn plan_orders_duplicate_with_open_packet_fails() {
+        let yaml = plan_orders_fixture(&[
+            ("a-done", 144, "completed"),
+            ("b-open", 144, "ready"),
+            ("c-unique", 200, "ready"),
+        ]);
+        let err = plan_orders_check(&yaml).unwrap_err();
+        assert_eq!(err.len(), 1);
+        assert!(err[0].starts_with("duplicate-order:144:"), "{err:?}");
+        assert!(err[0].contains("b-open(ready)"), "{err:?}");
+    }
+
+    #[test]
+    fn plan_orders_done_only_duplicates_are_grandfathered() {
+        let yaml = plan_orders_fixture(&[
+            ("a-done", 160, "done"),
+            ("b-done", 160, "completed"),
+            ("c-obsolete", 160, "obsoleted"),
+            ("d-unique", 300, "ready"),
+        ]);
+        let (packets, grandfathered) = plan_orders_check(&yaml).unwrap();
+        assert_eq!(packets, 4);
+        assert_eq!(grandfathered, 1);
+    }
+
+    #[test]
+    fn plan_orders_all_unique_passes() {
+        let yaml = plan_orders_fixture(&[("a", 1, "ready"), ("b", 2, "blocked"), ("c", 3, "done")]);
+        let (packets, grandfathered) = plan_orders_check(&yaml).unwrap();
+        assert_eq!(packets, 3);
+        assert_eq!(grandfathered, 0);
+    }
+
+    #[test]
+    fn plan_orders_three_way_open_collision_names_every_member() {
+        let yaml = plan_orders_fixture(&[
+            ("x-pending", 161, "pending"),
+            ("y-ready", 161, "ready"),
+            ("z-pending", 161, "pending"),
+        ]);
+        let err = plan_orders_check(&yaml).unwrap_err();
+        assert_eq!(err.len(), 1);
+        for member in ["x-pending(pending)", "y-ready(ready)", "z-pending(pending)"] {
+            assert!(err[0].contains(member), "{err:?}");
+        }
+    }
+
+    #[test]
+    fn plan_orders_missing_steps_is_a_parse_failure() {
+        let yaml: serde_yaml::Value = serde_yaml::from_str("unrelated: true").unwrap();
+        assert!(plan_orders_check(&yaml).is_err());
     }
 }

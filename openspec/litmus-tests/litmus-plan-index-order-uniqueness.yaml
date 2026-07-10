@@ -1,0 +1,74 @@
+# @trace spec:methodology-accountability
+#
+# Pins `tillandsias-policy plan-orders` (plan order 275,
+# plan-index-order-uniqueness): parallel filing across hosts repeatedly
+# minted the same plan/index.yaml `order:` value for different packets, and
+# the collisions merged silently — "order N" references became ambiguous
+# (7 historic groups found 2026-07-10; macOS renumbered its own packet
+# twice in one day). The check fails loud when a duplicate order group
+# contains any open (non-done) packet and grandfathers done-only groups so
+# history stays untouched. Ruby-free per the order-261 precedent, with a
+# ruby fallback mirroring the rule where cargo is absent.
+name: litmus:plan-index-order-uniqueness
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin tillandsias-policy plan-orders: subcommand exists, the live ledger
+  passes (no open packet shares an order), a fixture with an open duplicate
+  fails exit 1 naming the group, done-only duplicate groups are
+  grandfathered, and the unit tests pinning the rule exist by name.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-policy/src/main.rs
+  - workspace contains plan/index.yaml
+  - cargo (preferred) or ruby is available in PATH
+
+critical_path:
+  - step: "plan-orders subcommand + usage line exist in tillandsias-policy"
+    command: "grep -q 'fn plan_orders(' crates/tillandsias-policy/src/main.rs && grep -q 'plan-orders' crates/tillandsias-policy/src/main.rs && echo 'ok: subcommand-defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: subcommand-defined"
+
+  - step: "live ledger passes: no open packet shares an order number"
+    command: "if command -v cargo >/dev/null 2>&1; then cargo run -q -p tillandsias-policy -- plan-orders; else ruby -ryaml -e 'done = %w(done completed success obsoleted obsolete); steps = YAML.load_file(%q(plan/index.yaml))[%q(plan_index)][%q(steps)]; bad = steps.select { |s| s[%q(order)] }.group_by { |s| s[%q(order)] }.select { |o, g| g.size > 1 && g.any? { |s| !done.include?(s[%q(status)]) } }; (bad.each { |o, g| puts %Q(duplicate-order:#{o}: ) + g.map { |s| s[%q(packet_id)] }.join(%q(, )) }; exit 1) unless bad.empty?; puts %q(ok: plan orders unique among open packets)'; fi"
+    timeout_ms: 120000
+    expected_behavior: "ok: plan orders unique among open packets"
+
+  - step: "negative control: fixture with an open duplicate fails exit 1 naming the group"
+    command: "f=$(mktemp); printf 'plan_index:\\n  steps:\\n    - packet_id: a\\n      order: 7\\n      status: completed\\n    - packet_id: b\\n      order: 7\\n      status: ready\\n' > \"$f\"; if command -v cargo >/dev/null 2>&1; then out=$(cargo run -q -p tillandsias-policy -- plan-orders --index \"$f\" 2>&1); rc=$?; else out=$(ruby -ryaml -e 'done = %w(done completed success obsoleted obsolete); steps = YAML.load_file(ARGV[0])[%q(plan_index)][%q(steps)]; bad = steps.group_by { |s| s[%q(order)] }.select { |o, g| g.size > 1 && g.any? { |s| !done.include?(s[%q(status)]) } }; (bad.each { |o, g| puts %Q(duplicate-order:#{o}: x) }; exit 1) unless bad.empty?; puts %q(ok)' \"$f\" 2>&1); rc=$?; fi; rm -f \"$f\"; printf '%s' \"$out\" | grep -q '^duplicate-order:7:' && [ \"$rc\" = 1 ] && echo 'ok: open-duplicate-fails' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 120000
+    expected_behavior: "ok: open-duplicate-fails"
+
+  - step: "grandfather control: done-only duplicate group passes"
+    command: "f=$(mktemp); printf 'plan_index:\\n  steps:\\n    - packet_id: a\\n      order: 9\\n      status: done\\n    - packet_id: b\\n      order: 9\\n      status: completed\\n' > \"$f\"; if command -v cargo >/dev/null 2>&1; then out=$(cargo run -q -p tillandsias-policy -- plan-orders --index \"$f\" 2>&1); rc=$?; else out=$(ruby -ryaml -e 'done = %w(done completed success obsoleted obsolete); steps = YAML.load_file(ARGV[0])[%q(plan_index)][%q(steps)]; bad = steps.group_by { |s| s[%q(order)] }.select { |o, g| g.size > 1 && g.any? { |s| !done.include?(s[%q(status)]) } }; exit 1 unless bad.empty?; puts %q(ok grandfathered)' \"$f\" 2>&1); rc=$?; fi; rm -f \"$f\"; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -qi 'ok' && echo 'ok: done-only-grandfathered' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 120000
+    expected_behavior: "ok: done-only-grandfathered"
+
+  - step: "unit tests pinning the rule exist by name"
+    command: "grep -q 'plan_orders_duplicate_with_open_packet_fails' crates/tillandsias-policy/src/main.rs && grep -q 'plan_orders_done_only_duplicates_are_grandfathered' crates/tillandsias-policy/src/main.rs && grep -q 'plan_orders_three_way_open_collision_names_every_member' crates/tillandsias-policy/src/main.rs && echo 'ok: unit-tests-pinned'"
+    timeout_ms: 3000
+    expected_behavior: "ok: unit-tests-pinned"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "plan-orders uniqueness pinned (live ledger pass, open-duplicate fail, done-only grandfather, unit tests)"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "plan-index-order-uniqueness"
+    artifact: "crates/tillandsias-policy/src/main.rs + plan/index.yaml"
+
+rollback:
+  on_failure: >
+    The plan-orders uniqueness gate drifted. Restore the plan-orders
+    subcommand in tillandsias-policy: group plan_index.steps by order;
+    FAIL exit 1 printing one 'duplicate-order:<N>: <members>' line per
+    group containing any packet whose status is outside
+    {done, completed, success, obsoleted, obsolete}; pass exit 0 with the
+    'ok: plan orders unique among open packets' line otherwise; keep the
+    --index override and the named unit tests. If the live-ledger step
+    failed, a real collision merged: renumber the open packet(s) to fresh
+    order numbers with renumber events (keep renumbered_from).
+  command: "grep -o 'order: [0-9]*' plan/index.yaml | sort | uniq -d"

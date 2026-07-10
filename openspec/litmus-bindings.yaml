@@ -479,8 +479,9 @@ specs:
   - litmus:methodology-accountability-shape
   - litmus:no-duplicate-rust-item-defs
   - litmus:integration-strategy-consistency
+  - litmus:plan-index-order-uniqueness
   coverage_ratio: 100
-  last_verified: '2026-05-15'
+  last_verified: '2026-07-10'
 - spec_id: meta-orchestration
   status: active
   litmus_tests:
