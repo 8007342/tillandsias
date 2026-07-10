@@ -131,10 +131,8 @@ impl Cache {
         // Age-based pruning.
         for (path, mtime) in &entries {
             let age = now.duration_since(*mtime).unwrap_or(Duration::ZERO);
-            if age > self.gc_max_age {
-                if fs::remove_file(path).is_ok() {
-                    evicted += 1;
-                }
+            if age > self.gc_max_age && fs::remove_file(path).is_ok() {
+                evicted += 1;
             }
         }
 

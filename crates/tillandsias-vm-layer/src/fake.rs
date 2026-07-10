@@ -130,19 +130,17 @@ impl VmRuntime for FakeVmRuntime {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
-    fn manifest_with_paths(
-        rootfs: &PathBuf,
-        binary: &PathBuf,
-        shared: &PathBuf,
-    ) -> ProvisionManifest {
+    fn manifest_with_paths(rootfs: &Path, binary: &Path, shared: &Path) -> ProvisionManifest {
         ProvisionManifest {
-            rootfs_tarball: rootfs.clone(),
-            tillandsias_binary: binary.clone(),
+            rootfs_tarball: rootfs.to_path_buf(),
+            tillandsias_binary: binary.to_path_buf(),
             vsock_cid: 7,
             vsock_port: 42420,
-            shared_host_dir: shared.clone(),
+            shared_host_dir: shared.to_path_buf(),
         }
     }
 

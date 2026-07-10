@@ -23,8 +23,9 @@ LastExecutionTime: 2026-07-10T00:30:00Z
   Environment=XDG_RUNTIME_DIR=/run/user/0 in the vz.rs unit + drift pin
   tests both sides. Re-provisioned fresh VM: first --github-login reaches
   the git-author-name prompt, no 125, no podman error. All four exit
-  criteria closed. Windows sibling gap promoted to **order 260** (ready,
-  windows pickup: wsl.rs unit sets neither HOME nor XDG_RUNTIME_DIR).
+  criteria closed. Windows sibling gap promoted to **order 262** (ready,
+  windows pickup: wsl.rs unit sets neither HOME nor XDG_RUNTIME_DIR;
+  renumbered from 260 on merge — collision with the windows-filed 260).
 - **E2E gate (local-build, destructive, ×2)**: gates 1–3 + diagnose PASS on
   both 2a492797 and 77b0ba92 (build/codesign/install/freshness; 2.1G destroy;
   528MB cold provision). Forge lane n/a. Findings file run-2 section:
@@ -36,6 +37,82 @@ LastExecutionTime: 2026-07-10T00:30:00Z
   smoke; order 126 still blocked on linux order 128. Linux flag: order 259's
   fix pattern may also apply to any OTHER guest exec path that omits
   XDG_RUNTIME_DIR; windows flags: orders 260 (new), 154 cold-join, 258.
+
+## Cycle 2026-07-09T23:10Z (windows — meta-orchestration worker drain, order 258)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start at 521de7bd == origin/windows-next;
+  origin/linux-next (67bffc86) already merged — no sync needed.
+- **Worker drain — order 258 (windows-tray-parity-column-verify),
+  PARTIAL -> BLOCKED on operator (mirrors macOS order 257)**: rebuilt +
+  reinstalled the tray at HEAD (92675e8e, embedded SHA == HEAD freshness
+  gate), provisioned VM to Ready, and verified the unattended subset LIVE:
+  one-off status/probe cell -> done (--status-once --json reachable
+  wire_version=2 phase=Ready exit 0; --diagnose --json exit 0 full schema;
+  stopped-VM error path exercised; wsl.exe one-shot guest exec GUEST_OK).
+  Strong partial evidence recorded for local projects (host scan count=5 +
+  VM-side round-trip count=5), cloud refresh (graceful not-logged-in
+  count=0), login state (logged_in=false applied), status chip healthy path
+  (SC-07 suppression held after initial sync — slice 1+2 wiring observed
+  live at debug level). Remaining 7 required cells unknown -> todo;
+  consolidated 9-step attended checklist:
+  plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md.
+  NOTE: in-VM headless is v0.3.260707.2 (pre-744f4749) so login/cloud push
+  topics cannot fire on this VM yet; the designed startup fast-poll burst +
+  poll-while-unconfirmed fallback covered it exactly as intended (no bug).
+- **Reduction engine**: filed + promoted order 261
+  (parity-litmus-ruby-free-check): litmus:tray-parity-matrix-complete is a
+  ruby one-liner and Windows hosts have no ruby, so the order-243 per-host
+  gate can never execute on the Windows --ci-full lane and order 258's exit
+  criterion 4 is unsatisfiable as written — propose a tillandsias-policy
+  parity-matrix subcommand.
+- **E2E gate**: deferred — full destructive local-build e2e PASSED on this
+  host earlier today (run 20260709T201326Z); this cycle changed only
+  plan/openspec data files (matrix cells + ledgers), no runtime surface.
+- **Next windows work**: attended parity smoke (operator, order 258
+  checklist); order 154 watch-channel slice remains claimable (tick
+  retirement still waits on order 260, linux).
+
+## Cycle 2026-07-09T22:38Z (windows — meta-orchestration worker drain, order 154 slice 2)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start; merged `origin/linux-next` twice
+  (990c0482 at cycle start, 67bffc86 pre-push) — both clean, integration gate
+  green each time (conflict-marker scan, YAML validate, clippy+tests on the
+  merged tree).
+- **Worker drain — order 154 (windows-tray-stream-refactor), slice 2
+  COMPLETED (ea03e08e), lease released, packet stays ready**: orders 230/231
+  cleared slice 1's blocker, so the push listener now subscribes to all THREE
+  topics (VmStatus+LoginState+CloudProjects); LoginStatePush/CloudProjectsPush
+  applied via shared appliers byte-identical with the poll reply arms;
+  GithubLoginStatusRequest/CloudRefreshRequest demoted to fallback-only
+  (should_poll_login_and_cloud gate, drift-pinned; fast-poll bursts still
+  force a confirming round); one initial-sync poll round after SubscribeAck
+  because pushes are change-gated. windows-tray 63 tests green, clippy
+  --all-targets zero warnings, fmt clean. Live e2e of the new topics needs
+  the in-VM headless refreshed past 744f4749 (this VM predates it) —
+  initial-sync polls cover the gap until then.
+- **Bonus (2abfcb30)**: fixed 6 clippy warnings in windows-cfg /
+  windows-feature-set code Linux strict-clippy never compiles (hvsocket.rs,
+  windows-tray build.rs, vm-layer materialize/{cache,oci}.rs,
+  materialize-cli.rs). Note: linux's 034c31f6 trunk-red mediation collapsed
+  the same build.rs if-let in parallel — both edits merged clean at 67bffc86,
+  post-merge clippy zero warnings.
+- **Reduction engine**: filed
+  `plan/issues/windows-tray-local-projects-push-gap-2026-07-09.md` and
+  promoted it to ready order 260 (linux-owned): EnumerateLocalProjects is the
+  last poll-only topic, blocking order 154's tick-elimination exit criterion.
+  Started `plan/issues/windows-next-work-queue-2026-07.md` (the per-host
+  work-queue ledger the worker protocol names did not exist for windows).
+- **E2E gate**: deferred — full destructive local-build e2e PASSED on this
+  host 2.5h ago (run 20260709T201326Z) and this cycle's delta is tray-side
+  push wiring already covered by unit+drift tests; live push verification is
+  blocked on a headless refresh (see above), so a re-run now would re-prove
+  the morning's result without exercising the new code.
+- **Next windows work**: order 258 (windows-tray-parity-column-verify, filed
+  22:35Z, 4h live-tray verification) — exceeds this cycle's remaining budget;
+  first candidate for the next windows cycle. Order 154's watch-channel slice
+  is unblocked for wiring but tick retirement waits on order 260.
 
 ## Cycle 2026-07-09T22:40Z (linux_mutable macuahuitl — meta-orchestration: sibling integration x2, trunk-red mediation, order 259 linux slice)
 
