@@ -1371,6 +1371,18 @@ plan_index:
       status: ready
       events:
         - type: progress
+          ts: "2026-07-10T09:36:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          summary: >
+            E2E run 20260710T090845Z: even a PRISTINE cold provision boots
+            guest headless v0.3.260707.2 (zero-byte embedded assets →
+            fetch pulls a pre-260 release; release hold), so the slice-3
+            full-topic path and LocalProjectsPush cannot be live-verified
+            on Windows until order 282 (guest-binary-embed-windows) or a
+            release ships. The legacy fallback engaged for the 4th live
+            time and held. Slice residuals unchanged otherwise.
+        - type: progress
           ts: "2026-07-10T08:40:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"
           host: windows
@@ -3388,6 +3400,20 @@ plan_index:
           host: linux
           commits: ["5af98306"]
           evidence: "litmus:guest-binary-embed-integrity passes"
+        - type: progress
+          ts: "2026-07-10T09:30:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          summary: >
+            Windows consequence demonstrated live (e2e run 20260710T090845Z):
+            the windows assets are still zero-byte placeholders, so a
+            pristine cold provision fetches release headless v0.3.260707.2 —
+            and the tray-parity release hold keeps every fetchable release
+            pre-order-260, so the guest can NEVER carry current wire topics
+            on this host. Blocks order 154 slice-3 full-topic live
+            verification. Step 2+3 windows half promoted to order 282
+            (guest-binary-embed-windows) since this packet's exit criteria
+            were contract-shaped and are genuinely done.
       exit_criteria:
         - "cross-compile feasibility answered from the tree (YES; Nix-only) with flake.nix/release.yml evidence"
         - "exact `nix build` commands, artifact paths, canonical names, and the host-arch inject-time selector documented"
@@ -7040,10 +7066,54 @@ plan_index:
             in-forge agent did excellent real work (order 263) in the wrong
             budget envelope — the tension is structural, not agent error.
 
+    - packet_id: guest-binary-embed-windows
+      order: 282
+      title: "Windows: embed the linux-staged musl guest headless + demote fetch-headless to fallback (order 190 steps 2-3, windows half)"
+      status: ready
+      kind: packaging
+      deliverable: crates/tillandsias-windows-tray
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, packaging, guest-binary, wsl, vm-layer]
+      estimated_hours: 3
+      outcome: >
+        Order 190 shipped the linux staging contract
+        (scripts/build-guest-binaries.sh + litmus) but the windows embed
+        half never became its own packet: the assets under
+        crates/tillandsias-windows-tray/assets/ are zero-byte placeholders,
+        so inject_bootstrap_logic skips embedding and fetch-headless.sh
+        pulls the latest RELEASE into every fresh guest. Demonstrated live
+        (e2e run 20260710T090845Z): pristine provision at HEAD 06c14a35
+        boots guest headless v0.3.260707.2, which cannot decode
+        SubscriptionTopic::LocalProjects — the tray's version-skew fallback
+        held (4 live engagements), but order 154 slice-3 full-topic
+        verification is structurally blocked while the release hold keeps
+        every fetchable release pre-260. Wire the staged artifacts into the
+        windows build (build-windows-tray.ps1 stages them when present;
+        document the linux->windows artifact transport), embed per host
+        arch, and demote the in-VM fetch to the absent-asset fallback
+        exactly as order 190 step 3 specifies for wsl_lifecycle.rs.
+      exit_criteria:
+        - "a windows build with staged artifacts embeds a headless whose --version matches the host wrapper (litmus:guest-binary-embed-integrity shape)"
+        - "fresh provision with embedded binary subscribes full-topic (no legacy fallback line in tray.log)"
+        - "fetch-headless path demoted to fallback-only when the embedded asset is present; absent-asset behavior unchanged"
+      events:
+        - type: filed
+          ts: "2026-07-10T09:32:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          summary: >
+            Filed from e2e run 20260710T090845Z findings (Run 3 section of
+            build-install-smoke-e2e-findings-2026-07-10-windows.md).
+            Windows pickup, but step-1 artifact availability on a windows
+            host needs the transport decision — flag to linux coordinator
+            whether staged binaries ride a nightly artifact, a git-mirror
+            side channel, or the next release.
+
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
-      status: ready
+      status: blocked
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -7068,6 +7138,24 @@ plan_index:
         - "source pin tests fail loud if the unit and any exec preamble drift apart"
         - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
       events:
+        - type: blocked
+          ts: "2026-07-10T09:35:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          summary: >
+            Criteria 1+2 closed (d41b3493) and criterion 1 now
+            RUNTIME-CONFIRMED on a pristine cold provision (e2e run
+            20260710T090845Z: fresh guest unit carries both
+            Environment=HOME=/root and XDG_RUNTIME_DIR=/run/user/0).
+            Criterion 3 (first --github-login reaches credential prompts,
+            no 125) has NO unattended lane on Windows — the login flow is
+            tray-menu only (--github-login is a macOS diagnose.rs lane).
+            BLOCKED on operator: fold into the order 258 attended
+            checklist (item appended to
+            windows-tray-parity-attended-smoke-gap-2026-07-09.md).
+            Smallest next action: during the attended smoke, click GitHub
+            Login on a fresh distro and confirm the credential prompt
+            appears with no exit-125 vault race in the guest journal.
         - type: progress
           ts: "2026-07-10T05:56:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"

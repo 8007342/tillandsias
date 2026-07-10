@@ -138,3 +138,44 @@ curl-install test.
     ts: "2026-07-10T03:40:00Z"
     agent_id: "windows-bullo-fable5-20260710T0240Z"
     host: windows
+
+---
+
+# Run 3 — 2026-07-10T09:08Z series — PASS (+ guest version-skew demonstrated)
+
+- discovered_by: `/build-install-and-smoke-test-e2e` (windows), meta-orchestration recurring loop 4/8
+- run_id: `20260710T090845Z`
+- evidence: `target/build-install-smoke-e2e/20260710T090845Z/*` + `%LOCALAPPDATA%\tillandsias\logs\tray.log`
+- HEAD: `06c14a35` (includes orders 274 crit 1+2, 154 slices 3+4)
+
+| Gate | Result |
+|---|---|
+| 1 build (`scripts/build-windows-tray.ps1`) | PASS — exit 0, 2m16s |
+| 1 install (direct copy to `%LOCALAPPDATA%\Programs\Tillandsias`) | PASS — `--version` → `tillandsias-tray 0.3.260710.8 (06c14a35)`, embedded SHA == HEAD |
+| 2 destroy (`wsl --unregister tillandsias` + cache/wsl/logs dirs) | PASS — distro unlisted, all three dirs removed |
+| 3 cold re-provision (`--provision-once`) | PASS — exit 0, rootfs re-downloaded, headless unit enabled, `RESULT: VM Ready — control wire up ✓` |
+| 3 diagnose (`--diagnose --json`) | PASS — exit 2 (degraded-as-expected), 17 keys, `build_commit=06c14a35` |
+| 4 forge | n/a (linux-only lane) |
+
+## Extended verification (orders 274 + 154 residuals)
+
+- **Order 274 criterion-1 runtime confirmation**: the freshly provisioned
+  guest's `/etc/systemd/system/tillandsias-headless.service` carries BOTH
+  `Environment=HOME=/root` and `Environment=XDG_RUNTIME_DIR=/run/user/0`
+  (recipe-path unit, verified in-VM post-provision). Criterion 3's
+  login-prompt repro has no unattended CLI lane on Windows (`--github-login`
+  is a macOS diagnose.rs lane; Windows first-login is a tray-menu flow) —
+  folded into order 258's attended checklist.
+- **Order 154 slice 3/4 on a fresh guest — version skew DEMONSTRATED, fallback
+  held**: the fresh guest runs headless `v0.3.260707.2`, NOT this build. The
+  embedded musl assets in `crates/tillandsias-windows-tray/assets/` are
+  zero-byte placeholders, so `fetch-headless.sh` pulls the latest RELEASE —
+  and the release hold keeps every fetchable release pre-order-260. The tray's
+  full-topic subscribe was rejected (`subscribe: early eof`) even on this
+  pristine substrate and the slice-3 legacy fallback engaged (4th consecutive
+  live engagement). CONSEQUENCE: the Windows freshness gate pins the TRAY to
+  HEAD but the GUEST is version-pinned to the newest release; the slice-3
+  full-topic path and LocalProjectsPush cannot be live-verified on Windows
+  until `embedded-guest-binary-linux-build-2026-07-05.md` ships a staged
+  post-260 musl headless (linux pickup) or a release goes out. Not filed as
+  new — this run is concrete windows evidence appended to that packet.

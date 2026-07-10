@@ -1,6 +1,44 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T09:35:00Z
+LastExecutionTime: 2026-07-10T09:45:00Z
+
+## Cycle 2026-07-10T09:07Z→09:45Z (windows — meta-orchestration recurring loop 4/8: FULL DESTRUCTIVE E2E PASS @ 06c14a35, guest version-skew demonstrated, order 282 filed)
+
+- **Host**: Windows 11 native, `windows-next`, agent
+  windows-bullo-fable5-20260710T0536Z. Credential guard
+  `ok:gh-credentials-store`. Clean start at ebd68448; merged
+  origin/linux-next 06c14a35 clean, pushed sync before work. Preflight
+  `eligible`.
+- **E2E gate — /build-install-and-smoke-test-e2e (windows) run 3, PASS
+  (run_id 20260710T090845Z)**: build 2m16s → direct-copy install
+  (freshness gate: embedded SHA 06c14a35 == HEAD) → destructive
+  `wsl --unregister` + cache/wsl/logs wipe → cold `--provision-once`
+  exit 0 (rootfs re-downloaded, `RESULT: VM Ready — control wire up ✓`,
+  handshake wire_version=2 attempt=1) → `--diagnose --json` exit 2
+  degraded-as-expected, 17 keys, build_commit fresh. Report: Run 3
+  section of build-install-smoke-e2e-findings-2026-07-10-windows.md.
+- **Extended verification**: order 274 criterion 1 RUNTIME-CONFIRMED
+  (fresh guest unit carries HOME + XDG_RUNTIME_DIR pins); criterion 3 has
+  no unattended lane on Windows → 274 flipped to blocked-on-operator,
+  probe appended as item 10 of the order 258 attended checklist.
+- **Reduction engine — guest version skew DEMONSTRATED, order 282
+  filed**: a PRISTINE provision boots guest headless v0.3.260707.2 — the
+  embedded musl assets are zero-byte placeholders so fetch-headless pulls
+  the newest RELEASE, and the release hold keeps every release
+  pre-order-260. The slice-3 full-topic subscribe was rejected even on
+  the fresh substrate (legacy fallback held, 4th live engagement).
+  Evidence event appended to order 190 (its contract-shaped criteria are
+  genuinely done); windows implementation half promoted to order 282
+  (guest-binary-embed-windows, ready, windows pickup) with the
+  linux→windows artifact-transport question flagged to the coordinator.
+  ALSO: this means macOS live-push verifications share the same ceiling —
+  their guests fetch releases too (vz.rs fetch service): worth a macOS
+  check whether order 155's live evidence was against a staged or
+  fetched guest.
+- **Next windows work**: order 282 (needs transport decision), order 154
+  remaining slice (menu wakeups + tick elimination — unit-pinned, not
+  guest-dependent), order 251 verifiers, order 258 attended items (now
+  10 incl. the 274 probe).
 
 ## Cycle 2026-07-10T08:45Z→09:35Z (linux_mutable macuahuitl — overnight loop 5/8: strict burn-down to ONE named blocker)
 

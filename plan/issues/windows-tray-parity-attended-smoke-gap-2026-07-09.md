@@ -105,3 +105,14 @@ tray log `%LOCALAPPDATA%\tillandsias\logs\tray.log` (RUST_LOG=debug session).
 
 Single packet covers all 7 misses deliberately (shared root cause: attended
 session required); each cell is enumerated above so no miss is untracked.
+
+## Addendum 2026-07-10 (order 274 criterion 3)
+
+10. **Fresh-distro first login — vault lock-namespace probe** (closes order
+    274): on a freshly provisioned distro (or after `wsl --unregister` +
+    re-provision), click **GitHub Login** for the FIRST time. Expected: the
+    credential prompt appears; the guest journal shows NO `exit 125` /
+    vault name-in-use error (`wsl -d tillandsias -u root -- journalctl -u
+    tillandsias-headless | grep -i "name.*in use\|exit 125"` comes back
+    empty). The order-259-class fix pins HOME/XDG_RUNTIME_DIR in both unit
+    writers; this is its live discharge on Windows.
