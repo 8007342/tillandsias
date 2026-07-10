@@ -155,3 +155,23 @@ construction. Suspected cold-start/exec timing flake; the 5s budget and
 the exec-target coupling to STEP 1's container need review during this
 file's YAML repair. If a subsequent gate reds the same step, promote to
 its own bug packet instead of retrying.
+
+## Slice progress 2026-07-10T07:0xZ + the fake-podman shim finding
+
+- **litmus-environment-isolation.yaml REWRITTEN** (valid YAML, explicit
+  fail-loud verdicts, 30-60s timeouts, image pre-warm step) — the 5s
+  cold-start flake class is closed for this file.
+- **litmus-inference-deferred-model-pulls.yaml PARKED with a new finding**:
+  the failing `--userns=host` launch shape is NOT in the litmus file — the
+  runner exports a PATH shim (run-litmus-test.sh:79-133) routing every
+  litmus `podman` call through `scripts/tillandsias-podman raw`, whose
+  profile injects `--userns=host` and no `label=disable`. Under SELinux
+  Enforcing the binary install into the mounted cache is denied. Fix
+  options for the rewrite slice: (a) expose REAL_PODMAN_BIN to steps for
+  product-shape launches; (b) let `tillandsias-podman raw` accept
+  label/userns overrides; (c) PREFERRED per the order-271 doctrine — drive
+  the launch through the product ensure_inference path instead of raw
+  podman, making the litmus test the real layer. Also fix while there: the
+  TILMANDSIAS_ env-var typo in the cached-run step and the pre-order-168
+  success strings ("Pulling T0|T1 ready" → "default model .* ready" /
+  "ready (cached)").
