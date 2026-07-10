@@ -1368,8 +1368,29 @@ plan_index:
     - packet_id: windows-tray-stream-refactor
       order: 154
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
-      status: ready
+      status: claimed
       events:
+        - type: claim
+          ts: "2026-07-10T06:12:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          lease_id: "windows-tray-stream-refactor-localprojects-slice-3"
+          expires_at: "2026-07-10T10:12:00Z"
+          scope_note: >
+            Slice 3: linux order 260 landed SubscriptionTopic::LocalProjects
+            + LocalProjectsPush (7bdc4c1d), clearing slice 2's blocker.
+            Widen vm_status_subscribe_topics() to all FOUR topics, apply
+            LocalProjectsPush in the reader loop via a shared
+            apply_local_projects (byte-identical with the
+            LocalProjectsReply poll arm), demote the every-10-ticks
+            EnumerateLocalProjects poll to fallback-only behind a
+            should_poll_local_projects gate (fast-poll bursts still force a
+            confirming round), and add the local-projects initial-sync
+            prime after SubscribeAck (pushes are change-gated). Tick-loop
+            ELIMINATION (watch-channel wakeups + SubscriptionHealth
+            adoption per macOS order 155 slice 3) is deliberately the NEXT
+            slice — this slice makes every topic push-first, which is its
+            prerequisite.
         - type: progress
           ts: "2026-07-09T23:10:00Z"
           agent_id: "windows-bullo-fable5-20260709T2238Z"
