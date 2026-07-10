@@ -6914,7 +6914,7 @@ plan_index:
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -6939,6 +6939,25 @@ plan_index:
         - "source pin tests fail loud if the unit and any exec preamble drift apart"
         - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
       events:
+        - type: claim
+          ts: "2026-07-10T05:40:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0536Z"
+          host: windows
+          lease_id: "wsl-headless-unit-lock-namespace-unit-env-pin"
+          expires_at: "2026-07-10T09:40:00Z"
+          scope_note: >
+            Exit criteria 1+2: pin Environment=HOME=/root and
+            Environment=XDG_RUNTIME_DIR=/run/user/0 (plus the
+            ExecStartPre /run/user/0 mkdir+chmod the recipe-path unit
+            already carries) in the vm-layer WslRuntime::provision legacy
+            unit writer (wsl.rs step 4), mirroring vz.rs order-259 fix
+            77b0ba92; add source pin tests (vz.rs 2115-2139 shape) so the
+            two Windows unit writers (wsl.rs + windows-tray
+            wsl_lifecycle.rs, which is already pinned at :507-508) cannot
+            drift apart silently. Criterion 3 (fresh-distro first-login
+            probe) exercises the recipe path, which is already pinned —
+            scheduled to ride this host's next destructive local-build
+            e2e rather than a dedicated re-provision.
         - type: filed
           ts: "2026-07-10T00:25:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z"
