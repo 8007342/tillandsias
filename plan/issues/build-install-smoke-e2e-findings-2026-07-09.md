@@ -73,3 +73,37 @@ No defects found; order 252's `completed` status stands.
 every `--ci-full`, so gate 1 of this skill cannot go green on Linux until 243
 is fixed. Elevated: it gates ALL linux local-build e2e acceptance runs, not
 just tray work.
+
+## Resolution of failure 1 (2026-07-10, order 255 completed)
+
+Root cause was deterministic, not (only) timing: STEP 5's inline command
+referenced `$HEAD_BEFORE` without populating it. The litmus runner executes
+each step in a fresh `bash -c` subshell (run-litmus-test.sh
+execute-loop), so STEP 4's `HEAD_BEFORE=$(cat /tmp/opencode-e2e-head-before)`
+never carried over; the empty expansion collapsed the range to
+`HEAD..HEAD_AFTER` where both resolve to the same commit — an always-empty
+diff and a guaranteed `FAIL: no plan/ file modified` on every run since the
+step's introduction (a6a211a7). The "(no diff)" diagnostic in the recorded
+output is consistent with this; the commits observed on the branch afterwards
+were never the thing being compared.
+
+Fix (linux-macuahuitl-fable5-20260710T0009Z):
+
+- `scripts/litmus-git-delta-wait.sh` — shared bounded-retry git-delta probe
+  (modes local-head / plan-commit / remote-head; reads the before-sha from
+  the recorded file, immediate first probe, 5s poll, 120s window, verdict
+  grammar `^(ok: .*|FAIL: .*)$`, exit 0/1/2). The retry window also covers
+  the genuine async half of the original diagnosis (git-mirror relay lag)
+  for all three post-forge assertion steps, not just STEP 5.
+- `litmus-opencode-prompt-e2e-shape.yaml` steps 4-6 now invoke the helper
+  (timeout_ms 150000 > the 120s window, so a genuine miss reports FAIL, not
+  runner TIMEOUT).
+- New `litmus:git-delta-wait-shape` (9 steps: warm pass, bounded fail-loud,
+  mid-window re-sample, no-dead-check negative, before-file exit-2 guard,
+  remote-head ls-remote path, e2e wiring) registered under meta-orchestration
+  in litmus-bindings.yaml; instant pre-build suite 4/4 PASS.
+
+Exit criterion 2 (a real `--ci-full` in-forge cycle passing STEP 5
+deterministically) is expected to be discharged by the next post-build e2e
+gate; if that gate still reds on STEP 5, reopen order 255 with the new
+helper's diagnostic block attached.

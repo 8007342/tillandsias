@@ -182,7 +182,23 @@ When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `.
 - every eligible item is blocked;
 - a terminal failure was filed;
 - the current cycle has already produced a coherent commit and the next packet
-  would exceed the recurring-loop budget (note: if running inside a `forge` container under smoke tests, ignore this limit and drain as many ready forge tasks as possible in a single loop run to make progress in large batches).
+  would exceed the recurring-loop budget.
+
+Forge-hosted cycles (`TILLANDSIAS_HOST_KIND=forge`) are the OPPOSITE of
+greedy — decided by The Tlatoāni 2026-07-10 (order 264), replacing the earlier
+"drain as many as possible" exception:
+
+- Drain **at most ONE packet per forge cycle**.
+- Before implementing, estimate whether implement+verify+commit+push fits the
+  launch envelope (litmus-launched forge cycles live inside
+  `litmus:opencode-prompt-e2e-shape` STEP 3's 600s budget).
+- If it does not fit, do NOT start implementing: **split** the packet into
+  smaller ready child packets (`split_into` pattern), record the shaping
+  events, commit and push. The shaping commit IS that cycle's completed work —
+  a split that lowers residual ambiguity is a valid reduction step.
+- Canonical statement: `methodology/distributed-work.yaml`
+  `worker_agent_protocol.forge_cycle_budget`. Interim reliance on step
+  timeouts is tracked by order 265 (forge heartbeat/liveness signals).
 
 Each worker cycle must obey the non-negotiable exit contract above.
 

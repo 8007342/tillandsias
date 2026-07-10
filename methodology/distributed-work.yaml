@@ -550,6 +550,31 @@ distributed_work:
           If blocked or failed, write a 'blocked' or 'failed' event with a clear error/reason
           under the item's events list, update status, release the lease, and switch to a ready fallback task.
 
+    forge_cycle_budget:
+      decided_by: "The Tlatoāni, 2026-07-10 (plan order 264)"
+      rule: >
+        Agents running INSIDE a forge container (TILLANDSIAS_HOST_KIND=forge)
+        drain AT MOST ONE plan packet per cycle. Before implementing, estimate
+        whether the packet's full implement+verify+commit+push fits the launch
+        envelope (litmus-launched forge cycles run inside
+        litmus:opencode-prompt-e2e-shape STEP 3's 600s budget). If it does not
+        fit, do NOT start implementation: SPLIT the packet into smaller ready
+        child packets (split_into pattern), record the shaping events, commit
+        and push. The shaping commit is that cycle's completed work — a split
+        that lowers residual ambiguity is a valid reduction step.
+      supersedes: >
+        The 2026-06 greedy-drain exception ("claim, implement, and complete as
+        many ready forge tasks as possible in a single session"). Greedy forge
+        cycles made duration unbounded, so a litmus step timeout was
+        indistinguishable from a hung forge (order 264 collision: one in-forge
+        cycle implemented the whole of order 263 and timed out the gate while
+        perfectly healthy). Host (non-forge) cycles keep the ordinary
+        one-coherent-commit budget rule.
+      interim_note: >
+        Reliance on step timeouts is interim. Order 265 (forge
+        heartbeat/liveness signals — we own the launch and the container
+        stack) tracks replacing timeout inference with positive liveness.
+
   cheatsheet_index:
     - cheatsheets/concurrent-git/branches.md
     - cheatsheets/concurrent-git/agent-handoff.md

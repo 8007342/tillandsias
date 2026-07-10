@@ -1,8 +1,132 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-09T23:35:00Z
+LastExecutionTime: 2026-07-10T04:05:00Z
 
-## Cycle 2026-07-09T23:10Z (windows — meta-orchestration worker drain, order 258)
+## Cycle 2026-07-10T02:05Z→04:05Z (linux_mutable macuahuitl — OPERATOR-DIRECTED: bar-raise approved+enabled, one-packet forge doctrine, orders 256/264/266 done, 265/267/268 filed, install delivered)
+
+- **The Tlatoāni's directives executed (recorded 2026-07-10)**:
+  (1) Bar-raise slice 2 APPROVED → registry entry
+  methodology/convergence.yaml approved_bar_raises
+  (ci-full-all-features-clippy), lane rust-clippy-all-features wired into
+  scripts/local-ci.sh non-fast pre-build (--ci-full only; --ci/--fast
+  skips). Baseline sweep green; negative control (planted warning in a
+  fake-feature unit) fails the lane exit 101; PASSED in anger in the final
+  gate. Slice 3 (--check promotion) remains unapproved. Order 266 completed.
+  (2) One-packet forge doctrine (order 264, chosen over env-var approach):
+  forge-hosted cycles drain AT MOST ONE packet, split oversized packets
+  into ready children. Canonical:
+  methodology/distributed-work.yaml worker_agent_protocol.forge_cycle_budget;
+  skills/meta-orchestration + advance-work-from-plan updated. VERIFIED
+  LIVE: gate run 20260710T021654Z's in-forge cycle drained exactly order
+  224 (litmus-stdlib research) inside the 600s budget.
+  (3) Heartbeat/liveness signals filed as order 265 (research, ready) —
+  replace timeout inference with positive liveness; hard cap stays.
+- **litmus:opencode-prompt-e2e-shape: 7/7 PASS — first fully-green run in
+  its history** (orders 255+262+264 all discharged live; branch-scoped
+  STEP 6 probe passed against the in-forge push).
+- **Order 256 slice 1 (done, split → 267)**: litmus runner exit-code
+  authority staged behind TILLANDSIAS_LITMUS_STRICT_EXIT=1 (strict dry run
+  exposed 8 litmuses red behind the dead-check trap + an empty-step-name
+  exit-127 mis-parse class); legacy mode prints [DEAD-CHECK WARNING] (24
+  visible in the full suite); [PARSE WARNING] for unparseable commands (31
+  folded steps across 8 files skipped since authoring); zero-step files
+  fail with a named parse error. Order 267 (ready) owns burn-down, folded
+  rewrites, 4 YAML-invalid file repairs, strict default flip
+  (plan/issues/litmus-corpus-parse-health-2026-07-10.md).
+- **Final gate (run 20260710T021654Z): exit 1 with exactly ONE red** —
+  litmus:inference-deferred-model-pulls cold path: first-run ollama binary
+  download FAILED → exit 127 (product, graceful-degradation path;
+  unrelated to this cycle's changes). Filed as order 268 (ready) with
+  evidence (plan/issues/build-install-e2e-gate-20260710T021654Z.md).
+  Everything else green: pre-build 147/147 incl. the new all-features
+  lane, security 17/17, post-build 7/8.
+- **Install delivered**: /home/tlatoani/.local/bin/tillandsias
+  v0.3.260710.3 (40M), fresh from 39186723(+relay).
+- **Coordination**: windows-next (00076813) and osx-next (86105319)
+  advanced late in the cycle — integration deferred to the next recurring
+  linux cycle (this cycle was operator-directed; no tree mutations during
+  the running gate). Doctrine + lane changes are on linux-next for
+  siblings to pick up; the windows-owned chip litmus rewrite inside order
+  267 needs windows coordination.
+- **Queue after cycle**: linux ready = 268 (new), 267, 265, 260, 261,
+  225 (224 research done by in-forge), 144, security chain, streams chain,
+  transport. Blocked-on-operator: attended parity smokes (257/258),
+  tray-parity release hold, bar-raise slice 3 (unapproved).
+
+## This Loop (2026-07-10T02:27Z, linux_mutable — big-pickle reduction: litmus-stdlib-research)
+
+- **Cycle type**: meta-orchestration worker drain + reduction on mutable Linux.
+- **Startup**: `linux-next @ 39186723`, worktree dirty with tracked changes from a prior incomplete cycle (TRACES.md, VERSION bump, convergence dashboard). Committed as checkpoint `57f264f2` and pushed. Clean worktree after.
+- **Credential guard**: `ok:gh-keyring`.
+- **E2E gate**: `skip:smoke-lock-held` — no local-build gate this cycle.
+- **Worker drain**: Claimed and completed `litmus-command-portability-dsl-research` (order 224).
+  - Corpus analysis: 198 litmus files, 1044 command fields, 74% grep-based.
+  - D1: shell functions in sourced `scripts/litmus-stdlib.sh` (model b).
+  - D2: 8 core primitives: `mf_literal`, `mf_literal_count`, `mf_regex`, `mf_regex_count`, `mf_absent`, `mf_threshold`, `mf_file_exists`, `mf_assert_count`.
+  - D3: single file with `case` branching per OS.
+  - D4: lint + pin + lazy migration.
+  - D5: raw `command:` remains valid as escape hatch.
+  - 5 real prototype rewrites in deliverable.
+- **Verification**: `plan/index.yaml` validated with `ruby -ryaml`. 121/121 instant litmus PASS.
+- **Coordinator**: windows-next `00076813` and osx-next `86105319` — checked but no merge needed this cycle.
+- **Push state**: pushed `linux-next` (checkpoint `57f264f2` + research `16078687`).
+
+## Cycle 2026-07-10T00:09Z (linux_mutable macuahuitl — meta-orchestration: windows integration, litmus chain 255→262→264, e2e gate 1, in-forge drained 254+263)
+
+- **Credential guard**: ok:gh-keyring. Started clean at 67bffc86.
+- **Sibling integration** (a4092688): merged windows-next +8 (order 154 slice 2
+  LoginState+CloudProjects push topics; order 258 unattended parity subset; 6
+  windows clippy fixes). Merged tree: --check green + 66 workspace test suites
+  green. Verification exposed that `cargo check/clippy --workspace` never
+  compiles non-default-feature units (garbage injected into vm-layer
+  materialize/oci.rs → exit 0): fixed the latent vm-layer fake.rs lints
+  (f39f79e4), filed integration-gate-feature-coverage-gap-2026-07-10.md with a
+  Tlatoāni-gated ci-full bar-raise proposal. The headless all-features reds
+  were order 254's known scope (since drained — see below).
+- **Order 255 completed** (2bcced8e): the "STEP 5 race" was a misdiagnosis —
+  STEP 5 referenced $HEAD_BEFORE that no step ever set (runner steps are
+  separate bash -c subshells), collapsing its range to HEAD..HEAD: a
+  deterministic false negative since introduction. Shared bounded-retry probe
+  scripts/litmus-git-delta-wait.sh (local-head/plan-commit/remote-head, 120s
+  window/5s poll, exit 0/1/2 grammar) now backs litmus steps 4-6; new
+  litmus:git-delta-wait-shape (9 steps) pins it incl. mid-window re-sample +
+  no-dead-check negative. Criterion 2 discharged live: steps 4-5 PASS in this
+  cycle's ci-full forge cycle.
+- **E2E gate (local-build, run 20260710T003451Z): gate 1 exit 1, stopped
+  per runbook** — pre-build litmus 146/146, coverage 100%, security 16/16,
+  musl launcher installed (v0.3.260710.1); post-build e2e 5/6. Sole red:
+  STEP 6 asserted `ls-remote origin HEAD` whose symref is refs/heads/main —
+  a linux-next push never moves it (bug-behind-a-bug, unmasked by 255).
+  **Order 262 filed + fixed + completed**: branch-scoped recorder + probe,
+  shape-litmus regression pin (non-default-branch fixture where origin HEAD
+  resolves to nothing), live probe PASS against the real push window
+  129a85dd→e433b96f. Destructive gates 2-4 NOT reached (substrate intact);
+  next cycle should run the full destructive e2e expecting gate 1 green
+  modulo order 264.
+- **In-forge activity (sanctioned mid-build actors, audited)**: ci-full's
+  litmus cycle drained order 254 (61abd3bf: listen-vsock CI lane in --check +
+  pty test fixes) but pushed a mis-indented plan/index.yaml — committed
+  ledger did not parse; coordinator mediated mechanically and filed order 263
+  (mirror pre-receive YAML gate). The 262-verification run's in-forge cycle
+  then IMPLEMENTED order 263 (e433b96f: 150-line pre-receive hook + 10-step
+  shape litmus; coordinator audit PASS 2/2; gate binds on next git-mirror
+  image rebuild) — and blew STEP 3's 600s budget doing it → **order 264
+  filed** (bug+design: litmus budget vs in-forge greedy-drain doctrine;
+  options enumerated, ready). e433b96f also lacks Generated-By trailers and
+  its ledger event was misattributed (corrected; addendum in the 2026-07-10
+  findings file — consider a trailer rider on the 263 hook if it recurs).
+- **Release**: none — tray-parity release hold (16 gaps) still requires The
+  Tlatoāni's recorded approval; daily Linux release remains due behind it
+  (latest v0.3.260708.4).
+- **Queue after cycle**: linux ready = 264 (new), 256, 238, 144, 261
+  (any-host), 260, security chain (137/141/145), streams chain
+  (147/150/151/153/156/157/158), DSL (224/225), transport (125/128).
+  Windows: orders 230/231 confirmed landed → order 154 slice 3 unblocked;
+  order 258 blocked on attended smoke. macOS: order 259 criterion-3
+  verification still requested; order 155 residual slices claimable.
+  Blocked-on-operator: attended parity smokes (orders 257/258), tray-parity
+  release hold, feature-coverage bar-raise approval (see
+  integration-gate-feature-coverage-gap-2026-07-10.md).
 
 - **Host**: Windows 11 native, `windows-next`. Credential guard
   `ok:gh-credentials-store`. Clean start at 521de7bd == origin/windows-next;

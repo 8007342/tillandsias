@@ -28,8 +28,13 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok:"
 
-  - step: "record pre-smoke remote HEAD for push verification"
-    command: "git ls-remote origin HEAD | awk '{print $1}' > /tmp/opencode-e2e-remote-head-before && echo 'ok: remote HEAD recorded'"
+  # Record the CURRENT BRANCH's remote ref, not `ls-remote origin HEAD`:
+  # origin HEAD tracks the default branch (main), which a working-branch push
+  # never moves — that mismatch made STEP 6 a deterministic false negative
+  # (plan order 262). test -s fails loud here if the branch has no remote
+  # counterpart yet, instead of handing STEP 6 an empty before-file.
+  - step: "record pre-smoke remote branch head for push verification"
+    command: "git ls-remote origin \"refs/heads/$(git rev-parse --abbrev-ref HEAD)\" | awk '{print $1}' > /tmp/opencode-e2e-remote-head-before && test -s /tmp/opencode-e2e-remote-head-before && echo 'ok: remote branch head recorded'"
     timeout_ms: 15000
     expected_behavior: "ok:"
 
@@ -38,19 +43,29 @@ critical_path:
     timeout_ms: 600000
     expected_behavior: "FORGE_EXIT=0"
 
+  # Steps 4-6 assert deltas produced by the in-forge cycle, which reach the
+  # host checkout asynchronously (git-mirror relay) relative to the forge
+  # session's exit. Each probe below re-samples with a bounded retry window
+  # (default 120s, poll 5s — scripts/litmus-git-delta-wait.sh) instead of one
+  # instantaneous sample; step timeout_ms leaves headroom above the window so
+  # a genuine miss reports FAIL, not a runner TIMEOUT. The helper also owns
+  # reading the before-sha files: the previous inline STEP 5 referenced
+  # $HEAD_BEFORE without populating it (steps are separate `bash -c`
+  # subshells), collapsing its range to HEAD..HEAD — a deterministic false
+  # negative, not a race (plan order 255).
   - step: "verify local HEAD advanced since smoke start"
-    command: "HEAD_AFTER=$(git rev-parse HEAD) && HEAD_BEFORE=$(cat /tmp/opencode-e2e-head-before) && [ \"$HEAD_AFTER\" != \"$HEAD_BEFORE\" ] && echo \"ok: HEAD advanced $HEAD_BEFORE -> $HEAD_AFTER\" || { echo \"FAIL: HEAD unchanged ($HEAD_BEFORE)\"; exit 1; }"
-    timeout_ms: 5000
+    command: "scripts/litmus-git-delta-wait.sh local-head /tmp/opencode-e2e-head-before"
+    timeout_ms: 150000
     expected_behavior: "ok: HEAD advanced"
 
   - step: "verify a plan/ file was updated (ledger or finding filed)"
-    command: "HEAD_AFTER=$(git rev-parse HEAD) && git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null | grep -q '^plan/' && echo \"ok: plan/ changed\" || { echo \"FAIL: no plan/ file modified in new commit(s) — meta-orch must update a plan file before push\"; git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null || echo '(no diff)'; exit 1; }"
-    timeout_ms: 5000
+    command: "scripts/litmus-git-delta-wait.sh plan-commit /tmp/opencode-e2e-head-before"
+    timeout_ms: 150000
     expected_behavior: "ok: plan/ changed"
 
   - step: "verify remote branch HEAD advanced"
-    command: "REMOTE_AFTER=$(git ls-remote origin HEAD | awk '{print $1}') && REMOTE_BEFORE=$(cat /tmp/opencode-e2e-remote-head-before) && [ \"$REMOTE_AFTER\" != \"$REMOTE_BEFORE\" ] && echo \"ok: remote HEAD advanced $REMOTE_BEFORE -> $REMOTE_AFTER\" || { echo \"FAIL: remote HEAD unchanged ($REMOTE_BEFORE)\"; exit 1; }"
-    timeout_ms: 15000
+    command: "scripts/litmus-git-delta-wait.sh remote-head /tmp/opencode-e2e-remote-head-before"
+    timeout_ms: 150000
     expected_behavior: "ok: remote HEAD advanced"
 
   - step: "cleanup temp files"
