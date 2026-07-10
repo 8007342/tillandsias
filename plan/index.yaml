@@ -7554,6 +7554,21 @@ plan_index:
             prioritized): wire the probe into
             litmus:opencode-prompt-e2e-shape STEP 3 so liveness-past-budget
             extends the window and dead-air fails fast.
+        - type: correction
+          ts: "2026-07-10T07:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0621Z"
+          host: linux_mutable
+          summary: >
+            The in-forge agent did NOT die: it was alive past the litmus
+            budget (its own probe's alive_quiet state, demonstrated live)
+            and pushed its work itself minutes later (047a5849 + 4da21d11)
+            while the coordinator audited the not-yet-relayed worktree
+            copies. Authorship stands with the forge agent; the
+            coordinator's 4e0d7629 contributed the Test-8 set -e guard and
+            this ledger closure. Tonight's STEP 3 'timeout failure' was
+            precisely the false-negative class this probe eliminates —
+            wiring it into STEP 3 (the residual above) is now evidenced by
+            its own birth.
         - type: progress
           ts: "2026-07-10T07:00:00Z"
           agent_id: "linux-bigp pickle-20260710T065445Z"
