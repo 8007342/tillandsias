@@ -25,8 +25,15 @@ set -uo pipefail
 #                <before-file>.
 #   plan-commit  waits until at least one commit in <before-sha>..HEAD
 #                touches plan/ (`git rev-list --count <before>..HEAD -- plan/`).
-#   remote-head  waits until `git ls-remote origin HEAD` differs from the
-#                sha in <before-file>.
+#   remote-head  waits until the CURRENT BRANCH's remote ref
+#                (`git ls-remote origin refs/heads/<branch>`) differs from
+#                the sha in <before-file>. Deliberately NOT `ls-remote
+#                origin HEAD`: origin's HEAD symref tracks the DEFAULT
+#                branch (main here), which a push to a working branch never
+#                moves — asserting it made the original STEP 6 a
+#                deterministic false negative on every non-main branch
+#                (plan order 262). Record the before sha from the same
+#                branch-scoped ref.
 #
 # Polls immediately, then every LITMUS_GIT_DELTA_POLL_S (default 5) seconds
 # until the condition holds or the bounded window (arg 3, else
@@ -88,8 +95,10 @@ probe_plan_commit() {
 }
 
 probe_remote_head() {
-  local after
-  after="$(git ls-remote origin HEAD 2>/dev/null | awk '{print $1; exit}')" || return 1
+  local branch after
+  branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || return 1
+  { [ -n "$branch" ] && [ "$branch" != "HEAD" ]; } || return 1
+  after="$(git ls-remote origin "refs/heads/${branch}" 2>/dev/null | awk '{print $1; exit}')" || return 1
   [ -n "$after" ] && [ "$after" != "$before" ] || return 1
   echo "ok: remote HEAD advanced $before -> $after"
 }
@@ -116,7 +125,7 @@ case "$mode" in
     git diff --name-only "${before}..HEAD" 2>/dev/null | head -20 || echo "(no diff)"
     ;;
   remote-head)
-    echo "FAIL: remote HEAD unchanged ($before) after ${timeout_s}s"
+    echo "FAIL: remote refs/heads/$(git rev-parse --abbrev-ref HEAD 2>/dev/null) unchanged ($before) after ${timeout_s}s"
     ;;
 esac
 exit 1

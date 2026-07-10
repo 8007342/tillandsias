@@ -17,8 +17,10 @@ description: >
   Pin scripts/litmus-git-delta-wait.sh: warm-path pass without waiting,
   bounded-window FAIL with exit 1 (no dead check), mid-window re-sampling
   that observes a commit landing after the probe starts, exit 2 fail-loud on
-  a missing before-file, the remote-head ls-remote path, and the
-  opencode-prompt e2e litmus consulting the helper for steps 4-6.
+  a missing before-file, remote-head probing the CURRENT branch's remote ref
+  rather than origin HEAD (order 262 — origin HEAD tracks the default
+  branch, which working-branch pushes never move), and the opencode-prompt
+  e2e litmus consulting the helper for steps 4-6.
 severity: high
 size: instant
 
@@ -63,10 +65,10 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: fail-loud-missing-before"
 
-  - step: "remote-head observes an origin advance via ls-remote"
-    command: "S=$PWD/scripts/litmus-git-delta-wait.sh; b=$(mktemp -d); git init -q --bare -b main \"$b\"; d=$(mktemp -d); git clone -q \"$b\" \"$d\" 2>/dev/null; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one; git -C \"$d\" push -q origin HEAD; git -C \"$d\" ls-remote origin HEAD | awk '{print $1}' > \"$d/before\"; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m two; git -C \"$d\" push -q origin HEAD; out=$(cd \"$d\" && bash \"$S\" remote-head \"$d/before\" 5); rc=$?; rm -rf \"$d\" \"$b\"; printf '%s' \"$out\" | grep -q '^ok: remote HEAD advanced' && [ \"$rc\" = 0 ] && echo 'ok: remote-head-pass' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+  - step: "remote-head probes the current branch's remote ref, not origin HEAD (default-branch) — order 262 regression pin"
+    command: "S=$PWD/scripts/litmus-git-delta-wait.sh; b=$(mktemp -d); git init -q --bare -b main \"$b\"; d=$(mktemp -d); git clone -q \"$b\" \"$d\" 2>/dev/null; git -C \"$d\" checkout -q -b linux; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m one; git -C \"$d\" push -q origin linux; git -C \"$d\" ls-remote origin refs/heads/linux | awk '{print $1}' > \"$d/before\"; git -C \"$d\" -c user.email=t@t -c user.name=t commit -q --allow-empty -m two; git -C \"$d\" push -q origin linux; hd=$(git -C \"$d\" ls-remote origin HEAD | wc -l); out=$(cd \"$d\" && bash \"$S\" remote-head \"$d/before\" 5); rc=$?; rm -rf \"$d\" \"$b\"; [ \"$hd\" = 0 ] && printf '%s' \"$out\" | grep -q '^ok: remote HEAD advanced' && [ \"$rc\" = 0 ] && echo 'ok: remote-head-branch-scoped' || { echo \"FAIL: rc=$rc head_lines=$hd out=$out\"; exit 1; }"
     timeout_ms: 15000
-    expected_behavior: "ok: remote-head-pass"
+    expected_behavior: "ok: remote-head-branch-scoped"
 
   - step: "opencode-prompt e2e litmus steps 4-6 consult the helper"
     command: "c=$(grep -c 'scripts/litmus-git-delta-wait.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml); [ \"$c\" -ge 3 ] && echo 'ok: e2e-steps-wired' || { echo \"FAIL: only $c references\"; exit 1; }"
@@ -86,9 +88,11 @@ rollback:
   on_failure: >
     The git-delta-wait probe drifted. Restore scripts/litmus-git-delta-wait.sh
     with modes local-head/plan-commit/remote-head reading the before sha from
-    the file argument (never from ambient shell variables), an immediate first
-    probe plus LITMUS_GIT_DELTA_POLL_S-cadence re-sampling until the bounded
-    window elapses, verdict grammar ^(ok: .*|FAIL: .*)$ with exit 0/1/2
-    (observed / window elapsed / usage or bad before-file), and keep
-    litmus-opencode-prompt-e2e-shape.yaml steps 4-6 invoking the helper.
+    the file argument (never from ambient shell variables), remote-head
+    probing refs/heads/<current-branch> (never origin HEAD — default-branch
+    symref), an immediate first probe plus LITMUS_GIT_DELTA_POLL_S-cadence
+    re-sampling until the bounded window elapses, verdict grammar
+    ^(ok: .*|FAIL: .*)$ with exit 0/1/2 (observed / window elapsed / usage or
+    bad before-file), and keep litmus-opencode-prompt-e2e-shape.yaml steps
+    4-6 invoking the helper.
   command: "ls -l scripts/litmus-git-delta-wait.sh && grep -n 'litmus-git-delta-wait.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml"

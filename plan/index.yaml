@@ -6056,7 +6056,7 @@ plan_index:
       events:
         - type: filed
           ts: "2026-07-09T21:05:00Z"
-            agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
           host: linux
           summary: >
             Found while implementing orders 230/231 (first session to run the
@@ -6500,3 +6500,82 @@ plan_index:
             Reduction-engine capture from order 258: exit criterion 4 asks a
             check to pass that cannot even execute on this host class — an
             advisory-only gate. Filed + promoted per capture rule.
+
+    - packet_id: opencode-prompt-e2e-step6-wrong-ref
+      order: 262
+      title: "Fix: litmus:opencode-prompt-e2e-shape STEP 6 asserts origin HEAD (default branch) instead of the branch under test"
+      status: in_progress
+      kind: bug+litmus
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-10.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, smoke, forge, git]
+      estimated_hours: 1
+      outcome: >
+        STEP 6 "verify remote branch HEAD advanced" recorded and probed
+        `git ls-remote origin HEAD`, but origin's HEAD symref tracks the
+        default branch (main) — a linux-next push never moves it, so the
+        step is a deterministic false negative on every non-default branch.
+        Masked until 2026-07-10 because the runner stops at the first
+        failing step and STEP 5 (order 255) always failed first. Failed
+        e2e run 20260710T003451Z gate 1 even though the in-forge cycle's
+        push visibly advanced origin/linux-next (2bcced8e -> 61abd3bf).
+        Fix: record + probe refs/heads/<current-branch> in both the
+        recorder step and litmus-git-delta-wait.sh remote-head mode.
+      exit_criteria:
+        - "remote-head probes the current branch's remote ref; shape-litmus regression pin (push to non-default branch, origin HEAD unresolvable) passes"
+        - "litmus:opencode-prompt-e2e-shape passes standalone against a live in-forge cycle (all 7 steps)"
+      events:
+        - type: claim
+          ts: "2026-07-10T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          lease_id: "opencode-prompt-e2e-step6-wrong-ref (claim-ledger-node.sh)"
+        - type: progress
+          ts: "2026-07-10T01:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          summary: >
+            Fix implemented: branch-scoped recorder (+ test -s fail-loud) in
+            the litmus, branch-scoped probe_remote_head in the helper,
+            regression pin added to litmus:git-delta-wait-shape (fixture on
+            a non-default branch where ls-remote origin HEAD resolves to
+            nothing). Instant pre-build suite 4/4 PASS
+            (git-delta-wait-shape 9/9). Live standalone e2e litmus re-run
+            in flight; completion event to follow with its verdict.
+
+    - packet_id: git-mirror-ledger-yaml-gate
+      order: 263
+      title: "git-mirror pre-receive: reject pushes whose plan/openspec YAML does not parse"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/inforge-ledger-yaml-validation-gap-2026-07-10.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, yaml, forge, gating]
+      estimated_hours: 3
+      outcome: >
+        In-forge agent big-pickle-20260710T0044Z pushed 61abd3bf with a
+        mis-indented agent_id in plan/index.yaml — the committed ledger did
+        not parse until coordinator mediation (see deliverable). The
+        finalization step "validate touched YAML with a parser" is prose;
+        nothing on the forge push path enforces it. Add a pre-receive gate
+        to git-mirror-service rejecting pushes whose touched plan.yaml /
+        plan/**/*.yaml / openspec/**/*.yaml blobs fail a YAML parse
+        (tillandsias-policy validate-yaml in the mirror image, ruby
+        fallback), with the file + parser error surfaced to the pusher.
+        Pin with a fixture litmus: broken-index push rejected with the
+        parse error; clean push accepted.
+      exit_criteria:
+        - "a push containing a syntactically invalid plan/index.yaml is rejected at the mirror with the parse error"
+        - "a clean push is accepted (positive control)"
+        - "shape litmus pins both branches and the validator fallback order"
+      events:
+        - type: filed
+          ts: "2026-07-10T01:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Reduction-engine capture from the 20260710T003451Z e2e cycle's
+            trunk mediation: an advisory validation step let a broken
+            ledger reach origin/linux-next; the mirror is the single choke
+            point that can make it a constraint for every forge push.
