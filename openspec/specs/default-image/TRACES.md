@@ -10,7 +10,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L298](../../../crates/tillandsias-core/src/container_profile.rs#L298)
 - [crates/tillandsias-headless/src/main.rs#L3367](../../../crates/tillandsias-headless/src/main.rs#L3367)
 - [crates/tillandsias-headless/src/main.rs#L4566](../../../crates/tillandsias-headless/src/main.rs#L4566)
-- [crates/tillandsias-policy/src/main.rs#L1479](../../../crates/tillandsias-policy/src/main.rs#L1479)
+- [crates/tillandsias-policy/src/main.rs#L1611](../../../crates/tillandsias-policy/src/main.rs#L1611)
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
 - [images/default/Containerfile#L2](../../../images/default/Containerfile#L2)
 - [images/default/Containerfile#L65](../../../images/default/Containerfile#L65)
