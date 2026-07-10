@@ -143,3 +143,15 @@ tarball is 1.34 GiB — 600s curl cap product-side). Also: main.rs's
 `/usr/bin/ollama serve` trailing args to this container are DEAD (the
 entrypoint ignores "$@"; no /usr/bin/ollama exists in the image) — remove
 them in a separate hygiene commit when touching that launch path.
+
+## environment-isolation STEP 2 flake observation (gate run 20260710T062934Z)
+
+`litmus:environment-isolation` (one of the four YAML-invalid files above)
+failed STEP 2 "execute forge container and count env vars" with EMPTY
+output inside its 5s timeout — green in the same night's earlier gate
+(021654Z) and no code path from the intervening diffs (macOS vz/ssh
+masking, WSL unit env pin, headless push topics) touches forge env
+construction. Suspected cold-start/exec timing flake; the 5s budget and
+the exec-target coupling to STEP 1's container need review during this
+file's YAML repair. If a subsequent gate reds the same step, promote to
+its own bug packet instead of retrying.
