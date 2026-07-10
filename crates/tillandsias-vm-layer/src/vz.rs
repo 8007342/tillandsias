@@ -477,7 +477,16 @@ systemctl enable podman.socket
 systemctl start podman.socket
 
 # Mount host ~/src via virtio-fs when the VZ config provides the home-src tag.
+# PERSISTED via /etc/fstab (2026-07-10 attended-smoke finding): cloud-init
+# runs first boot only, so a mount issued here evaporates on every
+# subsequent boot — the guest then scans an empty /home/forge/src
+# (EnumerateLocalProjects returns []) and fetch-headless.sh can't see the
+# staged guest binary. nofail keeps boots green when the VZ config omits
+# the share.
 mkdir -p /home/forge/src
+if ! grep -q "^home-src " /etc/fstab; then
+  echo "home-src /home/forge/src virtiofs nofail 0 0" >> /etc/fstab
+fi
 if ! mountpoint -q /home/forge/src; then
   mount -t virtiofs home-src /home/forge/src || true
 fi
@@ -563,6 +572,15 @@ Requires=tillandsias-headless-fetch.service
 Type=exec
 ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
 Environment=HOME=/root
+# XDG_RUNTIME_DIR must match the value the tray's control-wire exec preamble
+# exports for guest login/satisfier processes (macos-tray diagnose.rs github
+# login lane). The order-232 per-resource flocks live under
+# $XDG_RUNTIME_DIR/tillandsias-locks; if this unit leaves the variable unset,
+# resource_lock::lock_dir() falls back to /tmp/tillandsias-locks-0 while the
+# exec'd satisfier locks under /run/user/0/tillandsias-locks — two disjoint
+# lock namespaces, and the vault name-in-use race (order 259) reproduces on
+# every fresh-VM first login. Verified live 2026-07-09 on macOS.
+Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 Environment=TILLANDSIAS_SECURE_CONTROL_WIRE=__SECURE_CONTROL_WIRE__
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
@@ -2110,9 +2128,27 @@ mod tests {
         assert!(
             headless_unit.contains("Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200")
         );
+        // Order 259: the boot-path bootstrap and the exec'd login satisfier
+        // must resolve the SAME $XDG_RUNTIME_DIR/tillandsias-locks dir or the
+        // order-232 vault flock never contends across the two processes and
+        // the name-in-use race returns. /run/user/0 is the value the tray's
+        // github-login exec preamble exports (macos-tray diagnose.rs).
+        assert!(
+            headless_unit.contains("Environment=XDG_RUNTIME_DIR=/run/user/0"),
+            "headless unit must pin XDG_RUNTIME_DIR to the satisfier's lock namespace (order 259)"
+        );
         assert!(
             !headless_unit.contains("Requires=podman.socket"),
             "podman.socket is a wanted readiness input, not a hard dependency for diagnostics"
+        );
+        // 2026-07-10 attended smoke: cloud-init runs first boot only, so
+        // the home-src virtio-fs mount MUST be persisted to /etc/fstab or
+        // every subsequent boot scans an empty /home/forge/src (local
+        // projects vanish from the tray, staged headless never picked up).
+        assert!(
+            source.contains("home-src /home/forge/src virtiofs nofail 0 0"),
+            "cloud-init must persist the home-src virtio-fs mount in /etc/fstab \
+             (first-boot-only mounts evaporate on reboot)"
         );
     }
 

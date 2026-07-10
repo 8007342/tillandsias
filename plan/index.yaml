@@ -1576,6 +1576,55 @@ plan_index:
             sources landed, orders 230/231), watch-channel menu listeners,
             SC-01/02 sleep elimination in the projects/login cadence. Lease
             released for the next macOS cycle.
+        - type: progress
+          ts: "2026-07-10T00:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z"
+          host: macos
+          commits: [2a492797]
+          summary: >
+            Slice 2 COMPLETE and verified LIVE on a fresh VZ VM: Subscribe set
+            widened to [VmStatus, LoginState, CloudProjects]; reader loop
+            consumes LoginStatePush/CloudProjectsPush (and their reply twins)
+            through new map_login_state/apply_login_state/apply_cloud_projects
+            helpers shared byte-identically with the fallback poll path;
+            initial-sync extended to all three topics (login/cloud primes on
+            the same connection, tolerated Error while logged out); SC-07 gate
+            widened (VM_STATUS_PUSH_HEALTHY -> PUSH_SUBSCRIPTION_HEALTHY) so
+            the 10-tick login/cloud polls are suppressed while the stream is
+            healthy. LocalProjects has no push topic and keeps polling. Live
+            evidence: 'push subscription established (vm-status/login/cloud
+            polls demoted to fallback, SC-07)' then Ready chip via push, clean
+            SIGTERM. 64/64 tray tests (topic pin now slice-2 shape). Remaining
+            slices: watch-channel menu listeners, SC-01/02 sleep elimination
+            in the tick loop. Lease released.
+        - type: progress
+          ts: "2026-07-10T01:35:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0040Z"
+          host: macos
+          summary: >
+            Slice 3 COMPLETE (SC-16 watch-channel health signal), verified
+            LIVE. New shared primitive
+            tillandsias_host_shell::subscription_health::SubscriptionHealth
+            (tokio::sync::watch-backed, change-gated set, 4 unit tests)
+            replaces the macOS tray's PUSH_SUBSCRIPTION_HEALTHY AtomicBool —
+            the exact AtomicBool+sleep signaling pattern SC-16 forbids. The
+            tick loop now selects on health transitions
+            (wait_tick_or_subscription_drop): a subscription drop ends the
+            30s wait immediately and rewinds to tick 0, so the full fallback
+            round (local/cloud/login + VmStatus) runs at once instead of up
+            to 300s later on the 10-tick cadence; an up-transition never
+            shortens the period; a closed channel degrades to the plain
+            timer. Paused-clock tests pin all three behaviors (tokio
+            test-util, per tillandsias-metrics precedent). 67/67 tray +
+            57/57 host-shell tests, build check clean; live: signed build,
+            push subscription established, Ready push applied, 75s alive,
+            clean SIGTERM. WINDOWS FLAG (order 154 watch-channel slice):
+            adopt the shared SubscriptionHealth in notify_icon.rs — replace
+            VM_STATUS_PUSH_HEALTHY AtomicBool + tick re-read with the same
+            select-on-transition wait so both trays keep identical stream
+            architectures. Remaining slices: watch-channel menu listeners
+            (MenuState propagation), SC-01/02 full sleep elimination
+            (blocked on order 260 LocalProjects push). Lease released.
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
@@ -6230,6 +6279,28 @@ plan_index:
             plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md,
             flip evidenced cells to done, re-run the tray-app post-build
             litmus.
+        - type: progress
+          ts: "2026-07-10T04:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            ATTENDED SESSION COMPLETE (The Tlatoani at the tray + agent
+            driving AX harness): 6 of the 7 blocked cells flipped to done
+            with live evidence — 6-leaf submenu (AX-enumerated), login
+            popup (3 real-PAT completions, never inline), cloud submenu +
+            overflow (23 repos), local ~/src submenu (fstab-persistent
+            across reboot), enclave indicator (healthy + degraded live),
+            remote listing. Residual: InteractiveStream stays todo,
+            blocked on NEW order 273 (agent attach runs the github-login
+            flow and exits 0 without launching the agent — verbatim PTY
+            capture via the TILLANDSIAS_PTY_DEBUG tee added this session).
+            litmus:tray-parity-matrix-complete correctly RED on the one
+            todo cell. Session also fixed F-A/F-B/F-C (chip clobber,
+            fstab mount persistence, post-login cloud prime) and filed
+            orders 267-273. Packet stays blocked, now on order 273 (linux)
+            instead of the operator.
+          blocker_refs:
+            - guest-agent-attach-runs-login-flow
 
     - packet_id: windows-tray-parity-column-verify
       order: 258
@@ -6393,8 +6464,7 @@ plan_index:
     - packet_id: vault-ensure-name-in-use-race
       order: 259
       title: "P1: cold-VM first --github-login fails — tillandsias-vault name-in-use race between boot bootstrap and login satisfier"
-      status: blocked
-      blocked_on: "macOS fresh-VM repro (exit criterion 3) — linux structural slice complete, see completed-analysis event"
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
       depends_on: []
@@ -6460,6 +6530,30 @@ plan_index:
             designed (both processes must resolve the same
             XDG_RUNTIME_DIR/tillandsias-locks path inside the guest — check
             that first).
+        - type: completed
+          ts: "2026-07-10T00:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z"
+          host: macos
+          commits: [77b0ba92]
+          summary: >
+            Criterion 3 verified after one more fix. Fresh-VM repro on the
+            merged tree (2a492797, includes the linux structural slice) STILL
+            hit exit 125 — the linux hypothesis was exactly right: the two
+            guest processes resolved disjoint lock namespaces. The headless
+            unit (vz.rs) set HOME=/root but no XDG_RUNTIME_DIR, so
+            resource_lock::lock_dir() fell back to /tmp/tillandsias-locks-0,
+            while the tray's github-login exec preamble exports
+            XDG_RUNTIME_DIR=/run/user/0 — flocks on different files never
+            contend. Fix 77b0ba92 pins Environment=XDG_RUNTIME_DIR=/run/user/0
+            in the headless unit + two source pin tests (vm-layer unit line,
+            macos-tray preamble export) so the values fail loud on drift.
+            Re-verified on a fully re-provisioned fresh VM: first
+            --github-login reaches 'matched: git author name' with no 125 and
+            no podman error (evidence: macos-build-install-smoke-e2e-findings-
+            2026-07-09.md run 2). All four exit criteria now closed. Windows
+            residual promoted to order 265 (wsl.rs unit sets neither HOME nor
+            XDG_RUNTIME_DIR; renumbered 260 -> 262 -> 265 across the two 2026-07-10 merges — order collisions
+            with windows- and linux-filed packets).
 
     - packet_id: windows-tray-local-projects-push-gap
       order: 260
@@ -6693,6 +6787,395 @@ plan_index:
             (target/litmus-rerun-20260710/run.log: STEP 3 TIMEOUT). The
             in-forge agent did excellent real work (order 263) in the wrong
             budget envelope — the tension is structural, not agent error.
+
+    - packet_id: wsl-headless-unit-lock-namespace
+      order: 274
+      title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, vault, concurrency]
+      estimated_hours: 2
+      outcome: >
+        Same class as the macOS order 259 root cause, found by inspection
+        while fixing it: the WSL2 tillandsias-headless.service (wsl.rs ~:350)
+        sets neither HOME nor XDG_RUNTIME_DIR, so the boot-path bootstrap's
+        resource_lock::lock_dir() falls back to /tmp/tillandsias-locks-<uid>
+        while any exec'd satisfier path that exports XDG_RUNTIME_DIR (mirror
+        of macos-tray diagnose.rs preamble) locks under
+        /run/user/<uid>/tillandsias-locks. flock(2) on different files never
+        contends, so the vault name-in-use race (exit 125 on fresh-distro
+        first login) can reproduce on Windows exactly as it did on macOS.
+        Fix mirror: pin Environment=XDG_RUNTIME_DIR (and HOME) in the wsl.rs
+        unit to the satisfier's values + source pin tests on both sides, per
+        77b0ba92 on osx-next. Then re-run the fresh-distro first-login probe.
+      exit_criteria:
+        - "wsl.rs headless unit pins HOME and XDG_RUNTIME_DIR to the exec-preamble values"
+        - "source pin tests fail loud if the unit and any exec preamble drift apart"
+        - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
+      events:
+        - type: filed
+          ts: "2026-07-10T00:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z"
+          host: macos
+          summary: >
+            Filed during order 259 macOS verification (fix 77b0ba92). See
+            plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md
+            run 2 for the full lock-namespace post-mortem this mirrors.
+            Renumbered 260 -> 262 in the 2026-07-10 osx merge (collision
+            with windows' 260), then 262 -> 265 in the same day's second
+            merge (collision with linux's opencode-prompt-e2e-step6-wrong-
+            ref) — two renumbers in one day; order 266's case in point.
+
+    - packet_id: plan-index-order-uniqueness
+      order: 275
+      title: "plan/index.yaml order-number uniqueness: fail-loud check + historic duplicate cleanup"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-policy
+      depends_on: []
+      pickup_role: any
+      capability_tags: [rust, policy, litmus, plan-hygiene]
+      estimated_hours: 2
+      outcome: >
+        Seven order numbers (144, 160, 161, 196, 197, 201, 224) are each
+        shared by 2-3 different packets — parallel-filing collisions that
+        merged silently, making every historical "order N" reference in
+        loop_status, commit messages, and cross-host flags ambiguous.
+        Detection is currently manual eyeballing during merge conflict
+        resolution (the 2026-07-10 osx merge caught its own 260 collision
+        only because both sides conflicted textually; hours later the SAME
+        DAY's second merge collided again on 262 AND 263 — this very
+        packet was renumbered from 263). Add a fail-loud uniqueness check
+        to tillandsias-policy (validate-yaml or a dedicated plan-orders
+        subcommand) rejecting duplicate order values among non-done
+        packets, with an explicit grandfather allowlist for the historic
+        done-status duplicates; pin with litmus:plan-index-order-uniqueness.
+        Renumber any still-open duplicates with a renumber event. Ruby-free
+        per order 261 precedent. Natural composition: once in
+        tillandsias-policy, the order-263 git-mirror pre-receive gate
+        enforces it on every forge push for free.
+        Full finding: plan/issues/plan-index-duplicate-order-numbers-2026-07-10.md.
+      exit_criteria:
+        - "policy check exits non-zero on a duplicate order among non-done packets, 0 otherwise (unit tests)"
+        - "litmus:plan-index-order-uniqueness pins the check and passes on the current ledger"
+        - "no still-open (ready/blocked/in-progress) packet shares an order with any other packet"
+      events:
+        - type: filed
+          ts: "2026-07-10T00:55:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0040Z"
+          host: macos
+          summary: >
+            Reduction-engine capture during the osx-next merge: uniqueness
+            scan after resolving the 260 collision found 7 pre-existing
+            duplicate order numbers already merged. Filed + promoted per
+            capture rule. Renumbered 263 -> 266 in the second 2026-07-10
+            merge (collision with linux's git-mirror-ledger-yaml-gate —
+            the finding demonstrating itself).
+
+    - packet_id: headless-login-transition-refresh
+      order: 276
+      title: "Headless: logged-in transition must refresh cloud projects + push LoginState immediately (attended smoke F-C/F-D)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, vsock, control-wire, vault]
+      estimated_hours: 3
+      outcome: >
+        2026-07-10 attended macOS smoke: after a successful GitHub login the
+        tray showed "no repos" indefinitely and stayed visually logged-out
+        for up to 60s+. Root causes guest-side: (1) set_cloud_projects (the
+        CloudProjectsPush source) is invoked ONLY by the CloudRefreshRequest
+        handler, which SC-07 suppresses on healthy push streams — nothing
+        re-derives the auth-gated cloud list after login; (2) LoginStatePush
+        rides a 60s presence-poll cadence and the login satisfier's own
+        completion does not push, so the operator re-ran a login that had
+        already succeeded. Fix: on the login-probe's (or satisfier's)
+        logged-out->logged-in transition, push LoginState immediately AND
+        refresh + push the cloud project list, so every subscriber converges
+        without tray-side workarounds. The macOS tray landed an interim
+        prime (b365deaf: CloudRefreshRequest on LoginStatePush logged-in);
+        windows should mirror until this packet closes, then both trays can
+        drop the prime. Full analysis:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-C, F-D).
+      exit_criteria:
+        - "logged-out->logged-in transition emits LoginStatePush within the satisfier's completion path (no 60s cadence wait)"
+        - "the same transition triggers a guest-side cloud refresh whose result pushes CloudProjectsPush (change-gated)"
+        - "unit test: login transition with subscribers produces both pushes without any inbound request"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Attended-smoke capture (operator present, login run live twice).
+            Tray-side interim prime landed on osx-next; guest-side is the
+            durable fix and is linux-owned.
+
+    - packet_id: macos-oneshot-cli-live-tray-coexistence
+      order: 277
+      title: "macOS one-shot CLI modes vs running tray: disk-lock collision with opaque VZ error (attended smoke F-E)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-macos-tray/src/main.rs
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, tray, vz, cli, ux]
+      estimated_hours: 3
+      outcome: >
+        --exec-guest and --list-cloud-projects unconditionally start their
+        own VZ VM; with the tray holding the root disk they fail with
+        'Invalid virtual machine configuration. The storage device
+        attachment is invalid.' — fine in e2e (nothing else running),
+        broken for a real operator whose tray is always up, and it blocks
+        in-session guest forensics (hit live in the 2026-07-10 attended
+        smoke). Wanted: detect the live VM first (control-wire probe or pid
+        /lock file) and either route the one-shot through it or fail with a
+        clear 'tray owns the VM — use the tray menu or quit it first'
+        message. Full context:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-E).
+      exit_criteria:
+        - "one-shot modes against a live tray either succeed through the running VM or fail with an explicit tray-owns-VM message (no raw VZ storage error)"
+        - "one-shot modes with no VM running behave exactly as today (e2e paths unchanged)"
+        - "pin test on the detection branch"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Attended-smoke capture: every guest forensics attempt this
+            session had to be abandoned or routed around the running tray.
+
+    - packet_id: macos-attended-smoke-ux-residue
+      order: 269
+      title: "Attended-smoke small residue: login popup dead-shell exit + ax-smoke pty-dump session resolution (F-F, F-G)"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-macos-tray/src/
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, tray, ux, harness]
+      estimated_hours: 2
+      outcome: >
+        Two small operator-facing rough edges from the 2026-07-10 attended
+        smoke, batched: (F-G) the GitHub-login popup terminal ends at a dead
+        shell printing '[screen is terminating]' after a SUCCESSFUL flow —
+        close the window on success (osascript) or print an unmistakable
+        success line; (F-F) scripts/macos-tray-ax-smoke.sh pty-dump reports
+        'No screen session found' while screen -ls lists the attached login
+        session — resolve the session via screen -ls (or accept a -S arg)
+        so harness dumps work against the real login PTY. Details:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md.
+      exit_criteria:
+        - "completing the login flow leaves no orphaned dead-shell window (or prints an explicit success banner)"
+        - "pty-dump hardcopies the live login session without a manual -S workaround"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Attended-smoke capture per the nothing-gets-lost rule; both
+            observed live with the operator present.
+
+    - packet_id: macos-attach-first-use-materialization-blackout
+      order: 270
+      title: "Agent attach on fresh VM: PTY dies silently during first-use forge-image build (attended smoke F-H)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-macos-tray/src/terminal_attach.rs
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, tray, pty, vz, ux, materialize]
+      estimated_hours: 4
+      outcome: >
+        2026-07-10 attended smoke, fresh VM: first agent attach triggers the
+        in-VM forge-image materialization (multi-minute, network-bound
+        recipe build). The attach PTY streams early output (cloud clone
+        lines) then goes silent; the host attach worker eventually closes
+        the PTY with no message — the operator's Terminal shows '[screen is
+        terminating]' or a stuck window, indistinguishable from a hang
+        (guest journal confirmed healthy podman image builds in flight).
+        SEVERITY UPGRADE (post-mortem over SSH): the in-VM build runs as a
+        child of the attach session, so when the host worker gives up and
+        closes the PTY it REAPS THE BUILD — both attempts left only
+        dangling layers (empty-ID 'image build' journal events, no tagged
+        image, no build process, load 0.05). First-use attach can therefore
+        NEVER succeed on a slow network; each retry only advances the layer
+        cache incrementally. Wanted: (1) surface materialization progress
+        into the attach PTY — at minimum an explicit 'building forge image,
+        first use takes minutes…' line; (2) the worker must not close the
+        PTY while the in-VM launch is legitimately building — keep-alive
+        until build completion or a LOUD failure line with the guest-side
+        error; (3) the build must survive PTY loss (guest-side detach:
+        systemd-run / setsid) so an impatient close doesn't waste the work;
+        (4) a retry after the build completes must succeed (image cached).
+        Guest cooperation (progress frames on the wire, detached build) may
+        spawn a linux slice — coordinate via this packet. Also noted: guest
+        journal drowns in 60s podman exec/exec_died label dumps from the
+        liveness probes, and the headless logs entire gh api JSON bodies
+        (private-repo metadata into the journal) — quieting both is in
+        scope for forensics signal-to-noise. Full context:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-H).
+      exit_criteria:
+        - "fresh-VM first attach shows an explicit materialization message in the popup terminal within 5s of click"
+        - "the PTY stays open through a healthy multi-minute image build and lands in the live agent session"
+        - "worker give-up paths print a loud error line to the PTY before closing"
+        - "an in-flight image build survives the attach PTY closing (verify: close terminal mid-build, image still completes)"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Attended-smoke capture: operator hit this live on both a cloud
+            and a local attach; SSH forensics (cloud-init injected key)
+            confirmed builds in flight while both PTYs were already dead.
+
+    - packet_id: methodology-idiomatic-layers-for-agents
+      order: 271
+      title: "Methodology: agents develop and debug THROUGH the idiomatic layers — no ssh/root/side channels into the guest"
+      status: ready
+      kind: methodology
+      deliverable: methodology/multi-host-development.yaml
+      depends_on: []
+      pickup_role: any
+      capability_tags: [methodology, security, control-wire, forensics]
+      estimated_hours: 2
+      outcome: >
+        Directive from The Tlatoani (2026-07-10 attended session, verbatim
+        intent): the Tillandsias idiomatic layers exist to create containers
+        and monitor status/metrics — agents must use them for DEVELOPMENT
+        (forensics, rebuilds, probes) as well, because making them good
+        enough for development makes them good enough for user runtime. The
+        counter-example that prompted this: the macOS agent ssh'd into the
+        guest as root (via the cloud-init debug key + NAT-reachable sshd)
+        to read journals and sneak a manual image rebuild when the attach
+        flow failed — bypassing the secure-socket-only isolation boundary
+        (host and guest must NOT share a trusted network; the guest is
+        fully isolated, fully user-runtime, root never required). Encode in
+        methodology: (1) the control wire / diagnose / ExecOneShot surfaces
+        are the ONLY sanctioned guest access for agents; (2) when a
+        debugging task cannot be done through them, that is a product gap —
+        file/promote a packet extending the idiomatic layer (e.g. the
+        TILLANDSIAS_PTY_DEBUG tee, orders 268/272) instead of side-stepping;
+        (3) root exec anywhere in guest/forge is a finding, not a tool.
+        Cross-reference the worker protocol and e2e skills so unattended
+        agents inherit the rule.
+      exit_criteria:
+        - "methodology names the sanctioned guest-access surfaces and the file-a-packet-instead rule"
+        - "worker/e2e skill docs reference the rule (grepable, one canonical statement)"
+        - "litmus or review checklist item exists so violations are catchable in audit"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Filed at The Tlatoani's direction after the agent's ssh/root
+            workaround in the attended smoke. Companion: order 272 closes
+            the backdoor itself.
+
+    - packet_id: guest-ssh-backdoor-closure
+      order: 272
+      title: "Close the guest debug backdoor: cloud-init SSH key injection + NAT-reachable sshd violate secure-socket-only isolation"
+      status: ready
+      kind: security
+      deliverable: crates/tillandsias-vm-layer/src/vz.rs
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, security, vz, vm-layer, isolation]
+      estimated_hours: 3
+      outcome: >
+        The VZ cloud-init user-data injects a personal SSH public key for
+        root AND fedora, leaves sshd reachable on the NAT interface, and
+        the boot banner advertises 'ssh vsock%3' — a standing bypass of the
+        secure-socket-only architecture (the control wire is meant to be
+        the ONLY host<->guest channel; the guest fully isolated). Proven
+        exploitable-by-convenience in the 2026-07-10 attended session (the
+        agent used it; The Tlatoani vetoed it). Fix: remove the key
+        injection from the cloud-init template, disable/mask sshd (or
+        firewall it to loopback) in the guest, drop the banner hint, and
+        pin with a source drift test (no authorized_keys write, no sshd
+        enable). Audit the WSL2 provisioning path for the same class.
+        NOTE while designing: in-guest processes currently run as root
+        (headless unit, XDG_RUNTIME_DIR=/run/user/0) — The Tlatoani's
+        fully-user-runtime posture suggests a rootless-guest exploration;
+        captured separately in the findings file, do not fold into this
+        packet's scope.
+      exit_criteria:
+        - "fresh-provisioned guest has no injected authorized_keys and no reachable sshd from the host network"
+        - "source pin test fails loud if key injection or sshd enablement returns"
+        - "WSL2 path audited; sibling packet filed if it shares the hole"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Filed from the attended session after using the backdoor for
+            forensics surfaced how open it is. Companion to order 271
+            (methodology) and order 268 (idiomatic one-shot coexistence,
+            which removes the temptation).
+
+    - packet_id: guest-agent-attach-runs-login-flow
+      order: 273
+      title: "Guest headless: agent-attach argv (--cloud <p> --opencode) runs the github-login flow and exits 0 — agent never launches"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, pty, dispatch, forge]
+      estimated_hours: 4
+      outcome: >
+        2026-07-10 attended smoke, verbatim PTY capture via the new
+        TILLANDSIAS_PTY_DEBUG tee (b365deaf tree, guest headless
+        v0.3.260710.2): clicking OpenCode on local project 'tillandsias'
+        sends the correct host-side argv (launch_spec: /bin/bash -lc
+        '... && exec tillandsias-headless --cloud tillandsias --opencode')
+        but the PTY session streams EXACTLY the interactive github-login
+        flow — 'Git author name [saved]:', 'Git author email [saved]:',
+        'Git identity saved', 'Paste your GitHub authentication token',
+        '[tillandsias] GitHub authentication complete for 8007342' — then
+        PtyClose code=0. run_opencode_mode's stack launch / TUI attach
+        never emits a byte. All four leaves (Claude/Codex/OpenCode/
+        Maintenance) show the same operator-visible outcome (flash ->
+        blank -> screen terminates). NOTE the inconsistency that narrows
+        the search: a CLOUD attach on an uncloned repo (lakanoa) DID run
+        the --cloud resolve (clone lines streamed, clone completed) before
+        going silent — so argv reaches the guest; the login flow is
+        entered from INSIDE the launch path. Candidate paths to check:
+        (a) ensure_git_login / ensure_provider_auth chain invoking
+        run_provider_login's interactive prompts (prompt_and_store_git_identity
+        writes /root/.cache/tillandsias/secrets/git/.gitconfig — matches
+        the capture) and then something returning early with success;
+        (b) require_desktop_user_session lane classification for
+        PTY-handler children (HeadlessServiceAccount vs desktop lane) —
+        if it errors, why code=0 and no Error line on the PTY?
+        Repro loop for whoever picks this up: install tray at >= b365deaf,
+        TILLANDSIAS_PTY_DEBUG=1, click an agent leaf, read tray stderr.
+        Fix must end with: agent TUI paints in the popup, PtyClose only on
+        user exit. Full session context:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-J).
+      exit_criteria:
+        - "agent leaf click on a resolved local project lands in the agent TUI (PtyData shows TUI init, not login prompts)"
+        - "root cause named + pinned by a unit test on the guest dispatch path"
+        - "InteractiveStream macOS parity cell flips done with live evidence"
+      events:
+        - type: filed
+          ts: "2026-07-10T04:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Root-caused to the wire with the PTY tee during the attended
+            session; guest-side dispatch is linux-owned so filed for linux
+            pickup with the verbatim capture and a one-click repro loop.
         - type: decision
           ts: "2026-07-10T02:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260710T0009Z"

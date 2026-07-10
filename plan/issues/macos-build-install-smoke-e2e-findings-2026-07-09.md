@@ -132,3 +132,50 @@ closes.
   genuinely satisfied (230/231 done) — same basis as order 155's un-blocking;
   the packet was already `ready`, this confirms it is actionable.
 - **macos (this host, next cycle)**: order 155 is ready and claimable.
+
+---
+
+## Run 2 — 2026-07-09T23:18Z (meta-orchestration cycle, order 259 verification + order 155 slice 2)
+
+- commits tested: `2a492797` (order 155 slice 2 on merged linux-next `67bffc86`),
+  then `77b0ba92` (order 259 lock-namespace fix)
+- evidence: `target/build-install-smoke-e2e/20260709T231816Z/` (local host)
+- agent: macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| 1 build + codesign + install + freshness (`2a492797`, then `77b0ba92`) | PASS ×2 |
+| 2 destroy substrate (2.1G VM dir + cache, verified absent) | PASS ×2 |
+| 3 cold provision (528 MB download → `{"status":"provisioned"}`, exit 0) | PASS ×2 |
+| 3b `--diagnose --json` post-provision | PASS (exit 0, `provisioned: true`) |
+| 4 forge lane | n/a (linux-only lane) |
+| ext-A order 259 criterion 3, fresh VM first `--github-login` on `2a492797` | **FAIL** (exit 125 name-in-use — repro CONFIRMED on merged tree with linux structural slice) |
+| ext-B same probe on `77b0ba92` after fix + full re-provision | **PASS** (reaches `matched: git author name` prompt; no 125, no podman error) |
+| ext-C live tray: order 155 slice 2 push subscription | PASS (`push subscription established (vm-status/login/cloud polls demoted to fallback, SC-07)`, Ready chip via push, clean SIGTERM 143) |
+
+### RESOLVED: FINDING 1 root cause (order 259) — disjoint lock namespaces
+
+The linux structural slice (ensure_vault_running flock-before-check +
+rm-before-run) is correct but was inert across the two guest processes:
+
+- `tillandsias-headless.service` (vz.rs) set `HOME=/root` but no
+  `XDG_RUNTIME_DIR` → `resource_lock::lock_dir()` fell back to
+  `/tmp/tillandsias-locks-0`.
+- The tray's `--github-login` exec preamble (diagnose.rs) exports
+  `XDG_RUNTIME_DIR=/run/user/0` → satisfier locked under
+  `/run/user/0/tillandsias-locks`.
+
+flock(2) on different files never contends. Guest forensics after the failed
+attempt: `tillandsias-vault` left in **Created** state (not Exited 143 as in
+run 1 — the loser died at container-storage create, the winner never started
+it before VM shutdown).
+
+Fix `77b0ba92`: headless unit now pins `Environment=XDG_RUNTIME_DIR=/run/user/0`;
+two source pin tests (vm-layer unit line, macos-tray preamble export) fail loud
+if the values drift apart. Fresh-VM verification: ext-B PASS above.
+
+**Windows heads-up (promoted to order 274; renumbered 260 -> 262 -> 265 -> 274 across three 2026-07-10 merge collisions)**: `wsl.rs` headless unit (~:350)
+sets neither `HOME` nor `XDG_RUNTIME_DIR` — the WSL2 guest likely shares this
+exact divergence.

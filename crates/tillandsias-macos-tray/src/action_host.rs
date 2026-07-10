@@ -1694,34 +1694,147 @@ fn rebuild_menu_main_thread(
     }
 }
 
-/// True while the dedicated `VmStatus` push subscription (order 155 slice 1)
-/// is connected and delivering frames. Gates the steady-state fallback poll:
-/// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07);
-/// when the stream drops, the 30s tick resumes polling until the listener
-/// resubscribes. Mirrors windows-tray's `VM_STATUS_PUSH_HEALTHY` (b6ca3290)
-/// so the two trays keep structurally identical stream architectures.
-static VM_STATUS_PUSH_HEALTHY: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+// True while the dedicated push subscription (order 155 slices 1+2) is
+// connected and delivering frames. Gates the steady-state fallback polls:
+// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07)
+// and the 10-tick `GithubLoginStatusRequest`/`CloudRefreshRequest` polls are
+// suppressed too (slice 2 — all three topics ride this one connection);
+// when the stream drops, the tick loop resumes polling until the listener
+// resubscribes. Grew out of windows-tray's `VM_STATUS_PUSH_HEALTHY`
+// (b6ca3290, VmStatus-only) — windows adopts the widened gate in its own
+// slice 2 so the two trays keep structurally identical stream architectures.
+//
+// Slice 3 (SC-16): the signal is a shared watch-backed
+// [`tillandsias_host_shell::subscription_health::SubscriptionHealth`]
+// (created in `spawn_vm_status_poller`, written by `run_push_listener`) —
+// not an `AtomicBool` the tick loop re-reads after each sleep. The tick
+// loop selects on the health transition, so a subscription drop triggers
+// an immediate fallback poll round instead of surfacing up to 300s later
+// on the 10-tick login/cloud cadence.
 
-/// SC-07 gate: the steady-state `VmStatusRequest` poll is fallback-only —
+/// SC-07 gate: every steady-state request poll (VmStatus each tick,
+/// LoginState/CloudProjects on the 10-tick cadence) is fallback-only —
 /// suppressed whenever the push subscription is delivering.
-fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
+fn should_poll_fallback(push_stream_healthy: bool) -> bool {
     !push_stream_healthy
 }
 
-/// The exact topic set slice 1 subscribes to. LoginState/CloudProjects stay
-/// polled until their tray-side consumers land in the next slice (the guest
-/// push sources shipped in orders 230/231) — widening this list is that
-/// slice's job, pinned by `vm_status_subscribe_topics_is_vmstatus_only_slice1`.
-fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
-    vec![tillandsias_control_wire::SubscriptionTopic::VmStatus]
+/// What ended one tick-loop wait (slice 3, SC-16).
+#[derive(Debug, PartialEq, Eq)]
+enum TickWake {
+    /// The poll period elapsed normally.
+    Timer,
+    /// The push subscription dropped mid-wait — the fallback polls own
+    /// freshness again and should run a full round now, not up to 300s
+    /// later when the 10-tick cadence next comes around.
+    SubscriptionDropped,
+}
+
+/// Wait out one poll period, waking early only on a healthy→down transition
+/// of the push subscription. Up-transitions don't end the wait (pushes own
+/// freshness again; there is nothing to poll), and a closed channel (listener
+/// task gone) degrades to the plain timer instead of spinning.
+async fn wait_tick_or_subscription_drop(
+    period: Duration,
+    health: &mut tokio::sync::watch::Receiver<bool>,
+) -> TickWake {
+    let sleep = tokio::time::sleep(period);
+    tokio::pin!(sleep);
+    loop {
+        tokio::select! {
+            _ = &mut sleep => return TickWake::Timer,
+            changed = health.changed() => {
+                if changed.is_err() {
+                    sleep.as_mut().await;
+                    return TickWake::Timer;
+                }
+                if !*health.borrow_and_update() {
+                    return TickWake::SubscriptionDropped;
+                }
+            }
+        }
+    }
+}
+
+/// Next tick counter after a wake. A subscription drop rewinds to tick 0 so
+/// the next iteration replays the first-tick full round (local + cloud +
+/// login, then VmStatus below) instead of waiting out the 10-tick cadence.
+fn tick_after_wake(tick: u32, wake: &TickWake) -> u32 {
+    match wake {
+        TickWake::Timer => tick.wrapping_add(1),
+        TickWake::SubscriptionDropped => 0,
+    }
+}
+
+/// The exact topic set the dedicated push connection subscribes to. Slice 2
+/// widened this from `[VmStatus]` to all three topics now that the tray
+/// consumes the order 230/231 guest push sources; pinned by
+/// `push_subscribe_topics_is_all_three_slice2`.
+fn push_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
+    vec![
+        tillandsias_control_wire::SubscriptionTopic::VmStatus,
+        tillandsias_control_wire::SubscriptionTopic::LoginState,
+        tillandsias_control_wire::SubscriptionTopic::CloudProjects,
+    ]
+}
+
+/// Map a `GithubLoginStatusReply`/`LoginStatePush` payload to the menu's
+/// login state. Shared by the fallback poll and the push listener (order 155
+/// slice 2) so both surfaces stay byte-identical.
+fn map_login_state(
+    logged_in: bool,
+    handle: Option<String>,
+) -> tillandsias_host_shell::menu_state::GithubLoginState {
+    if logged_in {
+        tillandsias_host_shell::menu_state::GithubLoginState::LoggedIn {
+            handle: handle.unwrap_or_default(),
+        }
+    } else {
+        tillandsias_host_shell::menu_state::GithubLoginState::LoggedOut
+    }
+}
+
+/// Apply a live login-state observation — from a poll reply or an
+/// unrequested `LoginStatePush` frame — to the shared `MenuState`. Returns
+/// whether the menu needs a rebuild (state changed); idempotent on repeat.
+fn apply_login_state(
+    login: tillandsias_host_shell::menu_state::GithubLoginState,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+) -> bool {
+    let mut guard = menu_state.lock().unwrap();
+    if guard.login == login {
+        return false;
+    }
+    guard.login = login;
+    drop(guard);
+    eprintln!("[tillandsias-tray] github-login: menu_state updated");
+    true
+}
+
+/// Apply a live cloud-projects observation — from a poll reply or an
+/// unrequested `CloudProjectsPush` frame (full replacement list) — to the
+/// shared `MenuState`. Returns whether the menu needs a rebuild; idempotent
+/// on repeat.
+fn apply_cloud_projects(
+    projects: Vec<tillandsias_host_shell::menu_state::ProjectEntry>,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+) -> bool {
+    let new_count = projects.len();
+    let mut guard = menu_state.lock().unwrap();
+    if guard.cloud_projects == projects {
+        return false;
+    }
+    guard.cloud_projects = projects;
+    drop(guard);
+    eprintln!("[tillandsias-tray] cloud-projects: menu_state updated ({new_count} entries)");
+    true
 }
 
 /// Apply a live `VmStatus` observation — from a poll reply or an unrequested
 /// `VmStatusPush` frame — to the shared `MenuState` and status chip. Returns
 /// whether the menu needs a rebuild (podman_ready / login gating changed).
-/// Shared by the 30s fallback poll and `run_vm_status_push_listener` (order
-/// 155 slice 1) so both surfaces stay byte-identical; mirrors windows-tray's
+/// Shared by the 30s fallback poll and `run_push_listener` (order 155
+/// slice 1) so both surfaces stay byte-identical; mirrors windows-tray's
 /// `apply_vm_status` (b6ca3290).
 ///
 /// `last_logged_phase` is shared across both sources so a phase transition is
@@ -1750,6 +1863,8 @@ fn apply_vm_status(
             );
         }
     }
+    let base = vm_phase_status_text(phase, podman_ready);
+    let text_for_dispatch = compose_chip_text(&base, last_event);
     let mut rebuild_needed = false;
     {
         let mut guard = menu_state.lock().unwrap();
@@ -1762,9 +1877,17 @@ fn apply_vm_status(
             guard.login_runtime_ready = new_login_runtime_ready;
             rebuild_needed = true;
         }
+        // The status row is re-rendered from MenuState on every rebuild
+        // (render() reads state.status_text). Without this write the state
+        // keeps its BOOT_STATUS_TEXT default, so the rebuild triggered by
+        // the very transition we're applying (e.g. -> Ready) clobbers the
+        // chip back to "Booting…" right after the direct setTitle below —
+        // the 2026-07-10 attended smoke caught the menu stuck there while
+        // stderr showed phase=Ready (m8 F2 class: status must never lie).
+        if guard.status_text != text_for_dispatch {
+            guard.status_text = text_for_dispatch.clone();
+        }
     }
-    let base = vm_phase_status_text(phase, podman_ready);
-    let text_for_dispatch = compose_chip_text(&base, last_event);
     let chip_status_text = status_text.clone();
     let chip_status_item = status_item.clone();
     let chip_status_menu_item = status_menu_item.clone();
@@ -1779,25 +1902,28 @@ fn apply_vm_status(
     rebuild_needed
 }
 
-/// Dedicated `VmStatus` push listener (order 155 slice 1): a persistent
-/// reader task on its own control-wire connection. Connect → handshake →
-/// `Subscribe{[VmStatus]}` → `SubscribeAck` → loop `next_envelope`, applying
-/// each `VmStatusPush` to the chip/menu within milliseconds of the guest's
-/// VmPhase or last_event change (SC-09, <500ms end-to-end) instead of up to
-/// 30s later on the next poll tick.
+/// Dedicated push listener (order 155 slices 1+2): a persistent reader task
+/// on its own control-wire connection. Connect → handshake →
+/// `Subscribe{[VmStatus, LoginState, CloudProjects]}` → `SubscribeAck` →
+/// loop `next_envelope`, applying each push frame to the chip/menu within
+/// milliseconds of the guest-side change (SC-09, <500ms end-to-end) instead
+/// of up to 30s (VmStatus) or 300s (login/cloud) later on a poll tick.
 ///
 /// A separate connection (not the per-poll one-shots) is deliberate: the
 /// request/reply helpers would mis-consume an unsolicited push frame arriving
 /// between a request and its reply. The headless broadcasts pushes to every
 /// subscribed client, so a dedicated connection gets the stream without
-/// racing the request path. Mirrors windows-tray `run_vm_status_push_listener`
-/// (b6ca3290) on the macOS `GuestTransport`/VZ stream + secure-wire path.
+/// racing the request path. Started as a mirror of windows-tray
+/// `run_vm_status_push_listener` (b6ca3290) on the macOS `GuestTransport`/VZ
+/// stream + secure-wire path; slice 2 widened it to all three topics
+/// (windows follows in its own slice 2).
 ///
 /// Reconnects forever with the shared `BACKOFF_SCHEDULE` (250ms→4s), then
-/// holds at 30s between attempts — while down, `VM_STATUS_PUSH_HEALTHY` is
-/// false and the tick loop's fallback poll covers status freshness.
+/// holds at 30s between attempts — while down, the shared
+/// [`SubscriptionHealth`](tillandsias_host_shell::subscription_health::SubscriptionHealth)
+/// signal is false and the tick loop's fallback polls cover freshness.
 #[allow(clippy::too_many_arguments)]
-async fn run_vm_status_push_listener(
+async fn run_push_listener(
     vz: Arc<VzRuntime>,
     status_text: Arc<Mutex<String>>,
     status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
@@ -1806,6 +1932,7 @@ async fn run_vm_status_push_listener(
     self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
     last_logged_phase: Arc<Mutex<Option<tillandsias_control_wire::VmPhase>>>,
     vm_ever_ready: Arc<std::sync::atomic::AtomicBool>,
+    health: Arc<tillandsias_host_shell::subscription_health::SubscriptionHealth>,
 ) {
     use std::sync::atomic::Ordering;
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
@@ -1814,7 +1941,7 @@ async fn run_vm_status_push_listener(
 
     let mut backoff_idx: usize = 0;
     loop {
-        VM_STATUS_PUSH_HEALTHY.store(false, Ordering::SeqCst);
+        health.set(false);
         let established = async {
             let stream =
                 open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
@@ -1834,7 +1961,7 @@ async fn run_vm_status_push_listener(
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),
                 body: ControlMessage::Subscribe {
-                    topics: vm_status_subscribe_topics(),
+                    topics: push_subscribe_topics(),
                 },
             };
             let reply = client
@@ -1865,20 +1992,22 @@ async fn run_vm_status_push_listener(
         };
 
         backoff_idx = 0;
-        VM_STATUS_PUSH_HEALTHY.store(true, Ordering::SeqCst);
+        health.set(true);
         eprintln!(
-            "[tillandsias-tray] vm-status push subscription established \
-             (poll demoted to fallback, SC-07)"
+            "[tillandsias-tray] push subscription established \
+             (vm-status/login/cloud polls demoted to fallback, SC-07)"
         );
 
         // Initial sync on the SAME connection: pushes are change-gated
-        // (set_phase/set_last_event emit only on transitions), so a
-        // subscriber joining a steady-state-Ready VM would otherwise render
-        // nothing until the next transition — while SC-07 suppresses the
-        // fallback poll precisely because this stream is healthy. One
-        // VmStatusRequest primes the chip; the reader loop below accepts
-        // the VmStatusReply alongside pushes, so an interleaved push can
-        // never be mis-consumed as the reply.
+        // (the guest sources emit only on transitions), so a subscriber
+        // joining a steady-state VM would otherwise render nothing until
+        // the next transition — while SC-07 suppresses the fallback polls
+        // precisely because this stream is healthy. One request per topic
+        // primes the state; the reader loop below accepts the replies
+        // alongside pushes, so an interleaved push can never be
+        // mis-consumed as a reply. A failed login/cloud prime is tolerated
+        // (e.g. Error frame while logged out — the reader loop debug-logs
+        // it); only a dead wire on send forces a reconnect.
         let seq = client.allocate_seq();
         let prime = ControlEnvelope {
             wire_version: WIRE_VERSION,
@@ -1887,6 +2016,26 @@ async fn run_vm_status_push_listener(
         };
         if let Err(err) = client.send_envelope(&prime).await {
             tracing::debug!(%err, "vm-status initial-sync request failed; reconnecting");
+            continue;
+        }
+        let seq = client.allocate_seq();
+        let prime_login = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: client.allocate_seq(),
+            body: ControlMessage::GithubLoginStatusRequest { seq },
+        };
+        if let Err(err) = client.send_envelope(&prime_login).await {
+            tracing::debug!(%err, "login initial-sync request failed; reconnecting");
+            continue;
+        }
+        let seq = client.allocate_seq();
+        let prime_cloud = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: client.allocate_seq(),
+            body: ControlMessage::CloudRefreshRequest { seq },
+        };
+        if let Err(err) = client.send_envelope(&prime_cloud).await {
+            tracing::debug!(%err, "cloud-projects initial-sync request failed; reconnecting");
             continue;
         }
 
@@ -1925,6 +2074,60 @@ async fn run_vm_status_push_listener(
                             );
                         }
                     }
+                    ControlMessage::LoginStatePush {
+                        logged_in, handle, ..
+                    }
+                    | ControlMessage::GithubLoginStatusReply {
+                        logged_in, handle, ..
+                    } => {
+                        let changed =
+                            apply_login_state(map_login_state(logged_in, handle), &menu_state);
+                        if changed {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                        // Login-transition burst (2026-07-10 attended smoke):
+                        // the cloud list is auth-derived, but its ONLY push
+                        // source is the CloudRefreshRequest handler and SC-07
+                        // suppresses the tray's fallback poll while this
+                        // stream is healthy — without this prime a fresh
+                        // login renders "no repos" until the subscription
+                        // reconnects. One request on this same connection;
+                        // the reply routes through the CloudProjectsPush/
+                        // CloudRefreshReply arm below. Mirrors the windows
+                        // fast-poll-burst intent (order 154) push-natively.
+                        if changed && logged_in {
+                            let seq = client.allocate_seq();
+                            let prime_cloud = ControlEnvelope {
+                                wire_version: WIRE_VERSION,
+                                seq: client.allocate_seq(),
+                                body: ControlMessage::CloudRefreshRequest { seq },
+                            };
+                            if let Err(err) = client.send_envelope(&prime_cloud).await {
+                                tracing::debug!(
+                                    %err,
+                                    "post-login cloud prime failed; reconnecting"
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    ControlMessage::CloudProjectsPush { projects, .. }
+                    | ControlMessage::CloudRefreshReply { projects, .. } => {
+                        let mapped = projects.iter().map(cloud_entry_to_menu).collect();
+                        if apply_cloud_projects(mapped, &menu_state) {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());
                     }
@@ -1953,10 +2156,15 @@ fn spawn_vm_status_poller(
         Arc::new(Mutex::new(None));
     let vm_ever_ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-    // Push-first (order 155 slice 1): the dedicated reader task applies
-    // VmStatusPush frames as they arrive; the 30s tick below polls
-    // VmStatusRequest only while that subscription is down (SC-07).
-    tokio::spawn(run_vm_status_push_listener(
+    // Push-first (order 155 slices 1+2): the dedicated reader task applies
+    // VmStatusPush/LoginStatePush/CloudProjectsPush frames as they arrive;
+    // the tick loop below polls only while that subscription is down (SC-07).
+    // Slice 3 (SC-16): subscription health is a shared watch signal — the
+    // listener writes it, the tick loop both reads it at poll decision
+    // points and selects on its transitions while waiting.
+    let health = Arc::new(tillandsias_host_shell::subscription_health::SubscriptionHealth::new());
+    let mut health_rx = health.subscribe();
+    tokio::spawn(run_push_listener(
         vz.clone(),
         status_text.clone(),
         status_item.clone(),
@@ -1965,6 +2173,7 @@ fn spawn_vm_status_poller(
         self_handle.clone(),
         last_logged_phase.clone(),
         vm_ever_ready.clone(),
+        health.clone(),
     ));
     tokio::spawn(async move {
         // Tick counter for the cloud-projects cadence. Matches windows-
@@ -2014,56 +2223,50 @@ fn spawn_vm_status_poller(
                         }
                     }
                 }
-                match poll_cloud_projects_once(&vz).await {
-                    Ok(projects) => {
-                        let new_count = projects.len();
-                        let mut guard = menu_state.lock().unwrap();
-                        if guard.cloud_projects != projects {
-                            guard.cloud_projects = projects;
-                            rebuild_needed = true;
-                            eprintln!(
-                                "[tillandsias-tray] cloud-projects: \
-                                 menu_state updated ({} entries)",
-                                new_count
-                            );
+                // SC-07 (slice 2): the login/cloud polls are fallback-only —
+                // while the push subscription is delivering, LoginStatePush/
+                // CloudProjectsPush (plus the cold-join initial sync) own
+                // these topics. LocalProjects has no push topic yet, so its
+                // poll above always runs.
+                if should_poll_fallback(health.is_healthy()) {
+                    match poll_cloud_projects_once(&vz).await {
+                        Ok(projects) => {
+                            if apply_cloud_projects(projects, &menu_state) {
+                                rebuild_needed = true;
+                            }
                         }
-                        drop(guard);
-                    }
-                    Err(e) => {
-                        if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
-                            eprintln!("[tillandsias-tray] cloud-projects poll: {e}");
+                        Err(e) => {
+                            if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
+                                eprintln!("[tillandsias-tray] cloud-projects poll: {e}");
+                            }
                         }
                     }
-                }
-                match poll_github_login_once(&vz).await {
-                    Ok(login_state) => {
-                        let mut guard = menu_state.lock().unwrap();
-                        if guard.login != login_state {
-                            guard.login = login_state;
-                            rebuild_needed = true;
-                            eprintln!(
-                                "[tillandsias-tray] github-login: \
-                                 menu_state updated"
-                            );
+                    match poll_github_login_once(&vz).await {
+                        Ok(login_state) => {
+                            if apply_login_state(login_state, &menu_state) {
+                                rebuild_needed = true;
+                            }
                         }
-                        drop(guard);
-                    }
-                    Err(e) => {
-                        if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
-                            eprintln!("[tillandsias-tray] github-login poll: {e}");
+                        Err(e) => {
+                            if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
+                                eprintln!("[tillandsias-tray] github-login poll: {e}");
+                            }
                         }
                     }
                 }
             }
 
-            tokio::time::sleep(Duration::from_secs(30)).await;
-            tick = tick.wrapping_add(1);
+            // SC-16: not a plain sleep — a healthy→down transition of the
+            // push subscription ends the wait immediately and rewinds to
+            // tick 0, so the full fallback round (local + cloud + login
+            // above, VmStatus below) runs now instead of up to 300s later.
+            let wake =
+                wait_tick_or_subscription_drop(Duration::from_secs(30), &mut health_rx).await;
+            tick = tick_after_wake(tick, &wake);
 
             // SC-07: while the push subscription is delivering, the poll is
             // suppressed entirely — the reader task owns status freshness.
-            if !should_poll_vm_status(
-                VM_STATUS_PUSH_HEALTHY.load(std::sync::atomic::Ordering::SeqCst),
-            ) {
+            if !should_poll_fallback(health.is_healthy()) {
                 if rebuild_needed {
                     dispatch_rebuild(&menu_state, &status_item, &status_menu_item, &self_handle);
                 }
@@ -2113,6 +2316,12 @@ fn spawn_vm_status_poller(
                             guard.podman_ready = false;
                             guard.login_runtime_ready = false;
                             rebuild_needed = true;
+                        }
+                        // Keep MenuState's status row in sync so the rebuild
+                        // below doesn't resurrect a stale label (same clobber
+                        // class apply_vm_status fixes for the healthy path).
+                        if guard.status_text != WIRE_UNREACHABLE_CHIP_TEXT {
+                            guard.status_text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
                         }
                     }
                     let text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
@@ -2171,25 +2380,154 @@ fn dispatch_rebuild(
 mod tests {
     use super::*;
 
-    /// SC-07 pin: the fallback poll runs exactly when the push
-    /// subscription is NOT delivering. Mirrors windows-tray's
-    /// `should_poll_vm_status` gate (order 154/155 parity).
+    /// SC-07 pin: the fallback polls run exactly when the push
+    /// subscription is NOT delivering. Mirrors windows-tray's gate
+    /// (order 154/155 parity).
     #[test]
-    fn should_poll_vm_status_is_pure_fallback_gate() {
-        assert!(!should_poll_vm_status(true));
-        assert!(should_poll_vm_status(false));
+    fn should_poll_fallback_is_pure_fallback_gate() {
+        assert!(!should_poll_fallback(true));
+        assert!(should_poll_fallback(false));
     }
 
-    /// Slice-1 topic pin: widening the Subscribe set to LoginState/
-    /// CloudProjects is the NEXT slice's job (tray-side consumers for
-    /// the order 230/231 push sources). This test fails loud if the
-    /// topic list drifts without that slice's menu wiring.
-    #[test]
-    fn vm_status_subscribe_topics_is_vmstatus_only_slice1() {
-        assert_eq!(
-            vm_status_subscribe_topics(),
-            vec![tillandsias_control_wire::SubscriptionTopic::VmStatus]
+    /// Slice-3 (SC-16) pin: a healthy→down transition ends the tick wait
+    /// immediately (no 30s sleep-out), an up-transition does NOT end it,
+    /// and a closed health channel degrades to the plain timer instead of
+    /// spinning or panicking.
+    #[tokio::test(start_paused = true)]
+    async fn tick_wait_wakes_early_only_on_subscription_drop() {
+        use tillandsias_host_shell::subscription_health::SubscriptionHealth;
+
+        // Down-transition wakes early.
+        let health = SubscriptionHealth::new();
+        health.set(true);
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        let wait = wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx);
+        tokio::pin!(wait);
+        tokio::select! {
+            biased;
+            _ = &mut wait => panic!("wait ended with no transition and no timer"),
+            _ = tokio::task::yield_now() => {}
+        }
+        health.set(false);
+        assert_eq!(wait.await, TickWake::SubscriptionDropped);
+
+        // Up-transition keeps waiting; the timer ends the wait.
+        let health = SubscriptionHealth::new();
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        let started = tokio::time::Instant::now();
+        let wait = wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx);
+        tokio::pin!(wait);
+        tokio::select! {
+            biased;
+            _ = &mut wait => panic!("wait ended before any event"),
+            _ = tokio::task::yield_now() => {}
+        }
+        health.set(true);
+        assert_eq!(wait.await, TickWake::Timer);
+        assert!(
+            started.elapsed() >= Duration::from_secs(30),
+            "up-transition must not shorten the poll period"
         );
+
+        // Closed channel: sender dropped mid-wait → plain timer, no spin.
+        let health = SubscriptionHealth::new();
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        drop(health);
+        assert_eq!(
+            wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx).await,
+            TickWake::Timer
+        );
+    }
+
+    /// Slice-3 pin: a subscription drop rewinds the cadence to tick 0 so
+    /// the next iteration replays the first-tick full round; a timer wake
+    /// advances normally (with wraparound).
+    #[test]
+    fn tick_after_wake_rewinds_on_drop_and_advances_on_timer() {
+        assert_eq!(tick_after_wake(4, &TickWake::Timer), 5);
+        assert_eq!(tick_after_wake(u32::MAX, &TickWake::Timer), 0);
+        assert_eq!(tick_after_wake(7, &TickWake::SubscriptionDropped), 0);
+    }
+
+    /// Slice-2 topic pin: the dedicated push connection subscribes to all
+    /// three topics now that the tray consumes the order 230/231 guest
+    /// push sources. This test fails loud if the topic list drifts
+    /// without matching reader-loop consumers.
+    #[test]
+    fn push_subscribe_topics_is_all_three_slice2() {
+        assert_eq!(
+            push_subscribe_topics(),
+            vec![
+                tillandsias_control_wire::SubscriptionTopic::VmStatus,
+                tillandsias_control_wire::SubscriptionTopic::LoginState,
+                tillandsias_control_wire::SubscriptionTopic::CloudProjects,
+            ]
+        );
+    }
+
+    /// `map_login_state` mapping pin: logged_in with a handle, logged_in
+    /// with a missing handle (defaults empty), and logged_out — identical
+    /// to the poll path's historical mapping.
+    #[test]
+    fn map_login_state_covers_all_reply_shapes() {
+        use tillandsias_host_shell::menu_state::GithubLoginState;
+        assert_eq!(
+            map_login_state(true, Some("octocat".into())),
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into()
+            }
+        );
+        assert_eq!(
+            map_login_state(true, None),
+            GithubLoginState::LoggedIn { handle: "".into() }
+        );
+        assert_eq!(map_login_state(false, None), GithubLoginState::LoggedOut);
+        assert_eq!(
+            map_login_state(false, Some("stale".into())),
+            GithubLoginState::LoggedOut
+        );
+    }
+
+    /// `apply_login_state` reports a rebuild exactly on change and is
+    /// idempotent on repeat (order 155 slice 2 — shared by poll + push).
+    #[test]
+    fn apply_login_state_reports_rebuild_only_on_change() {
+        use tillandsias_host_shell::menu_state::GithubLoginState;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        // initial() starts LoggedOut — reapplying it is a no-op.
+        assert!(!apply_login_state(GithubLoginState::LoggedOut, &menu_state));
+        let logged_in = GithubLoginState::LoggedIn {
+            handle: "octocat".into(),
+        };
+        assert!(apply_login_state(logged_in.clone(), &menu_state));
+        assert_eq!(menu_state.lock().unwrap().login, logged_in);
+        assert!(!apply_login_state(logged_in, &menu_state));
+        assert!(apply_login_state(GithubLoginState::LoggedOut, &menu_state));
+    }
+
+    /// `apply_cloud_projects` reports a rebuild exactly on change
+    /// (full-replacement list semantics) and is idempotent on repeat.
+    #[test]
+    fn apply_cloud_projects_reports_rebuild_only_on_change() {
+        use tillandsias_host_shell::menu_state::ProjectEntry;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        assert!(!apply_cloud_projects(Vec::new(), &menu_state));
+        let projects = vec![ProjectEntry {
+            name: "tillandsias".into(),
+            path: "8007342/tillandsias".into(),
+            ready: false,
+        }];
+        assert!(apply_cloud_projects(projects.clone(), &menu_state));
+        assert_eq!(menu_state.lock().unwrap().cloud_projects, projects);
+        assert!(!apply_cloud_projects(projects, &menu_state));
+        assert!(apply_cloud_projects(Vec::new(), &menu_state));
     }
 
     /// `apply_vm_status` flips MenuState gating + reports a rebuild
@@ -2233,6 +2571,55 @@ mod tests {
             &status_menu_item,
         );
         assert!(!second, "unchanged status must not re-request a rebuild");
+    }
+
+    /// Chip-clobber regression pin (2026-07-10 attended smoke): render()
+    /// re-derives the status row from MenuState.status_text on every
+    /// rebuild, so apply_vm_status MUST write the composed chip text into
+    /// MenuState — otherwise the rebuild its own transition triggers
+    /// resurrects the BOOT_STATUS_TEXT default and the menu shows
+    /// "Booting…" forever while stderr says Ready.
+    #[test]
+    fn apply_vm_status_syncs_menu_state_status_text_for_rebuilds() {
+        let last_logged = Arc::new(Mutex::new(None));
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let status_text = Arc::new(Mutex::new(String::new()));
+        let status_item = Arc::new(Mutex::new(None));
+        let status_menu_item = Arc::new(Mutex::new(None));
+
+        assert_eq!(
+            menu_state.lock().unwrap().status_text,
+            tillandsias_host_shell::menu_state::BOOT_STATUS_TEXT,
+            "precondition: fresh MenuState carries the boot default"
+        );
+        apply_vm_status(
+            tillandsias_control_wire::VmPhase::Ready,
+            true,
+            None,
+            &last_logged,
+            &menu_state,
+            &status_text,
+            &status_item,
+            &status_menu_item,
+        );
+        let synced = menu_state.lock().unwrap().status_text.clone();
+        assert_ne!(
+            synced,
+            tillandsias_host_shell::menu_state::BOOT_STATUS_TEXT,
+            "apply_vm_status left MenuState.status_text at the boot default — \
+             the next rebuild will clobber the chip back to Booting…"
+        );
+        assert_eq!(
+            synced,
+            compose_chip_text(
+                &vm_phase_status_text(tillandsias_control_wire::VmPhase::Ready, true),
+                None
+            ),
+            "MenuState.status_text must carry the same composed chip text \
+             the direct setTitle path applies"
+        );
     }
 
     #[test]

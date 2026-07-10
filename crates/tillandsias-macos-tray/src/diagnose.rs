@@ -1090,6 +1090,23 @@ mod tests {
         );
     }
 
+    /// Order 259 lock-namespace pin: the login exec preamble's
+    /// XDG_RUNTIME_DIR export must stay /run/user/0 — the same value the
+    /// guest headless unit pins (vm-layer vz.rs, its own matching test).
+    /// The order-232 per-resource flocks live under
+    /// $XDG_RUNTIME_DIR/tillandsias-locks; if the two processes resolve
+    /// different dirs the vault check+act sections never serialize and the
+    /// fresh-VM first-login name-in-use race (exit 125) returns.
+    #[test]
+    fn github_login_preamble_pins_the_shared_lock_namespace() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let window = source_window(source, "pub fn github_login_main() -> i32");
+        assert!(
+            window.contains("export XDG_RUNTIME_DIR=/run/user/0;"),
+            "login preamble must export the lock namespace the headless unit pins (order 259)"
+        );
+    }
+
     /// litmus:secure-wait-phase-ready — `wait_phase_ready`'s probe callback
     /// must route through the same secure-or-plain opener as user actions
     /// (`open_control_wire_stream`), not a bare `open_vsock_stream*` connect.

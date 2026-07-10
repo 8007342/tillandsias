@@ -1,6 +1,142 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T04:05:00Z
+LastExecutionTime: 2026-07-10T04:25:00Z
+
+## Cycle 2026-07-10T02:02Z (macos — ATTENDED meta-orchestration: order 257 six cells closed live, 3 fixes verified, orders 274-278-era packets filed (renumbered thrice; see merge notes), isolation correction)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z, **The Tlatoāni at the
+  terminal** (attended interactive packets). Credential guard `ok:gh-keyring`.
+  Merged `origin/linux-next` twice (2bcced8e, d80a13c6) — second merge
+  collided AGAIN on orders 262/263 (linux filed its own in parallel);
+  renumbered mine to **265** and **266** — then AGAIN to **274** (wsl) and **275** (order
+  uniqueness — the finding demonstrating itself twice in one day).
+- **Order 257 attended smoke — 6 of 7 cells DONE live** (AX harness +
+  operator): 6-leaf submenu, login popup (3 real-PAT completions), cloud
+  submenu + overflow (23 repos), local ~/src submenu, enclave indicator
+  (healthy 🟢 + degraded 🔴), remote listing. InteractiveStream residual
+  blocked on order 273. Parity litmus correctly RED on that one cell.
+- **Fixes landed + verified live this session**: (F-A) chip clobbered back
+  to Booting… by rebuilds — MenuState.status_text sync + pin test; (F-B)
+  virtio-fs ~/src mount evaporated after first boot — fstab persistence,
+  verified across a real reboot; (F-C tray side) post-login cloud prime on
+  LoginStatePush — verified: 23 repos rendered the instant login state
+  arrived. Plus TILLANDSIAS_PTY_DEBUG tee in the bridge (product-layer PTY
+  forensics) which root-caused F-J to the wire.
+- **Order 273 (NEW, linux, top macOS-blocking)**: agent attach argv
+  (--cloud <p> --opencode) runs the github-login flow and PtyCloses code=0
+  — the agent NEVER launches (all four leaves). Verbatim PTY capture in the
+  packet + one-click repro loop. This is the last blocker on the macOS
+  parity column.
+- **Isolation correction (The Tlatoāni, recorded)**: agent used the
+  cloud-init SSH key + NAT sshd to run root guest forensics/rebuilds —
+  vetoed. Orders **271** (methodology: agents develop THROUGH the idiomatic
+  layers; ssh/root side channels forbidden; "good enough for development =
+  good enough for user runtime") and **272** (close the SSH backdoor:
+  remove key injection, disable NAT sshd, drift-pin; audit WSL2) filed.
+  Rootless-guest posture captured as research candidate.
+- **Also filed** (final numbers after the THIRD collision renumber — linux independently filed 265-268): 276 (headless: login transition must push LoginState
+  immediately + refresh cloud — 60s-probe gap confirmed 3x tonight, and on
+  boot 2 the probe's first observation never arrived at all: add to 267's
+  repro), 277 (one-shot CLI vs live tray disk-lock collision), 269 (login
+  popup dead-shell + pty-dump session resolution), 270 (first-use attach
+  reaps the in-VM image build — PTY close kills the build; severity
+  upgraded with journal evidence). litmus:binary-e2e-smoke macOS path gap
+  flagged to the 224/225/261 portability chain (findings file).
+- **E2E gate**: attended interactive session on a fresh destructive
+  re-provision (substrate destroyed + cold provision at b365deaf) IS this
+  cycle's runtime verification; full findings file:
+  plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md.
+- **Process slip (F9 recurrence, self-caught)**: the 04:30Z pre-push merge's
+  conflict exit code was masked by a `| tail` pipe, so the gate + push ran
+  against a mid-merge tree (push harmlessly sent pre-merge HEAD). Same
+  lesson as linux F9 (linux-audit-recent-work-2026-07-09.md): verdicts from
+  explicit exit codes, never piped tails. No new filing — F9 already owns it.
+- **Queue after session**: macOS blocked on linux orders 273 (attach) and
+  276 (login push); orders 277/269/270 macOS-claimable next unattended
+  cycle; 271 any-host; 272 macOS. Order 155 residual (watch-channel menu
+  listeners) still claimable. Linux: 273 is the hot one — full verbatim
+  repro in the packet.
+
+## Cycle 2026-07-10T00:40Z (macos — meta-orchestration: linux/windows merge + order collision renumber, order 155 slice 3 SC-16, order 263 filed)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260710T0040Z. Credential guard
+  `ok:gh-keyring`. Started clean at 2afc2d72; merged `origin/linux-next`
+  (2bcced8e — brings windows order 154 slice 2, order 258 partial, order 261,
+  litmus order 255 fix).
+- **Merge mediation**: plan/index.yaml order collision as predicted — my
+  order 260 (wsl-headless-unit-lock-namespace) vs windows' 260
+  (windows-tray-local-projects-push-gap). Renumbered mine to **262** (all
+  references updated: index event, loop_status, findings file). Integration
+  gate on merged tree: build check + 217 tests green. [Superseded: the
+  02:02Z merge collided AGAIN with linux's parallel 262/263 filings —
+  final numbers after the 04:30Z third collision: 274 (wsl) and 275 (uniqueness).]
+- **Order 155 slice 3 — COMPLETE, verified LIVE (SC-16)**: new shared
+  `tillandsias_host_shell::subscription_health::SubscriptionHealth`
+  (watch-backed, change-gated) replaces the tray's
+  PUSH_SUBSCRIPTION_HEALTHY AtomicBool; tick loop selects on health
+  transitions — a subscription drop now triggers an immediate full fallback
+  round (was: unnoticed up to 300s on the 10-tick cadence); up-transitions
+  never shorten the period; closed channel degrades to plain timer.
+  Paused-clock unit tests pin all three. 67/67 tray + 57/57 host-shell,
+  build check clean; live: signed build, push subscription established,
+  Ready push applied, 75s alive, clean SIGTERM. **Windows flag (order 154)**:
+  adopt SubscriptionHealth in notify_icon.rs (same AtomicBool pattern).
+- **Captures**: plan-index-duplicate-order-numbers-2026-07-10.md filed +
+  promoted to ready **order 275** (pickup any; filed as 263, renumbered TWICE more in
+  the 02:02Z merge): 7 order numbers (144, 160,
+  161, 196, 197, 201, 224) are each shared by 2-3 packets — silent
+  parallel-filing collisions; propose fail-loud uniqueness check in
+  tillandsias-policy + litmus. (Order 155's own "mirrors order 144" text is
+  a live symptom — the windows tray refactor is 154, and 144 now names two
+  other packets.)
+- **E2E gate**: skipped-with-cause — full destructive local-build e2e PASSED
+  twice on this host <2h ago (findings file runs 1-2 @ 2a492797/77b0ba92);
+  this cycle's runtime delta (slice 3) was live-verified against the
+  provisioned VM directly (subscription-up path) with the drop path pinned
+  by paused-clock unit tests.
+- **Queue after drain**: macOS-eligible ready residue = order 155 remaining
+  slices (watch-channel menu listeners; SC-01/02 closure blocked on linux
+  order 260 LocalProjects push), orders 261/275 (pickup any, claimable next
+  cycle). Order 257 still blocked on operator-attended smoke; order 126
+  still blocked on linux order 128.
+
+## Cycle 2026-07-09T23:10Z (macos — meta-orchestration: order 155 slice 2, order 259 root-caused + fixed + verified, full destructive e2e ×2)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z. Credential guard
+  `ok:gh-keyring`. Started clean at b6d657a2; merged `origin/linux-next`
+  (67bffc86, clean) before work.
+- **Order 155 slice 2 — COMPLETE (2a492797), verified LIVE**: Subscribe
+  widened to all three topics; LoginStatePush/CloudProjectsPush consumers in
+  the reader loop via apply helpers shared with the poll path; initial sync
+  extended to login/cloud on the same connection; SC-07 gate widened
+  (PUSH_SUBSCRIPTION_HEALTHY) to suppress the 10-tick login/cloud polls.
+  Live: 'push subscription established (vm-status/login/cloud polls demoted
+  to fallback, SC-07)', Ready chip via push, clean SIGTERM. 64/64 tests.
+  Remaining: watch-channel menu listeners, SC-01/02 sleep elimination.
+- **Order 259 — COMPLETED (77b0ba92)**: fresh-VM repro on the merged tree
+  STILL hit exit 125; root cause exactly the linux agent's hypothesis —
+  disjoint lock namespaces (headless unit: no XDG_RUNTIME_DIR →
+  /tmp/tillandsias-locks-0; login exec preamble: /run/user/0). Fix pins
+  Environment=XDG_RUNTIME_DIR=/run/user/0 in the vz.rs unit + drift pin
+  tests both sides. Re-provisioned fresh VM: first --github-login reaches
+  the git-author-name prompt, no 125, no podman error. All four exit
+  criteria closed. Windows sibling gap promoted to **order 274** (ready,
+  windows pickup: wsl.rs unit sets neither HOME nor XDG_RUNTIME_DIR;
+  renumbered 260 -> 262 -> 265 across the two 2026-07-10 merge collisions).
+- **E2E gate (local-build, destructive, ×2)**: gates 1–3 + diagnose PASS on
+  both 2a492797 and 77b0ba92 (build/codesign/install/freshness; 2.1G destroy;
+  528MB cold provision). Forge lane n/a. Findings file run-2 section:
+  plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md.
+- **Captures**: control-wire-prime-seq-double-allocation-2026-07-09.md
+  (optimization: primes allocate two seqs each, both trays).
+- **Queue after drain**: macOS-eligible ready residue = order 155 remaining
+  slices (claimable next cycle); order 257 still blocked on operator-attended
+  smoke; order 126 still blocked on linux order 128. Linux flag: order 259's
+  fix pattern may also apply to any OTHER guest exec path that omits
+  XDG_RUNTIME_DIR; windows flags: orders 260 (new), 154 cold-join, 258.
 
 ## Cycle 2026-07-10T02:05Z→04:05Z (linux_mutable macuahuitl — OPERATOR-DIRECTED: bar-raise approved+enabled, one-packet forge doctrine, orders 256/264/266 done, 265/267/268 filed, install delivered)
 

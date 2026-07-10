@@ -59,3 +59,6 @@ objc2-virtualization = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
+# test-util: paused-clock tests for the tick-loop wait (SC-16 slice 3);
+# precedent: tillandsias-metrics.
+tokio = { workspace = true, features = ["full", "test-util"] }
