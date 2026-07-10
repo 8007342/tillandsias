@@ -176,6 +176,6 @@ Fix `77b0ba92`: headless unit now pins `Environment=XDG_RUNTIME_DIR=/run/user/0`
 two source pin tests (vm-layer unit line, macos-tray preamble export) fail loud
 if the values drift apart. Fresh-VM verification: ext-B PASS above.
 
-**Windows heads-up (promoted to order 262; renumbered from 260 on merge)**: `wsl.rs` headless unit (~:350)
+**Windows heads-up (promoted to order 265; renumbered 260 -> 262 -> 265 across the 2026-07-10 merges)**: `wsl.rs` headless unit (~:350)
 sets neither `HOME` nor `XDG_RUNTIME_DIR` — the WSL2 guest likely shares this
 exact divergence.

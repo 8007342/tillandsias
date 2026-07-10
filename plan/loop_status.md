@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T01:40:00Z
+LastExecutionTime: 2026-07-10T02:05:00Z
 
 ## Cycle 2026-07-10T00:40Z (macos — meta-orchestration: linux/windows merge + order collision renumber, order 155 slice 3 SC-16, order 263 filed)
 
@@ -13,7 +13,9 @@ LastExecutionTime: 2026-07-10T01:40:00Z
   order 260 (wsl-headless-unit-lock-namespace) vs windows' 260
   (windows-tray-local-projects-push-gap). Renumbered mine to **262** (all
   references updated: index event, loop_status, findings file). Integration
-  gate on merged tree: build check + 217 tests green.
+  gate on merged tree: build check + 217 tests green. [Superseded: the
+  02:02Z merge collided AGAIN with linux's parallel 262/263 filings —
+  final numbers are 265 (wsl) and 266 (uniqueness).]
 - **Order 155 slice 3 — COMPLETE, verified LIVE (SC-16)**: new shared
   `tillandsias_host_shell::subscription_health::SubscriptionHealth`
   (watch-backed, change-gated) replaces the tray's
@@ -26,7 +28,8 @@ LastExecutionTime: 2026-07-10T01:40:00Z
   Ready push applied, 75s alive, clean SIGTERM. **Windows flag (order 154)**:
   adopt SubscriptionHealth in notify_icon.rs (same AtomicBool pattern).
 - **Captures**: plan-index-duplicate-order-numbers-2026-07-10.md filed +
-  promoted to ready **order 263** (pickup any): 7 order numbers (144, 160,
+  promoted to ready **order 266** (pickup any; filed as 263, renumbered in
+  the 02:02Z merge): 7 order numbers (144, 160,
   161, 196, 197, 201, 224) are each shared by 2-3 packets — silent
   parallel-filing collisions; propose fail-loud uniqueness check in
   tillandsias-policy + litmus. (Order 155's own "mirrors order 144" text is
@@ -39,7 +42,7 @@ LastExecutionTime: 2026-07-10T01:40:00Z
   by paused-clock unit tests.
 - **Queue after drain**: macOS-eligible ready residue = order 155 remaining
   slices (watch-channel menu listeners; SC-01/02 closure blocked on linux
-  order 260 LocalProjects push), orders 261/263 (pickup any, claimable next
+  order 260 LocalProjects push), orders 261/266 (pickup any, claimable next
   cycle). Order 257 still blocked on operator-attended smoke; order 126
   still blocked on linux order 128.
 
@@ -64,9 +67,9 @@ LastExecutionTime: 2026-07-10T01:40:00Z
   Environment=XDG_RUNTIME_DIR=/run/user/0 in the vz.rs unit + drift pin
   tests both sides. Re-provisioned fresh VM: first --github-login reaches
   the git-author-name prompt, no 125, no podman error. All four exit
-  criteria closed. Windows sibling gap promoted to **order 262** (ready,
+  criteria closed. Windows sibling gap promoted to **order 265** (ready,
   windows pickup: wsl.rs unit sets neither HOME nor XDG_RUNTIME_DIR;
-  renumbered from 260 on merge — collision with the windows-filed 260).
+  renumbered 260 -> 262 -> 265 across the two 2026-07-10 merge collisions).
 - **E2E gate (local-build, destructive, ×2)**: gates 1–3 + diagnose PASS on
   both 2a492797 and 77b0ba92 (build/codesign/install/freshness; 2.1G destroy;
   528MB cold provision). Forge lane n/a. Findings file run-2 section:
@@ -79,7 +82,62 @@ LastExecutionTime: 2026-07-10T01:40:00Z
   fix pattern may also apply to any OTHER guest exec path that omits
   XDG_RUNTIME_DIR; windows flags: orders 260 (new), 154 cold-join, 258.
 
-## Cycle 2026-07-09T23:10Z (windows — meta-orchestration worker drain, order 258)
+## Cycle 2026-07-10T00:09Z (linux_mutable macuahuitl — meta-orchestration: windows integration, litmus chain 255→262→264, e2e gate 1, in-forge drained 254+263)
+
+- **Credential guard**: ok:gh-keyring. Started clean at 67bffc86.
+- **Sibling integration** (a4092688): merged windows-next +8 (order 154 slice 2
+  LoginState+CloudProjects push topics; order 258 unattended parity subset; 6
+  windows clippy fixes). Merged tree: --check green + 66 workspace test suites
+  green. Verification exposed that `cargo check/clippy --workspace` never
+  compiles non-default-feature units (garbage injected into vm-layer
+  materialize/oci.rs → exit 0): fixed the latent vm-layer fake.rs lints
+  (f39f79e4), filed integration-gate-feature-coverage-gap-2026-07-10.md with a
+  Tlatoāni-gated ci-full bar-raise proposal. The headless all-features reds
+  were order 254's known scope (since drained — see below).
+- **Order 255 completed** (2bcced8e): the "STEP 5 race" was a misdiagnosis —
+  STEP 5 referenced $HEAD_BEFORE that no step ever set (runner steps are
+  separate bash -c subshells), collapsing its range to HEAD..HEAD: a
+  deterministic false negative since introduction. Shared bounded-retry probe
+  scripts/litmus-git-delta-wait.sh (local-head/plan-commit/remote-head, 120s
+  window/5s poll, exit 0/1/2 grammar) now backs litmus steps 4-6; new
+  litmus:git-delta-wait-shape (9 steps) pins it incl. mid-window re-sample +
+  no-dead-check negative. Criterion 2 discharged live: steps 4-5 PASS in this
+  cycle's ci-full forge cycle.
+- **E2E gate (local-build, run 20260710T003451Z): gate 1 exit 1, stopped
+  per runbook** — pre-build litmus 146/146, coverage 100%, security 16/16,
+  musl launcher installed (v0.3.260710.1); post-build e2e 5/6. Sole red:
+  STEP 6 asserted `ls-remote origin HEAD` whose symref is refs/heads/main —
+  a linux-next push never moves it (bug-behind-a-bug, unmasked by 255).
+  **Order 262 filed + fixed + completed**: branch-scoped recorder + probe,
+  shape-litmus regression pin (non-default-branch fixture where origin HEAD
+  resolves to nothing), live probe PASS against the real push window
+  129a85dd→e433b96f. Destructive gates 2-4 NOT reached (substrate intact);
+  next cycle should run the full destructive e2e expecting gate 1 green
+  modulo order 264.
+- **In-forge activity (sanctioned mid-build actors, audited)**: ci-full's
+  litmus cycle drained order 254 (61abd3bf: listen-vsock CI lane in --check +
+  pty test fixes) but pushed a mis-indented plan/index.yaml — committed
+  ledger did not parse; coordinator mediated mechanically and filed order 263
+  (mirror pre-receive YAML gate). The 262-verification run's in-forge cycle
+  then IMPLEMENTED order 263 (e433b96f: 150-line pre-receive hook + 10-step
+  shape litmus; coordinator audit PASS 2/2; gate binds on next git-mirror
+  image rebuild) — and blew STEP 3's 600s budget doing it → **order 264
+  filed** (bug+design: litmus budget vs in-forge greedy-drain doctrine;
+  options enumerated, ready). e433b96f also lacks Generated-By trailers and
+  its ledger event was misattributed (corrected; addendum in the 2026-07-10
+  findings file — consider a trailer rider on the 263 hook if it recurs).
+- **Release**: none — tray-parity release hold (16 gaps) still requires The
+  Tlatoāni's recorded approval; daily Linux release remains due behind it
+  (latest v0.3.260708.4).
+- **Queue after cycle**: linux ready = 264 (new), 256, 238, 144, 261
+  (any-host), 260, security chain (137/141/145), streams chain
+  (147/150/151/153/156/157/158), DSL (224/225), transport (125/128).
+  Windows: orders 230/231 confirmed landed → order 154 slice 3 unblocked;
+  order 258 blocked on attended smoke. macOS: order 259 criterion-3
+  verification still requested; order 155 residual slices claimable.
+  Blocked-on-operator: attended parity smokes (orders 257/258), tray-parity
+  release hold, feature-coverage bar-raise approval (see
+  integration-gate-feature-coverage-gap-2026-07-10.md).
 
 - **Host**: Windows 11 native, `windows-next`. Credential guard
   `ok:gh-credentials-store`. Clean start at 521de7bd == origin/windows-next;

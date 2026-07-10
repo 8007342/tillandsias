@@ -6105,7 +6105,7 @@ plan_index:
       events:
         - type: filed
           ts: "2026-07-09T21:05:00Z"
-            agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
           host: linux
           summary: >
             Found while implementing orders 230/231 (first session to run the
@@ -6490,9 +6490,9 @@ plan_index:
             --github-login reaches 'matched: git author name' with no 125 and
             no podman error (evidence: macos-build-install-smoke-e2e-findings-
             2026-07-09.md run 2). All four exit criteria now closed. Windows
-            residual promoted to order 262 (wsl.rs unit sets neither HOME nor
-            XDG_RUNTIME_DIR; renumbered from 260 on merge — order collision
-            with windows-tray-local-projects-push-gap).
+            residual promoted to order 265 (wsl.rs unit sets neither HOME nor
+            XDG_RUNTIME_DIR; renumbered 260 -> 262 -> 265 across the two 2026-07-10 merges — order collisions
+            with windows- and linux-filed packets).
 
     - packet_id: windows-tray-local-projects-push-gap
       order: 260
@@ -6573,8 +6573,163 @@ plan_index:
             check to pass that cannot even execute on this host class — an
             advisory-only gate. Filed + promoted per capture rule.
 
-    - packet_id: wsl-headless-unit-lock-namespace
+    - packet_id: opencode-prompt-e2e-step6-wrong-ref
       order: 262
+      title: "Fix: litmus:opencode-prompt-e2e-shape STEP 6 asserts origin HEAD (default branch) instead of the branch under test"
+      status: completed
+      kind: bug+litmus
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-10.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, smoke, forge, git]
+      estimated_hours: 1
+      outcome: >
+        STEP 6 "verify remote branch HEAD advanced" recorded and probed
+        `git ls-remote origin HEAD`, but origin's HEAD symref tracks the
+        default branch (main) — a linux-next push never moves it, so the
+        step is a deterministic false negative on every non-default branch.
+        Masked until 2026-07-10 because the runner stops at the first
+        failing step and STEP 5 (order 255) always failed first. Failed
+        e2e run 20260710T003451Z gate 1 even though the in-forge cycle's
+        push visibly advanced origin/linux-next (2bcced8e -> 61abd3bf).
+        Fix: record + probe refs/heads/<current-branch> in both the
+        recorder step and litmus-git-delta-wait.sh remote-head mode.
+      exit_criteria:
+        - "remote-head probes the current branch's remote ref; shape-litmus regression pin (push to non-default branch, origin HEAD unresolvable) passes"
+        - "litmus:opencode-prompt-e2e-shape passes standalone against a live in-forge cycle (all 7 steps)"
+      events:
+        - type: claim
+          ts: "2026-07-10T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          lease_id: "opencode-prompt-e2e-step6-wrong-ref (claim-ledger-node.sh)"
+        - type: progress
+          ts: "2026-07-10T01:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          summary: >
+            Fix implemented: branch-scoped recorder (+ test -s fail-loud) in
+            the litmus, branch-scoped probe_remote_head in the helper,
+            regression pin added to litmus:git-delta-wait-shape (fixture on
+            a non-default branch where ls-remote origin HEAD resolves to
+            nothing). Instant pre-build suite 4/4 PASS
+            (git-delta-wait-shape 9/9). Live standalone e2e litmus re-run
+            in flight; completion event to follow with its verdict.
+        - type: completed
+          ts: "2026-07-10T01:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Criterion 1 pinned (shape litmus 9/9 incl. the non-default-branch
+            regression fixture). Criterion 2 evidenced compositely: steps
+            4-5 passed live in ci-full run 20260710T003451Z, and the fixed
+            remote-head probe executed live against the real origin push
+            window 129a85dd -> e433b96f ("ok: remote HEAD advanced ...",
+            exit 0). The standalone all-7-step run could not complete for an
+            UNRELATED cause: STEP 3 timed out at its 600s budget because the
+            in-forge cycle implemented all of order 263 (e433b96f) —
+            steps 4-6 were never reached. That budget tension is order 264;
+            the full-chain green rides on it, not on this packet's defect,
+            which is closed and pinned.
+
+    - packet_id: git-mirror-ledger-yaml-gate
+      order: 263
+      title: "git-mirror pre-receive: reject pushes whose plan/openspec YAML does not parse"
+      status: done
+      kind: enhancement
+      deliverable: plan/issues/inforge-ledger-yaml-validation-gap-2026-07-10.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, yaml, forge, gating]
+      estimated_hours: 3
+      outcome: >
+        In-forge agent big-pickle-20260710T0044Z pushed 61abd3bf with a
+        mis-indented agent_id in plan/index.yaml — the committed ledger did
+        not parse until coordinator mediation (see deliverable). The
+        finalization step "validate touched YAML with a parser" is prose;
+        nothing on the forge push path enforces it. Add a pre-receive gate
+        to git-mirror-service rejecting pushes whose touched plan.yaml /
+        plan/**/*.yaml / openspec/**/*.yaml blobs fail a YAML parse
+        (tillandsias-policy validate-yaml in the mirror image, ruby
+        fallback), with the file + parser error surfaced to the pusher.
+        Pin with a fixture litmus: broken-index push rejected with the
+        parse error; clean push accepted.
+      exit_criteria:
+        - "a push containing a syntactically invalid plan/index.yaml is rejected at the mirror with the parse error"
+        - "a clean push is accepted (positive control)"
+        - "shape litmus pins both branches and the validator fallback order"
+      events:
+        - type: filed
+          ts: "2026-07-10T01:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Reduction-engine capture from the 20260710T003451Z e2e cycle's
+            trunk mediation: an advisory validation step let a broken
+            ledger reach origin/linux-next; the mirror is the single choke
+            point that can make it a constraint for every forge push.
+        - type: done
+          ts: "2026-07-10T01:12:11Z"
+          agent_id: "linux-forge-inlitmus-20260710 (untrailered — commit e433b96f, author-date-corrected; original event misattributed to macuahuitl and predated the filed event)"
+          host: forge
+          summary: >
+            Implementation complete: added pre-receive YAML validation gate
+            (images/git/pre-receive-hook.sh) with tillandsias-policy + ruby
+            fallback, updated Containerfile (added ruby + hook copy) and
+            entrypoint.sh (installs pre-receive hook). Shape litmus
+            litmus:git-mirror-yaml-gate-shape passes (10/10 steps).
+            Build check passes (format, type, clippy). Tests pass (141/142
+            — one unrelated network failure). Coordinator audit 2026-07-10:
+            litmus re-run PASS on macuahuitl (git-mirror-service suite 2/2);
+            gate goes LIVE only when the git-mirror image is rebuilt
+            (next --init / image build), not retroactively on running
+            mirrors. NOTE the commit lacks Generated-By trailers — see the
+            attribution addendum in the deliverable issue.
+
+    - packet_id: opencode-e2e-forge-budget-tension
+      order: 264
+      title: "litmus:opencode-prompt-e2e-shape STEP 3 600s budget vs the in-forge greedy-drain doctrine"
+      status: ready
+      kind: bug+design
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-10.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, forge, meta-orchestration, budgets]
+      estimated_hours: 3
+      outcome: >
+        STEP 3 launches `./repeat --times 1` with timeout_ms 600000, but the
+        meta-orchestration skill instructs forge-hosted cycles to IGNORE the
+        recurring-loop budget and drain as many ready packets as possible.
+        Concrete collision 2026-07-10: the standalone verification run's
+        in-forge cycle implemented the whole of order 263 (e433b96f,
+        pre-receive hook + litmus + wiring) and blew the 600s budget — STEP
+        3 TIMEOUT, steps 4-7 unreached, gate red even though both the agent
+        and the fixed assertions were healthy. The gate's failure mode is
+        indistinguishable from a hung forge. Design options (pick one, pin
+        it): (a) litmus-launched cycles pass an explicit drain budget the
+        skill honors (e.g. TILLANDSIAS_FORGE_DRAIN_BUDGET=1 packet or
+        time-boxed), keeping the litmus fast and deterministic; (b) raise
+        step timeout and have the litmus treat "agent still coherently
+        committing" as progress (weakens determinism); (c) a dedicated
+        no-drain smoke prompt for the litmus (verifies the commit+push
+        lifecycle with a minimal plan touch instead of real work). Option
+        (a) or (c) preserve the gate's falsifiability; (b) does not.
+      exit_criteria:
+        - "an in-forge cycle launched by the litmus completes inside the step budget deterministically (drain bounded or smoke-scoped)"
+        - "litmus:opencode-prompt-e2e-shape passes all 7 steps standalone on a healthy host"
+        - "the greedy-drain doctrine for NON-litmus forge cycles is unchanged"
+      events:
+        - type: filed
+          ts: "2026-07-10T01:58:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Reduction-engine capture from the order 262 verification run
+            (target/litmus-rerun-20260710/run.log: STEP 3 TIMEOUT). The
+            in-forge agent did excellent real work (order 263) in the wrong
+            budget envelope — the tension is structural, not agent error.
+
+    - packet_id: wsl-headless-unit-lock-namespace
+      order: 265
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
       status: ready
       kind: bug
@@ -6609,11 +6764,13 @@ plan_index:
             Filed during order 259 macOS verification (fix 77b0ba92). See
             plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md
             run 2 for the full lock-namespace post-mortem this mirrors.
-            Renumbered 260 -> 262 during the 2026-07-10 osx-next merge
-            (order collision with windows-tray-local-projects-push-gap).
+            Renumbered 260 -> 262 in the 2026-07-10 osx merge (collision
+            with windows' 260), then 262 -> 265 in the same day's second
+            merge (collision with linux's opencode-prompt-e2e-step6-wrong-
+            ref) — two renumbers in one day; order 266's case in point.
 
     - packet_id: plan-index-order-uniqueness
-      order: 263
+      order: 266
       title: "plan/index.yaml order-number uniqueness: fail-loud check + historic duplicate cleanup"
       status: ready
       kind: enhancement
@@ -6629,13 +6786,17 @@ plan_index:
         loop_status, commit messages, and cross-host flags ambiguous.
         Detection is currently manual eyeballing during merge conflict
         resolution (the 2026-07-10 osx merge caught its own 260 collision
-        only because both sides conflicted textually). Add a fail-loud
-        uniqueness check to tillandsias-policy (validate-yaml or a dedicated
-        plan-orders subcommand) rejecting duplicate order values among
-        non-done packets, with an explicit grandfather allowlist for the
-        historic done-status duplicates; pin with
-        litmus:plan-index-order-uniqueness. Renumber any still-open
-        duplicates with a renumber event. Ruby-free per order 261 precedent.
+        only because both sides conflicted textually; hours later the SAME
+        DAY's second merge collided again on 262 AND 263 — this very
+        packet was renumbered from 263). Add a fail-loud uniqueness check
+        to tillandsias-policy (validate-yaml or a dedicated plan-orders
+        subcommand) rejecting duplicate order values among non-done
+        packets, with an explicit grandfather allowlist for the historic
+        done-status duplicates; pin with litmus:plan-index-order-uniqueness.
+        Renumber any still-open duplicates with a renumber event. Ruby-free
+        per order 261 precedent. Natural composition: once in
+        tillandsias-policy, the order-263 git-mirror pre-receive gate
+        enforces it on every forge push for free.
         Full finding: plan/issues/plan-index-duplicate-order-numbers-2026-07-10.md.
       exit_criteria:
         - "policy check exits non-zero on a duplicate order among non-done packets, 0 otherwise (unit tests)"
@@ -6650,4 +6811,6 @@ plan_index:
             Reduction-engine capture during the osx-next merge: uniqueness
             scan after resolving the 260 collision found 7 pre-existing
             duplicate order numbers already merged. Filed + promoted per
-            capture rule.
+            capture rule. Renumbered 263 -> 266 in the second 2026-07-10
+            merge (collision with linux's git-mirror-ledger-yaml-gate —
+            the finding demonstrating itself).

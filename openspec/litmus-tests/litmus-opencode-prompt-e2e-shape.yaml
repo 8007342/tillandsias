@@ -28,8 +28,13 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok:"
 
-  - step: "record pre-smoke remote HEAD for push verification"
-    command: "git ls-remote origin HEAD | awk '{print $1}' > /tmp/opencode-e2e-remote-head-before && echo 'ok: remote HEAD recorded'"
+  # Record the CURRENT BRANCH's remote ref, not `ls-remote origin HEAD`:
+  # origin HEAD tracks the default branch (main), which a working-branch push
+  # never moves — that mismatch made STEP 6 a deterministic false negative
+  # (plan order 262). test -s fails loud here if the branch has no remote
+  # counterpart yet, instead of handing STEP 6 an empty before-file.
+  - step: "record pre-smoke remote branch head for push verification"
+    command: "git ls-remote origin \"refs/heads/$(git rev-parse --abbrev-ref HEAD)\" | awk '{print $1}' > /tmp/opencode-e2e-remote-head-before && test -s /tmp/opencode-e2e-remote-head-before && echo 'ok: remote branch head recorded'"
     timeout_ms: 15000
     expected_behavior: "ok:"
 

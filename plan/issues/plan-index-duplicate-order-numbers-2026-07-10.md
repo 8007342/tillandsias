@@ -3,7 +3,7 @@
 - **Date**: 2026-07-10
 - **Filed by**: macos meta-orchestration cycle 2026-07-10T00:40Z
 - **Classification**: enhancement
-- **Status**: open (promoted to plan/index.yaml order 263)
+- **Status**: open (promoted to plan/index.yaml order 266; renumbered from 263 in the second 2026-07-10 merge — the finding demonstrating itself)
 
 ## Finding
 

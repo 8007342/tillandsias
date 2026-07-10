@@ -1,0 +1,84 @@
+# @trace spec:git-mirror-service, spec:cross-platform
+name: litmus:git-mirror-yaml-gate-shape
+spec: git-mirror-service
+phase: pre-build
+size: instant
+
+description: >
+  Pins the pre-receive YAML validation gate for git-mirror-service.
+  Verifies the hook script exists, is executable, validates plan/openspec YAML,
+  and rejects pushes with broken YAML.
+
+severity: high
+
+preconditions:
+  - images/git/pre-receive-hook.sh exists and is executable
+  - images/git/entrypoint.sh installs the pre-receive hook
+  - images/git/Containerfile copies the pre-receive hook
+
+critical_path:
+  - step: "pre-receive hook exists and is executable"
+    command: "test -x images/git/pre-receive-hook.sh && echo 'OK: pre-receive-hook.sh is executable' || { echo 'FAIL: pre-receive-hook.sh missing or not executable'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "pre-receive hook validates plan/ YAML"
+    command: "grep -qE 'plan/.*\\.yaml' images/git/pre-receive-hook.sh && echo 'OK: hook checks plan/ YAML' || { echo 'FAIL: hook does not check plan/ YAML'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "pre-receive hook validates openspec/ YAML"
+    command: "grep -qE 'openspec/.*\\.yaml' images/git/pre-receive-hook.sh && echo 'OK: hook checks openspec/ YAML' || { echo 'FAIL: hook does not check openspec/ YAML'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "pre-receive hook has tillandsias-policy validator"
+    command: "grep -q 'tillandsias-policy' images/git/pre-receive-hook.sh && echo 'OK: hook uses tillandsias-policy' || { echo 'FAIL: hook missing tillandsias-policy'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "pre-receive hook has ruby fallback validator"
+    command: "grep -q 'ruby' images/git/pre-receive-hook.sh && echo 'OK: hook has ruby fallback' || { echo 'FAIL: hook missing ruby fallback'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "pre-receive hook exits 0 on success, 1 on failure"
+    command: "grep -q 'exit 0' images/git/pre-receive-hook.sh && grep -q 'exit 1' images/git/pre-receive-hook.sh && echo 'OK: hook has both exit codes' || { echo 'FAIL: hook missing exit codes'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "Containerfile includes ruby for YAML validation"
+    command: "grep -q 'ruby' images/git/Containerfile && echo 'OK: Containerfile has ruby' || { echo 'FAIL: Containerfile missing ruby'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "Containerfile copies pre-receive hook"
+    command: "grep -q 'pre-receive-hook.sh' images/git/Containerfile && echo 'OK: Containerfile copies pre-receive hook' || { echo 'FAIL: Containerfile missing pre-receive hook'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "entrypoint installs pre-receive hook"
+    command: "grep -q 'pre-receive' images/git/entrypoint.sh && echo 'OK: entrypoint installs pre-receive hook' || { echo 'FAIL: entrypoint missing pre-receive hook'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "pre-receive hook uses temp directory for validation"
+    command: "grep -q 'mktemp' images/git/pre-receive-hook.sh && grep -q 'trap.*rm' images/git/pre-receive-hook.sh && echo 'OK: hook uses temp directory with cleanup' || { echo 'FAIL: hook missing temp directory pattern'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "All pre-receive hook shape assertions passed"
+  log_fields:
+    spec: git-mirror-service
+    test: git-mirror-yaml-gate-shape
+    artifact: images/git/pre-receive-hook.sh
+
+rollback:
+  on_failure: >
+    The pre-receive YAML gate hook may be missing or incorrectly structured.
+    Check that images/git/pre-receive-hook.sh exists, validates plan/openspec YAML,
+    and has both tillandsias-policy and ruby fallback validators.
+  command: "echo 'Rollback: restoring pre-receive hook from git history' && git checkout HEAD -- images/git/pre-receive-hook.sh 2>/dev/null || true && ls -la images/git/pre-receive-hook.sh"
