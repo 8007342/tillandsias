@@ -8136,6 +8136,29 @@ fn maybe_spawn_vsock_listener(
             }
         });
 
+        // Order 260: guest-side LocalProjects rescan. Replaces the host
+        // tray's last steady-state WIRE poll (the 30s EnumerateLocalProjects
+        // tick) with a guest-internal readdir on a 15s cadence, change-gated
+        // in set_local_projects and subscriber-gated so an idle headless
+        // spends zero scans. A local readdir costs no podman exec and no
+        // wire round-trip; an inotify upgrade is a future enhancement
+        // (headless has no notify dep today).
+        let local_projects_state = state.clone();
+        let local_projects_rescan = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                if local_projects_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
+                    || !local_projects_state.has_local_projects_subscribers()
+                {
+                    continue;
+                }
+                let entries = tokio::task::spawn_blocking(vsock_server::enumerate_local_projects)
+                    .await
+                    .unwrap_or_default();
+                local_projects_state.set_local_projects(entries);
+            }
+        });
+
         // Podman events monitor: reads `podman events --format json`
         // and pushes curated step names to the tray.
         let events_state = state.clone();
@@ -8243,6 +8266,8 @@ fn maybe_spawn_vsock_listener(
         let _ = liveness.await;
         login_probe.abort();
         let _ = login_probe.await;
+        local_projects_rescan.abort();
+        let _ = local_projects_rescan.await;
     }))
 }
 

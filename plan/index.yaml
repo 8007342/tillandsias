@@ -6634,7 +6634,7 @@ plan_index:
     - packet_id: windows-tray-local-projects-push-gap
       order: 260
       title: "Control wire + headless: LocalProjects push topic (last poll blocking tick-loop retirement)"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/vsock_server.rs
       depends_on: []
@@ -6671,6 +6671,30 @@ plan_index:
             the packet's tick-elimination exit criterion is unreachable while
             local projects are poll-only. Full context in
             plan/issues/windows-tray-local-projects-push-gap-2026-07-09.md.
+        - type: completed
+          ts: "2026-07-10T05:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0410Z"
+          host: linux_mutable
+          lease_id: "windows-tray-local-projects-push-gap (claim-ledger-node.sh)"
+          summary: >
+            Wire: SubscriptionTopic::LocalProjects + LocalProjectsPush as
+            TRAILING variants (additive, no WIRE_VERSION bump; round-trip +
+            kind() + topics tests — 38 wire tests green). Headless:
+            set_local_projects change-gated source + subscribe/gate
+            accessors mirroring order 231; EnumerateLocalProjects handler
+            doubles as a push source (order-231 contract); per-connection
+            forwarder arm with the lag-skip full-replacement contract; NEW
+            subscriber-gated guest-side rescan task (15s readdir — no wire,
+            no podman; inotify upgrade noted as future enhancement since
+            headless carries no notify dep) wired into the listener abort
+            sequence (F7 discipline). Tests: change-gate unit (first scan
+            pushes, identical scan silent, changed list pushes);
+            ./build.sh --check (incl. listen-vsock lane) green; workspace
+            --test 66 suites green. WINDOWS: widen the Subscribe topic list
+            to include LocalProjects, delete the 30s tick poll (fallback
+            gated on subscription health), and drop the login prime once
+            the guest carries order 276. MACOS: same when picking up order
+            155 residuals.
 
     - packet_id: parity-litmus-ruby-free-check
       order: 261

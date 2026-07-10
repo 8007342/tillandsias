@@ -139,6 +139,13 @@ pub struct VmStateHandle {
     /// Last pushed project list, `None` until first fetched. Full-replacement
     /// compare: `set_cloud_projects` pushes only when the list differs.
     cloud_projects: Arc<RwLock<Option<Vec<CloudProjectEntry>>>>,
+    /// Broadcast fan-out for `LocalProjectsPush` (order 260). Same
+    /// subscriber semantics as `vm_status_tx`.
+    local_projects_tx: broadcast::Sender<ControlMessage>,
+    /// Last pushed VM-local project list, `None` until first scanned.
+    /// Full-replacement compare (order 260): `set_local_projects` pushes
+    /// only when the list differs.
+    local_projects: Arc<RwLock<Option<Vec<LocalProjectEntry>>>>,
     /// Monotonic counter for the `seq` field carried inside each push
     /// message (distinct from the per-request `ControlEnvelope.seq`, which
     /// pushes don't have a request to reply to). Shared across all push
@@ -164,6 +171,10 @@ const LOGIN_STATE_PUSH_CAPACITY: usize = 16;
 /// frame is a full-replacement list, so only the newest frame matters; a
 /// small buffer bounds memory for the larger payload.
 const CLOUD_PROJECTS_PUSH_CAPACITY: usize = 8;
+/// Order 260: same shallow-queue rationale as CloudProjects — each push is a
+/// full replacement list, so a lagged receiver skipping to latest loses
+/// nothing durable.
+const LOCAL_PROJECTS_PUSH_CAPACITY: usize = 8;
 
 impl VmStateHandle {
     /// Construct with default `Starting` phase and the conventional podman
@@ -173,6 +184,7 @@ impl VmStateHandle {
         let (vm_status_tx, _) = broadcast::channel(VM_STATUS_PUSH_CAPACITY);
         let (login_state_tx, _) = broadcast::channel(LOGIN_STATE_PUSH_CAPACITY);
         let (cloud_projects_tx, _) = broadcast::channel(CLOUD_PROJECTS_PUSH_CAPACITY);
+        let (local_projects_tx, _) = broadcast::channel(LOCAL_PROJECTS_PUSH_CAPACITY);
         Self {
             phase: Arc::new(RwLock::new(VmPhase::Starting)),
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
@@ -181,6 +193,8 @@ impl VmStateHandle {
             login_state: Arc::new(RwLock::new(None)),
             cloud_projects_tx,
             cloud_projects: Arc::new(RwLock::new(None)),
+            local_projects_tx,
+            local_projects: Arc::new(RwLock::new(None)),
             push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             last_event: Arc::new(RwLock::new(SERVER_NAME.to_string())),
         }
@@ -265,6 +279,45 @@ impl VmStateHandle {
         if flipped_in {
             let projects = tokio::task::spawn_blocking(fetch).await.unwrap_or_default();
             self.set_cloud_projects(projects);
+        }
+    }
+
+    /// Subscribe to the `LocalProjects` push topic (order 260). Same
+    /// independent-receiver semantics as [`subscribe_vm_status`].
+    pub fn subscribe_local_projects(&self) -> broadcast::Receiver<ControlMessage> {
+        self.local_projects_tx.subscribe()
+    }
+
+    /// True when at least one connection is subscribed to `LocalProjects`.
+    /// The guest-side rescan task uses this to spend zero directory scans
+    /// while nobody is listening (order 260; mirrors the login-probe gate).
+    pub fn has_local_projects_subscribers(&self) -> bool {
+        self.local_projects_tx.receiver_count() > 0
+    }
+
+    /// Record the latest VM-local project list and push `LocalProjectsPush`
+    /// (full replacement) to all `LocalProjects` subscribers IFF the list
+    /// differs from the previous one (order 260). The first scan always
+    /// pushes.
+    pub fn set_local_projects(&self, entries: Vec<LocalProjectEntry>) {
+        let changed = match self.local_projects.write() {
+            Ok(mut guard) => {
+                let changed = guard.as_ref() != Some(&entries);
+                if changed {
+                    *guard = Some(entries.clone());
+                }
+                changed
+            }
+            Err(_) => false,
+        };
+        if changed {
+            let seq = self
+                .push_seq
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1;
+            let _ = self
+                .local_projects_tx
+                .send(ControlMessage::LocalProjectsPush { seq, entries });
         }
     }
 
@@ -598,6 +651,8 @@ async fn handle_connection(
     // subscribe-gated zero-cost-when-unsubscribed contract as VmStatus.
     let mut login_state_rx: Option<broadcast::Receiver<ControlMessage>> = None;
     let mut cloud_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
+    // Order 260: LocalProjects topic, same contract.
+    let mut local_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
 
     loop {
         tokio::select! {
@@ -706,6 +761,37 @@ async fn handle_connection(
                     }
                     None => {
                         cloud_projects_rx = None;
+                    }
+                }
+                continue;
+            }
+            // Server-push: LocalProjectsPush (order 260). Same lag-skip
+            // contract; each frame is a full replacement so skipping to the
+            // latest loses nothing durable.
+            push = async {
+                loop {
+                    match local_projects_rx.as_mut()?.recv().await {
+                        Ok(msg) => return Some(msg),
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(spec = "vsock-transport", skipped, "LocalProjects push receiver lagged; skipping to latest");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            }, if local_projects_rx.is_some() => {
+                match push {
+                    Some(body) => {
+                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
+                        if write_envelope(&mut stream, &env).await.is_err() {
+                            debug!(spec = "vsock-transport", "vsock write failed during LocalProjectsPush; closing connection");
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                    }
+                    None => {
+                        local_projects_rx = None;
                     }
                 }
                 continue;
@@ -821,6 +907,9 @@ async fn handle_connection(
                 if topics.contains(&tillandsias_control_wire::SubscriptionTopic::CloudProjects) {
                     cloud_projects_rx = Some(state.subscribe_cloud_projects());
                 }
+                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::LocalProjects) {
+                    local_projects_rx = Some(state.subscribe_local_projects());
+                }
                 let ack = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -833,6 +922,11 @@ async fn handle_connection(
             ControlMessage::EnumerateLocalProjects { seq } => {
                 // l4: scan the bind-mount root for real project entries.
                 let entries = enumerate_local_projects();
+                // Order 260: an explicit enumeration is also a push source —
+                // fan the (possibly changed) list out to every LocalProjects
+                // subscriber on OTHER connections (change-gated inside),
+                // mirroring the order-231 CloudRefreshRequest contract.
+                state.set_local_projects(entries.clone());
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -1136,7 +1230,7 @@ fn in_vm_project_root() -> PathBuf {
 /// directory-walk + sort + mtime logic on different roots.
 ///
 /// @trace spec:host-shell-architecture, plan/issues/multi-host-integration-loop-2026-05-24.md l4
-fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
+pub(crate) fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
     let root = in_vm_project_root();
     let out = crate::local_projects::scan_project_root(&root);
     if out.is_empty() {
@@ -1348,6 +1442,34 @@ mod tests {
             }
             other => panic!("expected LoginStatePush, got {other:?}"),
         }
+    }
+
+    /// Order 260 exit criterion: a VM-side project list change emits
+    /// LocalProjectsPush; an identical rescan does not re-push (change gate).
+    #[tokio::test]
+    async fn set_local_projects_pushes_on_change_only() {
+        let entry = |name: &str| LocalProjectEntry {
+            label: name.to_string(),
+            guest_path: format!("/home/forge/src/{name}"),
+            last_seen_unix: 1_752_000_000,
+        };
+        let state = VmStateHandle::new();
+        let mut rx = state.subscribe_local_projects();
+        state.set_local_projects(vec![entry("tillandsias")]);
+        assert!(
+            matches!(rx.try_recv(), Ok(ControlMessage::LocalProjectsPush { entries, .. }) if entries.len() == 1),
+            "first scan must push"
+        );
+        state.set_local_projects(vec![entry("tillandsias")]);
+        assert!(
+            matches!(rx.try_recv(), Err(broadcast::error::TryRecvError::Empty)),
+            "identical list must not push"
+        );
+        state.set_local_projects(vec![entry("tillandsias"), entry("zeroclaw")]);
+        assert!(
+            matches!(rx.try_recv(), Ok(ControlMessage::LocalProjectsPush { entries, .. }) if entries.len() == 2),
+            "changed list must push"
+        );
     }
 
     /// Order 276 exit criterion: the logged-out -> logged-in transition
