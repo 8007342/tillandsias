@@ -18,7 +18,7 @@ case "$MODE" in
   launch-container)
     LAUNCH_TIME=$(date +%s%3N)
     FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
-    test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+    test -n "$FORGE_IMAGE" || FORGE_IMAGE="docker.io/library/alpine:3.20"
     CONTAINER_ID=$(podman run --rm -d --label "$TEST_LABEL" "$FORGE_IMAGE" sleep 60 2>&1 | head -1)
     echo "LAUNCH_TIME=$LAUNCH_TIME" && echo "CONTAINER_ID=$CONTAINER_ID"
     ;;

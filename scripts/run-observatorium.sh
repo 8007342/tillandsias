@@ -81,7 +81,23 @@ NAME="${OBSERVATORIUM_CONTAINER_NAME:-tillandsias-observatorium-${PROJECT_LABEL}
 SERVICE_PORT="${OBSERVATORIUM_SERVICE_PORT:-8080}"
 BROWSER_URL="${OBSERVATORIUM_BROWSER_URL:-}"
 BROWSER_MODE="${OBSERVATORIUM_BROWSER:-auto}"
-IMAGE="${OBSERVATORIUM_IMAGE:-tillandsias-web:v${VERSION}}"
+# Image resolution (order 267 strict-default finding): the name must be
+# localhost/-QUALIFIED — unqualified short names fail on hosts whose
+# registries.conf defines no unqualified-search registries — and the exact
+# v${VERSION} tag does not exist in the window between a version bump and
+# the next image build (every --ci-full pre-build phase). Prefer the exact
+# current-version image, fall back to the newest available web image.
+IMAGE="${OBSERVATORIUM_IMAGE:-}"
+if [[ -z "$IMAGE" ]]; then
+    IMAGE="localhost/tillandsias-web:v${VERSION}"
+    if ! podman image exists "$IMAGE" 2>/dev/null; then
+        FALLBACK="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -E '(^|/)tillandsias-web:v' | head -1)"
+        if [[ -n "$FALLBACK" ]]; then
+            echo "[run-observatorium] NOTE: $IMAGE not built yet; using $FALLBACK"
+            IMAGE="$FALLBACK"
+        fi
+    fi
+fi
 HOST_PORT=""
 CREATE_NEEDS_HOST_FALLBACK=0
 CONTAINER_STARTED_BY_CREATE=0

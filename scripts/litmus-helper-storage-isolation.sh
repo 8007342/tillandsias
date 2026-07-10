@@ -7,7 +7,7 @@ TEST_ROOT="${TEST_ROOT:-/tmp/tillandsias-litmus-storage-$$}"
 case "$MODE" in
   check-image)
     FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
-    test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+    test -n "$FORGE_IMAGE" || FORGE_IMAGE="docker.io/library/alpine:3.20"
     echo "FORGE_IMAGE=$FORGE_IMAGE" && podman inspect "$FORGE_IMAGE" >/dev/null && echo FORGE_IMAGE_OK
     ;;
   create-dirs)
@@ -19,7 +19,7 @@ case "$MODE" in
     ;;
   launch-project-a)
     FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
-    test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+    test -n "$FORGE_IMAGE" || FORGE_IMAGE="docker.io/library/alpine:3.20"
     CONTAINER_A=$(podman run -d --rm --label "tillandsias-litmus-storage-test=project-a" \
       --volume "$TEST_ROOT/project-a/src:/src:ro" \
       --volume "$TEST_ROOT/project-a/workspace:/workspace:rw" \
@@ -28,7 +28,7 @@ case "$MODE" in
     ;;
   launch-project-b)
     FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
-    test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+    test -n "$FORGE_IMAGE" || FORGE_IMAGE="docker.io/library/alpine:3.20"
     CONTAINER_B=$(podman run -d --rm --label "tillandsias-litmus-storage-test=project-b" \
       --volume "$TEST_ROOT/project-b/src:/src:ro" \
       --volume "$TEST_ROOT/project-b/workspace:/workspace:rw" \
@@ -78,7 +78,7 @@ case "$MODE" in
     ;;
   verify-tmp-clean-relaunch)
     FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
-    test -n "$FORGE_IMAGE" || FORGE_IMAGE="alpine:latest"
+    test -n "$FORGE_IMAGE" || FORGE_IMAGE="docker.io/library/alpine:3.20"
     CONTAINER_A_NEW=$(podman run -d --rm --label "tillandsias-litmus-storage-test=project-a-relaunch" \
       --volume "$TEST_ROOT/project-a/src:/src:ro" \
       --volume "$TEST_ROOT/project-a/workspace:/workspace:rw" \
