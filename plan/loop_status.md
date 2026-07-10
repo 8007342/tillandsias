@@ -1,6 +1,24 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T09:45:00Z
+LastExecutionTime: 2026-07-10T10:15:00Z
+
+## Cycle 2026-07-10T09:44Z→10:15Z (linux_mutable macuahuitl — overnight loop 6/8: ORDER 267 COMPLETE, strict litmus authority is the default)
+
+- Siblings merged x2 (clean). The harness onion's final layers: the
+  RELATIVE calls-file path was landing in the package-root target dir
+  (cargo test cwd — iteration 5's "stray nested target" was the evidence);
+  localhost/-qualified assertion updates; the test's ensure list extended
+  to the 10-image canon; the never-real container-run assertions moved to
+  a filed full-init-harness follow-up.
+- THE FLIP: TILLANDSIAS_LITMUS_STRICT_EXIT defaults ON (=0 opt-out is
+  itself a finding); unparseable steps are hard PARSE FAILs. Strict sweep
+  156/156 before the flip; default sweep 156/156 after; every litmus file
+  ruby-parses. Order 267 completed with multi-agent credit (in-forge:
+  slice 1 + slice 2 + anchor; coordinator: burn-down, iterations 2-6).
+- Post-build matrix re-proves at the next gate (pattern-ed steps are
+  behavior-identical under the flip).
+- Queue next: 273 (attach login flow), 129, 225, security chain, streams
+  chain, audits. Blocked-on-operator unchanged.
 
 ## Cycle 2026-07-10T09:07Z→09:45Z (windows — meta-orchestration recurring loop 4/8: FULL DESTRUCTIVE E2E PASS @ 06c14a35, guest version-skew demonstrated, order 282 filed)
 
