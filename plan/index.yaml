@@ -7466,48 +7466,44 @@ plan_index:
 
     - packet_id: macos-attach-first-use-materialization-blackout
       order: 270
-      title: "Agent attach on fresh VM: PTY dies silently during first-use forge-image build (attended smoke F-H)"
+      title: "First-use attach: forge-image materialization has no progress feedback and the build dies with the attach process (guest-side)"
       status: ready
       kind: bug
-      deliverable: crates/tillandsias-macos-tray/src/terminal_attach.rs
+      deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
-      pickup_role: macos
-      capability_tags: [macos, tray, pty, vz, ux, materialize]
+      pickup_role: linux
+      capability_tags: [headless, pty, materialize, forge, ux]
       estimated_hours: 4
       outcome: >
-        2026-07-10 attended smoke, fresh VM: first agent attach triggers the
-        in-VM forge-image materialization (multi-minute, network-bound
-        recipe build). The attach PTY streams early output (cloud clone
-        lines) then goes silent; the host attach worker eventually closes
-        the PTY with no message — the operator's Terminal shows '[screen is
-        terminating]' or a stuck window, indistinguishable from a hang
-        (guest journal confirmed healthy podman image builds in flight).
-        SEVERITY UPGRADE (post-mortem over SSH): the in-VM build runs as a
-        child of the attach session, so when the host worker gives up and
-        closes the PTY it REAPS THE BUILD — both attempts left only
-        dangling layers (empty-ID 'image build' journal events, no tagged
-        image, no build process, load 0.05). First-use attach can therefore
-        NEVER succeed on a slow network; each retry only advances the layer
-        cache incrementally. Wanted: (1) surface materialization progress
-        into the attach PTY — at minimum an explicit 'building forge image,
-        first use takes minutes…' line; (2) the worker must not close the
-        PTY while the in-VM launch is legitimately building — keep-alive
-        until build completion or a LOUD failure line with the guest-side
-        error; (3) the build must survive PTY loss (guest-side detach:
-        systemd-run / setsid) so an impatient close doesn't waste the work;
-        (4) a retry after the build completes must succeed (image cached).
-        Guest cooperation (progress frames on the wire, detached build) may
-        spawn a linux slice — coordinate via this packet. Also noted: guest
-        journal drowns in 60s podman exec/exec_died label dumps from the
-        liveness probes, and the headless logs entire gh api JSON bodies
-        (private-repo metadata into the journal) — quieting both is in
-        scope for forensics signal-to-noise. Full context:
-        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-H).
+        RE-SCOPED 2026-07-10 (overnight cycle 6) after orders 269/281 and a
+        code re-read shifted the picture — the original macOS host-side
+        framing was a misdiagnosis. FACTS NOW: (a) the macOS attach worker
+        (action_host::run_pty_attach) does NOT "give up and close the PTY"
+        — it spawns pump_io and detaches; the PTY closes only when the
+        GUEST child (the login/agent flow) exits. So there is no host-side
+        give-up to add a message to. (b) Order 269 (done) already made the
+        session end operator-VISIBLE: the popup prints '[tillandsias]
+        session ended — you may close this window.' + exits, so the "silent
+        death / blank terminal indistinguishable from a hang" symptom is
+        resolved on the host side. (c) The corrupt-overlay aftermath of a
+        reaped build is order 281's self-heal. What REMAINS is genuinely
+        guest-side: the first-use forge-image build is a child of the guest
+        login/agent process, so when that process exits the build is reaped
+        (cycle 3 evidence: exit-125 corrupt overlay, dangling layers), and
+        there is no progress feedback while it runs (multi-minute, silent).
+        Guest-side fixes: (1) detach the image build from the attach
+        session lifecycle (systemd-run/setsid in the headless launch path)
+        so it survives the PTY closing and a retry hits the cache; (2) emit
+        materialization progress the tray can render (a build-phase line on
+        the wire / to the PTY within ~5s of build start). Host-side operator
+        visibility is DONE (269); this packet is now the guest-side
+        durability + progress work. Full context:
+        plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md (F-H)
+        and guest-podman-overlay-corruption-no-selfheal-2026-07-10.md.
       exit_criteria:
-        - "fresh-VM first attach shows an explicit materialization message in the popup terminal within 5s of click"
-        - "the PTY stays open through a healthy multi-minute image build and lands in the live agent session"
-        - "worker give-up paths print a loud error line to the PTY before closing"
-        - "an in-flight image build survives the attach PTY closing (verify: close terminal mid-build, image still completes)"
+        - "the first-use forge-image build is detached from the attach session and survives the PTY closing (close mid-build, image still completes; unit test on the detach decision behind a spawn seam)"
+        - "a retry after the build completes attaches to the cached image (no rebuild)"
+        - "materialization emits a progress signal within ~5s of build start that the tray can render (test on the emit path)"
       events:
         - type: filed
           ts: "2026-07-10T03:20:00Z"
@@ -7515,8 +7511,23 @@ plan_index:
           host: macos
           summary: >
             Attended-smoke capture: operator hit this live on both a cloud
-            and a local attach; SSH forensics (cloud-init injected key)
-            confirmed builds in flight while both PTYs were already dead.
+            and a local attach; forensics confirmed builds in flight while
+            both PTYs were already dead.
+        - type: rescope
+          ts: "2026-07-10T10:00:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0957Z"
+          host: macos
+          summary: >
+            Overnight cycle 6 re-scope: corrected the host-side
+            misdiagnosis (no macOS worker give-up — run_pty_attach detaches
+            pump_io; the guest child's exit closes the PTY). Operator
+            visibility of session-end is DONE via order 269's banner; the
+            corrupt-store aftermath is order 281. Residual is guest-side
+            (detach the build from the attach lifecycle + progress
+            feedback), so pickup_role macos -> linux, deliverable ->
+            tillandsias-headless, criteria trimmed to the two guest-side
+            realities. Reduction step: removed ambiguity + fixed
+            attribution so a capable host can drain it.
 
     - packet_id: methodology-idiomatic-layers-for-agents
       order: 271

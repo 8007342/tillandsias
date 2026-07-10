@@ -1,6 +1,42 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T10:15:00Z
+LastExecutionTime: 2026-07-10T10:20:00Z
+
+## Cycle 2026-07-10T09:57Z (macos — overnight autonomous 6/8: reduction pass — order 270 re-scoped guest-side, order-155-criteria proposal filed, destructive e2e on merged HEAD)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 6 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next 447451db
+  (order 267 COMPLETE — strict litmus exit-code authority is now the
+  default; corpus 156/156). Order 273 STILL open.
+- **Reduction-engine pass (no risky big-refactor forced at 6/8)**: the two
+  macOS-owned ready packets are 155 (large final refactor) and 270
+  (entangled with 273). Rather than force either unattended, reduced the
+  ledger:
+  - **Order 270 RE-SCOPED guest-side**: code re-read + orders 269/281
+    corrected the original host-side misdiagnosis. The macOS attach worker
+    does NOT give up/close the PTY (run_pty_attach detaches pump_io; the
+    GUEST child's exit closes it); order 269's banner already made
+    session-end operator-visible; 281 owns the corrupt-store aftermath. The
+    real residual — build reaped with the attach process + no progress
+    feedback — is guest-side. Moved pickup_role macos->linux, deliverable
+    ->tillandsias-headless, criteria trimmed to detach-build + progress
+    signal. Rescope event recorded.
+  - **Order-155 exit-criteria proposal filed** (Tlatoāni-gated,
+    order-155-zero-sleep-criteria-vs-fallback-poll-2026-07-10.md): the
+    "no tokio::time::sleep in transport path" criterion is unsatisfiable
+    against the converged design that DELIBERATELY keeps a fallback poll
+    (both trays share it via subscription_health). Proposed rewording to
+    the SC-07 "no timer while healthy" invariant the code already
+    satisfies — NOT self-approved (definition-of-done change).
+- **E2E gate (destructive, local-build) on merged HEAD 447451db PASS**:
+  eligible; destroy + rebuild + cold provision (exit 0) + `--exec-guest`
+  smoke — fresh disk boots healthy (guest headless v0.3.260710.8), and
+  order 272 re-verified on this build (sshd masked, zero :22 listeners,
+  fstab mount present). Report:
+  plan/issues/macos-e2e-overnight-cycle6-2026-07-10.md.
+- **Queue next**: macOS ready now = 155 (pending the criteria decision) +
+  its watch-channel-menu residual. 270 handed to linux. Order 273 remains
+  the attach-cell blocker.
 
 ## Cycle 2026-07-10T09:44Z→10:15Z (linux_mutable macuahuitl — overnight loop 6/8: ORDER 267 COMPLETE, strict litmus authority is the default)
 
