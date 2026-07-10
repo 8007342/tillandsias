@@ -1,6 +1,31 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T08:45:00Z
+LastExecutionTime: 2026-07-10T09:10:00Z
+
+## Cycle 2026-07-10T08:57Z (macos — overnight autonomous 5/8: order 155 tick-wait dedup onto shared module, cross-host convergence)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 5 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next 34c53ced —
+  which brought TWO cross-host wins from my earlier slices: (1) windows
+  adopted my SubscriptionHealth (order 154 slice 4, 0083f362 "tick wait
+  wakes on drop"); (2) linux hoisted my slice-3 tick-wait helpers into the
+  shared subscription_health module. Order 273 STILL open.
+- **Order 155 dedup COMPLETE**: removed the macOS-local TickWake /
+  wait_tick_or_subscription_drop / tick_after_wake (+ their 2 redundant
+  unit tests) and imported the shared copies linux hoisted. The "identical
+  stream architecture" exit criterion is now enforced by SHARED SOURCE
+  rather than parallel copies — the two trays' tick-wait semantics cannot
+  drift. Byte-identical implementations (behavior live-verified cycle 4);
+  69 tray + 59 host-shell tests, build check clean. No behavior change → no
+  re-verification needed.
+- **E2E gate**: skipped-with-cause — pure source dedup, zero runtime
+  behavior change; cycle 4's destructive gate (<90min ago) exercised the
+  identical behavior on a fresh provision. No new e2e report warranted.
+- **Queue next**: macOS 155 residual = watch-channel MENU listeners (last
+  slice; removing the fallback tick loop entirely + SC-01 zero-sleep). Order
+  273 remains the hot linux blocker on the attach cell. Sibling convergence
+  healthy: both trays now share SubscriptionHealth + tick-wait + the
+  four-topic push model.
 
 ## Cycle 2026-07-10T08:07Z→08:45Z (windows — meta-orchestration recurring loop 3/8: order 154 slice 4 SC-16, helpers hoisted to host-shell)
 

@@ -1764,6 +1764,24 @@ plan_index:
             tick-elimination. Remaining residual: watch-channel MENU
             listeners (the tick loop still exists as fallback; full removal
             + SC-01 zero-sleep in the transport path is the last slice).
+        - type: progress
+          ts: "2026-07-10T09:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0857Z"
+          host: macos
+          commits: [07c6dca8]
+          summary: >
+            Convergence dedup: linux hoisted the slice-3 tick-wait helpers
+            (TickWake / wait_tick_or_subscription_drop / tick_after_wake)
+            from this crate into
+            tillandsias_host_shell::subscription_health, and windows adopted
+            them (order 154 slice 4). Removed the macOS local duplicates +
+            their redundant unit tests and imported the shared copies so the
+            two trays' tick-wait semantics can no longer drift — the
+            "identical stream architecture" exit criterion, enforced by
+            shared source rather than parallel copies. Byte-identical
+            implementations (behavior live-verified cycle 4), so no
+            re-verification: 69 tray + 59 host-shell tests, build check
+            clean. No behavior change.
       exit_criteria:
         - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
         - "Reader task and watch channels identical in structure to order 144"
