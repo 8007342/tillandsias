@@ -740,18 +740,17 @@ run_litmus_test_file() {
 
     append_step
 
-    # Surface parse gaps instead of silently thinning coverage (order 256
-    # slice 1). The 2026-07-10 audit found 31 folded/multi-line command:
-    # values across 8 files that this runner has skipped since authoring;
-    # rewriting them is order 267 — until it lands, an affected step is a
-    # loud WARNING (not a step fail) so currently-green suites do not flip
-    # red wholesale. Once 267 rewrites the corpus, promote this to a hard
-    # per-step parse FAIL.
+    # A named step whose command: cannot be extracted is a hard PARSE FAIL
+    # (order 267 promotion, 2026-07-10): the corpus carries zero folded
+    # commands post-slice-2, so an unparseable step is authoring drift, not
+    # legacy debt — silently thinner coverage was the original dead-check
+    # vector (31 steps skipped since authoring before the rewrite).
     if [[ "${#unparsed_step_names[@]}" -gt 0 ]]; then
-        printf '  %b[PARSE WARNING]%b %s\n' "${YELLOW}" "${NC}" "$test_file" >&2
+        printf '  %b[PARSE FAIL]%b %s\n' "${RED}" "${NC}" "$test_file" >&2
         for us in "${unparsed_step_names[@]}"; do
-            printf '%s\n' "         step '${us}': command: not extractable (single-line double-quoted scalar required; folded '>'/'>-' unsupported) — step SKIPPED, coverage is thinner than authored (order 267)" >&2
+            printf '%s\n' "         step '${us}': command: not extractable (single-line double-quoted scalar required; folded '>'/'>-' unsupported)" >&2
         done
+        return 1
     fi
 
     # A file with ZERO parseable steps has always failed — but generically
@@ -793,24 +792,21 @@ run_litmus_test_file() {
 
         # Patternless non-zero exits (order 256): when a step declares
         # neither success_pattern nor expected_behavior, its exit code is
-        # the only signal it has — a non-zero exit SHOULD fail the step
-        # instead of passing silently (dead-check trap). The 2026-07-10
-        # strict-mode audit exposed multiple litmuses that have been red
-        # for a while behind this trap (observatorium skeleton, the
-        # source-built init harness, host-browser-mcp frame shape, …), so
-        # per migration discipline the authority is staged: strict mode
-        # behind TILLANDSIAS_LITMUS_STRICT_EXIT=1 first, burn-down of the
-        # exposed reds + default flip tracked by order 267. Legacy mode
-        # still passes the step but says so loudly.
+        # the only signal it has — a non-zero exit FAILS the step (the
+        # order-256 dead-check trap). STRICT IS THE DEFAULT as of order
+        # 267's flip (2026-07-10, staged flag→burn-down→default per
+        # migration discipline; the corpus was 156/156 strict at flip
+        # time). TILLANDSIAS_LITMUS_STRICT_EXIT=0 is the emergency opt-out
+        # — using it on a red is a finding to file, not a fix.
         if [[ $exit_code -ne 0 && -z "$step_success_pattern" && -z "$step_expected" ]]; then
-            if [[ "${TILLANDSIAS_LITMUS_STRICT_EXIT:-0}" == "1" ]]; then
+            if [[ "${TILLANDSIAS_LITMUS_STRICT_EXIT:-1}" != "0" ]]; then
                 printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
                 printf '%s\n' "         exit_code=${exit_code} (no success_pattern/expected_behavior declared — non-zero exit fails the step; strict-exit mode)" >&2
                 printf '%s\n' "         output=${step_output}" >&2
                 return 1
             fi
             printf ' %b[DEAD-CHECK WARNING]%b\n' "${YELLOW}" "${NC}" >&2
-            printf '%s\n' "         exit_code=${exit_code} with no declared pattern — PASSING via legacy behavior; will FAIL once TILLANDSIAS_LITMUS_STRICT_EXIT defaults on (order 267)" >&2
+            printf '%s\n' "         exit_code=${exit_code} with no declared pattern — PASSING via the TILLANDSIAS_LITMUS_STRICT_EXIT=0 opt-out (file a finding; the opt-out is not a fix)" >&2
         fi
 
         # If success_pattern is declared, use check_signal() which is

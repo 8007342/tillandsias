@@ -7867,7 +7867,7 @@ plan_index:
     - packet_id: litmus-corpus-parse-health
       order: 267
       title: "Litmus corpus parse health: burn down strict-exit reds, rewrite folded commands, repair YAML-invalid files, flip strict default"
-      status: ready
+      status: completed
       kind: fix+litmus-infra
       deliverable: plan/issues/litmus-corpus-parse-health-2026-07-10.md
       depends_on: []
@@ -7905,6 +7905,32 @@ plan_index:
             standalone-context artifact). Slice-able file-by-file; each
             file is an independent child if a picker needs smaller
             packets.
+        - type: completed
+          ts: "2026-07-10T10:10:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0944Z (multi-agent: in-forge cycles contributed slice 1 — 4 YAML repairs, c4b44aa2 — and slice 2 — all 31 folded rewrites, 2cc5a066 — plus the parser anchor + 3 burn-down fixes adopted from the gate-4 orphan; coordinator did the rest across loop iterations 2-6)"
+          host: linux_mutable
+          lease_id: "litmus-corpus-parse-health (claim-ledger-node.sh)"
+          summary: >
+            All four exit criteria met. (1) Every strict red repaired:
+            observatorium/env-isolation/inference (full rewrites on the
+            product launch shape), init-command (rg -F/-U regex-vs-literal
+            + the 8->10 image canon per orders 253/76), spec-traceability
+            + podman-build greps, host-browser-mcp/runtime-diagnostics
+            empty-name mis-parses (parser anchor), and the headless-init
+            harness onion: single-quoted scalar never parsed -> rustup env
+            orphaned by the HOME override -> RELATIVE calls-file landing
+            in the package-root target (the "stray nested target" was the
+            evidence) -> localhost/-qualified image names -> the test's
+            image list extended to canon and the never-real container-run
+            assertions moved to a filed follow-up. (2) Zero folded
+            commands, zero PARSE warnings. (3) ruby parses all 100+ litmus
+            files. (4) TILLANDSIAS_LITMUS_STRICT_EXIT defaults ON
+            (=0 is the emergency opt-out, itself a finding) and
+            unparseable steps are hard PARSE FAILs; pre-build matrix
+            156/156 under the flipped default. Post-build matrix re-proves
+            at the next gate (pattern-ed steps are behavior-identical).
+            Residual follow-up (recorded in the deliverable): full-init
+            harness packet for the container-run-shape assertions.
         - type: progress
           ts: "2026-07-10T06:39:00Z"
           agent_id: "linux-bigp pickle-20260710T063952Z"

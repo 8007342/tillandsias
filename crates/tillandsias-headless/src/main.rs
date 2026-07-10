@@ -10816,10 +10816,16 @@ mod tests {
             "status-check plan should keep the completion marker"
         );
         if std::env::var_os("LITMUS_PODMAN_CALLS_FILE").is_some() {
+            // Keep in lockstep with run_init's canonical image list (orders
+            // 253/76 added vault + forge-base; router was always in init) —
+            // litmus:headless-init-status-check-source-built asserts every
+            // family's lookup lands in the fake-podman calls log.
             let images = [
                 "proxy",
                 "git",
+                "vault",
                 "inference",
+                "router",
                 "chromium-core",
                 "chromium-framework",
                 "forge",
