@@ -1,6 +1,24 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T02:05:00Z
+LastExecutionTime: 2026-07-10T02:35:00Z
+
+## This Loop (2026-07-10T02:27Z, linux_mutable — big-pickle reduction: litmus-stdlib-research)
+
+- **Cycle type**: meta-orchestration worker drain + reduction on mutable Linux.
+- **Startup**: `linux-next @ 39186723`, worktree dirty with tracked changes from a prior incomplete cycle (TRACES.md, VERSION bump, convergence dashboard). Committed as checkpoint `57f264f2` and pushed. Clean worktree after.
+- **Credential guard**: `ok:gh-keyring`.
+- **E2E gate**: `skip:smoke-lock-held` — no local-build gate this cycle.
+- **Worker drain**: Claimed and completed `litmus-command-portability-dsl-research` (order 224).
+  - Corpus analysis: 198 litmus files, 1044 command fields, 74% grep-based.
+  - D1: shell functions in sourced `scripts/litmus-stdlib.sh` (model b).
+  - D2: 8 core primitives: `mf_literal`, `mf_literal_count`, `mf_regex`, `mf_regex_count`, `mf_absent`, `mf_threshold`, `mf_file_exists`, `mf_assert_count`.
+  - D3: single file with `case` branching per OS.
+  - D4: lint + pin + lazy migration.
+  - D5: raw `command:` remains valid as escape hatch.
+  - 5 real prototype rewrites in deliverable.
+- **Verification**: `plan/index.yaml` validated with `ruby -ryaml`. 121/121 instant litmus PASS.
+- **Coordinator**: windows-next `00076813` and osx-next `86105319` — checked but no merge needed this cycle.
+- **Push state**: pushed `linux-next` (checkpoint `57f264f2` + research `16078687`).
 
 ## Cycle 2026-07-10T00:09Z (linux_mutable macuahuitl — meta-orchestration: windows integration, litmus chain 255→262→264, e2e gate 1, in-forge drained 254+263)
 
