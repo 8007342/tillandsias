@@ -1,6 +1,42 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T07:45:00Z
+LastExecutionTime: 2026-07-10T08:45:00Z
+
+## Cycle 2026-07-10T08:07Z→08:45Z (windows — meta-orchestration recurring loop 3/8: order 154 slice 4 SC-16, helpers hoisted to host-shell)
+
+- **Host**: Windows 11 native, `windows-next`, agent
+  windows-bullo-fable5-20260710T0536Z. Credential guard
+  `ok:gh-credentials-store`. Clean start at 14012ad7; merged
+  origin/linux-next 2cc5a066 (order 267 slice 2 litmus rewrites, pure
+  fast-forward again — three cycles running, windows-next has stayed a
+  strict descendant of linux-next), pushed sync + claim before work.
+- **Worker drain — order 154 slice 4 COMPLETED (0083f362), lease
+  released, packet stays ready**: SC-16 adoption — VM_STATUS_PUSH_HEALTHY
+  AtomicBool replaced by shared host-shell SubscriptionHealth; tick loop
+  waits via wait_tick_or_subscription_drop, rewinding to tick 0 on a drop
+  so the full fallback round runs immediately (was: up to 300s on the
+  10-tick cadence). HOISTED the tray-agnostic helpers (TickWake,
+  wait_tick_or_subscription_drop, tick_after_wake) into
+  host-shell::subscription_health with their paused-clock pins instead of
+  mirror-duplicating them — macOS order 155 flagged to swap
+  action_host.rs's local copies for the shared ones (order-274
+  unit-writer-drift lesson applied proactively). host-shell 53 tests,
+  windows-tray 65, clippy 0 warnings across both.
+- **Live verification**: tray at this HEAD engaged the slice-3
+  legacy-topic fallback twice more (stale pre-260 guest), and survived a
+  mid-run `wsl --terminate`: keepalive respawned WSL, push subscription
+  re-established 31s end-to-end. SC-16 wake-timing semantics pinned
+  deterministically by the paused-clock tests. All test processes
+  terminated, VM returned to stopped.
+- **E2E gate**: deferred-with-cause — third consecutive cycle whose
+  runtime delta is tray-side push wiring, live-exercised directly above;
+  the pending destructive run (also order 274 criterion 3 + slice 3
+  full-topic path) is queued for a cycle with headroom — it needs the
+  guest refreshed past 7bdc4c1d, which the e2e's build+install provides.
+- **Next windows work**: order 154 residual (watch-channel menu wakeups +
+  tick-task elimination — needs an event-driven menu render path); the
+  full destructive e2e as the next cycle's primary item (closes three
+  pending live-verification residuals at once).
 
 ## Cycle 2026-07-10T06:58Z (macos — overnight autonomous 3/8: order 269 done + verified live, order 281 filed from PTY-tee capture)
 
