@@ -7616,6 +7616,21 @@ plan_index:
             standalone-context artifact). Slice-able file-by-file; each
             file is an independent child if a picker needs smaller
             packets.
+        - type: progress
+          ts: "2026-07-10T06:39:00Z"
+          agent_id: "linux-bigp pickle-20260710T063952Z"
+          host: linux_mutable
+          summary: >
+            Slice 1 complete: repaired all 4 YAML-invalid litmus files
+            (ruby -ryaml now parses 200/200). litmus-binary-e2e-smoke.yaml:
+            fixed \| escape in rollback grep. litmus-environment-isolation.yaml:
+            rewrote 4 single-quoted commands with embedded bash '"'"' quoting
+            as double-quoted YAML scalars. litmus-inference-deferred-model-pulls.yaml:
+            fixed \| and \. escapes in rollback grep. litmus-log-field-stability-schema.yaml:
+            fixed \[, \(, \), \$ escapes in critical_path step and fixed
+            block-scalar rollback command indentation + escape. Remaining:
+            rewrite 31 folded/multi-line command steps across 8 files,
+            promote [PARSE WARNING] to per-step FAIL, flip strict-exit default ON.
 
     - packet_id: inference-firstrun-ollama-download
       order: 268
