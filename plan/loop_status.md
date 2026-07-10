@@ -2879,3 +2879,10 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - **Order 237 residual (forge mirror gitconfig default-on)** + **order 238**: need a forge-context session (in-forge agent or operator-launched).
 - **Order 129 (agent egress allowlist research)**: needs an operator-attended forge session for live proxy logs.
 - **Tray-parity release hold**: merge-to-main-and-release now reports 16 parity gaps (8 required features x macos+windows `unknown`) — release-with-gaps needs The Tlatoāni's recorded approval until 257/258 land.
+
+## Cycle 2026-07-10T00:10Z (windows bullo — order 261 drain: ruby-free parity gate)
+
+- **Agent**: windows-bullo-fable5-20260710T0010Z (meta-orchestration worker drain; branch windows-next, linux-next already fully merged at startup).
+- **Order 261 done** (`d2f0c908`): `tillandsias-policy parity-matrix` subcommand replicates the litmus:tray-parity-matrix-complete ruby one-liner exactly (valid status words on all cells, no `regressed` anywhere, current host column done on `parity: required` rows; identical output lines). 9 unit tests incl. a repo-matrix pin (linux green, windows red-by-design). Litmus command repointed cargo-first with the ruby one-liner as fallback where cargo is absent; timeout raised 5s→120s for cold cargo builds. Verified live on this no-ruby host: default run exits 1 with the 7 expected `missing required:` lines; `--host linux` exits 0. **Order 258 exit criterion 4 is now executable on Windows** (stays red until the attended smoke flips the column, by design).
+- **Verification**: cargo test -p tillandsias-policy 22/22; clippy --all-targets clean; fmt-check clean; touched YAML validated via `tillandsias-policy validate-yaml`.
+- **Queue after cycle (windows)**: order 258 remains blocked-on-operator (attended smoke checklist `plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md`); order 260 (LocalProjects push topic) is linux-owned; orders 224/225/256 (litmus DSL/runner) remain any-host candidates.
