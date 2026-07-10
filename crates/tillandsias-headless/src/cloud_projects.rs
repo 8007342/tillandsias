@@ -39,6 +39,7 @@ use tracing::{debug, warn};
 /// carrying whatever this returns.
 ///
 /// @trace spec:host-shell-architecture, spec:tillandsias-vault
+#[allow(dead_code)]
 pub fn fetch_cloud_projects(token: Option<&str>) -> Vec<CloudProjectEntry> {
     let mut cmd = std::process::Command::new("gh");
     cmd.args([
@@ -97,6 +98,7 @@ pub fn fetch_cloud_projects(token: Option<&str>) -> Vec<CloudProjectEntry> {
 /// no defaultBranchRef (e.g. an empty repo) gets an empty
 /// default_branch rather than being dropped. Malformed JSON yields an
 /// empty list.
+#[allow(dead_code)]
 pub fn parse_gh_repo_list(json: &str) -> Vec<CloudProjectEntry> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
         return Vec::new();
@@ -134,11 +136,9 @@ pub fn parse_gh_repo_list(json: &str) -> Vec<CloudProjectEntry> {
 /// `token: Some(t)` sets `GH_TOKEN=t` on the spawned process. `token: None`
 /// lets `gh` use its own auth config.
 ///
-/// Gated to `listen-vsock`: the sole caller is the in-VM vsock dispatcher's
-/// `GithubLoginStatusRequest` handler (`vsock_server.rs`, same cfg). Without
-/// this gate the function is dead code under `--features tray` and trips the
-/// `-D warnings` clippy gate (the CI `Run clippy` step builds `--features tray`).
+/// Kept for API completeness; may be used by future tray or vsock callers.
 #[cfg(feature = "listen-vsock")]
+#[allow(dead_code)]
 pub fn fetch_github_username(token: Option<&str>) -> Option<String> {
     let mut cmd = std::process::Command::new("gh");
     cmd.args(["api", "user", "--jq", ".login"]);

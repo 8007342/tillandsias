@@ -6028,7 +6028,7 @@ plan_index:
     - packet_id: listen-vsock-feature-matrix-ci-gap
       order: 254
       title: "CI: clippy+test the listen-vsock feature; fix the 2 pty_handler tests that drifted"
-      status: ready
+      status: completed
       kind: fix+ci
       deliverable: crates/tillandsias-headless/src/pty_handler.rs
       depends_on: []
@@ -6056,7 +6056,7 @@ plan_index:
       events:
         - type: filed
           ts: "2026-07-09T21:05:00Z"
-          agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
+            agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
           host: linux
           summary: >
             Found while implementing orders 230/231 (first session to run the
@@ -6064,6 +6064,18 @@ plan_index:
             order-141 argv-allowlist surface — coordinate the test fix with
             the encrypted-control-channel owner rather than loosening the
             allowlist casually.
+        - type: completed
+          ts: "2026-07-10T00:55:00Z"
+          agent_id: "linux-tlatoani-big-pickle-20260710T0044Z"
+          host: linux
+          summary: >
+            Fixed brace syntax error from guard refactor. Removed leftover
+            `} else { false }` block. All clippy warnings resolved: collapsible
+            if-lets (main.rs), borrowed expr (main.rs), unneeded return
+            (remote_projects.rs), dead_code annotations (cloud_projects.rs).
+            Added CI lane: `./build.sh --check` now runs clippy with
+            --features listen-vsock. 5/5 pty_handler unit tests pass (2
+            pre-ignored flaky). All stress/vault integration tests pass.
 
     - packet_id: opencode-prompt-e2e-step5-race
       order: 255
