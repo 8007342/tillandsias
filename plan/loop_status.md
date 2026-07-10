@@ -1,7 +1,25 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T06:00:00Z
+LastExecutionTime: 2026-07-10T06:25:00Z
 
+
+## Cycle 2026-07-10T05:57Z (macos — overnight autonomous 2/8: order 277 done + verified both ways)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 2 of 8).
+  Credential guard `ok:gh-keyring`. Clean start, linux-next unchanged since
+  cycle 1; windows-next advanced (not merged here — linux coordinates).
+- **Order 277 COMPLETED + verified live**: VM-booting one-shot modes probe
+  the tray singleton (acquire-and-drop) and exit 3 with operator guidance
+  when a live tray owns the VM — no more opaque VZ storage error. Verified
+  both branches live: refusal against a running tray; GUEST_OK exit 0 via
+  --exec-guest after quit. Pin test covers all four dispatch branches.
+- **E2E gate**: skipped-with-cause — full destructive local-build e2e
+  PASSED on this host <1h ago (cycle 1 report); this cycle runtime delta
+  (the guard) was live-verified directly on the installed build.
+- **Queue next**: macOS-claimable = 269 (ux residue), 270 (attach
+  materialization blackout — NOTE partially entangled with linux order 273:
+  273 may reveal the attach never reaches the build path on macOS), 155
+  residual. Order 273 still linux-open — the hot macOS blocker.
 
 ## Cycle 2026-07-10T05:33Z (macos — overnight autonomous 1/8: order 272 done + verified on fresh provision, destructive e2e PASS)
 
