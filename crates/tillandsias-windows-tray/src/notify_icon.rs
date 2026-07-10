@@ -1137,17 +1137,41 @@ fn apply_vm_status(
 static VM_STATUS_PUSH_HEALTHY: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// True while the current push subscription includes
+/// `SubscriptionTopic::LocalProjects` (order 154 slice 3). Distinct from
+/// [`VM_STATUS_PUSH_HEALTHY`] because of version skew: against a guest that
+/// predates order 260 the listener falls back to the legacy three-topic
+/// subscribe (see `run_vm_status_push_listener`), and the local-projects
+/// wire poll must then stay active even though the subscription is healthy.
+static LOCAL_PROJECTS_PUSH_SUBSCRIBED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// SC-07 gate: the steady-state `VmStatusRequest` poll is fallback-only —
 /// suppressed whenever the push subscription is delivering.
 fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
     !push_stream_healthy
 }
 
-/// The exact topic set the push listener subscribes to — all three push
+/// The exact topic set the push listener subscribes to — all four push
 /// topics since orders 230/231 landed the headless LoginStatePush /
-/// CloudProjectsPush sources (order 154 slice 2). Pinned by
-/// `subscribe_topics_cover_all_three_push_topics`.
+/// CloudProjectsPush sources (order 154 slice 2) and order 260 landed
+/// LocalProjectsPush (slice 3). Pinned by
+/// `subscribe_topics_cover_all_push_topics`.
 fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
+    vec![
+        tillandsias_control_wire::SubscriptionTopic::VmStatus,
+        tillandsias_control_wire::SubscriptionTopic::LoginState,
+        tillandsias_control_wire::SubscriptionTopic::CloudProjects,
+        tillandsias_control_wire::SubscriptionTopic::LocalProjects,
+    ]
+}
+
+/// The pre-order-260 topic list, used as the version-skew fallback when a
+/// stale guest cannot decode `SubscriptionTopic::LocalProjects` (a trailing
+/// postcard variant is an unknown discriminant to an older decoder). Must
+/// stay exactly `vm_status_subscribe_topics()` minus `LocalProjects` —
+/// pinned by `legacy_topics_are_full_topics_minus_local_projects`.
+fn legacy_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
     vec![
         tillandsias_control_wire::SubscriptionTopic::VmStatus,
         tillandsias_control_wire::SubscriptionTopic::LoginState,
@@ -1165,6 +1189,18 @@ fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTop
 /// clients on every `GithubLoginStatusRequest` (order 230 piggyback), so a
 /// burst refreshes every tray, not just this one.
 fn should_poll_login_and_cloud(push_stream_healthy: bool, fast_poll_burst: bool) -> bool {
+    fast_poll_burst || !push_stream_healthy
+}
+
+/// SC-07 extension (order 154 slice 3): the every-10-ticks
+/// `EnumerateLocalProjects` wire poll is fallback-only — suppressed while the
+/// push subscription delivers `LocalProjectsPush` (order 260: the headless
+/// runs a subscriber-gated guest rescan and pushes a change-gated full
+/// replacement list). A user-action fast-poll burst still forces a confirming
+/// round, same rationale as [`should_poll_login_and_cloud`]. This was the
+/// last steady-state wire poll; with it gated, a healthy subscription means
+/// the tick loop sends nothing.
+fn should_poll_local_projects(push_stream_healthy: bool, fast_poll_burst: bool) -> bool {
     fast_poll_burst || !push_stream_healthy
 }
 
@@ -1188,6 +1224,20 @@ fn apply_cloud_projects(projects: &[tillandsias_control_wire::CloudProjectEntry]
     let n = mapped.len();
     if let Ok(mut guard) = MENU_STATE.lock() {
         guard.get_or_insert_with(MenuState::initial).cloud_projects = mapped;
+    }
+    n
+}
+
+/// Apply a live VM-side local-projects observation — from a
+/// `LocalProjectsReply` poll or an unrequested `LocalProjectsPush` frame
+/// (order 154 slice 3; full replacement list per the wire doc) — to the
+/// shared `MenuState.local_projects`, so both surfaces stay byte-identical
+/// (mirrors `apply_cloud_projects`). Returns the entry count for logging.
+fn apply_local_projects(entries: &[tillandsias_control_wire::LocalProjectEntry]) -> usize {
+    let mapped: Vec<ProjectEntry> = entries.iter().map(local_entry_to_menu).collect();
+    let n = mapped.len();
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        guard.get_or_insert_with(MenuState::initial).local_projects = mapped;
     }
     n
 }
@@ -1216,10 +1266,13 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
     let mut backoff_idx: usize = 0;
     loop {
         VM_STATUS_PUSH_HEALTHY.store(false, std::sync::atomic::Ordering::SeqCst);
-        // Reconnect pacing: walk the shared schedule, then hold at 30s. The
-        // first connect attempt runs immediately (backoff_idx starts at 0 and
-        // the wait happens on failure, below).
-        let established = async {
+        LOCAL_PROJECTS_PUSH_SUBSCRIBED.store(false, std::sync::atomic::Ordering::SeqCst);
+        // One connect+handshake+subscribe attempt for a given topic list.
+        // A FRESH connection per attempt is deliberate: a guest that cannot
+        // decode the topic list (postcard unknown-discriminant) may tear the
+        // connection down rather than reply, so the fallback list must not
+        // reuse the first stream.
+        let try_subscribe = |topics: Vec<tillandsias_control_wire::SubscriptionTopic>| async {
             let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT)
                 .await
                 .map_err(|e| format!("connect: {e}"))?;
@@ -1238,9 +1291,7 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq,
-                body: ControlMessage::Subscribe {
-                    topics: vm_status_subscribe_topics(),
-                },
+                body: ControlMessage::Subscribe { topics },
             };
             let reply = client
                 .request(&sub)
@@ -1250,8 +1301,29 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
                 ControlMessage::SubscribeAck => Ok(client),
                 other => Err(format!("expected SubscribeAck, got {}", other.kind())),
             }
-        }
-        .await;
+        };
+
+        // Version-skew fallback (order 154 slice 3): SubscriptionTopic::
+        // LocalProjects is a trailing postcard variant, so a guest headless
+        // that predates order 260 cannot DECODE a Subscribe naming it — and
+        // would otherwise reject the whole subscription, regressing VmStatus/
+        // Login/Cloud pushes to polls until the guest is refreshed. Try the
+        // full list first; on failure resubscribe with the legacy three-topic
+        // list and leave the local-projects wire poll active
+        // (LOCAL_PROJECTS_PUSH_SUBSCRIBED stays false).
+        let mut local_topic_subscribed = true;
+        let established = match try_subscribe(vm_status_subscribe_topics()).await {
+            Ok(c) => Ok(c),
+            Err(first_err) => {
+                local_topic_subscribed = false;
+                tracing::debug!(
+                    %first_err,
+                    "full-topic subscribe failed; retrying with legacy topics \
+                     (guest may predate the LocalProjects topic, order 260)"
+                );
+                try_subscribe(legacy_subscribe_topics()).await
+            }
+        };
 
         let mut client = match established {
             Ok(c) => c,
@@ -1269,19 +1341,29 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
 
         backoff_idx = 0;
         VM_STATUS_PUSH_HEALTHY.store(true, std::sync::atomic::Ordering::SeqCst);
-        tracing::info!("vm status push subscription established (polls suppressed, SC-07)");
+        LOCAL_PROJECTS_PUSH_SUBSCRIBED
+            .store(local_topic_subscribed, std::sync::atomic::Ordering::SeqCst);
+        if local_topic_subscribed {
+            tracing::info!("vm status push subscription established (polls suppressed, SC-07)");
+        } else {
+            tracing::info!(
+                "vm status push subscription established on legacy topics \
+                 (local-projects poll stays active until the guest carries order 260)"
+            );
+        }
 
-        // Initial sync (order 154 slice 2): pushes are change-gated, so a
+        // Initial sync (order 154 slices 2+3): pushes are change-gated, so a
         // client that (re)subscribes after the last transition would wait
-        // indefinitely for the current login/cloud state. Run one poll round
-        // over LIVE_CLIENT (a separate connection — no interleave risk with
-        // this push stream) right after subscribing; from here on the
-        // steady-state path is push-only. VmStatus deliberately gets no
-        // initial poll: SC-07 pins "no VmStatusRequest after Subscribe", and
-        // the tick loop's fallback poll already covered it while the
-        // subscription was down.
+        // indefinitely for the current login/cloud/local-projects state. Run
+        // one poll round over LIVE_CLIENT (a separate connection — no
+        // interleave risk with this push stream) right after subscribing;
+        // from here on the steady-state path is push-only. VmStatus
+        // deliberately gets no initial poll: SC-07 pins "no VmStatusRequest
+        // after Subscribe", and the tick loop's fallback poll already
+        // covered it while the subscription was down.
         refresh_github_login(hwnd).await;
         refresh_cloud_projects(hwnd).await;
+        refresh_local_projects(hwnd).await;
 
         loop {
             match client.next_envelope().await {
@@ -1304,6 +1386,10 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
                     ControlMessage::CloudProjectsPush { projects, .. } => {
                         let n = apply_cloud_projects(&projects);
                         tracing::debug!(count = n, "cloud projects pushed");
+                    }
+                    ControlMessage::LocalProjectsPush { entries, .. } => {
+                        let n = apply_local_projects(&entries);
+                        tracing::debug!(count = n, "local projects pushed");
                     }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());
@@ -1397,11 +1483,7 @@ async fn refresh_local_projects(hwnd: HWND) {
     };
     match reply.body {
         ControlMessage::LocalProjectsReply { entries, .. } => {
-            let mapped: Vec<ProjectEntry> = entries.iter().map(local_entry_to_menu).collect();
-            let n = mapped.len();
-            if let Ok(mut guard) = MENU_STATE.lock() {
-                guard.get_or_insert_with(MenuState::initial).local_projects = mapped;
-            }
+            let n = apply_local_projects(&entries);
             tracing::debug!(count = n, "local projects refreshed (VM-side)");
         }
         // Per convergence packet item 4 (eddb5c00): surface the dispatcher's
@@ -2148,15 +2230,18 @@ fn spawn_provisioning(hwnd: HWND) {
                 match lifecycle.spawn_keepalive(is_debug) {
                     Ok(_keepalive) => {
                         tracing::info!("VM keepalive holding the control wire warm");
-                        // Live status, push-first (order 154 slices 1+2): a
-                        // dedicated reader task subscribes to VmStatus +
-                        // LoginState + CloudProjects and applies pushes as
-                        // they arrive; the 30s tick below polls
-                        // VmStatusRequest — and the slow-cadence login/cloud
-                        // requests — only while that subscription is down
-                        // (SC-07 fallback) or a user-action fast-poll burst
-                        // forces a round. Local projects stay polled:
-                        // EnumerateLocalProjects has no push topic yet.
+                        // Live status, push-first (order 154 slices 1-3): a
+                        // dedicated reader task subscribes to all four push
+                        // topics (VmStatus + LoginState + CloudProjects +
+                        // LocalProjects) and applies pushes as they arrive;
+                        // the 30s tick below polls VmStatusRequest — and the
+                        // slow-cadence login/cloud/local-projects requests —
+                        // only while that subscription is down (SC-07
+                        // fallback) or a user-action fast-poll burst forces
+                        // a round. With a healthy subscription the tick
+                        // sends NOTHING on the wire; retiring the tick task
+                        // itself (watch-channel wakeups + SubscriptionHealth)
+                        // is the packet's next slice.
                         // Holds `_keepalive` for the tray's lifetime; on
                         // Quit the LocalSet drops the task → kill_on_drop.
                         tokio::task::spawn_local(run_vm_status_push_listener(hwnd));
@@ -2174,7 +2259,20 @@ fn spawn_provisioning(hwnd: HWND) {
                             let fast_poll =
                                 FAST_POLL_COUNT.load(std::sync::atomic::Ordering::SeqCst);
                             if tick.is_multiple_of(10) || fast_poll > 0 {
-                                refresh_local_projects(hwnd).await;
+                                // VM-side local projects arrive as pushes
+                                // while the subscription is healthy (order
+                                // 260 / slice 3); the wire poll is
+                                // fallback-only. The host-side ~/src scanner
+                                // is untouched — it never hits the wire.
+                                if should_poll_local_projects(
+                                    VM_STATUS_PUSH_HEALTHY
+                                        .load(std::sync::atomic::Ordering::SeqCst)
+                                        && LOCAL_PROJECTS_PUSH_SUBSCRIBED
+                                            .load(std::sync::atomic::Ordering::SeqCst),
+                                    fast_poll > 0,
+                                ) {
+                                    refresh_local_projects(hwnd).await;
+                                }
                                 // Login + cloud projects arrive as pushes
                                 // while the subscription is healthy (order
                                 // 154 slice 2) — the requests below are
@@ -2697,19 +2795,21 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 mod tests {
     use super::*;
 
-    /// Order 154 slice 2: with the headless push sources landed (orders
-    /// 230/231, commit 744f4749) the listener subscribes to ALL THREE push
-    /// topics. Narrowing this list would silently regress login/cloud state
-    /// back to the (now suppressed) slow-cadence polls; widening it beyond
-    /// the wire's topics is a compile error.
+    /// Order 154 slices 2+3: with the headless push sources landed (orders
+    /// 230/231 for login/cloud, order 260 for local projects) the listener
+    /// subscribes to ALL FOUR push topics. Narrowing this list would
+    /// silently regress the dropped topic back to its (now suppressed)
+    /// slow-cadence poll; widening it beyond the wire's topics is a compile
+    /// error.
     #[test]
-    fn subscribe_topics_cover_all_three_push_topics() {
+    fn subscribe_topics_cover_all_push_topics() {
         assert_eq!(
             vm_status_subscribe_topics(),
             vec![
                 tillandsias_control_wire::SubscriptionTopic::VmStatus,
                 tillandsias_control_wire::SubscriptionTopic::LoginState,
                 tillandsias_control_wire::SubscriptionTopic::CloudProjects,
+                tillandsias_control_wire::SubscriptionTopic::LocalProjects,
             ]
         );
     }
@@ -2734,6 +2834,41 @@ mod tests {
         );
         assert!(
             should_poll_login_and_cloud(false, true),
+            "a fast-poll burst with the stream down must still poll"
+        );
+    }
+
+    /// Order 154 slice 3 version-skew pin: the legacy fallback list must be
+    /// exactly the full list minus `LocalProjects`. If a future slice adds a
+    /// fifth topic to `vm_status_subscribe_topics()` this fails loud so the
+    /// author decides the fallback story for it too.
+    #[test]
+    fn legacy_topics_are_full_topics_minus_local_projects() {
+        let mut expected = vm_status_subscribe_topics();
+        expected.retain(|t| *t != tillandsias_control_wire::SubscriptionTopic::LocalProjects);
+        assert_eq!(legacy_subscribe_topics(), expected);
+    }
+
+    /// SC-07 extension (order 154 slice 3): the EnumerateLocalProjects wire
+    /// poll — the last steady-state wire poll — is fallback-only, mirroring
+    /// the login/cloud gate: suppressed while the push subscription is
+    /// healthy, restored when it drops, force-run during a fast-poll burst.
+    #[test]
+    fn local_projects_poll_is_fallback_only_when_push_healthy() {
+        assert!(
+            should_poll_local_projects(false, false),
+            "poll must run while the push stream is down"
+        );
+        assert!(
+            !should_poll_local_projects(true, false),
+            "poll must be suppressed while the push stream is healthy"
+        );
+        assert!(
+            should_poll_local_projects(true, true),
+            "a fast-poll burst must force a confirming round even when healthy"
+        );
+        assert!(
+            should_poll_local_projects(false, true),
             "a fast-poll burst with the stream down must still poll"
         );
     }
