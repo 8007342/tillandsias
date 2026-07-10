@@ -6976,3 +6976,89 @@ plan_index:
             Attended-smoke capture: operator hit this live on both a cloud
             and a local attach; SSH forensics (cloud-init injected key)
             confirmed builds in flight while both PTYs were already dead.
+
+    - packet_id: methodology-idiomatic-layers-for-agents
+      order: 271
+      title: "Methodology: agents develop and debug THROUGH the idiomatic layers — no ssh/root/side channels into the guest"
+      status: ready
+      kind: methodology
+      deliverable: methodology/multi-host-development.yaml
+      depends_on: []
+      pickup_role: any
+      capability_tags: [methodology, security, control-wire, forensics]
+      estimated_hours: 2
+      outcome: >
+        Directive from The Tlatoani (2026-07-10 attended session, verbatim
+        intent): the Tillandsias idiomatic layers exist to create containers
+        and monitor status/metrics — agents must use them for DEVELOPMENT
+        (forensics, rebuilds, probes) as well, because making them good
+        enough for development makes them good enough for user runtime. The
+        counter-example that prompted this: the macOS agent ssh'd into the
+        guest as root (via the cloud-init debug key + NAT-reachable sshd)
+        to read journals and sneak a manual image rebuild when the attach
+        flow failed — bypassing the secure-socket-only isolation boundary
+        (host and guest must NOT share a trusted network; the guest is
+        fully isolated, fully user-runtime, root never required). Encode in
+        methodology: (1) the control wire / diagnose / ExecOneShot surfaces
+        are the ONLY sanctioned guest access for agents; (2) when a
+        debugging task cannot be done through them, that is a product gap —
+        file/promote a packet extending the idiomatic layer (e.g. the
+        TILLANDSIAS_PTY_DEBUG tee, orders 268/272) instead of side-stepping;
+        (3) root exec anywhere in guest/forge is a finding, not a tool.
+        Cross-reference the worker protocol and e2e skills so unattended
+        agents inherit the rule.
+      exit_criteria:
+        - "methodology names the sanctioned guest-access surfaces and the file-a-packet-instead rule"
+        - "worker/e2e skill docs reference the rule (grepable, one canonical statement)"
+        - "litmus or review checklist item exists so violations are catchable in audit"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Filed at The Tlatoani's direction after the agent's ssh/root
+            workaround in the attended smoke. Companion: order 272 closes
+            the backdoor itself.
+
+    - packet_id: guest-ssh-backdoor-closure
+      order: 272
+      title: "Close the guest debug backdoor: cloud-init SSH key injection + NAT-reachable sshd violate secure-socket-only isolation"
+      status: ready
+      kind: security
+      deliverable: crates/tillandsias-vm-layer/src/vz.rs
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, security, vz, vm-layer, isolation]
+      estimated_hours: 3
+      outcome: >
+        The VZ cloud-init user-data injects a personal SSH public key for
+        root AND fedora, leaves sshd reachable on the NAT interface, and
+        the boot banner advertises 'ssh vsock%3' — a standing bypass of the
+        secure-socket-only architecture (the control wire is meant to be
+        the ONLY host<->guest channel; the guest fully isolated). Proven
+        exploitable-by-convenience in the 2026-07-10 attended session (the
+        agent used it; The Tlatoani vetoed it). Fix: remove the key
+        injection from the cloud-init template, disable/mask sshd (or
+        firewall it to loopback) in the guest, drop the banner hint, and
+        pin with a source drift test (no authorized_keys write, no sshd
+        enable). Audit the WSL2 provisioning path for the same class.
+        NOTE while designing: in-guest processes currently run as root
+        (headless unit, XDG_RUNTIME_DIR=/run/user/0) — The Tlatoani's
+        fully-user-runtime posture suggests a rootless-guest exploration;
+        captured separately in the findings file, do not fold into this
+        packet's scope.
+      exit_criteria:
+        - "fresh-provisioned guest has no injected authorized_keys and no reachable sshd from the host network"
+        - "source pin test fails loud if key injection or sshd enablement returns"
+        - "WSL2 path audited; sibling packet filed if it shares the hole"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:45:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
+          host: macos
+          summary: >
+            Filed from the attended session after using the backdoor for
+            forensics surfaced how open it is. Companion to order 271
+            (methodology) and order 268 (idiomatic one-shot coexistence,
+            which removes the temptation).

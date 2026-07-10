@@ -147,6 +147,38 @@ unblock the InteractiveStream / 6-leaf verification.
   ENFORCING breakage — pre-existing hardening debt worth a dedicated packet
   when SELinux enforcement lands on the roadmap.
 
+## Round 3 — operator direction + new findings
+
+### Architecture correction from The Tlatoāni (orders 271, 272)
+
+The agent's SSH-as-root guest forensics/rebuild workaround was vetoed:
+idiomatic layers (control wire / diagnose / ExecOneShot) are the only
+sanctioned guest access — for development too ("good enough for development
+= good enough for user runtime"). The debug backdoor it rode (cloud-init
+key injection + NAT sshd + banner hint) is promoted for closure (order 272);
+methodology encoding promoted as order 271. The manual forge build started
+over SSH is disowned as method — its result is incidental.
+
+### F-J (NEW, mitigated): fast-failing agent attach loses its dying words
+
+All four agent leaves (Claude/Codex/OpenCode/Maintenance) pop a terminal
+that flashes unreadable text, goes blank, then the screen session dies
+(minutes or instantly). The error text is lost to the popup's
+alternate-screen teardown; the bridge logs nothing for clean closes.
+Mitigation landed: TILLANDSIAS_PTY_DEBUG=1 tee in pty_vsock_bridge.rs
+mirrors PtyData/PtyClose (with exit code/signal) to tray stderr — the
+product's own layer, no side channel. Root cause of the agent failure
+itself: under investigation with the tee; suspected fast container-launch
+failure (forge image state on this VM is uncertain after order 270's
+build-reaping behavior + a disowned manual build).
+
+### Rootless-guest exploration (capture, not designed)
+
+In-guest services run as root today (headless unit HOME=/root,
+XDG_RUNTIME_DIR=/run/user/0, root podman). The fully-user-runtime posture
+The Tlatoāni articulated suggests a rootless-guest target; needs a
+dedicated research packet when prioritized — noted here so it isn't lost.
+
 ## Residual verification (needs fresh provision + one more login)
 
 Re-provision with F-B's fstab fix + current headless, re-login (operator),
