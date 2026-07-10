@@ -1719,52 +1719,14 @@ fn should_poll_fallback(push_stream_healthy: bool) -> bool {
     !push_stream_healthy
 }
 
-/// What ended one tick-loop wait (slice 3, SC-16).
-#[derive(Debug, PartialEq, Eq)]
-enum TickWake {
-    /// The poll period elapsed normally.
-    Timer,
-    /// The push subscription dropped mid-wait — the fallback polls own
-    /// freshness again and should run a full round now, not up to 300s
-    /// later when the 10-tick cadence next comes around.
-    SubscriptionDropped,
-}
-
-/// Wait out one poll period, waking early only on a healthy→down transition
-/// of the push subscription. Up-transitions don't end the wait (pushes own
-/// freshness again; there is nothing to poll), and a closed channel (listener
-/// task gone) degrades to the plain timer instead of spinning.
-async fn wait_tick_or_subscription_drop(
-    period: Duration,
-    health: &mut tokio::sync::watch::Receiver<bool>,
-) -> TickWake {
-    let sleep = tokio::time::sleep(period);
-    tokio::pin!(sleep);
-    loop {
-        tokio::select! {
-            _ = &mut sleep => return TickWake::Timer,
-            changed = health.changed() => {
-                if changed.is_err() {
-                    sleep.as_mut().await;
-                    return TickWake::Timer;
-                }
-                if !*health.borrow_and_update() {
-                    return TickWake::SubscriptionDropped;
-                }
-            }
-        }
-    }
-}
-
-/// Next tick counter after a wake. A subscription drop rewinds to tick 0 so
-/// the next iteration replays the first-tick full round (local + cloud +
-/// login, then VmStatus below) instead of waiting out the 10-tick cadence.
-fn tick_after_wake(tick: u32, wake: &TickWake) -> u32 {
-    match wake {
-        TickWake::Timer => tick.wrapping_add(1),
-        TickWake::SubscriptionDropped => 0,
-    }
-}
+// Tick-wait semantics (TickWake, wait_tick_or_subscription_drop,
+// tick_after_wake) were hoisted into the shared
+// tillandsias_host_shell::subscription_health module so the macOS (order
+// 155) and windows (order 154) tick loops cannot drift. Use the shared
+// copies directly; this crate keeps no local duplicate.
+use tillandsias_host_shell::subscription_health::{
+    TickWake, tick_after_wake, wait_tick_or_subscription_drop,
+};
 
 /// The exact topic set the dedicated push connection subscribes to. Slice 2
 /// widened this from `[VmStatus]` to all three topics now that the tray
@@ -2437,68 +2399,10 @@ mod tests {
         assert!(should_poll_fallback(false));
     }
 
-    /// Slice-3 (SC-16) pin: a healthy→down transition ends the tick wait
-    /// immediately (no 30s sleep-out), an up-transition does NOT end it,
-    /// and a closed health channel degrades to the plain timer instead of
-    /// spinning or panicking.
-    #[tokio::test(start_paused = true)]
-    async fn tick_wait_wakes_early_only_on_subscription_drop() {
-        use tillandsias_host_shell::subscription_health::SubscriptionHealth;
-
-        // Down-transition wakes early.
-        let health = SubscriptionHealth::new();
-        health.set(true);
-        let mut rx = health.subscribe();
-        rx.borrow_and_update();
-        let wait = wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx);
-        tokio::pin!(wait);
-        tokio::select! {
-            biased;
-            _ = &mut wait => panic!("wait ended with no transition and no timer"),
-            _ = tokio::task::yield_now() => {}
-        }
-        health.set(false);
-        assert_eq!(wait.await, TickWake::SubscriptionDropped);
-
-        // Up-transition keeps waiting; the timer ends the wait.
-        let health = SubscriptionHealth::new();
-        let mut rx = health.subscribe();
-        rx.borrow_and_update();
-        let started = tokio::time::Instant::now();
-        let wait = wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx);
-        tokio::pin!(wait);
-        tokio::select! {
-            biased;
-            _ = &mut wait => panic!("wait ended before any event"),
-            _ = tokio::task::yield_now() => {}
-        }
-        health.set(true);
-        assert_eq!(wait.await, TickWake::Timer);
-        assert!(
-            started.elapsed() >= Duration::from_secs(30),
-            "up-transition must not shorten the poll period"
-        );
-
-        // Closed channel: sender dropped mid-wait → plain timer, no spin.
-        let health = SubscriptionHealth::new();
-        let mut rx = health.subscribe();
-        rx.borrow_and_update();
-        drop(health);
-        assert_eq!(
-            wait_tick_or_subscription_drop(Duration::from_secs(30), &mut rx).await,
-            TickWake::Timer
-        );
-    }
-
-    /// Slice-3 pin: a subscription drop rewinds the cadence to tick 0 so
-    /// the next iteration replays the first-tick full round; a timer wake
-    /// advances normally (with wraparound).
-    #[test]
-    fn tick_after_wake_rewinds_on_drop_and_advances_on_timer() {
-        assert_eq!(tick_after_wake(4, &TickWake::Timer), 5);
-        assert_eq!(tick_after_wake(u32::MAX, &TickWake::Timer), 0);
-        assert_eq!(tick_after_wake(7, &TickWake::SubscriptionDropped), 0);
-    }
+    // The tick-wait pins (tick_wait_wakes_early_only_on_subscription_drop,
+    // tick_after_wake_rewinds_on_drop_and_advances_on_timer) now live in
+    // tillandsias_host_shell::subscription_health alongside the hoisted
+    // implementations — no local duplicate here.
 
     /// Slice-3 topic pin: the dedicated push connection subscribes to all
     /// FOUR topics now that order 260 shipped LocalProjectsPush and the
