@@ -38,9 +38,15 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok:"
 
-  - step: "launch forge with meta-orchestration prompt and one cycle"
-    command: "./repeat --times 1 --agent opencode --prompt \"Use the /meta-orchestration skill\" 2>&1; echo FORGE_EXIT=$?"
-    timeout_ms: 600000
+  # Order 265 wiring (second alive-past-budget collision, 2026-07-10): a
+  # fixed 600s wall turned healthy one-packet cycles into TIMEOUT reds
+  # twice — both times the in-forge agent later pushed real work. The step
+  # now runs the probe past a 600s SOFT budget: liveness (container up /
+  # HEAD advanced / heartbeat fresh) extends the window; a dead_* verdict
+  # fails fast; a 1500s HARD cap remains the backstop.
+  - step: "launch forge with meta-orchestration prompt and one cycle (liveness-extended)"
+    command: "./repeat --times 1 --agent opencode --prompt \"Use the /meta-orchestration skill\" > /tmp/opencode-e2e-forge.log 2>&1 & RPID=$!; SOFT=600; HARD=1500; S=$(date +%s); BH=$(cat /tmp/opencode-e2e-head-before 2>/dev/null); while kill -0 $RPID 2>/dev/null; do E=$(( $(date +%s) - S )); if [ $E -ge $HARD ]; then kill $RPID 2>/dev/null; echo \"FORGE_EXIT=124 (hard cap ${HARD}s)\"; exit 1; fi; if [ $E -ge $SOFT ]; then st=$(scripts/forge-liveness-probe.sh status --start-time $S --budget $HARD --before-head \"$BH\" 2>/dev/null || echo probe_error); case \"$st\" in alive_*) ;; *) kill $RPID 2>/dev/null; echo \"FORGE_EXIT=125 (probe verdict $st past soft budget)\"; exit 1 ;; esac; fi; sleep 10; done; wait $RPID; rc=$?; tail -5 /tmp/opencode-e2e-forge.log; echo FORGE_EXIT=$rc"
+    timeout_ms: 1560000
     expected_behavior: "FORGE_EXIT=0"
 
   # Steps 4-6 assert deltas produced by the in-forge cycle, which reach the

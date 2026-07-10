@@ -8092,8 +8092,91 @@ plan_index:
             --exec-guest storage probe. Cross-references order 270 (root
             cause of the corruption).
 
-    - packet_id: headless-integration-tests-podman-gate
+    - packet_id: smoke-lock-fd-leaks-into-forge-sessions
       order: 283
+      title: "with-smoke-lock fd leaks into launched forge agent sessions — orphaned agents deadlock the next gate"
+      status: ready
+      kind: bug
+      deliverable: scripts/with-smoke-lock.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [shell, locking, forge, e2e]
+      estimated_hours: 2
+      outcome: >
+        2026-07-10T11:27Z: gate pipeline attempt 3 queued 16 minutes on the
+        build-install-smoke-e2e flock while the holder was an ORPHANED
+        opencode agent session (timeout 5400 opencode run ...) from attempt
+        2's killed litmus STEP 3 — the flock fd was inherited through the
+        exec chain into the forge launch, so a litmus-step kill that
+        orphans the agent leaves the lock held for up to the agent's own
+        90-minute cap. The coordinator reclaimed manually (agent had
+        pushed its packet 20+ minutes earlier and gone quiet). Fix:
+        with-smoke-lock must open the lock fd close-on-exec (or re-exec
+        the payload with the fd closed) so ONLY the wrapper's own lifetime
+        holds the lease; add a shape-litmus fixture proving a child
+        surviving the wrapper does NOT retain the lock. Also consider the
+        liveness probe's dead_air verdict as an auto-reclaim input for
+        gate queuing.
+      exit_criteria:
+        - "a child process outliving with-smoke-lock does not hold the flock (fixture litmus)"
+        - "a queued second wrapper acquires within poll cadence of the first wrapper's exit"
+      events:
+        - type: filed
+          ts: "2026-07-10T11:30:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T1127Z"
+          host: linux_mutable
+          summary: >
+            Reduction-engine capture from the final overnight-loop
+            iteration; manual reclaim unblocked pipeline attempt 3.
+
+    - packet_id: forge-opencode-harness-broken-by-upstream-latest
+      order: 284
+      title: "P1: forge opencode lane down — opencode-ai@latest refresh mid-night broke the harness (postinstall incomplete in-enclave)"
+      status: ready
+      kind: bug
+      deliverable: images/default/lib-common.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, npm, proxy, supply-chain]
+      estimated_hours: 4
+      outcome: >
+        Every forge launch fails since 2026-07-10T10:56Z: the opencode
+        harness exits 1 at startup demanding "cd node_modules/opencode-ai
+        && node postinstall.mjs" (repro: TILLANDSIAS_NO_TRAY=1 tillandsias
+        . --opencode --prompt anything). Chain: tonight's destructive
+        resets wiped the persistent npm tool cache; the 24h-rate-limited
+        harness refresh reinstalled opencode-ai@latest; upstream published
+        THREE dev/beta releases during our overnight window (npm timeline:
+        beta at 10:17Z, minutes before the first failure) and the fresh
+        install's postinstall did not complete inside the enclave —
+        suspected proxy/allowlist block of its platform-binary download
+        (order 129/130 territory) or an upstream-broken publish. Killed
+        the last three gate attempts (dead_crashed via the order-265
+        probe, which fast-failed exactly as designed). Fix direction:
+        (1) pin a TESTED opencode-ai version in lib-common.sh's harness
+        list (test in-container before pinning; upstream's 0.0.0-dev/beta
+        chaotic tagging makes @latest structurally unsafe for an isolated
+        enclave); (2) make the updater roll back to the cached-working
+        install when a fresh install fails a smoke probe (opencode
+        --version + a no-op run); (3) capture the postinstall's egress
+        target and add it to the proxy allowlist research (order 129).
+      exit_criteria:
+        - "forge launch green again (minimal repro exits 0)"
+        - "harness updater survives a broken upstream publish (rollback or pinned, litmus-pinned)"
+        - "postinstall egress target identified and dispositioned (allowlist or offline bundle)"
+      events:
+        - type: filed
+          ts: "2026-07-10T12:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T1127Z"
+          host: linux_mutable
+          summary: >
+            Filed at overnight-loop close with the full evidence chain
+            (gate runs 104930Z + 111150Z, npm publish timeline, minimal
+            repro). TOP PICK for the next linux cycle — the forge lane is
+            the loop's engine.
+
+    - packet_id: headless-integration-tests-podman-gate
+      order: 285
       title: "Headless podman-integration tests must skip (not fail) when no podman daemon is reachable (macOS trunk sweep)"
       status: ready
       kind: enhancement
@@ -8111,13 +8194,13 @@ plan_index:
         errors, but on a bare macOS host (no `podman machine start`) the CLI
         returns a CONNECTION error instead, so the tests FAIL rather than
         skip. Confirmed: error_recovery::test_missing_image_error_handling
-        (fixed this cycle as the reference pattern),
+        (fixed cycle 7 as the reference pattern),
         stress_concurrent_operations::{test_stress_container_scaling,
         test_stress_concurrent_attach_detach}; cargo stops at the first
         failing binary so rapid_project_switch(_v2), network_validation,
         e2e_user_flow, signal_handling, cache_peer_routing,
         singleton_coexistence likely share it. This masks real macOS
-        regressions in the same sweep (it nearly buried this cycle's genuine
+        regressions in the same sweep (it nearly buried cycle 7's genuine
         keyring-hermeticity find). Fix: extract a shared
         podman_daemon_reachable() helper (podman info once; false on connect
         error) and gate every podman-integration test on it, skipping with
@@ -8135,6 +8218,9 @@ plan_index:
           host: macos
           summary: >
             Reduction-engine capture from the cycle-7 macOS trunk sweep;
-            error_recovery reference fix committed on osx-next this cycle,
+            error_recovery reference fix committed on osx-next cycle 7,
             remaining class handed to the crate owner (linux) for a
-            consistent shared-helper gate.
+            consistent shared-helper gate. Filed as order 283; renumbered
+            to 285 in the cycle-8 merge (collision with linux's parallel
+            283 smoke-lock-fd + 284 forge-opencode filings — the order-275
+            uniqueness gate's exact use case).
