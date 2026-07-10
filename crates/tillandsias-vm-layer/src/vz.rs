@@ -453,17 +453,17 @@ impl VzRuntime {
         let user_data_content = r#"#!/bin/bash
 set -euo pipefail
 
-# Inject SSH keys for debugging
-mkdir -p /root/.ssh
-chmod 700 /root/.ssh
-echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDGkwkOhAxGExE4dJUbIOMaVf8g0m0nSAp/JGzOxILfW tlatoani@Tlatoanis-MacBook-Air.local" >> /root/.ssh/authorized_keys
-chmod 600 /root/.ssh/authorized_keys
-
-mkdir -p /home/fedora/.ssh
-chmod 700 /home/fedora/.ssh
-echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDGkwkOhAxGExE4dJUbIOMaVf8g0m0nSAp/JGzOxILfW tlatoani@Tlatoanis-MacBook-Air.local" >> /home/fedora/.ssh/authorized_keys
-chown -R fedora:fedora /home/fedora/.ssh
-chmod 600 /home/fedora/.ssh/authorized_keys
+# Order 272 (guest-ssh-backdoor-closure): the secure control wire is the
+# ONLY host<->guest channel. No SSH keys are injected, and every sshd
+# surface is masked — the NAT-reachable daemon AND the AF_VSOCK socket
+# systemd-ssh-generator would auto-create (the 'ssh vsock%3' boot-banner
+# hint). The Tlatoani's isolation directive, 2026-07-10: host and guest
+# never share a trusted network; the guest is fully isolated.
+systemctl disable --now sshd.service sshd.socket 2>/dev/null || true
+systemctl mask sshd.service sshd.socket 2>/dev/null || true
+systemctl mask sshd-vsock.socket sshd-unix-local.socket 2>/dev/null || true
+mkdir -p /etc/systemd/system-generators
+ln -sf /dev/null /etc/systemd/system-generators/systemd-ssh-generator
 
 # Install podman + dependencies for the enclave
 echo "Waiting for network..."
@@ -2149,6 +2149,28 @@ mod tests {
             source.contains("home-src /home/forge/src virtiofs nofail 0 0"),
             "cloud-init must persist the home-src virtio-fs mount in /etc/fstab \
              (first-boot-only mounts evaporate on reboot)"
+        );
+        // Order 272 (guest-ssh-backdoor-closure): the control wire is the
+        // ONLY host<->guest channel. Scope the scan to the user-data
+        // template window (the whole-file source contains these needles in
+        // this very test), then fail loud if key injection returns or the
+        // sshd surfaces (NAT daemon + systemd-ssh-generator's AF_VSOCK
+        // socket) lose their masks.
+        let user_data = source
+            .split("let user_data_content = r#\"")
+            .nth(1)
+            .and_then(|tail| tail.split("\"#").next())
+            .expect("user-data template window");
+        assert!(
+            !user_data.contains("authorized_keys") && !user_data.contains("ssh-ed25519"),
+            "cloud-init must not inject SSH keys — the guest is reachable only \
+             via the secure control wire (order 272; The Tlatoani 2026-07-10)"
+        );
+        assert!(
+            user_data.contains("systemctl mask sshd.service sshd.socket")
+                && user_data.contains("/etc/systemd/system-generators/systemd-ssh-generator"),
+            "cloud-init must mask sshd and the systemd-ssh-generator vsock \
+             surface (order 272)"
         );
     }
 
