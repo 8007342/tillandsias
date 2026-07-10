@@ -6310,7 +6310,9 @@ plan_index:
     - packet_id: litmus-runner-step-exit-code-ignored
       order: 256
       title: "Litmus runner: a step's non-zero exit code never fails the step (dead-check trap)"
-      status: ready
+      status: done
+      split_into:
+        - "267 — litmus-corpus-parse-health (burn down strict-exit reds, rewrite 31 folded commands, repair 4 YAML-invalid files, flip strict default)"
       kind: bug+litmus-infra
       deliverable: scripts/run-litmus-test.sh
       depends_on: []
@@ -6350,6 +6352,28 @@ plan_index:
             ignored). Overlaps orders 224/225 (litmus command DSL) — this
             packet is the fail-loud fix; the DSL packets are the readable
             long-term shape.
+        - type: done
+          ts: "2026-07-10T03:00:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          lease_id: "litmus-runner-step-exit-code-ignored (claim-ledger-node.sh)"
+          summary: >
+            Slice 1 landed, remainder split to order 267 per the new
+            one-packet/split doctrine. Runner now: (a) exit-code authority
+            for patternless steps behind TILLANDSIAS_LITMUS_STRICT_EXIT=1
+            (default off per migration-discipline ladder — the strict dry
+            run exposed 8 litmuses red-behind-the-trap plus a broader
+            bash/ruby parse gap incl. empty-step-name exit-127 mis-parses;
+            burn-down list in
+            plan/issues/litmus-corpus-parse-health-2026-07-10.md), with a
+            loud [DEAD-CHECK WARNING] in legacy mode; (b) [PARSE WARNING]
+            naming every step whose command: the parser cannot extract
+            (silently-thinner coverage made visible); (c) zero-step files
+            fail with a named parse error instead of the generic "Check
+            implementation". Full pre-build suite green in legacy mode
+            (validation run this cycle). Criterion "non-zero exit fails
+            patternless step" is satisfied in strict mode; the default
+            flip is order 267's exit criterion after burn-down.
 
     - packet_id: vault-ensure-name-in-use-race
       order: 259
@@ -6755,3 +6779,45 @@ plan_index:
             sweep green pre-enablement (exit 0, post-order-254 tree).
             End-to-end validation: this cycle's final --ci-full --install
             runs the lane in anger.
+
+    - packet_id: litmus-corpus-parse-health
+      order: 267
+      title: "Litmus corpus parse health: burn down strict-exit reds, rewrite folded commands, repair YAML-invalid files, flip strict default"
+      status: ready
+      kind: fix+litmus-infra
+      deliverable: plan/issues/litmus-corpus-parse-health-2026-07-10.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, shell, yaml, testing]
+      estimated_hours: 6
+      outcome: >
+        Order 256 slice 1 exposed (without yet enforcing) three rot
+        classes in the litmus corpus: 8 litmuses red behind the dead-check
+        trap under TILLANDSIAS_LITMUS_STRICT_EXIT=1 (incl. an
+        empty-step-name exit-127 mis-parse class where the runner executes
+        a fragment); 31 folded/multi-line command: steps across 8 files
+        silently skipped since authoring (now [PARSE WARNING]); 4 litmus
+        files that are not valid YAML at all (Psych rejects — the
+        order-263 mirror gate will refuse the next edit to them).
+        Remediate file-by-file (helper scripts under scripts/ preferred
+        over unreadable one-liners; coordinate the windows-owned chip
+        litmus), repair the YAML-invalid files, then flip
+        TILLANDSIAS_LITMUS_STRICT_EXIT default ON and promote [PARSE
+        WARNING] to a per-step FAIL. Full burn-down list with repro
+        commands in the deliverable.
+      exit_criteria:
+        - "the 8 strict-mode reds pass (or are individually retired with cause) under TILLANDSIAS_LITMUS_STRICT_EXIT=1"
+        - "zero [PARSE WARNING] and zero folded command: steps across openspec/litmus-tests/"
+        - "ruby -ryaml parses every litmus file (mirror-gate compatible)"
+        - "strict-exit default flipped ON and parse warnings promoted to FAIL, full suite matrix green"
+      events:
+        - type: filed
+          ts: "2026-07-10T03:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Split from order 256 per the one-packet/split doctrine after
+            the strict dry run showed the blast radius (9 reds incl. 1
+            standalone-context artifact). Slice-able file-by-file; each
+            file is an independent child if a picker needs smaller
+            packets.
