@@ -85,6 +85,11 @@ if [ -n "$PROJECT" ]; then
         chmod +x "$PROJECT_REPO/hooks/post-receive"
         echo "[git-service] installed post-receive hook at $PROJECT_REPO/hooks/post-receive"
     fi
+    if [ ! -e "$PROJECT_REPO/hooks/pre-receive" ]; then
+        cp /usr/local/share/git-service/pre-receive-hook.sh "$PROJECT_REPO/hooks/pre-receive"
+        chmod +x "$PROJECT_REPO/hooks/pre-receive"
+        echo "[git-service] installed pre-receive hook at $PROJECT_REPO/hooks/pre-receive"
+    fi
 fi
 
 # @trace spec:git-mirror-service

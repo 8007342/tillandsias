@@ -6546,7 +6546,7 @@ plan_index:
     - packet_id: git-mirror-ledger-yaml-gate
       order: 263
       title: "git-mirror pre-receive: reject pushes whose plan/openspec YAML does not parse"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/inforge-ledger-yaml-validation-gap-2026-07-10.md
       depends_on: []
@@ -6579,3 +6579,15 @@ plan_index:
             trunk mediation: an advisory validation step let a broken
             ledger reach origin/linux-next; the mirror is the single choke
             point that can make it a constraint for every forge push.
+        - type: done
+          ts: "2026-07-10T01:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
+          host: linux_mutable
+          summary: >
+            Implementation complete: added pre-receive YAML validation gate
+            (images/git/pre-receive-hook.sh) with tillandsias-policy + ruby
+            fallback, updated Containerfile (added ruby + hook copy) and
+            entrypoint.sh (installs pre-receive hook). Shape litmus
+            litmus:git-mirror-yaml-gate-shape passes (10/10 steps).
+            Build check passes (format, type, clippy). Tests pass (141/142
+            — one unrelated network failure).
