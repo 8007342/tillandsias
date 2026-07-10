@@ -8091,3 +8091,50 @@ plan_index:
             robustness is linux-owned; filed with verbatim evidence + an
             --exec-guest storage probe. Cross-references order 270 (root
             cause of the corruption).
+
+    - packet_id: headless-integration-tests-podman-gate
+      order: 283
+      title: "Headless podman-integration tests must skip (not fail) when no podman daemon is reachable (macOS trunk sweep)"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/tests/
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, tests, portability, podman]
+      estimated_hours: 3
+      outcome: >
+        Found by the 2026-07-10 macOS overnight cycle-7 full-workspace test
+        sweep (the macOS host is the only one that compiles+runs the
+        macOS-specific code, so a full `cargo test` there is the trunk-health
+        check no other CI performs). A class of tillandsias-headless
+        integration tests shell out to `podman` and assert on podman-semantic
+        errors, but on a bare macOS host (no `podman machine start`) the CLI
+        returns a CONNECTION error instead, so the tests FAIL rather than
+        skip. Confirmed: error_recovery::test_missing_image_error_handling
+        (fixed this cycle as the reference pattern),
+        stress_concurrent_operations::{test_stress_container_scaling,
+        test_stress_concurrent_attach_detach}; cargo stops at the first
+        failing binary so rapid_project_switch(_v2), network_validation,
+        e2e_user_flow, signal_handling, cache_peer_routing,
+        singleton_coexistence likely share it. This masks real macOS
+        regressions in the same sweep (it nearly buried this cycle's genuine
+        keyring-hermeticity find). Fix: extract a shared
+        podman_daemon_reachable() helper (podman info once; false on connect
+        error) and gate every podman-integration test on it, skipping with
+        eprintln when unreachable — mirroring ssh_keygen_available() in
+        tillandsias-core. Full context + the reference fix:
+        plan/issues/headless-integration-tests-not-macos-gated-2026-07-10.md.
+      exit_criteria:
+        - "a shared podman_daemon_reachable() (or equivalent) gates every podman-shelling headless integration test"
+        - "cargo test --workspace is green on a bare macOS host with no podman machine (tests skip, not fail)"
+        - "with a podman daemon running, the same tests still assert fully (no coverage loss)"
+      events:
+        - type: filed
+          ts: "2026-07-10T11:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T1057Z"
+          host: macos
+          summary: >
+            Reduction-engine capture from the cycle-7 macOS trunk sweep;
+            error_recovery reference fix committed on osx-next this cycle,
+            remaining class handed to the crate owner (linux) for a
+            consistent shared-helper gate.
