@@ -171,9 +171,15 @@ async fn bind_vsock(_cid: u32, _port: u32) -> io::Result<Listener> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The framing helpers below only feed the unix roundtrip test; on
+    // Windows they (and their imports) would be dead code — a lint class
+    // Linux clippy never compiles (mirror of the windows-cfg case, 2abfcb30).
+    #[cfg(unix)]
     use crate::{ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode};
+    #[cfg(unix)]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    #[cfg(unix)]
     async fn write_envelope<W>(stream: &mut W, env: &ControlEnvelope) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
@@ -186,6 +192,7 @@ mod tests {
         stream.flush().await
     }
 
+    #[cfg(unix)]
     async fn read_envelope<R>(stream: &mut R) -> io::Result<ControlEnvelope>
     where
         R: AsyncRead + Unpin,
