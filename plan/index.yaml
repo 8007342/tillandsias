@@ -6431,7 +6431,7 @@ plan_index:
     - packet_id: parity-litmus-ruby-free-check
       order: 261
       title: "tillandsias-policy parity-matrix subcommand: ruby-free litmus:tray-parity-matrix-complete (gate cannot execute on Windows)"
-      status: ready
+      status: claimed
       kind: enhancement
       deliverable: crates/tillandsias-policy
       depends_on: []
@@ -6465,3 +6465,9 @@ plan_index:
             Reduction-engine capture from order 258: exit criterion 4 asks a
             check to pass that cannot even execute on this host class — an
             advisory-only gate. Filed + promoted per capture rule.
+        - type: claim
+          ts: "2026-07-10T00:14:00Z"
+          agent_id: "windows-bullo-fable5-20260710T0010Z"
+          host: windows
+          lease_id: "parity-litmus-ruby-free-check-20260710T0014Z"
+          expires_at: "2026-07-10T04:14:00Z"
