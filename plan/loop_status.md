@@ -1,6 +1,39 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T06:25:00Z
+LastExecutionTime: 2026-07-10T07:20:00Z
+
+## Cycle 2026-07-10T06:58Z (macos — overnight autonomous 3/8: order 269 done + verified live, order 281 filed from PTY-tee capture)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 3 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next 8ac2abdd
+  (linux draining order 267 litmus corpus; order 273 still open).
+- **Order 269 COMPLETED + F-G verified live**: (F-G) screen-attach
+  AppleScript now prints '[tillandsias] session ended — you may close this
+  window.' + exit — verified LIVE in the login popup (banner rendered, then
+  '[Opération terminée]', window reclaimed cleanly, no dead-shell strand).
+  (F-F) macos-tray-ax-smoke.sh pty-dump takes an explicit session arg +
+  hardened auto-resolution (empty-sid guard, full token match, fail-loud
+  listing, non-empty check). 3 new unit tests; bash-linted.
+- **Order 281 FILED (linux) — real capture via the PTY debug tee**: the
+  F-G verification's login attach hit `podman build tillandsias-git` exit
+  125 `retry Permanent` — corrupt overlay store (missing layer diff).
+  --exec-guest probe confirmed only vault built; git/proxy/inference/forge
+  absent, 21 orphan overlay dirs. This is order 270's dangling-layer damage
+  made concrete; 281 adds one-shot self-heal (reset+rebuild) since 270 only
+  reduces the corruption rate, not repairs it. Filed as 278, renumbered to
+  281 when the order-275 uniqueness gate flagged a collision with
+  forge-harness-icap-proxy — the gate earning its keep on its first
+  autonomous night. All forensics via idiomatic layers (PTY tee +
+  --exec-guest), no ssh/root.
+- **E2E gate**: skipped-with-cause — destructive local-build e2e PASSED
+  cycle 1 (<2h); this cycle's code delta (AppleScript banner + harness) is
+  unit-pinned and the banner live-verified.
+- **Substrate note**: osx-next VM left with corrupt podman storage (order
+  278); a --provision re-run or next destructive gate clears it. Documented
+  in the finding so the morning operator recognizes it.
+- **Queue next**: macOS-claimable = 270 (attach materialization/reaping —
+  now with order 281 as its downstream evidence), 155 residual. Order 273
+  still the hot linux blocker on the macOS attach cell.
 
 ## Cycle 2026-07-10T05:35Z→05:58Z (windows — meta-orchestration recurring loop 1/8: linux-next FF sync, order 274 criteria 1+2)
 
