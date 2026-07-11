@@ -70,14 +70,16 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: idiomatic layer reported >=1 container running via diagnostics annex"
 
-  - step: "container-start health: NO container reached state=failed during the annex capture"
-    # A failed launch surfaces the failing stage + container straight
-    # from the stream. Gating: a single failed line in the diagnostics
-    # cycle invalidates the structured report (containers didn't reach
-    # the state the JSON claims).
-    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && if grep -E 'event:container_launch .* state=failed' \"$STDERR\"; then echo \"FAIL: a container launch failed during the annex capture (see lines above)\"; exit 1; else echo \"ok: no container_launch state=failed in annex stderr\"; fi"
+  - step: "container-start health: NO INFRA container failed during the annex capture (agent-process exits excluded)"
+    # A failed INFRA launch surfaces the failing stage + container straight
+    # from the stream and invalidates the structured report. An attached
+    # AGENT process exiting nonzero ("attached command exited with status")
+    # is an agent-layer condition (2026-07-11: provider throttling), judged
+    # by the JSON-validity step — the same infra/agent split as
+    # litmus:container-start-health.
+    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && if grep -E 'event:container_launch .* state=failed' \"$STDERR\" | grep -Ev 'attached command exited with status'; then echo \"FAIL: an infra container launch failed during the annex capture (see lines above)\"; exit 1; else echo \"ok: no infra container_launch state=failed in annex stderr\"; fi"
     timeout_ms: 10000
-    expected_behavior: "ok: no container_launch state=failed in annex stderr"
+    expected_behavior: "ok: no infra container_launch state=failed in annex stderr"
 
   - step: "container-start health: the forge-agent stage launched (running OR exited)"
     # The annex prompt activates --opencode → must launch the agent
@@ -98,7 +100,7 @@ critical_path:
     # A capture without an agent-stage line means the agent JSON came
     # from somewhere unexpected (cached run, mocked call, ...) and the
     # structured report can't be trusted. Gating.
-    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' \"$STDERR\" && echo \"ok: forge-agent stage launched via idiomatic layer\""
+    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) (state=(running|exited) |state=failed .*attached command exited with status)' \"$STDERR\" && echo \"ok: forge-agent stage launched via idiomatic layer\""
     timeout_ms: 10000
     expected_behavior: "ok: forge-agent stage launched via idiomatic layer"
 
