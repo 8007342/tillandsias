@@ -17,6 +17,19 @@
     `release-artifacts/`. This absorbs the inline packaging stopgap previously in
     the release.yml `windows-release` job (tray-convergence-coordination.md ask).
 
+    Guest-binary embed (order 190 windows half / order 282): before compiling,
+    any non-empty staged guest headless under `target-guest/` (the
+    scripts/build-guest-binaries.sh staging contract) is copied per-arch into
+    `crates/tillandsias-windows-tray/assets/` so `include_bytes!` embeds it and
+    fresh WSL guests skip the release-download fetch (no version skew). When a
+    staged binary is absent the build.rs zero-byte placeholder stays, keeping
+    the in-VM fetch-headless network fallback for that arch. Artifact transport
+    onto a Windows host, any of: (a) build inside the local WSL distro with a
+    rustup musl toolchain and `install` the binary into `target-guest/`;
+    (b) copy `target-guest/` from a Linux checkout (CI nightly or sibling
+    host); (c) let the guest fetch the published release (the fallback this
+    embed demotes).
+
     @trace spec:windows-native-tray, spec:linux-native-portable-executable
 
 .PARAMETER DebugBuild
@@ -58,6 +71,47 @@ Set-Location $RepoRoot
 $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     throw "cargo not found on PATH. Install Rust (https://rustup.rs) or add %USERPROFILE%\.cargo\bin."
+}
+
+# --- Stage guest headless binaries into assets/ (order 190 windows half) ------
+# Embed per HOST arch (order 282): a WSL2 guest always matches the Windows
+# host architecture, so only that one staged binary from target-guest/ (the
+# scripts/build-guest-binaries.sh staging contract) is copied into the
+# crate's assets/ for include_bytes! embedding. The other arch's asset is
+# reset to the zero-byte placeholder (absent-asset = in-VM fetch-headless
+# fallback) so a stale copy can't bloat the exe by ~40MB. Copy only when
+# content differs so incremental cargo builds don't recompile for an
+# unchanged asset.
+$assetsDir = Join-Path $RepoRoot 'crates\tillandsias-windows-tray\assets'
+New-Item -ItemType Directory -Force $assetsDir | Out-Null
+$hostGuestArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
+$guestArches = @('x86_64', 'aarch64')
+foreach ($guestArch in $guestArches) {
+    $guestBin = "tillandsias-headless-$guestArch-unknown-linux-musl"
+    $stagedGuest = Join-Path $RepoRoot "target-guest\$guestBin"
+    $assetGuest = Join-Path $assetsDir $guestBin
+    if ($guestArch -ne $hostGuestArch) {
+        if ((Test-Path $assetGuest) -and ((Get-Item $assetGuest).Length -gt 0)) {
+            [System.IO.File]::WriteAllBytes($assetGuest, @())
+            Write-Host "Reset non-host-arch guest asset to placeholder: $guestBin" -ForegroundColor DarkGray
+        }
+        continue
+    }
+    if ((Test-Path $stagedGuest) -and ((Get-Item $stagedGuest).Length -gt 0)) {
+        $srcHash = (Get-FileHash $stagedGuest -Algorithm SHA256).Hash
+        $dstHash = ''
+        if ((Test-Path $assetGuest) -and ((Get-Item $assetGuest).Length -gt 0)) {
+            $dstHash = (Get-FileHash $assetGuest -Algorithm SHA256).Hash
+        }
+        if ($srcHash -eq $dstHash) {
+            Write-Host "Guest binary already staged (unchanged): $guestBin" -ForegroundColor DarkGray
+        } else {
+            Copy-Item $stagedGuest $assetGuest -Force
+            Write-Host "Staged guest binary into assets ($hostGuestArch host): $guestBin" -ForegroundColor Cyan
+        }
+    } else {
+        Write-Host "  WARN: no staged guest binary at target-guest\$guestBin for this host arch - embedded asset stays empty; fresh guests fall back to fetching the latest release (version skew possible). Stage with scripts/build-guest-binaries.sh (see .DESCRIPTION for Windows transport options)." -ForegroundColor Yellow
+    }
 }
 
 $profileName = if ($DebugBuild) { 'debug' } else { 'release' }
