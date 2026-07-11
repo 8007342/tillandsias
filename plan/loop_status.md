@@ -1,6 +1,1290 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-08T20:34:30Z
+LastExecutionTime: 2026-07-11T19:45:00Z
+
+## Cycle 2026-07-11T17:57Z→19:45Z (linux_mutable macuahuitl — operator-goal drain + RELEASE gate green)
+
+- **Drained**: 283 (smoke-lock fd close-on-exec + fixture), 284 (updater
+  probe+rollback to last-good; BONUS: npm-update lock-leak trap bug fixed
+  + 1h self-heal), 288 (tray label 120-char cap), 289 (lane predicate +
+  teardown tracing), 290/294 (operator-approved attested brew adoption:
+  shims + allowlist + litmus; 295 filed for opencode migration), 225
+  progressed (ADOPTED STRAY from the in-forge gate agent: mf_* litmus
+  stdlib, completed the unexported-var wiring bug).
+- **Gate saga (4 attempts to green)**: harness updater race (sibling npm
+  replaces shared-prefix symlinks non-atomically → next launch fatal) —
+  fixed with lock-aware wait + 6h cadence; then TWO provider-throttling
+  misclassifications — three copies of the state=failed assertion judged
+  agent-process exits as infra failures; all three now split infra
+  (fatal) from agent exits (e2e concern). Diagnostics e2e joined the
+  e2e_token_budget (4h limiter class diagnostics + cached-evidence
+  reuse). **First live smoke-mode meta e2e PASS** (MO-SMOKE verdict,
+  delta steps skipped) — order 286 proven.
+- **Gate 4: GREEN** (pre-build matrix + post-build smoke + runtime
+  residual all pass). windows-next merged (order 282 done); osx-next in
+  sync. RELEASE proceeding per operator instruction with the 8 known
+  tray-parity gaps (orders 257/258 cells) recorded as
+  release-with-parity-gaps, operator-directed 2026-07-11 ("ensure a
+  successful release"; macOS/Windows workers actively draining).
+
+## Cycle 2026-07-11T18:20Z (macos — operator session: ROOT-CAUSED the agent-attach failure = guest disk too small; 250G fix + Antigravity parity)
+
+- **Host**: macOS arm64, `osx-next`, operator present + interacting.
+  Merged origin/linux-next through 18d78d99. osx-next pushed to f93e94e0.
+- **THE macOS agent-launch blocker, root-caused + fixed (order 294)**: on a
+  fresh provision the operator logged in (worked, remote projects listed, a
+  cloud repo cloned), but every agent/maintenance attach = blank timing-out
+  terminal. PTY debug tee caught it: forge-base image build fails microdnf
+  install with 'needs NNN MB more space on / filesystem' -> build STEP error
+  -> PtyClose code=1. Root cause: convert_qcow2_to_raw did a straight
+  qemu-img convert of the ~5GB Fedora Cloud image with NO resize. This was
+  the real wall behind the order-273 "attach runs login flow" theory — the
+  substrate ran out of space (or was corrupt, order 281) before anything
+  could work. Fix: qemu-img resize the raw disk to GUEST_DISK_SIZE=250G
+  (operator direction; sparse) before first boot; cloud-init growpart/
+  resizefs fills root. VERIFIED live via --exec-guest: guest root fs now
+  '/dev/vda2 250G 1.2G 249G 1% /' — 249G free. Drift-pinned. Windows sibling
+  filed order 297 (per operator; renumbered from 295 on merge collision with brew-opencode-harness-migration).
+- **Antigravity agent menu parity (order 296)**: operator flagged the Linux
+  tray has an Antigravity agent the macOS/windows shared menu lacked (headless
+  supports --antigravity). Added through the whole host-shell chain
+  (SelectedAgent, ids, per-project leaf, agent picker, menu_action
+  resolve/resolve_project, pty agent_flag); windows inherits it. All three
+  trays' parity tests updated to the 7-leaf set. Green.
+- **E2E**: fresh destructive re-provision at 250G (exit 0) + guest boot smoke
+  via --exec-guest; interactive tray relaunched (v0.3.260711.5) for operator.
+- **Order 273 reframed**: the "agent attach runs the login flow" symptom was
+  the disk wall, not a dispatch bug — with 249G free the forge build can now
+  complete. Operator to confirm a live agent launch; if still off, re-capture
+  via the tee. (273 stays linux-owned pending that confirmation.)
+- **Standing goal (operator)**: release-gated macOS drain loop armed (cron
+  b8fb0697, hourly at :23) — drains the macOS queue each cycle, stops when
+  linux publishes a release newer than baseline v0.3.260707.2.
+## Cycle 2026-07-11T17:58Z (macos — operator session: integrate linux forge-lane fix, fresh destructive provision for interaction)
+
+- **Host**: macOS arm64, `osx-next`, operator present. Credential guard
+  `ok:gh-keyring`. Merged origin/linux-next 3fddd8b2 (+5: forge P1 fixes —
+  order 291 P0 post-reset startup regression fixed fail-soft with traced
+  errors; order 284 forge-opencode minimal repro now passes end-to-end;
+  orders 285/286 fail-soft harness + 4h e2e token budget; 287/292/293
+  vault provider-login roles + runtime-build proxy exemption + router in
+  launch ensure list). osx-next pushed to 3fddd8b2 — linux stays unblocked.
+- **Integration gate**: build check clean; macOS crates green (tray 69,
+  host-shell 59, vm-layer 51, control-wire 38).
+- **E2E gate (destructive local-build) — provision PASS**: eligible;
+  destroyed yesterday's substrate + cold provision at 3fddd8b2 (528MB
+  Fedora image) exit 0, so the operator interacts with a PRISTINE current
+  VM carrying all of last night's + this morning's guest fixes.
+- **Interactive build launched** (v0.3.260711.5, TILLANDSIAS_PTY_DEBUG=1)
+  for the operator. Order 291's fail-soft launch fix is directly relevant
+  to order 273 (agent attach ran the login flow / died) — if the operator
+  logs in, the agent-attach path can finally be re-tested live with the
+  PTY tee to see whether 291/284 changed the behavior.
+- **Queue**: order 273 (attach) still ready [linux], needs operator PAT to
+  repro — now testable this session. Order 155 (macos) criteria proposal
+  still pending Tlatoāni decision.
+## Cycle 2026-07-11T06:30Z→07:15Z (linux_mutable macuahuitl — operator session: P0 startup regression fixed, e2e token budget enforced)
+
+- **Order 291 (P0, done; renumbered from 285 — macOS filed its own 285
+  first)**: after `podman system reset` every lane
+  (opencode/codex/claude/antigravity/maintenance terminal) died with
+  "Terminal startup failed (exit code: 1)" — bare `require_*` calls under
+  `set -e` turned a failed launch-time npm install into a fatal, with the
+  real npm error discarded to /dev/null. Fixed fail-soft with traced
+  errors + `harness_missing_fatal` actionable banner for missing primary
+  agents. Needs the next forge image build to reach installed stacks.
+- **Order 284 update**: minimal repro now PASSES (proxy up, npm installs
+  through enclave, agent answers, exit 0) — upstream published a working
+  latest. Residual: updater pin/rollback + postinstall egress
+  disposition remain open.
+- **Orders 287/292/293 (operator session follow-up, done)**: codex/claude/
+  antigravity lanes crashed at launch — three stacked regressions unwound
+  live: (287) provider-login vault roles shipped 2026-06-30 as HCL files
+  but never wired into Policy::all(), so every post-reset login flow
+  404'd (also fixed the bootstrap sentinel probing the OLDEST role, which
+  froze existing vaults out of new roles forever); (292) BOTH Rust podman
+  build paths lacked --http-proxy=false (proxy-exemption class, 4th
+  instance) so post-bump lazy image rebuilds died on apk DNS; (293)
+  "router" was missing from the launch ensure-images list (bump-window
+  pull from nonexistent registry). Orders 288 (tray stack-trace UX P0),
+  289 (shared proxy teardown under a live terminal lane), 290 (Homebrew
+  migration research — blocked on Tlatoāni slice decision) filed.
+  Operator's live BigPickle test (opencode from terminal) pushed
+  da85f0c9 — commit+push relay proven; file distilled and removed per
+  markdown policy.
+- **Order 286 (operator directive, done)**: full in-forge
+  /meta-orchestration e2e capped at once per 4h per host
+  (scripts/forge-e2e-rate-limit.sh); other runs downgrade to the skill's
+  new Smoke Mode (verify-only, no plan drain, `MO-SMOKE: PASS` verdict)
+  via scripts/litmus-opencode-e2e-launch.sh. Canon in
+  methodology/distributed-work.yaml `e2e_token_budget`; pinned by
+  litmus:forge-e2e-rate-limit-shape. Rationale: repeated full cycles
+  (retries killed at budget) were burning BigPickle's rate-limited token
+  budget and masquerading as forge-lane outages.
+
+## Cycle 2026-07-10T11:57Z (macos — overnight autonomous 8/8 FINAL: merge + verified-green macOS handoff)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 8 of 8, final).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next ba3e5acd.
+- **Order collision resolved (uniqueness gate)**: linux filed its own order
+  283 (smoke-lock-fd-leaks) + 284 (P1 forge-opencode outage) in parallel
+  with my cycle-7 order 283 (headless-podman-test-gate). Kept linux's
+  283/284, renumbered mine to **285**; the order-275 uniqueness gate
+  confirmed clean (150 packets, no open-packet duplicates). This is the
+  gate's textbook use case — three hosts filing packets in parallel
+  overnight, caught mechanically.
+- **No macOS-actionable ready work this cycle**: 273 operator-blocked
+  (agent leaves auth-gated); 155 contested criteria (proposal pending);
+  270/283/284/285 linux-owned; 284 is a P1 but it's the linux forge lane
+  (upstream opencode-ai@latest publish broke the in-enclave postinstall),
+  not macOS-fixable.
+- **Final action — verified-green macOS handoff**: re-ran the macOS-owned +
+  cycle-7-fixed crates on the merged final tree — all green
+  (macos-tray 69, host-shell 59, vm-layer 51, control-wire 38,
+  gh_auth_deploy_key 5/5 with the keyring hermeticity fix holding). Build
+  check clean. The macOS trunk is solid at loop close.
+- **E2E gate**: skipped-with-cause — destructive local-build e2e PASSED
+  cycle 6 (merged HEAD) + cycle 4; no runtime delta this cycle (merge +
+  verification only).
+- **macOS night summary (8 cycles)**: order 272 (ssh backdoor closed,
+  verified), 277 (one-shot CLI vs live tray), 269 (session-end banner +
+  pty-dump), 155 slice 4 (LocalProjects push) + tick-wait dedup onto the
+  shared module; fixes: chip clobber, fstab mount persistence, post-login
+  cloud prime, keyring test hermeticity. Filed for siblings: 267/276 (login
+  push), 270 (guest-side attach), 281 (overlay self-heal), 283/285
+  (test-gate). Two destructive e2e PASSes. Open macOS residual: 273
+  (operator), 155 (criteria decision). Parity column: 6/7 cells done,
+  InteractiveStream blocked on 273.
+## Cycle 2026-07-10T10:40Z→12:10Z (linux_mutable macuahuitl — overnight loop 7-8/8 CLOSE: strict default proved in gates, P1 forge-lane outage filed)
+
+- Iteration 7: strict-default's first gates surfaced and FIXED two real
+  bugs — alpine:latest fallbacks in the slice-2 helpers (base policy) and
+  run-observatorium.sh's unqualified + bump-window image reference
+  (launcher verified live). Order-265 probe WIRED into opencode STEP 3
+  after the second alive-past-budget collision (soft 600s + liveness
+  extension + 1500s hard cap).
+- Iteration 8: reclaimed the smoke lock from an orphaned agent session
+  holding an inherited flock fd (order 283 filed — close-on-exec fix);
+  then the probe fast-failed dead_crashed and exposed the real outage:
+  **P1 order 284 — the forge opencode lane is DOWN since 10:56Z.**
+  Upstream opencode-ai published 3 dev/beta releases during our window;
+  the post-reset harness refresh pulled one whose postinstall cannot
+  complete in-enclave. Minimal repro + npm timeline + fix direction
+  (tested pin, updater rollback, egress disposition) in the packet. TOP
+  PICK for the next linux cycle.
+- Gate state at close: pre-build matrix 156/156 under the strict default
+  (proved twice); post-build green EXCEPT the three forge-launching
+  litmuses, all red on the order-284 outage; destructive gates 2-4 not
+  reached tonight after the 073536Z full PASS (substrate remains from
+  that provision).
+- The 8-iteration overnight loop is COMPLETE. Cross-host: siblings ran
+  their own loops throughout (macOS adopted 260 + passed destructive e2e;
+  windows on 154 slices); ~15 packets closed across hosts tonight.
+
+## Cycle 2026-07-10T10:57Z (macos — overnight autonomous 7/8: macOS trunk-health sweep found+fixed a real keyring hermeticity bug + filed the podman-test-gating class)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 7 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next c2964103
+  (strict-default gate findings — alpine fallbacks, observatorium image
+  resolution). Order 273 STILL open; needs operator PAT to repro (agent
+  leaves are auth-gated), so unadvanceable unattended.
+- **No small macOS-owned packet available** (155 large+contested, 270 now
+  linux, 273 operator-blocked, 147/225 cross-cutting), so ran the macOS
+  host's UNIQUE contribution: a full `cargo test --workspace` sweep — the
+  macOS box is the only host that compiles+runs the macOS-specific code, so
+  this is the trunk-health check no other CI performs.
+- **Real bug found + FIXED (keyring hermeticity)**: the deploy-key test
+  (tillandsias-core gh_auth_deploy_key) was designed hermetic via
+  LITMUS_SECRET_TOOL_STORE + a fake secret-tool shim, but
+  scripts/generate-repo-key.sh's Darwin arm used the real macOS `security`
+  Keychain, which the Linux shim doesn't intercept — so on macOS it wrote to
+  the developer's login Keychain and failed read-back under automation. Fix:
+  secret_store_set/get honor LITMUS_SECRET_TOOL_STORE as a cross-platform
+  file store (fake's exact format → Linux byte-identical). 5/5 pass; never
+  touches the real Keychain now. Finding:
+  deploy-key-test-hits-real-macos-keychain-2026-07-10.md.
+- **Reduction-engine capture → order 283 (linux)**: the sweep also exposed a
+  CLASS — tillandsias-headless podman-integration tests FAIL (not skip) on a
+  bare macOS host (no podman machine): they assert podman-semantic errors but
+  get connection-refused. Fixed one as the reference pattern
+  (error_recovery::test_missing_image_error_handling now treats
+  podman-unreachable as a graceful skip); filed the rest (stress_* + the
+  un-reached binaries) for a shared podman_daemon_reachable() gate. These
+  masked the real keyring find — hermeticity matters. Finding:
+  headless-integration-tests-not-macos-gated-2026-07-10.md.
+- **E2E gate**: skipped-with-cause — destructive local-build e2e PASSED
+  cycle 6 (<1h) on merged HEAD; this cycle's deltas are test/script
+  hermeticity fixes verified by the test sweep itself.
+- **Queue next**: order 283 (linux, test gating), 273 (operator), 155
+  (contested criteria — proposal pending). Final cycle 8 next.
+## Cycle 2026-07-10T09:57Z (macos — overnight autonomous 6/8: reduction pass — order 270 re-scoped guest-side, order-155-criteria proposal filed, destructive e2e on merged HEAD)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 6 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next 447451db
+  (order 267 COMPLETE — strict litmus exit-code authority is now the
+  default; corpus 156/156). Order 273 STILL open.
+- **Reduction-engine pass (no risky big-refactor forced at 6/8)**: the two
+  macOS-owned ready packets are 155 (large final refactor) and 270
+  (entangled with 273). Rather than force either unattended, reduced the
+  ledger:
+  - **Order 270 RE-SCOPED guest-side**: code re-read + orders 269/281
+    corrected the original host-side misdiagnosis. The macOS attach worker
+    does NOT give up/close the PTY (run_pty_attach detaches pump_io; the
+    GUEST child's exit closes it); order 269's banner already made
+    session-end operator-visible; 281 owns the corrupt-store aftermath. The
+    real residual — build reaped with the attach process + no progress
+    feedback — is guest-side. Moved pickup_role macos->linux, deliverable
+    ->tillandsias-headless, criteria trimmed to detach-build + progress
+    signal. Rescope event recorded.
+  - **Order-155 exit-criteria proposal filed** (Tlatoāni-gated,
+    order-155-zero-sleep-criteria-vs-fallback-poll-2026-07-10.md): the
+    "no tokio::time::sleep in transport path" criterion is unsatisfiable
+    against the converged design that DELIBERATELY keeps a fallback poll
+    (both trays share it via subscription_health). Proposed rewording to
+    the SC-07 "no timer while healthy" invariant the code already
+    satisfies — NOT self-approved (definition-of-done change).
+- **E2E gate (destructive, local-build) on merged HEAD 447451db PASS**:
+  eligible; destroy + rebuild + cold provision (exit 0) + `--exec-guest`
+  smoke — fresh disk boots healthy (guest headless v0.3.260710.8), and
+  order 272 re-verified on this build (sshd masked, zero :22 listeners,
+  fstab mount present). Report:
+  plan/issues/macos-e2e-overnight-cycle6-2026-07-10.md.
+- **Queue next**: macOS ready now = 155 (pending the criteria decision) +
+  its watch-channel-menu residual. 270 handed to linux. Order 273 remains
+  the attach-cell blocker.
+
+## Cycle 2026-07-10T09:44Z→10:15Z (linux_mutable macuahuitl — overnight loop 6/8: ORDER 267 COMPLETE, strict litmus authority is the default)
+
+- Siblings merged x2 (clean). The harness onion's final layers: the
+  RELATIVE calls-file path was landing in the package-root target dir
+  (cargo test cwd — iteration 5's "stray nested target" was the evidence);
+  localhost/-qualified assertion updates; the test's ensure list extended
+  to the 10-image canon; the never-real container-run assertions moved to
+  a filed full-init-harness follow-up.
+- THE FLIP: TILLANDSIAS_LITMUS_STRICT_EXIT defaults ON (=0 opt-out is
+  itself a finding); unparseable steps are hard PARSE FAILs. Strict sweep
+  156/156 before the flip; default sweep 156/156 after; every litmus file
+  ruby-parses. Order 267 completed with multi-agent credit (in-forge:
+  slice 1 + slice 2 + anchor; coordinator: burn-down, iterations 2-6).
+- Post-build matrix re-proves at the next gate (pattern-ed steps are
+  behavior-identical under the flip).
+- Queue next: 273 (attach login flow), 129, 225, security chain, streams
+  chain, audits. Blocked-on-operator unchanged.
+
+## Cycle 2026-07-10T09:07Z→09:45Z (windows — meta-orchestration recurring loop 4/8: FULL DESTRUCTIVE E2E PASS @ 06c14a35, guest version-skew demonstrated, order 282 filed)
+
+- **Host**: Windows 11 native, `windows-next`, agent
+  windows-bullo-fable5-20260710T0536Z. Credential guard
+  `ok:gh-credentials-store`. Clean start at ebd68448; merged
+  origin/linux-next 06c14a35 clean, pushed sync before work. Preflight
+  `eligible`.
+- **E2E gate — /build-install-and-smoke-test-e2e (windows) run 3, PASS
+  (run_id 20260710T090845Z)**: build 2m16s → direct-copy install
+  (freshness gate: embedded SHA 06c14a35 == HEAD) → destructive
+  `wsl --unregister` + cache/wsl/logs wipe → cold `--provision-once`
+  exit 0 (rootfs re-downloaded, `RESULT: VM Ready — control wire up ✓`,
+  handshake wire_version=2 attempt=1) → `--diagnose --json` exit 2
+  degraded-as-expected, 17 keys, build_commit fresh. Report: Run 3
+  section of build-install-smoke-e2e-findings-2026-07-10-windows.md.
+- **Extended verification**: order 274 criterion 1 RUNTIME-CONFIRMED
+  (fresh guest unit carries HOME + XDG_RUNTIME_DIR pins); criterion 3 has
+  no unattended lane on Windows → 274 flipped to blocked-on-operator,
+  probe appended as item 10 of the order 258 attended checklist.
+- **Reduction engine — guest version skew DEMONSTRATED, order 282
+  filed**: a PRISTINE provision boots guest headless v0.3.260707.2 — the
+  embedded musl assets are zero-byte placeholders so fetch-headless pulls
+  the newest RELEASE, and the release hold keeps every release
+  pre-order-260. The slice-3 full-topic subscribe was rejected even on
+  the fresh substrate (legacy fallback held, 4th live engagement).
+  Evidence event appended to order 190 (its contract-shaped criteria are
+  genuinely done); windows implementation half promoted to order 282
+  (guest-binary-embed-windows, ready, windows pickup) with the
+  linux→windows artifact-transport question flagged to the coordinator.
+  ALSO: this means macOS live-push verifications share the same ceiling —
+  their guests fetch releases too (vz.rs fetch service): worth a macOS
+  check whether order 155's live evidence was against a staged or
+  fetched guest.
+- **Next windows work**: order 282 (needs transport decision), order 154
+  remaining slice (menu wakeups + tick elimination — unit-pinned, not
+  guest-dependent), order 251 verifiers, order 258 attended items (now
+  10 incl. the 274 probe).
+
+## Cycle 2026-07-10T08:57Z (macos — overnight autonomous 5/8: order 155 tick-wait dedup onto shared module, cross-host convergence)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 5 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next 34c53ced —
+  which brought TWO cross-host wins from my earlier slices: (1) windows
+  adopted my SubscriptionHealth (order 154 slice 4, 0083f362 "tick wait
+  wakes on drop"); (2) linux hoisted my slice-3 tick-wait helpers into the
+  shared subscription_health module. Order 273 STILL open.
+- **Order 155 dedup COMPLETE**: removed the macOS-local TickWake /
+  wait_tick_or_subscription_drop / tick_after_wake (+ their 2 redundant
+  unit tests) and imported the shared copies linux hoisted. The "identical
+  stream architecture" exit criterion is now enforced by SHARED SOURCE
+  rather than parallel copies — the two trays' tick-wait semantics cannot
+  drift. Byte-identical implementations (behavior live-verified cycle 4);
+  69 tray + 59 host-shell tests, build check clean. No behavior change → no
+  re-verification needed.
+- **E2E gate**: skipped-with-cause — pure source dedup, zero runtime
+  behavior change; cycle 4's destructive gate (<90min ago) exercised the
+  identical behavior on a fresh provision. No new e2e report warranted.
+- **Queue next**: macOS 155 residual = watch-channel MENU listeners (last
+  slice; removing the fallback tick loop entirely + SC-01 zero-sleep). Order
+  273 remains the hot linux blocker on the attach cell. Sibling convergence
+  healthy: both trays now share SubscriptionHealth + tick-wait + the
+  four-topic push model.
+
+## Cycle 2026-07-10T08:45Z→09:35Z (linux_mutable macuahuitl — overnight loop 5/8: strict burn-down to ONE named blocker)
+
+- Siblings merged x2 (osx: 155 slice 4 LocalProjects adoption + their own
+  destructive e2e PASS + 281 corruption cleared; windows: 154 slice 4).
+- Order 267 tail: init-command-shape repaired (rg -F/-U regex-vs-literal
+  class, canonical image pin updated 8→10 per orders 253/76);
+  headless-init harness step EXECUTED for the first time since authoring
+  (single-quoted scalar + rustup env) and exposed the next layer — the
+  Rust harness test self-short-circuits in 0.07s without writing the
+  calls log. That is now the SOLE strict-flip blocker (named in the 267
+  issue). Parser command:-anchor re-applied safely post-slice-2 and
+  immediately proved itself. Strict pre-build sweep: 155/156.
+- Generated-file stragglers (metrics/TRACES/nested-target stub) committed
+  or removed; tree clean.
+
+## Cycle 2026-07-10T08:07Z→08:45Z (windows — meta-orchestration recurring loop 3/8: order 154 slice 4 SC-16, helpers hoisted to host-shell)
+
+- **Host**: Windows 11 native, `windows-next`, agent
+  windows-bullo-fable5-20260710T0536Z. Credential guard
+  `ok:gh-credentials-store`. Clean start at 14012ad7; merged
+  origin/linux-next 2cc5a066 (order 267 slice 2 litmus rewrites, pure
+  fast-forward again — three cycles running, windows-next has stayed a
+  strict descendant of linux-next), pushed sync + claim before work.
+- **Worker drain — order 154 slice 4 COMPLETED (0083f362), lease
+  released, packet stays ready**: SC-16 adoption — VM_STATUS_PUSH_HEALTHY
+  AtomicBool replaced by shared host-shell SubscriptionHealth; tick loop
+  waits via wait_tick_or_subscription_drop, rewinding to tick 0 on a drop
+  so the full fallback round runs immediately (was: up to 300s on the
+  10-tick cadence). HOISTED the tray-agnostic helpers (TickWake,
+  wait_tick_or_subscription_drop, tick_after_wake) into
+  host-shell::subscription_health with their paused-clock pins instead of
+  mirror-duplicating them — macOS order 155 flagged to swap
+  action_host.rs's local copies for the shared ones (order-274
+  unit-writer-drift lesson applied proactively). host-shell 53 tests,
+  windows-tray 65, clippy 0 warnings across both.
+- **Live verification**: tray at this HEAD engaged the slice-3
+  legacy-topic fallback twice more (stale pre-260 guest), and survived a
+  mid-run `wsl --terminate`: keepalive respawned WSL, push subscription
+  re-established 31s end-to-end. SC-16 wake-timing semantics pinned
+  deterministically by the paused-clock tests. All test processes
+  terminated, VM returned to stopped.
+- **E2E gate**: deferred-with-cause — third consecutive cycle whose
+  runtime delta is tray-side push wiring, live-exercised directly above;
+  the pending destructive run (also order 274 criterion 3 + slice 3
+  full-topic path) is queued for a cycle with headroom — it needs the
+  guest refreshed past 7bdc4c1d, which the e2e's build+install provides.
+- **Next windows work**: order 154 residual (watch-channel menu wakeups +
+  tick-task elimination — needs an event-driven menu render path); the
+  full destructive e2e as the next cycle's primary item (closes three
+  pending live-verification residuals at once).
+
+## Cycle 2026-07-10T07:12Z→08:25Z (linux_mutable macuahuitl — overnight loop 3-4/8: FULL DESTRUCTIVE E2E PASS, all four gates green)
+
+- **THE MILESTONE**: run 20260710T073536Z — first fully-green destructive
+  local-build e2e on this host. Gate 1 ci-full exit 0 (all litmuses incl.
+  the night's three rewrites + all-features lane), gate 2 podman reset
+  zero-residue, gate 3 cold --init full rebuild exit 0 (order-263 mirror
+  YAML gate now LIVE in the rebuilt git image), gate 4 forge lane exit 0.
+  PASS report: plan/issues/build-install-smoke-e2e-PASS-20260710T073536Z.md.
+- Getting there (iterations 3-4): inference litmus rewritten on the
+  product launch shape (real podman, keep-id+label=disable, current
+  strings) — PASS standalone then in-gate; env-isolation resolution +
+  entrypoint overrides + env-key allowlist (the 3-10 band was stale: 9
+  baked + HOSTNAME + 6 containers.conf proxy vars); in-forge agents
+  contributed 267 slice 2 (all 31 folded steps rewritten, mid-gate) and
+  the gate-4 orphan fixes (adopted after strict-green verification;
+  runner regex anchor REVERTED + parked — it re-pairs steps/expecteds in
+  folded-legacy shapes); coordinator repaired the slice-2 placeholder
+  expecteds. Full instant sweep green post-everything.
+- Siblings: osx merged (269 + 281 filed); windows merged (154 slices 3-4
+  — LocalProjects topic adoption underway on my order-260 wire work).
+- Order 265 completed via ADOPTION with a correction event: the in-forge
+  agent implementing the liveness probe outlived its litmus window
+  (alive_quiet per its own grammar), pushed late, and the coordinator
+  contributed the final test guard — the probe's thesis demonstrated by
+  its own birth. STEP 3 wiring = evidenced next packet.
+- Remaining 267 tail: strict-exit default flip + PARSE-WARNING→FAIL
+  promotion + parked anchor, gated on strict sweeps staying green.
+- Queue: next linux picks = 267 tail, 273, 129, 225, security chain,
+  streams chain, 249/250, audits. Blocked-on-operator unchanged (windows
+  attended smoke 258, release approval, bar-raise slice 3).
+
+## Cycle 2026-07-10T07:57Z (macos — overnight autonomous 4/8: order 155 slice 4 LocalProjects push, destructive e2e PASS, order 281 corruption cleared)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 4 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next 2cc5a066
+  (linux deep in order 267 litmus-corpus rewrites; order 273 STILL open —
+  the macOS attach cell's blocker).
+- **Order 155 slice 4 COMPLETE + verified live**: order 260's LocalProjects
+  push source (landed cycle 1) let the tray's LAST steady-state poll ride
+  the stream. Subscribe widened to all FOUR topics; new shared
+  apply_local_projects consumes LocalProjectsPush/Reply; initial-sync primes
+  EnumerateLocalProjects. The tick loop's entire slow-cadence block (local +
+  cloud + login) is now inside the SC-07 fallback gate — a healthy
+  subscription skips it, timer is pure fallback (SC-01/02 for the
+  projects/login cadence). Live: 'push subscription established
+  (vm-status/login/cloud/local polls demoted to fallback, SC-07)' +
+  'local-projects: menu_state updated (4 entries)' via the reader loop, not
+  the poll; clean SIGTERM. 71/71 tray tests. Windows flag: adopt
+  LocalProjectsPush in notify_icon.rs for the same tick-elimination.
+  Residual: watch-channel MENU listeners (last 155 slice; tick loop still
+  exists as fallback).
+- **E2E gate (destructive, local-build) PASS**: preflight eligible; build
+  v0.3.260710.8 + install (SHA==HEAD 34838feb) + substrate wipe + 528MB cold
+  provision exit 0. This destructive re-provision ALSO cleared cycle 3's
+  order-281 corrupt overlay store — the osx-next VM is clean again. Report:
+  plan/issues/macos-e2e-overnight-cycle4-2026-07-10.md.
+- **Queue next**: macOS-claimable = 155 final residual (watch-channel menu
+  listeners), 270 (attach materialization — still entangled with 273). Order
+  273 remains the hot linux blocker; re-checked each cycle.
+
+## Cycle 2026-07-10T06:58Z (macos — overnight autonomous 3/8: order 269 done + verified live, order 281 filed from PTY-tee capture)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 3 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next 8ac2abdd
+  (linux draining order 267 litmus corpus; order 273 still open).
+- **Order 269 COMPLETED + F-G verified live**: (F-G) screen-attach
+  AppleScript now prints '[tillandsias] session ended — you may close this
+  window.' + exit — verified LIVE in the login popup (banner rendered, then
+  '[Opération terminée]', window reclaimed cleanly, no dead-shell strand).
+  (F-F) macos-tray-ax-smoke.sh pty-dump takes an explicit session arg +
+  hardened auto-resolution (empty-sid guard, full token match, fail-loud
+  listing, non-empty check). 3 new unit tests; bash-linted.
+- **Order 281 FILED (linux) — real capture via the PTY debug tee**: the
+  F-G verification's login attach hit `podman build tillandsias-git` exit
+  125 `retry Permanent` — corrupt overlay store (missing layer diff).
+  --exec-guest probe confirmed only vault built; git/proxy/inference/forge
+  absent, 21 orphan overlay dirs. This is order 270's dangling-layer damage
+  made concrete; 281 adds one-shot self-heal (reset+rebuild) since 270 only
+  reduces the corruption rate, not repairs it. Filed as 278, renumbered to
+  281 when the order-275 uniqueness gate flagged a collision with
+  forge-harness-icap-proxy — the gate earning its keep on its first
+  autonomous night. All forensics via idiomatic layers (PTY tee +
+  --exec-guest), no ssh/root.
+- **E2E gate**: skipped-with-cause — destructive local-build e2e PASSED
+  cycle 1 (<2h); this cycle's code delta (AppleScript banner + harness) is
+  unit-pinned and the banner live-verified.
+- **Substrate note**: osx-next VM left with corrupt podman storage (order
+  278); a --provision re-run or next destructive gate clears it. Documented
+  in the finding so the morning operator recognizes it.
+- **Queue next**: macOS-claimable = 270 (attach materialization/reaping —
+  now with order 281 as its downstream evidence), 155 residual. Order 273
+  still the hot linux blocker on the macOS attach cell.
+
+## Cycle 2026-07-10T06:07Z→07:20Z (windows — meta-orchestration recurring loop 2/8: order 154 slice 3 + version-skew fallback, verified live)
+
+- **Host**: Windows 11 native, `windows-next`, agent
+  windows-bullo-fable5-20260710T0536Z. Credential guard
+  `ok:gh-credentials-store`. Clean start at eaee1c94 == origin;
+  origin/linux-next (7bdc4c1d) unchanged since loop 1/8 — already
+  integrated, no merge needed. osx-next advanced twice mid-cycle (macOS
+  loop active); its integration belongs to the linux coordinator.
+- **Worker drain — order 154 (windows-tray-stream-refactor) slice 3
+  COMPLETED (5c459070), lease released, packet stays ready**: push
+  subscription widened to all FOUR topics (order 260's LocalProjectsPush),
+  shared apply_local_projects applier, last steady-state wire poll
+  (EnumerateLocalProjects) demoted to fallback-only, initial-sync prime
+  extended. Found + fixed a REAL version-skew hazard while implementing:
+  a pre-260 guest cannot decode the new trailing SubscriptionTopic
+  variant and drops the connection — naive widening would have regressed
+  ALL push topics to polls on every stale guest. Added a legacy
+  three-topic fallback on a fresh connection with a separate
+  LOCAL_PROJECTS_PUSH_SUBSCRIBED gate so local projects keep polling in
+  legacy mode. VERIFIED LIVE against this host's stale-guest VM (guest @
+  45cfd526-era, pre-260): 'subscribe: early eof' → legacy resubscribe in
+  ~0.8s → login/cloud polls suppressed, local-projects poll continued at
+  ~5min cadence, clean shutdown; VM returned to stopped as found.
+  windows-tray 65 tests, clippy 0 warnings, fmt clean.
+- **Cross-host flag (macOS order 155)**: adopt the version-skew fallback
+  BEFORE widening the macOS topic list — the postcard decode failure is
+  platform-independent. Pin shape: legacy_topics_are_full_topics_minus_
+  local_projects.
+- **Observation (not re-filed, duplicate discipline)**: stale guest's boot
+  log showed '[vsock] vault bootstrap after DeliverCredentials failed:
+  Failed to create runtime asset parent: Permission denied (os error 13)'
+  — same os-error-13 vault family as smoke-e2e-findings-v0.3.260704.2 /
+  vault-selinux-label-rootless-crash-2026-07-02; guest predates current
+  HEAD where tonight's linux gate ran the vault chain green. Re-check on
+  a FRESH guest at the next destructive e2e before filing anything new.
+- **E2E gate**: deferred-with-cause — the slice's live verification above
+  exercised the changed code directly (the destructive gate would boot a
+  fresh guest that hides the fallback path this slice needed to prove);
+  next destructive run verifies the full-topic path + order 274
+  criterion 3.
+- **Next windows work**: order 154 final slice (tick-task retirement:
+  watch-channel wakeups + SubscriptionHealth adoption); order 258 still
+  operator-blocked; order 251 awaits verifiers.
+## Cycle 2026-07-10T06:54Z (linux_mutable opencode/big-pickle — meta-orch worker drain: order 265 research verdict + fixture prototype)
+
+- **Host**: linux_mutable, `linux-next @ 9e7e47cc` → `047a5849`
+- **Credential guard**: `ok:gh-keyring`
+- **E2E eligibility**: `skip:smoke-lock-held`
+- **Worker drain**: Completed order 265 (forge-agent-liveness-signals). Research
+  verdict: 3-signal layered design (container state + heartbeat mtime + git HEAD).
+  Evaluated 5 candidates (heartbeat file, git cadence, podman exec, vsock pulse,
+  podman events). Implemented `scripts/forge-liveness-probe.sh` (status/wait/
+  deadline modes, 5 liveness states). Fixture test suite `scripts/test-forge-
+  liveness-probe.sh` (8 scenarios, all pass). Litmus `litmus:forge-liveness-
+  probe-shape` registered and passing (9 steps). Hard-cap backstop preserved.
+  Residual: forge entrypoint heartbeat touch, repeat script integration, litmus
+  STEP 3 timeout diagnostics wiring.
+- **Siblings**: windows-next `fd0706ca`, osx-next `dd2b21ea` — both ancestors
+  of linux-next; no merge needed.
+- **Commit**: `047a5849` pushed to `origin/linux-next`.
+
+## Cycle 2026-07-10T06:21Z→07:20Z (linux_mutable macuahuitl — overnight loop 2/8: siblings merged, gate-1 burn-down ×3, env-isolation rewritten)
+
+- Merged osx-next (272 SSH backdoor closed + 277) and windows-next (274
+  progress, 154 slice 3 claim); merged tree --check green; one
+  loop_status union-resolve.
+- Gate 1 attempted ×3, each red understood + acted on (full table:
+  plan/issues/build-install-e2e-gate-attempts-20260710-iter2.md):
+  test race FIXED (63e0a497) → env-isolation flake, file REWRITTEN
+  (8ac2abdd) → inference shim red (parked, next 267 slice: product-path
+  launch) + FIRST one-packet STEP 3 timeout (no push landed; order-265
+  data point — recurrence bumps its priority).
+- Destructive gates 2-4 correctly not reached; next iteration rewrites
+  the inference litmus then retries gate 1 → 2-4.
+- Positives: all-features lane 3/3 green; opencode litmus greens #2-3 at
+  062934Z; 268 proxy guard held in the bad shape.
+
+## Cycle 2026-07-10T05:35Z→05:58Z (windows — meta-orchestration recurring loop 1/8: linux-next FF sync, order 274 criteria 1+2)
+
+- **Host**: Windows 11 native, `windows-next`, agent
+  windows-bullo-fable5-20260710T0536Z. Credential guard
+  `ok:gh-credentials-store`. Clean start at c61601a8; merged
+  origin/linux-next 7bdc4c1d — resolved as a pure fast-forward (windows-next
+  was already fully merged into linux-next by the 05:50Z coordinator cycle),
+  pushed. Recurring-loop context: this host runs 8 scheduled
+  meta-orchestration cycles ~hourly tonight; linux + macOS hosts are running
+  the same loop, so cycles stay one-packet-sized and lease-disciplined.
+- **Worker drain — order 274 (wsl-headless-unit-lock-namespace), criteria
+  1+2 CLOSED (d41b3493), lease released, packet stays ready**: the legacy
+  WslRuntime::provision unit (vm-layer wsl.rs step 4) now pins
+  Environment=HOME=/root + Environment=XDG_RUNTIME_DIR=/run/user/0 and
+  creates /run/user/0 (ExecStartPre mkdir+chmod, matching the recipe-path
+  unit), so the boot-path bootstrap and exec'd satisfiers share one
+  $XDG_RUNTIME_DIR/tillandsias-locks flock namespace — the macOS order-259
+  vault name-in-use race can no longer reproduce through the tarball path.
+  New source pin test wsl::tests::wsl_provision_unit_pins_lock_namespace_env
+  (runs on all platforms). fmt clean, clippy --all-targets 0 warnings,
+  vm-layer 23/23. RESIDUAL: criterion 3 (fresh-distro first --github-login
+  probe) rides this host's next destructive local-build e2e.
+- **Reduction engine**: filed
+  plan/issues/wsl-legacy-provision-unit-writer-drift-2026-07-10.md
+  (enhancement): Windows has TWO independent headless-unit writers (legacy
+  wsl.rs trait path vs live wsl_lifecycle.rs recipe path) and order 274 is
+  the demonstrated drift mode — the 259 fix reached one writer but not the
+  other. Proposes consolidating to one unit-template constant or retiring
+  the legacy tarball path.
+- **E2E gate**: deferred-with-cause — local-build e2e PASSED twice on this
+  host tonight (runs @ c52a1e2e and 45cfd526, <4h ago) and this cycle's
+  delta is the LEGACY provision path, which a recipe-path cold provision
+  does not exercise; a re-run now would re-prove tonight's result without
+  touching the changed code. Next destructive run doubles as the order-274
+  criterion-3 probe.
+- **Next windows work**: order 154 watch-channel slice is now FULLY
+  unblocked (linux order 260 landed SubscriptionTopic::LocalProjects at
+  7bdc4c1d — widen topic list, retire the 30s tick, adopt SubscriptionHealth
+  per macOS order 155 slice 3); order 276 note: drop the interim login-prime
+  once guests carry the transition push. Order 258 stays blocked on
+  operator-attended smoke; order 251 awaits its 3 verifiers.
+
+
+
+## Cycle 2026-07-10T05:57Z (macos — overnight autonomous 2/8: order 277 done + verified both ways)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 2 of 8).
+  Credential guard `ok:gh-keyring`. Clean start, linux-next unchanged since
+  cycle 1; windows-next advanced (not merged here — linux coordinates).
+- **Order 277 COMPLETED + verified live**: VM-booting one-shot modes probe
+  the tray singleton (acquire-and-drop) and exit 3 with operator guidance
+  when a live tray owns the VM — no more opaque VZ storage error. Verified
+  both branches live: refusal against a running tray; GUEST_OK exit 0 via
+  --exec-guest after quit. Pin test covers all four dispatch branches.
+- **E2E gate**: skipped-with-cause — full destructive local-build e2e
+  PASSED on this host <1h ago (cycle 1 report); this cycle runtime delta
+  (the guard) was live-verified directly on the installed build.
+- **Queue next**: macOS-claimable = 269 (ux residue), 270 (attach
+  materialization blackout — NOTE partially entangled with linux order 273:
+  273 may reveal the attach never reaches the build path on macOS), 155
+  residual. Order 273 still linux-open — the hot macOS blocker.
+
+## Cycle 2026-07-10T05:33Z (macos — overnight autonomous 1/8: order 272 done + verified on fresh provision, destructive e2e PASS)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight loop 1 of 8,
+  hourly). Credential guard `ok:gh-keyring`. Clean start; fast-forwarded
+  onto origin/linux-next 50fdd0bb (orders 275/276/260/268 landed — the
+  uniqueness gate, the login-transition funnel, and the LocalProjects push
+  all shipped by linux tonight).
+- **Order 272 COMPLETED (33151e4d) + verified live**: cloud-init injects no
+  SSH keys; sshd.service/.socket masked; systemd-ssh-generator nulled (the
+  AF_VSOCK ssh surface behind the boot banner). Pin test scoped to the
+  user-data window. Fresh destructive provision probed via --exec-guest
+  (idiomatic layer, no ssh per orders 271/272): sshd masked+inactive, zero
+  :22 listeners, zero key material (empty image-stub files only), fstab
+  home-src mount present. wsl.rs audit clean.
+- **E2E gate (destructive, local-build)**: preflight `eligible`; build +
+  codesign v0.3.260710.3 + install (SHA == HEAD) + 2.1G wipe + 528MB cold
+  provision exit 0; report
+  plan/issues/macos-e2e-overnight-cycle1-2026-07-10.md. Tray installed but
+  NOT launched (unattended; operator relaunch in the morning picks up the
+  hardened template).
+- **Queue next**: macOS-claimable = 277, 269, 270, 271 (any), 155 residual;
+  linux flag: order 273 (attach runs login flow) still the hot macOS
+  blocker — untouched tonight so far.
+## Cycle 2026-07-10T04:10Z→05:50Z (linux_mutable macuahuitl — OPERATOR-DIRECTED drain: 275+268+276+260 completed, both siblings integrated)
+
+- **Credential guard**: ok:gh-keyring. Clean start at f685b1e3; merged
+  osx-next (+10: attended smoke — 6 parity cells done live, orders 269-275
+  filed, PTY debug tee, home-src mount persistence) and windows-next (+8:
+  order 261 ruby-free parity gate done live, order 251 long-running-packet
+  protocol slice, 2 windows local-build e2e PASS). Merged tree --check
+  green.
+- **Order 275 (operator-priority) COMPLETED**: tillandsias-policy
+  plan-orders uniqueness gate (fail exit 1 on any duplicate order group
+  containing an open packet; done-only groups grandfathered by status
+  rule; 5 unit tests) + litmus:plan-index-order-uniqueness (runner PASS)
+  bound under methodology-accountability. Historic cleanup: icap-proxy
+  144→278, host-lifecycle-race-safeguards 161→279,
+  microsoft-linux-guest-migration 161→280 (renumber events +
+  renumbered_from). Live ledger: 145 packets, 0 open collisions. NOTE for
+  all hosts: "order 144/161" in pre-2026-07-10 notes are ambiguous —
+  check renumbered_from. Follow-up: wire plan-orders into the order-263
+  mirror hook at the next git-mirror image rebuild.
+- **Order 268 COMPLETED**: inference cold path — proxy-resolvability
+  guard (unsets baked proxy env when 'proxy' cannot resolve; enclave
+  untouched), direct-retry fallback, curl max-time 600 (tarball is
+  1.34 GiB), fail-loud exit when no ollama binary. Verified cold
+  end-to-end (labeled bare shape): download → install → serve →
+  qwen2.5:0.5b ready. Litmus rewrite recipe (product launch shape +
+  current strings) appended to order 267's deliverable.
+- **Order 276 COMPLETED**: guest login-transition funnel —
+  apply_login_transition pushes LoginState AND refreshes+pushes
+  CloudProjects exactly on the logged-in flip; satisfier-completion
+  sentinel (2s stat) kills the 60s lag (attended-smoke F-C/F-D). TRAYS:
+  drop the interim primes (macos b365deaf; windows mirror) once guests
+  carry this.
+- **Order 260 COMPLETED**: SubscriptionTopic::LocalProjects +
+  LocalProjectsPush (trailing, additive, no WIRE_VERSION bump) +
+  change-gated guest source + subscriber-gated 15s guest rescan.
+  WINDOWS: widen topic list, delete the 30s tick poll (fallback only) —
+  the order-154 exit criterion is now reachable. 66 workspace suites +
+  38 wire tests green.
+- **E2E gate**: preflight `eligible`; local-build destructive gate
+  deliberately SKIPPED-WITH-CAUSE — the operator is interactively using
+  this host's substrate (directive: install delivered 03:20Z tonight),
+  and the full gate already ran this same night (run 20260710T021654Z,
+  sole red root-caused + fixed as order 268). Next unattended linux
+  cycle should run the full destructive e2e; expect green modulo order
+  267 (litmus file rewrites incl. the inference litmus).
+- **Release**: none — tray-parity hold: macOS closed 6 cells tonight
+  (attended); remaining hold rides on the windows attended checklist
+  (order 258) + The Tlatoāni's recorded release approval.
+- **Queue after drain** (linux/any, ~31 open): 267 (litmus corpus, has
+  full recipes), 265 (liveness research), 273 (attach login flow), 129
+  (egress research), 271 (methodology doc), 249/250 (tray UX/event
+  audits), security chain (137/141/145/142), streams chain
+  (147/148/150/151/153/156/157/158), 225 (litmus DSL impl), 278 (ICAP,
+  ex-144), audits (245-248). Blocked-on-operator: windows attended smoke
+  (258), release approval, bar-raise slice 3.
+
+## Cycle 2026-07-10T02:02Z (macos — ATTENDED meta-orchestration: order 257 six cells closed live, 3 fixes verified, orders 274-278-era packets filed (renumbered thrice; see merge notes), isolation correction)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z, **The Tlatoāni at the
+  terminal** (attended interactive packets). Credential guard `ok:gh-keyring`.
+  Merged `origin/linux-next` twice (2bcced8e, d80a13c6) — second merge
+  collided AGAIN on orders 262/263 (linux filed its own in parallel);
+  renumbered mine to **265** and **266** — then AGAIN to **274** (wsl) and **275** (order
+  uniqueness — the finding demonstrating itself twice in one day).
+- **Order 257 attended smoke — 6 of 7 cells DONE live** (AX harness +
+  operator): 6-leaf submenu, login popup (3 real-PAT completions), cloud
+  submenu + overflow (23 repos), local ~/src submenu, enclave indicator
+  (healthy 🟢 + degraded 🔴), remote listing. InteractiveStream residual
+  blocked on order 273. Parity litmus correctly RED on that one cell.
+- **Fixes landed + verified live this session**: (F-A) chip clobbered back
+  to Booting… by rebuilds — MenuState.status_text sync + pin test; (F-B)
+  virtio-fs ~/src mount evaporated after first boot — fstab persistence,
+  verified across a real reboot; (F-C tray side) post-login cloud prime on
+  LoginStatePush — verified: 23 repos rendered the instant login state
+  arrived. Plus TILLANDSIAS_PTY_DEBUG tee in the bridge (product-layer PTY
+  forensics) which root-caused F-J to the wire.
+- **Order 273 (NEW, linux, top macOS-blocking)**: agent attach argv
+  (--cloud <p> --opencode) runs the github-login flow and PtyCloses code=0
+  — the agent NEVER launches (all four leaves). Verbatim PTY capture in the
+  packet + one-click repro loop. This is the last blocker on the macOS
+  parity column.
+- **Isolation correction (The Tlatoāni, recorded)**: agent used the
+  cloud-init SSH key + NAT sshd to run root guest forensics/rebuilds —
+  vetoed. Orders **271** (methodology: agents develop THROUGH the idiomatic
+  layers; ssh/root side channels forbidden; "good enough for development =
+  good enough for user runtime") and **272** (close the SSH backdoor:
+  remove key injection, disable NAT sshd, drift-pin; audit WSL2) filed.
+  Rootless-guest posture captured as research candidate.
+- **Also filed** (final numbers after the THIRD collision renumber — linux independently filed 265-268): 276 (headless: login transition must push LoginState
+  immediately + refresh cloud — 60s-probe gap confirmed 3x tonight, and on
+  boot 2 the probe's first observation never arrived at all: add to 267's
+  repro), 277 (one-shot CLI vs live tray disk-lock collision), 269 (login
+  popup dead-shell + pty-dump session resolution), 270 (first-use attach
+  reaps the in-VM image build — PTY close kills the build; severity
+  upgraded with journal evidence). litmus:binary-e2e-smoke macOS path gap
+  flagged to the 224/225/261 portability chain (findings file).
+- **E2E gate**: attended interactive session on a fresh destructive
+  re-provision (substrate destroyed + cold provision at b365deaf) IS this
+  cycle's runtime verification; full findings file:
+  plan/issues/macos-tray-attended-smoke-findings-2026-07-10.md.
+- **Process slip (F9 recurrence, self-caught)**: the 04:30Z pre-push merge's
+  conflict exit code was masked by a `| tail` pipe, so the gate + push ran
+  against a mid-merge tree (push harmlessly sent pre-merge HEAD). Same
+  lesson as linux F9 (linux-audit-recent-work-2026-07-09.md): verdicts from
+  explicit exit codes, never piped tails. No new filing — F9 already owns it.
+- **Queue after session**: macOS blocked on linux orders 273 (attach) and
+  276 (login push); orders 277/269/270 macOS-claimable next unattended
+  cycle; 271 any-host; 272 macOS. Order 155 residual (watch-channel menu
+  listeners) still claimable. Linux: 273 is the hot one — full verbatim
+  repro in the packet.
+
+## Cycle 2026-07-10T00:40Z (macos — meta-orchestration: linux/windows merge + order collision renumber, order 155 slice 3 SC-16, order 263 filed)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260710T0040Z. Credential guard
+  `ok:gh-keyring`. Started clean at 2afc2d72; merged `origin/linux-next`
+  (2bcced8e — brings windows order 154 slice 2, order 258 partial, order 261,
+  litmus order 255 fix).
+- **Merge mediation**: plan/index.yaml order collision as predicted — my
+  order 260 (wsl-headless-unit-lock-namespace) vs windows' 260
+  (windows-tray-local-projects-push-gap). Renumbered mine to **262** (all
+  references updated: index event, loop_status, findings file). Integration
+  gate on merged tree: build check + 217 tests green. [Superseded: the
+  02:02Z merge collided AGAIN with linux's parallel 262/263 filings —
+  final numbers after the 04:30Z third collision: 274 (wsl) and 275 (uniqueness).]
+- **Order 155 slice 3 — COMPLETE, verified LIVE (SC-16)**: new shared
+  `tillandsias_host_shell::subscription_health::SubscriptionHealth`
+  (watch-backed, change-gated) replaces the tray's
+  PUSH_SUBSCRIPTION_HEALTHY AtomicBool; tick loop selects on health
+  transitions — a subscription drop now triggers an immediate full fallback
+  round (was: unnoticed up to 300s on the 10-tick cadence); up-transitions
+  never shorten the period; closed channel degrades to plain timer.
+  Paused-clock unit tests pin all three. 67/67 tray + 57/57 host-shell,
+  build check clean; live: signed build, push subscription established,
+  Ready push applied, 75s alive, clean SIGTERM. **Windows flag (order 154)**:
+  adopt SubscriptionHealth in notify_icon.rs (same AtomicBool pattern).
+- **Captures**: plan-index-duplicate-order-numbers-2026-07-10.md filed +
+  promoted to ready **order 275** (pickup any; filed as 263, renumbered TWICE more in
+  the 02:02Z merge): 7 order numbers (144, 160,
+  161, 196, 197, 201, 224) are each shared by 2-3 packets — silent
+  parallel-filing collisions; propose fail-loud uniqueness check in
+  tillandsias-policy + litmus. (Order 155's own "mirrors order 144" text is
+  a live symptom — the windows tray refactor is 154, and 144 now names two
+  other packets.)
+- **E2E gate**: skipped-with-cause — full destructive local-build e2e PASSED
+  twice on this host <2h ago (findings file runs 1-2 @ 2a492797/77b0ba92);
+  this cycle's runtime delta (slice 3) was live-verified against the
+  provisioned VM directly (subscription-up path) with the drop path pinned
+  by paused-clock unit tests.
+- **Queue after drain**: macOS-eligible ready residue = order 155 remaining
+  slices (watch-channel menu listeners; SC-01/02 closure blocked on linux
+  order 260 LocalProjects push), orders 261/275 (pickup any, claimable next
+  cycle). Order 257 still blocked on operator-attended smoke; order 126
+  still blocked on linux order 128.
+
+## Cycle 2026-07-09T23:10Z (macos — meta-orchestration: order 155 slice 2, order 259 root-caused + fixed + verified, full destructive e2e ×2)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260709T2310Z. Credential guard
+  `ok:gh-keyring`. Started clean at b6d657a2; merged `origin/linux-next`
+  (67bffc86, clean) before work.
+- **Order 155 slice 2 — COMPLETE (2a492797), verified LIVE**: Subscribe
+  widened to all three topics; LoginStatePush/CloudProjectsPush consumers in
+  the reader loop via apply helpers shared with the poll path; initial sync
+  extended to login/cloud on the same connection; SC-07 gate widened
+  (PUSH_SUBSCRIPTION_HEALTHY) to suppress the 10-tick login/cloud polls.
+  Live: 'push subscription established (vm-status/login/cloud polls demoted
+  to fallback, SC-07)', Ready chip via push, clean SIGTERM. 64/64 tests.
+  Remaining: watch-channel menu listeners, SC-01/02 sleep elimination.
+- **Order 259 — COMPLETED (77b0ba92)**: fresh-VM repro on the merged tree
+  STILL hit exit 125; root cause exactly the linux agent's hypothesis —
+  disjoint lock namespaces (headless unit: no XDG_RUNTIME_DIR →
+  /tmp/tillandsias-locks-0; login exec preamble: /run/user/0). Fix pins
+  Environment=XDG_RUNTIME_DIR=/run/user/0 in the vz.rs unit + drift pin
+  tests both sides. Re-provisioned fresh VM: first --github-login reaches
+  the git-author-name prompt, no 125, no podman error. All four exit
+  criteria closed. Windows sibling gap promoted to **order 274** (ready,
+  windows pickup: wsl.rs unit sets neither HOME nor XDG_RUNTIME_DIR;
+  renumbered 260 -> 262 -> 265 across the two 2026-07-10 merge collisions).
+- **E2E gate (local-build, destructive, ×2)**: gates 1–3 + diagnose PASS on
+  both 2a492797 and 77b0ba92 (build/codesign/install/freshness; 2.1G destroy;
+  528MB cold provision). Forge lane n/a. Findings file run-2 section:
+  plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md.
+- **Captures**: control-wire-prime-seq-double-allocation-2026-07-09.md
+  (optimization: primes allocate two seqs each, both trays).
+- **Queue after drain**: macOS-eligible ready residue = order 155 remaining
+  slices (claimable next cycle); order 257 still blocked on operator-attended
+  smoke; order 126 still blocked on linux order 128. Linux flag: order 259's
+  fix pattern may also apply to any OTHER guest exec path that omits
+  XDG_RUNTIME_DIR; windows flags: orders 260 (new), 154 cold-join, 258.
+
+## Cycle 2026-07-10T02:39Z→03:50Z (windows — meta-orchestration: linux-next merged, order 251 implemented → verification, local-build e2e PASS @ 45cfd526)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start at 00076813 == origin.
+- **Integration**: merged origin/linux-next f685b1e3 (union-resolved
+  plan/index.yaml: windows order-261 events + linux orders 262-268;
+  validate-yaml ok), pushed e0fcab24. Windows-buildable crate subset
+  (`-p windows-tray -p host-shell -p control-wire -p vm-layer -p policy`)
+  compiles clean on the merged tree; `./build.sh --check` remains
+  un-runnable on Windows (known gap, windows-workspace-cargo-check-gap).
+- **Worker drain — order 251 (long-running-work-packet-methodology)
+  IMPLEMENTATION-COMPLETE → phase: verification (45cfd526)**: canonical
+  `long_running_packets` section in methodology/distributed-work.yaml
+  (multi_cycle schema + cycle-scoped claims, verified-by event protocol,
+  additive update policy), meta-orchestration + advance-work-from-plan
+  skill recognition, plan/long-running.md sub-queue view (orders 245-251).
+  Completion gated on verified-by from opencode-bigpickle,
+  antigravity-gemini, codex-gpt55-highthink — packet stays `ready` for
+  them per its own protocol. Only dependency-free ready+any packet;
+  258 stays operator-blocked (attended parity smoke), 260 is linux-owned.
+- **Local-build e2e: PASS @ 45cfd526** (first Windows e2e over the
+  f685b1e3 merge): build 1m56s → freshness gate embedded==HEAD → distro
+  destroy → cold provision (rootfs re-download, dnf 135 pkgs, `RESULT: VM
+  Ready — control wire up ✓`, handshake attempt=1) → diagnose exit 2
+  degraded-as-expected, build_commit fresh. Filed
+  smoke-finding/windows-provision-log-wsl-utf16-mojibake (wsl.exe UTF-16LE
+  bytes forwarded raw into UTF-8 provision log). Report: Run 2 section of
+  plan/issues/build-install-smoke-e2e-findings-2026-07-10-windows.md.
+- **Release**: n/a (windows host; release hold unchanged).
+- **Next windows work**: attended parity smoke (operator, order 258);
+  order 251 awaits its 3 verifiers; windows coordination slice of order
+  267 (chip litmus rewrite) when linux ratifies scope.
+
+## Cycle 2026-07-10T02:05Z→04:05Z (linux_mutable macuahuitl — OPERATOR-DIRECTED: bar-raise approved+enabled, one-packet forge doctrine, orders 256/264/266 done, 265/267/268 filed, install delivered)
+
+- **The Tlatoāni's directives executed (recorded 2026-07-10)**:
+  (1) Bar-raise slice 2 APPROVED → registry entry
+  methodology/convergence.yaml approved_bar_raises
+  (ci-full-all-features-clippy), lane rust-clippy-all-features wired into
+  scripts/local-ci.sh non-fast pre-build (--ci-full only; --ci/--fast
+  skips). Baseline sweep green; negative control (planted warning in a
+  fake-feature unit) fails the lane exit 101; PASSED in anger in the final
+  gate. Slice 3 (--check promotion) remains unapproved. Order 266 completed.
+  (2) One-packet forge doctrine (order 264, chosen over env-var approach):
+  forge-hosted cycles drain AT MOST ONE packet, split oversized packets
+  into ready children. Canonical:
+  methodology/distributed-work.yaml worker_agent_protocol.forge_cycle_budget;
+  skills/meta-orchestration + advance-work-from-plan updated. VERIFIED
+  LIVE: gate run 20260710T021654Z's in-forge cycle drained exactly order
+  224 (litmus-stdlib research) inside the 600s budget.
+  (3) Heartbeat/liveness signals filed as order 265 (research, ready) —
+  replace timeout inference with positive liveness; hard cap stays.
+- **litmus:opencode-prompt-e2e-shape: 7/7 PASS — first fully-green run in
+  its history** (orders 255+262+264 all discharged live; branch-scoped
+  STEP 6 probe passed against the in-forge push).
+- **Order 256 slice 1 (done, split → 267)**: litmus runner exit-code
+  authority staged behind TILLANDSIAS_LITMUS_STRICT_EXIT=1 (strict dry run
+  exposed 8 litmuses red behind the dead-check trap + an empty-step-name
+  exit-127 mis-parse class); legacy mode prints [DEAD-CHECK WARNING] (24
+  visible in the full suite); [PARSE WARNING] for unparseable commands (31
+  folded steps across 8 files skipped since authoring); zero-step files
+  fail with a named parse error. Order 267 (ready) owns burn-down, folded
+  rewrites, 4 YAML-invalid file repairs, strict default flip
+  (plan/issues/litmus-corpus-parse-health-2026-07-10.md).
+- **Final gate (run 20260710T021654Z): exit 1 with exactly ONE red** —
+  litmus:inference-deferred-model-pulls cold path: first-run ollama binary
+  download FAILED → exit 127 (product, graceful-degradation path;
+  unrelated to this cycle's changes). Filed as order 268 (ready) with
+  evidence (plan/issues/build-install-e2e-gate-20260710T021654Z.md).
+  Everything else green: pre-build 147/147 incl. the new all-features
+  lane, security 17/17, post-build 7/8.
+- **Install delivered**: /home/tlatoani/.local/bin/tillandsias
+  v0.3.260710.3 (40M), fresh from 39186723(+relay).
+- **Coordination**: windows-next (00076813) and osx-next (86105319)
+  advanced late in the cycle — integration deferred to the next recurring
+  linux cycle (this cycle was operator-directed; no tree mutations during
+  the running gate). Doctrine + lane changes are on linux-next for
+  siblings to pick up; the windows-owned chip litmus rewrite inside order
+  267 needs windows coordination.
+- **Queue after cycle**: linux ready = 268 (new), 267, 265, 260, 261,
+  225 (224 research done by in-forge), 144, security chain, streams chain,
+  transport. Blocked-on-operator: attended parity smokes (257/258),
+  tray-parity release hold, bar-raise slice 3 (unapproved).
+
+## This Loop (2026-07-10T02:27Z, linux_mutable — big-pickle reduction: litmus-stdlib-research)
+
+- **Cycle type**: meta-orchestration worker drain + reduction on mutable Linux.
+- **Startup**: `linux-next @ 39186723`, worktree dirty with tracked changes from a prior incomplete cycle (TRACES.md, VERSION bump, convergence dashboard). Committed as checkpoint `57f264f2` and pushed. Clean worktree after.
+- **Credential guard**: `ok:gh-keyring`.
+- **E2E gate**: `skip:smoke-lock-held` — no local-build gate this cycle.
+- **Worker drain**: Claimed and completed `litmus-command-portability-dsl-research` (order 224).
+  - Corpus analysis: 198 litmus files, 1044 command fields, 74% grep-based.
+  - D1: shell functions in sourced `scripts/litmus-stdlib.sh` (model b).
+  - D2: 8 core primitives: `mf_literal`, `mf_literal_count`, `mf_regex`, `mf_regex_count`, `mf_absent`, `mf_threshold`, `mf_file_exists`, `mf_assert_count`.
+  - D3: single file with `case` branching per OS.
+  - D4: lint + pin + lazy migration.
+  - D5: raw `command:` remains valid as escape hatch.
+  - 5 real prototype rewrites in deliverable.
+- **Verification**: `plan/index.yaml` validated with `ruby -ryaml`. 121/121 instant litmus PASS.
+- **Coordinator**: windows-next `00076813` and osx-next `86105319` — checked but no merge needed this cycle.
+- **Push state**: pushed `linux-next` (checkpoint `57f264f2` + research `16078687`).
+
+## Cycle 2026-07-10T00:09Z (linux_mutable macuahuitl — meta-orchestration: windows integration, litmus chain 255→262→264, e2e gate 1, in-forge drained 254+263)
+
+- **Credential guard**: ok:gh-keyring. Started clean at 67bffc86.
+- **Sibling integration** (a4092688): merged windows-next +8 (order 154 slice 2
+  LoginState+CloudProjects push topics; order 258 unattended parity subset; 6
+  windows clippy fixes). Merged tree: --check green + 66 workspace test suites
+  green. Verification exposed that `cargo check/clippy --workspace` never
+  compiles non-default-feature units (garbage injected into vm-layer
+  materialize/oci.rs → exit 0): fixed the latent vm-layer fake.rs lints
+  (f39f79e4), filed integration-gate-feature-coverage-gap-2026-07-10.md with a
+  Tlatoāni-gated ci-full bar-raise proposal. The headless all-features reds
+  were order 254's known scope (since drained — see below).
+- **Order 255 completed** (2bcced8e): the "STEP 5 race" was a misdiagnosis —
+  STEP 5 referenced $HEAD_BEFORE that no step ever set (runner steps are
+  separate bash -c subshells), collapsing its range to HEAD..HEAD: a
+  deterministic false negative since introduction. Shared bounded-retry probe
+  scripts/litmus-git-delta-wait.sh (local-head/plan-commit/remote-head, 120s
+  window/5s poll, exit 0/1/2 grammar) now backs litmus steps 4-6; new
+  litmus:git-delta-wait-shape (9 steps) pins it incl. mid-window re-sample +
+  no-dead-check negative. Criterion 2 discharged live: steps 4-5 PASS in this
+  cycle's ci-full forge cycle.
+- **E2E gate (local-build, run 20260710T003451Z): gate 1 exit 1, stopped
+  per runbook** — pre-build litmus 146/146, coverage 100%, security 16/16,
+  musl launcher installed (v0.3.260710.1); post-build e2e 5/6. Sole red:
+  STEP 6 asserted `ls-remote origin HEAD` whose symref is refs/heads/main —
+  a linux-next push never moves it (bug-behind-a-bug, unmasked by 255).
+  **Order 262 filed + fixed + completed**: branch-scoped recorder + probe,
+  shape-litmus regression pin (non-default-branch fixture where origin HEAD
+  resolves to nothing), live probe PASS against the real push window
+  129a85dd→e433b96f. Destructive gates 2-4 NOT reached (substrate intact);
+  next cycle should run the full destructive e2e expecting gate 1 green
+  modulo order 264.
+- **In-forge activity (sanctioned mid-build actors, audited)**: ci-full's
+  litmus cycle drained order 254 (61abd3bf: listen-vsock CI lane in --check +
+  pty test fixes) but pushed a mis-indented plan/index.yaml — committed
+  ledger did not parse; coordinator mediated mechanically and filed order 263
+  (mirror pre-receive YAML gate). The 262-verification run's in-forge cycle
+  then IMPLEMENTED order 263 (e433b96f: 150-line pre-receive hook + 10-step
+  shape litmus; coordinator audit PASS 2/2; gate binds on next git-mirror
+  image rebuild) — and blew STEP 3's 600s budget doing it → **order 264
+  filed** (bug+design: litmus budget vs in-forge greedy-drain doctrine;
+  options enumerated, ready). e433b96f also lacks Generated-By trailers and
+  its ledger event was misattributed (corrected; addendum in the 2026-07-10
+  findings file — consider a trailer rider on the 263 hook if it recurs).
+- **Release**: none — tray-parity release hold (16 gaps) still requires The
+  Tlatoāni's recorded approval; daily Linux release remains due behind it
+  (latest v0.3.260708.4).
+- **Queue after cycle**: linux ready = 264 (new), 256, 238, 144, 261
+  (any-host), 260, security chain (137/141/145), streams chain
+  (147/150/151/153/156/157/158), DSL (224/225), transport (125/128).
+  Windows: orders 230/231 confirmed landed → order 154 slice 3 unblocked;
+  order 258 blocked on attended smoke. macOS: order 259 criterion-3
+  verification still requested; order 155 residual slices claimable.
+  Blocked-on-operator: attended parity smokes (orders 257/258), tray-parity
+  release hold, feature-coverage bar-raise approval (see
+  integration-gate-feature-coverage-gap-2026-07-10.md).
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start at 521de7bd == origin/windows-next;
+  origin/linux-next (67bffc86) already merged — no sync needed.
+- **Worker drain — order 258 (windows-tray-parity-column-verify),
+  PARTIAL -> BLOCKED on operator (mirrors macOS order 257)**: rebuilt +
+  reinstalled the tray at HEAD (92675e8e, embedded SHA == HEAD freshness
+  gate), provisioned VM to Ready, and verified the unattended subset LIVE:
+  one-off status/probe cell -> done (--status-once --json reachable
+  wire_version=2 phase=Ready exit 0; --diagnose --json exit 0 full schema;
+  stopped-VM error path exercised; wsl.exe one-shot guest exec GUEST_OK).
+  Strong partial evidence recorded for local projects (host scan count=5 +
+  VM-side round-trip count=5), cloud refresh (graceful not-logged-in
+  count=0), login state (logged_in=false applied), status chip healthy path
+  (SC-07 suppression held after initial sync — slice 1+2 wiring observed
+  live at debug level). Remaining 7 required cells unknown -> todo;
+  consolidated 9-step attended checklist:
+  plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md.
+  NOTE: in-VM headless is v0.3.260707.2 (pre-744f4749) so login/cloud push
+  topics cannot fire on this VM yet; the designed startup fast-poll burst +
+  poll-while-unconfirmed fallback covered it exactly as intended (no bug).
+- **Reduction engine**: filed + promoted order 261
+  (parity-litmus-ruby-free-check): litmus:tray-parity-matrix-complete is a
+  ruby one-liner and Windows hosts have no ruby, so the order-243 per-host
+  gate can never execute on the Windows --ci-full lane and order 258's exit
+  criterion 4 is unsatisfiable as written — propose a tillandsias-policy
+  parity-matrix subcommand.
+- **E2E gate**: deferred — full destructive local-build e2e PASSED on this
+  host earlier today (run 20260709T201326Z); this cycle changed only
+  plan/openspec data files (matrix cells + ledgers), no runtime surface.
+- **Next windows work**: attended parity smoke (operator, order 258
+  checklist); order 154 watch-channel slice remains claimable (tick
+  retirement still waits on order 260, linux).
+
+## Cycle 2026-07-09T22:38Z (windows — meta-orchestration worker drain, order 154 slice 2)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start; merged `origin/linux-next` twice
+  (990c0482 at cycle start, 67bffc86 pre-push) — both clean, integration gate
+  green each time (conflict-marker scan, YAML validate, clippy+tests on the
+  merged tree).
+- **Worker drain — order 154 (windows-tray-stream-refactor), slice 2
+  COMPLETED (ea03e08e), lease released, packet stays ready**: orders 230/231
+  cleared slice 1's blocker, so the push listener now subscribes to all THREE
+  topics (VmStatus+LoginState+CloudProjects); LoginStatePush/CloudProjectsPush
+  applied via shared appliers byte-identical with the poll reply arms;
+  GithubLoginStatusRequest/CloudRefreshRequest demoted to fallback-only
+  (should_poll_login_and_cloud gate, drift-pinned; fast-poll bursts still
+  force a confirming round); one initial-sync poll round after SubscribeAck
+  because pushes are change-gated. windows-tray 63 tests green, clippy
+  --all-targets zero warnings, fmt clean. Live e2e of the new topics needs
+  the in-VM headless refreshed past 744f4749 (this VM predates it) —
+  initial-sync polls cover the gap until then.
+- **Bonus (2abfcb30)**: fixed 6 clippy warnings in windows-cfg /
+  windows-feature-set code Linux strict-clippy never compiles (hvsocket.rs,
+  windows-tray build.rs, vm-layer materialize/{cache,oci}.rs,
+  materialize-cli.rs). Note: linux's 034c31f6 trunk-red mediation collapsed
+  the same build.rs if-let in parallel — both edits merged clean at 67bffc86,
+  post-merge clippy zero warnings.
+- **Reduction engine**: filed
+  `plan/issues/windows-tray-local-projects-push-gap-2026-07-09.md` and
+  promoted it to ready order 260 (linux-owned): EnumerateLocalProjects is the
+  last poll-only topic, blocking order 154's tick-elimination exit criterion.
+  Started `plan/issues/windows-next-work-queue-2026-07.md` (the per-host
+  work-queue ledger the worker protocol names did not exist for windows).
+- **E2E gate**: deferred — full destructive local-build e2e PASSED on this
+  host 2.5h ago (run 20260709T201326Z) and this cycle's delta is tray-side
+  push wiring already covered by unit+drift tests; live push verification is
+  blocked on a headless refresh (see above), so a re-run now would re-prove
+  the morning's result without exercising the new code.
+- **Next windows work**: order 258 (windows-tray-parity-column-verify, filed
+  22:35Z, 4h live-tray verification) — exceeds this cycle's remaining budget;
+  first candidate for the next windows cycle. Order 154's watch-channel slice
+  is unblocked for wiring but tick retirement waits on order 260.
+
+## Cycle 2026-07-09T22:40Z (linux_mutable macuahuitl — meta-orchestration: sibling integration x2, trunk-red mediation, order 259 linux slice)
+
+- **Credential guard**: ok:gh-keyring. Started clean at 990c0482.
+- **Sibling integration**: merged osx-next (+10: order 155 slice 1 — macOS tray VmStatus push subscription verified LIVE on the VZ VM, chip ~10s vs 30s poll; order 257 partial — ExecOneShot verified, 7 cells todo + attended-smoke checklist packet) and windows-next (+4: BUILD_COMMIT_SHA build.rs freshness fix, Windows-aware e2e preflight verdict). One loop_status.md conflict union-resolved per CRDT policy.
+- **Trunk-red mediation** (034c31f6): the windows build.rs fix tripped clippy collapsible-if under -D warnings on the merged tree; my pre-push gate false-greened on a warm cargo cache (captured as F9 in linux-audit-recent-work-2026-07-09.md — verdicts must come from explicit exit codes, never piped tails). Minimal mechanical let-chain collapse per the a105306e precedent; windows heads-up in the commit body.
+- **Order 259 linux slice** (blocked -> macOS verification): the reported name-in-use race was against 9cb47ff6, which predates orders 232/235; on current linux-next ALL vault bring-up paths route through the flocked ensure_vault_running (lock BEFORE running-check) and launch replaces stale name-holders. New pin test vault_launch_serializes_and_replaces_stale_name_holder. Criterion 3 (fresh-VM login repro) handed to macOS; if it still 125s, check both processes resolve the same tillandsias-locks dir in the guest.
+- **E2E gate**: skipped-with-cause — gate 1 is deterministically red on the KNOWN order-255 litmus race (unchanged since run 20260709T195719Z; duplicate-finding discipline). Order 255 is the top ready pick for the next worker drain; a full destructive run follows it.
+- **Release**: none — tray-parity release hold (16 gaps) requires The Tlatoani's recorded approval; daily Linux release is otherwise due (latest v0.3.260708.4).
+- **Queue**: linux ready = 255, 256, 254, 238, 144, security chain (137/141/145), streams chain (147/150/151/153/156/157/158), DSL (224/225), transport (125/128). Blocked-on-siblings list unchanged from 2026-07-09T23:20Z cycle + order 259 added (macOS verification).
+
+## Cycle 2026-07-09T21:32Z (macos — advance-work-from-plan: queue drain, orders 257 + 155)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260709T2132Z. Merged fresh
+  `origin/linux-next` (order 234 R6, windows e2e PASS merge) before work.
+- **Order 257 (macos-tray-parity-column-verify) — PARTIAL, now BLOCKED on
+  operator**: ExecOneShot cell verified live (`--exec-guest` ok/exit 0) ->
+  done; 7 remaining required cells unknown -> todo with strong partial
+  evidence recorded (--list-cloud-projects full chain to graceful
+  not-logged-in 404; InteractiveStream via live PtyOpen expect session).
+  Consolidated gap packet with 8-step attended checklist:
+  plan/issues/macos-tray-parity-attended-smoke-gap-2026-07-09.md.
+  NOTE: litmus:tray-parity-matrix-complete is RED on macOS --ci-full until
+  the attended pass — order 243's intended design, not a build break.
+- **Order 155 (macos-tray-stream-refactor) slice 1 — COMPLETE (ceb8ded5)**:
+  VmStatus push subscription on a dedicated control-wire connection with
+  SC-07 poll suppression, mirroring windows b6ca3290 via the shared
+  host-shell primitives. Verified LIVE on the provisioned VZ VM: chip
+  renders ~10s after launch via push+initial-sync (vs 30s+ poll). Found and
+  fixed the change-gated-push cold-join gap (initial-sync VmStatusRequest on
+  the subscription connection); heads-up event added to order 154 in case
+  windows shares the gap. Packet back to ready for remaining slices
+  (LoginState/CloudProjects consumers, watch-channel listeners).
+- **Queue state after drain**: no macOS-eligible ready work remains
+  claimable by an unattended agent. Order 257 blocked on operator-attended
+  smoke; order 155 residual slices are claimable next cycle; order 126
+  (host-guest-transport-macos) still blocked on Linux order 128 conformance
+  harness + packaged/entitled VM substrate.
+- **Blocked-work flags**: linux — order 259 (vault name-in-use race, blocks
+  first-run login), order 153 closure (SC-10 + 4-agent verification), order
+  254 (listen-vsock CI lane); windows — order 154 cold-join gap heads-up;
+  operator — attended parity smoke (order 257 checklist).
+
+## Cycle 2026-07-09T21:05Z (macos — meta-orchestration: integration + full local-build e2e + login/event verification)
+
+- **Host**: macOS arm64, `osx-next`. Credential guard `ok:gh-keyring`. Started
+  clean; fast-forwarded `linux-next` +35, merged into `osx-next` (clean FF to
+  `2790d84c`, pushed). `./build.sh --check` PASS; 157 tests green
+  (control-wire 37, macos-tray 58, secure-channel 12, vm-layer 50).
+- **Preflight fix (9cb47ff6)**: `scripts/e2e-preflight.sh` Darwin branch —
+  macOS hosts were permanently mis-verdicted `skip:no-podman-user-session`;
+  now probes `kern.hv_support` (VZ substrate). Verdict on this host flipped to
+  `eligible` for the first time. Litmus e2e-eligibility-probe-shape 3/3 PASS
+  (smoke-lock step made portable to flock-less macOS).
+- **Local-build e2e (/build-install-and-smoke-test-e2e, macos lane)**: gates
+  1-3 PASS (build+codesign+install+freshness 9cb47ff6; destroy 2.0G substrate;
+  cold provision 528MB rootfs + diagnose exit 0). Gate 4 forge: n/a. Extended:
+  cold VM boot → phase Ready → control wire PASS; installed tray live-launch
+  logged `vm-status: phase=Ready podman_ready=true event=…` (guest→host
+  last_event propagation proven) + clean SIGTERM.
+- **GitHub Login verified**: 807a0950's ensure_git_login fix is live on macOS
+  (bundled-guest staging works — guest reports v0.3.260709.4). Attempt 2
+  reaches credential prompts. NEW P1 filed+promoted (order 259): first cold
+  attempt always fails — vault name-in-use race (boot bootstrap vs login
+  satisfier, exit 125). Full report:
+  plan/issues/macos-build-install-smoke-e2e-findings-2026-07-09.md.
+- **Ledger reconciliation**: order 155 (macos-tray-stream-refactor)
+  pending→ready — its dependency's push topics all landed (153 slice 1 +
+  230/231). Order 153 progress event: residual = SC-10 timed test + 4-agent
+  verification only (flagged for linux closure). Order 154 confirmed
+  actionable for windows on the same basis.
+- **Flags for sibling hosts**: linux — order 259 (vault race, blocks first-run
+  login UX), order 153 closure, order 254 (listen-vsock CI lane, 0 coverage on
+  the wire macOS consumes); windows — order 154 actionable now.
+- **E2E gate**: `eligible` (first macOS cycle with a valid verdict).
+
+## Cycle 2026-07-09T21:07Z (windows — meta-orchestration worker drain, order 154 slice 1)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Clean start; merged `origin/linux-next` twice
+  mid-cycle (2790d84c, f347053e) — one loop_status.md prepend conflict
+  union-resolved.
+- **Worker drain — order 154 (windows-tray-stream-refactor), slice 1
+  COMPLETED, lease released, packet stays ready**: dedicated
+  `run_vm_status_push_listener` reader task on its own connection
+  (Subscribe{[VmStatus]} → SubscribeAck → next_envelope loop);
+  VmStatusRequest poll demoted to fallback-only while the subscription is
+  healthy (SC-07, drift-pinned). Shared
+  `Client::{send_envelope,next_envelope}` added to host-shell with
+  cross-platform duplex tests so order 155 (macOS) reuses the identical
+  shape. windows-tray 62 tests + host-shell 47 tests green; clippy clean.
+- **Cross-host request (BLOCKING next windows slice)**: linux to land orders
+  230/231 (headless LoginStatePush/CloudProjectsPush sources) so the next
+  slice can widen the topic list and retire the slow-cadence polls.
+- **Cleanup of work blocking Windows**: `smoke-finding/e2e-preflight-not-
+  windows-aware` implemented + closed — `e2e_eligibility_verdict` grew a
+  MINGW*/MSYS*/CYGWIN* branch probing `wsl.exe` (new reason `skip:no-wsl`),
+  mirroring the Darwin branch that landed upstream at f347053e; this host now
+  reports `eligible` (was `skip:no-podman-binary` — every Windows e2e gate
+  would have been skipped by an obedient loop).
+- **Reduction engine**: filed
+  `plan/issues/windows-workspace-cargo-check-gap-2026-07-09.md` (enhancement:
+  no per-host crate allowlist for the Integration Verification Gate's compile
+  step; headless unix-isms make `./build.sh --check` impossible on Windows).
+- **Live verification + bonus fix**: rebuilt + reinstalled + relaunched the
+  tray against the morning's freshly provisioned VM — log shows
+  `vm status push subscription established (polls suppressed, SC-07)` ~0.5s
+  after keepalive on two consecutive launches (order 154 slice 1 exercised
+  end-to-end, not just unit-tested). Doing so surfaced + fixed
+  `smoke-finding/windows-build-commit-sha-stale-on-rebuild`: windows-tray
+  build.rs only tracked `.git/HEAD`, so same-branch commits left
+  BUILD_COMMIT_SHA stale on incremental rebuilds (would spuriously fail the
+  e2e freshness gate); now tracks the resolved ref file + packed-refs.
+
+## Cycle 2026-07-09T20:13Z (windows — meta-orchestration, local-build e2e PASS)
+
+- **Host**: Windows 11 native, `windows-next`. Credential guard
+  `ok:gh-credentials-store`. Started clean; fast-forwarded `windows-next` onto
+  `origin/linux-next` (`a68c9825`) and pushed before work.
+- **E2E gate — `/build-install-and-smoke-test-e2e` (windows), PASS**:
+  build 2m53s → direct-copy install (freshness gate: embedded SHA == HEAD
+  `a68c9825`) → destructive `wsl --unregister tillandsias` + cache/VHDX wipe →
+  cold `--provision-once` exit 0 (`RESULT: VM Ready — control wire up ✓`) →
+  `--diagnose --json` exit 2 (degraded-as-expected idle), 17 schema keys.
+  Report: `plan/issues/build-install-smoke-e2e-findings-2026-07-09-windows.md`
+  (run_id `20260709T201326Z`).
+- **Reduction engine — 3 findings filed** (same report):
+  `smoke-finding/e2e-preflight-not-windows-aware` (eligibility probe emits
+  `skip:no-podman-binary` on every Windows host, contradicting the E2E Gates
+  table), `smoke-finding/windows-local-install-path-mismatch`
+  (`install-windows.ps1` is the curl installer; both skills' local-install
+  instructions are stale — direct-copy path used), and
+  `smoke-finding/tray-output-log-committed` (generated `tray_output.log`
+  tracked at repo root).
+- **Interactive**: installed tray launched post-run for attended smoke
+  (operator-requested; the unattended PASS does not cover the tray UX surface).
+
+## Cycle 2026-07-09T20:07Z (linux_mutable — meta-orchestration worker slice, order 252)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Started with dirty worktree (leftover trace/convergence artifacts from previous
+  cycle) — committed as checkpoint (a68c9825, pushed). Credential guard `ok:gh-keyring`.
+- **Worker drain — order 252 (launch-paths-route-through-dependency-model), COMPLETED**:
+  Added `ForgeLaunch` variant to `container_deps::Service` with dep edges
+  (EnclaveNetwork, EgressNetwork, CaBundle, Proxy). Created `ensure_forge_launch()`
+  wrapper + `ForgeLaunchReady` typestate witness. Refactored `ensure_enclave_for_project`
+  to call `ensure_forge_launch` instead of ad-hoc ensure_*/inline proxy bring-up.
+  Removed proxy inline code (duplicated `ensure_proxy_running`). Emptied the order-229
+  litmus known-gap allowlist; both launch paths now gate through `container_deps`.
+  18/18 container_deps tests, litmus drift test pass; `./build.sh --check` clean.
+- **E2E gate**: `skip:smoke-lock-held` — no destructive test this cycle.
+- **Coordinator**: deferred — small slice, no sibling drift expected.
+- **Reduction engine**: no new unfiled findings from this cycle.
+
+## Cycle 2026-07-09T18:48Z (linux_mutable — meta-orchestration worker slice, order 229)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Started with dirty worktree (leftover convergence dashboard + VERSION bump from
+  previous cycle) — committed as checkpoint. Credential guard `ok:gh-keyring`.
+- **Worker drain — order 229 (container-dependency-graph-drift-litmus), COMPLETED**:
+  Added `launch_skipping_prerequisite_fails` test (proves removing a prereq fails),
+  `all_launch_targets_have_prerequisites` structural test, and
+  `all_launch_paths_route_through_dependency_model` source-audit test in main.rs
+  (documents `ensure_enclave_for_project`/`run_forge_agent_cli_mode` as known gaps).
+  Created `litmus:launch-skips-prerequisite-fails` litmus YAML. All 15 container_deps
+  tests and 3 new main.rs tests PASS; `./build.sh --check` PASS.
+- **Capture**: forge-diagnostics.json added to .gitignore as generated artifact.
+  ensure_enclave_for_project/run_forge_agent_cli_mode documented as known gaps in
+  the launch-path audit test — not yet routing through the dependency model.
+- **E2E gate**: deferred — small slice, no destructive test needed.
+- **Coordinator**: deferred — small slice, no sibling drift expected.
+- **Reduction engine**: no new unfiled findings — gaps documented in audit test.
+
+## Cycle 2026-07-09T18:38Z (linux_mutable — meta-orchestration worker slice)
+
+- **Host**: Linux mutable (`macuahuitl.ayahuitlcalpan.com`), `linux-next`.
+  Started with dirty worktree (SELinux `relabel=shared` test assertions, trace
+  regen, version 0.3.260709.2, convergence refresh) — committed as checkpoint.
+  Credential guard `ok:gh-keyring`.
+- **Worker drain — order 228 (container-dependency-graph-liveness), COMPLETED**:
+  Added `LivenessProbe` struct with `run_check()` that probes vault/proxy
+  containers via `podman inspect` and re-ensures dead ones through the
+  dependency satisfier (idempotent). Wired into `maybe_spawn_vsock_listener` as
+  a background heartbeat task during VmPhase::Ready (30s interval). 3 new unit
+  tests; `./build.sh --check` PASS; all 13 container_deps tests green.
+- **E2E gate**: `skip:smoke-lock-held` — no destructive test this cycle.
+- **Coordinator**: sibling drift checked — both `origin/osx-next` and
+  `origin/windows-next` at 0 commits ahead of `origin/linux-next` (clean).
+  Release deferred — small slice, no release PR in flight.
+- **Reduction engine**: no new unfiled findings from this cycle.
+
+
+- **Host**: Linux mutable, `linux-next`.
+- **Worker drain — order 112 (forge-harness-auth-device-flow), COMPLETED**:
+  Extracted Phase 2 (ICAP proxy injection) into a dedicated plan packet `forge-harness-icap-proxy` (order 144) to formally close this packet. CLI subcommands were already extracted to order 132/143 by the operator.
+- **E2E gate**: deferred — current cycle produced a coherent commit resolving a ledger inconsistency, deferring destructive test to the next logical phase.
+
+## Cycle 2026-07-08T22:30Z (macos — linux coordinator merge for order 191)
+
+- **Host**: macOS arm64, `linux-next`.
+- **Merge**: fast-forward `origin/osx-next` (1780cfb3) into `linux-next` — clean, no conflicts.
+- **Fix**: Updated pty/mod.rs GithubLogin script: use `exec ... || (...)` subshell pattern instead of `{ ...; ...; }` to avoid `;` in the command string (wt.exe separator bug on Windows). This restores the `exec` prefix and eliminates `;` while preserving error-handling fallback.
+- **Integration gate**: No conflict markers, `plan/index.yaml` YAML valid, all crates type-check + clippy pass.
+- **Test**: `cargo test -p tillandsias-host-shell` — `launch_spec_maps_intents_to_in_vm_argv` now passes. Pre-existing test failures on this host (keychain read-back, no Podman machine) unchanged.
+- **Order 191 status**: `done` — all three exit criteria met:
+  1. osx-next merged origin/linux-next ✅ (9308cf5c)
+  2. windows-next already a linux-next ancestor ✅
+  3. Both hosts recorded evidence (win: flag-OFF/ON hvsocket, mac: build + test + deferred VM smoke) ✅
+
+## Cycle 2026-07-08T22:03Z (macos — meta-orchestration, secure-wire integration + full local build)
+
+- **Host**: macOS arm64, `osx-next`.
+- **Start**: Dirty worktree (VM provisioning debug changes in vault_bootstrap.rs, vz.rs) + untracked artifacts. Stashed, merged, then restored useful changes.
+- **Credential guard**: `ok:gh-keyring`.
+- **Merge**: `origin/linux-next` (baf52d88) into `osx-next` (9308cf5c) — one conflict in `plan/loop_status.md` resolved (kept both sides).
+- **Worker drain — order 191 (multi-host-secure-wire-integration-freeze)**: macOS evidence slice COMPLETE. Origin/linux-next merged, all tests pass (58+50+12+37), `./build.sh --check` green, tray binary builds, secure-wire/transport code intact. Full flag-OFF/flag-ON VM smoke deferred (no Podman machine on this dev host — `skip:no-podman-user-session`). Evidence recorded in deliverable and plan/index.yaml.
+- **VM provisioning fixes applied**: (1) network wait loop before dnf in VZ cloud-init, (2) HOME=/root in fetch-headless/headless units, (3) TILLANDSIAS_HOST_KIND + hostname-based VM detection for vault_bootstrap.
+- **Verification**: `cargo test -p tillandsias-macos-tray`: 58 passed / 1 ignored / 0 failed; `cargo test -p tillandsias-vm-layer`: 50 passed / 1 ignored / 0 failed; `cargo test -p tillandsias-secure-channel`: 12 passed / 0 failed; `cargo test -p tillandsias-control-wire`: 37 passed / 0 failed; `./build.sh --check` (fmt + type-check + strict clippy): PASS.
+- **macOS tray build**: `cargo build -p tillandsias-macos-tray` — PASS. Binary ready for interaction.
+- **E2E gate**: `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-user-session`.
 
 ## Cycle 2026-07-08T20:29Z (linux_mutable — meta-orchestration worker + e2e slice)
 
@@ -2513,6 +3797,9 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
   - `.github/workflows/nix-cache-warm.yml`: removed `push` trigger (keep `schedule` + `workflow_dispatch`)
 - **Blocked**: orders 148/150/154 (Windows), 155/161b/198 (macOS) need their respective host agents. Order 145 (encrypted-channel-vsock-cutover) needs cross-host coordination. Order 129 needs user to run forge session for proxy logs.
 
+### Cycle 2026-07-08T14:00Z (macos — build-install-smoke-e2e)
+- **PASS**: Local build and smoke test e2e succeeded on `macos` (tested commit `b3e52235`). VM substrate wiped and cleanly re-provisioned.
+
 ## Cycle 2026-07-07T19:17Z (linux_immutable — meta-orchestration, opencode)
 
 - **Host**: Linux immutable (Fedora Silverblue), `linux-next` (clean at `9f4dd61d`,
@@ -2538,3 +3825,75 @@ VM setup. Linux (image owner) implemented slice 1 of order 180:
 - **Order 177 exit criteria**: Still pending — "mirror ls-remote and direct GitHub ls-remote agree on linux-next" and "upstream forwarding failure returns non-zero" both require a forge that actually pushes through the mirror.
 - **New finding filed**: `plan/issues/forge-credential-guard-push-channel-gap-2026-07-08.md` — the guard must distinguish between mirror-proxied and direct-GitHub origins.
 - **Blocked**: this cycle cannot push its findings (no credential channel). This matches the credential gap documented in the new finding.
+
+## Cycle 2026-07-09T19:23Z (linux_mutable macuahuitl — sole-builder session: audits + worker drain + e2e)
+
+- **Agent**: linux-macuahuitl-fable5-20260709T1923Z (operator-directed: void stale leases, take over work, audit other agents, full destructive e2e as needed).
+- **Startup**: pulled 226 commits; sibling heads main `1684c111`, linux-next `8424f392`, windows-next `1c89b835` (integrated), osx-next `1780cfb3` (integrated). Credential guard `ok:gh-keyring`; e2e preflight `eligible`.
+- **Cycle 1 — audit of recent agent work** (`3b018a15`, `133538ef`):
+  - FIXED F1: container_deps unit tests executed the real satisfier (cargo test could create networks / start Vault+proxy); reduced to compile-time assertions.
+  - FIXED F2: order-228 liveness probe ran blocking podman calls on async workers → spawn_blocking.
+  - Reconciled: order 122 → done (slices via 227/228/229); order 237 expired lease voided → ready with residual; 230/231 dependency_note (153 slice 1 landed); filed order 252.
+  - Full narrative: `plan/issues/linux-audit-recent-work-2026-07-09.md` (F1-F8).
+- **Cycle 2 — order 245 network-architecture-audit** (`11f20ef5`): DRAFT v1 in the deliverable — runtime taxonomy, source-verified container network matrix, scenarios S0-S5, container_deps RuntimeContext proposal, platform matrix, patch list P1-P7. Vault-missing-from-init CONFIRMED → order 253 filed. gh-login 401 network-exonerated (no_bump CONNECT tunnel; dual-homed helper) → order 246 scope. Ratification pending (3 named verifier agents).
+- **Cycle 3 — orders 230/231 done** (`744f4749`, `4c7babc3`): LoginStatePush + CloudProjectsPush wired to change-gated broadcast sources (subscriber-gated 60s vault presence probe — raw token never read in the vsock process; request piggyback). 20/20 vsock_server tests. FIXED F7 (liveness/login tasks now aborted at listener shutdown). Filed order 254 (listen-vsock feature combo never linted/tested in CI: 13 warnings + 2 drifted pty_handler tests). 249 got a design-input note (not claimed — deps 245/246 unratified).
+- **Cycle 4 — destructive local-build e2e** (run `20260709T195719Z` @ `4c7babc3`): **STOPPED at gate 1** per runbook — compile/clippy/tests/install-prep PASSED; post-build status smoke 4/6: `litmus:opencode-prompt-e2e-shape` STEP 5 is a timing-race false negative (the in-forge cycle's plan commit `3621fc74` exists — order 255 filed) and `litmus:tray-parity-matrix-complete` is the KNOWN order-243 failure (ping appended: it gates ALL linux local-build e2e acceptance). **No podman reset performed.** Findings: `plan/issues/build-install-smoke-e2e-findings-2026-07-09.md`.
+- **Bonus**: the gate-1 smoke's in-forge agent implemented order 252 mid-run (`ce70c788`, completed `3621fc74`); audited PASS (wrapper outside block_on, both entry points routed, order-229 gap allowlist eliminated).
+- **Queue after session**: next Linux picks = order 243 (1h, unblocks the e2e gate), 253 (2h vault-in-init), 232-235 (concurrency safeguards — elevated by the F3 liveness-race note), 254, 255, 237 residual. Multi-cycle audits 245-251 await verifier agents (opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink).
+
+## Cycle 2026-07-09T20:40Z (linux_mutable macuahuitl — second drain wave, /advance-work-from-plan iterations)
+
+- **Agent**: linux-macuahuitl-fable5-20260709T1923Z (continuation; operator: keep draining, file sibling work in plan when blocked).
+- **Order 243 done** (`a50d061f`): tray-parity litmus root cause was the runner (folded command = zero steps parsed, failing structurally since authoring). Semantic split: post-build litmus now gates the CURRENT host's column (single-line command + explicit patterns); ALL-platform completeness moved to merge-to-main-and-release §0 as an operator-overridable hold (16 gaps today). Orders 255 (step-5 race) refined, 256 filed (runner ignores step exit codes + silent zero-step parse — every patternless litmus step is currently a dead check).
+- **Order 253 done** (`8b6c7031`): vault joins --init's declarative image set; build_vault_image gains an identity-tag exists-skip (kills the per-login podman build) + actionable on-demand hint. Closes 2 of 3 order-245 observations structurally.
+- **Order 232 done** (`2790d84c`): resource_lock module (flock RAII, bounded poll); proxy/vault/networks/per-image ensure paths serialized; liveness probe now contends fairly with user logins. litmus:concurrent-container-ensure-no-race.
+- **Order 233 done** (`ab3fea87`): per-project cleanup no longer removes shared containers; shared removal only via the no-running-forge guard; 4 pre-launch sites converged. litmus:shared-containers-survive-per-project-cleanup.
+- **Order 234 done** (`adcfd37e`): runtime_phase VmPhase gate (Draining/Stopping refuse) at every container create/remove site, fail-fast before lock waits; mirror is cfg(not(test)) — global writes leaked refusals across parallel test isolation. litmus:drain-vs-self-heal.
+- **Sibling coordination**: merged windows-next twice (order 154 claim, then slice 1 — their tray consumes VmStatusPush with polls demoted to fallback; e2e PASS + 3 findings) and osx-next (Darwin e2e-preflight VZ probe). Filed orders 257/258 (macos/windows parity-column verification — the per-host gate arrives as scheduled work, not a surprise red build); orders 154/155 dependency notes: all three push topics live; 155 promoted to ready.
+- **Queue after wave**: ready = 235 (R7 vault recreate mutex — last of the R-series), 254 (listen-vsock CI), 255 (litmus race), 256 (runner fail-loud), 237 residual, 257/258 (sibling-owned). Multi-cycle audits 245-251 still await verifier agents.
+
+## Cycle 2026-07-09T23:20Z (linux_mutable macuahuitl — R7 closes the race-safeguards ladder + blocked-work flags)
+
+- **Order 235 done** (`eac9813f`): vault recreate <-> lease-holder RW lock (flock LOCK_SH/LOCK_EX on the R4 vault resource); AppRoleSecretLease carries the shared guard for its whole lifetime; writers take shared AFTER their on-demand ensure (self-deadlock audit); health wait retries transient stopped/no-such-container 3x2s bounded; the podman-health pin was tightened, not evaded. **Orders 232-235 (R4-R7) all closed — order 162 parent folded to done.**
+- **Linux-claimable ready queue** (next cycles): 254 (listen-vsock CI lane + 2 drifted pty tests — coordinate the exec-allowlist fix with the order-141 owner), 255 (opencode-prompt litmus step-5 race), 256 (litmus runner fail-loud: exit codes ignored + folded commands parse to zero steps), 238 (mirror credential research), 144 (forge-harness ICAP), 141/137/145 (secure channel chain), 147/148/150/151/153/156/157/158 (streams/audit chain), 224/225 (litmus DSL), 125/128 (host-guest transport linux + conformance).
+
+### BLOCKED ON OTHER AGENTS (flagged per operator goal 2026-07-09)
+
+- **Orders 245-251 (multi_cycle audits)**: completion-gated on verified-by events from `opencode-bigpickle`, `antigravity-gemini`, `codex-gpt55-highthink` (+ `claude-opus-highthink` for 250). Order 245 has DRAFT v1 published and is ratification-ready; 246/247/248 have no draft yet (any of the named agents can start); 249/250 additionally depend on 245/246 completing.
+- **Order 257 (macos-tray-parity-column-verify)** + **order 155 (macos tray stream refactor, now ready)**: macOS host. Their next --ci-full gates on their parity column.
+- **Order 258 (windows-tray-parity-column-verify)** + **order 154 remaining slices**: Windows host (slice 1 landed 2026-07-09 and is integrated).
+- **Order 126 (host-guest-transport-macos)**: blocked, macOS-owned.
+- **Order 237 residual (forge mirror gitconfig default-on)** + **order 238**: need a forge-context session (in-forge agent or operator-launched).
+- **Order 129 (agent egress allowlist research)**: needs an operator-attended forge session for live proxy logs.
+- **Tray-parity release hold**: merge-to-main-and-release now reports 16 parity gaps (8 required features x macos+windows `unknown`) — release-with-gaps needs The Tlatoāni's recorded approval until 257/258 land.
+
+## Cycle 2026-07-10T00:10Z (windows bullo — order 261 drain: ruby-free parity gate)
+
+- **Agent**: windows-bullo-fable5-20260710T0010Z (meta-orchestration worker drain; branch windows-next, linux-next already fully merged at startup).
+- **Order 261 done** (`d2f0c908`): `tillandsias-policy parity-matrix` subcommand replicates the litmus:tray-parity-matrix-complete ruby one-liner exactly (valid status words on all cells, no `regressed` anywhere, current host column done on `parity: required` rows; identical output lines). 9 unit tests incl. a repo-matrix pin (linux green, windows red-by-design). Litmus command repointed cargo-first with the ruby one-liner as fallback where cargo is absent; timeout raised 5s→120s for cold cargo builds. Verified live on this no-ruby host: default run exits 1 with the 7 expected `missing required:` lines; `--host linux` exits 0. **Order 258 exit criterion 4 is now executable on Windows** (stays red until the attended smoke flips the column, by design).
+- **Verification**: cargo test -p tillandsias-policy 22/22; clippy --all-targets clean; fmt-check clean; touched YAML validated via `tillandsias-policy validate-yaml`.
+- **Local-build e2e gate PASS** @ `c52a1e2e` (preflight `eligible`): full destructive Windows cycle — build 1m43s, direct-copy install with fresh embedded SHA, `wsl --unregister` + cache/VHDX wipe, cold `--provision-once` → `RESULT: VM Ready — control wire up ✓` exit 0, `--diagnose --json` exit 2 degraded-as-expected with `build_commit=c52a1e2e`. First e2e covering order 154 slice 2 (ea03e08e push-topic tray transport). Report: `plan/issues/build-install-smoke-e2e-findings-2026-07-10-windows.md` (+1 optimization packet: PS5.1 stderr quirk makes the freshness probe brittle). Curl-install e2e skipped: release hold active, no newer release than last tested.
+- **Queue after cycle (windows)**: order 258 remains blocked-on-operator (attended smoke checklist `plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md`); order 260 (LocalProjects push topic) is linux-owned; orders 224/225/256 (litmus DSL/runner) remain any-host candidates.
+
+## Cycle 2026-07-10T07:25Z (linux-mutable — meta-orchestration: litmus:forge-liveness-probe-shape verified PASS; merged windows-next)
+
+- **Host**: Linux x86_64, `linux-next`, agent opencode/big-pickle. Credential guard `ok:gh-keyring`. Clean start at be966855 + committed auto-generated traces/metrics.
+- **Work**: Verified `litmus:forge-liveness-probe-shape` — 8/8 static checks PASS, 8/8 fixture suite PASS, full instant pre-build suite 124/124 PASS (100%).
+- **E2E eligibility**: `skip:smoke-lock-held`.
+- **Coordinator**: Merged `origin/windows-next` (order 154 slice 3: push subscription widened, version-skew fallback). Resolved plan/loop_status.md union conflict. `build --check` green.
+- **Next**: order 267 remaining (promote [PARSE WARNING] to per-step FAIL, flip strict-exit default ON), order 281 (guest overlay corruption self-heal), order 273 (attach login).
+
+## Cycle 2026-07-10T07:45Z (linux-mutable — meta-orchestration: litmus:forge-liveness-probe-shape re-verified; order 267 slice 2 COMPLETE)
+
+- **Host**: Linux x86_64, `linux-next`, agent opencode/big-pickle. Credential guard `ok:gh-keyring`. Clean start at 0e056e3d (checkpointed auto-generated traces/metrics).
+- **Work**: Re-verified `litmus:forge-liveness-probe-shape` — 8/8 static checks PASS, 8/8 fixture suite PASS (all five liveness states, deadline iso8601, exit codes). Order 267 slice 2: rewrote all 31 folded/multi-line command steps across 8 files into runner-compatible single-line commands, extracted 5 helper scripts under scripts/. ruby -ryaml parses 200/200, zero remaining folded commands.
+- **E2E eligibility**: `skip:smoke-lock-held`.
+- **Coordinator**: Both platform branches (windows-next, osx-next) already merged. No new platform work.
+- **Next**: order 267 remaining — promote [PARSE WARNING] to per-step FAIL, flip strict-exit default ON. Also order 281, order 273.
+
+## Cycle 2026-07-10T06:38Z→06:48Z (linux-mutable — meta-orchestration: order 267 slice 1: 4 YAML-invalid files repaired)
+
+- **Host**: Linux x86_64, `linux-next`, agent linux-bigp pickle-20260710T063952Z. Credential guard `ok:gh-keyring`. Clean start at 63e0a497; committed auto-generated traces/metrics checkpoint.
+- **Worker drain — order 267 (litmus-corpus-parse-health), slice 1 COMPLETE (c4b44aa2), lease released, packet stays ready**: repaired all 4 YAML-invalid litmus files — litmus-binary-e2e-smoke.yaml (double-quote \| escape in rollback grep), litmus-environment-isolation.yaml (4 single-quoted cmds with bash '"'"' quoting rewritten as YAML double-quoted), litmus-inference-deferred-model-pulls.yaml (\| and \. escapes in rollback), litmus-log-field-stability-schema.yaml (\[, \\(, \\), \$ escapes in critical_path step + rollback block-scalar indent). All 200 openspec/litmus-tests/*.yaml now parse with ruby -ryaml.
+- **E2E gate**: skipped-with-cause — `skip:smoke-lock-held` (parent/local sibling smoke owns the host lock).
+- **Next**: remaining order 267 work: rewrite 31 folded/multi-line command steps, promote [PARSE WARNING] to per-step FAIL, flip strict-exit default ON. Also in queue: 265 (liveness research), 273 (attach login flow), 129 (egress research).

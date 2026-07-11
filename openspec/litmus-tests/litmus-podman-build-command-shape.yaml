@@ -24,7 +24,7 @@ critical_path:
     timeout_ms: 2000
 
   - step: "assert human aliases are refreshed after build"
-    command: "grep -F 'podman tag' scripts/build-image.sh && grep -F 'podman rmi' scripts/build-image.sh"
+    command: "grep -F '\"$PODMAN\" tag' scripts/build-image.sh && grep -F '\"$PODMAN\" rmi' scripts/build-image.sh"
     timeout_ms: 2000
 
 observability:

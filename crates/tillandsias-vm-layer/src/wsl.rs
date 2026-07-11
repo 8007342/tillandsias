@@ -339,6 +339,19 @@ impl VmRuntime for WslRuntime {
         }
 
         // Step 4: install the systemd unit + enable it.
+        //
+        // HOME + XDG_RUNTIME_DIR must match what the exec'd login/satisfier
+        // lanes resolve (host-shell pty preamble defaults XDG_RUNTIME_DIR to
+        // /run/user/$(id -u) — /run/user/0 for root). The order-232
+        // per-resource flocks live under $XDG_RUNTIME_DIR/tillandsias-locks;
+        // if this unit leaves the variable unset, resource_lock::lock_dir()
+        // falls back to /tmp/tillandsias-locks-0 while the exec'd satisfier
+        // locks under /run/user/0/tillandsias-locks — two disjoint lock
+        // namespaces, and the vault name-in-use race (orders 259/274)
+        // reproduces on every fresh-distro first login. The recipe-path unit
+        // (windows-tray wsl_lifecycle.rs) and the macOS unit (vz.rs) carry
+        // the same pins; /run/user/0 needs the ExecStartPre mkdir because
+        // nothing else creates it before logind sees a root session.
         let unit = format!(
             "cat > /etc/systemd/system/tillandsias-headless.service << 'EOF'\n\
              [Unit]\n\
@@ -347,6 +360,10 @@ impl VmRuntime for WslRuntime {
              Wants=network-online.target\n\
              [Service]\n\
              Type=simple\n\
+             ExecStartPre=/usr/bin/mkdir -p /run/user/0\n\
+             ExecStartPre=/usr/bin/chmod 0700 /run/user/0\n\
+             Environment=HOME=/root\n\
+             Environment=XDG_RUNTIME_DIR=/run/user/0\n\
              ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock {port}\n\
              Restart=always\n\
              RestartSec=1s\n\
@@ -518,5 +535,47 @@ impl VmRuntime for WslRuntime {
 
     async fn wait_ready(&self, _timeout: Duration) -> Result<(), VmError> {
         Err("WslRuntime is Windows-only".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The legacy tarball-path unit writer (`WslRuntime::provision` step 4)
+    /// must pin the same lock-namespace environment as the recipe-path unit
+    /// (windows-tray `wsl_lifecycle.rs`) and the macOS unit (`vz.rs`): the
+    /// boot-path bootstrap and any exec'd login satisfier must resolve the
+    /// SAME `$XDG_RUNTIME_DIR/tillandsias-locks` dir, or the order-232 vault
+    /// flock never contends across the two guest processes and the
+    /// name-in-use race (exit 125 on fresh-distro first login) returns.
+    ///
+    /// Source pin, not a runtime probe: the unit is a string literal inside
+    /// the cfg(windows) provision impl, so this runs on every platform's CI.
+    ///
+    /// @trace plan/index.yaml wsl-headless-unit-lock-namespace (order 274)
+    #[test]
+    fn wsl_provision_unit_pins_lock_namespace_env() {
+        let source = include_str!("wsl.rs");
+        let unit_window = source
+            .split("cat > /etc/systemd/system/tillandsias-headless.service << 'EOF'")
+            .nth(1)
+            .and_then(|tail| tail.split("systemctl daemon-reload").next())
+            .expect("headless unit window");
+
+        assert!(
+            unit_window.contains("Environment=HOME=/root"),
+            "headless unit must pin HOME for the boot-path bootstrap (orders 259/274)"
+        );
+        assert!(
+            unit_window.contains("Environment=XDG_RUNTIME_DIR=/run/user/0"),
+            "headless unit must pin XDG_RUNTIME_DIR to the satisfier's lock namespace (orders 259/274)"
+        );
+        assert!(
+            unit_window.contains("ExecStartPre=/usr/bin/mkdir -p /run/user/0"),
+            "nothing else creates /run/user/0 before a root logind session exists"
+        );
+        assert!(
+            unit_window.contains("ExecStartPre=/usr/bin/chmod 0700 /run/user/0"),
+            "runtime dir must keep the 0700 mode logind would give it"
+        );
     }
 }

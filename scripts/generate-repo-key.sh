@@ -112,6 +112,22 @@ EOF
 secret_store_set() {
     local service="$1" account="$2" secret="$3"
 
+    # Test hermeticity hook: when LITMUS_SECRET_TOOL_STORE is set, persist to
+    # a file store instead of the real platform keyring so tests never touch
+    # the developer's Secret Service / login Keychain. Cross-platform on
+    # purpose — the Darwin `security` path used to hit the real Keychain even
+    # under LITMUS_SECRET_TOOL_STORE, so the deploy-key test failed read-back
+    # in any non-interactive/automation session (found 2026-07-10 macOS trunk
+    # sweep). File format matches scripts/test-support/secret-tool-fake.sh so
+    # the Linux path's behavior is byte-identical.
+    if [[ -n "${LITMUS_SECRET_TOOL_STORE:-}" ]]; then
+        mkdir -p "$LITMUS_SECRET_TOOL_STORE" || return 3
+        local slug
+        slug=$(printf '%s|%s' "$service" "$account" | tr '/:' '__')
+        printf '%s' "$secret" >"$LITMUS_SECRET_TOOL_STORE/$slug" || return 3
+        return 0
+    fi
+
     case "$(uname -s)" in
         Linux)
             command -v secret-tool >/dev/null 2>&1 \
@@ -138,6 +154,17 @@ secret_store_set() {
 # Reads a secret from the host keyring.
 secret_store_get() {
     local service="$1" account="$2"
+
+    # Test hermeticity hook (see secret_store_set): read back from the file
+    # store when LITMUS_SECRET_TOOL_STORE is set, on every platform.
+    if [[ -n "${LITMUS_SECRET_TOOL_STORE:-}" ]]; then
+        local slug file
+        slug=$(printf '%s|%s' "$service" "$account" | tr '/:' '__')
+        file="$LITMUS_SECRET_TOOL_STORE/$slug"
+        [[ -f "$file" ]] || return 1
+        cat "$file"
+        return 0
+    fi
 
     case "$(uname -s)" in
         Linux)

@@ -35,6 +35,26 @@ test "$(git rev-list --count origin/linux-next..HEAD)" -eq 0
 
 If the branch is not `linux-next`, log + exit without escalating — the release flow only ships from the Linux integration branch.
 
+### Tray-parity completeness (release-scoped gate — order 243 semantic split)
+
+The per-build litmus (`litmus:tray-parity-matrix-complete`) only gates each
+host's OWN column so sibling verification debt cannot block unrelated local
+builds. The ALL-platform completeness requirement from
+`plan/issues/tray-feature-parity-matrix-2026-06-28.md` ("the matrix should be
+all-green on `required` rows before that release") lives HERE instead:
+
+```bash
+ruby -ryaml -e 'data = YAML.load_file(%q(openspec/tray-parity-matrix.yaml)); gaps = 0; data[%q(features)].each { |f| next unless f[%q(parity)] == %q(required); [%q(linux), %q(macos), %q(windows)].each { |p| (puts p + %q(: ) + f[%q(capability)].to_s + %q( status=) + f[p].to_s; gaps += 1) if f[p] != %q(done) } }; puts %q(parity gaps: ) + gaps.to_s; exit 1 if gaps > 0'
+```
+
+If this exits non-zero, the parity matrix has unverified/incomplete `required`
+cells. This is an **advisory hold, operator-overridable**: record the gap list
+in the cycle outcome (§8) and in `plan/loop_status.md`, and proceed ONLY if the
+operator has recorded a release-with-parity-gaps approval for the cycle (The
+Tlatoāni owns that call — releases shipped with parity gaps before this gate
+existed, so a hard stop would strand the daily Linux release on macOS/Windows
+verification debt; make the debt loud, not invisible).
+
 ---
 
 ## 1 — Compute the new version

@@ -2,41 +2,51 @@
 name: litmus:tray-parity-matrix-complete
 spec: tray-app
 phase: post-build
-description: Verify that all required tray features are done on linux, macos, and windows
+description: >-
+  Per-host tray parity gate: the CURRENT host's column in
+  openspec/tray-parity-matrix.yaml must be 'done' for every row marked
+  parity: required, every cell must use a valid status word, and no cell
+  anywhere may be 'regressed'. Sibling columns being unverified does NOT
+  fail this host's build — each host verifies its own column (per
+  plan/issues/tray-feature-parity-matrix-2026-06-28.md "Owner: linux
+  authors the matrix — each host verifies its column"). The ALL-platform
+  completeness requirement is the RELEASE gate: see the parity step in
+  skills/merge-to-main-and-release/SKILL.md (order 243 semantic split —
+  the old all-hosts-on-every-build shape made every Linux --ci-full red
+  on unverified sibling cells, blocking unrelated local-build e2e
+  acceptance; see plan/issues/build-install-smoke-e2e-findings-2026-07-09.md).
+  NOTE the command below is deliberately ONE line: the litmus runner's
+  step parser only extracts single-line double-quoted command: values —
+  the previous folded (>-) multi-line form parsed to ZERO steps, so this
+  litmus failed structurally on every run regardless of matrix content
+  (see order 243 completion event; orders 224/225 track a real command DSL).
+  The check itself is `tillandsias-policy parity-matrix` (order 261) —
+  Windows hosts have no ruby, so the previous ruby-only one-liner could
+  never execute on the very host class it gates (see
+  plan/issues/parity-litmus-ruby-dependency-windows-2026-07-09.md); the
+  ruby one-liner is retained only as a fallback where cargo is absent.
 severity: high
 size: quick
 
 preconditions:
   - workspace contains openspec/tray-parity-matrix.yaml
-  - ruby is available in PATH
+  - cargo is available in PATH (preferred), or ruby as fallback
 
 critical_path:
-  - step: "check that all required tray features are implemented on all platforms"
-    command: >-
-      ruby -ryaml -e "
-      data = YAML.load_file('openspec/tray-parity-matrix.yaml');
-      failed = false;
-      data['features'].each do |f|
-        next unless f['parity'] == 'required';
-        ['linux', 'macos', 'windows'].each do |platform|
-          if f[platform] != 'done'
-            puts %Q(Missing required feature '#{f['capability']}' on #{platform} (status: #{f[platform]}));
-            failed = true;
-          end
-        end
-      end;
-      exit 1 if failed
-      "
-    timeout_ms: 5000
+  - step: "current host column done for required rows; statuses valid; no regressions anywhere"
+    command: "if command -v cargo >/dev/null 2>&1; then cargo run -q -p tillandsias-policy -- parity-matrix; else ruby -ryaml -e 'host = RUBY_PLATFORM =~ /darwin/ ? %q(macos) : (RUBY_PLATFORM =~ /linux/ ? %q(linux) : %q(windows)); valid = %w(done partial todo unknown regressed n/a); data = YAML.load_file(%q(openspec/tray-parity-matrix.yaml)); failed = false; data[%q(features)].each { |f| [%q(linux), %q(macos), %q(windows)].each { |p| c = f[p]; (puts %q(Invalid status ) + c.to_s + %q( on ) + p + %q( for ) + f[%q(capability)].to_s; failed = true) unless valid.include?(c); (puts %q(REGRESSION: ) + f[%q(capability)].to_s + %q( on ) + p; failed = true) if c == %q(regressed) }; next unless f[%q(parity)] == %q(required); (puts %q(Host ) + host + %q( missing required: ) + f[%q(capability)].to_s + %q( status=) + f[host].to_s; failed = true) if f[host] != %q(done) }; puts %q(Tray parity: host column complete, statuses valid, no regressions) unless failed; exit 1 if failed'; fi"
+    timeout_ms: 120000
+    success_pattern: "Tray parity: host column complete, statuses valid, no regressions"
+    failure_pattern: "missing required:|Invalid status|REGRESSION:"
 
 observability:
   traces:
     - "@trace spec:tray-app"
-  expected_log: "Tray parity matrix is complete across all platforms"
+  expected_log: "Tray parity: host column complete, statuses valid, no regressions"
   log_fields:
     spec: "tray-app"
     test: "tray-parity-matrix-complete"
 
 rollback:
-  on_failure: "check openspec/tray-parity-matrix.yaml for missing features"
+  on_failure: "check openspec/tray-parity-matrix.yaml for this host's missing/invalid/regressed features"
   command: "cat openspec/tray-parity-matrix.yaml"

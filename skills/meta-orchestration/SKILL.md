@@ -14,6 +14,52 @@ This is the top-level unattended loop intended for:
 It composes the worker, coordination, e2e, and release skills without replacing
 their detailed runbooks.
 
+## Invocation Modes — check FIRST, before anything else
+
+The skill is parameterized by the invoking prompt. **Before doing any work —
+before host classification, before `git fetch`, before reading the plan —
+inspect the prompt that invoked this skill and pick the mode.** Full cycles
+are token-expensive; running one when a smoke pass was requested wastes a
+rate-limited provider budget (operator directive, 2026-07-11).
+
+- **Full mode** (default): the prompt is a bare "Use the /meta-orchestration
+  skill". Run the complete cycle described in the rest of this document.
+- **Smoke Mode** (early break): the prompt contains the word `smoke` (e.g.
+  "Use the /meta-orchestration skill in smoke mode (verify-only)"). You are
+  inside a short e2e smoke test with a hard budget of a few minutes. Do NOT
+  run a full cycle. Follow "Smoke Mode Runbook" below and exit.
+- **Targeted verify** (a variant of Smoke Mode): the prompt names specific
+  packets, orders, specs, or files (e.g. "…smoke mode, verify order 283" or
+  "…smoke: spec git-mirror-service"). Same rules as Smoke Mode, but the
+  verification set is the named targets' verifiable closures instead of the
+  generic checks.
+
+### Smoke Mode Runbook
+
+Purpose: give fast, cheap feedback that the forge lane and the work under
+test are healthy — WITHOUT advancing the plan or consuming a full-cycle
+token budget. Hosted e2e gates (`litmus:opencode-prompt-e2e-shape`) invoke
+this mode whenever the full cycle is rate-limited
+(`scripts/forge-e2e-rate-limit.sh`, one full cycle per 4h per host).
+
+Hard rules:
+
+1. Do NOT claim ledger nodes, drain plan work, file routine findings, run
+   nested e2e gates, release, commit, or push. A smoke run leaves the repo
+   untouched. (Exception: a real defect discovered during verification may
+   be reported in your final output text — the HOST files it, not you.)
+2. Keep it small: prefer `scripts/run-litmus-test.sh --size instant
+   --phase pre-build --compact` scoped with a spec filter when targets are
+   named, plus cheap direct checks (parse `plan/index.yaml`, `git status`,
+   `git fetch --dry-run` reachability, the targets' named verifiable
+   closures). Skip anything that builds, launches containers, or exceeds
+   the budget.
+3. Budget: finish well inside ~5 minutes of wall time.
+4. Verdict grammar: your FINAL output line MUST be exactly one of
+   `MO-SMOKE: PASS` or `MO-SMOKE: FAIL <one-line reason>`. The launching
+   litmus greps for this marker; a smoke run that exits without it is a
+   failure by definition.
+
 ## Non-Negotiable Exit Contract
 
 Local state is volatile. Before a successful exit, every meaningful result must
@@ -182,7 +228,23 @@ When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `.
 - every eligible item is blocked;
 - a terminal failure was filed;
 - the current cycle has already produced a coherent commit and the next packet
-  would exceed the recurring-loop budget (note: if running inside a `forge` container under smoke tests, ignore this limit and drain as many ready forge tasks as possible in a single loop run to make progress in large batches).
+  would exceed the recurring-loop budget.
+
+Forge-hosted cycles (`TILLANDSIAS_HOST_KIND=forge`) are the OPPOSITE of
+greedy — decided by The Tlatoāni 2026-07-10 (order 264), replacing the earlier
+"drain as many as possible" exception:
+
+- Drain **at most ONE packet per forge cycle**.
+- Before implementing, estimate whether implement+verify+commit+push fits the
+  launch envelope (litmus-launched forge cycles live inside
+  `litmus:opencode-prompt-e2e-shape` STEP 3's 600s budget).
+- If it does not fit, do NOT start implementing: **split** the packet into
+  smaller ready child packets (`split_into` pattern), record the shaping
+  events, commit and push. The shaping commit IS that cycle's completed work —
+  a split that lowers residual ambiguity is a valid reduction step.
+- Canonical statement: `methodology/distributed-work.yaml`
+  `worker_agent_protocol.forge_cycle_budget`. Interim reliance on step
+  timeouts is tracked by order 265 (forge heartbeat/liveness signals).
 
 Each worker cycle must obey the non-negotiable exit contract above.
 
@@ -209,6 +271,23 @@ never corrupts state (at worst two cycles converge on the same safe edit).
 Release with `scripts/claim-ledger-node.sh release <node-id>` after the closure
 is committed; expired leases (default TTL 4h) are auto-reclaimed. Pinned by
 `litmus:ledger-node-claim-shape`.
+
+### Long-Running (multi_cycle) Packets
+
+Packets marked `multi_cycle: true` in `plan/index.yaml` follow
+`methodology/distributed-work.yaml` → `long_running_packets` (plan order 251):
+
+- Claims are **cycle-scoped**; the packet returns to `ready` after each
+  cycle's commit. A `ready` multi_cycle packet with prior progress events is
+  normal, not stalled.
+- Do NOT mark one `done` — even with all exit criteria implemented — until
+  its `verification_required.completion_gate` is satisfied by `verified-by`
+  events from every named agent. Implementation-complete means
+  `phase: verification`, not `completed`.
+- Treat a packet sitting at `phase: verification` as a dispatch item for the
+  named verifier agents and surface it during coordination.
+- The active set is mirrored in `plan/long-running.md`; keep that view in
+  sync in the same commit as any phase/status/verification change.
 
 ## E2E Gates
 

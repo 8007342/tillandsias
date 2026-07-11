@@ -111,6 +111,7 @@ fn agent_flag(agent: SelectedAgent) -> &'static str {
         SelectedAgent::Claude => "--claude",
         SelectedAgent::Codex => "--codex",
         SelectedAgent::OpenCode => "--opencode",
+        SelectedAgent::Antigravity => "--antigravity",
     }
 }
 
@@ -209,7 +210,9 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // vault_bootstrap::vault_selinux_label_opt (Phase 3d) before the
             // vault launch, so no host-side podman wrapper is needed. The former
             // base64 podman shim was removed 2026-07-02 (base64_script_injection_ban).
-            vm_login_shell_argv("exec tillandsias-headless --github-login")
+            vm_login_shell_argv(
+                "exec tillandsias-headless --github-login || (echo 'tillandsias-headless failed' && sleep 10 && false)",
+            )
         }
         PtyIntent::Agent(agent) => {
             vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]

@@ -1,0 +1,54 @@
+# @trace spec:default-image
+# Order 284 regression pin: the EVERY_LAUNCH harness updater must survive
+# a broken upstream @latest publish. The 2026-07-10 outage took the whole
+# forge lane down for hours because a mid-night opencode-ai publish
+# installed a harness whose startup failed and there was no revert path.
+name: litmus:harness-rollback-shape
+spec: default-image
+phase: pre-build
+description: >
+  Fixture-test the order-284 survival path in images/default/lib-common.sh:
+  a fresh @latest failing the health probe rolls back to the recorded
+  last-good version; a missing last-good is loud but non-fatal; healthy
+  installs record last-good; the npm-update lock cannot leak permanently
+  onto the persistent volume (expanded-at-set trap + 1h stale reclaim).
+severity: high
+size: instant
+
+preconditions:
+  - repo checkout with images/default/lib-common.sh present
+
+critical_path:
+  - step: "rollback fixtures pass (broken @latest reverts, no-last-good is loud, healthy records)"
+    command: "scripts/test-harness-rollback.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: harness rollback fixtures"
+
+  - step: "updater probes fresh installs and has a rollback branch"
+    command: "grep -Fq 'harness_record_last_good' images/default/lib-common.sh && grep -Fq 'rolling back to last-good' images/default/lib-common.sh && echo 'ok: rollback-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: rollback-wired"
+
+  - step: "npm-update lock trap expands at set time and stale locks self-heal"
+    command: "grep -Fq 'trap \"rm -rf '\\''$npm_lock'\\''\" EXIT' images/default/lib-common.sh && grep -Fq 'mmin +60' images/default/lib-common.sh && echo 'ok: lock-leak-pinned'"
+    timeout_ms: 3000
+    expected_behavior: "ok: lock-leak-pinned"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: >
+    Harness updater survival path verified: probe, rollback to last-good,
+    loud no-last-good, lock-leak fix pinned.
+  log_fields:
+    spec: "default-image"
+    test: "harness-rollback-shape"
+    artifact: "fixture temp dirs (removed by the fixture)"
+
+rollback:
+  on_failure: >
+    Restore the probe+rollback branch in ensure_forge_harnesses and the
+    expanded-at-set npm_lock trap — without them one broken upstream
+    publish downs every forge lane (order 284) and one leaked lock
+    disables harness updates permanently.
+  command: "scripts/test-harness-rollback.sh; grep -n 'npm_lock' images/default/lib-common.sh"

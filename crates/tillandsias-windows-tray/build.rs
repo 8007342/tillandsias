@@ -52,11 +52,29 @@ fn main() {
     // pasting `--diagnose --json` into a bug report make `build_commit`
     // ground-truth for triage). Best-effort: if git isn't on PATH or this
     // isn't a working tree (e.g. building from a source tarball), emit
-    // "unknown" rather than failing the build. Re-runs when HEAD moves
-    // (commit, branch switch, checkout) because of the rerun-if-changed on
-    // .git/HEAD. Set BEFORE the windows-target gate for the same
-    // cross-check-from-Linux reason as WORKSPACE_VERSION.
+    // "unknown" rather than failing the build. Set BEFORE the windows-target
+    // gate for the same cross-check-from-Linux reason as WORKSPACE_VERSION.
+    //
+    // Re-run tracking: .git/HEAD alone is NOT enough — it only changes on a
+    // branch switch/checkout (it holds `ref: refs/heads/<branch>`), while a
+    // commit or merge on the SAME branch rewrites .git/refs/heads/<branch>
+    // instead. Without tracking the resolved ref file, an incremental rebuild
+    // keeps the previous BUILD_COMMIT_SHA and the installed binary lies about
+    // its commit (observed 2026-07-09: rebuild at 8797003f still reported
+    // a68c9825), which would also make the e2e freshness gate (embedded SHA
+    // == HEAD) spuriously fail on a genuinely fresh binary.
     println!("cargo:rerun-if-changed=../../.git/HEAD");
+    let git_dir = manifest_dir_path.join("../../.git");
+    if let Ok(head) = std::fs::read_to_string(git_dir.join("HEAD"))
+        && let Some(ref_path) = head.trim().strip_prefix("ref: ")
+    {
+        println!("cargo:rerun-if-changed=../../.git/{ref_path}");
+    }
+    // Refs can also live packed (git gc/pack-refs); only track the file when
+    // it exists — cargo re-runs unconditionally for a tracked-but-missing path.
+    if git_dir.join("packed-refs").exists() {
+        println!("cargo:rerun-if-changed=../../.git/packed-refs");
+    }
     println!("cargo:rerun-if-env-changed=BUILD_COMMIT_SHA_OVERRIDE");
     let build_commit = std::env::var("BUILD_COMMIT_SHA_OVERRIDE").unwrap_or_else(|_| {
         std::process::Command::new("git")

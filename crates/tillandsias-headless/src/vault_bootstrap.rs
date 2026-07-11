@@ -77,13 +77,27 @@ pub fn set_in_vm_credentials(
     installation_uuid: String,
     root_token: Option<String>,
 ) {
+    // If we have a pending fresh handover, the VM's state is strictly newer than
+    // whatever the host tray just delivered. Ignore the stale delivery to prevent
+    // clobbering the fresh token in memory and the fallback file.
+    if get_pending_handover().1.is_some() {
+        return;
+    }
+
     let cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = cell.lock() {
         *guard = Some(InVmCredentials {
             unseal_share_b64,
             installation_uuid,
-            root_token,
+            root_token: root_token.clone(),
         });
+    }
+
+    if let Some(token) = root_token
+        && let Ok(cache_dir) = crate::init_cache_dir()
+    {
+        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        let _ = std::fs::write(&fallback_file, token);
     }
 }
 
@@ -115,8 +129,17 @@ pub fn clear_pending_handover() {
 pub fn is_running_in_vm() -> bool {
     if let Some(cell) = IN_VM_CREDENTIALS.get()
         && let Ok(guard) = cell.lock()
+        && guard.is_some()
     {
-        return guard.is_some();
+        return true;
+    }
+    if std::env::var("TILLANDSIAS_HOST_KIND").is_ok() {
+        return true;
+    }
+    if let Ok(hostname) = std::fs::read_to_string("/proc/sys/kernel/hostname")
+        && hostname.trim() == "tillandsias-vm"
+    {
+        return true;
     }
     false
 }
@@ -403,6 +426,17 @@ fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient,
 /// healthy. Called automatically from `run_init`; the previous `--with-vault`
 /// opt-in is now a no-op.
 pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
+    // Order 234 (R6): refuse before waiting on the lock during drain/stop.
+    if !crate::runtime_phase::container_mutations_allowed() {
+        return Err(crate::runtime_phase::refusal("ensure tillandsias-vault"));
+    }
+    // Order 232 (R4): serialize the whole running-check + build + launch +
+    // init/unseal window. 600s bound: a cold vault image build plus first
+    // init is the slowest ensure path. The liveness probe (order 228) takes
+    // this same lock, so its self-heal can no longer race a user login's
+    // vault bring-up.
+    let _vault_lock =
+        crate::resource_lock::acquire("vault", std::time::Duration::from_secs(600), debug)?;
     let certs_dir = tls_material_dir(debug)?;
     ensure_vault_tls_leaf(&certs_dir, debug)?;
 
@@ -424,13 +458,20 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                 }
                 let root_token = read_and_handover_root_token(debug)?;
                 let client = vault_client(&base_url, &root_token, debug)?;
+                // Sentinel must be the NEWEST provisioned role, not the oldest:
+                // probing 'git-mirror' let vaults provisioned before a Policy
+                // addition skip provisioning forever, so newly added roles
+                // (the provider-login set, orphaned since 2026-06-30) were
+                // never created on existing vault volumes and every token
+                // mint 404'd. load_policies/create_approle_role are
+                // idempotent overwrites, so re-provisioning is safe.
                 if rt
-                    .block_on(client.approle_role_exists("git-mirror"))
+                    .block_on(client.approle_role_exists("antigravity-login"))
                     .unwrap_or(false)
                 {
                     if debug {
                         eprintln!(
-                            "[tillandsias-vault] AppRole 'git-mirror' already exists; skipping policy and role provisioning"
+                            "[tillandsias-vault] AppRole 'antigravity-login' (newest sentinel) already exists; skipping policy and role provisioning"
                         );
                     }
                 } else {
@@ -545,6 +586,10 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
         ensure_vault_running(debug)
             .map_err(|e| format!("could not bring Vault up to store the GitHub token: {e}"))?;
     }
+    // Order 235 (R7): AFTER the on-demand bring-up (ensure holds the same
+    // resource exclusively — taking shared first would self-deadlock), hold
+    // shared so a concurrent recreate waits for this write to finish.
+    let _stability = vault_stability_lease(debug)?;
     let rt = tokio_runtime()?;
     let base_url = vault_api_base_url();
     let root_token = read_and_handover_root_token(debug)?;
@@ -622,8 +667,25 @@ fn vault_exec_command(root_token: &str, vault_args: &[&str]) -> std::process::Co
 /// `remote_projects::is_github_logged_in` instead.
 ///
 /// @trace spec:tillandsias-vault, spec:tray-minimal-ux
+/// Order 235 (R7): shared vault-stability lock for every exec-based Vault
+/// accessor. Holders require only that the vault container REMAINS STABLE
+/// while they run; a recreate (ensure_vault_running's exclusive lock on the
+/// same resource) waits for them to drain, and they wait out a recreate
+/// instead of hitting "container is stopped" / stale state. 120s bound: long
+/// enough to sit out a container relaunch, loud on a wedged recreate.
+fn vault_stability_lease(debug: bool) -> Result<crate::resource_lock::ResourceLockGuard, String> {
+    crate::resource_lock::acquire_shared("vault", Duration::from_secs(120), debug)
+}
+
+// Only caller today is the order-230 login probe inside the listen-vsock-gated
+// listener, so the default feature set sees this as dead.
 #[allow(dead_code)]
 pub(crate) fn is_github_key_present() -> bool {
+    // Order 235: skip the probe (presence unknown ≈ absent) rather than read
+    // through a recreate window.
+    let Ok(_stability) = vault_stability_lease(false) else {
+        return false;
+    };
     if !vault_data_volume_exists() {
         return false;
     }
@@ -659,6 +721,8 @@ pub(crate) fn vault_kv_get_via_exec(
     field: &str,
     debug: bool,
 ) -> Result<String, String> {
+    // Order 235 (R7): wait out any in-flight recreate instead of racing it.
+    let _stability = vault_stability_lease(debug)?;
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err(format!("{VAULT_CONTAINER_NAME} is not running"));
     }
@@ -755,6 +819,9 @@ pub fn write_provider_api_key(provider: ProviderId, key: &str, debug: bool) -> R
             )
         })?;
     }
+    // Order 235 (R7): shared AFTER the on-demand ensure (see
+    // write_github_token_to_vault for the self-deadlock rationale).
+    let _stability = vault_stability_lease(debug)?;
     let rt = tokio_runtime()?;
     let base_url = vault_api_base_url();
     let root_token = read_and_handover_root_token(debug)?;
@@ -849,7 +916,9 @@ pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
 /// expensive on-demand launch in `is_github_key_present` and `ensure_vault_running`.
 #[allow(dead_code)]
 fn vault_data_volume_exists() -> bool {
-    let dir = crate::init_cache_dir().unwrap_or_else(|_| PathBuf::from(".")).join("vault-data");
+    let dir = crate::init_cache_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("vault-data");
     dir.exists()
 }
 
@@ -931,6 +1000,11 @@ pub async fn mint_approle_token_for_container(
 #[allow(dead_code)]
 pub struct AppRoleSecretLease {
     secret_name: String,
+    /// Order 235 (R7): shared vault-stability lock held for the lease's whole
+    /// lifetime — a vault recreate (exclusive holder) waits for this lease to
+    /// drop, so the container consuming the minted secret never observes the
+    /// vault container being replaced mid-flow.
+    _stability: crate::resource_lock::ResourceLockGuard,
 }
 
 impl AppRoleSecretLease {
@@ -958,13 +1032,18 @@ pub fn mint_approle_secret_lease(
     container_instance: &str,
     debug: bool,
 ) -> Result<AppRoleSecretLease, String> {
+    // Order 235 (R7): acquired BEFORE minting and held by the returned lease.
+    let stability = vault_stability_lease(debug)?;
     let runtime = tokio_runtime()?;
     let (_token, secret_name) = runtime.block_on(mint_approle_token_for_container(
         role,
         container_instance,
         debug,
     ))?;
-    Ok(AppRoleSecretLease { secret_name })
+    Ok(AppRoleSecretLease {
+        secret_name,
+        _stability: stability,
+    })
 }
 
 /// Drain and revoke every per-container token recorded in the in-process
@@ -1029,12 +1108,23 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
         dependency_digests,
     )?;
 
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] building image vault with tag {}",
-            identity.canonical_tag
-        );
+    // Order 253: --init pre-builds vault into this same identity tag, so the
+    // login path is zero-build on an initialized runtime. Skipping here also
+    // stops every login from re-invoking `podman build` (the repeated-login
+    // rebuild observed in the order-245 audit). The build below stays as the
+    // fail-soft fallback for runtimes that skipped --init.
+    if tillandsias_podman::image_exists_sync(&identity.canonical_tag) {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] image {} already built; skipping build",
+                identity.canonical_tag
+            );
+        }
+        return Ok(identity.canonical_tag);
     }
+    eprintln!(
+        "[tillandsias-vault] vault image missing — building on demand; run `tillandsias --init` to pre-build it (order 253)"
+    );
 
     let cache_dir = crate::init_cache_dir()?;
     let log_file = if debug {
@@ -1581,7 +1671,9 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
                  (volume exists but no Shamir share in keychain)"
             );
         }
-        let vault_dir = crate::init_cache_dir().unwrap_or_else(|_| PathBuf::from(".")).join("vault-data");
+        let vault_dir = crate::init_cache_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("vault-data");
         let _ = std::fs::remove_dir_all(vault_dir);
     } else if debug && vault_data_volume_exists() {
         eprintln!(
@@ -1625,8 +1717,11 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // /vault/data/core/_migration and `--github-login` then reports Vault as
     // not running. `:U` re-asserts ownership and self-repairs that drift.
     // @trace spec:tillandsias-vault
-    let vault_dir = crate::init_cache_dir().map_err(|e| e.to_string())?.join("vault-data");
-    std::fs::create_dir_all(&vault_dir).map_err(|e| format!("failed to create vault data dir: {}", e))?;
+    let vault_dir = crate::init_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("vault-data");
+    std::fs::create_dir_all(&vault_dir)
+        .map_err(|e| format!("failed to create vault data dir: {}", e))?;
     let volume_arg = format!("{}:/vault/data:U", vault_dir.display());
     let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
     let mut run_args: Vec<String> = vec![
@@ -1742,7 +1837,38 @@ fn wait_for_vault_ready(
     if debug {
         eprintln!("[tillandsias-vault] waiting for podman health status=healthy");
     }
-    if let Err(e) = rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME)) {
+    // Order 235 (R7): "container is stopped" / "no such container" during the
+    // recreate window is TRANSIENT — the old container is being replaced
+    // (observed on Silverblue, see the launch_vault_container --rm note).
+    // Bounded retry (3 attempts, 2s apart) before treating it as the
+    // permanent crash it usually is outside that window.
+    let mut wait_result = Ok(());
+    for attempt in 1..=3 {
+        wait_result = rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME));
+        match &wait_result {
+            Ok(()) => break,
+            Err(e) => {
+                let msg = e.to_string();
+                let transient =
+                    msg.contains("container is stopped") || msg.contains("no such container");
+                if !transient || attempt == 3 {
+                    break;
+                }
+                if debug {
+                    eprintln!(
+                        "[tillandsias-vault] health wait transient ({msg}); retry {attempt}/3"
+                    );
+                }
+                // Inter-attempt backoff only — readiness detection itself
+                // stays delegated to podman's wait_healthy above (the
+                // vault_ready_wait_uses_podman_health pin forbids local
+                // readiness sleep-POLLING; this bounded backoff between
+                // wait_healthy attempts is not a readiness poll).
+                rt.block_on(tokio::time::sleep(Duration::from_secs(2)));
+            }
+        }
+    }
+    if let Err(e) = wait_result {
         // The container likely crashed on boot. With no `--rm` it still exists,
         // so dump its logs + last state to make the failure diagnosable instead
         // of the opaque "no such container" / "did not report healthy".
@@ -1925,9 +2051,31 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
             if let Ok(mut guard) = cell.lock() {
                 *guard = Some(PendingHandover {
-                    unseal_share_b64: Some(share_b64),
+                    unseal_share_b64: Some(share_b64.clone()),
                     root_token: Some(token.clone()),
                 });
+            }
+
+            // Also proactively update the fallback file so child processes (like GithubLogin)
+            // running right after init can use the fresh token before the host re-delivers it.
+            if let Ok(cache_dir) = crate::init_cache_dir() {
+                let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+                let _ = std::fs::write(&fallback_file, &token);
+            }
+
+            // Update in-memory credentials so the current process has the new token.
+            let creds_cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
+            if let Ok(mut guard) = creds_cell.lock() {
+                if let Some(creds) = guard.as_mut() {
+                    creds.root_token = Some(token.clone());
+                    creds.unseal_share_b64 = Some(share_b64.clone());
+                } else {
+                    *guard = Some(InVmCredentials {
+                        unseal_share_b64: Some(share_b64.clone()),
+                        installation_uuid: String::new(),
+                        root_token: Some(token.clone()),
+                    });
+                }
             }
         } else {
             keychain_set_blocking("vault-root-token-v1", &token)?;
@@ -2116,6 +2264,9 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
         Policy::Tray => "tray",
         Policy::Inference => "inference",
         Policy::GithubLogin => "github-login",
+        Policy::ClaudeLogin => "claude-login",
+        Policy::CodexLogin => "codex-login",
+        Policy::AntigravityLogin => "antigravity-login",
     }
 }
 
@@ -2132,6 +2283,12 @@ mod tests {
         assert_eq!(policy_role_name(&Policy::Tray), "tray");
         assert_eq!(policy_role_name(&Policy::Inference), "inference");
         assert_eq!(policy_role_name(&Policy::GithubLogin), "github-login");
+        assert_eq!(policy_role_name(&Policy::ClaudeLogin), "claude-login");
+        assert_eq!(policy_role_name(&Policy::CodexLogin), "codex-login");
+        assert_eq!(
+            policy_role_name(&Policy::AntigravityLogin),
+            "antigravity-login"
+        );
     }
 
     #[test]
@@ -2372,6 +2529,49 @@ mod tests {
         );
     }
 
+    /// Order 259: the cold-VM first-login name-in-use race is closed by TWO
+    /// invariants that must both hold: (a) every vault bring-up serializes
+    /// behind the order-232 exclusive flock BEFORE the running-check (so the
+    /// loser observes the winner's container and early-returns instead of
+    /// racing `podman run`), and (b) the launch replaces any exited/created
+    /// name-holder (`podman rm -f` preamble) instead of erroring on it.
+    #[test]
+    fn vault_launch_serializes_and_replaces_stale_name_holder() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let ensure = source
+            .split("pub fn ensure_vault_running(")
+            .nth(1)
+            .expect("ensure_vault_running source");
+        let lock_idx = ensure
+            .find("resource_lock::acquire(\"vault\"")
+            .expect("ensure_vault_running must take the order-232 vault flock");
+        let running_check_idx = ensure
+            .find("container_running(VAULT_CONTAINER_NAME)")
+            .expect("ensure_vault_running must early-return on a running vault");
+        assert!(
+            lock_idx < running_check_idx,
+            "the exclusive vault flock must be held BEFORE the running-check (order 259)"
+        );
+        let launch = source
+            .split("fn launch_vault_container(")
+            .nth(1)
+            .expect("launch_vault_container source");
+        let rm_idx = launch
+            .find("[\"rm\", \"-f\", VAULT_CONTAINER_NAME]")
+            .expect("launch must rm -f any stale name-holder before podman run (order 259)");
+        let run_idx = launch
+            .find("podman run")
+            .or_else(|| launch.find("run_args"))
+            .expect("launch must run the vault container");
+        assert!(
+            rm_idx < run_idx,
+            "stale-name replacement must precede the run (order 259)"
+        );
+    }
+
     #[test]
     fn vault_ready_wait_uses_podman_health() {
         let source = include_str!(concat!(
@@ -2389,6 +2589,14 @@ mod tests {
         assert!(
             !window.contains("thread::sleep"),
             "Vault readiness must not use a local polling sleep loop"
+        );
+        // Order 235: the transient-error retry around wait_healthy must stay
+        // BOUNDED (attempt cap present) — readiness detection remains
+        // delegated to podman; only the inter-attempt backoff may sleep, and
+        // never unboundedly.
+        assert!(
+            window.contains("attempt == 3"),
+            "transient health-wait retry must keep its bounded attempt cap"
         );
     }
 

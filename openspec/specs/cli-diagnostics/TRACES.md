@@ -5,13 +5,13 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-headless/src/main.rs#L173](../../../crates/tillandsias-headless/src/main.rs#L173)
-- [crates/tillandsias-headless/src/main.rs#L200](../../../crates/tillandsias-headless/src/main.rs#L200)
-- [crates/tillandsias-headless/src/main.rs#L234](../../../crates/tillandsias-headless/src/main.rs#L234)
-- [crates/tillandsias-headless/src/main.rs#L608](../../../crates/tillandsias-headless/src/main.rs#L608)
-- [crates/tillandsias-headless/src/main.rs#L649](../../../crates/tillandsias-headless/src/main.rs#L649)
-- [crates/tillandsias-headless/src/main.rs#L11088](../../../crates/tillandsias-headless/src/main.rs#L11088)
-- [crates/tillandsias-headless/src/main.rs#L11112](../../../crates/tillandsias-headless/src/main.rs#L11112)
-- [crates/tillandsias-headless/src/main.rs#L11155](../../../crates/tillandsias-headless/src/main.rs#L11155)
-- [crates/tillandsias-policy/src/main.rs#L1480](../../../crates/tillandsias-policy/src/main.rs#L1480)
+- [crates/tillandsias-headless/src/main.rs#L177](../../../crates/tillandsias-headless/src/main.rs#L177)
+- [crates/tillandsias-headless/src/main.rs#L204](../../../crates/tillandsias-headless/src/main.rs#L204)
+- [crates/tillandsias-headless/src/main.rs#L238](../../../crates/tillandsias-headless/src/main.rs#L238)
+- [crates/tillandsias-headless/src/main.rs#L612](../../../crates/tillandsias-headless/src/main.rs#L612)
+- [crates/tillandsias-headless/src/main.rs#L653](../../../crates/tillandsias-headless/src/main.rs#L653)
+- [crates/tillandsias-headless/src/main.rs#L11672](../../../crates/tillandsias-headless/src/main.rs#L11672)
+- [crates/tillandsias-headless/src/main.rs#L11696](../../../crates/tillandsias-headless/src/main.rs#L11696)
+- [crates/tillandsias-headless/src/main.rs#L11739](../../../crates/tillandsias-headless/src/main.rs#L11739)
+- [crates/tillandsias-policy/src/main.rs#L1612](../../../crates/tillandsias-policy/src/main.rs#L1612)
 - [scripts/distill-forge-diagnostics.sh#L3](../../../scripts/distill-forge-diagnostics.sh#L3)

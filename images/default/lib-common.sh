@@ -835,19 +835,63 @@ ensure_forge_prebuilt_tools() {
 }
 
 # ── Agent harness EVERY_LAUNCH update ──────────────────────────
+# ── Harness health probe + last-good rollback (order 284) ───
+# The 2026-07-10 outage: upstream published a broken opencode-ai@latest
+# mid-night, the EVERY_LAUNCH refresh installed it, and the whole forge
+# lane was down until upstream fixed it. @latest is structurally unsafe
+# without a survival path, so every update is now probed and a broken
+# fresh install rolls back to the last KNOWN-GOOD version recorded in the
+# persistent npm cache.
+harness_probe() {
+    # $1 = binary name. Cheap liveness: --version within a short timeout.
+    local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1"
+    [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1
+}
+
+harness_last_good_file() {
+    # $1 = binary name → stamp file in the persistent npm prefix.
+    echo "${NPM_CONFIG_PREFIX:-$HOME/.cache}/last-good-$1.version"
+}
+
+harness_record_last_good() {
+    # $1 = binary, $2 = npm package. Probe first; record only working installs.
+    local ver
+    harness_probe "$1" || return 1
+    ver="$(npm ls -g --depth=0 "$2" 2>/dev/null | grep -oE '@[0-9][^ ]*' | tail -1 | tr -d '@')"
+    [ -n "$ver" ] && echo "$ver" > "$(harness_last_good_file "$1")" 2>/dev/null
+    return 0
+}
+
 # ensure_forge_harnesses: npm-install/update agent harnesses (codex, claude-code,
 # opencode, openspec) to the LATEST version at every launch. Runs in the background
 # so it never blocks the agent launch. Fail-soft: if npm is offline or the proxy
 # is unreachable, the baked/cached version is used silently (no hard fail).
+# A fresh install that fails the health probe rolls back to the recorded
+# last-good version (order 284).
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 ensure_forge_harnesses() {
     # Avoid a concurrent npm join race — only the first process runs npm.
     local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
     if ! mkdir "$npm_lock" 2>/dev/null; then
-        return 0
+        # Self-heal locks leaked by the pre-fix trap bug (they live on the
+        # PERSISTENT volume, so one leak used to disable updates forever):
+        # a real concurrent updater finishes in minutes — reclaim after 1h.
+        if [ -d "$npm_lock" ] && [ -n "$(find "$npm_lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+            trace_lifecycle "harness" "reclaiming stale npm-update lock (leaked pre-fix)"
+            rm -rf "$npm_lock"
+            mkdir "$npm_lock" 2>/dev/null || return 0
+        else
+            return 0
+        fi
     fi
-    # Ensure we clean up the lock on exit (even forked).
-    trap 'rm -rf "$npm_lock"' EXIT
+    # Ensure we clean up the lock on exit (even forked). The path MUST be
+    # expanded NOW (double quotes): a single-quoted "$npm_lock" is expanded
+    # when the EXIT trap fires, after this function's `local` is out of
+    # scope — under set -u the trap then dies unbound and the lock dir
+    # LEAKS onto the persistent volume, silently disabling every future
+    # harness update (found by scripts/test-harness-rollback.sh, order 284).
+    # shellcheck disable=SC2064
+    trap "rm -rf '$npm_lock'" EXIT
 
     local npm_bin
     npm_bin="$(command -v npm 2>/dev/null)"
@@ -856,12 +900,58 @@ ensure_forge_harnesses() {
         return 0
     fi
 
+    # Rate-limit the refresh (6h): each npm install replaces the shared
+    # prefix's bin symlinks non-atomically, and a sibling launch landing in
+    # that window sees the harness "missing" (2026-07-11 gate incident).
+    # A 6h cadence keeps order-181 freshness (multiple dailies) while
+    # cutting the race surface ~100x; a missing harness is still installed
+    # immediately by _require_harness regardless of this stamp.
+    local update_stamp="$HOME/.cache/tillandsias-project/harness-update-stamp"
+    if [ -f "$update_stamp" ]; then
+        local now last age
+        now="$(date +%s)"
+        last="$(cat "$update_stamp" 2>/dev/null || echo 0)"
+        case "$last" in *[!0-9]*|"") last=0 ;; esac
+        age=$(( now - last ))
+        if [ "$age" -lt 21600 ]; then
+            trace_lifecycle "harness" "refresh skipped (last update ${age}s ago, cadence 21600s)"
+            return 0
+        fi
+    fi
+    date +%s > "$update_stamp" 2>/dev/null || true
+
     # Update each harness to latest. We use `npm install` (not `npm update`) so
     # a missing or removed package is installed rather than silently skipped.
     # Uses $NPM_CONFIG_PREFIX (persistent cache, set in lib-common.sh).
+    local pkg bin lg
     for pkg in opencode-ai "@fission-ai/openspec" "@anthropic-ai/claude-code" "@openai/codex"; do
+        case "$pkg" in
+            opencode-ai) bin=opencode ;;
+            "@fission-ai/openspec") bin=openspec ;;
+            "@anthropic-ai/claude-code") bin=claude ;;
+            "@openai/codex") bin=codex ;;
+        esac
         if ! "$npm_bin" install -g --no-audit --no-fund "$pkg@latest" 2>/dev/null; then
             trace_lifecycle "harness" "npm update failed for $pkg (non-fatal, using cached)"
+            continue
+        fi
+        if harness_record_last_good "$bin" "$pkg"; then
+            continue
+        fi
+        # Fresh @latest is broken (the order-284 class). Roll back to the
+        # recorded last-good version when we have one; otherwise leave the
+        # broken install in place and trace loudly (the entrypoint's
+        # require path surfaces it with the real error).
+        lg="$(cat "$(harness_last_good_file "$bin")" 2>/dev/null || true)"
+        if [ -n "$lg" ]; then
+            trace_lifecycle "harness" "$pkg@latest FAILED health probe — rolling back to last-good $lg"
+            if "$npm_bin" install -g --no-audit --no-fund "$pkg@$lg" 2>/dev/null && harness_probe "$bin"; then
+                trace_lifecycle "harness" "$pkg rollback to $lg OK"
+            else
+                trace_lifecycle "harness" "$pkg rollback to $lg FAILED (broken install remains)"
+            fi
+        else
+            trace_lifecycle "harness" "$pkg@latest FAILED health probe and no last-good recorded (upstream-broken publish?)"
         fi
     done
 
@@ -916,75 +1006,136 @@ find_project_dir() {
     return 0
 }
 
-# ── Coding agents (hard-installed in image) ─────────────────
+# ── Coding agents (installed EVERY_LAUNCH / persistent cache) ──
 # @trace spec:default-image, spec:forge-shell-tools
-# OpenCode, Claude Code, and OpenSpec are baked into /opt/agents/ at image
-# build time and symlinked into /usr/local/bin/ — see images/default/Containerfile.
-# These helpers verify presence and export the canonical bin path each
-# entrypoint needs. Failure here means the image is corrupt; bail loudly.
-require_opencode() {
-    OC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/opencode"
-    if [ ! -x "$OC_BIN" ]; then
-        OC_BIN="/usr/local/bin/opencode"
+# @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+# Nothing is baked at image CREATION (order 181): harnesses live in the
+# order-179 persistent npm volume and are (re)installed at launch. After
+# `podman system reset` that volume is EMPTY, so the install path below is
+# the only source — it must be fail-SOFT. These helpers always return 0;
+# on failure they leave *_BIN pointing at a non-executable path and trace
+# the real npm error (previously discarded to /dev/null, which made every
+# post-reset launch die as an unexplained exit 1 under `set -e` because
+# the bare `require_*` call propagated the return 1 through the entrypoint).
+# Entrypoints whose PRIMARY agent is missing must check `[ -x "$*_BIN" ]`
+# themselves and fail with an actionable message (see harness_missing_fatal).
+_require_harness() {
+    # $1=friendly-name  $2=npm-package  $3=bin-name  → echoes resolved path
+    local name="$1" pkg="$2" bin="$3" path errlog
+    path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+    [ -x "$path" ] || path="/usr/local/bin/$bin"
+    # Updater race (2026-07-11 gate incident): a SIBLING container's
+    # background ensure_forge_harnesses replaces the shared prefix's bin
+    # symlinks non-atomically, so a launch landing in that window sees the
+    # harness "missing" and then races a SECOND npm against the same
+    # prefix (fails in ~1s with mid-state errors). If the npm-update lock
+    # is held, wait for the updater (bounded 90s; a lock is stale only
+    # via the 1h reclaim path) and re-check before deciding anything.
+    if [ ! -x "$path" ] && [ -d "$HOME/.cache/tillandsias-project/npm-update.lock" ]; then
+        trace_lifecycle "harness" "$name not visible while updater lock held — waiting for sibling npm update"
+        local waited=0
+        while [ -d "$HOME/.cache/tillandsias-project/npm-update.lock" ] && [ "$waited" -lt 90 ]; do
+            sleep 2
+            waited=$((waited + 2))
+            path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+            [ -x "$path" ] || path="/usr/local/bin/$bin"
+            [ -x "$path" ] && break
+        done
+        [ -x "$path" ] && trace_lifecycle "harness" "$name appeared after ${waited}s (sibling updater)"
     fi
-    if [ ! -x "$OC_BIN" ]; then
-        trace_lifecycle "harness" "opencode missing — install latest"
-        if ! npm install -g --no-audit --no-fund opencode-ai@latest 2>/dev/null; then
-            trace_lifecycle "harness" "opencode install failed (non-fatal)"
-            return 1
+    if [ ! -x "$path" ]; then
+        trace_lifecycle "harness" "$name missing — install latest"
+        errlog="$(mktemp /tmp/npm-install-${bin}.XXXXXX 2>/dev/null || echo /tmp/npm-install-$bin.err)"
+        if ! npm install -g --no-audit --no-fund "$pkg@latest" >"$errlog" 2>&1; then
+            trace_lifecycle "harness" "$name install FAILED (non-fatal): $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+            trace_lifecycle "harness" "$name install log: $errlog"
+            echo "$path"
+            return 0
         fi
-        OC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/opencode"
+        rm -f "$errlog" 2>/dev/null || true
+        path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+        # Seed the order-284 rollback point: the first working install of a
+        # fresh cache becomes last-good so a later broken @latest can revert.
+        harness_record_last_good "$bin" "$pkg" 2>/dev/null || true
     fi
-    trace_lifecycle "install" "opencode: available ($("$OC_BIN" --version 2>/dev/null || echo 'unknown'))"
+    if [ -x "$path" ]; then
+        trace_lifecycle "install" "$name: available ($("$path" --version 2>/dev/null || echo 'unknown'))"
+    fi
+    echo "$path"
+}
+
+# Fatal-with-explanation path for entrypoints whose PRIMARY agent is absent.
+# Prints an actionable banner (the exit_pause trap only shows a bare exit
+# code) and exits 1 — callers invoke this INSTEAD of letting set -e fire.
+harness_missing_fatal() {
+    local name="$1"
+    echo "" >&2
+    echo "ERROR: the '$name' agent harness is not installed and its launch-time" >&2
+    echo "npm install failed (see the 'harness' lifecycle lines above for the" >&2
+    echo "real npm error — commonly enclave egress/proxy after 'podman system" >&2
+    echo "reset' emptied the persistent npm cache volume)." >&2
+    echo "Recovery: check network/proxy, then relaunch — the install retries" >&2
+    echo "at every launch. A maintenance terminal still works for diagnosis." >&2
+    exit 1
+}
+
+require_opencode() {
+    OC_BIN="$(_require_harness opencode opencode-ai opencode)"
+    return 0
 }
 
 require_claude() {
-    CC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/claude"
-    if [ ! -x "$CC_BIN" ]; then
-        CC_BIN="/usr/local/bin/claude"
-    fi
-    if [ ! -x "$CC_BIN" ]; then
-        trace_lifecycle "harness" "claude-code missing — install latest"
-        if ! npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@latest" 2>/dev/null; then
-            trace_lifecycle "harness" "claude-code install failed (non-fatal)"
-            return 1
-        fi
-        CC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/claude"
-    fi
-    trace_lifecycle "install" "claude-code: available ($("$CC_BIN" --version 2>/dev/null || echo 'unknown'))"
+    CC_BIN="$(_require_harness claude-code "@anthropic-ai/claude-code" claude)"
+    return 0
 }
 
 require_openspec() {
-    OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
-    if [ ! -x "$OS_BIN" ]; then
-        OS_BIN="/usr/local/bin/openspec"
-    fi
-    if [ ! -x "$OS_BIN" ]; then
-        trace_lifecycle "harness" "openspec missing — install latest"
-        if ! npm install -g --no-audit --no-fund "@fission-ai/openspec@latest" 2>/dev/null; then
-            trace_lifecycle "harness" "openspec install failed (non-fatal)"
-            return 1
-        fi
-        OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
-    fi
-    trace_lifecycle "install" "openspec: available ($("$OS_BIN" --version 2>/dev/null || echo 'unknown'))"
+    OS_BIN="$(_require_harness openspec "@fission-ai/openspec" openspec)"
+    return 0
 }
 
 require_codex() {
-    CX_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/codex"
-    if [ ! -x "$CX_BIN" ]; then
-        CX_BIN="/usr/local/bin/codex"
-    fi
-    if [ ! -x "$CX_BIN" ]; then
-        trace_lifecycle "harness" "codex missing — install latest"
-        if ! npm install -g --no-audit --no-fund "@openai/codex@latest" 2>/dev/null; then
-            trace_lifecycle "harness" "codex install failed (non-fatal)"
-            return 1
-        fi
-        CX_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/codex"
-    fi
-    trace_lifecycle "install" "codex: available ($("$CX_BIN" --version 2>/dev/null || echo 'unknown'))"
+    CX_BIN="$(_require_harness codex "@openai/codex" codex)"
+    return 0
 }
+
+# ── On-demand userspace tools (Homebrew, attested formulae only) ──
+# @trace spec:default-image
+# Plan order 294 (operator-approved 2026-07-11): every command in
+# /usr/local/lib/tillandsias/brew-tools-allowlist.txt that is not already
+# on PATH gets a shim in a LAST-on-PATH dir. Running the command installs
+# it on first use through tillandsias-brew-shim-exec (homebrew-core
+# formulae only, Sigstore attestation verification REQUIRED), then execs
+# it transparently — distro-style "command-not-found" UX, but it actually
+# installs. TILLANDSIAS_BREW_SHIMS=0 disables shim generation;
+# TILLANDSIAS_BREW_AUTOINSTALL=0 makes shims print the
+# `brew install <formula>` hint instead of installing.
+install_brew_shims() {
+    local allowlist="/usr/local/lib/tillandsias/brew-tools-allowlist.txt"
+    local shim_dir="$HOME/.local/share/tillandsias/brew-shims"
+    [ -f "$allowlist" ] || return 0
+    [ -x /usr/local/bin/tillandsias-brew-shim-exec ] || return 0
+    mkdir -p "$shim_dir" 2>/dev/null || return 0
+    local cmd formula
+    while read -r cmd formula _; do
+        case "$cmd" in \#*|"") continue ;; esac
+        [ -n "$formula" ] || continue
+        # Real tool already present (image-baked or previously installed):
+        # no shim. The shim dir is last on PATH anyway, so this is belt
+        # and suspenders against confusing `command -v` output.
+        command -v "$cmd" >/dev/null 2>&1 && continue
+        [ -e "$shim_dir/$cmd" ] && continue
+        printf '#!/bin/bash\nexec /usr/local/bin/tillandsias-brew-shim-exec %q %q "$@"\n' \
+            "$cmd" "$formula" > "$shim_dir/$cmd" 2>/dev/null || continue
+        chmod +x "$shim_dir/$cmd" 2>/dev/null || true
+    done < "$allowlist"
+    export PATH="$PATH:$shim_dir"
+    trace_lifecycle "tools" "on-demand brew shims ready ($shim_dir)"
+}
+
+if [ "${TILLANDSIAS_BREW_SHIMS:-1}" != "0" ]; then
+    install_brew_shims || true
+fi
 
 # ── OpenCode config overlay ─────────────────────────────────
 # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp, spec:layered-tools-overlay

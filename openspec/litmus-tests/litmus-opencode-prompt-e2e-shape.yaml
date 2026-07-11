@@ -1,8 +1,8 @@
 # @trace spec:meta-orchestration, spec:forge-push-credential-channel
 # OpenCode-prompt E2E smoke — verify agent commits and pushes findings.
 #
-# Asserts forge_exit=0, new commit since smoke start, loop_status.md
-# advanced, and remote branch HEAD advanced via git ls-remote.
+# Asserts forge_exit=0, new commit since smoke start, at least one
+# plan/ file updated, and remote branch HEAD advanced via git ls-remote.
 #
 # NOTE: Requires forge image built, tillandsias on PATH, and git-mirror
 # running (forge-push-credential-channel post-receive relay). Gating points
@@ -28,33 +28,58 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok:"
 
-  - step: "record pre-smoke remote HEAD for push verification"
-    command: "git ls-remote origin HEAD | awk '{print $1}' > /tmp/opencode-e2e-remote-head-before && echo 'ok: remote HEAD recorded'"
+  # Record the CURRENT BRANCH's remote ref, not `ls-remote origin HEAD`:
+  # origin HEAD tracks the default branch (main), which a working-branch push
+  # never moves — that mismatch made STEP 6 a deterministic false negative
+  # (plan order 262). test -s fails loud here if the branch has no remote
+  # counterpart yet, instead of handing STEP 6 an empty before-file.
+  - step: "record pre-smoke remote branch head for push verification"
+    command: "git ls-remote origin \"refs/heads/$(git rev-parse --abbrev-ref HEAD)\" | awk '{print $1}' > /tmp/opencode-e2e-remote-head-before && test -s /tmp/opencode-e2e-remote-head-before && echo 'ok: remote branch head recorded'"
     timeout_ms: 15000
     expected_behavior: "ok:"
 
-  - step: "launch forge with meta-orchestration prompt and one cycle"
-    command: "./repeat --times 1 --agent opencode --prompt \"Use the /meta-orchestration skill\" 2>&1; echo FORGE_EXIT=$?"
-    timeout_ms: 600000
+  # Order 265 wiring (liveness-extended budget) + operator directive
+  # 2026-07-11 (token rate limiting): the launch logic lives in
+  # scripts/litmus-opencode-e2e-launch.sh. A FULL /meta-orchestration
+  # cycle runs at most once per 4h per host (scripts/forge-e2e-rate-limit.sh
+  # class full-meta); rate-limited runs downgrade to the skill's Smoke Mode
+  # (verify-only, no plan drain, must print `MO-SMOKE: PASS`). The mode is
+  # written to /tmp/opencode-e2e-mode so the delta steps below can skip for
+  # smoke runs, which by design commit and push nothing.
+  - step: "launch forge with meta-orchestration prompt (full-or-smoke, rate-limited, liveness-extended)"
+    command: "scripts/litmus-opencode-e2e-launch.sh"
+    timeout_ms: 1560000
     expected_behavior: "FORGE_EXIT=0"
 
+  # Steps 4-6 assert deltas produced by the in-forge cycle, which reach the
+  # host checkout asynchronously (git-mirror relay) relative to the forge
+  # session's exit. Each probe below re-samples with a bounded retry window
+  # (default 120s, poll 5s — scripts/litmus-git-delta-wait.sh) instead of one
+  # instantaneous sample; step timeout_ms leaves headroom above the window so
+  # a genuine miss reports FAIL, not a runner TIMEOUT. The helper also owns
+  # reading the before-sha files: the previous inline STEP 5 referenced
+  # $HEAD_BEFORE without populating it (steps are separate `bash -c`
+  # subshells), collapsing its range to HEAD..HEAD — a deterministic false
+  # negative, not a race (plan order 255).
+  # Smoke-mode runs are verify-only and push nothing, so each delta step
+  # skips (with an explicit marker) when STEP 3 recorded mode=smoke.
   - step: "verify local HEAD advanced since smoke start"
-    command: "HEAD_AFTER=$(git rev-parse HEAD) && HEAD_BEFORE=$(cat /tmp/opencode-e2e-head-before) && [ \"$HEAD_AFTER\" != \"$HEAD_BEFORE\" ] && echo \"ok: HEAD advanced $HEAD_BEFORE -> $HEAD_AFTER\" || { echo \"FAIL: HEAD unchanged ($HEAD_BEFORE)\"; exit 1; }"
-    timeout_ms: 5000
+    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: HEAD advanced (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh local-head /tmp/opencode-e2e-head-before; fi"
+    timeout_ms: 150000
     expected_behavior: "ok: HEAD advanced"
 
-  - step: "verify loop_status.md was updated (new entry present)"
-    command: "HEAD_AFTER=$(git rev-parse HEAD) && git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null | grep -q 'plan/loop_status.md' && echo \"ok: loop_status.md changed\" || { echo \"FAIL: loop_status.md not modified in new commit(s)\"; git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null || echo '(no diff)'; exit 1; }"
-    timeout_ms: 5000
-    expected_behavior: "ok: loop_status.md changed"
+  - step: "verify a plan/ file was updated (ledger or finding filed)"
+    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: plan/ changed (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh plan-commit /tmp/opencode-e2e-head-before; fi"
+    timeout_ms: 150000
+    expected_behavior: "ok: plan/ changed"
 
   - step: "verify remote branch HEAD advanced"
-    command: "REMOTE_AFTER=$(git ls-remote origin HEAD | awk '{print $1}') && REMOTE_BEFORE=$(cat /tmp/opencode-e2e-remote-head-before) && [ \"$REMOTE_AFTER\" != \"$REMOTE_BEFORE\" ] && echo \"ok: remote HEAD advanced $REMOTE_BEFORE -> $REMOTE_AFTER\" || { echo \"FAIL: remote HEAD unchanged ($REMOTE_BEFORE)\"; exit 1; }"
-    timeout_ms: 15000
+    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: remote HEAD advanced (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh remote-head /tmp/opencode-e2e-remote-head-before; fi"
+    timeout_ms: 150000
     expected_behavior: "ok: remote HEAD advanced"
 
   - step: "cleanup temp files"
-    command: "rm -f /tmp/opencode-e2e-head-before /tmp/opencode-e2e-remote-head-before && echo \"ok: cleaned up\""
+    command: "rm -f /tmp/opencode-e2e-head-before /tmp/opencode-e2e-remote-head-before /tmp/opencode-e2e-mode && echo \"ok: cleaned up\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
@@ -64,8 +89,8 @@ observability:
     - "@trace spec:forge-push-credential-channel"
   expected_log: >
     OpenCode-prompt E2E smoke: forge launched (exit=0), HEAD advanced
-    with new commit, loop_status.md updated, and remote HEAD advanced
-    via git push relay through git-mirror.
+    with new commit in plan/, and remote HEAD advanced via git push
+    relay through git-mirror.
   log_fields:
     spec: "meta-orchestration"
     test: "opencode-prompt-e2e-shape"

@@ -85,6 +85,7 @@ inject_startup_context "$PROJECT_DIR"
 # ── Agent binary (EVERY_LAUNCH install/update) ─────────────
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 require_codex
+[ -x "$CX_BIN" ] || harness_missing_fatal codex
 
 # ── Banner ──────────────────────────────────────────────────
 show_banner "codex"

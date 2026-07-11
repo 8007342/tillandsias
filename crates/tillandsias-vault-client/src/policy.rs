@@ -18,6 +18,10 @@ const FORGE_HCL: &str = include_str!("../../../images/vault/policies/forge.hcl")
 const TRAY_HCL: &str = include_str!("../../../images/vault/policies/tray.hcl");
 const INFERENCE_HCL: &str = include_str!("../../../images/vault/policies/inference.hcl");
 const GITHUB_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/github-login.hcl");
+const CLAUDE_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/claude-login.hcl");
+const CODEX_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/codex-login.hcl");
+const ANTIGRAVITY_LOGIN_HCL: &str =
+    include_str!("../../../images/vault/policies/antigravity-login.hcl");
 
 /// Named policy bound to a Vault token.
 ///
@@ -26,6 +30,9 @@ const GITHUB_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/gith
 /// - `Tray` — full CRUD on `secret/*` for rotation flows.
 /// - `Inference` — empty placeholder (no secrets needed today).
 /// - `GithubLogin` — write-capable policy for the one-shot github-login container.
+/// - `ClaudeLogin`/`CodexLogin`/`AntigravityLogin` — write-capable policies for
+///   the one-shot provider-login containers (`run_provider_login` mints role
+///   `<provider>-login`); scoped to `secret/data/<provider>/oauth` only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Policy {
     GitMirror,
@@ -33,6 +40,9 @@ pub enum Policy {
     Tray,
     Inference,
     GithubLogin,
+    ClaudeLogin,
+    CodexLogin,
+    AntigravityLogin,
 }
 
 impl Policy {
@@ -45,6 +55,9 @@ impl Policy {
             Policy::Tray => "tray-policy",
             Policy::Inference => "inference-policy",
             Policy::GithubLogin => "github-login-policy",
+            Policy::ClaudeLogin => "claude-login-policy",
+            Policy::CodexLogin => "codex-login-policy",
+            Policy::AntigravityLogin => "antigravity-login-policy",
         }
     }
 
@@ -58,6 +71,9 @@ impl Policy {
             Policy::Tray => "images/vault/policies/tray.hcl",
             Policy::Inference => "images/vault/policies/inference.hcl",
             Policy::GithubLogin => "images/vault/policies/github-login.hcl",
+            Policy::ClaudeLogin => "images/vault/policies/claude-login.hcl",
+            Policy::CodexLogin => "images/vault/policies/codex-login.hcl",
+            Policy::AntigravityLogin => "images/vault/policies/antigravity-login.hcl",
         }
     }
 
@@ -71,6 +87,9 @@ impl Policy {
             Policy::Tray => TRAY_HCL,
             Policy::Inference => INFERENCE_HCL,
             Policy::GithubLogin => GITHUB_LOGIN_HCL,
+            Policy::ClaudeLogin => CLAUDE_LOGIN_HCL,
+            Policy::CodexLogin => CODEX_LOGIN_HCL,
+            Policy::AntigravityLogin => ANTIGRAVITY_LOGIN_HCL,
         }
     }
 
@@ -82,6 +101,9 @@ impl Policy {
             Policy::Tray,
             Policy::Inference,
             Policy::GithubLogin,
+            Policy::ClaudeLogin,
+            Policy::CodexLogin,
+            Policy::AntigravityLogin,
         ]
     }
 }
@@ -123,6 +145,9 @@ mod tests {
         assert_eq!(Policy::Tray.name(), "tray-policy");
         assert_eq!(Policy::Inference.name(), "inference-policy");
         assert_eq!(Policy::GithubLogin.name(), "github-login-policy");
+        assert_eq!(Policy::ClaudeLogin.name(), "claude-login-policy");
+        assert_eq!(Policy::CodexLogin.name(), "codex-login-policy");
+        assert_eq!(Policy::AntigravityLogin.name(), "antigravity-login-policy");
     }
 
     #[test]

@@ -73,6 +73,7 @@ clone_project_from_mirror
 # ── Claude Code + OpenSpec (hard-installed) ────────────────
 # @trace spec:default-image, spec:forge-shell-tools
 require_claude
+[ -x "$CC_BIN" ] || harness_missing_fatal claude-code
 require_openspec
 
 # @trace spec:forge-offline, spec:podman-secrets-integration

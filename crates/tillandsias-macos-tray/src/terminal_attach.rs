@@ -153,8 +153,18 @@ pub fn applescript_for_terminal_app(command: &str) -> String {
 /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
 pub fn applescript_for_screen_attach(slave_path: &str) -> String {
     let escaped = applescript_escape(slave_path);
+    // Order 269 (F-G): when the PTY session ends, `screen` exits and the
+    // window used to strand the operator at a bare prompt showing only
+    // '[screen is terminating]' — indistinguishable from a crash (three
+    // login windows piled up like this in the 2026-07-10 attended smoke).
+    // Print an unmistakable end-of-session banner, then `exit` so Terminal
+    // profiles configured to close-on-clean-exit reclaim the window
+    // automatically; other profiles keep the window with the banner as the
+    // last line.
     format!(
-        "tell application \"Terminal\"\n    do script \"screen {escaped}\"\n    activate\nend tell"
+        "tell application \"Terminal\"\n    do script \"screen {escaped}; \
+         echo '[tillandsias] session ended \u{2014} you may close this window.'; exit\"\n    \
+         activate\nend tell"
     )
 }
 
@@ -368,7 +378,7 @@ mod tests {
     fn screen_attach_wraps_slave_path_in_do_script() {
         let snippet = applescript_for_screen_attach("/dev/ttys005");
         assert!(snippet.contains("tell application \"Terminal\""));
-        assert!(snippet.contains("do script \"screen /dev/ttys005\""));
+        assert!(snippet.contains("do script \"screen /dev/ttys005;"));
         assert!(snippet.contains("activate"));
     }
 
@@ -378,7 +388,24 @@ mod tests {
         // Unrealistic path with embedded quotes — verify AppleScript
         // escaping survives so the `do script` literal parses.
         let snippet = applescript_for_screen_attach(r#"/tmp/with"weird\path"#);
-        assert!(snippet.contains(r#"do script "screen /tmp/with\"weird\\path""#));
+        assert!(snippet.contains(r#"do script "screen /tmp/with\"weird\\path;"#));
+    }
+
+    /// Order 269 (F-G) pin: session end must be unmistakable — the
+    /// window prints a banner and the wrapping shell exits (so
+    /// close-on-exit Terminal profiles reclaim the window) instead of
+    /// stranding the operator at a dead prompt.
+    #[test]
+    fn screen_attach_ends_with_banner_and_exit() {
+        let snippet = applescript_for_screen_attach("/dev/ttys005");
+        assert!(
+            snippet.contains("session ended"),
+            "end-of-session banner missing: {snippet}"
+        );
+        assert!(
+            snippet.contains("; exit\""),
+            "wrapping shell must exit after screen ends: {snippet}"
+        );
     }
 
     /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)

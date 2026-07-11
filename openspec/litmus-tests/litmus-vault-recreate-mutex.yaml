@@ -1,0 +1,44 @@
+# @trace spec:tillandsias-vault
+name: litmus:vault-recreate-mutex
+spec: tillandsias-vault
+phase: pre-build
+description: >-
+  Order 235 (R7): vault recreate (ensure_vault_running, exclusive flock on
+  the vault resource) is mutually exclusive with lease holders — every
+  exec-based Vault accessor (kv get, token/key writes, approle lease mint)
+  holds the same resource SHARED, and the minted AppRoleSecretLease carries
+  the shared guard for its whole lifetime so a recreate waits for in-flight
+  login flows. The health wait retries transient "container is stopped" /
+  "no such container" with a bounded attempt cap. STEP 1 proves the
+  shared/exclusive flock semantics in-process; STEP 2 source-audits the
+  wiring. Single-line commands + explicit patterns per the order-256 runner
+  constraints.
+severity: high
+size: quick
+
+preconditions:
+  - cargo workspace builds
+
+critical_path:
+  - step: "in-process proof: shared holders coexist; exclusive and shared mutually exclude"
+    command: "cargo test -p tillandsias-headless resource_lock::tests::exclusive_and_shared_mutually_exclude -- --exact 2>&1 | grep 'exclusive_and_shared_mutually_exclude ... ok' && echo RW-LOCK-SEMANTICS-OK"
+    timeout_ms: 120000
+    success_pattern: "RW-LOCK-SEMANTICS-OK"
+    failure_pattern: "FAILED|panicked"
+  - step: "source audit: 5 shared-holder sites + lease-held guard + exclusive recreate + bounded transient retry"
+    command: "test $(grep -c vault_stability_lease crates/tillandsias-headless/src/vault_bootstrap.rs) -ge 6 && grep -q _stability crates/tillandsias-headless/src/vault_bootstrap.rs && grep -q 'attempt == 3' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -q resource_lock::acquire crates/tillandsias-headless/src/vault_bootstrap.rs && echo VAULT-RECREATE-MUTEX-WIRED"
+    timeout_ms: 5000
+    success_pattern: "VAULT-RECREATE-MUTEX-WIRED"
+    failure_pattern: "No such file"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "VAULT-RECREATE-MUTEX-WIRED"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "vault-recreate-mutex"
+
+rollback:
+  on_failure: "a vault accessor dropped its vault_stability_lease, the lease no longer carries the guard, or the bounded retry cap was removed"
+  command: "grep -n 'vault_stability_lease\\|attempt == 3' crates/tillandsias-headless/src/vault_bootstrap.rs"

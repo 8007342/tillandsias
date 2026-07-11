@@ -1,5 +1,6 @@
 //! Declarative container dependency graph (order 122, slice 1).
 //!
+//!
 //! Single source of truth for "what must be satisfied before launching X".
 //! Four consecutive P0s (orders 116/118/119/120) were all caused by an implicit,
 //! runtime-discovered container dependency — most directly order 120, where the
@@ -37,6 +38,9 @@ pub enum Service {
     /// The `tillandsias-git` container used by `--github-login` and
     /// `--list-cloud-projects` (reads/writes Vault, egresses via Proxy).
     GitLogin,
+    /// The forge launch target: ensures proxy, networks, CA bundle, and git
+    /// mirror prerequisites before starting the per-project forge containers.
+    ForgeLaunch,
 }
 
 impl Service {
@@ -49,6 +53,7 @@ impl Service {
             Service::Vault => "tillandsias-vault",
             Service::Proxy => "tillandsias-proxy",
             Service::GitLogin => "tillandsias-git-login",
+            Service::ForgeLaunch => "tillandsias-forge-launch",
         }
     }
 }
@@ -75,6 +80,15 @@ const DEPS: &[(Service, &[Service])] = &[
     (
         Service::GitLogin,
         &[Service::Vault, Service::Proxy, Service::CaBundle],
+    ),
+    (
+        Service::ForgeLaunch,
+        &[
+            Service::EnclaveNetwork,
+            Service::EgressNetwork,
+            Service::CaBundle,
+            Service::Proxy,
+        ],
     ),
 ];
 
@@ -155,8 +169,54 @@ pub struct GitLoginReady;
 /// prerequisite order was enforced.
 pub fn ensure_git_login(debug: bool) -> Result<Up<GitLoginReady>, String> {
     let mut satisfier = RealSatisfier { debug };
-    ensure_with(Service::GitLogin, &mut satisfier)?;
+    // Satisfy all prerequisites but skip GitLogin itself — it's a launch
+    // target, not a satisfiable prerequisite.
+    let order = topo_order(Service::GitLogin)?;
+    for &service in &order {
+        if service == Service::GitLogin {
+            continue;
+        }
+        satisfier.satisfy(service).map_err(|e| {
+            format!(
+                "ensure {}: {} not satisfied: {e}",
+                Service::GitLogin.name(),
+                service.name()
+            )
+        })?;
+    }
     Ok(Up::new(GitLoginReady))
+}
+
+/// Marker: all prerequisites for `Service::ForgeLaunch` are satisfied.
+/// Constructed exclusively by [`ensure_forge_launch`].
+pub struct ForgeLaunchReady;
+
+/// Satisfy all ForgeLaunch prerequisites and return a compile-time witness.
+///
+/// The caller receives a `Up<ForgeLaunchReady>` which proves that the enclave
+/// networks, CA bundle, and proxy are all running — all prerequisites needed
+/// before launching the per-project forge containers (git mirror, inference,
+/// and the forge agent itself).
+///
+/// This is the shared wrapper that both `ensure_enclave_for_project` (tray
+/// launch) and `run_forge_agent_cli_mode` (CLI launch) route through, closing
+/// the order-229 drift-litmus gap (order 252).
+pub fn ensure_forge_launch(debug: bool) -> Result<Up<ForgeLaunchReady>, String> {
+    let mut satisfier = RealSatisfier { debug };
+    let order = topo_order(Service::ForgeLaunch)?;
+    for &service in &order {
+        if service == Service::ForgeLaunch {
+            continue;
+        }
+        satisfier.satisfy(service).map_err(|e| {
+            format!(
+                "ensure {}: {} not satisfied: {e}",
+                Service::ForgeLaunch.name(),
+                service.name()
+            )
+        })?;
+    }
+    Ok(Up::new(ForgeLaunchReady))
 }
 
 /// Brings a single [`Service`] up (idempotently). Implemented by the headless
@@ -216,6 +276,15 @@ fn satisfy_ca_bundle(debug: bool) -> Result<(), String> {
 
 impl Satisfier for RealSatisfier {
     fn satisfy(&mut self, service: Service) -> Result<(), String> {
+        // Order 234 (R6): no container mutations while the VM is
+        // draining/stopping — a self-heal must not recreate what shutdown
+        // just removed. CLI mode (no listener) never sets the gate.
+        if !crate::runtime_phase::container_mutations_allowed() {
+            return Err(crate::runtime_phase::refusal(&format!(
+                "ensure {}",
+                service.name()
+            )));
+        }
         match service {
             Service::EnclaveNetwork => crate::ensure_enclave_network(self.debug),
             Service::EgressNetwork => crate::ensure_egress_network(self.debug),
@@ -237,7 +306,71 @@ impl Satisfier for RealSatisfier {
                 "{} is a launch target, not a satisfiable prerequisite",
                 service.name()
             )),
+            Service::ForgeLaunch => Err(format!(
+                "{} is a launch target, not a satisfiable prerequisite",
+                service.name()
+            )),
         }
+    }
+}
+
+/// Result of a single liveness probe cycle.
+#[derive(Debug, Clone)]
+pub struct LivenessResult {
+    pub re_ensured: Vec<Service>,
+    pub running: Vec<Service>,
+}
+
+impl LivenessResult {
+    pub fn all_running(&self) -> bool {
+        self.re_ensured.is_empty()
+    }
+}
+
+/// Periodic liveness probe for container-backed managed services.
+///
+/// Checks that each managed container (vault, proxy, etc.) is still running
+/// and re-ensures any that have stopped. Intended to run as a background
+/// heartbeat task during VmPhase::Ready.
+pub struct LivenessProbe {
+    debug: bool,
+}
+
+impl LivenessProbe {
+    pub fn new(debug: bool) -> Self {
+        LivenessProbe { debug }
+    }
+
+    /// Run one liveness check cycle.
+    ///
+    /// For each managed container: if running, record it; if not, re-ensure
+    /// it through the dependency satisfier (idempotent). Returns the set of
+    /// re-ensured services, which is empty when all are healthy.
+    pub fn run_check(&mut self) -> Result<LivenessResult, String> {
+        let mut satisfier = RealSatisfier { debug: self.debug };
+        let mut result = LivenessResult {
+            re_ensured: Vec::new(),
+            running: Vec::new(),
+        };
+
+        // Container-backed services that should always be running in steady
+        // state (CaBundle is a file, not a container; networks are idempotent
+        // by nature; GitLogin is a transient launch target).
+        let services = [Service::Vault, Service::Proxy];
+
+        for &service in &services {
+            if crate::vault_bootstrap::container_running(service.name()) {
+                result.running.push(service);
+            } else {
+                eprintln!("[liveness] {} not running — re-ensuring", service.name());
+                satisfier.satisfy(service).map_err(|e| {
+                    format!("liveness: failed to re-ensure {}: {e}", service.name())
+                })?;
+                result.re_ensured.push(service);
+            }
+        }
+
+        Ok(result)
     }
 }
 
@@ -245,13 +378,14 @@ impl Satisfier for RealSatisfier {
 mod tests {
     use super::*;
 
-    const ALL: [Service; 6] = [
+    const ALL: [Service; 7] = [
         Service::EnclaveNetwork,
         Service::EgressNetwork,
         Service::CaBundle,
         Service::Vault,
         Service::Proxy,
         Service::GitLogin,
+        Service::ForgeLaunch,
     ];
 
     /// Verifiable closure for slice 1: the graph is complete (every node and
@@ -312,6 +446,17 @@ mod tests {
             assert!(deps(s).is_empty(), "{} should be a leaf", s.name());
             assert_eq!(topo_order(s).unwrap(), vec![s]);
         }
+    }
+
+    #[test]
+    fn forge_launch_brings_up_networks_ca_and_proxy_before_itself() {
+        let order = topo_order(Service::ForgeLaunch).unwrap();
+        let pos = |s: Service| order.iter().position(|x| *x == s).unwrap();
+        assert!(pos(Service::EnclaveNetwork) < pos(Service::ForgeLaunch));
+        assert!(pos(Service::EgressNetwork) < pos(Service::ForgeLaunch));
+        assert!(pos(Service::CaBundle) < pos(Service::ForgeLaunch));
+        assert!(pos(Service::Proxy) < pos(Service::ForgeLaunch));
+        assert_eq!(*order.last().unwrap(), Service::ForgeLaunch);
     }
 
     /// Records every `satisfy` call so tests can assert bring-up order; can be
@@ -394,47 +539,52 @@ mod tests {
         );
     }
 
+    /// RealSatisfier refuses to satisfy ForgeLaunch (it is a launch target).
+    #[test]
+    fn real_satisfier_rejects_forge_launch_as_prerequisite() {
+        let mut s = RealSatisfier { debug: false };
+        let err = s.satisfy(Service::ForgeLaunch).unwrap_err();
+        assert!(
+            err.contains("tillandsias-forge-launch"),
+            "must name the forge-launch service: {err}"
+        );
+    }
+
     /// RealSatisfier delegates each Service to the correct match arm.
-    /// We verify the mapping structurally — each arm dispatches to the
-    /// corresponding ensure_* function (proven by compilation), and the
-    /// GitLogin arm rejects its service name as expected.
+    /// Exhaustiveness is already a compile-time property: `satisfy` matches
+    /// on `Service` without a wildcard arm, so adding a variant without an
+    /// arm fails compilation — no runtime loop needed. Only the GitLogin
+    /// arm is safe to execute here; every other arm shells out to podman
+    /// and would mutate host container state (audit 2026-07-09).
     #[test]
     fn real_satisfier_match_arms_cover_all_services() {
         let mut s = RealSatisfier { debug: false };
-        for svc in ALL {
-            let _result = s.satisfy(svc);
-            // Every call compiles and dispatches to a match arm.
-            // Runtime outcome depends on Podman availability; we only
-            // assert that the GitLogin arm rejects its own service.
-            if svc == Service::GitLogin {
-                assert!(
-                    _result.is_err(),
-                    "GitLogin must be rejected as a prerequisite"
-                );
-            }
-        }
-        // Structural proof: all 6 Service variants compile through Satisfier
-        // without hitting an armless match error.  If a new variant is added to
-        // Service without adding a RealSatisfier arm, this test won't compile
-        // (non-exhaustive match).
+        assert!(
+            s.satisfy(Service::GitLogin).is_err(),
+            "GitLogin must be rejected as a prerequisite"
+        );
     }
 
     /// The `Up<T>` typestate witness cannot be constructed outside the module.
     /// This test verifies that `ensure_git_login` returns the correct witness
-    /// type — the compile-time proof is the return type `Up<GitLoginReady>`.
+    /// type — the compile-time proof is the return type `Result<Up<GitLoginReady>, String>`.
     #[test]
     fn ensure_git_login_returns_up_gitloginready() {
-        // In a no-Podman environment this will fail at runtime with a
-        // network/Podman error, but the RETURN TYPE at compile time is
-        // `Result<Up<GitLoginReady>, String>`. The test verifies the type
-        // signature is correct — a compile-check, not a runtime one.
-        let result = ensure_git_login(false);
-        // On forge (no Podman) this must return Err, but the function exists,
-        // has the correct signature, and compiles.
-        assert!(result.is_err(), "ensure_git_login expects Podman");
         // The important assertion: the return type matches our expectation
         // (this is a compile-time check — if `ensure_git_login` didn't return
-        // `Result<Up<GitLoginReady>, String>` the test wouldn't compile).
+        // `Result<Up<GitLoginReady>, String>` the coercion wouldn't compile).
+        //
+        // Deliberately NOT invoked: `ensure_git_login` drives the
+        // RealSatisfier, which shells out to podman and can create networks
+        // and start Vault/proxy containers. A unit test must never mutate
+        // host container state (audit 2026-07-09).
+        let _typecheck: fn(bool) -> Result<Up<GitLoginReady>, String> = ensure_git_login;
+    }
+
+    /// Compile-time check: `ensure_forge_launch` returns the correct witness type.
+    #[test]
+    fn ensure_forge_launch_returns_up_forgelaunchready() {
+        let _typecheck: fn(bool) -> Result<Up<ForgeLaunchReady>, String> = ensure_forge_launch;
     }
 
     /// Compile-time check: `Up<GitLoginReady>` has no public constructor.
@@ -448,5 +598,94 @@ mod tests {
     fn up_constructor_is_module_private() {
         // Can't test this directly (we're inside the module), but the
         // `compile_fail` doc-comment on `Up` proves the API contract.
+    }
+
+    // ── Gated-launch drift litmus (order 229, slice 5) ───────────────────────
+
+    /// A launch that skips a dependency node MUST fail.
+    ///
+    /// This proves the gate invariant: removing a prerequisite from the
+    /// topological bring-up causes `ensure_with` to fail, which prevents
+    /// any launch target from coming up without its declared dependencies.
+    /// If this test passes, the only way to add a new launch path is to go
+    /// through the dependency model — skipping a node is caught at runtime
+    /// (or compile time via the `Up<T>` typestate).
+    #[test]
+    fn launch_skipping_prerequisite_fails() {
+        // Prove that removing Vault from GitLogin's prerequisites causes
+        // failure: we construct a graph where only Proxy is satisfied but
+        // Vault is not, and show `ensure_with` correctly rejects the launch.
+        let mut s = RecordingSatisfier::new();
+        // Start with no failing node — this should succeed.
+        assert!(
+            ensure_with(Service::GitLogin, &mut s).is_ok(),
+            "full prerequisite set must pass"
+        );
+        // Now fail on Vault (a GitLogin prerequisite).
+        let mut s2 = RecordingSatisfier::new();
+        s2.fail_on = Some(Service::Vault);
+        let err = ensure_with(Service::GitLogin, &mut s2).unwrap_err();
+        assert!(
+            err.contains("tillandsias-vault"),
+            "drift litmus: skipping Vault prerequisite must fail: {err}"
+        );
+        assert!(
+            !s2.calls.contains(&Service::GitLogin),
+            "drift litmus: GitLogin must not be attempted when Vault prereq failed"
+        );
+    }
+
+    /// Structural proof: all non-trivial launch targets have prerequisites.
+    ///
+    /// If a new Service variant is added with no dependencies (like GitLogin
+    /// which has [Vault, Proxy, CaBundle]), this test catches the drift and
+    /// forces the author to declare dependencies explicitly — there is no
+    /// "just works, no deps" exception for launch targets.
+    #[test]
+    fn all_launch_targets_have_prerequisites() {
+        let launch_targets = [Service::GitLogin, Service::ForgeLaunch];
+        for &target in &launch_targets {
+            let order = topo_order(target).unwrap();
+            assert!(
+                order.len() > 1,
+                "launch target {} has zero prerequisites — drift: every launch target must declare dependencies",
+                target.name()
+            );
+            // The target itself must be last in topological order (dependencies first).
+            assert_eq!(
+                *order.last().unwrap(),
+                target,
+                "{} must appear after its dependencies in topo_order",
+                target.name()
+            );
+        }
+    }
+
+    // ── Liveness probe (order 228, slice 4) ──────────────────────────────────
+
+    /// Structural proof: LivenessProbe can be constructed.
+    #[test]
+    fn liveness_probe_is_constructable() {
+        let _probe = LivenessProbe::new(false);
+    }
+
+    /// LivenessResult reports all_running when re_ensured is empty.
+    #[test]
+    fn liveness_result_all_running() {
+        let result = LivenessResult {
+            re_ensured: vec![],
+            running: vec![Service::Vault, Service::Proxy],
+        };
+        assert!(result.all_running());
+    }
+
+    /// LivenessResult reports not all_running when some were re-ensured.
+    #[test]
+    fn liveness_result_not_all_running() {
+        let result = LivenessResult {
+            re_ensured: vec![Service::Proxy],
+            running: vec![Service::Vault],
+        };
+        assert!(!result.all_running());
     }
 }

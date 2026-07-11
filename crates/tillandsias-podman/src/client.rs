@@ -610,7 +610,18 @@ impl PodmanClient {
         build_args: &[String],
     ) -> Result<(), PodmanError> {
         debug!(tag, containerfile, context_dir, "Building image");
-        let mut args = vec!["build".into(), "-t".into(), tag.into()];
+        // Proxy-exemption class (orders 116/118/119; 4th instance 2026-07-11):
+        // containers.conf bakes http(s)_proxy=proxy:3128 into every container,
+        // but build containers are not on the enclave network, so `proxy`
+        // never resolves and any RUN needing egress (apk/dnf/npm) fails DNS.
+        // scripts/build-image.sh carries --http-proxy=false; every Rust build
+        // path must too.
+        let mut args = vec![
+            "build".into(),
+            "--http-proxy=false".into(),
+            "-t".into(),
+            tag.into(),
+        ];
         args.extend_from_slice(build_args);
         args.extend(["-f".into(), containerfile.into(), context_dir.into()]);
         let output = self.execute(OperationKind::Image, &args).await;

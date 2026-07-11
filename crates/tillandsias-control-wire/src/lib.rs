@@ -304,6 +304,15 @@ pub enum ControlMessage {
         seq: u64,
         projects: Vec<CloudProjectEntry>,
     },
+    /// In-VM headless → host: pushed when the VM-visible local project list
+    /// changes (guest-side reconciliation of the bind-mount root — the same
+    /// scan that backs `LocalProjectsReply`). Full replacement list each
+    /// time. Trailing addition: additive, no wire version bump (order 260 —
+    /// retires the host tray's last steady-state wire poll).
+    LocalProjectsPush {
+        seq: u64,
+        entries: Vec<LocalProjectEntry>,
+    },
 }
 
 /// Direction tag for `PtyData` frames.
@@ -351,6 +360,8 @@ pub enum SubscriptionTopic {
     VmStatus,
     LoginState,
     CloudProjects,
+    /// Order 260: VM-visible local projects (bind-mount root reconciliation).
+    LocalProjects,
 }
 
 /// A single VM-visible project entry returned by `LocalProjectsReply`.
@@ -443,6 +454,7 @@ impl ControlMessage {
             ControlMessage::VmStatusPush { .. } => "VmStatusPush",
             ControlMessage::LoginStatePush { .. } => "LoginStatePush",
             ControlMessage::CloudProjectsPush { .. } => "CloudProjectsPush",
+            ControlMessage::LocalProjectsPush { .. } => "LocalProjectsPush",
         }
     }
 }
@@ -862,6 +874,13 @@ mod tests {
                 },
                 "CloudProjectsPush",
             ),
+            (
+                ControlMessage::LocalProjectsPush {
+                    seq: 1,
+                    entries: vec![],
+                },
+                "LocalProjectsPush",
+            ),
         ];
         for (msg, expected) in cases {
             assert_eq!(
@@ -922,6 +941,7 @@ mod tests {
                     SubscriptionTopic::VmStatus,
                     SubscriptionTopic::LoginState,
                     SubscriptionTopic::CloudProjects,
+                    SubscriptionTopic::LocalProjects,
                 ],
             },
         });
@@ -984,6 +1004,32 @@ mod tests {
             body: ControlMessage::CloudProjectsPush {
                 seq: 205,
                 projects: vec![],
+            },
+        });
+    }
+
+    /// Order 260: LocalProjectsPush is a TRAILING variant — round-trips and
+    /// must never disturb the encoding of earlier variants (additive rule).
+    #[test]
+    fn local_projects_push_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 207,
+            body: ControlMessage::LocalProjectsPush {
+                seq: 207,
+                entries: vec![LocalProjectEntry {
+                    label: "tillandsias".into(),
+                    guest_path: "/home/forge/src/tillandsias".into(),
+                    last_seen_unix: 1_752_000_000,
+                }],
+            },
+        });
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 208,
+            body: ControlMessage::LocalProjectsPush {
+                seq: 208,
+                entries: vec![],
             },
         });
     }

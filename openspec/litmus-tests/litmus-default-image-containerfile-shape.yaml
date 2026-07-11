@@ -70,7 +70,10 @@ critical_path:
     # update-check path), so a fresh forge always gets the newest
     # harness instead of an image-build-time snapshot. Pin the
     # canonical package names in lib-common.sh, not the Containerfile.
-    command: "for package in 'opencode-ai' '@fission-ai/openspec' '@anthropic-ai/claude-code' '@openai/codex'; do grep -Fq \"$package@latest\" images/default/lib-common.sh || { echo \"FAIL: EVERY_LAUNCH agent '$package' missing\"; exit 1; }; done && echo 'ok: agents install at EVERY_LAUNCH via npm @latest'"
+    # The @latest suffix is applied dynamically (\"$pkg@latest\" in
+    # _require_harness / ensure_forge_harnesses since the 2026-07-11
+    # fail-soft refactor), so pin the names and the idiom separately.
+    command: "for package in 'opencode-ai' '@fission-ai/openspec' '@anthropic-ai/claude-code' '@openai/codex'; do grep -Fq \"$package\" images/default/lib-common.sh || { echo \"FAIL: EVERY_LAUNCH agent '$package' missing\"; exit 1; }; done && grep -Fq '@latest' images/default/lib-common.sh && echo 'ok: agents install at EVERY_LAUNCH via npm @latest'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

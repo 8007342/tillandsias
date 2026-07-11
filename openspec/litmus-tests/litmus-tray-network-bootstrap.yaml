@@ -17,67 +17,24 @@ preconditions:
 
 critical_path:
   - step: "run_opencode_mode calls ensure_router_running before its first run_container_observed"
-    # Extract the run_opencode_mode body and check the relative ordering of
-    # ensure_router_running vs the first run_container_observed call. The
-    # body runs from `fn run_opencode_mode` to the next top-level `fn `.
-    command: |
-      awk '
-        /^fn run_opencode_mode/ {in_fn=1}
-        in_fn && /ensure_router_running/ {er=NR; in_fn=2}
-        in_fn==2 && /run_container_observed/ {rc=NR; exit}
-        /^fn / && in_fn && !/run_opencode_mode/ {exit}
-      END {
-        if (er && rc && er < rc) print "ok: ensure_router_running@" er " before run_container_observed@" rc;
-        else { print "FAIL: ensure_router_running missing or after run_container_observed (er=" er " rc=" rc ")"; exit 1 }
-      }' crates/tillandsias-headless/src/main.rs
+    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-run_opencode_mode-ordering"
     timeout_ms: 5000
-    expected_behavior: "ok: ensure_router_running@<early-line> before run_container_observed@<later-line>"
+    expected_behavior: "ok: ensure_router_running@"
 
   - step: "run_observatorium_mode calls ensure_router_running before its first run_container_observed"
-    command: |
-      awk '
-        /^fn run_observatorium_mode/ {in_fn=1}
-        in_fn && /ensure_router_running/ {er=NR; in_fn=2}
-        in_fn==2 && /run_container_observed/ {rc=NR; exit}
-        /^fn / && in_fn && !/run_observatorium_mode/ {exit}
-      END {
-        if (er && rc && er < rc) print "ok: observatorium ensure_router_running@" er " before run_container_observed@" rc;
-        else { print "FAIL: observatorium router-ordering wrong (er=" er " rc=" rc ")"; exit 1 }
-      }' crates/tillandsias-headless/src/main.rs
+    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-run_observatorium_mode-ordering"
     timeout_ms: 5000
-    expected_behavior: "ok: observatorium ensure_router_running@<line> before run_container_observed@<line>"
+    expected_behavior: "ok: observatorium ensure_router_running@"
 
   - step: "ensure_enclave_for_project calls ensure_router_running before its first run_container_observed"
-    command: |
-      awk '
-        /fn ensure_enclave_for_project/ {in_fn=1}
-        in_fn && /ensure_router_running/ {er=NR; in_fn=2}
-        in_fn==2 && /run_container_observed/ {rc=NR; exit}
-        /^fn / && in_fn && !/ensure_enclave_for_project/ {exit}
-      END {
-        if (er && rc && er < rc) print "ok: ensure_enclave_for_project router@" er " before container@" rc;
-        else { print "FAIL: ensure_enclave_for_project router-ordering wrong (er=" er " rc=" rc ")"; exit 1 }
-      }' crates/tillandsias-headless/src/main.rs
+    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-ensure_enclave_for_project-ordering"
     timeout_ms: 5000
-    expected_behavior: "ok: ensure_enclave_for_project router@<line> before container@<line>"
+    expected_behavior: "ok: ensure_enclave_for_project router@"
 
   - step: "ensure_enclave_network is called before any router/container setup in each spawn path"
-    # Sanity: the existing enclave-network preamble is still there (network
-    # is allocated before router OR project containers in every path that
-    # spawns containers). Greps the four mode functions.
-    command: |
-      for fn in run_opencode_mode run_observatorium_mode ensure_enclave_for_project; do
-        awk -v want="$fn" '
-          $0 ~ "^(pub(\\(crate\\))? )?fn "want"\\(" {in_fn=1}
-          in_fn && /ensure_enclave_network/ {found=1; exit}
-          /^(pub(\\(crate\\))? )?fn / && in_fn && $0 !~ "^(pub(\\(crate\\))? )?fn "want"\\(" {exit}
-        END {
-          if (found) print "ok: " want " ensure_enclave_network present";
-          else { print "FAIL: " want " missing ensure_enclave_network"; exit 1 }
-        }' crates/tillandsias-headless/src/main.rs
-      done
+    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-ensure_enclave_network-present"
     timeout_ms: 5000
-    expected_behavior: "ok: <fn> ensure_enclave_network present"
+    expected_behavior: "ensure_enclave_network present"
 
   - step: "Step 15 plan file references the @trace litmus binding"
     command: "grep -Fq 'plan/steps/15-tray-network-bootstrap.md' crates/tillandsias-headless/src/main.rs && echo 'spawn paths cite Step 15'"
@@ -85,19 +42,7 @@ critical_path:
     expected_behavior: "spawn paths cite Step 15"
 
   - step: "Slice 4 exit-125 classifier is wired into format_observed_launch_failure"
-    # The classify_typed_launch_failure call must appear inside (or syntactically
-    # right before the parts.extend in) format_observed_launch_failure. We grep
-    # for the function name on the same line range to ensure the cascade-collapse
-    # logic hasn't been silently removed from the launch-failure path.
-    command: |
-      awk '
-        /async fn format_observed_launch_failure/ {in_fn=1}
-        in_fn && /classify_typed_launch_failure/ {found=1; exit}
-        /^}$/ && in_fn {exit}
-      END {
-        if (found) print "ok: classify_typed_launch_failure threaded into format_observed_launch_failure";
-        else { print "FAIL: classify_typed_launch_failure missing from format_observed_launch_failure body"; exit 1 }
-      }' crates/tillandsias-podman/src/client.rs
+    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-format_observed_launch_failure-classifier"
     timeout_ms: 5000
     expected_behavior: "ok: classify_typed_launch_failure threaded into format_observed_launch_failure"
 

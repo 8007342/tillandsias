@@ -453,25 +453,40 @@ impl VzRuntime {
         let user_data_content = r#"#!/bin/bash
 set -euo pipefail
 
-# Inject SSH keys for debugging
-mkdir -p /root/.ssh
-chmod 700 /root/.ssh
-echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDGkwkOhAxGExE4dJUbIOMaVf8g0m0nSAp/JGzOxILfW tlatoani@Tlatoanis-MacBook-Air.local" >> /root/.ssh/authorized_keys
-chmod 600 /root/.ssh/authorized_keys
-
-mkdir -p /home/fedora/.ssh
-chmod 700 /home/fedora/.ssh
-echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDGkwkOhAxGExE4dJUbIOMaVf8g0m0nSAp/JGzOxILfW tlatoani@Tlatoanis-MacBook-Air.local" >> /home/fedora/.ssh/authorized_keys
-chown -R fedora:fedora /home/fedora/.ssh
-chmod 600 /home/fedora/.ssh/authorized_keys
+# Order 272 (guest-ssh-backdoor-closure): the secure control wire is the
+# ONLY host<->guest channel. No SSH keys are injected, and every sshd
+# surface is masked — the NAT-reachable daemon AND the AF_VSOCK socket
+# systemd-ssh-generator would auto-create (the 'ssh vsock%3' boot-banner
+# hint). The Tlatoani's isolation directive, 2026-07-10: host and guest
+# never share a trusted network; the guest is fully isolated.
+systemctl disable --now sshd.service sshd.socket 2>/dev/null || true
+systemctl mask sshd.service sshd.socket 2>/dev/null || true
+systemctl mask sshd-vsock.socket sshd-unix-local.socket 2>/dev/null || true
+mkdir -p /etc/systemd/system-generators
+ln -sf /dev/null /etc/systemd/system-generators/systemd-ssh-generator
 
 # Install podman + dependencies for the enclave
+echo "Waiting for network..."
+until curl -sI https://mirrors.fedoraproject.org >/dev/null 2>&1; do
+  echo "Still waiting for network..."
+  sleep 1
+done
+
 dnf install -y podman
 systemctl enable podman.socket
 systemctl start podman.socket
 
 # Mount host ~/src via virtio-fs when the VZ config provides the home-src tag.
+# PERSISTED via /etc/fstab (2026-07-10 attended-smoke finding): cloud-init
+# runs first boot only, so a mount issued here evaporates on every
+# subsequent boot — the guest then scans an empty /home/forge/src
+# (EnumerateLocalProjects returns []) and fetch-headless.sh can't see the
+# staged guest binary. nofail keeps boots green when the VZ config omits
+# the share.
 mkdir -p /home/forge/src
+if ! grep -q "^home-src " /etc/fstab; then
+  echo "home-src /home/forge/src virtiofs nofail 0 0" >> /etc/fstab
+fi
 if ! mountpoint -q /home/forge/src; then
   mount -t virtiofs home-src /home/forge/src || true
 fi
@@ -537,6 +552,7 @@ Before=tillandsias-headless.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+Environment=HOME=/root
 ExecStart=/usr/local/lib/tillandsias/fetch-headless.sh
 TimeoutStartSec=300s
 StandardOutput=journal+console
@@ -555,6 +571,16 @@ Requires=tillandsias-headless-fetch.service
 [Service]
 Type=exec
 ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
+Environment=HOME=/root
+# XDG_RUNTIME_DIR must match the value the tray's control-wire exec preamble
+# exports for guest login/satisfier processes (macos-tray diagnose.rs github
+# login lane). The order-232 per-resource flocks live under
+# $XDG_RUNTIME_DIR/tillandsias-locks; if this unit leaves the variable unset,
+# resource_lock::lock_dir() falls back to /tmp/tillandsias-locks-0 while the
+# exec'd satisfier locks under /run/user/0/tillandsias-locks — two disjoint
+# lock namespaces, and the vault name-in-use race (order 259) reproduces on
+# every fresh-VM first login. Verified live 2026-07-09 on macOS.
+Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 Environment=TILLANDSIAS_SECURE_CONTROL_WIRE=__SECURE_CONTROL_WIRE__
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
@@ -660,6 +686,32 @@ fn convert_qcow2_to_raw(
         let _ = std::fs::remove_file(&raw_part);
         return Err(format!("qemu-img convert failed: exit {status}"));
     }
+    // Grow the raw disk before first boot. The Fedora Cloud qcow2 is a ~5 GB
+    // virtual disk — nowhere near enough once the forge-base image builds its
+    // full dev toolchain (558 packages: gcc, valgrind, delve, gopls, rust,
+    // node, python…) on top of the base OS, podman's overlay store for every
+    // enclave image, and a cloned project. Symptom before this fix
+    // (2026-07-11 operator session): EVERY agent/maintenance attach opened a
+    // PTY, streamed the forge-base package downloads, then died with
+    // 'installing package … needs NNN MB more space on the / filesystem' →
+    // 'Error: building at STEP "RUN microdnf install …"' → PtyClose code=1,
+    // i.e. a blank terminal that "times out". Fedora Cloud's cloud-init
+    // (cc_growpart + cc_resizefs) grows the root partition/filesystem to fill
+    // the disk on first boot, so simply enlarging the raw file here is enough.
+    // The raw image stays sparse, so a 64 GiB virtual disk does not consume
+    // 64 GiB on the host until actually written.
+    let resize = std::process::Command::new("qemu-img")
+        .arg("resize")
+        .arg("-f")
+        .arg("raw")
+        .arg(&raw_part)
+        .arg(GUEST_DISK_SIZE)
+        .status()
+        .map_err(|e| format!("spawn qemu-img resize: {e}"))?;
+    if !resize.success() {
+        let _ = std::fs::remove_file(&raw_part);
+        return Err(format!("qemu-img resize failed: exit {resize}"));
+    }
     std::fs::rename(&raw_part, raw_dest).map_err(|e| {
         let _ = std::fs::remove_file(&raw_part);
         format!(
@@ -671,6 +723,14 @@ fn convert_qcow2_to_raw(
     on_phase("Fedora Cloud image ready");
     Ok(())
 }
+
+/// Virtual size the Fedora Cloud raw disk is grown to before first boot so
+/// the forge-base toolchain + podman overlay store + project checkouts fit.
+/// A string like "250G" for `qemu-img resize`. The raw image stays SPARSE,
+/// so this costs no host disk until actually written — the original ~5 GB
+/// disk was the hard wall every agent attach hit (2026-07-11). Generous by
+/// operator direction; trim later if needed. See `convert_qcow2_to_raw`.
+const GUEST_DISK_SIZE: &str = "250G";
 
 /// Fetch the xz-compressed asset at `xz_url` to `xz_temp_dest`,
 /// decompress to `final_dest` via `xz -d`, then SHA-256-verify the
@@ -1905,6 +1965,42 @@ mod tests {
         assert_eq!(cfg.memory_bytes, 4 * 1024 * 1024 * 1024);
     }
 
+    /// 2026-07-11: the raw disk MUST be grown past the ~5 GB Fedora Cloud
+    /// default before first boot, or the forge-base image build runs the
+    /// root filesystem out of space and every agent attach dies with a
+    /// blank timing-out terminal. Pin the resize (source scan — the resize
+    /// runs in the download-gated convert path) so it can't silently
+    /// regress, and require a roomy target.
+    #[test]
+    fn convert_grows_raw_disk_before_first_boot() {
+        let source = include_str!("vz.rs");
+        assert!(
+            source.contains("const GUEST_DISK_SIZE: &str"),
+            "the guest disk-size constant must exist"
+        );
+        assert!(
+            source.contains("\"qemu-img\"")
+                && source.contains(".arg(\"resize\")")
+                && source.contains(".arg(GUEST_DISK_SIZE)"),
+            "convert_qcow2_to_raw must qemu-img resize the raw disk to GUEST_DISK_SIZE \
+             before first boot (else forge-base build fills the ~5 GB default)"
+        );
+        // The size string must parse as a generous GiB value (>= 32 GiB).
+        let size = source
+            .split("const GUEST_DISK_SIZE: &str =")
+            .nth(1)
+            .and_then(|t| t.split('"').nth(1))
+            .expect("GUEST_DISK_SIZE literal");
+        let gib: u64 = size
+            .trim_end_matches(['G', 'g'])
+            .parse()
+            .expect("GUEST_DISK_SIZE must be an <N>G literal");
+        assert!(
+            gib >= 32,
+            "guest disk must be >= 32 GiB for the forge toolchain + overlay store, got {size}"
+        );
+    }
+
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
     #[test]
     fn vz_guest_config_uses_share_tag_home_src() {
@@ -2102,9 +2198,49 @@ mod tests {
         assert!(
             headless_unit.contains("Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200")
         );
+        // Order 259: the boot-path bootstrap and the exec'd login satisfier
+        // must resolve the SAME $XDG_RUNTIME_DIR/tillandsias-locks dir or the
+        // order-232 vault flock never contends across the two processes and
+        // the name-in-use race returns. /run/user/0 is the value the tray's
+        // github-login exec preamble exports (macos-tray diagnose.rs).
+        assert!(
+            headless_unit.contains("Environment=XDG_RUNTIME_DIR=/run/user/0"),
+            "headless unit must pin XDG_RUNTIME_DIR to the satisfier's lock namespace (order 259)"
+        );
         assert!(
             !headless_unit.contains("Requires=podman.socket"),
             "podman.socket is a wanted readiness input, not a hard dependency for diagnostics"
+        );
+        // 2026-07-10 attended smoke: cloud-init runs first boot only, so
+        // the home-src virtio-fs mount MUST be persisted to /etc/fstab or
+        // every subsequent boot scans an empty /home/forge/src (local
+        // projects vanish from the tray, staged headless never picked up).
+        assert!(
+            source.contains("home-src /home/forge/src virtiofs nofail 0 0"),
+            "cloud-init must persist the home-src virtio-fs mount in /etc/fstab \
+             (first-boot-only mounts evaporate on reboot)"
+        );
+        // Order 272 (guest-ssh-backdoor-closure): the control wire is the
+        // ONLY host<->guest channel. Scope the scan to the user-data
+        // template window (the whole-file source contains these needles in
+        // this very test), then fail loud if key injection returns or the
+        // sshd surfaces (NAT daemon + systemd-ssh-generator's AF_VSOCK
+        // socket) lose their masks.
+        let user_data = source
+            .split("let user_data_content = r#\"")
+            .nth(1)
+            .and_then(|tail| tail.split("\"#").next())
+            .expect("user-data template window");
+        assert!(
+            !user_data.contains("authorized_keys") && !user_data.contains("ssh-ed25519"),
+            "cloud-init must not inject SSH keys — the guest is reachable only \
+             via the secure control wire (order 272; The Tlatoani 2026-07-10)"
+        );
+        assert!(
+            user_data.contains("systemctl mask sshd.service sshd.socket")
+                && user_data.contains("/etc/systemd/system-generators/systemd-ssh-generator"),
+            "cloud-init must mask sshd and the systemd-ssh-generator vsock \
+             surface (order 272)"
         );
     }
 

@@ -77,6 +77,10 @@ mod runtime_assets;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
+// Advisory per-resource flocks for container check+act sections (order 232, R4).
+mod resource_lock;
+// Process-global VmPhase mirror gating container mutations (order 234, R6).
+mod runtime_phase;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -1533,6 +1537,22 @@ fn ensure_image_exists(
     image_tag: &str,
     debug: bool,
 ) -> Result<(), String> {
+    // Order 232 (R4): serialize the exists-check + build per image so two
+    // parallel launches never build the same image concurrently. 900s bound:
+    // a cold forge/chromium build takes minutes; the loser should wait for
+    // the winner's image, not race it. Recursion into base images (forge ->
+    // forge-base) nests DISTINCT locks in one direction only — no cycle.
+    // Order 234 (R6): image builds are container-substrate mutations too.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal(&format!(
+            "ensure image {image_name}"
+        )));
+    }
+    let _image_lock = resource_lock::acquire(
+        &format!("image-{image_name}"),
+        std::time::Duration::from_secs(900),
+        debug,
+    )?;
     let (containerfile, context_dir) = image_specs(root, image_name)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -1567,7 +1587,7 @@ fn ensure_image_exists(
         }
     }
 
-    let build_args = if image_name == "chromium-framework" {
+    let mut build_args = if image_name == "chromium-framework" {
         vec![
             "--build-arg".to_string(),
             format!(
@@ -1583,6 +1603,8 @@ fn ensure_image_exists(
     } else {
         Vec::new()
     };
+    build_args.push("--dns".to_string());
+    build_args.push("8.8.8.8".to_string());
 
     rt.block_on(async move {
         if client.image_exists(image_tag).await {
@@ -1625,6 +1647,15 @@ fn ensure_versioned_images(
 }
 
 fn ensure_enclave_network(debug: bool) -> Result<(), String> {
+    // Order 232 (R4): serialize check+create so parallel launches never race
+    // `podman network create` for the same network. Held across the nested
+    // egress ensure (distinct lock, one-directional nesting — no cycle).
+    // Order 234 (R6): no network creation during drain/stop.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal("ensure tillandsias-enclave network"));
+    }
+    let _net_lock =
+        resource_lock::acquire("network-enclave", std::time::Duration::from_secs(60), debug)?;
     // The dual-homed proxy/git-service need the egress network to exist on every
     // path that ensures the enclave, so ensure it first — even when the enclave
     // network already exists (early return below would otherwise skip it).
@@ -1783,6 +1814,14 @@ fn render_enclave_resolved_config(gateway: &str) -> String {
 /// runtime after `podman system reset --force`.
 /// @trace spec:enclave-network, spec:proxy-container
 fn ensure_egress_network(debug: bool) -> Result<(), String> {
+    // Order 232 (R4): the exists-check + create below is exactly the
+    // check+act race window; serialize it.
+    // Order 234 (R6): no network creation during drain/stop.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal("ensure tillandsias-egress network"));
+    }
+    let _net_lock =
+        resource_lock::acquire("network-egress", std::time::Duration::from_secs(60), debug)?;
     if tillandsias_podman::network_exists_sync(EGRESS_NET) {
         return Ok(());
     }
@@ -2017,6 +2056,24 @@ fn build_stack_common_args(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
+        // NODE_EXTRA_CA_CERTS (order 241): tell Node.js to trust the
+        // Tillandsias intermediate CA so opencode (which uses undici under
+        // the hood) can validate the proxy-issued TLS certificate during
+        // SSL bump. Without this, `opencode run --diagnostics` fails with
+        // a TLS validation error when connecting to models.dev through the
+        // MITM proxy, causing the diagnostics annex to record state=failed.
+        "--env".into(),
+        "NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt".into(),
+        // Mount the same CA cert at the path lib-common.sh's entrypoint
+        // expects ($CA_CHAIN) so the forge container builds a combined
+        // bundle that includes both the system CAs and the Tillandsias CA,
+        // exported as SSL_CERT_FILE / REQUESTS_CA_BUNDLE for non-Node
+        // tools (curl, pip, git, etc.).
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        ),
     ]);
     append_git_identity_env_args(&mut args);
     args
@@ -2067,6 +2124,16 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
 ///
 /// @trace spec:proxy-container, plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
 fn ensure_proxy_running(debug: bool) -> Result<(), String> {
+    // Order 234 (R6): refuse before waiting on the lock — a drain-time
+    // caller should fail fast, not queue behind a mutation it may not make.
+    if !runtime_phase::container_mutations_allowed() {
+        return Err(runtime_phase::refusal("ensure tillandsias-proxy"));
+    }
+    // Order 232 (R4): the running-check below plus the rm+run act section is
+    // the R4 race window (two parallel launches both saw "not running" and
+    // both ran `podman run --name tillandsias-proxy`). 300s bound covers a
+    // cold proxy image ensure inside.
+    let _proxy_lock = resource_lock::acquire("proxy", std::time::Duration::from_secs(300), debug)?;
     if crate::vault_bootstrap::container_running("tillandsias-proxy") {
         if debug {
             eprintln!("[tillandsias] enclave proxy already running");
@@ -2939,12 +3006,27 @@ fn build_forge_common_args(
     )
 }
 
+/// Remove the PER-PROJECT containers for `project_name` only.
+///
+/// Order 233 (R5, order-160 ratification): SHARED containers (proxy,
+/// inference, router) are ensure-only — owned by the vsock supervisor and
+/// removed exclusively through [`cleanup_shared_stack_if_no_running_forge`].
+/// This function used to remove tillandsias-proxy and tillandsias-inference
+/// too, which tore the shared stack out from under any OTHER project's live
+/// forge on every per-project cleanup.
 async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
-    let _ = client.remove_container("tillandsias-proxy").await;
+    // Order 234 (R6): removals also race shutdown's own teardown — skip
+    // during drain/stop (the shutdown path owns teardown then).
+    if !runtime_phase::container_mutations_allowed() {
+        eprintln!(
+            "[tillandsias] {}",
+            runtime_phase::refusal("project cleanup")
+        );
+        return;
+    }
     let _ = client
         .remove_container(&format!("tillandsias-git-{project_name}"))
         .await;
-    let _ = client.remove_container("tillandsias-inference").await;
     let _ = client
         .remove_container(&format!("tillandsias-{project_name}-forge"))
         .await;
@@ -2953,43 +3035,73 @@ async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
         .await;
 }
 
+/// Remove the SHARED stack containers. Callers MUST have verified no forge
+/// is running (order 233) — reach this only through
+/// [`cleanup_shared_stack_if_no_running_forge`]. Router is deliberately
+/// absent: it is supervisor-owned and never torn down by session cleanup.
+async fn remove_shared_stack_containers(client: &PodmanClient) {
+    // Order 234 (R6): see cleanup_stack_containers — shutdown owns teardown.
+    if !runtime_phase::container_mutations_allowed() {
+        eprintln!(
+            "[tillandsias] {}",
+            runtime_phase::refusal("shared stack removal")
+        );
+        return;
+    }
+    let _ = client.remove_container("tillandsias-proxy").await;
+    let _ = client.remove_container("tillandsias-inference").await;
+}
+
+/// Does this container's liveness require the SHARED stack (proxy,
+/// inference) to stay up? Order 289 broadened this beyond `-forge`:
+/// maintenance terminals ARE `-forge-maintenance` (already matched), but
+/// provider-login containers (`tillandsias-<provider>-login-<pid>`) and
+/// project browsers (`tillandsias-browser-<project>`) also route egress
+/// through the proxy — tearing it down under them breaks every curl with
+/// "Could not resolve proxy: proxy" (operator repro 2026-07-11).
+fn is_active_lane_container(name: &str, state: &str) -> bool {
+    let running = matches!(state.to_ascii_lowercase().as_str(), "running" | "up");
+    running
+        && (name.contains("-forge")
+            || name.contains("-login-")
+            || name.starts_with("tillandsias-browser-"))
+}
+
 async fn cleanup_shared_stack_if_no_running_forge(
     client: &PodmanClient,
     project_name: &str,
     debug: bool,
 ) {
-    let running_forges = client
+    let running_lanes: Vec<String> = client
         .list_containers("tillandsias-")
         .await
         .map(|containers| {
             containers
                 .into_iter()
-                .filter(|container| {
-                    container.name.contains("-forge")
-                        && matches!(
-                            container.state.to_ascii_lowercase().as_str(),
-                            "running" | "up"
-                        )
-                })
-                .count()
+                .filter(|container| is_active_lane_container(&container.name, &container.state))
+                .map(|container| container.name)
+                .collect()
         })
-        .unwrap_or(0);
+        .unwrap_or_default();
 
-    if running_forges != 0 {
+    if !running_lanes.is_empty() {
         if debug {
             eprintln!(
-                "[tillandsias] keeping shared stack alive; {running_forges} forge container(s) still running"
+                "[tillandsias] keeping shared stack alive; active lane container(s): {}",
+                running_lanes.join(", ")
             );
         }
         return;
     }
 
-    if debug {
-        eprintln!(
-            "[tillandsias] no active forge containers; cleaning project stack for {project_name}"
-        );
-    }
+    // Always trace shared teardown (not only under --debug): when the proxy
+    // vanishes under a live lane we need the actor in the log, not a guess
+    // (order 289 instrumentation).
+    eprintln!(
+        "[tillandsias] no active lane containers; cleaning project + shared stack for {project_name}"
+    );
     cleanup_stack_containers(client, project_name).await;
+    remove_shared_stack_containers(client).await;
 }
 
 fn build_status_check_forge_args(
@@ -3186,6 +3298,13 @@ fn build_opencode_forge_args(
         "--mount".into(),
         format!(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        ),
+        "--env".into(),
+        "NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt".into(),
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
@@ -3711,9 +3830,15 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
     let runtime_manifest_digest = runtime_assets::root_manifest_digest(&root).ok();
+    // "vault" belongs in this declarative set (order 253): it was previously
+    // built on demand inside the provider-login path only, so a fresh runtime
+    // hit its first vault build mid-login and every login re-invoked podman
+    // build. Login stays a pure runtime operation when init has run;
+    // build_vault_image keeps a fail-soft on-demand fallback.
     let images = [
         "proxy",
         "git",
+        "vault",
         "inference",
         "router",
         "chromium-core",
@@ -4050,6 +4175,12 @@ pub(crate) const BUILD_PROXY_NEUTRALIZE_VARS: [&str; 6] = [
 /// ## Build Arguments
 /// - `--build-arg CHROMIUM_CORE_IMAGE=<image>` for chromium-framework only
 /// - chromium-framework MUST be built after chromium-core to resolve the ARG
+pub(crate) fn push_udp_event(msg: &str) {
+    if let Ok(socket) = std::net::UdpSocket::bind("127.0.0.1:0") {
+        let _ = socket.send_to(msg.as_bytes(), "127.0.0.1:42421");
+    }
+}
+
 pub(crate) fn build_image_with_logging(
     root: &Path,
     image_name: &str,
@@ -4058,6 +4189,20 @@ pub(crate) fn build_image_with_logging(
     log_file: &Option<PathBuf>,
     _debug: bool,
 ) -> Result<(), String> {
+    let curated_name = match image_name {
+        "forge" | "forge-base" => "Building Forge",
+        "chromium-framework" => "Polishing Chromium",
+        "chromium-core" => "Thinkering Chromium Dev",
+        "inference" => "Loading Inference",
+        "proxy" => "Routing Proxy",
+        "git" => "Setting up Git",
+        "router" => "Routing Traffic",
+        "web" => "Serving Web",
+        "vault" => "Securing Vault",
+        _ => "Setting up containers",
+    };
+    push_udp_event(curated_name);
+
     // @trace gap:ON-005 — show progress % during image pull
     let (containerfile, context_dir) = image_specs(root, image_name)?;
 
@@ -4202,6 +4347,15 @@ fn podman_build_argv(
         "build".to_string(),
         "--format".to_string(),
         "docker".to_string(),
+        // Proxy-exemption class (orders 116/118/119, 4th instance 2026-07-11):
+        // containers.conf bakes http(s)_proxy=proxy:3128 into EVERY container,
+        // but build containers are not on the enclave network, so `proxy`
+        // never resolves and any RUN needing egress (apk/dnf/npm) fails DNS.
+        // scripts/build-image.sh has carried --http-proxy=false since the
+        // first instance; this runtime build path missed it.
+        "--http-proxy=false".to_string(),
+        "--dns".to_string(),
+        "8.8.8.8".to_string(),
         "-t".to_string(),
         identity.canonical_tag.clone(),
     ];
@@ -4460,6 +4614,9 @@ fn run_status_check(debug: bool) -> Result<(), String> {
 
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         client
             .run_container_observed(
@@ -4969,6 +5126,17 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         secret_name = config.provider.vault_secret_name(),
         "{provider_name} authentication and secret rotation completed successfully"
     );
+
+    // Order 276: signal the resident control server (separate process) that a
+    // login just completed so it re-probes NOW instead of on the 60s presence
+    // cadence — the attended-smoke operator re-ran a login that had already
+    // succeeded because the tray stayed visually logged-out (F-D). The
+    // resident server only exists in listen-vsock builds (the in-guest
+    // binary); host builds without the feature have no probe to nudge.
+    #[cfg(feature = "listen-vsock")]
+    {
+        let _ = std::fs::write(vsock_server::login_transition_sentinel_path(), b"1");
+    }
     if let Some(username) = username.filter(|value| !value.is_empty()) {
         println!("[tillandsias] {provider_name} authentication complete for {username}");
     } else {
@@ -5869,6 +6037,9 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             );
 
         cleanup_stack_containers(&client, project_name).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         // Step 15: bring the router up BEFORE any project containers so the
         // enclave's `router` network alias is already resolvable when proxy /
@@ -6917,6 +7088,9 @@ pub(crate) fn run_opencode_web_mode(
             );
 
         cleanup_stack_containers(&client, project_name).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
         // See the forge-launch-proxy site for the full rationale.
@@ -7293,12 +7467,24 @@ pub(crate) fn ensure_enclave_for_project(
     project_path: Option<&Path>,
     debug: bool,
 ) -> Result<PathBuf, String> {
+    // Prerequisites: enclave/egress networks, CA bundle, proxy — satisfied
+    // through the container_deps topological model (order 252).  The proxy
+    // image is verified by ensure_proxy_running inside the satisfier.
+    let _witness = container_deps::ensure_forge_launch(debug)
+        .map_err(|e| format!("[forge-launch] prerequisites: {e}"))?;
+
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
+    // ensure_ca_bundle is idempotent (our caller needs the certs_dir PathBuf).
     let certs_dir = ensure_ca_bundle(debug)?;
-    ensure_enclave_network(debug)?;
 
-    let images = ["proxy", "git", "inference", "forge"];
+    // "router" included (2026-07-11): ensure_router_running below launches
+    // the versioned router image but nothing on this path built it, so in
+    // the window between a VERSION bump and the next full image build the
+    // launch died trying to pull localhost/tillandsias-router:v<new> from a
+    // nonexistent registry (same bump-window class as the order-267
+    // run-observatorium finding).
+    let images = ["router", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
 
     let project_remote_url = project_path.and_then(read_host_project_origin_url);
@@ -7313,9 +7499,12 @@ pub(crate) fn ensure_enclave_for_project(
     let client = PodmanClient::new();
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         // Step 15 slice 2: bring the router up BEFORE the per-project
-        // proxy/git/inference/forge spawn so the enclave's `router` alias
+        // git/inference/forge spawn so the enclave's `router` alias
         // is live by the time Squid's cache_peer / git-service HTTPS
         // upstream try to resolve it. ensure_router_running is idempotent.
         //
@@ -7327,34 +7516,12 @@ pub(crate) fn ensure_enclave_for_project(
         };
         ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
-        // Idempotent proxy bring-up (mirrors ensure_router_running above and
-        // ensure_proxy_running): REUSE a running proxy, and clear any stale/exited
-        // one so `podman run --name tillandsias-proxy` does not fail "name already
-        // in use". Without this, a forge launch fails at the proxy stage whenever
-        // a tillandsias-proxy already exists (started by --init, or left by a prior
-        // / crashed session) — which blocks launching a Codex/Claude/OpenCode
-        // session even though the proxy is fine. (ensure_proxy_running itself
-        // runs its own tokio runtime, so it cannot be called from inside this
-        // block_on; inline the same guard.)
-        // @trace plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
-        if crate::vault_bootstrap::container_running("tillandsias-proxy") {
-            if debug {
-                eprintln!("[tillandsias] forge-launch: reusing already-running enclave proxy");
-            }
-        } else {
-            let _ = podman_cmd_sync()
-                .args(["rm", "--ignore", "tillandsias-proxy"])
-                .output();
-            client
-                .run_container_observed(
-                    "forge-launch-proxy",
-                    "tillandsias-proxy",
-                    &build_proxy_run_args(&certs_dir, &versioned_image_tag("proxy", version)),
-                    debug,
-                )
-                .await
-                .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
-        }
+        // The enclave proxy is already running (ensured by ensure_forge_launch
+        // above via the RealSatisfier → ensure_proxy_running path).  No inline
+        // proxy bring-up needed here — the order-252 migration removed the
+        // ad-hoc proxy container start that duplicated ensure_proxy_running.
+        // @trace plan/issues/launch-paths-route-through-dependency-model
+
         let git_container_name = format!("tillandsias-git-{project_name}");
         let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
@@ -7493,6 +7660,15 @@ pub(crate) fn build_forge_agent_run_args(
             true,
         );
     }
+    // NODE_EXTRA_CA_CERTS (order 241): Node.js TLS trust for proxy SSL bump.
+    spec = spec.env("NODE_EXTRA_CA_CERTS", "/etc/tillandsias/ca.crt");
+    if ca_cert.exists() {
+        spec = spec.bind_mount(
+            ca_cert.display().to_string(),
+            "/run/tillandsias/ca-chain.crt",
+            true,
+        );
+    }
 
     // Forge gitconfig injection (order 224): pre-populate $GIT_CONFIG_GLOBAL
     // with mirror redirect, safe.directory, and CA cert path so the
@@ -7516,9 +7692,7 @@ pub(crate) fn build_forge_agent_run_args(
         ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
         ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
         ForgeAgentMode::Antigravity => Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => {
-            None
-        }
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => None,
     };
     if let Some(p) = provider_api
         && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
@@ -7570,9 +7744,7 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             Some(ProviderId::Antigravity),
             Some(crate::vault_bootstrap::ProviderId::Gemini),
         ),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => {
-            (None, None)
-        }
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => (None, None),
     };
 
     if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
@@ -7857,6 +8029,242 @@ fn maybe_spawn_vsock_listener(
                 .watch_shutdown_and_mark_stopping(watcher_shutdown)
                 .await;
         });
+        // Liveness probe: periodically check managed containers are still
+        // running and re-ensure any that died (order 228, slice 4).
+        // Drives self-healing during VmPhase::Ready without a full restart.
+        let liveness_state = state.clone();
+        let liveness = tokio::spawn(async move {
+            loop {
+                // Only probe during Ready phase — containers aren't expected
+                // to be up during Starting/Draining/Stopping.
+                let phase = liveness_state.current_phase();
+                if phase != tillandsias_control_wire::VmPhase::Ready {
+                    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                    continue;
+                }
+                // run_check shells out to podman (container_running +
+                // RealSatisfier::satisfy are blocking); keep it off the
+                // async workers so a slow podman never stalls the vsock
+                // listener sharing this runtime.
+                let check = tokio::task::spawn_blocking(|| {
+                    container_deps::LivenessProbe::new(false).run_check()
+                })
+                .await
+                .unwrap_or_else(|join_err| Err(format!("liveness task panicked: {join_err}")));
+                match check {
+                    Ok(result) => {
+                        if !result.all_running() {
+                            eprintln!(
+                                "[liveness] re-ensured {} container(s): {:?}",
+                                result.re_ensured.len(),
+                                result
+                                    .re_ensured
+                                    .iter()
+                                    .map(|s| s.name())
+                                    .collect::<Vec<_>>()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[liveness] check failed: {e}");
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            }
+        });
+        // Login-state probe (order 230): while at least one connection is
+        // subscribed to the LoginState topic and the VM is Ready, watch the
+        // Vault github-token presence and push LoginStatePush on change.
+        // Presence-level detection on purpose: the vsock server never reads
+        // the raw token (matching the GithubLoginStatusRequest handler's
+        // no-token-in-process rule); a full in-container username probe runs
+        // only when presence flips or no baseline exists yet. Explicit
+        // GithubLoginStatusRequest probes piggyback into the same broadcast,
+        // so rotations that keep presence constant converge on request.
+        let login_probe_state = state.clone();
+        let login_probe = tokio::spawn(async move {
+            let mut last_presence: Option<bool> = None;
+            // Order 276: 2s ticks. Each tick stats the satisfier-completion
+            // sentinel (cheap); the HEAVY vault presence check keeps its 60s
+            // cadence (every 30th tick) — is_github_key_present costs a
+            // stability lease + container check + vault exec, far too heavy
+            // for the fast path.
+            let mut ticks_since_presence: u32 = 30; // first heavy check on the first eligible tick
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let sentinel = vsock_server::login_transition_sentinel_path();
+                let sentinel_hit = std::fs::metadata(&sentinel).is_ok();
+                if sentinel_hit {
+                    let _ = std::fs::remove_file(&sentinel);
+                }
+                ticks_since_presence = ticks_since_presence.saturating_add(1);
+                let heavy_due = ticks_since_presence >= 30;
+                if !sentinel_hit && !heavy_due {
+                    continue;
+                }
+                if login_probe_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
+                    || !login_probe_state.has_login_state_subscribers()
+                {
+                    // Nobody listening (or VM not steady): skip the podman
+                    // exec entirely and drop the baseline so the next
+                    // subscriber gets a fresh push.
+                    last_presence = None;
+                    if heavy_due {
+                        ticks_since_presence = 0;
+                    }
+                    continue;
+                }
+                if sentinel_hit {
+                    // Satisfier just completed: resolve the handle NOW and
+                    // run the transition funnel (LoginStatePush + cloud
+                    // refresh on the logged-in flip). Baseline resets so the
+                    // next heavy tick re-derives presence cleanly.
+                    let handle = tokio::task::spawn_blocking(|| {
+                        remote_projects::probe_github_username(false)
+                    })
+                    .await
+                    .unwrap_or(None);
+                    login_probe_state
+                        .apply_login_transition(
+                            handle.is_some(),
+                            handle,
+                            vsock_server::fetch_cloud_projects,
+                        )
+                        .await;
+                    last_presence = None;
+                    continue;
+                }
+                ticks_since_presence = 0;
+                let presence = tokio::task::spawn_blocking(vault_bootstrap::is_github_key_present)
+                    .await
+                    .unwrap_or(false);
+                if last_presence == Some(presence) {
+                    continue;
+                }
+                // Presence changed (or first observation): resolve the handle
+                // with the containerized probe, then push (change-gated in
+                // set_login_state).
+                let handle =
+                    tokio::task::spawn_blocking(|| remote_projects::probe_github_username(false))
+                        .await
+                        .unwrap_or(None);
+                // Order 276: the transition funnel also refreshes + pushes
+                // cloud projects when this observation flips to logged-in.
+                login_probe_state
+                    .apply_login_transition(
+                        handle.is_some(),
+                        handle,
+                        vsock_server::fetch_cloud_projects,
+                    )
+                    .await;
+                last_presence = Some(presence);
+            }
+        });
+
+        // Order 260: guest-side LocalProjects rescan. Replaces the host
+        // tray's last steady-state WIRE poll (the 30s EnumerateLocalProjects
+        // tick) with a guest-internal readdir on a 15s cadence, change-gated
+        // in set_local_projects and subscriber-gated so an idle headless
+        // spends zero scans. A local readdir costs no podman exec and no
+        // wire round-trip; an inotify upgrade is a future enhancement
+        // (headless has no notify dep today).
+        let local_projects_state = state.clone();
+        let local_projects_rescan = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                if local_projects_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
+                    || !local_projects_state.has_local_projects_subscribers()
+                {
+                    continue;
+                }
+                let entries = tokio::task::spawn_blocking(vsock_server::enumerate_local_projects)
+                    .await
+                    .unwrap_or_default();
+                local_projects_state.set_local_projects(entries);
+            }
+        });
+
+        // Podman events monitor: reads `podman events --format json`
+        // and pushes curated step names to the tray.
+        let events_state = state.clone();
+        let events_monitor = tokio::spawn(async move {
+            use tokio::io::AsyncBufReadExt;
+            loop {
+                // Wait for podman to be ready
+                if !events_state.podman_ready() {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    continue;
+                }
+
+                let mut cmd = tillandsias_podman::podman_cmd();
+                cmd.args(["events", "--format", "json"]);
+                cmd.stdout(std::process::Stdio::piped());
+
+                if let Ok(mut child) = cmd.spawn() {
+                    if let Some(stdout) = child.stdout.take() {
+                        let mut reader = tokio::io::BufReader::new(stdout).lines();
+                        while let Ok(Some(line)) = reader.next_line().await {
+                            let parsed = match serde_json::from_str::<serde_json::Value>(&line) {
+                                Ok(p) => p,
+                                _ => continue,
+                            };
+                            let action = match parsed.get("Action").and_then(|v| v.as_str()) {
+                                Some(a) => a,
+                                _ => continue,
+                            };
+                            let name = match parsed
+                                .get("Actor")
+                                .and_then(|a| a.get("Attributes"))
+                                .and_then(|a| a.get("name"))
+                                .and_then(|v| v.as_str())
+                            {
+                                Some(n) => n,
+                                _ => continue,
+                            };
+                            let display = match action {
+                                "create" | "start" | "init" => {
+                                    if name.contains("forge") {
+                                        Some("Building Forge")
+                                    } else if name.contains("chromium") {
+                                        Some("Polishing Chromium")
+                                    } else if name.contains("inference") {
+                                        Some("Loading Inference")
+                                    } else if name.contains("vault") {
+                                        Some("Securing Vault")
+                                    } else if name.contains("proxy") {
+                                        Some("Routing Proxy")
+                                    } else if name.contains("git") {
+                                        Some("Setting up Git")
+                                    } else {
+                                        Some("Setting up containers")
+                                    }
+                                }
+                                "build" => Some("Building image"),
+                                _ => None,
+                            };
+                            if let Some(msg) = display {
+                                events_state.set_last_event(msg.to_string());
+                            }
+                        }
+                    }
+                    let _ = child.wait().await;
+                }
+
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        });
+
+        let udp_state = state.clone();
+        let _udp_monitor = tokio::spawn(async move {
+            if let Ok(socket) = tokio::net::UdpSocket::bind("127.0.0.1:42421").await {
+                let mut buf = [0; 1024];
+                while let Ok((len, _)) = socket.recv_from(&mut buf).await {
+                    if let Ok(msg) = std::str::from_utf8(&buf[..len]) {
+                        udp_state.set_last_event(msg.to_string());
+                    }
+                }
+            }
+        });
 
         match vsock_server::run_vsock_listener(port, shutdown, state).await {
             Ok(()) => {}
@@ -7874,6 +8282,17 @@ fn maybe_spawn_vsock_listener(
         let _ = advancer.await;
         watcher.abort();
         let _ = watcher.await;
+        events_monitor.abort();
+        let _ = events_monitor.await;
+        // liveness + login probe were missing from this abort sequence when
+        // order 228 landed (2026-07-09 audit F7): without the aborts they
+        // outlive the listener and keep polling during shutdown.
+        liveness.abort();
+        let _ = liveness.await;
+        login_probe.abort();
+        let _ = login_probe.await;
+        local_projects_rescan.abort();
+        let _ = local_projects_rescan.await;
     }))
 }
 
@@ -9558,6 +9977,160 @@ mod tests {
         );
     }
 
+    /// Order 233 (R5): per-project cleanup must NEVER remove SHARED
+    /// containers. `cleanup_stack_containers` removing tillandsias-proxy /
+    /// tillandsias-inference tore the shared stack out from under another
+    /// project's live forge; only the no-running-forge guard may reach
+    /// `remove_shared_stack_containers`.
+    #[test]
+    fn per_project_cleanup_never_removes_shared_containers() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        // source_window ends at the next `fn ` and would run past the
+        // following `async fn remove_shared_stack_containers` (which
+        // legitimately names the shared containers); cut the window at that
+        // signature explicitly.
+        let cleanup_start = source
+            .find("async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str)")
+            .expect("cleanup_stack_containers signature present");
+        let cleanup_end = source
+            .find("async fn remove_shared_stack_containers")
+            .expect("remove_shared_stack_containers signature present");
+        assert!(
+            cleanup_start < cleanup_end,
+            "cleanup_stack_containers must precede remove_shared_stack_containers"
+        );
+        let cleanup = &source[cleanup_start..cleanup_end];
+        for shared in [
+            "tillandsias-proxy",
+            "tillandsias-inference",
+            "tillandsias-router",
+        ] {
+            assert!(
+                !cleanup.contains(shared),
+                "per-project cleanup_stack_containers must not touch shared container {shared}"
+            );
+        }
+        // The shared remover exists and is reached ONLY via the
+        // no-running-forge guard (exactly one call site). Needles are
+        // assembled at runtime so this test's own string literals do not
+        // count as matches (the test lives inside the file it audits).
+        let call_needle = format!("remove_shared_stack_containers({}).await", "client");
+        let ref_call_needle = format!("remove_shared_stack_containers({}client).await", "&");
+        let call_count =
+            source.matches(&call_needle).count() + source.matches(&ref_call_needle).count();
+        assert_eq!(
+            call_count, 1,
+            "remove_shared_stack_containers must be called exactly once (inside the guard)"
+        );
+        let guard = source_window(source, "async fn cleanup_shared_stack_if_no_running_forge(");
+        assert!(
+            guard.contains(&call_needle),
+            "the guard must be the one shared-remover call site"
+        );
+        assert!(
+            guard.contains("!running_lanes.is_empty()"),
+            "the guard must gate on active lane containers before shared removal"
+        );
+    }
+
+    /// Order 289: the shared-stack liveness predicate must count every
+    /// container class that needs the proxy — forge lanes (incl. the
+    /// `-forge-maintenance` terminal), provider-login one-shots, and
+    /// project browsers — and must ignore stopped ones.
+    #[test]
+    fn shared_stack_predicate_counts_all_proxy_dependent_lanes() {
+        for name in [
+            "tillandsias-myproj-forge",
+            "tillandsias-myproj-forge-maintenance",
+            "tillandsias-myproj-forge-codex",
+            "tillandsias-codex-login-12345",
+            "tillandsias-browser-myproj",
+        ] {
+            assert!(
+                is_active_lane_container(name, "running"),
+                "{name} (running) must keep the shared stack alive"
+            );
+            assert!(
+                !is_active_lane_container(name, "exited"),
+                "{name} (exited) must NOT keep the shared stack alive"
+            );
+        }
+        for name in [
+            "tillandsias-proxy",
+            "tillandsias-inference",
+            "tillandsias-router",
+            "tillandsias-vault",
+            "tillandsias-git-myproj",
+        ] {
+            assert!(
+                !is_active_lane_container(name, "running"),
+                "{name} is infrastructure, not a lane — it must not self-perpetuate the stack"
+            );
+        }
+    }
+
+    /// Drift litmus (order 229): every launch path that creates containers
+    /// MUST route through the container dependency model.  A launch that
+    /// skips a prerequisite must fail — this is proven at the crate level
+    /// by `container_deps::tests::launch_skipping_prerequisite_fails`.
+    /// This test verifies the source-code invariant: all CLI-visible launch
+    /// entry points reference the dependency model.
+    #[test]
+    fn all_launch_paths_route_through_dependency_model() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+
+        // All containerized launch paths must route through the dependency
+        // model (container_deps module).  Each launch function's body must
+        // reference the module directly or delegate to another function that
+        // does.  The order-229 known-gap allowlist is eliminated (order 252):
+        //   --github-login         via run_provider_login  → ensure_git_login
+        //   --list-cloud-projects  via run_list_cloud_projects → ensure_git_login
+        //   --<agent> CLI          via run_forge_agent_cli_mode → ensure_enclave_for_project → ensure_forge_launch
+        //   tray launch            via ensure_enclave_for_project → ensure_forge_launch
+        let dep_model_refs: Vec<&str> = source
+            .match_indices("container_deps::")
+            .map(|(_, s)| s)
+            .collect();
+        assert!(
+            dep_model_refs.len() >= 6,
+            "container_deps must be referenced by at least 6 locations, found {}",
+            dep_model_refs.len()
+        );
+
+        // Each function that dispatches a containerized launch must route
+        // through the dependency model, directly or transitively.
+        let launch_fns: [(&str, Option<&[&str]>); 4] = [
+            ("fn run_provider_login(", None),
+            ("fn run_list_cloud_projects(debug: bool)", None),
+            (
+                "fn run_forge_agent_cli_mode(",
+                Some(&["ensure_enclave_for_project"]),
+            ),
+            (
+                "fn ensure_enclave_for_project(",
+                Some(&["container_deps::"]),
+            ),
+        ];
+        for (fn_sig, expected_refs) in &launch_fns {
+            let window = source_window(source, fn_sig);
+            let directly_routes =
+                window.contains("ensure_git_login") || window.contains("container_deps::");
+            assert!(
+                directly_routes || expected_refs.is_some(),
+                "launch path {fn_sig} must route through the container dependency model \
+                 (found neither ensure_git_login nor container_deps:: in its body)"
+            );
+            if let Some(refs) = expected_refs {
+                for r in *refs {
+                    assert!(
+                        window.contains(r),
+                        "{fn_sig} must reference {r} in its body"
+                    );
+                }
+            }
+        }
+    }
+
     // Regression: the egress network must be ensured on every enclave-bootstrap
     // path (including the early-return-when-enclave-exists case), or the
     // dual-home leg cannot resolve on a clean runtime.
@@ -9896,6 +10469,10 @@ mod tests {
 
     #[test]
     fn write_forge_gitconfig_produces_valid_config_with_origin_redirect() {
+        // This test mutates HOME: serialize with every other env-mutating
+        // test or a parallel thread's set_var races the read inside
+        // write_forge_gitconfig (first fired in gate run 20260710T062345Z).
+        let _guard = env_lock();
         // Create a temp directory with a minimal git repo to test reading the origin URL.
         let tmp = tempfile::tempdir().expect("temp dir");
         let project_path = tmp.path().join("my-project");
@@ -9985,6 +10562,8 @@ mod tests {
 
     #[test]
     fn write_forge_gitconfig_handles_ssh_origin_with_https_redirect() {
+        // HOME-mutating: same serialization requirement as the sibling test.
+        let _guard = env_lock();
         let tmp = tempfile::tempdir().expect("temp dir");
         let project_path = tmp.path().join("another-project");
         std::fs::create_dir_all(&project_path).expect("create project dir");
@@ -10143,11 +10722,9 @@ mod tests {
         assert!(has_arg(&args, "-d"));
         assert!(has_arg(&args, "--name"));
         assert!(has_arg(&args, "tillandsias-browser-visual-chess"));
-        assert!(
-            args.iter().any(|arg| {
-                arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true"
-            })
-        );
+        assert!(args.iter().any(|arg| {
+            arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true"
+        }));
         assert!(has_arg(
             &args,
             "TILLANDSIAS_CA_BUNDLE=/etc/tillandsias/ca.crt"
@@ -10300,10 +10877,16 @@ mod tests {
             "status-check plan should keep the completion marker"
         );
         if std::env::var_os("LITMUS_PODMAN_CALLS_FILE").is_some() {
+            // Keep in lockstep with run_init's canonical image list (orders
+            // 253/76 added vault + forge-base; router was always in init) —
+            // litmus:headless-init-status-check-source-built asserts every
+            // family's lookup lands in the fake-podman calls log.
             let images = [
                 "proxy",
                 "git",
+                "vault",
                 "inference",
+                "router",
                 "chromium-core",
                 "chromium-framework",
                 "forge",
@@ -10348,14 +10931,10 @@ mod tests {
         assert!(has_arg(&args, ENCLAVE_NET));
         assert!(has_arg(&args, "--name"));
         assert!(has_arg(&args, "tillandsias-observatorium-project"));
-        assert!(
-            args.iter()
-                .any(|arg| arg
-                    == "type=bind,source=/tmp/project,target=/var/www/source,readonly=true")
-        );
-        assert!(args.iter().any(|arg| {
-            arg == "type=bind,source=/tmp/runtime/observatorium,target=/var/www/observatorium,readonly=true"
-        }));
+        assert!(args.iter().any(|arg| arg
+            == "type=bind,source=/tmp/project,target=/var/www/source,relabel=shared,readonly=true"));
+        assert!(args.iter().any(|arg| arg
+            == "type=bind,source=/tmp/runtime/observatorium,target=/var/www/observatorium,relabel=shared,readonly=true"));
         assert_eq!(
             args.last().map(|s| s.as_str()),
             Some("tillandsias-web:v1.2.3")
@@ -11027,6 +11606,11 @@ mod tests {
             &argv[0..3],
             ["build", "--format", "docker"],
             "Rust image builds must preserve Dockerfile HEALTHCHECK metadata"
+        );
+        assert!(
+            argv.contains(&"--http-proxy=false".to_string()),
+            "runtime image builds must exempt the containers.conf enclave proxy \
+             env (proxy-exemption class; build containers cannot resolve `proxy`): {argv:?}"
         );
     }
 

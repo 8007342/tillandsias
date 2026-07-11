@@ -69,6 +69,11 @@ readonly LITMUS_RUNTIME_DIR="${PROJECT_ROOT}/target/litmus-runtime"
 readonly LITMUS_PODMAN_ROOT="${PROJECT_ROOT}/target/litmus-podman/root"
 readonly LITMUS_PODMAN_RUNROOT="${PROJECT_ROOT}/target/litmus-podman/runroot"
 readonly LITMUS_PODMAN_TMPDIR="${PROJECT_ROOT}/target/litmus-podman/tmp"
+# Exported: step commands run in CHILD `bash -c` shells which `source`
+# this path — an unexported readonly is invisible there, making the
+# stdlib wiring silently inert (adopted-stray completion, order 225).
+LITMUS_STDLIB="${PROJECT_ROOT}/scripts/litmus-stdlib.sh"
+export LITMUS_STDLIB
 
 if [[ -z "${XDG_RUNTIME_DIR:-}" || ! -w "${XDG_RUNTIME_DIR:-/dev/null}" ]]; then
     mkdir -p "$LITMUS_RUNTIME_DIR"
@@ -628,11 +633,19 @@ run_litmus_test_file() {
     local -a step_expecteds=()
     local -a step_success_patterns=()
     local -a step_failure_patterns=()
+    local -a unparsed_step_names=()
     local success_criteria=()
     local failure_criteria=()
 
     append_step() {
-        [[ -z "$current_step_command" ]] && return 0
+        # A named step whose command: could not be extracted is a PARSE
+        # failure, not a silently droppable entry (order 256: a folded `>-`
+        # command parsed to zero steps and the litmus failed as a generic
+        # "Check implementation" with no diagnostic since authoring).
+        if [[ -z "$current_step_command" ]]; then
+            [[ -n "$current_step_name" ]] && unparsed_step_names+=("$current_step_name")
+            return 0
+        fi
         step_names+=("$current_step_name")
         step_commands+=("$current_step_command")
         step_timeouts+=("$current_step_timeout")
@@ -682,7 +695,7 @@ run_litmus_test_file() {
                 current_step_expected=""
                 current_step_success_pattern=""
                 current_step_failure_pattern=""
-            elif [[ "$line" =~ command:\ \"(.+)\" ]]; then
+            elif [[ "$line" =~ ^[[:space:]]*command:\ \"(.+)\" ]]; then
                 # YAML escapes \" as a double-quote inside a double-quoted
                 # string. The bash regex above captures the raw bytes between
                 # the outer "s, so the captured value retains the backslashes.
@@ -732,7 +745,23 @@ run_litmus_test_file() {
 
     append_step
 
+    # A named step whose command: cannot be extracted is a hard PARSE FAIL
+    # (order 267 promotion, 2026-07-10): the corpus carries zero folded
+    # commands post-slice-2, so an unparseable step is authoring drift, not
+    # legacy debt — silently thinner coverage was the original dead-check
+    # vector (31 steps skipped since authoring before the rewrite).
+    if [[ "${#unparsed_step_names[@]}" -gt 0 ]]; then
+        printf '  %b[PARSE FAIL]%b %s\n' "${RED}" "${NC}" "$test_file" >&2
+        for us in "${unparsed_step_names[@]}"; do
+            printf '%s\n' "         step '${us}': command: not extractable (single-line double-quoted scalar required; folded '>'/'>-' unsupported)" >&2
+        done
+        return 1
+    fi
+
+    # A file with ZERO parseable steps has always failed — but generically
+    # ("Check implementation"). Name the real reason (order 256).
     if [[ "${#step_commands[@]}" -eq 0 ]]; then
+        printf '  %b[PARSE ERROR]%b %s: no parseable critical_path steps (each step needs a single-line double-quoted command: scalar)\n' "${RED}" "${NC}" "$test_file" >&2
         return 1
     fi
 
@@ -757,13 +786,32 @@ run_litmus_test_file() {
         # @trace spec:spec-traceability
         printf '  [STEP %d/%d] %s (timeout: %ds)...' "$step_index" "${#step_commands[@]}" "$step_name" "$timeout_sec" >&2
 
-        step_output=$(timeout "${timeout_sec}s" bash -c "$step_command" 2>&1) || exit_code=$?
+        step_output=$(LITMUS_STDLIB="${LITMUS_STDLIB}" timeout "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" 2>&1) || exit_code=$?
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
 
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
             return 1
+        fi
+
+        # Patternless non-zero exits (order 256): when a step declares
+        # neither success_pattern nor expected_behavior, its exit code is
+        # the only signal it has — a non-zero exit FAILS the step (the
+        # order-256 dead-check trap). STRICT IS THE DEFAULT as of order
+        # 267's flip (2026-07-10, staged flag→burn-down→default per
+        # migration discipline; the corpus was 156/156 strict at flip
+        # time). TILLANDSIAS_LITMUS_STRICT_EXIT=0 is the emergency opt-out
+        # — using it on a red is a finding to file, not a fix.
+        if [[ $exit_code -ne 0 && -z "$step_success_pattern" && -z "$step_expected" ]]; then
+            if [[ "${TILLANDSIAS_LITMUS_STRICT_EXIT:-1}" != "0" ]]; then
+                printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+                printf '%s\n' "         exit_code=${exit_code} (no success_pattern/expected_behavior declared — non-zero exit fails the step; strict-exit mode)" >&2
+                printf '%s\n' "         output=${step_output}" >&2
+                return 1
+            fi
+            printf ' %b[DEAD-CHECK WARNING]%b\n' "${YELLOW}" "${NC}" >&2
+            printf '%s\n' "         exit_code=${exit_code} with no declared pattern — PASSING via the TILLANDSIAS_LITMUS_STRICT_EXIT=0 opt-out (file a finding; the opt-out is not a fix)" >&2
         fi
 
         # If success_pattern is declared, use check_signal() which is

@@ -183,15 +183,24 @@ not run.
     — `FAIL: loop_status.md not modified in new commit(s)`.
 - repro:
   - `scripts/run-litmus-test.sh meta-orchestration --phase post-build --size e2e --compact`
+- status: completed
+- closed_at: "2026-07-09T17:31:00Z"
 - next_action: >
-    Align the litmus with the current meta-orchestration exit contract, or
-    require the in-forge meta-orchestration path to always update
-    `plan/loop_status.md` before it pushes.
+    Completed: litmus step was changed from `plan/loop_status.md`-specific
+    to `plan/`-wide check, matching meta-orch exit contract (which only
+    requires a plan/ update, not necessarily loop_status.md).
 - events:
   - type: discovered
     ts: "2026-07-08T20:24:45Z"
     agent_id: "linux-macuahuitl-codex-20260708T1958Z"
     host: linux_mutable
+  - type: completed
+    ts: "2026-07-09T17:31:00Z"
+    agent_id: "linux-fedora-opencode-bigpickle-20260709T172909Z"
+    host: linux
+    evidence:
+      - "openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml: step verifies any plan/ change instead of requiring loop_status.md specifically"
+      - "plan/index.yaml: order 242 updated to claimed→completed with events"
 
 ### Work Packet: smoke-finding/tray-parity-matrix-complete-post-build
 
@@ -216,3 +225,51 @@ not run.
     ts: "2026-07-08T20:24:45Z"
     agent_id: "linux-macuahuitl-codex-20260708T1958Z"
     host: linux_mutable
+
+## Finding — order 241 — Fix applied: NODE_EXTRA_CA_CERTS + CA_CHAIN mount
+
+- discovered_by: `/advance-work-from-plan` (linux/yoga, big-pickle)
+- fixed_by: same run (2026-07-08T22:35:00Z)
+- commit: `crates/tillandsias-headless/src/main.rs` (3 sites)
+
+### Root cause
+
+The diagnostics annex captures forge diagnostics by running
+`opencode run --dangerously-skip-permissions "$(<prompt>)"` inside a forge
+container that connects through the MITM SSL-bumping proxy. The proxy
+issues a certificate signed by the Tillandsias intermediate CA for all
+bumped connections (including `models.dev`).
+
+Node.js (used by opencode's undici HTTP client) does NOT trust this
+proxy-issued certificate because:
+
+1. `NODE_EXTRA_CA_CERTS` was never set to the Tillandsias intermediate CA
+   path (`/etc/tillandsias/ca.crt`), even though the CA cert itself WAS
+   bind-mounted at that path.
+2. The forge entrypoint (`lib-common.sh`) checks for
+   `/run/tillandsias/ca-chain.crt` to build a combined CA bundle for
+   `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE`, but NO container arg ever mounted
+   a file to that path. This dead code path meant non-Node tools also had
+   no trust of the proxy CA.
+
+### Fix
+
+In all three forge-container argument builders:
+
+| Builder | NODE_EXTRA_CA_CERTS | /run/tillandsias/ca-chain.crt mount |
+|---|---|---|
+| `build_stack_common_args` | ✅ added | ✅ added |
+| `build_opencode_forge_args` | ✅ added | ✅ added |
+| `build_forge_agent_run_args` | ✅ added | ✅ added |
+
+The env var tells Node.js to trust the Tillandsias intermediate CA for TLS
+validation. The second bind-mount of `intermediate.crt` to
+`/run/tillandsias/ca-chain.crt` satisfies the entrypoint's `$CA_CHAIN`
+check, which then exports `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` for
+non-Node tools.
+
+### Verification
+
+- `rustfmt --check --edition 2024` passes.
+- Full `cargo check` blocked by missing `gcc`/`cc` linker.
+- Litmus verification pending rebuild on a host with full toolchain.

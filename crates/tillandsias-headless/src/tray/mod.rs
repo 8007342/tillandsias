@@ -242,6 +242,10 @@ fn status_label(stage: &TrayStatusStage) -> String {
                 | TrayStatusStage::Failed { .. }
                 | TrayStatusStage::PodmanMissing => String::new(),
             };
+            // Descriptors can carry full error chains; bound them here too
+            // since several call sites assign status_label() output to
+            // status_text directly, bypassing set_status (order 288).
+            let descriptor = sanitize_status_text(descriptor);
             if preserved.is_empty() {
                 format!("\u{274C} {descriptor}")
             } else {
@@ -249,6 +253,29 @@ fn status_label(stage: &TrayStatusStage) -> String {
             }
         }
         TrayStatusStage::PodmanMissing => String::from("\u{274C} Podman not available"),
+    }
+}
+
+/// Hard-cap for the rendered status menu label, in characters. A status
+/// item longer than one short line makes the whole menu unusable (order
+/// 288: a full error chain with podman argv + container diagnostics
+/// rendered as the label, spanning offscreen so even Quit was
+/// unreachable). Full error text still reaches stderr via the callers'
+/// eprintln — the menu shows only the first line, truncated.
+const STATUS_LABEL_MAX_CHARS: usize = 120;
+
+/// Reduce arbitrary status text (possibly a multi-KB, multi-line error
+/// chain) to a single bounded menu-safe line: first line only, interior
+/// whitespace collapsed, hard length cap with an ellipsis.
+/// @trace spec:tray-minimal-ux
+fn sanitize_status_text(text: &str) -> String {
+    let first_line = text.lines().next().unwrap_or("");
+    let collapsed = first_line.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.chars().count() <= STATUS_LABEL_MAX_CHARS {
+        collapsed
+    } else {
+        let truncated: String = collapsed.chars().take(STATUS_LABEL_MAX_CHARS).collect();
+        format!("{truncated}\u{2026}")
     }
 }
 
@@ -1169,7 +1196,7 @@ impl TrayService {
     ) -> zbus::Result<()> {
         let mut status_changed = false;
         self.with_state(|state| {
-            state.status_text = text.into();
+            state.status_text = sanitize_status_text(&text.into());
             state.tray_icon_state = icon;
             if let Some(value) = forge_available {
                 let previous_available = state.forge_available;
@@ -3480,6 +3507,54 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 288: a pathological multi-KB, multi-line error chain surfaced
+    /// as the status label must collapse to one bounded line so the menu
+    /// (including Quit) stays reachable.
+    /// @trace spec:tray-minimal-ux
+    #[test]
+    fn status_text_is_single_bounded_line_even_for_stack_traces() {
+        let argv_dump = "podman run --detach --rm --name tillandsias-router ".repeat(40);
+        let pathological = format!(
+            "Error: vault issue_approle_token failed: vault not found\nredacted argv: {argv_dump}\ncontainer: tillandsias-router\nstate: unknown\n{}",
+            "diagnostics line\n".repeat(200)
+        );
+        let sanitized = sanitize_status_text(&pathological);
+        assert!(!sanitized.contains('\n'), "must be a single line");
+        assert!(
+            sanitized.chars().count() <= STATUS_LABEL_MAX_CHARS + 1,
+            "must be hard-capped (got {} chars)",
+            sanitized.chars().count()
+        );
+        assert!(
+            sanitized.starts_with("Error: vault issue_approle_token failed"),
+            "must preserve the informative first line: {sanitized}"
+        );
+    }
+
+    /// Short labels pass through unchanged (no truncation regression on the
+    /// normal emoji status stack).
+    #[test]
+    fn status_text_short_labels_unchanged() {
+        assert_eq!(sanitize_status_text("✅ OK"), "✅ OK");
+        assert_eq!(
+            sanitize_status_text("🥀 Launch failed: image missing"),
+            "🥀 Launch failed: image missing"
+        );
+    }
+
+    /// The Failed status_label arm bounds its descriptor too — several call
+    /// sites assign status_label() output directly, bypassing set_status.
+    #[test]
+    fn failed_status_label_bounds_descriptor() {
+        let label = status_label(&TrayStatusStage::Failed {
+            stage: Box::new(TrayStatusStage::PreLaunch),
+            descriptor: format!("boom\n{}", "x".repeat(5000)),
+        });
+        assert!(!label.contains('\n'));
+        assert!(label.chars().count() <= STATUS_LABEL_MAX_CHARS + 8);
+        assert!(label.contains("\u{274C} boom"));
+    }
 
     /// Regression: a `ControlMessage` variant that is on the unix-socket
     /// matrix as `Handle` but does not yet have a real handler implementation

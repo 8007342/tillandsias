@@ -45,22 +45,28 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: idiomatic layer reported >=1 container running"
 
-  - step: "NO container reported state=failed"
-    # A single failed launch fails this gate, surfacing the failing stage +
-    # container name straight from the stream.
-    command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && if grep -E 'event:container_launch .* state=failed' \"$LOG\"; then echo \"FAIL: a container launch failed (see lines above)\"; exit 1; else echo \"ok: no container_launch state=failed\"; fi"
+  - step: "NO container reported an INFRA launch failure (agent-process exits excluded)"
+    # A single failed INFRA launch fails this gate, surfacing the failing
+    # stage + container name straight from the stream. The agent PROCESS
+    # exiting nonzero is explicitly NOT this litmus's concern — the header
+    # already says "we judge by the captured stream, not the agent's exit
+    # code", and 2026-07-11 proved the point: a provider rate-limit made
+    # the attached opencode exit 1 (`attached command exited with status`)
+    # while every container launch was healthy, failing two gate runs on
+    # an agent-layer condition. Provider health is the e2e litmuses' job.
+    command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && if grep -E 'event:container_launch .* state=failed' \"$LOG\" | grep -Ev 'attached command exited with status'; then echo \"FAIL: an infra container launch failed (see lines above)\"; exit 1; else echo \"ok: no infra container_launch state=failed\"; fi"
     timeout_ms: 10000
-    expected_behavior: "ok: no container_launch state=failed"
+    expected_behavior: "ok: no infra container_launch state=failed"
 
-  - step: "the forge-agent stage launched (running OR exited)"
-    # spec:runtime-diagnostics-stream "Launch stage event" allows TWO
-    # terminal states: `state=running` for detached containers, or
-    # `state=exited` for an attached foreground forge that completed
-    # (which is what `--diagnostics --prompt …` produces).
-    # Stage label is per-agent — accept the current set.
-    # First production distill confirms the real shape:
-    #   `event:container_launch stage=opencode state=exited container=…`
-    command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' \"$LOG\" && echo \"ok: forge-agent stage launched\""
+  - step: "the forge-agent stage launched (running, exited, or ran-to-process-exit)"
+    # spec:runtime-diagnostics-stream "Launch stage event" allows
+    # `state=running` for detached containers and `state=exited` for an
+    # attached foreground forge that completed. An attached agent whose
+    # PROCESS exited nonzero surfaces as state=failed with the
+    # `attached command exited with status` detail — the container still
+    # launched and ran (what THIS litmus verifies), so accept it here and
+    # leave agent-health verdicts to the e2e litmuses (2026-07-11).
+    command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) (state=(running|exited) |state=failed .*attached command exited with status)' \"$LOG\" && echo \"ok: forge-agent stage launched\""
     timeout_ms: 10000
     expected_behavior: "ok: forge-agent stage launched"
 

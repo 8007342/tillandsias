@@ -274,6 +274,34 @@ where
                 continue;
             }
         };
+        // Opt-in PTY forensics (TILLANDSIAS_PTY_DEBUG=1): mirror inbound
+        // PtyData/PtyExit to stderr so a session's dying words survive the
+        // popup terminal's alternate-screen teardown. The 2026-07-10
+        // attended smoke lost a fast-failing agent launch's error text
+        // exactly this way — the operator saw an unreadable flash, then a
+        // blank window (findings F-J). Observability through the product's
+        // own layer, not a host/guest side channel.
+        if std::env::var_os("TILLANDSIAS_PTY_DEBUG").is_some_and(|v| v == "1") {
+            match &envelope.body {
+                tillandsias_control_wire::ControlMessage::PtyData {
+                    session_id, bytes, ..
+                } => {
+                    eprintln!(
+                        "[pty-debug] session={} {} bytes: {}",
+                        session_id,
+                        bytes.len(),
+                        String::from_utf8_lossy(bytes).escape_debug()
+                    );
+                }
+                tillandsias_control_wire::ControlMessage::PtyClose { session_id, exit } => {
+                    eprintln!(
+                        "[pty-debug] session={session_id} CLOSE code={} signal={:?}",
+                        exit.code, exit.signal
+                    );
+                }
+                _ => {}
+            }
+        }
         if let Err(e) = router.route(&envelope.body) {
             // PtyRouter rejects unrouted ControlMessages — non-fatal
             // for non-PTY traffic (handshake replies, status, etc.).

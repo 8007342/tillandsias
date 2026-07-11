@@ -1,0 +1,13 @@
+[tillandsias-tray] Auto-boot: spawning worker (image_root=/Users/tlatoani/Library/Application Support/tillandsias)
+[tillandsias-tray] staged embedded guest binary at /Users/tlatoani/src/.tillandsias/guest-bin/tillandsias-headless
+[tillandsias-tray] Auto-boot: VM is running
+[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;start=8a5f56ad4c3241b394d18ea4c04421ac;user=root;hostname=tillandsias-vm;machineid=0a0d6f3be5184c41b889b55378a89210;bootid=b0fc3ce1cbca45228b84d5c3bc3ffccf;pid=1047;pidfdid=1048;comm=(agetty);servicename=serial-getty@hvc0.service;invocationid=328103bd3514460280a5581d2e02683f;type=service\P+q6E616D65\
+Fedora Linux 44 (Cloud Edition)
+Kernel 6.19.10-300.fc44.aarch64 on aarch64 (hvc0)
+
+enp0s1: 192.168.64.3 fd22:f583:a9c0:921c:d050:eaff:fed2:a1fe
+Try contacting this VM's SSH server via 'ssh vsock%3' from host.
+
+tillandsias-vm login: [tillandsias-tray] vm-status: phase=Ready podman_ready=true event=tillandsias-in-vm
+[tillandsias-tray] Quit: draining (timeout=60s)
+[tillandsias-tray] Quit: in-VM shutdown request: VmShutdownRequest: early eof (proceeding to VZ.requestStop)

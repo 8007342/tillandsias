@@ -8,6 +8,10 @@
 # Example: .googleapis.com already covers .storage.googleapis.com
 
 # --- Package registries ---
+# Homebrew (order 294): formulae.brew.sh API + brew.sh docs; bottles come
+# from ghcr.io and attestation verification from api.github.com (both
+# already covered below).
+.brew.sh
 .npmjs.org
 .npmjs.com
 .yarnpkg.com

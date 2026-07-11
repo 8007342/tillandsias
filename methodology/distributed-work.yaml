@@ -550,6 +550,154 @@ distributed_work:
           If blocked or failed, write a 'blocked' or 'failed' event with a clear error/reason
           under the item's events list, update status, release the lease, and switch to a ready fallback task.
 
+    forge_cycle_budget:
+      decided_by: "The Tlatoāni, 2026-07-10 (plan order 264)"
+      rule: >
+        Agents running INSIDE a forge container (TILLANDSIAS_HOST_KIND=forge)
+        drain AT MOST ONE plan packet per cycle. Before implementing, estimate
+        whether the packet's full implement+verify+commit+push fits the launch
+        envelope (litmus-launched forge cycles run inside
+        litmus:opencode-prompt-e2e-shape STEP 3's 600s budget). If it does not
+        fit, do NOT start implementation: SPLIT the packet into smaller ready
+        child packets (split_into pattern), record the shaping events, commit
+        and push. The shaping commit is that cycle's completed work — a split
+        that lowers residual ambiguity is a valid reduction step.
+      supersedes: >
+        The 2026-06 greedy-drain exception ("claim, implement, and complete as
+        many ready forge tasks as possible in a single session"). Greedy forge
+        cycles made duration unbounded, so a litmus step timeout was
+        indistinguishable from a hung forge (order 264 collision: one in-forge
+        cycle implemented the whole of order 263 and timed out the gate while
+        perfectly healthy). Host (non-forge) cycles keep the ordinary
+        one-coherent-commit budget rule.
+      interim_note: >
+        Reliance on step timeouts is interim. Order 265 (forge
+        heartbeat/liveness signals — we own the launch and the container
+        stack) tracks replacing timeout inference with positive liveness.
+
+    e2e_token_budget:
+      decided_by: "The Tlatoāni, 2026-07-11"
+      rule: >
+        A FULL in-forge /meta-orchestration e2e cycle is provider-token
+        expensive (the in-forge agent runs on a rate-limited provider
+        budget). Hosts run it AT MOST ONCE PER 4 HOURS, enforced by
+        scripts/forge-e2e-rate-limit.sh (class full-meta, host-persistent
+        stamp under ~/.cache/tillandsias/e2e-rate-limit/). Every other
+        forge-hosted e2e run MUST downgrade to the skill's Smoke Mode
+        (skills/meta-orchestration/SKILL.md "Invocation Modes"):
+        verify-only, no plan drain, no commits, final-line verdict
+        `MO-SMOKE: PASS|FAIL <reason>`. Launchers go through
+        scripts/litmus-opencode-e2e-launch.sh, which owns the branch and
+        records the stamp; ad-hoc full-cycle launches outside the limiter
+        are a finding.
+      rationale: >
+        Repeated full cycles per --ci-full and per destructive-gate retry
+        (sometimes killed at the step budget, discarding the work) burned
+        the in-forge provider budget and tripped provider rate limits that
+        then masqueraded as forge-lane outages (2026-07-10 overnight loop,
+        order 284 investigation).
+      escape_hatch: >
+        TILLANDSIAS_E2E_FORCE=1 makes the limiter's check always allow —
+        operator use only; its appearance in committed automation is
+        itself a finding.
+
+  long_running_packets:
+    trace: "plan order 251 (long-running-work-packet-methodology); plan/issues/long-running-work-packet-methodology-2026-07-09.md"
+    purpose: >
+      Support work packets that cannot be completed in a single agent cycle
+      (large audits, cross-cutting designs, multi-agent-verified artifacts)
+      without either stalling them or letting a single agent mark them done
+      unverified. Extends [[work_item_schema]] additively; every field below
+      is optional for ordinary single-cycle packets.
+    schema_extension:
+      multi_cycle:
+        kind: optional
+        type: boolean
+        note: >
+          true marks the packet as long-running: it accretes progress across
+          multiple agent cycles and MUST NOT be flipped to done by the
+          implementing agent alone when verification_required is present.
+      phase:
+        kind: optional_when_multi_cycle
+        enum: [research, design, review, implementation, verification]
+        rule: >
+          Coarse substate advanced monotonically by the agent holding the
+          cycle lease. Phase regression (e.g. verification back to design)
+          is allowed only via a revision event that names the disagreement
+          that forced it.
+      progress_summary:
+        kind: optional_when_multi_cycle
+        type: string
+        note: >
+          One-paragraph rolling summary updated each cycle so the next agent
+          orients from the packet header instead of replaying every event.
+          Update-in-place is the sanctioned exception to append-only history,
+          mirroring the status field's last-writer-wins rule.
+      verification_required:
+        kind: optional
+        fields:
+          agents: "list of {id: <agent-id>, criteria: [<criterion-tag>, ...]}"
+          completion_gate: "prose rule; default: ALL listed agents emit verified-by with every assigned criterion pass"
+        note: >
+          Criterion tags (e.g. NA-01, LM-03) are defined in the packet's
+          exit_criteria or deliverable document. An agent listed here
+          verifies only its assigned criteria and must not implement the
+          same slice it verifies.
+    lifecycle_rules:
+      - "A claim on a multi_cycle packet is CYCLE-SCOPED: it covers one agent session's slice, not the packet. After the cycle's commit, status returns to ready (not claimed) so the next capable agent or verifier can proceed."
+      - "Status stays ready across cycles until the completion_gate is satisfied; only then does a completed event flip it to done."
+      - "An implementing agent that satisfies all exit criteria emits a progress event stating implementation-complete and sets phase: verification — it MUST NOT emit completed while verified-by events are outstanding."
+      - "Each cycle appends events and updates progress_summary/phase; it never rewrites prior events (append-only history holds)."
+      - "Orchestrators treat a multi_cycle packet with phase: verification and missing verified-by events as a dispatch item for the named agents, not as stalled work."
+    verified_by_event_protocol:
+      event_type: verified-by
+      fields:
+        ts: "UTC ISO-8601"
+        agent_id: "the verifying agent's id — MUST match an id in verification_required.agents"
+        criteria: "list of criterion tags checked in this event (subset of the agent's assignment)"
+        verdict: "pass | fail | pass-with-notes (per event; a fail names the failing criterion and evidence)"
+        evidence: "refs to litmus/test output, file:line citations, or reproduction commands"
+      example: |
+        - type: verified-by
+          ts: "2026-07-11T04:00:00Z"
+          agent_id: "opencode-bigpickle"
+          criteria: [LM-01, LM-02, LM-03, LM-04, LM-05]
+          verdict: pass
+          evidence: "methodology/distributed-work.yaml long_running_packets section parses + matches plan/index.yaml order 245-251 usage; plan/long-running.md rows cross-checked"
+      rules:
+        - "verified-by is append-only and idempotent per (agent_id, criteria-set): re-verification after a revision appends a new event; it never edits the old one."
+        - "Any fail verdict returns the packet to phase: review with a revision event; affected criteria require re-verification from scratch after the revision (per the packet's completion_gate)."
+        - "verified-by events from agents not listed in verification_required are advisory: recorded, but they do not count toward the gate."
+        - "The completed event that closes the packet lists the satisfying verified-by events in evidence_refs."
+    additive_update_policy:
+      rule: >
+        Methodology, spec, and cheatsheet changes produced by long-running
+        audit/design packets MUST be additive: a new file, a new section
+        under the existing root key, or a clearly marked supersede
+        annotation (`supersedes: <old-section-or-rule>` plus a one-cycle
+        deprecation note at the old site). Rewriting or deleting existing
+        prose in place is not allowed while concurrent agents may hold
+        cycles against the same documents.
+      rationale: >
+        Concurrent agents merge branches containing these documents on every
+        cycle (pull_merge_cadence.pre_push_gate). Additive edits keep those
+        merges union-shaped and conflict-free; in-place rewrites are the
+        thrashing trigger [[active_multi_host_mediation_and_conflict_handling.thrashing_mediation]] exists to punish.
+      enforcement: >
+        Advisory at review time today; candidate for a litmus once the
+        pattern stabilizes (a diff-shape check that flags deletions inside
+        methodology/ and openspec/specs/ not annotated as supersede).
+    sub_queue_view:
+      path: plan/long-running.md
+      rule: >
+        Manually maintained filtered view of ACTIVE multi_cycle packets
+        (status not done/failed): one row per packet with order, packet_id,
+        phase, blocking dependency, and outstanding verifications. Updated
+        in the same commit as any cycle that changes a listed packet's
+        phase, status, or verification tally. plan/index.yaml remains the
+        source of truth; on disagreement the index wins and the view is
+        patched forward.
+
   cheatsheet_index:
     - cheatsheets/concurrent-git/branches.md
     - cheatsheets/concurrent-git/agent-handoff.md

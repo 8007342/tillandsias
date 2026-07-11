@@ -228,6 +228,7 @@ CHECK_IDS=(
     version-monotonicity
     rust-formatting
     rust-clippy
+    rust-clippy-all-features
     rust-tests
     container-base-policy
     cheatsheet-tiers
@@ -260,6 +261,7 @@ case "$CI_PHASE" in
                 version-monotonicity
                 rust-formatting
                 rust-clippy
+                rust-clippy-all-features
                 rust-tests
                 container-base-policy
                 cheatsheet-tiers
@@ -287,6 +289,7 @@ case "$CI_PHASE" in
             version-monotonicity
             rust-formatting
             rust-clippy
+            rust-clippy-all-features
             rust-tests
             container-base-policy
             cheatsheet-tiers
@@ -311,6 +314,7 @@ check_weight() {
         version-monotonicity) echo 40 ;;
         rust-formatting) echo 40 ;;
         rust-clippy) echo 60 ;;
+        rust-clippy-all-features) echo 180 ;;
         rust-tests) echo 80 ;;
         container-base-policy) echo 40 ;;
         cheatsheet-tiers) echo 80 ;;
@@ -332,6 +336,7 @@ check_spec_ref() {
         version-monotonicity) echo "spec:versioning" ;;
         rust-formatting) echo "spec:dev-build" ;;
         rust-clippy) echo "spec:dev-build" ;;
+        rust-clippy-all-features) echo "spec:dev-build" ;;
         rust-tests) echo "spec:testing" ;;
         container-base-policy) echo "spec:default-image" ;;
         cheatsheet-tiers) echo "spec:cheatsheet-source-layer" ;;
@@ -354,6 +359,7 @@ failed_reason_for_check() {
         version-monotonicity) echo "Version is not monotonically greater than last release (see /tmp/version-check.log)" ;;
         rust-formatting) echo "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)" ;;
         rust-clippy) echo "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)" ;;
+        rust-clippy-all-features) echo "All-features clippy warnings: run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' (see /tmp/clippy-all-features-check.log)" ;;
         rust-tests) echo "Test failures detected: run 'cargo test --workspace --lib' to see details (see /tmp/test-check.log)" ;;
         container-base-policy) echo "Container base-image policy drift found (see /tmp/container-bases.log)" ;;
         cheatsheet-tiers) echo "Cheatsheet tier errors or strict warnings found (see /tmp/cheatsheet-tiers.log)" ;;
@@ -836,6 +842,26 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         log_fail_tracked "rust-clippy" "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/clippy-check.log >&2
         archive_check_log "rust-clippy" "fail" /tmp/clippy-check.log
+    fi
+
+    # All-features clippy lane — approved bar-raise (The Tlatoāni, 2026-07-10):
+    # the default pass never compiles non-default-feature units (vm-layer
+    # fake/download/recipe/materialize, headless listen-vsock, materialize-cli
+    # required-features bin), so their lint debt was invisible until merge or
+    # e2e time. Deep lane only — skipped under --fast (--ci), runs under
+    # --ci-full. Registry: methodology/convergence.yaml approved_bar_raises
+    # id ci-full-all-features-clippy; slice 3 (promotion into --check) is NOT
+    # approved.
+    if [[ "$FAST_MODE" == "1" ]]; then
+        log_skip "All-features clippy lane (deep lane, skipped in fast mode)"
+        archive_check_log "rust-clippy-all-features" "skipped"
+    elif run_rust_on_host cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/clippy-all-features-check.log; then
+        log_pass "All-features clippy lane passes (no warnings)"
+        archive_check_log "rust-clippy-all-features" "pass" /tmp/clippy-all-features-check.log
+    else
+        log_fail_tracked "rust-clippy-all-features" "All-features clippy warnings: run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' (see /tmp/clippy-all-features-check.log)"
+        [[ "$VERBOSE" == "1" ]] && cat /tmp/clippy-all-features-check.log >&2
+        archive_check_log "rust-clippy-all-features" "fail" /tmp/clippy-all-features-check.log
     fi
 
     # Tests - run lib tests only; host-sensitive integration suites are covered by

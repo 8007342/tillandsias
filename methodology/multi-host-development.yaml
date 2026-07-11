@@ -238,6 +238,36 @@ multi_host_development:
       that credentials, version identity, and transport mode did not silently
       cross an unintended boundary.
 
+  idiomatic_layers_for_agents:
+    decided_by: "The Tlatoāni, 2026-07-10 attended session (plan order 271)"
+    rule: >
+      The Tillandsias idiomatic layers (tray/launcher surfaces, the control
+      wire, --diagnose, ExecOneShot, PTY attach with the TILLANDSIAS_PTY_DEBUG
+      tee, and the litmus/e2e skills' launch shapes) are the ONLY sanctioned
+      guest access for agents — for DEVELOPMENT work (forensics, rebuilds,
+      probes, log reading) exactly as for user runtime. Making the layers good
+      enough for development is what makes them good enough for users. The
+      host and guest do not share a trusted network; the guest is fully
+      isolated and root is never required.
+    when_the_layer_cannot_do_it: >
+      A debugging or development task that cannot be performed through the
+      sanctioned surfaces is a PRODUCT GAP, not a license to side-step: file
+      and promote a packet extending the idiomatic layer (precedents: the
+      TILLANDSIAS_PTY_DEBUG tee, orders 268/272), then do the task through
+      the extended layer. Side channels — ssh into the guest, cloud-init
+      debug keys, host-mounted guest disks, root exec in guest or forge —
+      are findings to file, never tools to use. The prompting incident: a
+      macOS agent ssh'd into the guest as root via a cloud-init debug key to
+      read journals and sneak a manual image rebuild (backdoor closed by
+      order 272); the correct move was extending the diagnose/attach
+      surface.
+    audit_rule: >
+      Any `ssh` to a guest address, any root shell in guest or forge, and any
+      credential/key material enabling either is a finding in coordinator
+      audits and code review — capture it per the reduction engine and check
+      the sanctioned-surface litmus (litmus:idiomatic-layers-doctrine-shape)
+      still pins this block and its skill cross-references.
+
   branch_canon:
     rule: >
       Branch names are CANONICAL — `osx-next`, not `macos-next`. The

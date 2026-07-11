@@ -48,21 +48,7 @@ critical_path:
     expected_behavior: "[A-Za-z0-9_-]{40,}"
 
   - step: "create mock OpenCode service inside forge (simple HTTP server)"
-    command: |
-      podman exec tillandsias-test-forge-e2e sh -c 'cat > /tmp/opencode-mock.sh << "EOF"
-      #!/bin/sh
-      while true; do
-        {
-          printf "HTTP/1.1 200 OK\r\n"
-          printf "Content-Type: application/json\r\n"
-          printf "Connection: close\r\n\r\n"
-          printf "{\"status\":\"opencode-ready\",\"path\":\"/\"}\n"
-        } | nc -l -p 4096
-      done
-      EOF
-      chmod +x /tmp/opencode-mock.sh
-      /tmp/opencode-mock.sh >/tmp/opencode-mock.log 2>&1 &
-      sleep 1 && echo MOCK_STARTED' 2>/dev/null | tail -1
+    command: "scripts/litmus-helper-browser-isolation.sh start-mock-opencode"
     timeout_ms: 10000
     expected_behavior: "MOCK_STARTED"
 
@@ -72,7 +58,7 @@ critical_path:
     expected_behavior: "OK"
 
   - step: "generate Caddyfile in router with opencode service route"
-    command: "cat > /tmp/tillandsias-router-e2e/Caddyfile << 'EOF'\nopencode.test-project.localhost:80 {\n  reverse_proxy http://forge:4096 {\n    header_up X-Forwarded-For {http.request.remote}\n    header_up X-Forwarded-Proto http\n  }\n}\nEOF\necho OK"
+    command: "rm -f /tmp/tillandsias-router-e2e/Caddyfile && echo 'opencode.test-project.localhost:80 {' > /tmp/tillandsias-router-e2e/Caddyfile && echo '  reverse_proxy http://forge:4096 {' >> /tmp/tillandsias-router-e2e/Caddyfile && echo '    header_up X-Forwarded-For {http.request.remote}' >> /tmp/tillandsias-router-e2e/Caddyfile && echo '    header_up X-Forwarded-Proto http' >> /tmp/tillandsias-router-e2e/Caddyfile && echo '  }' >> /tmp/tillandsias-router-e2e/Caddyfile && echo '}' >> /tmp/tillandsias-router-e2e/Caddyfile && echo OK"
     timeout_ms: 5000
     expected_behavior: "OK"
 

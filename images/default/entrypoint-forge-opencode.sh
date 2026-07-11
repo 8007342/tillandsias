@@ -74,6 +74,7 @@ clone_project_from_mirror
 # ── OpenCode + OpenSpec (hard-installed) ───────────────────
 # @trace spec:default-image, spec:forge-shell-tools
 require_opencode
+[ -x "$OC_BIN" ] || harness_missing_fatal opencode
 require_openspec
 apply_opencode_config_overlay
 
