@@ -1,0 +1,1 @@
+- 2026-07-11T19:45Z linux_mutable macuahuitl: RELEASE v0.3.260711.8 published (PR #71, run 29165261781, all platform assets + cosign bundles). Gate: 4th ci-full attempt green after updater-race + provider-throttling litmus fixes; first live smoke-mode meta e2e PASS. Shipped with the 8 known tray-parity gaps (orders 257/258), operator-directed.
