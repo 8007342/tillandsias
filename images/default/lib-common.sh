@@ -835,19 +835,63 @@ ensure_forge_prebuilt_tools() {
 }
 
 # ── Agent harness EVERY_LAUNCH update ──────────────────────────
+# ── Harness health probe + last-good rollback (order 284) ───
+# The 2026-07-10 outage: upstream published a broken opencode-ai@latest
+# mid-night, the EVERY_LAUNCH refresh installed it, and the whole forge
+# lane was down until upstream fixed it. @latest is structurally unsafe
+# without a survival path, so every update is now probed and a broken
+# fresh install rolls back to the last KNOWN-GOOD version recorded in the
+# persistent npm cache.
+harness_probe() {
+    # $1 = binary name. Cheap liveness: --version within a short timeout.
+    local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1"
+    [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1
+}
+
+harness_last_good_file() {
+    # $1 = binary name → stamp file in the persistent npm prefix.
+    echo "${NPM_CONFIG_PREFIX:-$HOME/.cache}/last-good-$1.version"
+}
+
+harness_record_last_good() {
+    # $1 = binary, $2 = npm package. Probe first; record only working installs.
+    local ver
+    harness_probe "$1" || return 1
+    ver="$(npm ls -g --depth=0 "$2" 2>/dev/null | grep -oE '@[0-9][^ ]*' | tail -1 | tr -d '@')"
+    [ -n "$ver" ] && echo "$ver" > "$(harness_last_good_file "$1")" 2>/dev/null
+    return 0
+}
+
 # ensure_forge_harnesses: npm-install/update agent harnesses (codex, claude-code,
 # opencode, openspec) to the LATEST version at every launch. Runs in the background
 # so it never blocks the agent launch. Fail-soft: if npm is offline or the proxy
 # is unreachable, the baked/cached version is used silently (no hard fail).
+# A fresh install that fails the health probe rolls back to the recorded
+# last-good version (order 284).
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 ensure_forge_harnesses() {
     # Avoid a concurrent npm join race — only the first process runs npm.
     local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
     if ! mkdir "$npm_lock" 2>/dev/null; then
-        return 0
+        # Self-heal locks leaked by the pre-fix trap bug (they live on the
+        # PERSISTENT volume, so one leak used to disable updates forever):
+        # a real concurrent updater finishes in minutes — reclaim after 1h.
+        if [ -d "$npm_lock" ] && [ -n "$(find "$npm_lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+            trace_lifecycle "harness" "reclaiming stale npm-update lock (leaked pre-fix)"
+            rm -rf "$npm_lock"
+            mkdir "$npm_lock" 2>/dev/null || return 0
+        else
+            return 0
+        fi
     fi
-    # Ensure we clean up the lock on exit (even forked).
-    trap 'rm -rf "$npm_lock"' EXIT
+    # Ensure we clean up the lock on exit (even forked). The path MUST be
+    # expanded NOW (double quotes): a single-quoted "$npm_lock" is expanded
+    # when the EXIT trap fires, after this function's `local` is out of
+    # scope — under set -u the trap then dies unbound and the lock dir
+    # LEAKS onto the persistent volume, silently disabling every future
+    # harness update (found by scripts/test-harness-rollback.sh, order 284).
+    # shellcheck disable=SC2064
+    trap "rm -rf '$npm_lock'" EXIT
 
     local npm_bin
     npm_bin="$(command -v npm 2>/dev/null)"
@@ -859,9 +903,35 @@ ensure_forge_harnesses() {
     # Update each harness to latest. We use `npm install` (not `npm update`) so
     # a missing or removed package is installed rather than silently skipped.
     # Uses $NPM_CONFIG_PREFIX (persistent cache, set in lib-common.sh).
+    local pkg bin lg
     for pkg in opencode-ai "@fission-ai/openspec" "@anthropic-ai/claude-code" "@openai/codex"; do
+        case "$pkg" in
+            opencode-ai) bin=opencode ;;
+            "@fission-ai/openspec") bin=openspec ;;
+            "@anthropic-ai/claude-code") bin=claude ;;
+            "@openai/codex") bin=codex ;;
+        esac
         if ! "$npm_bin" install -g --no-audit --no-fund "$pkg@latest" 2>/dev/null; then
             trace_lifecycle "harness" "npm update failed for $pkg (non-fatal, using cached)"
+            continue
+        fi
+        if harness_record_last_good "$bin" "$pkg"; then
+            continue
+        fi
+        # Fresh @latest is broken (the order-284 class). Roll back to the
+        # recorded last-good version when we have one; otherwise leave the
+        # broken install in place and trace loudly (the entrypoint's
+        # require path surfaces it with the real error).
+        lg="$(cat "$(harness_last_good_file "$bin")" 2>/dev/null || true)"
+        if [ -n "$lg" ]; then
+            trace_lifecycle "harness" "$pkg@latest FAILED health probe — rolling back to last-good $lg"
+            if "$npm_bin" install -g --no-audit --no-fund "$pkg@$lg" 2>/dev/null && harness_probe "$bin"; then
+                trace_lifecycle "harness" "$pkg rollback to $lg OK"
+            else
+                trace_lifecycle "harness" "$pkg rollback to $lg FAILED (broken install remains)"
+            fi
+        else
+            trace_lifecycle "harness" "$pkg@latest FAILED health probe and no last-good recorded (upstream-broken publish?)"
         fi
     done
 
@@ -945,6 +1015,9 @@ _require_harness() {
         fi
         rm -f "$errlog" 2>/dev/null || true
         path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+        # Seed the order-284 rollback point: the first working install of a
+        # fresh cache becomes last-good so a later broken @latest can revert.
+        harness_record_last_good "$bin" "$pkg" 2>/dev/null || true
     fi
     if [ -x "$path" ]; then
         trace_lifecycle "install" "$name: available ($("$path" --version 2>/dev/null || echo 'unknown'))"

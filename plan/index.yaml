@@ -8142,7 +8142,7 @@ plan_index:
     - packet_id: forge-opencode-harness-broken-by-upstream-latest
       order: 284
       title: "P1: forge opencode lane down — opencode-ai@latest refresh mid-night broke the harness (postinstall incomplete in-enclave)"
-      status: ready
+      status: done
       kind: bug
       deliverable: images/default/lib-common.sh
       depends_on: []
@@ -8199,6 +8199,22 @@ plan_index:
             down again) and criterion 3 (postinstall egress disposition)
             remain open; criterion 1 evidence is scratchpad repro
             2026-07-11T06:55Z.
+        - type: completed
+          ts: "2026-07-11T19:10:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Criterion 2 closed: ensure_forge_harnesses now health-probes
+            every fresh @latest and rolls back to the recorded last-good
+            version (seeded by the first working install); fixtures +
+            litmus:harness-rollback-shape green. BONUS finds fixed in the
+            same change: the npm-update lock trap expanded a local var at
+            EXIT time (unbound under set -u) so the lock dir LEAKED onto
+            the persistent volume and silently disabled all future
+            harness updates — trap now expands at set time + stale locks
+            (>1h) self-heal; live volume confirmed to carry one leaked
+            lock from 06:33Z. Criterion 3 (postinstall egress target
+            disposition) folded into order 129 scope.
 
     - packet_id: forge-entrypoint-fatal-require-on-empty-cache
       order: 291
