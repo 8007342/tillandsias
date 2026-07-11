@@ -1,6 +1,32 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-11T19:45:00Z
+LastExecutionTime: 2026-07-11T20:30:00Z
+
+## Cycle 2026-07-11T18:23Z→20:30Z (windows — meta-orchestration: order 282 DONE + verified, e2e run 4 PASS on attempt 2, staging-contract feature bug fixed)
+
+- **Host**: Windows 11, `windows-next`, agent windows-bullo-claude-20260711T182324Z.
+  Credential guard `ok:gh-credentials-store`. Started clean at 976f2539, merged
+  linux-next twice (18d78d99, then the release commit 9632165a — fast-forward
+  both times because the coordinator had already integrated our pushes).
+- **Drained: order 282 (guest-binary-embed-windows) COMPLETE with evidence**:
+  host-arch staging in build-windows-tray.ps1 (target-guest/ → assets/),
+  stale-binary version pin test, loud absent-asset warn, fetch demoted;
+  guest binaries built inside the local WSL distro (rustup musl toolchain).
+  Destructive e2e run 20260711T191912Z: attempt 1 FAILED (handshake timeout)
+  → ROOT-CAUSED to build-guest-binaries.sh cargo fallback using `--features
+  tray` (no vsock listener; flake uses `listen-vsock`) → fixed → attempt 2
+  PASS end-to-end incl. FULL-TOPIC push subscription on a pristine embedded
+  guest (order 154 slice-3 live check unblocked + passed, no legacy fallback).
+- **Release observed**: v0.3.260711.8 published 19:38Z (run 29165261781
+  success) with this cycle's windows commits in its lineage; watched to
+  terminal success per operator goal.
+- **Findings filed**: windows-litmus-strict-exit-fallout-2026-07-11.md (10
+  instant-suite FAILs on windows after strict-exit; incl. VERSION-clobber
+  hazard when a step-killed litmus skips its EXIT trap restore) + valid-YAML
+  mediation on litmus-litmus-stdlib-portability-shape.yaml (`\|` escape).
+- **Queue after cycle (windows)**: order 154 residual (watch-channel menu
+  wakeups + tick-task elimination), order 279 residual (N=10 quit/relaunch
+  litmus; macOS analog), 258/274 blocked-on-operator, any-host audits 245-251.
 
 ## Cycle 2026-07-11T17:57Z→19:45Z (linux_mutable macuahuitl — operator-goal drain + RELEASE gate green)
 
