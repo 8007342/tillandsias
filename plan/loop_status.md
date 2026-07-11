@@ -1,7 +1,30 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-11T07:15:00Z
+LastExecutionTime: 2026-07-11T18:05:00Z
 
+## Cycle 2026-07-11T17:58Z (macos — operator session: integrate linux forge-lane fix, fresh destructive provision for interaction)
+
+- **Host**: macOS arm64, `osx-next`, operator present. Credential guard
+  `ok:gh-keyring`. Merged origin/linux-next 3fddd8b2 (+5: forge P1 fixes —
+  order 291 P0 post-reset startup regression fixed fail-soft with traced
+  errors; order 284 forge-opencode minimal repro now passes end-to-end;
+  orders 285/286 fail-soft harness + 4h e2e token budget; 287/292/293
+  vault provider-login roles + runtime-build proxy exemption + router in
+  launch ensure list). osx-next pushed to 3fddd8b2 — linux stays unblocked.
+- **Integration gate**: build check clean; macOS crates green (tray 69,
+  host-shell 59, vm-layer 51, control-wire 38).
+- **E2E gate (destructive local-build) — provision PASS**: eligible;
+  destroyed yesterday's substrate + cold provision at 3fddd8b2 (528MB
+  Fedora image) exit 0, so the operator interacts with a PRISTINE current
+  VM carrying all of last night's + this morning's guest fixes.
+- **Interactive build launched** (v0.3.260711.5, TILLANDSIAS_PTY_DEBUG=1)
+  for the operator. Order 291's fail-soft launch fix is directly relevant
+  to order 273 (agent attach ran the login flow / died) — if the operator
+  logs in, the agent-attach path can finally be re-tested live with the
+  PTY tee to see whether 291/284 changed the behavior.
+- **Queue**: order 273 (attach) still ready [linux], needs operator PAT to
+  repro — now testable this session. Order 155 (macos) criteria proposal
+  still pending Tlatoāni decision.
 ## Cycle 2026-07-11T06:30Z→07:15Z (linux_mutable macuahuitl — operator session: P0 startup regression fixed, e2e token budget enforced)
 
 - **Order 291 (P0, done; renumbered from 285 — macOS filed its own 285
