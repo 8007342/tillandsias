@@ -1,0 +1,94 @@
+# @trace spec:default-image
+# Pins the 2026-07-11 operator decision: on-demand userspace tools come
+# from VERIFIABLE Homebrew packages only — homebrew-core formulae with
+# Sigstore build-provenance attestations, verified at install. Guards the
+# shim runner's structural rejections (taps/casks/unlisted pairs), the
+# attestation env, the allowlist mapping shape, the lazy pinned bootstrap
+# (no floating install.sh), and the image wiring.
+name: litmus:brew-ondemand-tools-shape
+spec: default-image
+phase: pre-build
+description: >
+  Shape-test the on-demand brew tool surface (orders 294/296):
+  tillandsias-brew-shim-exec rejects taps and unlisted pairs, hints
+  instead of installing when auto-install is off, execs an
+  already-installed tool without touching brew, requires attestation
+  verification env, and pins to a Homebrew release tag; lib-common
+  generates shims for allowlisted missing commands; the Containerfile
+  ships allowlist + runner.
+severity: high
+size: instant
+
+preconditions:
+  - repo checkout with images/default/ present
+
+critical_path:
+  - step: "runner and allowlist ship in the image"
+    command: "grep -Fq 'brew-tools-allowlist.txt /usr/local/lib/tillandsias/brew-tools-allowlist.txt' images/default/Containerfile && grep -Fq 'brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec' images/default/Containerfile && grep -Fq '/usr/local/bin/tillandsias-brew-shim-exec' images/default/Containerfile && echo 'ok: image-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: image-wired"
+
+  - step: "attestation verification is REQUIRED and analytics disabled"
+    command: "grep -Fq 'HOMEBREW_VERIFY_ATTESTATIONS=1' images/default/brew-shim-exec.sh && grep -Fq 'HOMEBREW_NO_ANALYTICS=1' images/default/brew-shim-exec.sh && echo 'ok: attested-env'"
+    timeout_ms: 3000
+    expected_behavior: "ok: attested-env"
+
+  - step: "brew bootstrap is a PINNED release tag, not floating install.sh"
+    command: "grep -Eq 'BREW_PIN_TAG=' images/default/brew-shim-exec.sh && grep -Fq -- '--branch \"$BREW_PIN_TAG\"' images/default/brew-shim-exec.sh && ! grep -Eq 'install.sh|HEAD/install' images/default/brew-shim-exec.sh && echo 'ok: pinned-bootstrap'"
+    timeout_ms: 3000
+    expected_behavior: "ok: pinned-bootstrap"
+
+  - step: "tap/cask-shaped formulae are structurally rejected (exit 2)"
+    command: "out=$(bash images/default/brew-shim-exec.sh evil 'some/tap/pkg' 2>&1); rc=$?; echo \"$out\" | grep -q 'verifiable homebrew-core formulae only' && [ \"$rc\" = 2 ] && echo 'ok: tap-rejected' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: tap-rejected"
+
+  - step: "command→formula pairs outside the shipped allowlist are rejected (exit 2)"
+    command: "out=$(TILLANDSIAS_BREW_ALLOWLIST=images/default/brew-tools-allowlist.txt bash images/default/brew-shim-exec.sh nosuchtool wget 2>&1); rc=$?; echo \"$out\" | grep -q 'not in the on-demand tool allowlist' && [ \"$rc\" = 2 ] && echo 'ok: unlisted-rejected' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: unlisted-rejected"
+
+  - step: "auto-install off prints the userspace brew hint and exits 127"
+    command: "d=$(mktemp -d); out=$(TILLANDSIAS_BREW_PREFIX=$d/none TILLANDSIAS_BREW_ALLOWLIST=images/default/brew-tools-allowlist.txt TILLANDSIAS_BREW_AUTOINSTALL=0 bash images/default/brew-shim-exec.sh zellij zellij 2>&1); rc=$?; rm -rf \"$d\"; echo \"$out\" | grep -q \"Install it in userspace with: brew install zellij\" && [ \"$rc\" = 127 ] && echo 'ok: hint-mode' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: hint-mode"
+
+  - step: "already-installed tool execs directly without invoking brew"
+    command: "d=$(mktemp -d); mkdir -p $d/bin; printf '#!/bin/bash\\necho REAL $1\\n' > $d/bin/zellij; chmod +x $d/bin/zellij; out=$(TILLANDSIAS_BREW_PREFIX=$d TILLANDSIAS_BREW_ALLOWLIST=images/default/brew-tools-allowlist.txt bash images/default/brew-shim-exec.sh zellij zellij hello 2>&1); rc=$?; rm -rf \"$d\"; [ \"$out\" = 'REAL hello' ] && [ \"$rc\" = 0 ] && echo 'ok: exec-path' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: exec-path"
+
+  - step: "allowlist lines are well-formed '<command> <formula>' pairs, no taps or casks"
+    command: "bad=$(grep -Ev '^([[:space:]]*$|#)' images/default/brew-tools-allowlist.txt | grep -Evc '^[a-zA-Z0-9][a-zA-Z0-9._+-]* [a-z0-9][a-z0-9._+-]*$' || true); [ \"$bad\" = 0 ] && ! grep -E '^[^#]*/' images/default/brew-tools-allowlist.txt | grep -q . && echo 'ok: allowlist-shape' || { echo \"FAIL: $bad malformed lines or tap-like entries\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: allowlist-shape"
+
+  - step: "lib-common generates shims for allowlisted missing commands and appends the dir LAST on PATH"
+    command: "grep -Fq 'install_brew_shims()' images/default/lib-common.sh && grep -Fq 'tillandsias-brew-shim-exec %q %q' images/default/lib-common.sh && grep -Fq 'PATH=\"$PATH:$shim_dir\"' images/default/lib-common.sh && echo 'ok: shim-generation'"
+    timeout_ms: 3000
+    expected_behavior: "ok: shim-generation"
+
+  - step: "proxy allowlist covers the brew API domain"
+    command: "grep -Fq '.brew.sh' images/proxy/allowlist.txt && echo 'ok: egress-allowlisted'"
+    timeout_ms: 3000
+    expected_behavior: "ok: egress-allowlisted"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: >
+    Brew on-demand tool surface verified: attested-formulae-only runner,
+    structural tap/cask rejection, hint mode, exec path, allowlist shape,
+    shim generation, and egress allowlist entry.
+  log_fields:
+    spec: "default-image"
+    test: "brew-ondemand-tools-shape"
+    artifact: "temp dirs (removed in-step)"
+
+rollback:
+  on_failure: >
+    The operator decision (2026-07-11) requires VERIFIABLE brew packages
+    only. If a step fails, restore the guard rather than weakening it;
+    update this litmus in the SAME commit as any surface change. Context:
+    plan/issues/homebrew-harness-distribution-research-2026-07-11.md.
+  command: "ls -l images/default/brew-shim-exec.sh images/default/brew-tools-allowlist.txt && grep -n 'install_brew_shims' images/default/lib-common.sh"

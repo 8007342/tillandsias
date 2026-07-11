@@ -8394,10 +8394,12 @@ plan_index:
     - packet_id: homebrew-harness-distribution-migration
       order: 290
       title: "Adopt Homebrew (pinned, attestation-verified) for eligible harness/tool installs; on-demand brew tool helper for forge agents"
-      status: blocked
+      status: done
+      decided_by: "The Tlatoāni, 2026-07-11 — approved brew WITH attestation, verifiable packets only; on-demand shims with brew-install hint/transparent first-use install"
+      split_into: [brew-ondemand-tool-shims, brew-opencode-harness-migration]
       kind: enhancement
       deliverable: plan/issues/homebrew-harness-distribution-research-2026-07-11.md
-      depends_on: [agent-services-egress-allowlist-research]
+      depends_on: []
       pickup_role: linux
       capability_tags: [supply-chain, forge, images, research]
       estimated_hours: 8
@@ -8430,6 +8432,103 @@ plan_index:
           summary: >
             Research issue written at operator request; packet blocked on
             operator slice decision + egress allowlist prerequisite.
+        - type: approved
+          ts: "2026-07-11T18:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            The Tlatoāni approved brew WITH attestation for verifiable
+            provenance — verifiable brew packets ONLY — plus a generous
+            on-demand allowlist with distro-style first-use shims. Split
+            into orders 294 (shims, implemented) and 295 (opencode
+            harness migration). Egress prerequisite satisfied directly:
+            .brew.sh added to images/proxy/allowlist.txt (ghcr.io +
+            github.com already covered).
+
+    - packet_id: brew-ondemand-tool-shims
+      order: 294
+      title: "On-demand userspace tools: brew shims with attested-formulae-only runner + generous general-use allowlist"
+      status: done
+      kind: enhancement
+      deliverable: images/default/brew-shim-exec.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [supply-chain, forge, images, shell]
+      estimated_hours: 4
+      outcome: >
+        Implemented per the 2026-07-11 operator decision: (1)
+        images/default/brew-tools-allowlist.txt — ~80 general-use
+        command→formula pairs (JSON/data, search/files, observability,
+        terminal workflow, git tooling, network, build systems,
+        containers/cloud, docs/media), homebrew-core FORMULAE only; (2)
+        /usr/local/bin/tillandsias-brew-shim-exec — central runner:
+        structurally rejects taps/casks/unlisted pairs (exit 2), lazy
+        pinned-tag Homebrew bootstrap into the standard /home/linuxbrew
+        prefix (bottles only prebuilt there; no floating pipe-to-shell
+        installer), HOMEBREW_VERIFY_ATTESTATIONS=1 REQUIRED so
+        installs fail without valid Sigstore provenance, transparent
+        exec after install; TILLANDSIAS_BREW_AUTOINSTALL=0 flips to the
+        distro-style hint ("Install it in userspace with: brew install
+        X", exit 127); (3) lib-common install_brew_shims generates shims
+        for allowlisted missing commands into a LAST-on-PATH dir at
+        entrypoint (TILLANDSIAS_BREW_SHIMS=0 disables); (4)
+        /home/linuxbrew pre-created forge-owned in the Containerfile;
+        (5) .brew.sh egress allowlist entry. Pinned by
+        litmus:brew-ondemand-tools-shape (10 steps).
+      exit_criteria:
+        - "tap/cask/unlisted installs are structurally impossible through the shim runner (litmus)"
+        - "attestation verification env is required, not optional (litmus)"
+        - "shims generate for allowlisted missing commands and exec transparently after install (litmus + host simulation)"
+      events:
+        - type: completed
+          ts: "2026-07-11T18:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Implemented + litmus green (10/10; 62 shims generated in host
+            simulation; guard/hint/exec paths exercised). Live in-forge
+            bottle install pending first post-build run — any finding
+            goes to a follow-up packet. Cellar persistence across
+            launches (volume-mount /home/linuxbrew) noted as follow-up
+            inside order 295's soak.
+
+    - packet_id: brew-opencode-harness-migration
+      order: 295
+      title: "Migrate the opencode harness install to an attested homebrew-core bottle behind the migration ladder (npm fallback retained)"
+      status: ready
+      kind: enhancement
+      deliverable: images/default/lib-common.sh
+      depends_on: [brew-ondemand-tool-shims]
+      pickup_role: linux
+      capability_tags: [supply-chain, forge, npm, shell]
+      estimated_hours: 5
+      outcome: >
+        Slice 2 of the approved brew adoption: opencode is the one
+        harness with a homebrew-core formula and Linux bottles (Sigstore
+        attested) — moving it off npm decouples the forge lane from the
+        order-284 postinstall-breakage class. Ladder per
+        methodology (feedback_migration_discipline): flag
+        (TILLANDSIAS_OPENCODE_VIA_BREW=1 in _require_harness/
+        ensure_forge_harnesses, npm fallback intact) → soak (forge e2e
+        gates on both paths; measure cold-start delta; decide cellar
+        persistence: volume-mount /home/linuxbrew on the order-179
+        pattern) → default (brew primary, npm fallback) → remove-flag.
+        codex/claude/antigravity stay on npm on Linux (brew casks are
+        macOS-only vendor binaries, NOT attestation-covered — outside
+        the operator's "verifiable packets only" constraint).
+      exit_criteria:
+        - "flag stage: opencode installs from an attested bottle when flagged, npm fallback intact (litmus)"
+        - "soak evidence: both paths green in forge e2e gates + cold-start delta recorded"
+        - "default flip recorded as its own ladder event before flag removal"
+      events:
+        - type: filed
+          ts: "2026-07-11T18:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Filed from the order-290 split under the operator's approval;
+            ready for any linux cycle once 294's image ships (next
+            build).
 
     - packet_id: runtime-image-builds-missing-proxy-exemption
       order: 292

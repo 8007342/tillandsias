@@ -186,6 +186,7 @@ specs:
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
   - litmus:forge-firstrun-prebuilt-tools-arch-shape
+  - litmus:brew-ondemand-tools-shape
   coverage_ratio: 80
   last_verified: '2026-07-05'
 - spec_id: dev-build

@@ -1,0 +1,112 @@
+# @trace spec:default-image
+# On-demand userspace tool allowlist (plan order 296, operator-approved
+# 2026-07-11: "verifiable brew packets only").
+#
+# Format: <command> <homebrew-core formula>   (one per line, # = comment)
+#
+# Every entry MUST be a homebrew-core FORMULA (Sigstore-attested bottles,
+# verified at install via HOMEBREW_VERIFY_ATTESTATIONS=1). Casks and
+# third-party taps are rejected by ensure_brew_tool — do not add them.
+# Commands listed here get a PATH shim in the forge: running the command
+# installs the tool on first use (or prints the brew install hint when
+# auto-install is disabled). Keep entries general-purpose dev tooling.
+
+# --- JSON/YAML/data wrangling ---
+jq jq
+yq yq
+gron gron
+fx fx
+jless jless
+mlr miller
+dasel dasel
+taplo taplo
+
+# --- Search/files/navigation ---
+fzf fzf
+fd fd
+bat bat
+eza eza
+tree tree
+zoxide zoxide
+broot broot
+dust du-dust
+duf duf
+ncdu ncdu
+
+# --- System/process observability ---
+htop htop
+btm bottom
+procs procs
+hyperfine hyperfine
+tokei tokei
+cloc cloc
+watchexec watchexec
+entr entr
+
+# --- Terminal workflow ---
+tmux tmux
+zellij zellij
+direnv direnv
+just just
+task go-task
+gum gum
+glow glow
+starship starship
+
+# --- Git tooling ---
+lazygit lazygit
+gitui gitui
+delta git-delta
+difft difftastic
+gitleaks gitleaks
+
+# --- Network/HTTP ---
+xh xh
+doggo doggo
+socat socat
+websocat websocat
+grpcurl grpcurl
+aria2c aria2
+nmap nmap
+mtr mtr
+
+# --- Build systems/compilers aids ---
+cmake cmake
+ninja ninja
+meson meson
+bazelisk bazelisk
+protoc protobuf
+pkgconf pkgconf
+bear bear
+ast-grep ast-grep
+ctags universal-ctags
+
+# --- Containers/cloud ---
+dive dive
+lazydocker lazydocker
+hadolint hadolint
+trivy trivy
+kubectl kubernetes-cli
+helm helm
+k9s k9s
+tofu opentofu
+aws awscli
+cosign cosign
+mkcert mkcert
+age age
+sops sops
+minisign minisign
+
+# --- Docs/media ---
+pandoc pandoc
+dot graphviz
+magick imagemagick
+ffmpeg ffmpeg
+sqlite3 sqlite
+
+# --- Editors/misc ---
+nvim neovim
+parallel parallel
+pv pv
+sponge moreutils
+7zz sevenzip

@@ -987,6 +987,44 @@ require_codex() {
     return 0
 }
 
+# ── On-demand userspace tools (Homebrew, attested formulae only) ──
+# @trace spec:default-image
+# Plan order 296 (operator-approved 2026-07-11): every command in
+# /usr/local/lib/tillandsias/brew-tools-allowlist.txt that is not already
+# on PATH gets a shim in a LAST-on-PATH dir. Running the command installs
+# it on first use through tillandsias-brew-shim-exec (homebrew-core
+# formulae only, Sigstore attestation verification REQUIRED), then execs
+# it transparently — distro-style "command-not-found" UX, but it actually
+# installs. TILLANDSIAS_BREW_SHIMS=0 disables shim generation;
+# TILLANDSIAS_BREW_AUTOINSTALL=0 makes shims print the
+# `brew install <formula>` hint instead of installing.
+install_brew_shims() {
+    local allowlist="/usr/local/lib/tillandsias/brew-tools-allowlist.txt"
+    local shim_dir="$HOME/.local/share/tillandsias/brew-shims"
+    [ -f "$allowlist" ] || return 0
+    [ -x /usr/local/bin/tillandsias-brew-shim-exec ] || return 0
+    mkdir -p "$shim_dir" 2>/dev/null || return 0
+    local cmd formula
+    while read -r cmd formula _; do
+        case "$cmd" in \#*|"") continue ;; esac
+        [ -n "$formula" ] || continue
+        # Real tool already present (image-baked or previously installed):
+        # no shim. The shim dir is last on PATH anyway, so this is belt
+        # and suspenders against confusing `command -v` output.
+        command -v "$cmd" >/dev/null 2>&1 && continue
+        [ -e "$shim_dir/$cmd" ] && continue
+        printf '#!/bin/bash\nexec /usr/local/bin/tillandsias-brew-shim-exec %q %q "$@"\n' \
+            "$cmd" "$formula" > "$shim_dir/$cmd" 2>/dev/null || continue
+        chmod +x "$shim_dir/$cmd" 2>/dev/null || true
+    done < "$allowlist"
+    export PATH="$PATH:$shim_dir"
+    trace_lifecycle "tools" "on-demand brew shims ready ($shim_dir)"
+}
+
+if [ "${TILLANDSIAS_BREW_SHIMS:-1}" != "0" ]; then
+    install_brew_shims || true
+fi
+
 # ── OpenCode config overlay ─────────────────────────────────
 # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp, spec:layered-tools-overlay
 # The Containerfile bakes a minimal stub at ~/.config/opencode/config.json
