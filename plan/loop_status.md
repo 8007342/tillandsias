@@ -1,6 +1,31 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-11T18:40:00Z
+LastExecutionTime: 2026-07-11T19:45:00Z
+
+## Cycle 2026-07-11T17:57Z→19:45Z (linux_mutable macuahuitl — operator-goal drain + RELEASE gate green)
+
+- **Drained**: 283 (smoke-lock fd close-on-exec + fixture), 284 (updater
+  probe+rollback to last-good; BONUS: npm-update lock-leak trap bug fixed
+  + 1h self-heal), 288 (tray label 120-char cap), 289 (lane predicate +
+  teardown tracing), 290/294 (operator-approved attested brew adoption:
+  shims + allowlist + litmus; 295 filed for opencode migration), 225
+  progressed (ADOPTED STRAY from the in-forge gate agent: mf_* litmus
+  stdlib, completed the unexported-var wiring bug).
+- **Gate saga (4 attempts to green)**: harness updater race (sibling npm
+  replaces shared-prefix symlinks non-atomically → next launch fatal) —
+  fixed with lock-aware wait + 6h cadence; then TWO provider-throttling
+  misclassifications — three copies of the state=failed assertion judged
+  agent-process exits as infra failures; all three now split infra
+  (fatal) from agent exits (e2e concern). Diagnostics e2e joined the
+  e2e_token_budget (4h limiter class diagnostics + cached-evidence
+  reuse). **First live smoke-mode meta e2e PASS** (MO-SMOKE verdict,
+  delta steps skipped) — order 286 proven.
+- **Gate 4: GREEN** (pre-build matrix + post-build smoke + runtime
+  residual all pass). windows-next merged (order 282 done); osx-next in
+  sync. RELEASE proceeding per operator instruction with the 8 known
+  tray-parity gaps (orders 257/258 cells) recorded as
+  release-with-parity-gaps, operator-directed 2026-07-11 ("ensure a
+  successful release"; macOS/Windows workers actively draining).
 
 ## Cycle 2026-07-11T18:20Z (macos — operator session: ROOT-CAUSED the agent-attach failure = guest disk too small; 250G fix + Antigravity parity)
 
