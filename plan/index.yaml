@@ -7738,6 +7738,34 @@ plan_index:
             criteria and order 262's residual full-chain criterion in the
             same run. Timeout inference remains interim pending order 265
             (heartbeat/liveness).
+        - type: reframe
+          ts: "2026-07-11T18:35:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260711T1758Z"
+          host: macos
+          summary: >
+            REFRAME — this packet's evidence is confounded; re-test before
+            assuming a dispatch bug. On a fresh 250G-fixed VM (order 294)
+            the operator-driven agent attach showed a DIFFERENT failure
+            than the original 2026-07-10 capture: the forge-base IMAGE BUILD
+            streamed 558 dnf packages then died 'needs NNN MB more space on
+            / filesystem' -> build STEP error -> PtyClose code=**1** (NOT the
+            login flow, NOT code=0). Root cause was the ~5GB guest disk
+            (order 294, now 250G / 249G free). The original 2026-07-10
+            'login flow, code=0' capture was on a 5GB (and at times
+            order-281-corrupt) substrate, so it cannot be trusted as
+            evidence of a guest-dispatch bug — the launch may never have
+            reached run_opencode_mode because the forge image couldn't
+            build. ACTION for linux: before writing any dispatch fix, have
+            the operator re-run an agent attach on the 250G substrate
+            (TILLANDSIAS_PTY_DEBUG=1) and read the tee — if the agent TUI
+            now paints, 273 is MOOT (was the disk); if the login flow still
+            appears with a built forge image, THEN the dispatch bug is real
+            and the original candidate paths apply. NOTE (ledger hygiene):
+            this packet's events list has picked up a mis-placed duplicate
+            of order 264's forge-budget decision/progress/completed events
+            (a merge artifact — YAML-valid so the gates missed it); linux
+            as ledger owner should prune them. Filed:
+            plan/issues/order-273-confounded-by-disk-reframe-2026-07-11.md.
 
     - packet_id: forge-agent-liveness-signals
       order: 265
