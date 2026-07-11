@@ -4335,6 +4335,13 @@ fn podman_build_argv(
         "build".to_string(),
         "--format".to_string(),
         "docker".to_string(),
+        // Proxy-exemption class (orders 116/118/119, 4th instance 2026-07-11):
+        // containers.conf bakes http(s)_proxy=proxy:3128 into EVERY container,
+        // but build containers are not on the enclave network, so `proxy`
+        // never resolves and any RUN needing egress (apk/dnf/npm) fails DNS.
+        // scripts/build-image.sh has carried --http-proxy=false since the
+        // first instance; this runtime build path missed it.
+        "--http-proxy=false".to_string(),
         "--dns".to_string(),
         "8.8.8.8".to_string(),
         "-t".to_string(),
@@ -7459,7 +7466,13 @@ pub(crate) fn ensure_enclave_for_project(
     // ensure_ca_bundle is idempotent (our caller needs the certs_dir PathBuf).
     let certs_dir = ensure_ca_bundle(debug)?;
 
-    let images = ["git", "inference", "forge"];
+    // "router" included (2026-07-11): ensure_router_running below launches
+    // the versioned router image but nothing on this path built it, so in
+    // the window between a VERSION bump and the next full image build the
+    // launch died trying to pull localhost/tillandsias-router:v<new> from a
+    // nonexistent registry (same bump-window class as the order-267
+    // run-observatorium finding).
+    let images = ["router", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
 
     let project_remote_url = project_path.and_then(read_host_project_origin_url);
@@ -11545,6 +11558,11 @@ mod tests {
             &argv[0..3],
             ["build", "--format", "docker"],
             "Rust image builds must preserve Dockerfile HEALTHCHECK metadata"
+        );
+        assert!(
+            argv.contains(&"--http-proxy=false".to_string()),
+            "runtime image builds must exempt the containers.conf enclave proxy \
+             env (proxy-exemption class; build containers cannot resolve `proxy`): {argv:?}"
         );
     }
 

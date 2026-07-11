@@ -4,7 +4,8 @@ LastExecutionTime: 2026-07-11T07:15:00Z
 
 ## Cycle 2026-07-11T06:30Z→07:15Z (linux_mutable macuahuitl — operator session: P0 startup regression fixed, e2e token budget enforced)
 
-- **Order 285 (P0, done)**: after `podman system reset` every lane
+- **Order 291 (P0, done; renumbered from 285 — macOS filed its own 285
+  first)**: after `podman system reset` every lane
   (opencode/codex/claude/antigravity/maintenance terminal) died with
   "Terminal startup failed (exit code: 1)" — bare `require_*` calls under
   `set -e` turned a failed launch-time npm install into a fatal, with the
@@ -15,6 +16,21 @@ LastExecutionTime: 2026-07-11T07:15:00Z
   through enclave, agent answers, exit 0) — upstream published a working
   latest. Residual: updater pin/rollback + postinstall egress
   disposition remain open.
+- **Orders 287/292/293 (operator session follow-up, done)**: codex/claude/
+  antigravity lanes crashed at launch — three stacked regressions unwound
+  live: (287) provider-login vault roles shipped 2026-06-30 as HCL files
+  but never wired into Policy::all(), so every post-reset login flow
+  404'd (also fixed the bootstrap sentinel probing the OLDEST role, which
+  froze existing vaults out of new roles forever); (292) BOTH Rust podman
+  build paths lacked --http-proxy=false (proxy-exemption class, 4th
+  instance) so post-bump lazy image rebuilds died on apk DNS; (293)
+  "router" was missing from the launch ensure-images list (bump-window
+  pull from nonexistent registry). Orders 288 (tray stack-trace UX P0),
+  289 (shared proxy teardown under a live terminal lane), 290 (Homebrew
+  migration research — blocked on Tlatoāni slice decision) filed.
+  Operator's live BigPickle test (opencode from terminal) pushed
+  da85f0c9 — commit+push relay proven; file distilled and removed per
+  markdown policy.
 - **Order 286 (operator directive, done)**: full in-forge
   /meta-orchestration e2e capped at once per 4h per host
   (scripts/forge-e2e-rate-limit.sh); other runs downgrade to the skill's

@@ -15,5 +15,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/tests/cache_corruption_recovery.rs#L1](../../../crates/tillandsias-core/tests/cache_corruption_recovery.rs#L1)
 - [crates/tillandsias-headless/src/main.rs#L3426](../../../crates/tillandsias-headless/src/main.rs#L3426)
 - [crates/tillandsias-headless/src/main.rs#L3855](../../../crates/tillandsias-headless/src/main.rs#L3855)
-- [crates/tillandsias-headless/src/main.rs#L4387](../../../crates/tillandsias-headless/src/main.rs#L4387)
+- [crates/tillandsias-headless/src/main.rs#L4394](../../../crates/tillandsias-headless/src/main.rs#L4394)
 - [crates/tillandsias-headless/tests/error_recovery.rs#L1](../../../crates/tillandsias-headless/tests/error_recovery.rs#L1)

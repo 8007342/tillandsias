@@ -8191,7 +8191,8 @@ plan_index:
             2026-07-11T06:55Z.
 
     - packet_id: forge-entrypoint-fatal-require-on-empty-cache
-      order: 285
+      order: 291
+      renumbered_from: 285
       title: "P0 regression: ALL harness lanes + maintenance terminal die at startup after podman system reset (fatal require_* under set -e)"
       status: done
       kind: bug
@@ -8280,3 +8281,218 @@ plan_index:
             paths with a stubbed ./repeat (full records stamp, second run
             downgrades to smoke, marker-less smoke fails loud, exit 126).
             meta-orchestration pre-build instant litmuses 6/6 PASS.
+
+    - packet_id: provider-login-vault-roles-never-provisioned
+      order: 287
+      title: "P1 regression: codex/claude/antigravity lanes crash at launch — provider-login vault roles never provisioned (half-landed 2026-06-30 agent-login work)"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-vault-client/src/policy.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [vault, rust, lifecycle]
+      estimated_hours: 3
+      outcome: >
+        Operator report 2026-07-11: opencode + terminal launch, but codex/
+        claude/antigravity crash. Headless repro: both die host-side with
+        "vault issue_approle_token failed: vault not found" BEFORE the
+        forge starts. Chain: post-reset vault has no provider OAuth
+        tokens, so lane launch enters run_provider_login, which mints an
+        approle token for role "<provider>-login" — but commit 7d52a5a1
+        (2026-06-30 agent-login checkpoint) shipped the three HCL policy
+        files (images/vault/policies/{claude,codex,antigravity}-login.hcl)
+        WITHOUT wiring them into Policy::all(), so load_policies/
+        provision_approle_roles never registered them (opencode survived
+        only because its credentials were already in vault). Compounding
+        bug: the bootstrap "already provisioned" gate probed the OLDEST
+        role (git-mirror), so existing vault volumes would never pick up
+        newly added roles. Fix: wired ClaudeLogin/CodexLogin/
+        AntigravityLogin into the Policy enum (names, hcl_path, embedded
+        hcl, all()) + policy_role_name; changed the bootstrap sentinel to
+        the NEWEST role (antigravity-login) so stale vaults re-provision
+        idempotently; extended the unit tests.
+      exit_criteria:
+        - "codex/claude/antigravity lanes get past vault token mint post-reset (repro no longer 404s)"
+        - "an already-provisioned vault volume picks up newly added roles at next bootstrap (sentinel = newest role)"
+        - "policy enum and HCL files locked byte-equal by existing embedded-hcl test"
+      events:
+        - type: completed
+          ts: "2026-07-11T08:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Wired + tested (vault-client 11/11, vault_bootstrap 12/12,
+            vault_approle_provisioning 2/2). Verification against the live
+            stack recorded in a follow-up event after rebuild+repro.
+
+    - packet_id: tray-status-menu-stack-trace-unusable
+      order: 288
+      title: "P0 UX: tray status menu item renders a full multi-line stack trace, spans offscreen, tray becomes unusable (cannot quit or launch)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/tray
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [tray, ux, rust]
+      estimated_hours: 3
+      outcome: >
+        Operator report 2026-07-11: after a lane error (the order-287
+        vault 404), the tray's status menu item displayed the WHOLE error
+        chain/stack trace as menu text, extending offscreen and making
+        every menu item (including Quit) unreachable — the operator had
+        to have the coordinator kill the process. Errors surfaced into
+        menu items must be truncated to a single short line (with the
+        full text going to the debug log / a "copy details" action), and
+        the menu must remain navigable regardless of error length.
+      exit_criteria:
+        - "status menu item text is hard-capped (single line, bounded length) with full detail routed to logs"
+        - "tray remains quittable with a pathological multi-KB error string (unit test on the menu-label builder)"
+      events:
+        - type: filed
+          ts: "2026-07-11T08:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Filed from operator report; root error was order 287 but ANY
+            long error reproduces the UX failure — fix the surface, not
+            just this instance.
+
+    - packet_id: shared-proxy-teardown-while-terminal-lane-live
+      order: 289
+      title: "Shared proxy/inference teardown while a maintenance-terminal lane is still running breaks its egress (curl: Could not resolve proxy)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, network, containers]
+      estimated_hours: 3
+      outcome: >
+        Operator repro 2026-07-11: inside the terminal container, any
+        egress (e.g. the brew installer curl) failed with "curl: (5)
+        Could not resolve proxy: proxy" — the terminal had baked proxy
+        env but the tillandsias-proxy container was GONE: another lane's
+        session-end cleanup (cleanup_shared_stack_if_no_running_forge)
+        removed the shared proxy while the terminal lane was still alive,
+        i.e. the maintenance terminal is not counted as a "running forge"
+        by the shared-stack liveness check. Fix: include terminal (and
+        any attached interactive lane) in the running-lane predicate, or
+        re-ensure the proxy on demand; add a regression test on the
+        predicate.
+      exit_criteria:
+        - "a live maintenance terminal prevents shared proxy/inference teardown (predicate unit test)"
+        - "operator repro: brew/curl egress from terminal works while other lanes come and go"
+      events:
+        - type: filed
+          ts: "2026-07-11T08:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Filed from operator repro; proxy-exemption class relative
+            (enclave proxy lifecycle vs lane lifetimes).
+
+    - packet_id: homebrew-harness-distribution-migration
+      order: 290
+      title: "Adopt Homebrew (pinned, attestation-verified) for eligible harness/tool installs; on-demand brew tool helper for forge agents"
+      status: blocked
+      kind: enhancement
+      deliverable: plan/issues/homebrew-harness-distribution-research-2026-07-11.md
+      depends_on: [agent-services-egress-allowlist-research]
+      pickup_role: linux
+      capability_tags: [supply-chain, forge, images, research]
+      estimated_hours: 8
+      outcome: >
+        Research complete (see deliverable): Homebrew is community-run
+        under the Software Freedom Conservancy; homebrew-core FORMULA
+        bottles carry Sigstore/in-toto build-provenance attestations
+        (SLSA L2, verifiable via HOMEBREW_VERIFY_ATTESTATIONS=1) and ship
+        Linux x86_64/arm64 bottles — but codex and antigravity-cli are
+        CASKS (macOS-only vendor binaries with sha pins, no attestation),
+        and claude-code has no core formula, so on Linux only OPENCODE is
+        a clean brew candidate today. Proposed slices: (1) opencode via
+        pinned Homebrew-on-Linux + attestation verification behind the
+        migration ladder, npm fallback retained; (2) guarded
+        ensure_brew_tool helper (formula allowlist, attestations on) as
+        the sanctioned on-demand tool channel replacing ad-hoc curl
+        installers; (3) revisit codex/antigravity when core formulae
+        appear; macOS guest MAY use casks if vendor-binary trust is
+        accepted. BLOCKED on: (a) Tlatoāni slice approval, (b) egress
+        allowlist entries for ghcr.io + formulae.brew.sh (order 129/130).
+      exit_criteria:
+        - "Tlatoāni decision recorded on slices 1-3"
+        - "slice 1: opencode installs from an attested bottle in-forge behind a flag, npm fallback intact"
+        - "slice 2: ensure_brew_tool helper with formula allowlist + litmus"
+      events:
+        - type: filed
+          ts: "2026-07-11T08:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Research issue written at operator request; packet blocked on
+            operator slice decision + egress allowlist prerequisite.
+
+    - packet_id: runtime-image-builds-missing-proxy-exemption
+      order: 292
+      title: "Proxy-exemption class, 4th instance: Rust runtime podman builds lack --http-proxy=false — post-bump image rebuilds die on apk/dnf DNS"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-podman/src/client.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [containers, proxy, rust, lifecycle]
+      estimated_hours: 2
+      outcome: >
+        Found while verifying order 287: containers.conf bakes the enclave
+        proxy env into EVERY container (by design, pinned by
+        litmus-environment-isolation), and build containers are not on the
+        enclave network, so `proxy` never resolves — any image RUN needing
+        egress fails DNS (repro: proxy image apk add, exit 4).
+        scripts/build-image.sh has carried --http-proxy=false since the
+        first instance (orders 116/118/119) but BOTH Rust build paths
+        missed it: PodmanClient::build_image (ensure_image_exists /
+        runtime lazy builds) and podman_build_argv (identity builds).
+        Added the flag to both + a unit assertion on the argv builder.
+        This only bit in the bump window because ./build.sh normally
+        pre-builds images through the exempted script path.
+      exit_criteria:
+        - "both Rust podman-build paths pass --http-proxy=false (argv unit test)"
+        - "post-bump lazy image rebuild succeeds on a RUN needing egress (live repro)"
+      events:
+        - type: completed
+          ts: "2026-07-11T08:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Fixed in PodmanClient::build_image + podman_build_argv;
+            tillandsias-podman suite green; live re-verify showed the apk
+            step passing (next failure was the distinct order-293 window).
+
+    - packet_id: router-image-missing-from-launch-ensure-list
+      order: 293
+      title: "Bump window: forge-launch path ensures git/inference/forge images but launches a versioned router it never builds"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, containers, rust]
+      estimated_hours: 1
+      outcome: >
+        Found while verifying order 287: ensure_enclave_for_project calls
+        ensure_router_running with versioned_image_tag("router") but
+        "router" was absent from its ensure_versioned_images list, so in
+        the VERSION-bump window podman tried to PULL
+        localhost/tillandsias-router:v<new> from a nonexistent registry
+        (dial tcp [::1]:80 refused) and the lane died. Same bump-window
+        class as the order-267 run-observatorium finding. Fix: added
+        "router" to the launch ensure list.
+      exit_criteria:
+        - "fresh VERSION bump + lane launch builds the router image on demand (live repro exits past router bring-up)"
+      events:
+        - type: completed
+          ts: "2026-07-11T08:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            One-line ensure-list fix with rationale comment; verified in
+            the same live pipeline as orders 287/292.
