@@ -4,6 +4,13 @@ LastExecutionTime: 2026-07-11T19:45:00Z
 
 ## Cycle 2026-07-11T17:57Z→19:45Z (linux_mutable macuahuitl — operator-goal drain + RELEASE gate green)
 
+- **RELEASE: v0.3.260711.8 PUBLISHED** — PR #71 merged (formatting-only
+  conflicts from the Jul-8 out-of-band main checkpoint mediated), tag +
+  workflow_dispatch run 29165261781 SUCCESS, full asset set (linux musl
+  x86_64/aarch64, macOS dmg+tar, windows zip, installers, SHA256SUMS,
+  cosign bundles). Latest tested release for curl-install e2e:
+  v0.3.260711.8.
+
 - **Drained**: 283 (smoke-lock fd close-on-exec + fixture), 284 (updater
   probe+rollback to last-good; BONUS: npm-update lock-leak trap bug fixed
   + 1h self-heal), 288 (tray label 120-char cap), 289 (lane predicate +
