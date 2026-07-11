@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace spec:default-image
 # tillandsias-brew-shim-exec — central runner behind the on-demand tool
-# shims (plan order 296, operator-approved 2026-07-11).
+# shims (plan order 294, operator-approved 2026-07-11).
 #
 # Usage (called by generated shims, not by hand):
 #   tillandsias-brew-shim-exec <command> <formula> [args...]

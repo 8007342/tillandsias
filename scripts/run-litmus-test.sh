@@ -69,6 +69,7 @@ readonly LITMUS_RUNTIME_DIR="${PROJECT_ROOT}/target/litmus-runtime"
 readonly LITMUS_PODMAN_ROOT="${PROJECT_ROOT}/target/litmus-podman/root"
 readonly LITMUS_PODMAN_RUNROOT="${PROJECT_ROOT}/target/litmus-podman/runroot"
 readonly LITMUS_PODMAN_TMPDIR="${PROJECT_ROOT}/target/litmus-podman/tmp"
+readonly LITMUS_STDLIB="${PROJECT_ROOT}/scripts/litmus-stdlib.sh"
 
 if [[ -z "${XDG_RUNTIME_DIR:-}" || ! -w "${XDG_RUNTIME_DIR:-/dev/null}" ]]; then
     mkdir -p "$LITMUS_RUNTIME_DIR"
@@ -781,7 +782,7 @@ run_litmus_test_file() {
         # @trace spec:spec-traceability
         printf '  [STEP %d/%d] %s (timeout: %ds)...' "$step_index" "${#step_commands[@]}" "$step_name" "$timeout_sec" >&2
 
-        step_output=$(timeout "${timeout_sec}s" bash -c "$step_command" 2>&1) || exit_code=$?
+        step_output=$(timeout "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"$step_command" 2>&1) || exit_code=$?
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
 
         if [[ $exit_code -eq 124 ]]; then
