@@ -1,5 +1,5 @@
 # @trace spec:default-image
-# On-demand userspace tool allowlist (plan order 296, operator-approved
+# On-demand userspace tool allowlist (plan order 294, operator-approved
 # 2026-07-11: "verifiable brew packets only").
 #
 # Format: <command> <homebrew-core formula>   (one per line, # = comment)

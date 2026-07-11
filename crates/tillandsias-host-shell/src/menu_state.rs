@@ -54,6 +54,7 @@ pub mod ids {
     pub const AGENT_CLAUDE: &str = "agent.claude";
     pub const AGENT_CODEX: &str = "agent.codex";
     pub const AGENT_OPENCODE: &str = "agent.opencode";
+    pub const AGENT_ANTIGRAVITY: &str = "agent.antigravity";
     pub const OBSERVATORIUM: &str = "observatorium";
     pub const OPENCODE_WEB: &str = "opencode-web";
 
@@ -62,6 +63,7 @@ pub mod ids {
     pub const VERB_CLAUDE: &str = "claude";
     pub const VERB_CODEX: &str = "codex";
     pub const VERB_OPENCODE: &str = "opencode";
+    pub const VERB_ANTIGRAVITY: &str = "antigravity";
     pub const VERB_OPENCODE_WEB: &str = "opencode-web";
     pub const VERB_OBSERVATORIUM: &str = "observatorium";
     pub const VERB_MAINTENANCE: &str = "maintenance";
@@ -193,6 +195,7 @@ pub enum SelectedAgent {
     Claude,
     Codex,
     OpenCode,
+    Antigravity,
 }
 
 impl SelectedAgent {
@@ -201,6 +204,7 @@ impl SelectedAgent {
             SelectedAgent::Claude => "Claude",
             SelectedAgent::Codex => "Codex",
             SelectedAgent::OpenCode => "OpenCode",
+            SelectedAgent::Antigravity => "Antigravity",
         }
     }
 
@@ -209,6 +213,7 @@ impl SelectedAgent {
             SelectedAgent::Claude => ids::AGENT_CLAUDE,
             SelectedAgent::Codex => ids::AGENT_CODEX,
             SelectedAgent::OpenCode => ids::AGENT_OPENCODE,
+            SelectedAgent::Antigravity => ids::AGENT_ANTIGRAVITY,
         }
     }
 }
@@ -496,6 +501,7 @@ fn build_agents(state: &MenuState) -> MenuItem {
         SelectedAgent::Claude,
         SelectedAgent::Codex,
         SelectedAgent::OpenCode,
+        SelectedAgent::Antigravity,
     ] {
         children.push(MenuItem::checkmark(
             agent.id(),
@@ -560,6 +566,7 @@ fn build_project_submenu(
         (ids::VERB_CLAUDE, "\u{1F47E} Claude"),
         (ids::VERB_CODEX, "\u{1F3D7}\u{FE0F} Codex"),
         (ids::VERB_OPENCODE, "\u{1F4BB} OpenCode"),
+        (ids::VERB_ANTIGRAVITY, "\u{1FA90} Antigravity"),
         (ids::VERB_OPENCODE_WEB, "\u{1F4D0} OpenCode Web"),
         (ids::VERB_OBSERVATORIUM, "\u{1F52D} Observatorium"),
         (ids::VERB_MAINTENANCE, "\u{1F527} Maintenance"),
@@ -667,14 +674,15 @@ mod tests {
             );
         }
 
-        // Local projects: 5 children, each a submenu with 6 per-project leaves.
+        // Local projects: 5 children, each a submenu with 7 per-project
+        // leaves (Antigravity added 2026-07-11 for Linux parity).
         let local_node = &items[1];
         assert_eq!(local_node.children.len(), 5);
         for child in &local_node.children {
             assert_eq!(
                 child.children.len(),
-                6,
-                "each project has 6 agent/action leaves"
+                7,
+                "each project has 7 agent/action leaves"
             );
             let verbs: Vec<&str> = child
                 .children
@@ -687,6 +695,7 @@ mod tests {
                     "claude",
                     "codex",
                     "opencode",
+                    "antigravity",
                     "opencode-web",
                     "observatorium",
                     "maintenance"
@@ -808,7 +817,7 @@ mod tests {
             _ => panic!("expected Ready"),
         };
         let proj = &items[1].children[0];
-        assert_eq!(proj.children.len(), 6);
+        assert_eq!(proj.children.len(), 7);
         assert!(proj.children.iter().all(|l| !l.enabled));
         assert!(
             proj.children
@@ -835,11 +844,12 @@ mod tests {
             _ => panic!("expected Ready"),
         };
         let proj = &items[1].children[0];
-        assert_eq!(proj.children.len(), 6);
+        assert_eq!(proj.children.len(), 7);
         assert!(proj.children.iter().all(|l| l.enabled));
         // IDs follow the project.local.<name>.<verb> scheme.
         assert!(proj.children[0].id.ends_with(".claude"));
-        assert!(proj.children[5].id.ends_with(".maintenance"));
+        assert!(proj.children[3].id.ends_with(".antigravity"));
+        assert!(proj.children[6].id.ends_with(".maintenance"));
     }
 
     /// @trace spec:vm-provisioning-lifecycle

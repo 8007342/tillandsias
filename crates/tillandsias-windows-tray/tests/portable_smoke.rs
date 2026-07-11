@@ -114,6 +114,7 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
             "claude",
             "codex",
             "opencode",
+            "antigravity",
             "opencode-web",
             "observatorium",
             "maintenance"

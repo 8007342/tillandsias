@@ -900,6 +900,26 @@ ensure_forge_harnesses() {
         return 0
     fi
 
+    # Rate-limit the refresh (6h): each npm install replaces the shared
+    # prefix's bin symlinks non-atomically, and a sibling launch landing in
+    # that window sees the harness "missing" (2026-07-11 gate incident).
+    # A 6h cadence keeps order-181 freshness (multiple dailies) while
+    # cutting the race surface ~100x; a missing harness is still installed
+    # immediately by _require_harness regardless of this stamp.
+    local update_stamp="$HOME/.cache/tillandsias-project/harness-update-stamp"
+    if [ -f "$update_stamp" ]; then
+        local now last age
+        now="$(date +%s)"
+        last="$(cat "$update_stamp" 2>/dev/null || echo 0)"
+        case "$last" in *[!0-9]*|"") last=0 ;; esac
+        age=$(( now - last ))
+        if [ "$age" -lt 21600 ]; then
+            trace_lifecycle "harness" "refresh skipped (last update ${age}s ago, cadence 21600s)"
+            return 0
+        fi
+    fi
+    date +%s > "$update_stamp" 2>/dev/null || true
+
     # Update each harness to latest. We use `npm install` (not `npm update`) so
     # a missing or removed package is installed rather than silently skipped.
     # Uses $NPM_CONFIG_PREFIX (persistent cache, set in lib-common.sh).
@@ -1004,6 +1024,25 @@ _require_harness() {
     local name="$1" pkg="$2" bin="$3" path errlog
     path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
     [ -x "$path" ] || path="/usr/local/bin/$bin"
+    # Updater race (2026-07-11 gate incident): a SIBLING container's
+    # background ensure_forge_harnesses replaces the shared prefix's bin
+    # symlinks non-atomically, so a launch landing in that window sees the
+    # harness "missing" and then races a SECOND npm against the same
+    # prefix (fails in ~1s with mid-state errors). If the npm-update lock
+    # is held, wait for the updater (bounded 90s; a lock is stale only
+    # via the 1h reclaim path) and re-check before deciding anything.
+    if [ ! -x "$path" ] && [ -d "$HOME/.cache/tillandsias-project/npm-update.lock" ]; then
+        trace_lifecycle "harness" "$name not visible while updater lock held — waiting for sibling npm update"
+        local waited=0
+        while [ -d "$HOME/.cache/tillandsias-project/npm-update.lock" ] && [ "$waited" -lt 90 ]; do
+            sleep 2
+            waited=$((waited + 2))
+            path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+            [ -x "$path" ] || path="/usr/local/bin/$bin"
+            [ -x "$path" ] && break
+        done
+        [ -x "$path" ] && trace_lifecycle "harness" "$name appeared after ${waited}s (sibling updater)"
+    fi
     if [ ! -x "$path" ]; then
         trace_lifecycle "harness" "$name missing — install latest"
         errlog="$(mktemp /tmp/npm-install-${bin}.XXXXXX 2>/dev/null || echo /tmp/npm-install-$bin.err)"
@@ -1062,7 +1101,7 @@ require_codex() {
 
 # ── On-demand userspace tools (Homebrew, attested formulae only) ──
 # @trace spec:default-image
-# Plan order 296 (operator-approved 2026-07-11): every command in
+# Plan order 294 (operator-approved 2026-07-11): every command in
 # /usr/local/lib/tillandsias/brew-tools-allowlist.txt that is not already
 # on PATH gets a shim in a LAST-on-PATH dir. Running the command installs
 # it on first use through tillandsias-brew-shim-exec (homebrew-core

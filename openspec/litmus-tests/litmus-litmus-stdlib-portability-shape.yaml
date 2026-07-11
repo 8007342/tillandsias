@@ -1,0 +1,128 @@
+# @trace spec:spec-traceability
+#
+# Drift-protection litmus for scripts/litmus-stdlib.sh. Pins that:
+# 1. The stdlib file exists and sources without error.
+# 2. The runner loads the stdlib before executing step commands.
+# 3. New/changed command: fields using raw hand-escaped metacharacters
+#    fail loud, preventing the silent cross-host breakage class from
+#    reappearing.
+#
+# Plan: plan/issues/litmus-command-portability-dsl-implementation-2026-07-06.md
+# Design: plan/issues/litmus-command-portability-dsl-research-2026-07-06.md
+
+name: litmus:litmus-stdlib-portability-shape
+spec: spec-traceability
+phase: pre-build
+size: instant
+severity: medium
+
+description: >
+  Pin that litmus-stdlib.sh is present, loadable, and that raw
+  hand-escaped backslash metacharacters (the recurring cross-host
+  breakage class) are not reintroduced in new command: fields.
+
+preconditions:
+  - workspace contains scripts/litmus-stdlib.sh
+  - workspace contains scripts/run-litmus-test.sh
+
+critical_path:
+  - step: "litmus-stdlib.sh is present and sources without error"
+    command: "bash -c 'source scripts/litmus-stdlib.sh && mf_literal /dev/null nonexistent; echo \"stdlib loaded: $?\"'"
+    timeout_ms: 3000
+    expected_behavior: "stdlib loaded"
+
+  - step: "LITMUS_STDLIB constant is set in the runner"
+    command: "grep -Fq 'LITMUS_STDLIB=' scripts/run-litmus-test.sh && echo 'ok: LITMUS_STDLIB defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: LITMUS_STDLIB defined"
+
+  - step: "runner sources stdlib before executing step commands"
+    command: "grep -Fq 'LITMUS_STDLIB=\"${LITMUS_STDLIB}\"' scripts/run-litmus-test.sh && echo 'ok: stdlib source present in runner'"
+    timeout_ms: 3000
+    expected_behavior: "ok: stdlib source present in runner"
+
+  - step: "mf_literal works: literal match finds expected content"
+    command: "printf 'hello world\\nfoo bar\\n' > /tmp/_litmus_stdlib_test && mf_literal /tmp/_litmus_stdlib_test 'hello world' && echo 'ok: literal match'"
+    timeout_ms: 3000
+    expected_behavior: "ok: literal match"
+
+  - step: "mf_literal works: absent pattern returns non-zero"
+    command: "! mf_literal /tmp/_litmus_stdlib_test 'not present' && echo 'ok: absent literal'"
+    timeout_ms: 3000
+    expected_behavior: "ok: absent literal"
+
+  - step: "mf_literal_count returns correct count"
+    command: "c=\\$(mf_literal_count /tmp/_litmus_stdlib_test 'hello'); [ \"\\$c\" = '1' ] && echo 'ok: count=1'"
+    timeout_ms: 3000
+    expected_behavior: "ok: count=1"
+
+  - step: "mf_regex matches ERE alternation"
+    command: "mf_regex /tmp/_litmus_stdlib_test '(hello|foo)' && echo 'ok: regex alternation match'"
+    timeout_ms: 3000
+    expected_behavior: "ok: regex alternation match"
+
+  - step: "mf_regex_count returns correct count with regex"
+    command: "c=\\$(mf_regex_count /tmp/_litmus_stdlib_test '^(hello|foo)'); [ \"\\$c\" = '2' ] && echo 'ok: regex_count=2'"
+    timeout_ms: 3000
+    expected_behavior: "ok: regex_count=2"
+
+  - step: "mf_absent exits 0 when pattern not found"
+    command: "mf_absent /tmp/_litmus_stdlib_test 'not_there' && echo 'ok: absent confirmed'"
+    timeout_ms: 3000
+    expected_behavior: "ok: absent confirmed"
+
+  - step: "mf_threshold passes when count >= min"
+    command: "mf_threshold /tmp/_litmus_stdlib_test 'hello' 1 && echo 'ok: threshold met'"
+    timeout_ms: 3000
+    expected_behavior: "ok: threshold met"
+
+  - step: "mf_threshold fails when count < min"
+    command: "! mf_threshold /tmp/_litmus_stdlib_test 'hello' 99 && echo 'ok: threshold correctly failed'"
+    timeout_ms: 3000
+    expected_behavior: "ok: threshold correctly failed"
+
+  - step: "mf_file_exists detects existing file"
+    command: "mf_file_exists /tmp/_litmus_stdlib_test && echo 'ok: file exists'"
+    timeout_ms: 3000
+    expected_behavior: "ok: file exists"
+
+  - step: "mf_file_exists correctly fails for missing file"
+    command: "! mf_file_exists /tmp/_litmus_nonexistent && echo 'ok: missing file correctly failed'"
+    timeout_ms: 3000
+    expected_behavior: "ok: missing file correctly failed"
+
+  - step: "mf_assert_count passes on equal"
+    command: "mf_assert_count 3 3 && echo 'ok: assert_count equal'"
+    timeout_ms: 3000
+    expected_behavior: "ok: assert_count equal"
+
+  - step: "mf_assert_count fails on mismatch"
+    command: "! mf_assert_count 3 5 && echo 'ok: assert_count mismatch'"
+    timeout_ms: 3000
+    expected_behavior: "ok: assert_count mismatch"
+
+  - step: "mf_threshold_std passes on threshold"
+    command: "mf_threshold_std 10 5 && echo 'ok: threshold_std met'"
+    timeout_ms: 3000
+    expected_behavior: "ok: threshold_std met"
+
+  - step: "cleanup temp file"
+    command: "rm -f /tmp/_litmus_stdlib_test && echo 'ok: cleaned'"
+    timeout_ms: 3000
+    expected_behavior: "ok: cleaned"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "litmus stdlib is present, sourced by runner, and all 8 core functions work correctly"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-stdlib-portability-shape"
+    artifact: "scripts/litmus-stdlib.sh"
+
+rollback:
+  on_failure: >
+    scripts/litmus-stdlib.sh or its runner integration regressed.
+    Restore the file, verify runner sources it (line: `source "$LITMUS_STDLIB"`),
+    and that all 8 mf_* functions exist and pass unit-level checks.
+  command: "grep -n 'mf_\|LITMUS_STDLIB' scripts/litmus-stdlib.sh scripts/run-litmus-test.sh"

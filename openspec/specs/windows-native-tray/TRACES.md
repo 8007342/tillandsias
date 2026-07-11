@@ -7,8 +7,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-host-shell/src/menu_action.rs#L12](../../../crates/tillandsias-host-shell/src/menu_action.rs#L12)
 - [crates/tillandsias-host-shell/src/menu_state.rs#L21](../../../crates/tillandsias-host-shell/src/menu_state.rs#L21)
-- [crates/tillandsias-host-shell/src/menu_state.rs#L398](../../../crates/tillandsias-host-shell/src/menu_state.rs#L398)
-- [crates/tillandsias-host-shell/src/menu_state.rs#L595](../../../crates/tillandsias-host-shell/src/menu_state.rs#L595)
+- [crates/tillandsias-host-shell/src/menu_state.rs#L403](../../../crates/tillandsias-host-shell/src/menu_state.rs#L403)
+- [crates/tillandsias-host-shell/src/menu_state.rs#L602](../../../crates/tillandsias-host-shell/src/menu_state.rs#L602)
 - [crates/tillandsias-host-shell/src/pty/windows.rs#L15](../../../crates/tillandsias-host-shell/src/pty/windows.rs#L15)
 - [crates/tillandsias-vm-layer/src/wsl.rs#L9](../../../crates/tillandsias-vm-layer/src/wsl.rs#L9)
 - [crates/tillandsias-windows-tray/build.rs#L18](../../../crates/tillandsias-windows-tray/build.rs#L18)
@@ -25,4 +25,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L11](../../../crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L11)
 - [crates/tillandsias-windows-tray/tests/cli_integration.rs#L19](../../../crates/tillandsias-windows-tray/tests/cli_integration.rs#L19)
 - [crates/tillandsias-windows-tray/tests/portable_smoke.rs#L13](../../../crates/tillandsias-windows-tray/tests/portable_smoke.rs#L13)
-- [crates/tillandsias-windows-tray/tests/portable_smoke.rs#L174](../../../crates/tillandsias-windows-tray/tests/portable_smoke.rs#L174)
+- [crates/tillandsias-windows-tray/tests/portable_smoke.rs#L175](../../../crates/tillandsias-windows-tray/tests/portable_smoke.rs#L175)

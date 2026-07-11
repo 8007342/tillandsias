@@ -173,11 +173,12 @@ mod tests {
             .find(|s| s.id == ids::LOCAL_PROJECTS)
             .expect("local-projects present");
         assert_eq!(projects.children.len(), 1);
-        // Linux parity: each project has 6 leaves.
+        // Linux parity: each project has 7 leaves (Antigravity added
+        // 2026-07-11).
         assert_eq!(
             projects.children[0].children.len(),
-            6,
-            "each project has 6 leaves (claude/codex/opencode/opencode-web/observatorium/maintenance)"
+            7,
+            "each project has 7 leaves (claude/codex/opencode/antigravity/opencode-web/observatorium/maintenance)"
         );
     }
 

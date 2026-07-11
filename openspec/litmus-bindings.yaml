@@ -690,8 +690,9 @@ specs:
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
   - litmus:litmus-runner-backslash-escaping-shape
-  coverage_ratio: 75
-  last_verified: '2026-07-06'
+  - litmus:litmus-stdlib-portability-shape
+  coverage_ratio: 77
+  last_verified: '2026-07-11'
 - spec_id: subdomain-naming-flip
   status: active
   litmus_tests:
