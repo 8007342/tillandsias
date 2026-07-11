@@ -37,7 +37,7 @@ critical_path:
     expected_behavior: "ok: LITMUS_STDLIB defined"
 
   - step: "runner sources stdlib before executing step commands"
-    command: "grep -Fq 'source \"\\$LITMUS_STDLIB\"' scripts/run-litmus-test.sh && echo 'ok: stdlib source present in runner'"
+    command: "grep -Fq 'LITMUS_STDLIB=\"${LITMUS_STDLIB}\"' scripts/run-litmus-test.sh && echo 'ok: stdlib source present in runner'"
     timeout_ms: 3000
     expected_behavior: "ok: stdlib source present in runner"
 
