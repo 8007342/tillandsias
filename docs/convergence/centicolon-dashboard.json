@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-07-11T18:59:35Z",
+  "generated_at": "2026-07-11T19:13:34Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 293,
-  "sparkline_closed": "██▁█▁▁██████████████████████████████████████████▇▇█████████████████████████████████████████████████████████▁█▁███▁█▁██████▆▅▆▅▆▅▅▆▇█████████████████▇▆███▆▆▆▆▆▆▆▇████████▇██████████████▇██████████████▇███▆██▆▆▇▇▇███████████████████████████▆██████▇████▇█▇▇▇███████▇██▇▇█▇██████▇▇███████████▇████",
-  "sparkline_residual": "▁▁█▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▁█▁▁▁█▁█▁▁▁▁▁▁▃▄▃▄▃▄▄▃▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▃▁▁▁▃▃▃▃▃▃▃▂▁▁▁▁▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▁▁▁▃▁▁▃▃▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▁▁▁▁▁▁▂▁▁▁▁▂▁▂▂▂▁▁▁▁▁▁▁▂▁▁▂▂▁▂▁▁▁▁▁▁▂▂▁▁▁▁▁▁▁▁▁▁▁▂▁▁▁▁",
+  "record_count": 294,
+  "sparkline_closed": "██▁█▁▁██████████████████████████████████████████▇▇█████████████████████████████████████████████████████████▁█▁███▁█▁██████▆▅▆▅▆▅▅▆▇█████████████████▇▆███▆▆▆▆▆▆▆▇████████▇██████████████▇██████████████▇███▆██▆▆▇▇▇███████████████████████████▆██████▇████▇█▇▇▇███████▇██▇▇█▇██████▇▇███████████▇█████",
+  "sparkline_residual": "▁▁█▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▁█▁▁▁█▁█▁▁▁▁▁▁▃▄▃▄▃▄▄▃▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▃▁▁▁▃▃▃▃▃▃▃▂▁▁▁▁▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▁▁▁▃▁▁▃▃▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▁▁▁▁▁▁▂▁▁▁▁▂▁▂▂▂▁▁▁▁▁▁▁▂▁▁▂▂▁▂▁▁▁▁▁▁▂▂▁▁▁▁▁▁▁▁▁▁▁▂▁▁▁▁▁",
   "alert_level": "green",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
@@ -160,17 +160,17 @@
     "kind": "closed",
     "start_release": "0.3.260710.9",
     "start_commit": "6ecefaa12922",
-    "end_release": "0.3.260711.6",
-    "end_commit": "9dd21efc4867",
-    "count": 5,
-    "closed": "▇████",
-    "residual": "▂▁▁▁▁"
+    "end_release": "0.3.260711.7",
+    "end_commit": "46f3e7b851f8",
+    "count": 6,
+    "closed": "▇█████",
+    "residual": "▂▁▁▁▁▁"
   }
 ],
   "latest": {
-  "release": "0.3.260711.6",
-  "date": "2026-07-11T18:44:28Z",
-  "commit": "9dd21efc4867",
+  "release": "0.3.260711.7",
+  "date": "2026-07-11T18:56:39Z",
+  "commit": "46f3e7b851f8",
   "total_cc": 990,
   "earned_cc": 990,
   "residual_cc": 0,
@@ -180,7 +180,7 @@
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "PASS",
-  "ci_run_id": "local-ci-20260711T184428Z",
+  "ci_run_id": "local-ci-20260711T185639Z",
   "trend_glyph": ""
 },
   "history": [
@@ -4870,6 +4870,22 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "PASS",
     "ci_run_id": "local-ci-20260711T184428Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.3.260711.7",
+    "date": "2026-07-11T18:56:39Z",
+    "commit": "46f3e7b851f8",
+    "total_cc": 990,
+    "earned_cc": 990,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260711T185639Z",
     "trend_glyph": ""
   }
 ]
