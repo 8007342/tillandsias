@@ -10,7 +10,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/Containerfile#L137](../../../images/default/Containerfile#L137)
 - [images/default/entrypoint-forge-antigravity.sh#L56](../../../images/default/entrypoint-forge-antigravity.sh#L56)
 - [images/default/entrypoint-forge-claude.sh#L68](../../../images/default/entrypoint-forge-claude.sh#L68)
-- [images/default/entrypoint-forge-claude.sh#L78](../../../images/default/entrypoint-forge-claude.sh#L78)
+- [images/default/entrypoint-forge-claude.sh#L79](../../../images/default/entrypoint-forge-claude.sh#L79)
 - [images/default/entrypoint-forge-codex.sh#L64](../../../images/default/entrypoint-forge-codex.sh#L64)
 - [images/default/entrypoint-forge-opencode.sh#L66](../../../images/default/entrypoint-forge-opencode.sh#L66)
 - [images/default/entrypoint-forge-opencode-web.sh#L66](../../../images/default/entrypoint-forge-opencode-web.sh#L66)
