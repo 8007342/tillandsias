@@ -3052,42 +3052,54 @@ async fn remove_shared_stack_containers(client: &PodmanClient) {
     let _ = client.remove_container("tillandsias-inference").await;
 }
 
+/// Does this container's liveness require the SHARED stack (proxy,
+/// inference) to stay up? Order 289 broadened this beyond `-forge`:
+/// maintenance terminals ARE `-forge-maintenance` (already matched), but
+/// provider-login containers (`tillandsias-<provider>-login-<pid>`) and
+/// project browsers (`tillandsias-browser-<project>`) also route egress
+/// through the proxy — tearing it down under them breaks every curl with
+/// "Could not resolve proxy: proxy" (operator repro 2026-07-11).
+fn is_active_lane_container(name: &str, state: &str) -> bool {
+    let running = matches!(state.to_ascii_lowercase().as_str(), "running" | "up");
+    running
+        && (name.contains("-forge")
+            || name.contains("-login-")
+            || name.starts_with("tillandsias-browser-"))
+}
+
 async fn cleanup_shared_stack_if_no_running_forge(
     client: &PodmanClient,
     project_name: &str,
     debug: bool,
 ) {
-    let running_forges = client
+    let running_lanes: Vec<String> = client
         .list_containers("tillandsias-")
         .await
         .map(|containers| {
             containers
                 .into_iter()
-                .filter(|container| {
-                    container.name.contains("-forge")
-                        && matches!(
-                            container.state.to_ascii_lowercase().as_str(),
-                            "running" | "up"
-                        )
-                })
-                .count()
+                .filter(|container| is_active_lane_container(&container.name, &container.state))
+                .map(|container| container.name)
+                .collect()
         })
-        .unwrap_or(0);
+        .unwrap_or_default();
 
-    if running_forges != 0 {
+    if !running_lanes.is_empty() {
         if debug {
             eprintln!(
-                "[tillandsias] keeping shared stack alive; {running_forges} forge container(s) still running"
+                "[tillandsias] keeping shared stack alive; active lane container(s): {}",
+                running_lanes.join(", ")
             );
         }
         return;
     }
 
-    if debug {
-        eprintln!(
-            "[tillandsias] no active forge containers; cleaning project + shared stack for {project_name}"
-        );
-    }
+    // Always trace shared teardown (not only under --debug): when the proxy
+    // vanishes under a live lane we need the actor in the log, not a guess
+    // (order 289 instrumentation).
+    eprintln!(
+        "[tillandsias] no active lane containers; cleaning project + shared stack for {project_name}"
+    );
     cleanup_stack_containers(client, project_name).await;
     remove_shared_stack_containers(client).await;
 }
@@ -10016,9 +10028,45 @@ mod tests {
             "the guard must be the one shared-remover call site"
         );
         assert!(
-            guard.contains("running_forges != 0"),
-            "the guard must gate on running forges before shared removal"
+            guard.contains("!running_lanes.is_empty()"),
+            "the guard must gate on active lane containers before shared removal"
         );
+    }
+
+    /// Order 289: the shared-stack liveness predicate must count every
+    /// container class that needs the proxy — forge lanes (incl. the
+    /// `-forge-maintenance` terminal), provider-login one-shots, and
+    /// project browsers — and must ignore stopped ones.
+    #[test]
+    fn shared_stack_predicate_counts_all_proxy_dependent_lanes() {
+        for name in [
+            "tillandsias-myproj-forge",
+            "tillandsias-myproj-forge-maintenance",
+            "tillandsias-myproj-forge-codex",
+            "tillandsias-codex-login-12345",
+            "tillandsias-browser-myproj",
+        ] {
+            assert!(
+                is_active_lane_container(name, "running"),
+                "{name} (running) must keep the shared stack alive"
+            );
+            assert!(
+                !is_active_lane_container(name, "exited"),
+                "{name} (exited) must NOT keep the shared stack alive"
+            );
+        }
+        for name in [
+            "tillandsias-proxy",
+            "tillandsias-inference",
+            "tillandsias-router",
+            "tillandsias-vault",
+            "tillandsias-git-myproj",
+        ] {
+            assert!(
+                !is_active_lane_container(name, "running"),
+                "{name} is infrastructure, not a lane — it must not self-perpetuate the stack"
+            );
+        }
     }
 
     /// Drift litmus (order 229): every launch path that creates containers

@@ -1,0 +1,58 @@
+# @trace spec:meta-orchestration
+# Order 283 regression pin: the smoke-lock flock fd must be held by the
+# wrapper's own shell ONLY. The 2026-07-10 incident: a litmus-step kill
+# orphaned an opencode agent session that had inherited fd 9 through the
+# exec chain, so the flock stayed held for the orphan's lifetime and the
+# next gate queued 16 minutes on a lock whose owner was long gone.
+name: litmus:smoke-lock-fd-isolation-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Fixture-test scripts/with-smoke-lock.sh: a background child that
+  OUTLIVES the wrapper does not retain the flock (a second wrapper
+  acquires immediately); serialization still works while the wrapper
+  itself is alive; and the payload sees fd 9 closed.
+severity: high
+size: instant
+
+preconditions:
+  - flock available on the host (util-linux)
+
+critical_path:
+  - step: "payload runs with the lock fd closed (fd 9 not inherited)"
+    command: "export TILLANDSIAS_SMOKE_LOCK_ROOT=$(mktemp -d); out=$(scripts/with-smoke-lock.sh --name fdtest -- bash -c 'if [ -e /proc/self/fd/9 ]; then echo FD9_LEAKED; else echo FD9_CLOSED; fi' 2>/dev/null); rm -rf \"$TILLANDSIAS_SMOKE_LOCK_ROOT\"; [ \"$out\" = FD9_CLOSED ] && echo 'ok: fd-closed' || { echo \"FAIL: $out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: fd-closed"
+
+  - step: "an orphaned child outliving the wrapper does NOT retain the lock"
+    command: "export TILLANDSIAS_SMOKE_LOCK_ROOT=$(mktemp -d); scripts/with-smoke-lock.sh --name orphan -- bash -c 'setsid sleep 20 >/dev/null 2>&1 & echo spawned' >/dev/null 2>&1; S=$(date +%s); TILLANDSIAS_SMOKE_LOCK_TIMEOUT_SECS=8 scripts/with-smoke-lock.sh --name orphan -- true >/dev/null 2>&1; rc=$?; E=$(( $(date +%s) - S )); rm -rf \"$TILLANDSIAS_SMOKE_LOCK_ROOT\"; [ \"$rc\" = 0 ] && [ \"$E\" -le 5 ] && echo 'ok: orphan-does-not-hold' || { echo \"FAIL: rc=$rc elapsed=${E}s (orphan retained the lock)\"; exit 1; }"
+    timeout_ms: 40000
+    expected_behavior: "ok: orphan-does-not-hold"
+
+  - step: "serialization still holds while the wrapper itself is alive"
+    command: "export TILLANDSIAS_SMOKE_LOCK_ROOT=$(mktemp -d); scripts/with-smoke-lock.sh --name serial -- bash -c 'sleep 6' >/dev/null 2>&1 & W=$!; sleep 1; S=$(date +%s); TILLANDSIAS_SMOKE_LOCK_TIMEOUT_SECS=30 scripts/with-smoke-lock.sh --name serial -- true >/dev/null 2>&1; E=$(( $(date +%s) - S )); wait $W 2>/dev/null; rm -rf \"$TILLANDSIAS_SMOKE_LOCK_ROOT\"; [ \"$E\" -ge 3 ] && echo 'ok: still-serializes' || { echo \"FAIL: second wrapper acquired in ${E}s while first held\"; exit 1; }"
+    timeout_ms: 40000
+    expected_behavior: "ok: still-serializes"
+
+  - step: "the fd-isolation redirection is present in the wrapper source"
+    command: "grep -Fq '\"$@\" 9>&-' scripts/with-smoke-lock.sh && echo 'ok: source-pinned'"
+    timeout_ms: 3000
+    expected_behavior: "ok: source-pinned"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: >
+    Smoke-lock fd isolation verified: payload sees fd 9 closed, an orphan
+    survivor does not extend the lease, live-wrapper serialization intact.
+  log_fields:
+    spec: "meta-orchestration"
+    test: "smoke-lock-fd-isolation-shape"
+    artifact: "temp lock roots (removed in-step)"
+
+rollback:
+  on_failure: >
+    Restore the `"$@" 9>&-` payload redirection in run_with_flock — without
+    it any orphaned descendant of a killed gate holds the host smoke lock
+    for its own lifetime (order 283 incident).
+  command: "grep -n '9>&-' scripts/with-smoke-lock.sh"

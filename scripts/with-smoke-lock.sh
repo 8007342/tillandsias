@@ -84,7 +84,12 @@ run_with_flock() {
     write_holder "$lock_file" "$@"
     log_line "acquired path=$lock_file"
     set +e
-    "$@"
+    # 9>&- : the payload (and every descendant, e.g. a launched forge
+    # agent session) must NOT inherit the lock fd. An orphaned descendant
+    # that outlived the wrapper kept the flock held for up to its own
+    # 90-minute cap and deadlocked the next gate 16 minutes (plan order
+    # 283). Only this wrapper's shell lifetime holds the lease.
+    "$@" 9>&-
     local rc=$?
     set -e
     log_line "released path=$lock_file exit=$rc"

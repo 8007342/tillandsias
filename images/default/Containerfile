@@ -15,9 +15,15 @@ ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
 RUN useradd -u 1000 -m -s /bin/bash forge
 
 # ── Directory structure ────────────────────────────────────────
+# /home/linuxbrew: Homebrew-on-Linux STANDARD prefix, pre-created and
+# forge-owned so the runtime lazy install (lib-common ensure_brew, order
+# 294) can clone into it rootless. Bottles are only prebuilt for this
+# exact prefix — any other prefix forces source builds. Empty at CREATION
+# (no network at image build); populated on first use.
 RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.cache/tillandsias \
     && mkdir -p /home/forge/.config/opencode \
+    && mkdir -p /home/linuxbrew && chown forge:forge /home/linuxbrew \
     && mkdir -p /opt/cheatsheets /opt/cheatsheets-image /opt/cheatsheet-sources \
     && mkdir -p /tmp && chmod 1777 /tmp
 
@@ -28,6 +34,8 @@ COPY cheatsheet-sources/ /opt/cheatsheet-sources/
 # ── Shared library ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/lib/tillandsias
 COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
+COPY brew-tools-allowlist.txt /usr/local/lib/tillandsias/brew-tools-allowlist.txt
+COPY brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec
 # @trace spec:error-message-localization
 COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 
@@ -47,6 +55,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-codex.sh \
              /usr/local/bin/entrypoint-forge-antigravity.sh \
              /usr/local/bin/entrypoint-terminal.sh \
+             /usr/local/bin/tillandsias-brew-shim-exec \
              /usr/local/bin/sse-keepalive-proxy.js
 
 # ── Locale ──────────────────────────────────────────────────────

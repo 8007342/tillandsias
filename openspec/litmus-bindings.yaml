@@ -186,6 +186,8 @@ specs:
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
   - litmus:forge-firstrun-prebuilt-tools-arch-shape
+  - litmus:brew-ondemand-tools-shape
+  - litmus:harness-rollback-shape
   coverage_ratio: 80
   last_verified: '2026-07-05'
 - spec_id: dev-build
@@ -493,6 +495,7 @@ specs:
   - litmus:opencode-prompt-e2e-shape
   - litmus:forge-liveness-probe-shape
   - litmus:forge-e2e-rate-limit-shape
+  - litmus:smoke-lock-fd-isolation-shape
   coverage_ratio: 100
   last_verified: '2026-07-11'
 - spec_id: logging-levels
