@@ -8095,7 +8095,7 @@ plan_index:
     - packet_id: smoke-lock-fd-leaks-into-forge-sessions
       order: 283
       title: "with-smoke-lock fd leaks into launched forge agent sessions — orphaned agents deadlock the next gate"
-      status: ready
+      status: done
       kind: bug
       deliverable: scripts/with-smoke-lock.sh
       depends_on: []
@@ -8128,6 +8128,16 @@ plan_index:
           summary: >
             Reduction-engine capture from the final overnight-loop
             iteration; manual reclaim unblocked pipeline attempt 3.
+        - type: completed
+          ts: "2026-07-11T18:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            run_with_flock now execs the payload with the lock fd closed
+            ("$@" 9>&-), so only the wrapper shell lifetime holds the
+            lease. Fixture litmus:smoke-lock-fd-isolation-shape proves the
+            payload sees fd 9 closed, an orphaned setsid survivor does NOT
+            extend the lease, and live-wrapper serialization is intact.
 
     - packet_id: forge-opencode-harness-broken-by-upstream-latest
       order: 284

@@ -494,6 +494,7 @@ specs:
   - litmus:opencode-prompt-e2e-shape
   - litmus:forge-liveness-probe-shape
   - litmus:forge-e2e-rate-limit-shape
+  - litmus:smoke-lock-fd-isolation-shape
   coverage_ratio: 100
   last_verified: '2026-07-11'
 - spec_id: logging-levels
