@@ -8371,7 +8371,7 @@ plan_index:
     - packet_id: shared-proxy-teardown-while-terminal-lane-live
       order: 289
       title: "Shared proxy/inference teardown while a maintenance-terminal lane is still running breaks its egress (curl: Could not resolve proxy)"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -8401,6 +8401,20 @@ plan_index:
           summary: >
             Filed from operator repro; proxy-exemption class relative
             (enclave proxy lifecycle vs lane lifetimes).
+        - type: completed
+          ts: "2026-07-11T18:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Predicate hardened: is_active_lane_container now counts forge
+            lanes (incl. -forge-maintenance terminals), provider-login
+            one-shots, and project browsers; extracted testable + unit
+            test over all lane/infra name classes. Shared teardown now
+            traces unconditionally (actor visible in logs, not only under
+            --debug). RESIDUAL: the terminal name DID match the old
+            predicate, so the exact historical teardown actor is
+            unconfirmed — if the operator repro recurs, the new trace line
+            identifies the caller; file a follow-up with that evidence.
 
     - packet_id: homebrew-harness-distribution-migration
       order: 290
