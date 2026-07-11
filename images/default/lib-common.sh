@@ -916,74 +916,75 @@ find_project_dir() {
     return 0
 }
 
-# ── Coding agents (hard-installed in image) ─────────────────
+# ── Coding agents (installed EVERY_LAUNCH / persistent cache) ──
 # @trace spec:default-image, spec:forge-shell-tools
-# OpenCode, Claude Code, and OpenSpec are baked into /opt/agents/ at image
-# build time and symlinked into /usr/local/bin/ — see images/default/Containerfile.
-# These helpers verify presence and export the canonical bin path each
-# entrypoint needs. Failure here means the image is corrupt; bail loudly.
-require_opencode() {
-    OC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/opencode"
-    if [ ! -x "$OC_BIN" ]; then
-        OC_BIN="/usr/local/bin/opencode"
-    fi
-    if [ ! -x "$OC_BIN" ]; then
-        trace_lifecycle "harness" "opencode missing — install latest"
-        if ! npm install -g --no-audit --no-fund opencode-ai@latest 2>/dev/null; then
-            trace_lifecycle "harness" "opencode install failed (non-fatal)"
-            return 1
+# @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+# Nothing is baked at image CREATION (order 181): harnesses live in the
+# order-179 persistent npm volume and are (re)installed at launch. After
+# `podman system reset` that volume is EMPTY, so the install path below is
+# the only source — it must be fail-SOFT. These helpers always return 0;
+# on failure they leave *_BIN pointing at a non-executable path and trace
+# the real npm error (previously discarded to /dev/null, which made every
+# post-reset launch die as an unexplained exit 1 under `set -e` because
+# the bare `require_*` call propagated the return 1 through the entrypoint).
+# Entrypoints whose PRIMARY agent is missing must check `[ -x "$*_BIN" ]`
+# themselves and fail with an actionable message (see harness_missing_fatal).
+_require_harness() {
+    # $1=friendly-name  $2=npm-package  $3=bin-name  → echoes resolved path
+    local name="$1" pkg="$2" bin="$3" path errlog
+    path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+    [ -x "$path" ] || path="/usr/local/bin/$bin"
+    if [ ! -x "$path" ]; then
+        trace_lifecycle "harness" "$name missing — install latest"
+        errlog="$(mktemp /tmp/npm-install-${bin}.XXXXXX 2>/dev/null || echo /tmp/npm-install-$bin.err)"
+        if ! npm install -g --no-audit --no-fund "$pkg@latest" >"$errlog" 2>&1; then
+            trace_lifecycle "harness" "$name install FAILED (non-fatal): $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+            trace_lifecycle "harness" "$name install log: $errlog"
+            echo "$path"
+            return 0
         fi
-        OC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/opencode"
+        rm -f "$errlog" 2>/dev/null || true
+        path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
     fi
-    trace_lifecycle "install" "opencode: available ($("$OC_BIN" --version 2>/dev/null || echo 'unknown'))"
+    if [ -x "$path" ]; then
+        trace_lifecycle "install" "$name: available ($("$path" --version 2>/dev/null || echo 'unknown'))"
+    fi
+    echo "$path"
+}
+
+# Fatal-with-explanation path for entrypoints whose PRIMARY agent is absent.
+# Prints an actionable banner (the exit_pause trap only shows a bare exit
+# code) and exits 1 — callers invoke this INSTEAD of letting set -e fire.
+harness_missing_fatal() {
+    local name="$1"
+    echo "" >&2
+    echo "ERROR: the '$name' agent harness is not installed and its launch-time" >&2
+    echo "npm install failed (see the 'harness' lifecycle lines above for the" >&2
+    echo "real npm error — commonly enclave egress/proxy after 'podman system" >&2
+    echo "reset' emptied the persistent npm cache volume)." >&2
+    echo "Recovery: check network/proxy, then relaunch — the install retries" >&2
+    echo "at every launch. A maintenance terminal still works for diagnosis." >&2
+    exit 1
+}
+
+require_opencode() {
+    OC_BIN="$(_require_harness opencode opencode-ai opencode)"
+    return 0
 }
 
 require_claude() {
-    CC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/claude"
-    if [ ! -x "$CC_BIN" ]; then
-        CC_BIN="/usr/local/bin/claude"
-    fi
-    if [ ! -x "$CC_BIN" ]; then
-        trace_lifecycle "harness" "claude-code missing — install latest"
-        if ! npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@latest" 2>/dev/null; then
-            trace_lifecycle "harness" "claude-code install failed (non-fatal)"
-            return 1
-        fi
-        CC_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/claude"
-    fi
-    trace_lifecycle "install" "claude-code: available ($("$CC_BIN" --version 2>/dev/null || echo 'unknown'))"
+    CC_BIN="$(_require_harness claude-code "@anthropic-ai/claude-code" claude)"
+    return 0
 }
 
 require_openspec() {
-    OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
-    if [ ! -x "$OS_BIN" ]; then
-        OS_BIN="/usr/local/bin/openspec"
-    fi
-    if [ ! -x "$OS_BIN" ]; then
-        trace_lifecycle "harness" "openspec missing — install latest"
-        if ! npm install -g --no-audit --no-fund "@fission-ai/openspec@latest" 2>/dev/null; then
-            trace_lifecycle "harness" "openspec install failed (non-fatal)"
-            return 1
-        fi
-        OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
-    fi
-    trace_lifecycle "install" "openspec: available ($("$OS_BIN" --version 2>/dev/null || echo 'unknown'))"
+    OS_BIN="$(_require_harness openspec "@fission-ai/openspec" openspec)"
+    return 0
 }
 
 require_codex() {
-    CX_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/codex"
-    if [ ! -x "$CX_BIN" ]; then
-        CX_BIN="/usr/local/bin/codex"
-    fi
-    if [ ! -x "$CX_BIN" ]; then
-        trace_lifecycle "harness" "codex missing — install latest"
-        if ! npm install -g --no-audit --no-fund "@openai/codex@latest" 2>/dev/null; then
-            trace_lifecycle "harness" "codex install failed (non-fatal)"
-            return 1
-        fi
-        CX_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/codex"
-    fi
-    trace_lifecycle "install" "codex: available ($("$CX_BIN" --version 2>/dev/null || echo 'unknown'))"
+    CX_BIN="$(_require_harness codex "@openai/codex" codex)"
+    return 0
 }
 
 # ── OpenCode config overlay ─────────────────────────────────

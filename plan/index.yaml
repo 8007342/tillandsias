@@ -8174,3 +8174,109 @@ plan_index:
             (gate runs 104930Z + 111150Z, npm publish timeline, minimal
             repro). TOP PICK for the next linux cycle — the forge lane is
             the loop's engine.
+        - type: progress
+          ts: "2026-07-11T07:12:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Minimal repro now PASSES end-to-end (proxy up, npm installed
+            opencode-ai + openspec through the enclave, agent answered,
+            exit 0) — upstream published a working latest, confirming the
+            outage was the upstream publish window, compounded by provider
+            rate limiting from our own repeated full-cycle e2e runs (now
+            capped by order 286). Residual: exit criterion 2 (updater
+            pin/rollback so a broken upstream publish cannot take the lane
+            down again) and criterion 3 (postinstall egress disposition)
+            remain open; criterion 1 evidence is scratchpad repro
+            2026-07-11T06:55Z.
+
+    - packet_id: forge-entrypoint-fatal-require-on-empty-cache
+      order: 285
+      title: "P0 regression: ALL harness lanes + maintenance terminal die at startup after podman system reset (fatal require_* under set -e)"
+      status: done
+      kind: bug
+      deliverable: images/default/lib-common.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, shell, lifecycle]
+      estimated_hours: 2
+      outcome: >
+        Operator report 2026-07-11: after ./build.sh --install + podman
+        system reset --force + --init + --tray, credentials/projects were
+        fine but NO lane launched (opencode/codex/claude/antigravity/
+        maintenance terminal) — "Terminal startup failed (exit code: 1)"
+        right after "openspec install failed (non-fatal)". Root cause:
+        order 181 moved all harness installs off the image onto the
+        order-179 persistent npm volume (wiped by reset) + launch-time
+        npm install; the require_* helpers returned 1 on install failure
+        while being called BARE under set -euo pipefail, so a
+        supposedly-non-fatal miss killed every entrypoint, and the npm
+        stderr was discarded to /dev/null so the real error (transient:
+        squid warm-up or the order-284 upstream window) was invisible.
+        Fix: _require_harness refactor — always return 0, capture npm
+        stderr to a traced logfile; agent entrypoints explicitly check
+        their PRIMARY binary and fail through harness_missing_fatal with
+        an actionable banner; terminal treats openspec as optional.
+      exit_criteria:
+        - "failed harness install no longer kills any entrypoint (unit-simulated under set -e with failing npm)"
+        - "real npm error is traced, not discarded"
+        - "missing primary agent produces an actionable banner, not a bare exit 1"
+      events:
+        - type: completed
+          ts: "2026-07-11T07:12:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Fixed in lib-common.sh (_require_harness + harness_missing_fatal)
+            and all four agent entrypoints; verified by set -e simulation
+            with a failing npm stub (survives, traces error, fatal helper
+            exits 1 with banner). Takes effect at next forge image build.
+            Pinned surface litmus-default-image-containerfile-shape updated
+            in the same commit (package names now pinned separately from
+            the dynamic @latest idiom).
+
+    - packet_id: forge-e2e-token-budget-rate-limit
+      order: 286
+      title: "Rate-limit full in-forge /meta-orchestration e2e to once per 4h; downgrade other runs to skill Smoke Mode"
+      status: done
+      kind: enhancement
+      deliverable: scripts/forge-e2e-rate-limit.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, e2e, litmus, methodology]
+      estimated_hours: 4
+      outcome: >
+        Operator directive 2026-07-11 ("we've been abusing BigPickle with
+        these careless e2e runs"): every --ci-full post-build phase and
+        every destructive-gate retry launched a FULL /meta-orchestration
+        cycle in the forge — sometimes killing it at the step budget —
+        burning the rate-limited provider token budget and producing
+        outages that masqueraded as forge-lane breaks (order 284 tail).
+        Implemented: (1) scripts/forge-e2e-rate-limit.sh — host-persistent
+        stamp limiter, class full-meta, 4h window, falsifiable grammar
+        allow:/limited:/recorded:, TILLANDSIAS_E2E_FORCE operator hatch;
+        (2) scripts/litmus-opencode-e2e-launch.sh — owns the full-vs-smoke
+        branch for litmus:opencode-prompt-e2e-shape STEP 3 (full keeps the
+        order-265 liveness-extended budget; smoke gets a 600s cap and must
+        print MO-SMOKE: PASS); delta steps 4-6 skip on mode=smoke since a
+        verify-only run pushes nothing; (3) skills/meta-orchestration
+        "Invocation Modes" — mode check FIRST, Smoke Mode runbook
+        (verify-only, no plan drain/commits, targeted litmus selection,
+        ~5min budget, MO-SMOKE verdict grammar) with targeted-verify
+        variant; (4) methodology/distributed-work.yaml e2e_token_budget
+        canon. All pinned by litmus:forge-e2e-rate-limit-shape.
+      exit_criteria:
+        - "full-meta e2e cannot run twice within 4h on one host without TILLANDSIAS_E2E_FORCE (limiter litmus)"
+        - "rate-limited runs downgrade to smoke and pass only on MO-SMOKE: PASS (launch-wrapper simulation)"
+        - "skill instructs in-forge agent to detect smoke mode BEFORE any work"
+      events:
+        - type: completed
+          ts: "2026-07-11T07:12:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            Implemented + verified: limiter grammar/exit-code litmus green;
+            launch wrapper simulated for full, smoke, and missing-marker
+            paths with a stubbed ./repeat (full records stamp, second run
+            downgrades to smoke, marker-less smoke fails loud, exit 126).
+            meta-orchestration pre-build instant litmuses 6/6 PASS.

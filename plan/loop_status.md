@@ -1,6 +1,29 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-10T12:10:00Z
+LastExecutionTime: 2026-07-11T07:15:00Z
+
+## Cycle 2026-07-11T06:30Z→07:15Z (linux_mutable macuahuitl — operator session: P0 startup regression fixed, e2e token budget enforced)
+
+- **Order 285 (P0, done)**: after `podman system reset` every lane
+  (opencode/codex/claude/antigravity/maintenance terminal) died with
+  "Terminal startup failed (exit code: 1)" — bare `require_*` calls under
+  `set -e` turned a failed launch-time npm install into a fatal, with the
+  real npm error discarded to /dev/null. Fixed fail-soft with traced
+  errors + `harness_missing_fatal` actionable banner for missing primary
+  agents. Needs the next forge image build to reach installed stacks.
+- **Order 284 update**: minimal repro now PASSES (proxy up, npm installs
+  through enclave, agent answers, exit 0) — upstream published a working
+  latest. Residual: updater pin/rollback + postinstall egress
+  disposition remain open.
+- **Order 286 (operator directive, done)**: full in-forge
+  /meta-orchestration e2e capped at once per 4h per host
+  (scripts/forge-e2e-rate-limit.sh); other runs downgrade to the skill's
+  new Smoke Mode (verify-only, no plan drain, `MO-SMOKE: PASS` verdict)
+  via scripts/litmus-opencode-e2e-launch.sh. Canon in
+  methodology/distributed-work.yaml `e2e_token_budget`; pinned by
+  litmus:forge-e2e-rate-limit-shape. Rationale: repeated full cycles
+  (retries killed at budget) were burning BigPickle's rate-limited token
+  budget and masquerading as forge-lane outages.
 
 ## Cycle 2026-07-10T10:40Z→12:10Z (linux_mutable macuahuitl — overnight loop 7-8/8 CLOSE: strict default proved in gates, P1 forge-lane outage filed)
 

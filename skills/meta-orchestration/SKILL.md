@@ -14,6 +14,52 @@ This is the top-level unattended loop intended for:
 It composes the worker, coordination, e2e, and release skills without replacing
 their detailed runbooks.
 
+## Invocation Modes — check FIRST, before anything else
+
+The skill is parameterized by the invoking prompt. **Before doing any work —
+before host classification, before `git fetch`, before reading the plan —
+inspect the prompt that invoked this skill and pick the mode.** Full cycles
+are token-expensive; running one when a smoke pass was requested wastes a
+rate-limited provider budget (operator directive, 2026-07-11).
+
+- **Full mode** (default): the prompt is a bare "Use the /meta-orchestration
+  skill". Run the complete cycle described in the rest of this document.
+- **Smoke Mode** (early break): the prompt contains the word `smoke` (e.g.
+  "Use the /meta-orchestration skill in smoke mode (verify-only)"). You are
+  inside a short e2e smoke test with a hard budget of a few minutes. Do NOT
+  run a full cycle. Follow "Smoke Mode Runbook" below and exit.
+- **Targeted verify** (a variant of Smoke Mode): the prompt names specific
+  packets, orders, specs, or files (e.g. "…smoke mode, verify order 283" or
+  "…smoke: spec git-mirror-service"). Same rules as Smoke Mode, but the
+  verification set is the named targets' verifiable closures instead of the
+  generic checks.
+
+### Smoke Mode Runbook
+
+Purpose: give fast, cheap feedback that the forge lane and the work under
+test are healthy — WITHOUT advancing the plan or consuming a full-cycle
+token budget. Hosted e2e gates (`litmus:opencode-prompt-e2e-shape`) invoke
+this mode whenever the full cycle is rate-limited
+(`scripts/forge-e2e-rate-limit.sh`, one full cycle per 4h per host).
+
+Hard rules:
+
+1. Do NOT claim ledger nodes, drain plan work, file routine findings, run
+   nested e2e gates, release, commit, or push. A smoke run leaves the repo
+   untouched. (Exception: a real defect discovered during verification may
+   be reported in your final output text — the HOST files it, not you.)
+2. Keep it small: prefer `scripts/run-litmus-test.sh --size instant
+   --phase pre-build --compact` scoped with a spec filter when targets are
+   named, plus cheap direct checks (parse `plan/index.yaml`, `git status`,
+   `git fetch --dry-run` reachability, the targets' named verifiable
+   closures). Skip anything that builds, launches containers, or exceeds
+   the budget.
+3. Budget: finish well inside ~5 minutes of wall time.
+4. Verdict grammar: your FINAL output line MUST be exactly one of
+   `MO-SMOKE: PASS` or `MO-SMOKE: FAIL <one-line reason>`. The launching
+   litmus greps for this marker; a smoke run that exits without it is a
+   failure by definition.
+
 ## Non-Negotiable Exit Contract
 
 Local state is volatile. Before a successful exit, every meaningful result must

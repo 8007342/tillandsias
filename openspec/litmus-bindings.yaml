@@ -492,8 +492,9 @@ specs:
   - litmus:git-delta-wait-shape
   - litmus:opencode-prompt-e2e-shape
   - litmus:forge-liveness-probe-shape
+  - litmus:forge-e2e-rate-limit-shape
   coverage_ratio: 100
-  last_verified: '2026-07-10'
+  last_verified: '2026-07-11'
 - spec_id: logging-levels
   status: obsolete
   litmus_tests: []

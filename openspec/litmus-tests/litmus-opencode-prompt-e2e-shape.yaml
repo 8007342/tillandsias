@@ -38,14 +38,16 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok:"
 
-  # Order 265 wiring (second alive-past-budget collision, 2026-07-10): a
-  # fixed 600s wall turned healthy one-packet cycles into TIMEOUT reds
-  # twice — both times the in-forge agent later pushed real work. The step
-  # now runs the probe past a 600s SOFT budget: liveness (container up /
-  # HEAD advanced / heartbeat fresh) extends the window; a dead_* verdict
-  # fails fast; a 1500s HARD cap remains the backstop.
-  - step: "launch forge with meta-orchestration prompt and one cycle (liveness-extended)"
-    command: "./repeat --times 1 --agent opencode --prompt \"Use the /meta-orchestration skill\" > /tmp/opencode-e2e-forge.log 2>&1 & RPID=$!; SOFT=600; HARD=1500; S=$(date +%s); BH=$(cat /tmp/opencode-e2e-head-before 2>/dev/null); while kill -0 $RPID 2>/dev/null; do E=$(( $(date +%s) - S )); if [ $E -ge $HARD ]; then kill $RPID 2>/dev/null; echo \"FORGE_EXIT=124 (hard cap ${HARD}s)\"; exit 1; fi; if [ $E -ge $SOFT ]; then st=$(scripts/forge-liveness-probe.sh status --start-time $S --budget $HARD --before-head \"$BH\" 2>/dev/null || echo probe_error); case \"$st\" in alive_*) ;; *) kill $RPID 2>/dev/null; echo \"FORGE_EXIT=125 (probe verdict $st past soft budget)\"; exit 1 ;; esac; fi; sleep 10; done; wait $RPID; rc=$?; tail -5 /tmp/opencode-e2e-forge.log; echo FORGE_EXIT=$rc"
+  # Order 265 wiring (liveness-extended budget) + operator directive
+  # 2026-07-11 (token rate limiting): the launch logic lives in
+  # scripts/litmus-opencode-e2e-launch.sh. A FULL /meta-orchestration
+  # cycle runs at most once per 4h per host (scripts/forge-e2e-rate-limit.sh
+  # class full-meta); rate-limited runs downgrade to the skill's Smoke Mode
+  # (verify-only, no plan drain, must print `MO-SMOKE: PASS`). The mode is
+  # written to /tmp/opencode-e2e-mode so the delta steps below can skip for
+  # smoke runs, which by design commit and push nothing.
+  - step: "launch forge with meta-orchestration prompt (full-or-smoke, rate-limited, liveness-extended)"
+    command: "scripts/litmus-opencode-e2e-launch.sh"
     timeout_ms: 1560000
     expected_behavior: "FORGE_EXIT=0"
 
@@ -59,23 +61,25 @@ critical_path:
   # $HEAD_BEFORE without populating it (steps are separate `bash -c`
   # subshells), collapsing its range to HEAD..HEAD — a deterministic false
   # negative, not a race (plan order 255).
+  # Smoke-mode runs are verify-only and push nothing, so each delta step
+  # skips (with an explicit marker) when STEP 3 recorded mode=smoke.
   - step: "verify local HEAD advanced since smoke start"
-    command: "scripts/litmus-git-delta-wait.sh local-head /tmp/opencode-e2e-head-before"
+    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: HEAD advanced (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh local-head /tmp/opencode-e2e-head-before; fi"
     timeout_ms: 150000
     expected_behavior: "ok: HEAD advanced"
 
   - step: "verify a plan/ file was updated (ledger or finding filed)"
-    command: "scripts/litmus-git-delta-wait.sh plan-commit /tmp/opencode-e2e-head-before"
+    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: plan/ changed (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh plan-commit /tmp/opencode-e2e-head-before; fi"
     timeout_ms: 150000
     expected_behavior: "ok: plan/ changed"
 
   - step: "verify remote branch HEAD advanced"
-    command: "scripts/litmus-git-delta-wait.sh remote-head /tmp/opencode-e2e-remote-head-before"
+    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: remote HEAD advanced (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh remote-head /tmp/opencode-e2e-remote-head-before; fi"
     timeout_ms: 150000
     expected_behavior: "ok: remote HEAD advanced"
 
   - step: "cleanup temp files"
-    command: "rm -f /tmp/opencode-e2e-head-before /tmp/opencode-e2e-remote-head-before && echo \"ok: cleaned up\""
+    command: "rm -f /tmp/opencode-e2e-head-before /tmp/opencode-e2e-remote-head-before /tmp/opencode-e2e-mode && echo \"ok: cleaned up\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 

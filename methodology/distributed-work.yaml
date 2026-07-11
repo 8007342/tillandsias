@@ -575,6 +575,32 @@ distributed_work:
         heartbeat/liveness signals — we own the launch and the container
         stack) tracks replacing timeout inference with positive liveness.
 
+    e2e_token_budget:
+      decided_by: "The Tlatoāni, 2026-07-11"
+      rule: >
+        A FULL in-forge /meta-orchestration e2e cycle is provider-token
+        expensive (the in-forge agent runs on a rate-limited provider
+        budget). Hosts run it AT MOST ONCE PER 4 HOURS, enforced by
+        scripts/forge-e2e-rate-limit.sh (class full-meta, host-persistent
+        stamp under ~/.cache/tillandsias/e2e-rate-limit/). Every other
+        forge-hosted e2e run MUST downgrade to the skill's Smoke Mode
+        (skills/meta-orchestration/SKILL.md "Invocation Modes"):
+        verify-only, no plan drain, no commits, final-line verdict
+        `MO-SMOKE: PASS|FAIL <reason>`. Launchers go through
+        scripts/litmus-opencode-e2e-launch.sh, which owns the branch and
+        records the stamp; ad-hoc full-cycle launches outside the limiter
+        are a finding.
+      rationale: >
+        Repeated full cycles per --ci-full and per destructive-gate retry
+        (sometimes killed at the step budget, discarding the work) burned
+        the in-forge provider budget and tripped provider rate limits that
+        then masqueraded as forge-lane outages (2026-07-10 overnight loop,
+        order 284 investigation).
+      escape_hatch: >
+        TILLANDSIAS_E2E_FORCE=1 makes the limiter's check always allow —
+        operator use only; its appearance in committed automation is
+        itself a finding.
+
   long_running_packets:
     trace: "plan order 251 (long-running-work-packet-methodology); plan/issues/long-running-work-packet-methodology-2026-07-09.md"
     purpose: >

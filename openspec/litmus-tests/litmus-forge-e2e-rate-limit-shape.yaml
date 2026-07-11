@@ -1,0 +1,82 @@
+# @trace spec:meta-orchestration
+# Pins the 2026-07-11 operator directive: full in-forge /meta-orchestration
+# e2e cycles are provider-token expensive and run at most once per 4h per
+# host; all other runs downgrade to the skill's Smoke Mode. Guards the
+# limiter's grammar/exit codes, the launch wrapper's wiring, the skill's
+# smoke-mode verdict marker, and the methodology canon — so the constraint
+# stays executable rather than prose-only.
+name: litmus:forge-e2e-rate-limit-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Shape-test scripts/forge-e2e-rate-limit.sh (allow/limited/recorded grammar,
+  exit codes, force escape hatch) and verify the full-vs-smoke wiring:
+  litmus:opencode-prompt-e2e-shape launches through
+  scripts/litmus-opencode-e2e-launch.sh, the meta-orchestration skill defines
+  Smoke Mode with the MO-SMOKE verdict grammar, and
+  methodology/distributed-work.yaml carries the e2e_token_budget canon.
+severity: high
+size: instant
+
+preconditions:
+  - repo checkout with scripts/ and skills/ present
+
+critical_path:
+  - step: "limiter and launch wrapper are executable"
+    command: "test -x scripts/forge-e2e-rate-limit.sh && test -x scripts/litmus-opencode-e2e-launch.sh && echo 'ok: executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: executable"
+
+  - step: "fresh class allows, record then limits with exit 3, status stays exit 0"
+    command: "export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); out1=$(scripts/forge-e2e-rate-limit.sh check litmus-probe); rc1=$?; out2=$(scripts/forge-e2e-rate-limit.sh record litmus-probe); out3=$(scripts/forge-e2e-rate-limit.sh check litmus-probe); rc3=$?; out4=$(scripts/forge-e2e-rate-limit.sh status litmus-probe); rc4=$?; rm -rf \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$out1\" = allow:litmus-probe ] && [ \"$rc1\" = 0 ] && [ \"$out2\" = recorded:litmus-probe ] && echo \"$out3\" | grep -Eq '^limited:litmus-probe:[0-9]+s$' && [ \"$rc3\" = 3 ] && echo \"$out4\" | grep -Eq '^limited:' && [ \"$rc4\" = 0 ] && echo 'ok: grammar-and-exits' || { echo \"FAIL: out1=$out1 rc1=$rc1 out2=$out2 out3=$out3 rc3=$rc3 out4=$out4 rc4=$rc4\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: grammar-and-exits"
+
+  - step: "TILLANDSIAS_E2E_FORCE=1 bypasses a live limit (operator escape hatch)"
+    command: "export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); scripts/forge-e2e-rate-limit.sh record litmus-probe >/dev/null; out=$(TILLANDSIAS_E2E_FORCE=1 scripts/forge-e2e-rate-limit.sh check litmus-probe); rc=$?; rm -rf \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$out\" = allow:litmus-probe ] && [ \"$rc\" = 0 ] && echo 'ok: force-allows' || { echo \"FAIL: out=$out rc=$rc\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: force-allows"
+
+  - step: "bad usage fails loud with exit 2"
+    command: "out=$(scripts/forge-e2e-rate-limit.sh check 'BAD CLASS' 2>&1); rc=$?; echo \"$out\" | grep -q '^FAIL: usage' && [ \"$rc\" = 2 ] && echo 'ok: usage-grammar' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: usage-grammar"
+
+  - step: "opencode e2e litmus launches through the rate-limited wrapper"
+    command: "grep -Fq 'scripts/litmus-opencode-e2e-launch.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml && grep -Fq 'forge-e2e-rate-limit.sh check full-meta' scripts/litmus-opencode-e2e-launch.sh && grep -Fq 'forge-e2e-rate-limit.sh record full-meta' scripts/litmus-opencode-e2e-launch.sh && echo 'ok: e2e-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: e2e-wired"
+
+  - step: "smoke runs are marker-gated and delta-steps skip on mode=smoke"
+    command: "grep -Fq 'MO-SMOKE: PASS' scripts/litmus-opencode-e2e-launch.sh && c=$(grep -c 'opencode-e2e-mode' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml); [ \"$c\" -ge 3 ] && echo 'ok: smoke-gated' || { echo \"FAIL: mode-file references=$c\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: smoke-gated"
+
+  - step: "skill defines Smoke Mode with the MO-SMOKE verdict grammar"
+    command: "grep -Fq 'Smoke Mode' skills/meta-orchestration/SKILL.md && grep -Fq 'MO-SMOKE: PASS' skills/meta-orchestration/SKILL.md && grep -Fq 'MO-SMOKE: FAIL' skills/meta-orchestration/SKILL.md && echo 'ok: skill-smoke-mode'"
+    timeout_ms: 3000
+    expected_behavior: "ok: skill-smoke-mode"
+
+  - step: "methodology carries the e2e_token_budget canon"
+    command: "grep -Fq 'e2e_token_budget' methodology/distributed-work.yaml && grep -Fq 'forge-e2e-rate-limit.sh' methodology/distributed-work.yaml && echo 'ok: methodology-canon'"
+    timeout_ms: 3000
+    expected_behavior: "ok: methodology-canon"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: >
+    Rate limiter grammar/exit codes verified in a temp stamp dir; full-vs-smoke
+    wiring pinned across launch wrapper, e2e litmus, skill, and methodology.
+  log_fields:
+    spec: "meta-orchestration"
+    test: "forge-e2e-rate-limit-shape"
+    artifact: "temp stamp dirs (removed in-step)"
+
+rollback:
+  on_failure: >
+    Re-read the operator directive canon at methodology/distributed-work.yaml
+    e2e_token_budget. If the limiter grammar changed, update this litmus in the
+    SAME commit as the surface change; if wiring is missing, restore the
+    launch-wrapper call in litmus:opencode-prompt-e2e-shape STEP 3.
+  command: "ls -l scripts/forge-e2e-rate-limit.sh scripts/litmus-opencode-e2e-launch.sh && grep -n 'litmus-opencode-e2e-launch.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml"
