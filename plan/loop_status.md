@@ -1,7 +1,63 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-11T07:15:00Z
+LastExecutionTime: 2026-07-11T18:40:00Z
 
+## Cycle 2026-07-11T18:20Z (macos — operator session: ROOT-CAUSED the agent-attach failure = guest disk too small; 250G fix + Antigravity parity)
+
+- **Host**: macOS arm64, `osx-next`, operator present + interacting.
+  Merged origin/linux-next through 18d78d99. osx-next pushed to f93e94e0.
+- **THE macOS agent-launch blocker, root-caused + fixed (order 294)**: on a
+  fresh provision the operator logged in (worked, remote projects listed, a
+  cloud repo cloned), but every agent/maintenance attach = blank timing-out
+  terminal. PTY debug tee caught it: forge-base image build fails microdnf
+  install with 'needs NNN MB more space on / filesystem' -> build STEP error
+  -> PtyClose code=1. Root cause: convert_qcow2_to_raw did a straight
+  qemu-img convert of the ~5GB Fedora Cloud image with NO resize. This was
+  the real wall behind the order-273 "attach runs login flow" theory — the
+  substrate ran out of space (or was corrupt, order 281) before anything
+  could work. Fix: qemu-img resize the raw disk to GUEST_DISK_SIZE=250G
+  (operator direction; sparse) before first boot; cloud-init growpart/
+  resizefs fills root. VERIFIED live via --exec-guest: guest root fs now
+  '/dev/vda2 250G 1.2G 249G 1% /' — 249G free. Drift-pinned. Windows sibling
+  filed order 297 (per operator; renumbered from 295 on merge collision with brew-opencode-harness-migration).
+- **Antigravity agent menu parity (order 296)**: operator flagged the Linux
+  tray has an Antigravity agent the macOS/windows shared menu lacked (headless
+  supports --antigravity). Added through the whole host-shell chain
+  (SelectedAgent, ids, per-project leaf, agent picker, menu_action
+  resolve/resolve_project, pty agent_flag); windows inherits it. All three
+  trays' parity tests updated to the 7-leaf set. Green.
+- **E2E**: fresh destructive re-provision at 250G (exit 0) + guest boot smoke
+  via --exec-guest; interactive tray relaunched (v0.3.260711.5) for operator.
+- **Order 273 reframed**: the "agent attach runs the login flow" symptom was
+  the disk wall, not a dispatch bug — with 249G free the forge build can now
+  complete. Operator to confirm a live agent launch; if still off, re-capture
+  via the tee. (273 stays linux-owned pending that confirmation.)
+- **Standing goal (operator)**: release-gated macOS drain loop armed (cron
+  b8fb0697, hourly at :23) — drains the macOS queue each cycle, stops when
+  linux publishes a release newer than baseline v0.3.260707.2.
+## Cycle 2026-07-11T17:58Z (macos — operator session: integrate linux forge-lane fix, fresh destructive provision for interaction)
+
+- **Host**: macOS arm64, `osx-next`, operator present. Credential guard
+  `ok:gh-keyring`. Merged origin/linux-next 3fddd8b2 (+5: forge P1 fixes —
+  order 291 P0 post-reset startup regression fixed fail-soft with traced
+  errors; order 284 forge-opencode minimal repro now passes end-to-end;
+  orders 285/286 fail-soft harness + 4h e2e token budget; 287/292/293
+  vault provider-login roles + runtime-build proxy exemption + router in
+  launch ensure list). osx-next pushed to 3fddd8b2 — linux stays unblocked.
+- **Integration gate**: build check clean; macOS crates green (tray 69,
+  host-shell 59, vm-layer 51, control-wire 38).
+- **E2E gate (destructive local-build) — provision PASS**: eligible;
+  destroyed yesterday's substrate + cold provision at 3fddd8b2 (528MB
+  Fedora image) exit 0, so the operator interacts with a PRISTINE current
+  VM carrying all of last night's + this morning's guest fixes.
+- **Interactive build launched** (v0.3.260711.5, TILLANDSIAS_PTY_DEBUG=1)
+  for the operator. Order 291's fail-soft launch fix is directly relevant
+  to order 273 (agent attach ran the login flow / died) — if the operator
+  logs in, the agent-attach path can finally be re-tested live with the
+  PTY tee to see whether 291/284 changed the behavior.
+- **Queue**: order 273 (attach) still ready [linux], needs operator PAT to
+  repro — now testable this session. Order 155 (macos) criteria proposal
+  still pending Tlatoāni decision.
 ## Cycle 2026-07-11T06:30Z→07:15Z (linux_mutable macuahuitl — operator session: P0 startup regression fixed, e2e token budget enforced)
 
 - **Order 291 (P0, done; renumbered from 285 — macOS filed its own 285
