@@ -4327,7 +4327,23 @@ plan_index:
         drift-protection litmus so a future command: reintroducing a raw
         \|/\[-style workaround fails loud instead of landing silently. Write
         the authoring guide.
-      events: []
+      events:
+        - type: progress
+          ts: "2026-07-11T19:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            ADOPTED STRAY: the in-forge agent from the ci-full full-meta
+            e2e implemented scripts/litmus-stdlib.sh (8 mf_* portable
+            primitives), the authoring cheatsheet, the shape litmus, and
+            the runner wiring — then crashed (order-284-class updater
+            race) before committing; the work landed as host-worktree
+            strays. Coordinator verified, completed the missing piece
+            (LITMUS_STDLIB was readonly-but-unexported, so child bash -c
+            shells sourced an empty path and the wiring was silently
+            inert — now exported), confirmed bindings registration, and
+            ran spec-traceability litmuses green. Residual: migrate
+            existing hand-escaped command: fields to mf_* incrementally.
       exit_criteria:
         - "scripts/run-litmus-test.sh --phase pre-build --size instant is green on both a Linux host and a macOS host after the migration batch lands"
         - "the 4 migrated files no longer contain a hand-derived backslash-escape workaround comment and produce byte-identical PASS/FAIL verdicts to their pre-conversion form"
