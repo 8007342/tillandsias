@@ -8328,7 +8328,7 @@ plan_index:
     - packet_id: tray-status-menu-stack-trace-unusable
       order: 288
       title: "P0 UX: tray status menu item renders a full multi-line stack trace, spans offscreen, tray becomes unusable (cannot quit or launch)"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-headless/src/tray
       depends_on: []
@@ -8356,6 +8356,17 @@ plan_index:
             Filed from operator report; root error was order 287 but ANY
             long error reproduces the UX failure — fix the surface, not
             just this instance.
+        - type: completed
+          ts: "2026-07-11T18:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260711T0712Z"
+          host: linux_mutable
+          summary: >
+            sanitize_status_text (first line, whitespace-collapsed, 120-char
+            hard cap + ellipsis) applied centrally in set_status AND in the
+            Failed status_label arm (several call sites assign label output
+            directly). Full error text still reaches stderr via caller
+            eprintln. Three unit tests incl. a multi-KB pathological chain
+            and a no-regression check on short emoji labels.
 
     - packet_id: shared-proxy-teardown-while-terminal-lane-live
       order: 289
