@@ -52,6 +52,18 @@ const SELINUX_HEADLESS_IF: &str = include_str!("../../../images/selinux/tillands
 const SELINUX_VAULT_TE: &str = include_str!("../../../images/selinux/tillandsias_vault.te");
 const SELINUX_VAULT_FC: &str = include_str!("../../../images/selinux/tillandsias_vault.fc");
 
+/// Staged guest headless binaries (order 190 windows half, order 282).
+/// `scripts/build-windows-tray.ps1` copies non-empty artifacts from
+/// `target-guest/` (the scripts/build-guest-binaries.sh staging contract)
+/// into `assets/` before compiling; `build.rs` touches zero-byte
+/// placeholders otherwise so `include_bytes!` always compiles. Empty slice
+/// = no staged artifact for that arch = the in-VM fetch-headless release
+/// download stays the provisioning path (`inject_bootstrap_logic`).
+const EMBEDDED_HEADLESS_X86_64: &[u8] =
+    include_bytes!("../assets/tillandsias-headless-x86_64-unknown-linux-musl");
+const EMBEDDED_HEADLESS_AARCH64: &[u8] =
+    include_bytes!("../assets/tillandsias-headless-aarch64-unknown-linux-musl");
+
 /// The single WSL2 distro the tray manages (see `tillandsias-vm-layer::wsl`,
 /// "one distro per host"). Also the `wsl.exe -d <name>` target the Open-Shell
 /// terminal attaches to.
@@ -396,10 +408,8 @@ for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_se
             .to_string();
 
         let embedded_bin: &[u8] = match arch.as_str() {
-            "x86_64" => include_bytes!("../assets/tillandsias-headless-x86_64-unknown-linux-musl"),
-            "aarch64" => {
-                include_bytes!("../assets/tillandsias-headless-aarch64-unknown-linux-musl")
-            }
+            "x86_64" => EMBEDDED_HEADLESS_X86_64,
+            "aarch64" => EMBEDDED_HEADLESS_AARCH64,
             _ => &[],
         };
 
@@ -416,6 +426,16 @@ for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_se
             )
             .await?;
         } else {
+            // Absent-asset fallback (order 190 step 3): without a staged
+            // binary the guest fetches the LATEST RELEASE, which can be an
+            // older wire revision than this tray (version skew — the order
+            // 282 trigger). Loud so smoke logs show which lane provisioned.
+            tracing::warn!(
+                %arch,
+                "no embedded tillandsias-headless asset for this arch; guest will \
+                 fetch the latest release (version skew possible — stage via \
+                 scripts/build-guest-binaries.sh before scripts/build-windows-tray.ps1)"
+            );
             // 1. fetch-headless.sh
             let fetch_script = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -952,5 +972,31 @@ mod tests {
             !fetch_script.contains("--output \"$DEST\""),
             "fetch script must not curl directly onto the live binary"
         );
+    }
+
+    /// Windows-side half of litmus:guest-binary-embed-integrity (order 282):
+    /// a NON-EMPTY embedded guest headless must carry the workspace VERSION
+    /// string, so a stale staged binary (built from an older checkout) fails
+    /// loud at test time instead of provisioning a version-skewed guest.
+    /// Zero-byte placeholders are the sanctioned absent-asset fallback and
+    /// pass trivially.
+    #[test]
+    fn embedded_guest_headless_matches_workspace_version() {
+        let version = env!("WORKSPACE_VERSION").as_bytes();
+        for (arch, bytes) in [
+            ("x86_64", EMBEDDED_HEADLESS_X86_64),
+            ("aarch64", EMBEDDED_HEADLESS_AARCH64),
+        ] {
+            if bytes.is_empty() {
+                continue;
+            }
+            assert!(
+                bytes.windows(version.len()).any(|w| w == version),
+                "embedded {arch} guest headless does not contain workspace version {} — \
+                 stale staged binary; re-run scripts/build-guest-binaries.sh then \
+                 scripts/build-windows-tray.ps1",
+                env!("WORKSPACE_VERSION")
+            );
+        }
     }
 }

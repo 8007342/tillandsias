@@ -125,4 +125,4 @@ rollback:
     scripts/litmus-stdlib.sh or its runner integration regressed.
     Restore the file, verify runner sources it (line: `source "$LITMUS_STDLIB"`),
     and that all 8 mf_* functions exist and pass unit-level checks.
-  command: "grep -n 'mf_\|LITMUS_STDLIB' scripts/litmus-stdlib.sh scripts/run-litmus-test.sh"
+  command: "grep -nE 'mf_|LITMUS_STDLIB' scripts/litmus-stdlib.sh scripts/run-litmus-test.sh"

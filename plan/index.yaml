@@ -7103,7 +7103,7 @@ plan_index:
     - packet_id: guest-binary-embed-windows
       order: 282
       title: "Windows: embed the linux-staged musl guest headless + demote fetch-headless to fallback (order 190 steps 2-3, windows half)"
-      status: ready
+      status: claimed
       kind: packaging
       deliverable: crates/tillandsias-windows-tray
       depends_on: []
@@ -7143,6 +7143,21 @@ plan_index:
             host needs the transport decision — flag to linux coordinator
             whether staged binaries ride a nightly artifact, a git-mirror
             side channel, or the next release.
+        - type: claim
+          ts: "2026-07-11T18:23:24Z"
+          agent_id: "windows-bullo-claude-20260711T182324Z"
+          host: windows
+          lease_id: "guest-binary-embed-windows-20260711T182324Z"
+          expires_at: "2026-07-11T22:23:24Z"
+          note: >
+            Windows worker cycle (meta-orchestration full mode). Plan: build
+            the x86_64 musl guest headless inside the local WSL tillandsias
+            distro to satisfy step-1 artifact availability on this host
+            (sidesteps the linux->windows transport decision for the
+            local-build case; transport for CI/release artifacts still
+            documented as part of this packet), then wire staging into
+            build-windows-tray.ps1 and demote fetch-headless per order 190
+            step 3.
 
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
