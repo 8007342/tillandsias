@@ -1,6 +1,6 @@
 # Guest VM disk (~5 GB) too small for the forge-base image → every agent attach fails (2026-07-11)
 
-- class: bug — macOS FIXED this session (vz.rs); windows sibling promoted order 295
+- class: bug — macOS FIXED this session (vz.rs); windows sibling promoted order 297
 - found by: operator interactive session on a fresh macOS provision, via the
   TILLANDSIAS_PTY_DEBUG tee (idiomatic layer, no ssh/root)
 
@@ -45,10 +45,10 @@ cc_resizefs) grows the root partition/filesystem to fill the disk on first
 boot. Drift-pinned by `convert_grows_raw_disk_before_first_boot` (source scan +
 ≥32 GiB floor). Requires a re-provision to take effect (done this session).
 
-## Windows sibling (order 295)
+## Windows sibling (order 297)
 
 WSL2 provisions differently (no qemu-img convert; the distro's VHDX grows
 dynamically by default up to a per-distro max, historically 256 GB / 1 TB on
 newer WSL). But the forge-base build will hit the same wall if the WSL VHDX
 max, the ext4 inside it, or any intermediate rootfs is capped near the Fedora
-default. Needs a host-appropriate audit + fix — see order 295.
+default. Needs a host-appropriate audit + fix — see order 297.

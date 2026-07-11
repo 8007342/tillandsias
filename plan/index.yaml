@@ -8764,7 +8764,7 @@ plan_index:
             sibling filed as order 295.
 
     - packet_id: windows-guest-disk-resize-forge-fit
-      order: 295
+      order: 297
       title: "Windows/WSL2 guest disk sizing for the forge-base image build (sibling of macOS order 294)"
       status: ready
       kind: research+bug

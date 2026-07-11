@@ -19,7 +19,7 @@ LastExecutionTime: 2026-07-11T18:40:00Z
   (operator direction; sparse) before first boot; cloud-init growpart/
   resizefs fills root. VERIFIED live via --exec-guest: guest root fs now
   '/dev/vda2 250G 1.2G 249G 1% /' — 249G free. Drift-pinned. Windows sibling
-  filed order 295 (per operator).
+  filed order 297 (per operator; renumbered from 295 on merge collision with brew-opencode-harness-migration).
 - **Antigravity agent menu parity (order 296)**: operator flagged the Linux
   tray has an Antigravity agent the macOS/windows shared menu lacked (headless
   supports --antigravity). Added through the whole host-shell chain
