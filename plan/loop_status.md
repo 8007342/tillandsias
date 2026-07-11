@@ -41,6 +41,39 @@ LastExecutionTime: 2026-07-11T07:15:00Z
   (retries killed at budget) were burning BigPickle's rate-limited token
   budget and masquerading as forge-lane outages.
 
+## Cycle 2026-07-10T11:57Z (macos — overnight autonomous 8/8 FINAL: merge + verified-green macOS handoff)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 8 of 8, final).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next ba3e5acd.
+- **Order collision resolved (uniqueness gate)**: linux filed its own order
+  283 (smoke-lock-fd-leaks) + 284 (P1 forge-opencode outage) in parallel
+  with my cycle-7 order 283 (headless-podman-test-gate). Kept linux's
+  283/284, renumbered mine to **285**; the order-275 uniqueness gate
+  confirmed clean (150 packets, no open-packet duplicates). This is the
+  gate's textbook use case — three hosts filing packets in parallel
+  overnight, caught mechanically.
+- **No macOS-actionable ready work this cycle**: 273 operator-blocked
+  (agent leaves auth-gated); 155 contested criteria (proposal pending);
+  270/283/284/285 linux-owned; 284 is a P1 but it's the linux forge lane
+  (upstream opencode-ai@latest publish broke the in-enclave postinstall),
+  not macOS-fixable.
+- **Final action — verified-green macOS handoff**: re-ran the macOS-owned +
+  cycle-7-fixed crates on the merged final tree — all green
+  (macos-tray 69, host-shell 59, vm-layer 51, control-wire 38,
+  gh_auth_deploy_key 5/5 with the keyring hermeticity fix holding). Build
+  check clean. The macOS trunk is solid at loop close.
+- **E2E gate**: skipped-with-cause — destructive local-build e2e PASSED
+  cycle 6 (merged HEAD) + cycle 4; no runtime delta this cycle (merge +
+  verification only).
+- **macOS night summary (8 cycles)**: order 272 (ssh backdoor closed,
+  verified), 277 (one-shot CLI vs live tray), 269 (session-end banner +
+  pty-dump), 155 slice 4 (LocalProjects push) + tick-wait dedup onto the
+  shared module; fixes: chip clobber, fstab mount persistence, post-login
+  cloud prime, keyring test hermeticity. Filed for siblings: 267/276 (login
+  push), 270 (guest-side attach), 281 (overlay self-heal), 283/285
+  (test-gate). Two destructive e2e PASSes. Open macOS residual: 273
+  (operator), 155 (criteria decision). Parity column: 6/7 cells done,
+  InteractiveStream blocked on 273.
 ## Cycle 2026-07-10T10:40Z→12:10Z (linux_mutable macuahuitl — overnight loop 7-8/8 CLOSE: strict default proved in gates, P1 forge-lane outage filed)
 
 - Iteration 7: strict-default's first gates surfaced and FIXED two real
@@ -67,6 +100,42 @@ LastExecutionTime: 2026-07-11T07:15:00Z
   their own loops throughout (macOS adopted 260 + passed destructive e2e;
   windows on 154 slices); ~15 packets closed across hosts tonight.
 
+## Cycle 2026-07-10T10:57Z (macos — overnight autonomous 7/8: macOS trunk-health sweep found+fixed a real keyring hermeticity bug + filed the podman-test-gating class)
+
+- **Host**: macOS arm64, `osx-next`, unattended (overnight 7 of 8).
+  Credential guard `ok:gh-keyring`. Merged origin/linux-next c2964103
+  (strict-default gate findings — alpine fallbacks, observatorium image
+  resolution). Order 273 STILL open; needs operator PAT to repro (agent
+  leaves are auth-gated), so unadvanceable unattended.
+- **No small macOS-owned packet available** (155 large+contested, 270 now
+  linux, 273 operator-blocked, 147/225 cross-cutting), so ran the macOS
+  host's UNIQUE contribution: a full `cargo test --workspace` sweep — the
+  macOS box is the only host that compiles+runs the macOS-specific code, so
+  this is the trunk-health check no other CI performs.
+- **Real bug found + FIXED (keyring hermeticity)**: the deploy-key test
+  (tillandsias-core gh_auth_deploy_key) was designed hermetic via
+  LITMUS_SECRET_TOOL_STORE + a fake secret-tool shim, but
+  scripts/generate-repo-key.sh's Darwin arm used the real macOS `security`
+  Keychain, which the Linux shim doesn't intercept — so on macOS it wrote to
+  the developer's login Keychain and failed read-back under automation. Fix:
+  secret_store_set/get honor LITMUS_SECRET_TOOL_STORE as a cross-platform
+  file store (fake's exact format → Linux byte-identical). 5/5 pass; never
+  touches the real Keychain now. Finding:
+  deploy-key-test-hits-real-macos-keychain-2026-07-10.md.
+- **Reduction-engine capture → order 283 (linux)**: the sweep also exposed a
+  CLASS — tillandsias-headless podman-integration tests FAIL (not skip) on a
+  bare macOS host (no podman machine): they assert podman-semantic errors but
+  get connection-refused. Fixed one as the reference pattern
+  (error_recovery::test_missing_image_error_handling now treats
+  podman-unreachable as a graceful skip); filed the rest (stress_* + the
+  un-reached binaries) for a shared podman_daemon_reachable() gate. These
+  masked the real keyring find — hermeticity matters. Finding:
+  headless-integration-tests-not-macos-gated-2026-07-10.md.
+- **E2E gate**: skipped-with-cause — destructive local-build e2e PASSED
+  cycle 6 (<1h) on merged HEAD; this cycle's deltas are test/script
+  hermeticity fixes verified by the test sweep itself.
+- **Queue next**: order 283 (linux, test gating), 273 (operator), 155
+  (contested criteria — proposal pending). Final cycle 8 next.
 ## Cycle 2026-07-10T09:57Z (macos — overnight autonomous 6/8: reduction pass — order 270 re-scoped guest-side, order-155-criteria proposal filed, destructive e2e on merged HEAD)
 
 - **Host**: macOS arm64, `osx-next`, unattended (overnight 6 of 8).

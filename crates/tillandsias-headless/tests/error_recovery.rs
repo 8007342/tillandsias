@@ -243,15 +243,29 @@ fn test_missing_image_error_handling() {
     match output {
         Ok(output) if !output.status.success() => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            // Should indicate image not found (not a generic error)
-            // Podman error messages include "not known" or "not found"
-            assert!(
-                stderr.contains("not known")
-                    || stderr.contains("no image with reference")
-                    || stderr.contains("not found"),
-                "Error should clearly indicate missing image: {}",
-                stderr
-            );
+            // Podman is present but has no reachable daemon/machine (common on
+            // a bare macOS dev host or CI without `podman machine start`) —
+            // the CLI returns a CONNECTION error before it can evaluate the
+            // image reference. We cannot exercise missing-image semantics
+            // without a daemon, so treat that as the same graceful-skip case
+            // as `podman` being absent entirely (Err arm below). Without this
+            // the macOS trunk test sweep fails on connection-refused, masking
+            // real regressions (found 2026-07-10). Otherwise the error must
+            // clearly indicate the missing image, not a generic failure.
+            let unreachable = stderr.contains("Cannot connect to Podman")
+                || stderr.contains("connection refused")
+                || stderr.contains("unable to connect to Podman socket");
+            if unreachable {
+                eprintln!("podman present but daemon unreachable; skipping: {stderr}");
+            } else {
+                assert!(
+                    stderr.contains("not known")
+                        || stderr.contains("no image with reference")
+                        || stderr.contains("not found"),
+                    "Error should clearly indicate missing image: {}",
+                    stderr
+                );
+            }
         }
         Ok(_) => {
             // Image exists (unexpected in test)
