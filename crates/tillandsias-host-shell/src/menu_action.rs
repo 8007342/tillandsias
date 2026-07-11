@@ -85,6 +85,7 @@ pub fn resolve(id: &str) -> MenuAction {
         ids::AGENT_CLAUDE => MenuAction::SelectAgent(SelectedAgent::Claude),
         ids::AGENT_CODEX => MenuAction::SelectAgent(SelectedAgent::Codex),
         ids::AGENT_OPENCODE => MenuAction::SelectAgent(SelectedAgent::OpenCode),
+        ids::AGENT_ANTIGRAVITY => MenuAction::SelectAgent(SelectedAgent::Antigravity),
         ids::CLOUD_PROJECTS_OVERFLOW => MenuAction::CloudOverflow,
         "retry" => MenuAction::Retry,
         "open-log" => MenuAction::OpenLog,
@@ -130,6 +131,16 @@ fn resolve_project(id: &str) -> Option<MenuAction> {
             scope,
             name: name.to_string(),
             agent: SelectedAgent::OpenCode,
+        });
+    }
+    if let Some(name) = after_scope.strip_suffix(".antigravity") {
+        if name.is_empty() {
+            return None;
+        }
+        return Some(MenuAction::Attach {
+            scope,
+            name: name.to_string(),
+            agent: SelectedAgent::Antigravity,
         });
     }
     if let Some(name) = after_scope.strip_suffix(".opencode-web") {
@@ -206,12 +217,23 @@ mod tests {
             resolve(ids::AGENT_OPENCODE),
             MenuAction::SelectAgent(SelectedAgent::OpenCode)
         );
+        // Linux-parity (2026-07-11): the shared tray menu must offer
+        // Antigravity too — the headless supports `--antigravity`.
+        assert_eq!(
+            resolve(ids::AGENT_ANTIGRAVITY),
+            MenuAction::SelectAgent(SelectedAgent::Antigravity)
+        );
     }
 
     #[test]
     fn resolves_per_project_agent_verbs() {
         use SelectedAgent::*;
-        for (verb, agent) in [("claude", Claude), ("codex", Codex), ("opencode", OpenCode)] {
+        for (verb, agent) in [
+            ("claude", Claude),
+            ("codex", Codex),
+            ("opencode", OpenCode),
+            ("antigravity", Antigravity),
+        ] {
             assert_eq!(
                 resolve(&format!("project.local.myapp.{verb}")),
                 MenuAction::Attach {

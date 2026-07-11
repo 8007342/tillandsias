@@ -111,6 +111,7 @@ fn agent_flag(agent: SelectedAgent) -> &'static str {
         SelectedAgent::Claude => "--claude",
         SelectedAgent::Codex => "--codex",
         SelectedAgent::OpenCode => "--opencode",
+        SelectedAgent::Antigravity => "--antigravity",
     }
 }
 

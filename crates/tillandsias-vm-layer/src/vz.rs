@@ -686,6 +686,32 @@ fn convert_qcow2_to_raw(
         let _ = std::fs::remove_file(&raw_part);
         return Err(format!("qemu-img convert failed: exit {status}"));
     }
+    // Grow the raw disk before first boot. The Fedora Cloud qcow2 is a ~5 GB
+    // virtual disk — nowhere near enough once the forge-base image builds its
+    // full dev toolchain (558 packages: gcc, valgrind, delve, gopls, rust,
+    // node, python…) on top of the base OS, podman's overlay store for every
+    // enclave image, and a cloned project. Symptom before this fix
+    // (2026-07-11 operator session): EVERY agent/maintenance attach opened a
+    // PTY, streamed the forge-base package downloads, then died with
+    // 'installing package … needs NNN MB more space on the / filesystem' →
+    // 'Error: building at STEP "RUN microdnf install …"' → PtyClose code=1,
+    // i.e. a blank terminal that "times out". Fedora Cloud's cloud-init
+    // (cc_growpart + cc_resizefs) grows the root partition/filesystem to fill
+    // the disk on first boot, so simply enlarging the raw file here is enough.
+    // The raw image stays sparse, so a 64 GiB virtual disk does not consume
+    // 64 GiB on the host until actually written.
+    let resize = std::process::Command::new("qemu-img")
+        .arg("resize")
+        .arg("-f")
+        .arg("raw")
+        .arg(&raw_part)
+        .arg(GUEST_DISK_SIZE)
+        .status()
+        .map_err(|e| format!("spawn qemu-img resize: {e}"))?;
+    if !resize.success() {
+        let _ = std::fs::remove_file(&raw_part);
+        return Err(format!("qemu-img resize failed: exit {resize}"));
+    }
     std::fs::rename(&raw_part, raw_dest).map_err(|e| {
         let _ = std::fs::remove_file(&raw_part);
         format!(
@@ -697,6 +723,14 @@ fn convert_qcow2_to_raw(
     on_phase("Fedora Cloud image ready");
     Ok(())
 }
+
+/// Virtual size the Fedora Cloud raw disk is grown to before first boot so
+/// the forge-base toolchain + podman overlay store + project checkouts fit.
+/// A string like "250G" for `qemu-img resize`. The raw image stays SPARSE,
+/// so this costs no host disk until actually written — the original ~5 GB
+/// disk was the hard wall every agent attach hit (2026-07-11). Generous by
+/// operator direction; trim later if needed. See `convert_qcow2_to_raw`.
+const GUEST_DISK_SIZE: &str = "250G";
 
 /// Fetch the xz-compressed asset at `xz_url` to `xz_temp_dest`,
 /// decompress to `final_dest` via `xz -d`, then SHA-256-verify the
@@ -1929,6 +1963,42 @@ mod tests {
         assert!(cfg.cpu_count >= 1, "cpu_count must be at least 1");
         assert!(cfg.cpu_count <= 4, "cpu_count must be capped at 4");
         assert_eq!(cfg.memory_bytes, 4 * 1024 * 1024 * 1024);
+    }
+
+    /// 2026-07-11: the raw disk MUST be grown past the ~5 GB Fedora Cloud
+    /// default before first boot, or the forge-base image build runs the
+    /// root filesystem out of space and every agent attach dies with a
+    /// blank timing-out terminal. Pin the resize (source scan — the resize
+    /// runs in the download-gated convert path) so it can't silently
+    /// regress, and require a roomy target.
+    #[test]
+    fn convert_grows_raw_disk_before_first_boot() {
+        let source = include_str!("vz.rs");
+        assert!(
+            source.contains("const GUEST_DISK_SIZE: &str"),
+            "the guest disk-size constant must exist"
+        );
+        assert!(
+            source.contains("\"qemu-img\"")
+                && source.contains(".arg(\"resize\")")
+                && source.contains(".arg(GUEST_DISK_SIZE)"),
+            "convert_qcow2_to_raw must qemu-img resize the raw disk to GUEST_DISK_SIZE \
+             before first boot (else forge-base build fills the ~5 GB default)"
+        );
+        // The size string must parse as a generous GiB value (>= 32 GiB).
+        let size = source
+            .split("const GUEST_DISK_SIZE: &str =")
+            .nth(1)
+            .and_then(|t| t.split('"').nth(1))
+            .expect("GUEST_DISK_SIZE literal");
+        let gib: u64 = size
+            .trim_end_matches(['G', 'g'])
+            .parse()
+            .expect("GUEST_DISK_SIZE must be an <N>G literal");
+        assert!(
+            gib >= 32,
+            "guest disk must be >= 32 GiB for the forge toolchain + overlay store, got {size}"
+        );
     }
 
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1

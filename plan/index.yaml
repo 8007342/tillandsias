@@ -8546,3 +8546,119 @@ plan_index:
             to 285 in the cycle-8 merge (collision with linux's parallel
             283 smoke-lock-fd + 284 forge-opencode filings — the order-275
             uniqueness gate's exact use case).
+
+    - packet_id: macos-guest-disk-resize-forge-fit
+      order: 294
+      title: "macOS guest disk grown to 250G so the forge-base image build fits (was ~5GB, every agent attach failed)"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-vm-layer/src/vz.rs
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, vm-layer, vz, disk, forge]
+      estimated_hours: 2
+      outcome: >
+        Operator interactive session 2026-07-11: on a fresh macOS provision,
+        login worked and a cloud repo cloned, but every agent/maintenance
+        attach showed a blank timing-out terminal. PTY debug tee caught the
+        forge-base image build failing microdnf install with 'needs NNN MB
+        more space on the / filesystem' (repeatedly) then PtyClose code=1 —
+        the guest disk was the Fedora Cloud default ~5GB (convert_qcow2_to_raw
+        did a straight qemu-img convert with no resize). Fixed:
+        convert_qcow2_to_raw now qemu-img resizes the raw disk to
+        GUEST_DISK_SIZE (250G, operator direction; sparse so no host cost
+        until written) before first boot; Fedora cloud-init growpart/resizefs
+        fills root on boot. Drift-pinned (convert_grows_raw_disk_before_first_boot,
+        source scan + >=32 GiB floor). Verified via re-provision + agent
+        launch this session. Full context:
+        plan/issues/guest-disk-too-small-for-forge-image-2026-07-11.md.
+      exit_criteria:
+        - "raw disk grown past the Fedora default before first boot (pin test)"
+        - "forge-base image builds without ENOSPC; an agent attach reaches a live session (operator-verified this session)"
+      events:
+        - type: completed
+          ts: "2026-07-11T18:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260711T1758Z"
+          host: macos
+          summary: >
+            Root-caused live via the PTY tee (idiomatic layer, no ssh) and
+            fixed in the same session at operator direction (250G). Windows
+            sibling filed as order 295.
+
+    - packet_id: windows-guest-disk-resize-forge-fit
+      order: 295
+      title: "Windows/WSL2 guest disk sizing for the forge-base image build (sibling of macOS order 294)"
+      status: ready
+      kind: research+bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, disk, forge]
+      estimated_hours: 4
+      outcome: >
+        macOS order 294 found the guest disk was the Fedora Cloud default
+        ~5GB, so the forge-base image build (full dev toolchain + podman
+        overlay store + project checkout) ran the root filesystem out of
+        space and EVERY agent attach failed with a blank timing-out terminal
+        (microdnf 'needs NNN MB more space on / filesystem' -> build STEP
+        error -> PtyClose code=1). Windows provisions via WSL2, not
+        qemu-img, so the mechanism differs: WSL2 VHDX grows dynamically up to
+        a per-distro max (historically 256GB, 1TB on newer WSL), but the
+        forge build will still wall if that max, the ext4 inside the VHDX, or
+        any intermediate rootfs the provisioning imports is capped near the
+        Fedora default. RESEARCH: measure the actual usable free space in a
+        freshly provisioned WSL2 guest right before a forge-base build;
+        reproduce the ENOSPC if present. IMPLEMENT: ensure the WSL2 guest has
+        headroom equivalent to macOS's 250G target — grow the VHDX max and/or
+        the ext4 (wsl --manage … --set-sparse / diskpart / resize2fs as
+        appropriate), matching order 294's GUEST_DISK_SIZE intent. Pin with a
+        provisioning-time free-space assertion so it fails loud on regression.
+        Full context: plan/issues/guest-disk-too-small-for-forge-image-2026-07-11.md.
+      exit_criteria:
+        - "measured: free space in a fresh WSL2 guest immediately before a forge-base build, with ENOSPC repro or confirmation of headroom"
+        - "WSL2 guest has forge-fit headroom (matching macOS 250G intent); forge-base builds without ENOSPC"
+        - "a provisioning-time free-space / disk-size assertion fails loud on regression"
+      events:
+        - type: filed
+          ts: "2026-07-11T18:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260711T1758Z"
+          host: macos
+          summary: >
+            Filed at operator direction as the windows sibling of the macOS
+            disk-size fix (order 294) — the forge-base build will hit the
+            same wall on any host whose guest disk is capped near the Fedora
+            default.
+
+    - packet_id: macos-antigravity-agent-menu-parity
+      order: 296
+      title: "Antigravity agent leaf added to the shared tray menu (macOS/windows parity with Linux)"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-host-shell/src/menu_state.rs
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, windows, tray, menu, parity]
+      estimated_hours: 1
+      outcome: >
+        Operator noted 2026-07-11: the Linux tray offers an Antigravity agent
+        but the macOS (and windows, via shared host-shell) tray did not, even
+        though the headless supports --antigravity. Added across the shared
+        menu: SelectedAgent::Antigravity (+ display_name/id),
+        ids::AGENT_ANTIGRAVITY + VERB_ANTIGRAVITY, the per-project leaf
+        (position 4, after OpenCode), the agent-picker order, menu_action
+        resolve (AGENT_ANTIGRAVITY -> SelectAgent) + resolve_project
+        (.antigravity -> Attach{Antigravity}), and pty agent_flag
+        (--antigravity). Windows inherits it from host-shell. Parity + resolve
+        tests updated across all three trays (7 leaves now: claude/codex/
+        opencode/antigravity/opencode-web/observatorium/maintenance).
+      exit_criteria:
+        - "the per-project submenu lists Antigravity and clicking it dispatches --antigravity (resolve test)"
+        - "all three trays' menu-parity tests assert the 7-leaf set"
+      events:
+        - type: completed
+          ts: "2026-07-11T18:30:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260711T1758Z"
+          host: macos
+          summary: >
+            Operator-flagged parity gap, fixed in the shared host-shell menu
+            so macOS and windows both gain the Antigravity leaf.
