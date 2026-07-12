@@ -9743,3 +9743,96 @@ plan_index:
             in-session by launching the tray from the elevated agent
             shell. This packet is the release gate for any
             standard-user-facing Windows install.
+
+    - packet_id: inference-firstrun-install-resilience
+      order: 313
+      title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
+      status: ready
+      kind: bug
+      deliverable: images/inference/entrypoint.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, containers, shell, lifecycle, e2e]
+      estimated_hours: 3
+      outcome: >
+        Attended Windows smoke 2026-07-12: on the pristine substrate the
+        first agent-lane launch raced the enclave proxy's restart/warm-up
+        window — the entrypoint's proxied ollama download failed, its
+        documented fallback ("retry direct, no proxy") is dead by design
+        INSIDE the enclave (no DNS egress: curl 6), both stderr streams
+        are discarded (2>/dev/null, order-291 class), and the container
+        exits 1 with only "install FAILED". Verified after warm-up that
+        the identical proxied curl succeeds (github is SPLICED by squid —
+        real Sectigo chain against the system store; HTTP 200, 1.4 GB).
+        Compounding defects found by inspection: (a) the CA-injection
+        block uses Debian's update-ca-certificates + /usr/local/share/
+        ca-certificates on a Fedora Minimal image — it has NEVER worked
+        (command absent, swallowed by || true); Fedora needs
+        /etc/pki/ca-trust/source/anchors + update-ca-trust — required the
+        day squid bumps instead of splicing; (b) OLLAMA_BINDIR
+        ("${OLLAMA_MODELS}.tools") is a SIBLING of the mounted models
+        volume, i.e. container-local — the "persists across restarts"
+        claim only holds for the same container, not recreation. Fix:
+        in-enclave-aware retry/backoff (retry PROXIED with delay, drop
+        the dead direct fallback when the proxy resolves), keep + surface
+        stderr, Fedora CA injection, move .tools inside the mounted
+        volume, and a first-run assertion mirroring order 299's loud
+        floor.
+      exit_criteria:
+        - "first-run install retries the proxied path with backoff and surfaces the real curl error on failure (no 2>/dev/null)"
+        - "CA injection works on the Fedora image (update-ca-trust; verified by a litmus or in-container probe)"
+        - "ollama binary persists across container recreation (path inside the mounted volume)"
+        - "pristine-substrate first lane launch installs ollama through a just-started proxy (e2e evidence)"
+      events:
+        - type: filed
+          ts: "2026-07-12T22:50:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Filed from live isolation during the attended smoke (probes:
+            enclave-dead direct path curl 6; post-warm-up proxied 200;
+            splice confirmed via Sectigo issuer). Operator unblocked by
+            removing the exited container so the next ensure recreates it.
+
+    - packet_id: container-ensure-not-idempotent-exited
+      order: 314
+      title: "P1: container ensure does bare `podman run --name` — an EXITED dependency container name-collides (125) and is classified retry-Permanent, blocking every lane"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, containers, rust, cross-host]
+      estimated_hours: 3
+      outcome: >
+        Attended Windows smoke 2026-07-12: after tillandsias-inference
+        exited 1 (order 313), EVERY lane launch — agent AND maintenance —
+        failed at the dependency-ensure stage: the ensure issues
+        `podman run --detach --name tillandsias-inference ...` while the
+        exited container still owns the name, podman exits 125 ("name
+        already in use"), and the stage classifies it retry: Permanent —
+        the operator-reported "now nothing launches". A manual
+        `podman start tillandsias-inference` re-ran the entrypoint fine.
+        DECIDED (The Tlatoāni, 2026-07-12, live during the smoke): use
+        `--replace` on the ensure's podman run — wipe the exited instance
+        and take over; fine for this use case, atomic, and a fresh run
+        still re-executes the entrypoint's own retry logic. Ensure must
+        be idempotent across container states (running: no-op; otherwise
+        run --replace); name-collision 125 must never be Permanent. Pin
+        with a unit/litmus on the ensure decision table. The
+        operator-facing error rendering was GOOD (structured cause +
+        argv + logs via the exit-pause trap) — keep it.
+      exit_criteria:
+        - "ensure runs with --replace (operator-decided); running containers are not needlessly replaced (decision-table test)"
+        - "an exited dependency container no longer blocks lane launches (repro: exit the inference container, launch a lane)"
+        - "125 name-in-use is never classified Permanent"
+      events:
+        - type: filed
+          ts: "2026-07-12T22:50:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Filed from the operator's structured lane-failure capture
+            (full podman argv + stderr + container state) during the
+            attended smoke; unblocked live via podman rm of the exited
+            container.
