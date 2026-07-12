@@ -6532,7 +6532,7 @@ plan_index:
     - packet_id: macos-tray-parity-column-verify
       order: 257
       title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: blocked
+      status: ready
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6560,6 +6560,16 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the macOS host"
       events:
+        - type: unblock
+          ts: "2026-07-12T19:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator directive 2026-07-12: linux-next is at a declared stable
+            point (orders 298-302 + login-flow/stable-channel packets filed);
+            the operator will attend the macOS/Windows hosts and start agents
+            there to complete the platform wrappers. Attended-smoke blockers
+            lifted; status flipped to ready.
         - type: filed
           ts: "2026-07-09T22:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
@@ -6634,8 +6644,8 @@ plan_index:
     - packet_id: windows-tray-parity-column-verify
       order: 258
       title: "Windows: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: blocked
-      blocked_on: "operator-attended interactive smoke at the Windows tray (7 UI cells) — see plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md"
+      status: ready
+      unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended-smoke blocker lifted"
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6654,6 +6664,16 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the Windows host"
       events:
+        - type: unblock
+          ts: "2026-07-12T19:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator directive 2026-07-12: linux-next is at a declared stable
+            point (orders 298-302 + login-flow/stable-channel packets filed);
+            the operator will attend the macOS/Windows hosts and start agents
+            there to complete the platform wrappers. Attended-smoke blockers
+            lifted; status flipped to ready.
         - type: filed
           ts: "2026-07-09T22:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
@@ -7251,7 +7271,8 @@ plan_index:
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
-      status: blocked
+      status: ready
+      unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended blocker lifted"
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -7276,6 +7297,16 @@ plan_index:
         - "source pin tests fail loud if the unit and any exec preamble drift apart"
         - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
       events:
+        - type: unblock
+          ts: "2026-07-12T19:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator directive 2026-07-12: linux-next is at a declared stable
+            point (orders 298-302 + login-flow/stable-channel packets filed);
+            the operator will attend the macOS/Windows hosts and start agents
+            there to complete the platform wrappers. Attended-smoke blockers
+            lifted; status flipped to ready.
         - type: blocked
           ts: "2026-07-10T09:35:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"
@@ -9241,3 +9272,144 @@ plan_index:
             Deployment residual of order 301: the code fix cannot take effect on
             the live mirror from a forge host (no podman to rebuild the image).
             Split out so a podman-capable host ships and live-verifies it.
+
+    - packet_id: agent-login-tray-lane-vault-parity
+      order: 303
+      title: "Tray forge launches run the same ensure_provider_auth vault ladder as the CLI lane"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [tray, vault, auth, rust]
+      estimated_hours: 2
+      outcome: >
+        launch_forge_agent (tray lane) skips ensure_provider_auth entirely, so
+        tray-initiated Claude/Codex/Antigravity launches never consult the
+        vault or trigger a login flow; the CLI lane already has the ladder.
+        Small parity slice of the login-flow work. Operator directive
+        2026-07-12: file only, do not implement until the current stable
+        point has shipped.
+      exit_criteria:
+        - "tray Claude/Codex/Antigravity launches call the ensure_provider_auth ladder before spawning the terminal"
+        - "vault-present credential launches with no login prompt"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator repro: relaunching Claude/Codex from the tray prompts
+            for login again despite a prior successful in-forge login.
+
+    - packet_id: agent-login-vault-roundtrip
+      order: 304
+      title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
+      depends_on: [agent-login-tray-lane-vault-parity]
+      pickup_role: linux
+      capability_tags: [vault, auth, forge, containers]
+      estimated_hours: 6
+      outcome: >
+        Credentials created by an agent's own interactive login inside the
+        --rm forge die with the lane; nothing exports them to the vault, so
+        every relaunch re-prompts. Model the <Agent>-Login flow on the GitHub
+        Login Flow: no vault credential => run login flow first, persist to
+        vault, then launch the forge; harvest in-forge logins back to the
+        vault before teardown. Operator directive 2026-07-12: file only,
+        implement after the stable release ships.
+      exit_criteria:
+        - "one interactive login per agent survives forge --rm teardown (relaunch does not prompt)"
+        - "vault paths per provider documented; no credential lands in the project workspace or image"
+        - "fixture/litmus: synthetic token harvested from a fake agent credential path into the vault and injected on next launch"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator smoke-test 2026-07-12; design sketch and existing
+            plumbing inventory in the deliverable issue file.
+
+    - packet_id: stable-release-channel
+      order: 305
+      title: "Introduce a 'stable' release label; README install scripts pin to stable while dailies keep shipping"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/stable-release-channel-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [release, ci, docs]
+      estimated_hours: 4
+      outcome: >
+        Daily CalVer releases immediately become what new users curl-install;
+        operator wants a promoted, e2e-vetted 'stable' channel the README
+        points at, with dailies marked pre-release. Promotion is an explicit
+        Tlatoani action gated on curl-install e2e PASS evidence.
+      exit_criteria:
+        - "stable-pinned download URL that dailies do not move"
+        - "README install instructions resolve the stable channel; dailies marked pre-release"
+        - "promotion procedure documented in methodology/versioning.yaml with e2e-evidence gate"
+        - "shape litmus asserting README install URL resolves the stable channel"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: "Operator directive 2026-07-12 (approaching stable point)."
+
+    - packet_id: opencode-tray-tui-spill-verify
+      order: 306
+      title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
+      status: ready
+      kind: verify
+      deliverable: plan/issues/opencode-tray-tui-escape-spill-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, e2e, tui]
+      estimated_hours: 2
+      outcome: >
+        This cycle muted npm stdout in ensure_forge_harnesses and redirected
+        the backgrounded installers' stdout to /tmp/forge-lifecycle.log in all
+        forge entrypoints (stderr kept for the order-299 loud floor). Needs an
+        interactive/local-build e2e confirmation on a cold cache; residual
+        suspects (live npm rewrite of the running harness, init-prompt
+        injection, debug stderr) ranked in the deliverable.
+      exit_criteria:
+        - "tray OpenCode session clean for >=5 minutes on a first-launch cold-cache run"
+        - "if live-rewrite implicated: updater never rewrites the active lane's package; fixture in scripts/test-harness-rollback.sh"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: "Operator repro fixed-in-part this cycle; verification packet."
+
+    - packet_id: antigravity-launch-crash
+      order: 307
+      title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
+      status: ready
+      kind: exploration
+      deliverable: plan/issues/antigravity-launch-crash-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, tray, e2e]
+      estimated_hours: 2
+      outcome: >
+        Operator repro 2026-07-12: window closed instantly, error unreadable.
+        This cycle added an exit-pause EXIT trap to every agent entrypoint and
+        fixed GIT_SSL_CAINFO; remaining candidates (missing Gemini credential
+        -> login-flow packets; agy installer failure; skip-permissions flag
+        drift) ranked in the deliverable.
+      exit_criteria:
+        - "actual error text captured into the deliverable via the exit-pause trap"
+        - "root cause fixed here or split to the owning packet (orders 303/304)"
+        - "antigravity lane reaches a usable TUI with a valid Gemini credential in the vault"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: "Operator repro; observability fix landed this cycle."

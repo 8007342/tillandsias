@@ -19,6 +19,27 @@ export TILLANDSIAS_AGENT_NAME="Google Antigravity"
 export TILLANDSIAS_GENERATED_BY="tool=antigravity"
 export TILLANDSIAS_HOST_KIND="forge"
 
+# @trace spec:simplified-tray-ux
+# EXIT trap: pause on error so the popup terminal stays open long enough to
+# read the failure. Without this an entrypoint/exec failure closes the window
+# instantly (operator repro 2026-07-12: Antigravity lane "crashed right away"
+# with no readable error). Mirrors entrypoint-terminal.sh::exit_pause; a
+# successful `exec <agent>` replaces the shell, so the trap never fires on
+# the happy path.
+exit_pause() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ] && [ -t 0 ]; then
+        echo ""
+        echo "═══════════════════════════════════════════════════════"
+        echo "ERROR: forge agent launch failed (exit code: $exit_code)"
+        echo "═══════════════════════════════════════════════════════"
+        echo ""
+        echo "Press any key to exit..."
+        read -r -n 1 -s 2>/dev/null || true
+    fi
+}
+trap 'exit_pause' EXIT
+
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
@@ -27,7 +48,7 @@ populate_hot_paths
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
 # so it never blocks the agent launch, and fail-soft.
-ensure_forge_prebuilt_tools &
+ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log &
 
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
@@ -47,6 +68,13 @@ if [ -f "$CA_CHAIN" ]; then
         cat "$SYSTEM_CA" "$CA_CHAIN" > "$COMBINED" 2>/dev/null
         export SSL_CERT_FILE="$COMBINED"
         export REQUESTS_CA_BUNDLE="$COMBINED"
+        # git uses libcurl, which ignores SSL_CERT_FILE, and the injected
+        # gitconfig pins http.sslCAInfo to the enclave-CA-only file — so a
+        # git HTTPS fetch to a non-MITMed remote (real GitHub cert chain)
+        # fails "unable to get local issuer certificate" (operator repro
+        # 2026-07-12: Homebrew install clone). GIT_SSL_CAINFO wins over
+        # http.sslCAInfo; point git at the combined bundle.
+        export GIT_SSL_CAINFO="$COMBINED"
     fi
 fi
 

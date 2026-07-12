@@ -1,6 +1,49 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T18:46:00Z
+LastExecutionTime: 2026-07-12T19:30:00Z
+
+## Cycle 2026-07-12T18:56Z→19:30Z (linux_mutable macuahuitl — operator smoke-test feedback drain + sibling unblock)
+
+- **Startup/sync**: linux-next clean at 6136000b; credential guard
+  `ok:gh-keyring`. Sibling heads: main 9632165a, windows-next e50ab2f2,
+  osx-next 9632165a.
+- **Forge push transparency CONFIRMED**: the operator's in-forge
+  /meta-orchestration cycles (Codex/ChattyGPT commits 8965d23e+884d32f1,
+  Claude commits a1d1ea4c+3d9e583b, OpenCode 5ca01feb+6136000b) are ALL on
+  origin/linux-next — the git mirror relays pushes to GitHub; no local-only
+  commits. Redundant-second-push residual ships with order 302.
+- **Branch conventions**: forge Claude's order-301 changes were mirror
+  refspec mechanics, no methodology collision. Added explicit scope +
+  forge_target_project_conventions to
+  methodology/multi-host-development.yaml: linux-next/osx-next/windows-next
+  are Tillandsias-internal; forge agents in END-USER projects follow the
+  target project's own branch conventions.
+- **OpenCode tray TUI escape-spill (operator repro)**: root-caused to the
+  backgrounded first-run installers sharing the lane TTY (npm stdout
+  unredirected; Maintenance lane works because the updater finishes before
+  the user launches opencode). Muted npm stdout in ensure_forge_harnesses;
+  all forge entrypoints now route the backgrounded installers' stdout to
+  /tmp/forge-lifecycle.log (stderr kept for the order-299 loud floor).
+  Verification packet order 306.
+- **Forge brew SSL failure (operator repro)**: git/libcurl ignores
+  SSL_CERT_FILE and the injected gitconfig pins the enclave-CA-only file →
+  git HTTPS to non-MITMed remotes fails cert verify. All lanes now export
+  GIT_SSL_CAINFO to the combined CA bundle.
+- **Antigravity instant crash (operator repro)**: agent entrypoints gained
+  an exit-pause EXIT trap (window no longer vanishes unreadably);
+  candidates ranked in order 307 (top: missing Gemini credential → login
+  flows).
+- **Filed (operator directive, file-only)**: orders 303/304 Agent-Login
+  flows (tray-lane ensure_provider_auth parity; vault round-trip of
+  in-forge logins), order 305 stable release channel (README pins stable,
+  dailies pre-release).
+- **Sibling unblock (operator directive)**: orders 257 (macOS parity), 258
+  + 274 (Windows) flipped blocked→ready with unblock events — the operator
+  will attend those hosts and start agents to complete the platform
+  wrappers. macOS/Windows: you are UNBLOCKED; linux-next is a declared
+  stable point.
+- **Release**: /merge-to-main-and-release run this cycle (see release event
+  below / PR + tag evidence).
 
 ## Cycle 2026-07-12T18:36Z→18:46Z (forge — meta-orchestration: order 237 fixture isolation DONE)
 
