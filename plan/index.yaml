@@ -9413,3 +9413,16 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
           host: linux_mutable
           summary: "Operator repro; observability fix landed this cycle."
+        - type: progress
+          ts: "2026-07-12T20:15:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260712T2003Z"
+          host: forge
+          summary: >
+            Root cause confirmed: forge proxy egress blocks
+            antigravity-cli-auto-updater-*.us-central1.run.app (connection
+            reset). agy installer downloads but inner binary fetch fails.
+            Fix: fail-fast with clear error in entrypoint (entrypoint-forge-
+            antigravity.sh:121-141). Proxy egress gap filed separately
+            (plan/issues/forge-proxy-egress-antigravity-2026-07-12.md).
+            Exit criteria 1+2 met; criterion 3 blocked on proxy allowlist
+            + vault Gemini credential (orders 303/304).

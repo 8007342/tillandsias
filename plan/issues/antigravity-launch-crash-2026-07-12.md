@@ -20,23 +20,44 @@ the container.
   enclave-CA-only file) — fixes any git-over-HTTPS step in the agy installer
   path.
 
-## Candidate root causes (in likelihood order)
+## Confirmed root cause (forge-big-pickle 2026-07-12)
 
-1. **No Gemini/Antigravity credential**: operator never completed an
-   Antigravity login; vault has no `GEMINI_API_KEY`, so `agy` may exit
-   immediately demanding auth → the login-flow packet
-   (`plan/issues/agent-login-flows-vault-2026-07-12.md`) is the real fix.
-2. `agy` installer failure (fetch/unpack) leaving `agy` absent → `exec agy`
-   fails; the entrypoint traces but (pre-fix) the window closed unreadably.
-3. `--dangerously-skip-permissions` flag drift in a newer agy release
-   (flag verified against agy --help 2026-07-06; EVERY_LAUNCH @latest install
-   means upstream can break us any day).
+**Forge proxy blocks the agy release server.** The installer downloads
+successfully (7354 bytes from `antigravity.google/cli/install.sh`) but the
+inner binary download from `antigravity-cli-auto-updater-974169037036.us-central1.run.app`
+fails with `Connection reset by peer` — the Squid proxy's egress allowlist
+does not include `*.us-central1.run.app` domains. No `run.app` domains
+appear anywhere in the proxy configuration. Since agy is installed
+EVERY_LAUNCH (not baked into the image), the binary is never present and
+`exec agy` fails with exit code 127.
+
+Secondary: vault has no `GEMINI_API_KEY` / `GEMINI_OAUTH_TOKEN` — even
+if agy installed successfully, it would likely demand authentication.
+
+## Fix applied this cycle
+
+`entrypoint-forge-antigravity.sh:121-141`: replaced the trace-only
+"agy not found on PATH" with a fail-fast block that prints a clear
+error message naming the proxy allowlist gap and exits 1 before
+reaching the `exec agy` line. The exit-pause trap is now redundant
+for this failure mode (the explicit exit 1 triggers it) but remains
+as a safety net for other failures.
+
+## Remaining work (split packets)
+
+- **Proxy egress allowlist**: add `antigravity-cli-auto-updater-*.us-central1.run.app`
+  to the Squid proxy egress rules. Operator action required (proxy config
+  is outside the forge container's write scope). File as
+  `plan/issues/forge-proxy-egress-antigravity-2026-07-12.md` or include in
+  order 303/304 login-flow work.
+- **Gemini credential in vault**: requires Antigravity OAuth login flow
+  (orders 303/304, deferred per operator directive until stable ships).
 
 ## Exit criteria (order 307)
 
-- Reproduce with the new exit-pause trap and capture the actual error text
+- [x] Reproduce with the new exit-pause trap and capture the actual error text
   into this file.
-- Root cause identified and either fixed or split into the owning packet
-  (login flows → order 303/304).
-- Antigravity lane launches to a usable TUI on a host with a valid Gemini
-  credential in the vault.
+- [x] Root cause identified and either fixed or split into the owning packet
+  (proxy egress → operator action; login flows → order 303/304).
+- [ ] Antigravity lane launches to a usable TUI on a host with a valid Gemini
+  credential in the vault. **Blocked on proxy egress allowlist + vault credential.**

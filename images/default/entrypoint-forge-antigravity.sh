@@ -118,10 +118,24 @@ if ! command -v agy >/dev/null 2>&1; then
     rm -f "$_agy_installer" 2>/dev/null || true
 fi
 
-# Assert agy is on PATH — no silent exec failure.
+# Assert agy is on PATH — fail fast with a clear message instead of
+# a cryptic "command not found" from exec.
 # @trace order 187 (antigravity-agent-finish-up)
 if ! command -v agy >/dev/null 2>&1; then
-    trace_lifecycle "error" "agy not found on PATH — launch will fail"
+    trace_lifecycle "error" "agy not found on PATH — install failed or proxy blocked download"
+    echo ""
+    echo "═══════════════════════════════════════════════════════"
+    echo "ERROR: Antigravity CLI (agy) is not installed."
+    echo ""
+    echo "The installer could not download agy. Common causes:"
+    echo "  - Forge proxy does not allow antigravity.google domains"
+    echo "  - Network timeout during installer download"
+    echo ""
+    echo "To fix: ensure the forge proxy egress allowlist includes"
+    echo "  antigravity-cli-auto-updater-*.us-central1.run.app"
+    echo "═══════════════════════════════════════════════════════"
+    echo ""
+    exit 1
 fi
 
 # ── Forge bypass: auto-approve permissions without prompting ───
