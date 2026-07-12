@@ -1,6 +1,34 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T00:55:00Z
+LastExecutionTime: 2026-07-12T11:25:00Z
+
+## Cycle 2026-07-12T10:06Z→11:25Z (linux_mutable macuahuitl — drain: orders 298+299 DONE, windows-next merged, order 300 filed)
+
+- **Drained order 298 (ROOT-CAUSED + FIXED)**: ensure_enclave_for_project
+  ran the dependency-model ensure (starts the proxy) BEFORE
+  cleanup_shared_stack_if_no_running_forge (removes the proxy when no lane
+  is live) — on a pristine first launch no lane exists, so the launcher
+  tore down the proxy it had just started; any pre-existing lane masks it.
+  Cleanup now precedes the ensure; pinned by unit test
+  enclave_bringup_cleans_up_before_ensuring_prerequisites + curl-install
+  smoke step 4b (proxy-alive-alongside-lane host assertion). 144 headless
+  tests pass. Commit 00bc2fa7.
+- **Drained order 299**: ensure_forge_harnesses first-run FLOOR — zero
+  harnesses after the install pass now warns loudly and clears the 6h
+  cadence stamp (next launch retries); cached-harness update path stays
+  silent (order-181). Brew shim: 10-min negative-result backoff on failed
+  bootstrap. Fixtures 5/6 in scripts/test-harness-rollback.sh; litmus
+  suite default-image 6/6 PASS. Commit cf689371.
+- **Coordination**: origin/windows-next (order 282 closeout + e2e PASS
+  evidence) merged into linux-next; loop_status conflict mediated;
+  integration gate (markers/YAML/--check) green. Merge 06b7fdb5.
+- **Captured**: order 300 filed — run-litmus-test.sh reports PASS when an
+  explicit name filter matches zero tests (silent no-op gate hazard).
+- **NEXT / release note**: the operator's broken curl-install
+  (v0.3.260711.8) is only cured by SHIPPING 298/299 — next
+  /merge-to-main-and-release cycle should go out today; the subsequent
+  curl-install e2e must exercise smoke step 4b. Heavy local-build e2e
+  deferred this cycle (drain-scoped operator directive).
 
 ## Cycle 2026-07-12T00:48Z (linux_mutable macuahuitl — operator curl-install repro captured, orders 298/299 filed)
 

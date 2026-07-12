@@ -9029,3 +9029,35 @@ plan_index:
             re-printing per shell init. Verified by fixtures 5/6 in
             scripts/test-harness-rollback.sh (run by
             litmus:harness-rollback-shape; default-image suite 6/6 PASS).
+
+    - packet_id: litmus-name-filter-silent-noop
+      order: 300
+      title: "run-litmus-test.sh: a name filter matching zero tests must fail loud, not report PASS on 0 executed"
+      status: ready
+      kind: enhancement
+      deliverable: scripts/run-litmus-test.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, testing, shell, gate-integrity]
+      estimated_hours: 1
+      outcome: >
+        Observed 2026-07-12: passing a litmus name (litmus:brew-ondemand-
+        tools-shape) instead of a spec name selected zero tests and the
+        runner printed "Total: 0 (executed: 0)" with Status PASS. Any gate
+        whose filter drifts (typo, renamed spec, wrong name form) keeps
+        passing while verifying nothing — the advisory-guard failure
+        class. Make an explicitly-filtered run that selects zero tests
+        exit non-zero with "no litmus tests matched filter '<arg>'";
+        optionally accept the litmus:<name> filter form. Pin with an
+        instant litmus asserting the non-zero exit + message. Full
+        context: plan/issues/litmus-name-filter-silent-noop-2026-07-12.md.
+      exit_criteria:
+        - "an explicit filter selecting zero tests exits non-zero with an actionable message (pinned by an instant litmus)"
+        - "filterless runs and legitimately-empty phase/size buckets keep their current pass semantics"
+      events:
+        - type: filed
+          ts: "2026-07-12T11:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          summary: >
+            Reduction-engine capture from the order-299 verification pass.
