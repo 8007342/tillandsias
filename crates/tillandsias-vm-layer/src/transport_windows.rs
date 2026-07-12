@@ -53,8 +53,16 @@ fn is_guid(s: &str) -> bool {
 }
 
 /// Parse the WSL utility VM's GUID from `hcsdiag list` output.
+///
+/// Tolerates UTF-16LE-as-lossy-UTF-8 output (interleaved NULs): Windows
+/// tooling can emit UTF-16 when stdout is a pipe from a GUI-subsystem
+/// parent, and a NUL-interleaved `W\0S\0L` row never matches — the
+/// 2026-07-12 operator session saw 3 minutes of "no running WSL utility
+/// VM" while the VM was demonstrably up and held by the keepalive. Same
+/// discipline as `WslRuntime::wsl_list_quiet`'s NUL strip.
 pub fn parse_wsl_vm_id(hcsdiag_list: &str) -> Option<String> {
-    for line in hcsdiag_list.lines() {
+    let cleaned = hcsdiag_list.replace('\u{0}', "");
+    for line in cleaned.lines() {
         let fields: Vec<&str> = line.split(',').map(str::trim).collect();
         let is_wsl_row = fields
             .last()
@@ -68,8 +76,12 @@ pub fn parse_wsl_vm_id(hcsdiag_list: &str) -> Option<String> {
 
 /// Shell out to `hcsdiag list` and return the WSL utility VM's GUID.
 pub fn wsl_utility_vm_id() -> io::Result<String> {
-    let output = std::process::Command::new("hcsdiag")
-        .arg("list")
+    // no_window: this runs once per handshake attempt from the GUI tray —
+    // without CREATE_NO_WINDOW each retry flashed a console (2026-07-12).
+    let mut cmd = std::process::Command::new("hcsdiag");
+    cmd.arg("list");
+    crate::no_window_sync(&mut cmd);
+    let output = cmd
         .output()
         .map_err(|e| io::Error::other(format!("hcsdiag list failed: {e}")))?;
     let text = String::from_utf8_lossy(&output.stdout);
@@ -295,6 +307,19 @@ mod tests {
              \x20\x20\x20\x20VM,                       \tRunning, A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA, WSL\n";
         assert_eq!(
             parse_wsl_vm_id(FIXTURE).as_deref(),
+            Some("A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA")
+        );
+    }
+
+    /// UTF-16LE piped output arrives as NUL-interleaved lossy UTF-8; the
+    /// parser must still find the WSL row (2026-07-12 operator session:
+    /// 3 min of false "no running WSL utility VM" during handshake).
+    #[test]
+    fn parse_wsl_vm_id_tolerates_utf16_nul_interleaving() {
+        let clean = "VM,\tRunning, A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA, WSL\n";
+        let interleaved: String = clean.chars().flat_map(|c| [c, '\u{0}']).collect();
+        assert_eq!(
+            parse_wsl_vm_id(&interleaved).as_deref(),
             Some("A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA")
         );
     }

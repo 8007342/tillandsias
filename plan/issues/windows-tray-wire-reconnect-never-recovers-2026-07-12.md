@@ -25,6 +25,23 @@ Status-indicator cell evidence: degraded indication works ("Wire
 unreachable" shown); RECOVERY does not (never re-arms). The cell cannot be
 flipped to done until reconnect works.
 
+## CORRECTION from tray.log (same session, post-quit)
+
+The reconnect DID happen: `21:08:46 INFO vm status push subscription
+established (polls suppressed, SC-07)` — 14 seconds after the headless
+restart. Yet at ~21:20 the operator saw "Wire unreachable" + ALL menus
+disabled, while a one-shot `--status-once` probe returned Ready. So the
+defect is (at least primarily) **stale state rendering**: the unreachable
+status set during the outage window was never cleared/re-rendered after the
+successful re-subscription, and the menu-enable state followed the stale
+status. Reframe the fix around status/menu state invalidation on
+re-subscribe, with the reconnect loop itself apparently functional on this
+evidence.
+
+Also verified in the same log: Quit from the wedged-LOOKING tray worked
+(21:22:42 click → graceful drain + `wsl --terminate` backstop → "VM drained
+on Quit" at 21:22:53) — quittability (order-288 class) holds on Windows.
+
 ## Fix direction
 
 - Reconnect loop with backoff that never gives up while the tray runs

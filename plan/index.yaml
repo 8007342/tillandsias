@@ -9621,3 +9621,58 @@ plan_index:
             still carries the bug — operator advised not to relaunch
             Antigravity this session. Order 307 (the lane's own crash)
             remains open and unrelated.
+
+    - packet_id: windows-background-spawn-console-flicker-and-hcsdiag-parse
+      order: 311
+      title: "Windows: background wsl.exe/hcsdiag spawns flash console windows; hcsdiag UTF-16 pipe output false-negatives the handshake VM lookup"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, tray, ux, transport]
+      estimated_hours: 3
+      outcome: >
+        Two operator-visible defects from the attended smoke's tray
+        relaunch on a stopped VM. (1) FLICKER: every background wsl.exe
+        spawn in vm-layer wsl.rs (start pokes, wait_ready 500ms polls,
+        wsl_root_sh, df probe, list/terminate) plus wsl_lifecycle's root
+        writers, notify_icon's version/running sniffs, materialize's
+        import, and transport_windows' per-handshake-attempt hcsdiag ALL
+        lacked CREATE_NO_WINDOW — from the GUI-subsystem tray each spawn
+        flashes a console ("terminals popping open and closing every few
+        seconds" during the 36x5s handshake retry loop).
+        tillandsias-podman solved this long ago (no_window_async/_sync,
+        spec:no-terminal-flicker) but the WSL layer never adopted it.
+        Fixed: vm-layer now exports the same helpers; a wsl_cmd()
+        constructor is the module-wide idiom in wsl.rs and
+        wsl_lifecycle.rs; hcsdiag/materialize/notify_icon call sites
+        wrapped. Deliberate exemptions: debug-console keepalive + lane
+        terminals (CREATE_NEW_CONSOLE). (2) HANDSHAKE FALSE-NEGATIVE:
+        the same relaunch failed its full 3-minute connect budget with
+        "no running WSL utility VM in hcsdiag list" while the keepalive
+        demonstrably held the VM (no keepalive warns in the window) and
+        hcsdiag showed the VM from a console shell. parse_wsl_vm_id did
+        not strip NULs, so UTF-16LE-as-lossy-UTF-8 pipe output (a known
+        Windows tooling behavior the codebase already tolerates for
+        wsl.exe via wsl_list_quiet's NUL strip) can never match the WSL
+        row. Fixed with the same NUL strip + an interleaved-NUL unit
+        test. vm-layer 75/75, windows-tray 54/55 (the one red is the
+        pre-existing embed-version pin, workspace bumped to .2 upstream
+        with no .2 guest asset published yet).
+      exit_criteria:
+        - "no background wsl/hcsdiag spawn without CREATE_NO_WINDOW on the tray paths (wsl_cmd idiom)"
+        - "parse_wsl_vm_id matches NUL-interleaved hcsdiag output (unit test)"
+        - "operator relaunch on a stopped VM: no console flashes, handshake succeeds inside the budget"
+      events:
+        - type: completed
+          ts: "2026-07-12T22:05:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Implemented + unit-verified; live criterion 3 verified by the
+            operator's tray relaunch immediately after reinstall (this
+            session). hcsdiag UTF-16 remains the best-fit hypothesis for
+            the observed 3-minute false-negative window — if a future
+            relaunch reproduces it WITH the NUL-tolerant parser, capture
+            hcsdiag's raw bytes and re-open.

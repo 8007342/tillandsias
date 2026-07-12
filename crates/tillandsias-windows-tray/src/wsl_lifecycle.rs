@@ -70,6 +70,18 @@ const EMBEDDED_HEADLESS_AARCH64: &[u8] =
 pub const DISTRO_NAME: &str = "tillandsias";
 
 /// A guard that aborts the supervised keepalive task when dropped.
+/// Build a background `wsl.exe` command with CREATE_NO_WINDOW applied.
+/// From the GUI-subsystem tray a raw console child flashes a visible window
+/// per invocation — the operator-reported "terminals popping open and
+/// closing" (2026-07-12). Interactive lane terminals go through
+/// `spawn_wsl_terminal` (CREATE_NEW_CONSOLE) instead, never through this.
+/// @trace spec:no-terminal-flicker
+fn wsl_cmd() -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new("wsl");
+    tillandsias_vm_layer::no_window_async(&mut cmd);
+    cmd
+}
+
 pub struct KeepaliveGuard {
     abort_handle: tokio::task::AbortHandle,
 }
@@ -392,7 +404,7 @@ for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_se
 
     async fn inject_bootstrap_logic(&self) -> Result<(), String> {
         // Detect guest architecture
-        let arch_output = tokio::process::Command::new("wsl")
+        let arch_output = wsl_cmd()
             .arg("-d")
             .arg(DISTRO_NAME)
             .arg("-u")
@@ -665,7 +677,7 @@ fi"#,
         let dir = Path::new(path).parent().unwrap().to_str().unwrap();
         self.wsl_root_sh(&format!("mkdir -p {dir}")).await?;
 
-        let mut child = tokio::process::Command::new("wsl")
+        let mut child = wsl_cmd()
             .arg("-d")
             .arg(DISTRO_NAME)
             .arg("-u")
@@ -704,7 +716,7 @@ fi"#,
         content: &[u8],
         make_executable: bool,
     ) -> Result<(), String> {
-        let mut child = tokio::process::Command::new("wsl")
+        let mut child = wsl_cmd()
             .arg("-d")
             .arg(DISTRO_NAME)
             .arg("-u")
@@ -738,7 +750,7 @@ fi"#,
     }
 
     async fn wsl_root_sh(&self, script: &str) -> Result<(), String> {
-        let status = tokio::process::Command::new("wsl")
+        let status = wsl_cmd()
             .arg("-d")
             .arg(DISTRO_NAME)
             .arg("-u")

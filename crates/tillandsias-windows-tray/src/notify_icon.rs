@@ -1846,11 +1846,10 @@ fn first_line(s: &str) -> Option<String> {
 /// via [`first_line`]'s `str::trim` — the BOM survives as `\u{FEFF}` which
 /// `trim` removes as whitespace per Unicode).
 fn sniff_wsl_version() -> Option<String> {
-    let output = std::process::Command::new("wsl")
-        .arg("--version")
-        .env("WSL_UTF8", "1")
-        .output()
-        .ok()?;
+    let mut cmd = std::process::Command::new("wsl");
+    cmd.arg("--version").env("WSL_UTF8", "1");
+    tillandsias_vm_layer::no_window_sync(&mut cmd);
+    let output = cmd.output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -1866,11 +1865,11 @@ fn sniff_wsl_version() -> Option<String> {
 /// older WSL builds; `WSL_UTF8=1` forces UTF-8 (we tolerate either by
 /// trimming embedded null bytes from each line).
 fn distro_running() -> bool {
-    let Ok(output) = std::process::Command::new("wsl")
-        .args(["--list", "--running", "--quiet"])
-        .env("WSL_UTF8", "1")
-        .output()
-    else {
+    let mut cmd = std::process::Command::new("wsl");
+    cmd.args(["--list", "--running", "--quiet"])
+        .env("WSL_UTF8", "1");
+    tillandsias_vm_layer::no_window_sync(&mut cmd);
+    let Ok(output) = cmd.output() else {
         return false;
     };
     let stdout = String::from_utf8_lossy(&output.stdout);

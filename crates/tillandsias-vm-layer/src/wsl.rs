@@ -101,10 +101,23 @@ fn evaluate_guest_root_headroom(avail_kib: u64) -> Result<Option<String>, String
 // @trace spec:vm-idiomatic-layer
 // ---------------------------------------------------------------------------
 
+/// Build a background `wsl.exe` command with CREATE_NO_WINDOW applied.
+/// Every non-interactive wsl spawn in this module must come from here —
+/// from the GUI-subsystem tray a raw console child flashes a visible
+/// window per invocation (operator repro 2026-07-12: start-poke +
+/// wait_ready + handshake retries flashed consoles every few seconds).
+/// The deliberately-interactive debug keepalive is the one exemption.
+#[cfg(target_os = "windows")]
+fn wsl_cmd() -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new("wsl");
+    crate::no_window_async(&mut cmd);
+    cmd
+}
+
 #[cfg(target_os = "windows")]
 impl WslRuntime {
     async fn wsl_list_quiet() -> Result<String, VmError> {
-        let output = tokio::process::Command::new("wsl")
+        let output = wsl_cmd()
             .args(["--list", "--quiet"])
             .output()
             .await
@@ -159,7 +172,7 @@ impl WslRuntime {
 
     pub async fn perform_wsl_shutdown_recovery() -> Result<(), String> {
         tracing::warn!("WSL service appears wedged. Attempting recovery via wsl --shutdown...");
-        let status = tokio::process::Command::new("wsl")
+        let status = wsl_cmd()
             .arg("--shutdown")
             .status()
             .await
@@ -180,7 +193,7 @@ impl WslRuntime {
     /// post-import wiring (wsl.conf, systemd unit install). Captures
     /// stderr for error messages.
     async fn wsl_root_sh(&self, script: &str) -> Result<(), VmError> {
-        let output = tokio::process::Command::new("wsl")
+        let output = wsl_cmd()
             .arg("--distribution")
             .arg(&self.distro_name)
             .arg("--user")
@@ -204,7 +217,7 @@ impl WslRuntime {
 
     /// Measure available KiB on the guest root filesystem via `df -Pk /`.
     async fn guest_root_avail_kib(&self) -> Result<u64, VmError> {
-        let output = tokio::process::Command::new("wsl")
+        let output = wsl_cmd()
             .arg("--distribution")
             .arg(&self.distro_name)
             .arg("--user")
@@ -276,7 +289,7 @@ impl WslRuntime {
         )
         .await?;
         // Terminate so the next start picks up systemd + the new wsl.conf.
-        let _ = tokio::process::Command::new("wsl")
+        let _ = wsl_cmd()
             .arg("--terminate")
             .arg(&self.distro_name)
             .status()
@@ -298,6 +311,9 @@ impl WslRuntime {
     ///
     /// @trace spec:vm-idiomatic-layer, plan/issues/tray-convergence-coordination.md (w9)
     pub fn spawn_keepalive(&self, debug: bool) -> Result<tokio::process::Child, VmError> {
+        // Deliberate wsl_cmd() exemption: the debug keepalive IS an
+        // interactive console (titled journalctl follow) — only the
+        // non-debug variant must stay windowless.
         let mut cmd = tokio::process::Command::new("wsl");
         cmd.arg("--distribution")
             .arg(&self.distro_name)
@@ -315,12 +331,7 @@ impl WslRuntime {
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null());
-
-            #[cfg(target_os = "windows")]
-            {
-                const CREATE_NO_WINDOW: u32 = 0x08000000;
-                cmd.creation_flags(CREATE_NO_WINDOW);
-            }
+            crate::no_window_async(&mut cmd);
         }
 
         cmd.spawn()
@@ -364,7 +375,7 @@ impl VmRuntime for WslRuntime {
         }
 
         // Step 1: import.
-        let status = tokio::process::Command::new("wsl")
+        let status = wsl_cmd()
             .arg("--import")
             .arg(&self.distro_name)
             .arg(&self.install_root)
@@ -414,7 +425,7 @@ impl VmRuntime for WslRuntime {
         let binary_bytes = tokio::fs::read(&manifest.tillandsias_binary)
             .await
             .map_err(|e| format!("read tillandsias binary failed: {e}"))?;
-        let mut child = tokio::process::Command::new("wsl")
+        let mut child = wsl_cmd()
             .arg("--distribution")
             .arg(&self.distro_name)
             .arg("--user")
@@ -486,7 +497,7 @@ impl VmRuntime for WslRuntime {
 
         // Step 5: terminate so the next start picks up the new wsl.conf
         // and systemd.
-        let _ = tokio::process::Command::new("wsl")
+        let _ = wsl_cmd()
             .arg("--terminate")
             .arg(&self.distro_name)
             .status()
@@ -518,7 +529,7 @@ impl VmRuntime for WslRuntime {
 
             let status_res = tokio::time::timeout(
                 Duration::from_secs(10),
-                tokio::process::Command::new("wsl")
+                wsl_cmd()
                     .arg("--distribution")
                     .arg(&self.distro_name)
                     .arg("--exec")
@@ -564,7 +575,7 @@ impl VmRuntime for WslRuntime {
     }
 
     async fn stop(&self, _drain_timeout: Duration) -> Result<(), VmError> {
-        let status = tokio::process::Command::new("wsl")
+        let status = wsl_cmd()
             .arg("--terminate")
             .arg(&self.distro_name)
             .status()
@@ -580,7 +591,7 @@ impl VmRuntime for WslRuntime {
         if argv.is_empty() {
             return Err("wsl exec: argv is empty".to_string());
         }
-        let mut cmd = tokio::process::Command::new("wsl");
+        let mut cmd = wsl_cmd();
         cmd.arg("--distribution")
             .arg(&self.distro_name)
             .arg("--exec");
@@ -595,7 +606,7 @@ impl VmRuntime for WslRuntime {
     async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError> {
         let deadline = std::time::Instant::now() + timeout;
         loop {
-            let probe = tokio::process::Command::new("wsl")
+            let probe = wsl_cmd()
                 .arg("--distribution")
                 .arg(&self.distro_name)
                 .arg("--exec")
