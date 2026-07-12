@@ -52,6 +52,24 @@ LastExecutionTime: 2026-07-12T21:50:00Z
   (SHA-verified) + hot-swapped in-guest; rolled back and forward during the
   308 bisection — guest ends the cycle on v0.3.260712.1 with the unit
   override live.
+- **Late-session P1s (attended relaunches)**: order 311 DONE (4c8a9650) —
+  every background wsl/hcsdiag spawn lacked CREATE_NO_WINDOW (operator saw
+  consoles popping per handshake retry; vm-layer now exports
+  no_window_async/_sync, wsl_cmd() idiom adopted) + NUL-tolerant
+  parse_wsl_vm_id. Order 312 FILED (release-gating): the handshake's
+  hcsdiag VM-ID lookup is admin/Hyper-V-Administrators-only — a
+  standard-user (Start-Menu) tray can NEVER connect ("Privilèges
+  insuffisants" captured non-elevated) and the failure masquerades as
+  "distro not started". ALL prior Windows e2e ran elevated (agent shells),
+  so the standard-user path was never exercised: curl-install Windows is
+  dead on arrival until 312 ships. Operator unblocked in-session via an
+  elevated launch (handshake then succeeded in 10s).
+- **Attended session outcome**: elevated tray connected instantly; OpenCode
+  lane launched (brew shims first-use bootstrap observed live — order 294);
+  router built on demand at lane launch (order 293 live evidence); wire
+  reconnect stale-render finding filed (subscription re-established but UI
+  stayed "Wire unreachable"; Quit worked from the wedged-looking tray —
+  order-288-class quittability holds).
 
 ## Cycle 2026-07-12T20:03Z→20:20Z (forge — meta-orchestration: order 307 antigravity root-cause)
 
