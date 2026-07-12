@@ -1,6 +1,31 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T18:26:08Z
+LastExecutionTime: 2026-07-12T18:46:00Z
+
+## Cycle 2026-07-12T18:36Z→18:46Z (forge — meta-orchestration: order 237 fixture isolation DONE)
+
+- **Startup/sync**: Forge on `linux-next`, clean at 3d9e583b; credential guard
+  `ok:forge-git-mirror`. Sibling heads: main 9632165a, linux-next 3d9e583b,
+  windows-next e50ab2f2, osx-next 9632165a.
+- **Drained order 237 (forge-git-mirror-agent-affordance) — fixture isolation
+  residual**: litmus:credential-channel-check-shape steps 7 and 9 created temp
+  repos with plain GitHub origins to test that the credential guard fails closed
+  on forge. On forge hosts, the global `url.insteadOf` mapping rewrites these
+  URLs to the enclave mirror, causing a false positive pass. Fixed by adding
+  `GIT_CONFIG_GLOBAL=/dev/null` to both steps so the temp repos are isolated
+  from global/system Git config.
+- **Verifiable closure**: `litmus:credential-channel-check-shape` now 9/9 PASS
+  (was 7/9, steps 7+9 FAIL). Full pre-build: 128 PASS / 3 FAIL (all forge env
+  gaps: `diff` missing, `file` missing, no podman binary). `build.sh --check`
+  PASS. YAML validation PASS.
+- **Forge gitconfig default-on affordance confirmed**: `write_forge_gitconfig`
+  writes project-specific mirror config, bind-mounted read-only to
+  `/home/forge/.config/git/config`, `GIT_CONFIG_GLOBAL` set — forge agents push
+  through the mirror transparently.
+- **E2E**: Forge has no destructive E2E lane (`skip:no-podman-binary`).
+- **Finalization**: committed `5ca01feb`, pushed to `origin/linux-next` via
+  `git://tillandsias-git/tillandsias` mirror (forwarded to GitHub successfully).
+  Clean tree before exit.
 
 ## Cycle 2026-07-12T18:15Z→18:30Z (forge — meta-orchestration: order 301 DONE, mirror ref-clobber fixed)
 
