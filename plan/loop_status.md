@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T19:30:00Z
+LastExecutionTime: 2026-07-12T19:45:00Z
 
 ## Cycle 2026-07-12T18:56Z→19:30Z (linux_mutable macuahuitl — operator smoke-test feedback drain + sibling unblock)
 
@@ -42,8 +42,15 @@ LastExecutionTime: 2026-07-12T19:30:00Z
   will attend those hosts and start agents to complete the platform
   wrappers. macOS/Windows: you are UNBLOCKED; linux-next is a declared
   stable point.
-- **Release**: /merge-to-main-and-release run this cycle (see release event
-  below / PR + tag evidence).
+- **Release: v0.3.260712.1 PUBLISHED** (PR #72 merged 19:15Z, merge
+  38d33cd8, tag pushed, run 29205458140 SUCCESS 19:15→19:39Z, 25 assets
+  all platforms + cosign). Parity gate: 8 required cells todo (all
+  macOS/Windows), operator-approved release-with-parity-gaps 2026-07-12.
+  Curl-install e2e hosts: latest release is now v0.3.260712.1 — it carries
+  the order-298/299 first-launch fixes that cure the operator's broken
+  v0.3.260711.8 curl-install, plus the forge image entrypoint fixes
+  (TUI-spill silencing, GIT_SSL_CAINFO, exit-pause traps).
+- **LastExecutionTime updated**: cycle closed 2026-07-12T19:45Z.
 
 ## Cycle 2026-07-12T18:36Z→18:46Z (forge — meta-orchestration: order 237 fixture isolation DONE)
 
