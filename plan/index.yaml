@@ -8871,3 +8871,76 @@ plan_index:
           summary: >
             Operator-flagged parity gap, fixed in the shared host-shell menu
             so macOS and windows both gain the Antigravity leaf.
+
+    - packet_id: curl-install-first-launch-proxy-absent
+      order: 298
+      title: "Fresh curl-install (v0.3.260711.8): maintenance terminal comes up with proxy hostname unresolvable — order 289 recurrence post-fix"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, network, containers, e2e]
+      estimated_hours: 3
+      outcome: >
+        Operator repro 2026-07-11 (curl-install of v0.3.260711.8, which
+        CONTAINS the order-289 predicate fix a7dad73e): first launch after
+        install brought up the maintenance terminal with baked proxy env
+        but "curl: (5) Could not resolve proxy: proxy" on every egress —
+        the tillandsias-proxy container was absent or unreachable from the
+        lane. Order 289's residual asked for exactly this follow-up: the
+        teardown now traces unconditionally, so EITHER capture that trace
+        line from the host logs to identify the teardown actor, OR
+        establish that this launch path never started the proxy at all
+        (pristine substrate, no prior lanes). Fix direction: the lane
+        handed to the operator must have proven proxy liveness (launcher
+        asserts before attach), and/or in-container egress helpers
+        re-ensure the proxy on demand. Full context:
+        plan/issues/curl-install-first-launch-no-harnesses-2026-07-11.md.
+      exit_criteria:
+        - "root cause identified with evidence: teardown trace line naming the actor, or proof the launch path skipped proxy bring-up"
+        - "a freshly curl-installed forge's first terminal lane has working egress (curl through proxy succeeds) — covered by an e2e assertion in the curl-install smoke"
+      events:
+        - type: filed
+          ts: "2026-07-12T00:50:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T0048Z"
+          host: linux_mutable
+          summary: >
+            Filed from operator curl-install repro; order 289 residual
+            triggered (repro recurred on a build containing the fix).
+
+    - packet_id: first-run-harness-bootstrap-fail-loud
+      order: 299
+      title: "Pristine forge with dead egress silently ships ZERO harnesses (opencode/claude/codex all 127) — first-run install failure must be loud"
+      status: ready
+      kind: enhancement
+      deliverable: images/default/lib-common.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, harness, ux, shell]
+      estimated_hours: 2
+      outcome: >
+        Same operator repro: ensure_forge_harnesses (order 181) is
+        fail-soft by design so a proxy outage falls back to the
+        baked/cached harness — but on a PRISTINE curl-install there is no
+        cached harness, so fail-soft degrades to fail-silent-with-nothing:
+        the welcome banner claims a healthy forge while opencode, claude,
+        codex, agy all exit 127 with no explanation. Distinguish the two
+        cases: update-path failure stays silent (cached version serves),
+        but when NO harness binary exists after the install attempt, fail
+        LOUD — a clear terminal/banner message naming the blocked egress
+        and the retry command. Bonus (same file): the brew-shim bootstrap
+        failure repeats per shell init; add a short negative-result
+        backoff stamp so the noise prints once. Full context:
+        plan/issues/curl-install-first-launch-no-harnesses-2026-07-11.md.
+      exit_criteria:
+        - "pristine-cache + dead-egress launch surfaces a loud, actionable harness-missing message (not a silent 127)"
+        - "update-path npm failure with a cached harness remains silent (no regression on order-181 fail-soft)"
+      events:
+        - type: filed
+          ts: "2026-07-12T00:50:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T0048Z"
+          host: linux_mutable
+          summary: >
+            Filed from operator curl-install repro; fail-soft harness
+            update has no first-run floor.

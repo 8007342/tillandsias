@@ -1,6 +1,19 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-11T19:45:00Z
+LastExecutionTime: 2026-07-12T00:55:00Z
+
+## Cycle 2026-07-12T00:48Z (linux_mutable macuahuitl — operator curl-install repro captured, orders 298/299 filed)
+
+- Operator curl-installed v0.3.260711.8: terminal lane launched but ALL
+  egress failed ("Could not resolve proxy: proxy") and NO harnesses
+  existed (opencode/claude/codex/agy → 127). The order-289 fix IS in the
+  installed release, so this is the recurrence its residual anticipated.
+- Filed plan/issues/curl-install-first-launch-no-harnesses-2026-07-11.md
+  and two ready packets: order 298 (proxy absent at first launch —
+  evidence via the new unconditional teardown trace, launcher must prove
+  proxy liveness) and order 299 (first-run harness bootstrap must fail
+  loud when fail-soft has no cached harness to fall back to).
+- Capture-only cycle at operator direction; no drain, no e2e.
 
 ## Cycle 2026-07-11T17:57Z→19:45Z (linux_mutable macuahuitl — operator-goal drain + RELEASE gate green)
 
