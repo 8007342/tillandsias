@@ -5,13 +5,13 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/default/entrypoint-forge-antigravity.sh#L70](../../../images/default/entrypoint-forge-antigravity.sh#L70)
-- [images/default/entrypoint-forge-claude.sh#L112](../../../images/default/entrypoint-forge-claude.sh#L112)
-- [images/default/entrypoint-forge-codex.sh#L82](../../../images/default/entrypoint-forge-codex.sh#L82)
-- [images/default/entrypoint-forge-opencode-web.sh#L119](../../../images/default/entrypoint-forge-opencode-web.sh#L119)
-- [images/default/entrypoint-forge-opencode.sh#L129](../../../images/default/entrypoint-forge-opencode.sh#L129)
-- [images/default/entrypoint-forge-opencode.sh#L136](../../../images/default/entrypoint-forge-opencode.sh#L136)
-- [images/default/lib-common.sh#L1816](../../../images/default/lib-common.sh#L1816)
+- [images/default/entrypoint-forge-antigravity.sh#L98](../../../images/default/entrypoint-forge-antigravity.sh#L98)
+- [images/default/entrypoint-forge-claude.sh#L140](../../../images/default/entrypoint-forge-claude.sh#L140)
+- [images/default/entrypoint-forge-codex.sh#L110](../../../images/default/entrypoint-forge-codex.sh#L110)
+- [images/default/entrypoint-forge-opencode.sh#L157](../../../images/default/entrypoint-forge-opencode.sh#L157)
+- [images/default/entrypoint-forge-opencode.sh#L164](../../../images/default/entrypoint-forge-opencode.sh#L164)
+- [images/default/entrypoint-forge-opencode-web.sh#L147](../../../images/default/entrypoint-forge-opencode-web.sh#L147)
+- [images/default/lib-common.sh#L1827](../../../images/default/lib-common.sh#L1827)
 - [scripts/check-readme-discipline.sh#L2](../../../scripts/check-readme-discipline.sh#L2)
 - [scripts/install-readme-pre-push-hook.sh#L2](../../../scripts/install-readme-pre-push-hook.sh#L2)
 - [scripts/install-readme-pre-push-hook.sh#L27](../../../scripts/install-readme-pre-push-hook.sh#L27)

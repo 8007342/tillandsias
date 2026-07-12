@@ -53,6 +53,30 @@ LastExecutionTime: 2026-07-12T21:50:00Z
   308 bisection — guest ends the cycle on v0.3.260712.1 with the unit
   override live.
 
+## Cycle 2026-07-12T20:03Z→20:20Z (forge — meta-orchestration: order 307 antigravity root-cause)
+
+- **Startup/sync**: Forge on `linux-next`, 5 unpushed commits (merge PR #72
+  + post-merge + VERSION bump + trace regen). Credential guard
+  `ok:forge-git-mirror`. Sibling heads: main 9632165a, linux-next 5ca01feb,
+  windows-next e50ab2f2, osx-next 9632165a.
+- **Worktree cleanup**: Committed 32 dirty tracked files (regenerated
+  TRACES.md + VERSION bump to 0.3.260712.2) as checkpoint before new work.
+- **Drained order 307 (antigravity-launch-crash) — root cause confirmed**:
+  Forge proxy egress blocks `antigravity-cli-auto-updater-*.us-central1.
+  run.app` (connection reset by peer). agy installer shell script downloads
+  but inner binary fetch fails; binary never installed; `exec agy` exits 127.
+  Fix: fail-fast with clear error message in entrypoint (line 121-141).
+  Proxy egress gap filed as separate finding.
+- **Filed**: `plan/issues/forge-proxy-egress-antigravity-2026-07-12.md`
+  (proxy egress allowlist gap for *.us-central1.run.app).
+- **Exit criteria**: 1+2 met (error captured, root cause identified).
+  Criterion 3 (usable TUI) blocked on proxy allowlist change (operator
+  action) + vault Gemini credential (orders 303/304, deferred per operator
+  directive).
+- **E2E gates**: skipped — no runtime code change; entrypoint fix is
+  shell-level and needs proxy allowlist change to be end-to-end testable.
+- **LastExecutionTime updated**: cycle closed 2026-07-12T20:20Z.
+
 ## Cycle 2026-07-12T18:56Z→19:30Z (linux_mutable macuahuitl — operator smoke-test feedback drain + sibling unblock)
 
 - **Startup/sync**: linux-next clean at 6136000b; credential guard
