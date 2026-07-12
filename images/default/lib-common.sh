@@ -25,6 +25,13 @@ if [ -f /etc/tillandsias/ca.crt ]; then
         cat "$SYSTEM_CA" /etc/tillandsias/ca.crt > "$COMBINED_CA" 2>/dev/null || true
         export SSL_CERT_FILE="$COMBINED_CA"
         export REQUESTS_CA_BUNDLE="$COMBINED_CA"
+        # git uses libcurl, which ignores SSL_CERT_FILE, and the injected
+        # gitconfig pins http.sslCAInfo to the enclave-CA-only file — so a
+        # git HTTPS fetch to a non-MITMed remote (real GitHub cert chain)
+        # fails "unable to get local issuer certificate" (operator repro
+        # 2026-07-12: Homebrew install clone). GIT_SSL_CAINFO wins over
+        # http.sslCAInfo; point git at the combined bundle.
+        export GIT_SSL_CAINFO="$COMBINED_CA"
     fi
 fi
 
@@ -931,7 +938,11 @@ ensure_forge_harnesses() {
             "@anthropic-ai/claude-code") bin=claude ;;
             "@openai/codex") bin=codex ;;
         esac
-        if ! "$npm_bin" install -g --no-audit --no-fund "$pkg@latest" 2>/dev/null; then
+        # stdout MUST be muted too: this function is backgrounded by the agent
+        # entrypoints and shares the TTY with a live TUI — npm's "added N
+        # packages" stdout lands mid-frame and corrupts the agent's display
+        # (operator repro 2026-07-12: OpenCode tray lane escape-char spill).
+        if ! "$npm_bin" install -g --no-audit --no-fund "$pkg@latest" >/dev/null 2>&1; then
             trace_lifecycle "harness" "npm update failed for $pkg (non-fatal, using cached)"
             continue
         fi
@@ -945,7 +956,7 @@ ensure_forge_harnesses() {
         lg="$(cat "$(harness_last_good_file "$bin")" 2>/dev/null || true)"
         if [ -n "$lg" ]; then
             trace_lifecycle "harness" "$pkg@latest FAILED health probe — rolling back to last-good $lg"
-            if "$npm_bin" install -g --no-audit --no-fund "$pkg@$lg" 2>/dev/null && harness_probe "$bin"; then
+            if "$npm_bin" install -g --no-audit --no-fund "$pkg@$lg" >/dev/null 2>&1 && harness_probe "$bin"; then
                 trace_lifecycle "harness" "$pkg rollback to $lg OK"
             else
                 trace_lifecycle "harness" "$pkg rollback to $lg FAILED (broken install remains)"
@@ -954,6 +965,42 @@ ensure_forge_harnesses() {
             trace_lifecycle "harness" "$pkg@latest FAILED health probe and no last-good recorded (upstream-broken publish?)"
         fi
     done
+
+    # Order 299 first-run floor: fail-soft is only sound when a cached
+    # harness exists to fall back to. On a PRISTINE cache (fresh curl-install,
+    # post `podman system reset`) a dead proxy means every install above
+    # failed and NOTHING is present — the operator gets a healthy-looking
+    # banner and four bare `command not found`s. Detect the zero-harness
+    # state, say so loudly on stderr (this function is backgrounded but its
+    # stderr reaches the lane terminal), and clear the cadence stamp so the
+    # very next launch retries instead of waiting out the 6h window. The
+    # update path stays silent as designed: with any cached harness present
+    # the floor check passes and this branch is never reached.
+    local floor_prefix="${NPM_CONFIG_PREFIX:-/usr/local}" floor_bin any_harness=0
+    # Fallback dir override exists for the fixtures in
+    # scripts/test-harness-rollback.sh (a dev host's own /usr/local/bin
+    # must not satisfy the floor check under test).
+    local floor_fallback="${TILLANDSIAS_HARNESS_FALLBACK_DIR:-/usr/local/bin}"
+    for floor_bin in opencode claude codex openspec; do
+        if [ -x "$floor_prefix/bin/$floor_bin" ] || [ -x "$floor_fallback/$floor_bin" ]; then
+            any_harness=1
+            break
+        fi
+    done
+    if [ "$any_harness" = "0" ]; then
+        rm -f "$update_stamp" 2>/dev/null || true
+        trace_lifecycle "harness" "FIRST-RUN FLOOR: zero harnesses present after install attempt"
+        {
+            echo ""
+            echo "WARNING: no agent harness is installed (opencode/claude/codex/openspec"
+            echo "all missing) and the launch-time npm installs failed. This is almost"
+            echo "always dead enclave egress — e.g. 'Could not resolve proxy: proxy'."
+            echo "Fix egress (or relaunch the forge: installs retry at every launch),"
+            echo "or retry by hand: npm install -g opencode-ai@latest"
+            echo ""
+        } >&2
+        return 0
+    fi
 
     trace_lifecycle "harness" "agent harnesses up to date"
 }

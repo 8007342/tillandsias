@@ -76,7 +76,17 @@ if [ -n "$PROJECT" ]; then
         echo "[git-service] setting $PROJECT_REPO origin to $REDACTED_URL"
         git -C "$PROJECT_REPO" remote remove origin 2>/dev/null || true
         git -C "$PROJECT_REPO" remote add origin "$TILLANDSIAS_PROJECT_REMOTE_URL"
-        git -C "$PROJECT_REPO" config remote.origin.fetch "+refs/*:refs/*"
+        # @trace spec:git-mirror-service
+        # Reconciliation fetches land in remote-tracking refs ONLY. The old
+        # "+refs/*:refs/*" mapped upstream branches directly onto the mirror's
+        # EXPORTED refs/heads/*, so a reconcile fetch run while upstream was
+        # stale force-overwrote a just-received branch before the post-receive
+        # hook relayed it — GitHub advanced, the mirror stayed behind, and only
+        # an identical second push converged them (order 301). tagOpt=--no-tags
+        # stops implicit tag writes during that reconcile fetch. Empty mirrors
+        # are seeded with an explicit heads/tags refspec in the retry loop.
+        git -C "$PROJECT_REPO" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+        git -C "$PROJECT_REPO" config remote.origin.tagOpt "--no-tags"
     else
         echo "[git-service] no TILLANDSIAS_PROJECT_REMOTE_URL set; post-receive hook will log and skip"
     fi
@@ -138,7 +148,13 @@ for mirror in /srv/git/*; do
     if ! git -C "$mirror" rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
        && [ -z "$(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null)" ]; then
         retry_msg "[git-mirror] Startup: $mirror has no refs but has origin. Fetching upstream to seed mirror."
-        FETCH_OUTPUT="$(git -C "$mirror" fetch origin 2>&1)" || retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
+        # @trace spec:git-mirror-service
+        # Seed the exported refs explicitly. The configured default refspec only
+        # populates refs/remotes/origin/* (safe reconciliation), which would
+        # leave a fresh mirror with no cloneable heads/tags. This one-time seed
+        # writes local heads and tags directly so clones over the git daemon see
+        # them; subsequent reconcile fetches use the safe tracking refspec.
+        FETCH_OUTPUT="$(git -C "$mirror" fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' 2>&1)" || retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
         continue
     fi
 

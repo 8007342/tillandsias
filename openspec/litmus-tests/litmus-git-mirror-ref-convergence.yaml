@@ -1,0 +1,63 @@
+# @trace spec:git-mirror-service
+# Order 301 regression pin: the mirror's reconciliation fetch must land in
+# remote-tracking refs only, never clobber a just-received exported branch.
+# A stale-upstream reconcile fetch under the old "+refs/*:refs/*" refspec
+# force-overwrote the mirror's freshly received head before the post-receive
+# hook relayed it, so GitHub advanced while the mirror stayed behind until an
+# identical second push (also stranded startup-retry commits).
+name: litmus:git-mirror-ref-convergence
+spec: git-mirror-service
+description: >
+  Offline two-bare-repo fixture (no network, no Podman) proving one push
+  converges mirror and upstream, startup retry preserves and forwards a
+  locally stranded commit, and empty-mirror seeding still yields cloneable
+  heads and tags. The fixture runs each divergence case under BOTH the legacy
+  unsafe refspec (must reproduce the bug) and the safe refspec now configured
+  by images/git/entrypoint.sh (must converge). Also pins the entrypoint config
+  strings so a revert to the unsafe mapping fails loud.
+severity: critical
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/test-git-mirror-ref-convergence.sh
+  - workspace contains images/git/entrypoint.sh
+  - workspace contains images/git/post-receive-hook.sh
+
+critical_path:
+  - step: "ref-convergence fixture passes all three cases (safe converges, unsafe controls reproduce the bug)"
+    command: "scripts/test-git-mirror-ref-convergence.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: git mirror ref-convergence fixtures (order 301)"
+
+  - step: "entrypoint fetches upstream into remote-tracking refs, not exported heads"
+    command: "grep -Fq 'config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"' images/git/entrypoint.sh && grep -Fq 'config remote.origin.tagOpt \"--no-tags\"' images/git/entrypoint.sh && echo 'ok: safe reconcile refspec configured'"
+    timeout_ms: 10000
+    expected_behavior: "ok: safe reconcile refspec configured"
+
+  - step: "entrypoint seeds empty mirrors with an explicit heads/tags refspec"
+    command: "grep -Fq \"fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'\" images/git/entrypoint.sh && echo 'ok: explicit empty-mirror seed'"
+    timeout_ms: 10000
+    expected_behavior: "ok: explicit empty-mirror seed"
+
+  - step: "the unsafe all-refs direct mapping is not restored"
+    command: "awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /remote\\.origin\\.fetch[^#]*\\+refs\\/\\*:refs\\/\\*/ {bad=1} END{exit bad}' images/git/entrypoint.sh && echo 'ok: no unsafe all-refs mapping'"
+    timeout_ms: 10000
+    expected_behavior: "ok: no unsafe all-refs mapping"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "git mirror push and startup-retry convergence remain executable as an instant offline pre-build check"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-ref-convergence"
+    artifact: "fixture temp dirs (removed by the fixture)"
+
+rollback:
+  on_failure: >
+    Inspect images/git/entrypoint.sh remote.origin.fetch/tagOpt config and the
+    empty-mirror seed refspec; a reconcile fetch mapped onto refs/heads/* will
+    clobber just-received branches (order 301). Re-run
+    scripts/test-git-mirror-ref-convergence.sh for the offline reproduction.
+  command: "scripts/test-git-mirror-ref-convergence.sh"

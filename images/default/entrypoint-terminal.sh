@@ -59,6 +59,13 @@ if [ -f "$CA_CHAIN" ]; then
         cat "$SYSTEM_CA" "$CA_CHAIN" > "$COMBINED" 2>/dev/null
         export SSL_CERT_FILE="$COMBINED"
         export REQUESTS_CA_BUNDLE="$COMBINED"
+        # git uses libcurl, which ignores SSL_CERT_FILE, and the injected
+        # gitconfig pins http.sslCAInfo to the enclave-CA-only file — so a
+        # git HTTPS fetch to a non-MITMed remote (real GitHub cert chain)
+        # fails "unable to get local issuer certificate" (operator repro
+        # 2026-07-12: Homebrew install clone). GIT_SSL_CAINFO wins over
+        # http.sslCAInfo; point git at the combined bundle.
+        export GIT_SSL_CAINFO="$COMBINED"
     fi
 fi
 
@@ -86,8 +93,8 @@ apply_opencode_config_overlay
 # harness set (codex/claude/opencode-ai), even though the welcome banner
 # advertises the full combined tool stack. Backgrounded + fail-soft, same as
 # the agent entrypoints, so it never blocks shell startup.
-ensure_forge_prebuilt_tools &
-ensure_forge_harnesses &
+ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log &
+ensure_forge_harnesses >>/tmp/forge-lifecycle.log &
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007

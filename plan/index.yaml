@@ -1371,6 +1371,19 @@ plan_index:
       status: ready
       events:
         - type: progress
+          ts: "2026-07-11T20:22:00Z"
+          agent_id: "windows-bullo-claude-20260711T182324Z"
+          host: windows
+          summary: >
+            Slice-3 full-topic live verification UNBLOCKED and PASSED via
+            order 282 (e2e run 20260711T191912Z attempt 2): pristine
+            provision with the embedded v0.3.260711.8 guest, live tray
+            logged 'vm status push subscription established (polls
+            suppressed, SC-07)' — full topics including LocalProjects, no
+            legacy fallback engaged. REMAINING for this packet unchanged:
+            watch-channel menu listener wakeups + eliminating the 30s tick
+            task entirely.
+        - type: progress
           ts: "2026-07-10T09:36:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"
           host: windows
@@ -2993,6 +3006,24 @@ plan_index:
             upstream forwarding returns non-zero" both require the forge
             push path to go through the mirror. New blocker filed:
             plan/issues/forge-credential-guard-push-channel-gap-2026-07-08.md.
+        - type: progress
+          ts: "2026-07-12T18:06:31Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          summary: >
+            The stale-ref failure recurred on the normal blind push path:
+            GitHub advanced to 8965d23e while the mirror still advertised
+            17acd1d0; repeating the same push converged both refs. A local
+            two-bare-repository fixture root-caused the race to
+            remote.origin.fetch=+refs/*:refs/* combined with the post-receive
+            `git fetch origin`, which overwrites the just-received exported
+            branch before relaying its captured NEWSHA. Reduced the fix and
+            startup-retry regression into ready order 301.
+          evidence:
+            - "live after push 1: direct GitHub=8965d23e, mirror=17acd1d0"
+            - "live after push 2: direct GitHub=mirror=8965d23e"
+            - "fixture after push 1: upstream=f7beb3df, mirror=ee964a99; push 2 converged"
+            - "fixture startup retry: stranded 1983bea6 became dangling after fetch reset refs to ee17014c"
 
     - packet_id: forge-image-creation-vs-firstrun-split-research
       order: 178
@@ -5528,6 +5559,39 @@ plan_index:
           evidence:
             - "git://tillandsias-git/tillandsias accepted 5343c856 on linux-next"
             - "git-mirror post-receive reported: Push to origin (https://github.com/8007342/tillandsias.git): success"
+        - type: progress
+          ts: "2026-07-12T18:06:31Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          summary: >
+            The full instant pre-build suite exposed that the plain-GitHub-origin
+            fixture inherits the forge's global url.insteadOf mapping, so its
+            supposedly plain origin resolves to the mirror and the negative
+            assertion fails. The production credential guard itself passes
+            (`ok:forge-git-mirror`). Isolate this fixture from global/system Git
+            config while completing the packet's default-on affordance residual.
+          evidence:
+            - "litmus:credential-channel-check-shape step 7 FAIL on forge"
+            - "scripts/check-credential-channel.sh: ok:forge-git-mirror"
+        - type: progress
+          ts: "2026-07-12T18:40:00Z"
+          agent_id: "forge-big-pickle-20260712T1836Z"
+          host: forge
+          lease_id: "forge-git-mirror-agent-affordance-20260712T1836Z"
+          summary: >
+            Fixture isolation fixed: added GIT_CONFIG_GLOBAL=/dev/null to
+            litmus:credential-channel-check-shape steps 7 and 9 so the
+            temp repos are not contaminated by the forge host's global
+            url.insteadOf mapping. Full pre-build suite: 128 PASS / 3 FAIL
+            (all three are known forge env gaps: diff missing, file missing,
+            no podman binary). credential-channel-check-shape is 9/9 PASS.
+            Forge gitconfig default-on affordance (write_forge_gitconfig +
+            bind-mount + GIT_CONFIG_GLOBAL env) confirmed operational.
+          evidence:
+            - "openspec/litmus-tests/litmus-credential-channel-check-shape.yaml: GIT_CONFIG_GLOBAL=/dev/null added to steps 7+9"
+            - "litmus:credential-channel-check-shape: 9/9 PASS"
+            - "full pre-build: 128 PASS / 3 FAIL (forge env gaps only)"
+            - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS"
       scope_note: >
         Agents inside the forge currently fail git push because `git push origin`
         prompts for credentials or errors with `could not read Username`. The
@@ -5781,7 +5845,7 @@ plan_index:
           lease_id: "opencode-prompt-e2e-loop-status-contract-20260709T1730Z"
           commit_sha: "4d76aff6"
           evidence:
-            - "litmus: litmus-opencode-prompt-e2e-shape.yaml: s/loop_status.md/plan\//"
+            - "litmus: litmus-opencode-prompt-e2e-shape.yaml: s/loop_status.md/plan\\//"
             - "plan/index.yaml: order 242 done + completion event"
             - "./build.sh --check: PASS"
       exit_criteria:
@@ -6468,7 +6532,7 @@ plan_index:
     - packet_id: macos-tray-parity-column-verify
       order: 257
       title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: blocked
+      status: ready
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6496,6 +6560,16 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the macOS host"
       events:
+        - type: unblock
+          ts: "2026-07-12T19:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator directive 2026-07-12: linux-next is at a declared stable
+            point (orders 298-302 + login-flow/stable-channel packets filed);
+            the operator will attend the macOS/Windows hosts and start agents
+            there to complete the platform wrappers. Attended-smoke blockers
+            lifted; status flipped to ready.
         - type: filed
           ts: "2026-07-09T22:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
@@ -6570,8 +6644,8 @@ plan_index:
     - packet_id: windows-tray-parity-column-verify
       order: 258
       title: "Windows: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: blocked
-      blocked_on: "operator-attended interactive smoke at the Windows tray (7 UI cells) — see plan/issues/windows-tray-parity-attended-smoke-gap-2026-07-09.md"
+      status: ready
+      unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended-smoke blocker lifted"
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6590,6 +6664,16 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the Windows host"
       events:
+        - type: unblock
+          ts: "2026-07-12T19:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator directive 2026-07-12: linux-next is at a declared stable
+            point (orders 298-302 + login-flow/stable-channel packets filed);
+            the operator will attend the macOS/Windows hosts and start agents
+            there to complete the platform wrappers. Attended-smoke blockers
+            lifted; status flipped to ready.
         - type: filed
           ts: "2026-07-09T22:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260709T1923Z"
@@ -7103,7 +7187,7 @@ plan_index:
     - packet_id: guest-binary-embed-windows
       order: 282
       title: "Windows: embed the linux-staged musl guest headless + demote fetch-headless to fallback (order 190 steps 2-3, windows half)"
-      status: claimed
+      status: done
       kind: packaging
       deliverable: crates/tillandsias-windows-tray
       depends_on: []
@@ -7158,11 +7242,37 @@ plan_index:
             documented as part of this packet), then wire staging into
             build-windows-tray.ps1 and demote fetch-headless per order 190
             step 3.
+        - type: completed
+          ts: "2026-07-11T20:20:00Z"
+          agent_id: "windows-bullo-claude-20260711T182324Z"
+          host: windows
+          commits: ["50012f63", "9d311c5c"]
+          summary: >
+            All three exit criteria verified. (1) build-windows-tray.ps1
+            stages the HOST-arch musl binary from target-guest/ into assets/
+            (non-host arch reset to placeholder); in-VM
+            build-guest-binaries.sh --verify SUCCESS at v0.3.260711.8; new
+            unit pin embedded_guest_headless_matches_workspace_version fails
+            loud on stale staging (demonstrated live on a .5-vs-.7 skew).
+            (2) destructive e2e run 20260711T191912Z attempt 2: pristine
+            cold provision injected the embedded binary, handshake
+            wire_version=2 attempt=1, live tray logged the FULL-TOPIC
+            'vm status push subscription established (polls suppressed,
+            SC-07)' with no legacy-fallback line. (3) embedded path writes
+            no-op fetch-headless.sh; absent-asset fallback unchanged + loud
+            warn. BONUS ROOT-CAUSE: attempt 1 FAILED (handshake timeout) —
+            build-guest-binaries.sh cargo fallback built --features tray,
+            which lacks the vsock listener; fixed to --features listen-vsock
+            (flake.nix parity). Transport documented in the script
+            .DESCRIPTION (local WSL rustup build / linux checkout copy /
+            release fallback). Report:
+            build-install-smoke-e2e-findings-2026-07-11-windows.md.
 
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
-      status: blocked
+      status: ready
+      unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended blocker lifted"
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -7187,6 +7297,16 @@ plan_index:
         - "source pin tests fail loud if the unit and any exec preamble drift apart"
         - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
       events:
+        - type: unblock
+          ts: "2026-07-12T19:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator directive 2026-07-12: linux-next is at a declared stable
+            point (orders 298-302 + login-flow/stable-channel packets filed);
+            the operator will attend the macOS/Windows hosts and start agents
+            there to complete the platform wrappers. Attended-smoke blockers
+            lifted; status flipped to ready.
         - type: blocked
           ts: "2026-07-10T09:35:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"
@@ -8871,3 +8991,425 @@ plan_index:
           summary: >
             Operator-flagged parity gap, fixed in the shared host-shell menu
             so macOS and windows both gain the Antigravity leaf.
+
+    - packet_id: curl-install-first-launch-proxy-absent
+      order: 298
+      title: "Fresh curl-install (v0.3.260711.8): maintenance terminal comes up with proxy hostname unresolvable — order 289 recurrence post-fix"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, network, containers, e2e]
+      estimated_hours: 3
+      outcome: >
+        Operator repro 2026-07-11 (curl-install of v0.3.260711.8, which
+        CONTAINS the order-289 predicate fix a7dad73e): first launch after
+        install brought up the maintenance terminal with baked proxy env
+        but "curl: (5) Could not resolve proxy: proxy" on every egress —
+        the tillandsias-proxy container was absent or unreachable from the
+        lane. Order 289's residual asked for exactly this follow-up: the
+        teardown now traces unconditionally, so EITHER capture that trace
+        line from the host logs to identify the teardown actor, OR
+        establish that this launch path never started the proxy at all
+        (pristine substrate, no prior lanes). Fix direction: the lane
+        handed to the operator must have proven proxy liveness (launcher
+        asserts before attach), and/or in-container egress helpers
+        re-ensure the proxy on demand. Full context:
+        plan/issues/curl-install-first-launch-no-harnesses-2026-07-11.md.
+      exit_criteria:
+        - "root cause identified with evidence: teardown trace line naming the actor, or proof the launch path skipped proxy bring-up"
+        - "a freshly curl-installed forge's first terminal lane has working egress (curl through proxy succeeds) — covered by an e2e assertion in the curl-install smoke"
+      events:
+        - type: filed
+          ts: "2026-07-12T00:50:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T0048Z"
+          host: linux_mutable
+          summary: >
+            Filed from operator curl-install repro; order 289 residual
+            triggered (repro recurred on a build containing the fix).
+        - type: claim
+          ts: "2026-07-12T10:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          lease_id: "curl-install-first-launch-proxy-absent-20260712T1006Z"
+          expires_at: "2026-07-12T14:08:00Z"
+        - type: completed
+          ts: "2026-07-12T10:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          summary: >
+            ROOT CAUSE (from source, no host log needed): in
+            ensure_enclave_for_project the order-252 migration put
+            container_deps::ensure_forge_launch (starts the proxy) BEFORE
+            cleanup_shared_stack_if_no_running_forge (removes the proxy
+            when no lane is live) — and on a pristine first launch no lane
+            exists yet, so the launcher tore down the proxy it had just
+            started, then launched the lane with a dead baked proxy env.
+            Any pre-existing running lane masks the bug, which is why only
+            fresh curl-installs hit it. FIX: cleanup now runs before the
+            dependency-model ensure (single bring-up path preserved);
+            ordering pinned by unit test
+            enclave_bringup_cleans_up_before_ensuring_prerequisites, and
+            the curl-install smoke gained step 4b (proxy-alive-alongside-
+            lane host assertion). 144 headless tests pass.
+
+    - packet_id: first-run-harness-bootstrap-fail-loud
+      order: 299
+      title: "Pristine forge with dead egress silently ships ZERO harnesses (opencode/claude/codex all 127) — first-run install failure must be loud"
+      status: done
+      kind: enhancement
+      deliverable: images/default/lib-common.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, harness, ux, shell]
+      estimated_hours: 2
+      outcome: >
+        Same operator repro: ensure_forge_harnesses (order 181) is
+        fail-soft by design so a proxy outage falls back to the
+        baked/cached harness — but on a PRISTINE curl-install there is no
+        cached harness, so fail-soft degrades to fail-silent-with-nothing:
+        the welcome banner claims a healthy forge while opencode, claude,
+        codex, agy all exit 127 with no explanation. Distinguish the two
+        cases: update-path failure stays silent (cached version serves),
+        but when NO harness binary exists after the install attempt, fail
+        LOUD — a clear terminal/banner message naming the blocked egress
+        and the retry command. Bonus (same file): the brew-shim bootstrap
+        failure repeats per shell init; add a short negative-result
+        backoff stamp so the noise prints once. Full context:
+        plan/issues/curl-install-first-launch-no-harnesses-2026-07-11.md.
+      exit_criteria:
+        - "pristine-cache + dead-egress launch surfaces a loud, actionable harness-missing message (not a silent 127)"
+        - "update-path npm failure with a cached harness remains silent (no regression on order-181 fail-soft)"
+      events:
+        - type: filed
+          ts: "2026-07-12T00:50:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T0048Z"
+          host: linux_mutable
+          summary: >
+            Filed from operator curl-install repro; fail-soft harness
+            update has no first-run floor.
+        - type: claim
+          ts: "2026-07-12T10:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          lease_id: "first-run-harness-bootstrap-fail-loud-20260712T1006Z"
+          expires_at: "2026-07-12T14:08:00Z"
+        - type: completed
+          ts: "2026-07-12T11:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          summary: >
+            ensure_forge_harnesses gained a first-run FLOOR: when zero
+            harness binaries exist after the install pass (pristine cache
+            + dead egress), it prints a loud actionable WARNING to the
+            lane terminal and clears the 6h cadence stamp so the next
+            launch retries immediately; the order-181 fail-soft update
+            path (any cached harness present) stays silent. Bonus: the
+            brew-shim bootstrap remembers a failed clone for 10 min
+            (negative-result backoff) instead of re-attempting and
+            re-printing per shell init. Verified by fixtures 5/6 in
+            scripts/test-harness-rollback.sh (run by
+            litmus:harness-rollback-shape; default-image suite 6/6 PASS).
+
+    - packet_id: litmus-name-filter-silent-noop
+      order: 300
+      title: "run-litmus-test.sh: a name filter matching zero tests must fail loud, not report PASS on 0 executed"
+      status: done
+      kind: enhancement
+      deliverable: scripts/run-litmus-test.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, testing, shell, gate-integrity]
+      estimated_hours: 1
+      outcome: >
+        Observed 2026-07-12: passing a litmus name (litmus:brew-ondemand-
+        tools-shape) instead of a spec name selected zero tests and the
+        runner printed "Total: 0 (executed: 0)" with Status PASS. Any gate
+        whose filter drifts (typo, renamed spec, wrong name form) keeps
+        passing while verifying nothing — the advisory-guard failure
+        class. Make an explicitly-filtered run that selects zero tests
+        exit non-zero with "no litmus tests matched filter '<arg>'";
+        optionally accept the litmus:<name> filter form. Pin with an
+        instant litmus asserting the non-zero exit + message. Full
+        context: plan/issues/litmus-name-filter-silent-noop-2026-07-12.md.
+      exit_criteria:
+        - "an explicit filter selecting zero tests exits non-zero with an actionable message (pinned by an instant litmus)"
+        - "filterless runs and legitimately-empty phase/size buckets keep their current pass semantics"
+      events:
+        - type: filed
+          ts: "2026-07-12T11:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          summary: >
+            Reduction-engine capture from the order-299 verification pass.
+        - type: claim
+          ts: "2026-07-12T18:00:37Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          lease_id: "forge-tillandsias-codex-20260712T180037Z"
+          expires_at: "2026-07-12T22:00:37Z"
+        - type: completed
+          ts: "2026-07-12T18:06:31Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          lease_id: "forge-tillandsias-codex-20260712T180037Z"
+          summary: >
+            Explicit filters that select no bound tests now exit 1 before the
+            ordinary PASS summary and retain the original filter in the
+            diagnostic. The guard keys on TESTS_RUN rather than executed count,
+            preserving named and filterless empty phase/size buckets. Added the
+            instant litmus:litmus-name-filter-fail-loud-shape with all three
+            behavioral boundaries.
+          evidence:
+            - "direct zero-match probe: exit 1 + exact diagnostic, no Status PASS"
+            - "named empty phase bucket: exit 0, 5 skipped"
+            - "filterless empty phase bucket: exit 0, 253 skipped"
+            - "spec-traceability instant pre-build: 5/5 PASS"
+            - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS"
+            - "tillandsias-policy validate-yaml: bindings, new litmus, and plan/index.yaml PASS"
+
+    - packet_id: git-mirror-fetch-clobbers-exported-ref
+      order: 301
+      title: "Git mirror: prevent relay fetch from clobbering just-received exported refs"
+      status: done
+      kind: bug+test
+      deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, forge, shell, litmus]
+      estimated_hours: 2
+      outcome: >
+        The mirror config maps origin fetches directly onto refs/*, and the
+        post-receive hook fetches origin after receive-pack has installed a new
+        exported branch. A stale upstream branch therefore overwrites the
+        just-received mirror ref before the hook relays its captured NEWSHA,
+        leaving GitHub advanced and the mirror stale until an identical second
+        push. Fetch upstream branches into refs/remotes/origin/*, retain an
+        explicit local heads/tags refspec only for empty-mirror seeding, and pin
+        push plus startup-retry convergence with an offline two-bare-repo fixture.
+      exit_criteria:
+        - "one push leaves the mirror and upstream advertising the same SHA"
+        - "startup retry preserves and forwards a locally stranded commit"
+        - "empty-mirror seeding still yields cloneable local heads and tags"
+        - "litmus:git-mirror-ref-convergence reproduces push and retry cases without network or Podman"
+        - "existing safe-refspec and YAML-gate litmuses remain green"
+      events:
+        - type: filed
+          ts: "2026-07-12T18:06:31Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          summary: >
+            Reduced the recurring order-177 stale-ref symptom after a live
+            first-push divergence and deterministic local fixture identified
+            the fetch refspec clobber. No production mirror code changed in this
+            cycle; order 300 remained the sole implementation packet.
+        - type: claim
+          ts: "2026-07-12T18:16:00Z"
+          agent_id: "forge-tillandsias-opus48-20260712T1815Z"
+          host: forge
+          lease_id: "forge-tillandsias-opus48-20260712T1815Z"
+          expires_at: "2026-07-12T22:16:00Z"
+        - type: completed
+          ts: "2026-07-12T18:30:00Z"
+          agent_id: "forge-tillandsias-opus48-20260712T1815Z"
+          host: forge
+          lease_id: "forge-tillandsias-opus48-20260712T1815Z"
+          summary: >
+            images/git/entrypoint.sh now sets remote.origin.fetch to
+            "+refs/heads/*:refs/remotes/origin/*" with tagOpt=--no-tags so the
+            post-receive and startup-retry reconcile fetches land in
+            remote-tracking refs only, never clobbering a just-received
+            exported branch; empty mirrors are seeded once with an explicit
+            "+refs/heads/*:refs/heads/*" + "+refs/tags/*:refs/tags/*" refspec so
+            clones still see heads and tags. Pinned by the new offline fixture
+            scripts/test-git-mirror-ref-convergence.sh (bound as
+            litmus:git-mirror-ref-convergence under git-mirror-service), which
+            runs each divergence case under both the legacy unsafe refspec (must
+            reproduce the bug) and the safe refspec (must converge). Spec
+            git-mirror-service gained the "Reconciliation fetch never clobbers
+            exported refs" requirement + two scenarios.
+          evidence:
+            - "scripts/test-git-mirror-ref-convergence.sh: PASS (case1 safe converges + unsafe control diverges; case2 safe forwards stranded + unsafe control strands; case3 empty-seed cloneable)"
+            - "run-litmus-test.sh git-mirror-service --phase pre-build --size instant: 3 PASS / 0 FAIL (safe-refspec-push, ref-convergence, yaml-gate-shape), 1 SKIP (enclave-isolation, no podman)"
+            - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS (fmt, type-check, clippy strict + listen-vsock)"
+            - "target/release/tillandsias-policy validate-yaml: new litmus, bindings, plan/index.yaml PASS"
+            - "bash -n on entrypoint.sh + fixture, git diff --check: clean"
+            - "LIVE repro during this cycle's own push: the OLD-image mirror clobbered the just-received a1d1ea4c back to 884d32f1 (forced-update trace); convergence required a redundant second push — the exact symptom the committed fix removes once the git-mirror image is rebuilt (see order 302)."
+
+    - packet_id: git-mirror-ref-convergence-deploy-and-verify
+      order: 302
+      title: "Rebuild git-mirror image with the order-301 safe refspec and live-verify one-push convergence"
+      status: ready
+      kind: deploy+verify
+      deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
+      depends_on: [git-mirror-fetch-clobbers-exported-ref]
+      pickup_role: linux
+      capability_tags: [git-mirror, podman, forge, e2e]
+      estimated_hours: 1
+      outcome: >
+        Order 301 fixed images/git/entrypoint.sh but the running mirror
+        container still serves the old image and its bare repo still carries
+        remote.origin.fetch=+refs/*:refs/*, so live pushes keep needing a
+        redundant second push to converge (reproduced this cycle: a1d1ea4c was
+        clobbered to 884d32f1 by the reconcile fetch). Forge hosts cannot
+        rebuild container images (no podman). A podman-capable host must rebuild
+        the tillandsias-git image so the safe refspec + tagOpt + explicit
+        empty-mirror seed take effect (the entrypoint re-applies the config on
+        every start, so no volume recreation is needed once the image ships),
+        restart the mirror container, and live-verify.
+      exit_criteria:
+        - "tillandsias-git image rebuilt from the order-301 entrypoint.sh and the mirror container restarted"
+        - "the restarted mirror's bare repo advertises remote.origin.fetch=+refs/heads/*:refs/remotes/origin/* (not +refs/*:refs/*)"
+        - "a single push of a fresh commit leaves local, mirror (git://tillandsias-git), and GitHub advertising the same SHA with no redundant second push"
+        - "litmus:git-mirror-ref-convergence stays green"
+      events:
+        - type: filed
+          ts: "2026-07-12T18:32:00Z"
+          agent_id: "forge-tillandsias-opus48-20260712T1815Z"
+          host: forge
+          summary: >
+            Deployment residual of order 301: the code fix cannot take effect on
+            the live mirror from a forge host (no podman to rebuild the image).
+            Split out so a podman-capable host ships and live-verifies it.
+
+    - packet_id: agent-login-tray-lane-vault-parity
+      order: 303
+      title: "Tray forge launches run the same ensure_provider_auth vault ladder as the CLI lane"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [tray, vault, auth, rust]
+      estimated_hours: 2
+      outcome: >
+        launch_forge_agent (tray lane) skips ensure_provider_auth entirely, so
+        tray-initiated Claude/Codex/Antigravity launches never consult the
+        vault or trigger a login flow; the CLI lane already has the ladder.
+        Small parity slice of the login-flow work. Operator directive
+        2026-07-12: file only, do not implement until the current stable
+        point has shipped.
+      exit_criteria:
+        - "tray Claude/Codex/Antigravity launches call the ensure_provider_auth ladder before spawning the terminal"
+        - "vault-present credential launches with no login prompt"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator repro: relaunching Claude/Codex from the tray prompts
+            for login again despite a prior successful in-forge login.
+
+    - packet_id: agent-login-vault-roundtrip
+      order: 304
+      title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
+      depends_on: [agent-login-tray-lane-vault-parity]
+      pickup_role: linux
+      capability_tags: [vault, auth, forge, containers]
+      estimated_hours: 6
+      outcome: >
+        Credentials created by an agent's own interactive login inside the
+        --rm forge die with the lane; nothing exports them to the vault, so
+        every relaunch re-prompts. Model the <Agent>-Login flow on the GitHub
+        Login Flow: no vault credential => run login flow first, persist to
+        vault, then launch the forge; harvest in-forge logins back to the
+        vault before teardown. Operator directive 2026-07-12: file only,
+        implement after the stable release ships.
+      exit_criteria:
+        - "one interactive login per agent survives forge --rm teardown (relaunch does not prompt)"
+        - "vault paths per provider documented; no credential lands in the project workspace or image"
+        - "fixture/litmus: synthetic token harvested from a fake agent credential path into the vault and injected on next launch"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: >
+            Operator smoke-test 2026-07-12; design sketch and existing
+            plumbing inventory in the deliverable issue file.
+
+    - packet_id: stable-release-channel
+      order: 305
+      title: "Introduce a 'stable' release label; README install scripts pin to stable while dailies keep shipping"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/stable-release-channel-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [release, ci, docs]
+      estimated_hours: 4
+      outcome: >
+        Daily CalVer releases immediately become what new users curl-install;
+        operator wants a promoted, e2e-vetted 'stable' channel the README
+        points at, with dailies marked pre-release. Promotion is an explicit
+        Tlatoani action gated on curl-install e2e PASS evidence.
+      exit_criteria:
+        - "stable-pinned download URL that dailies do not move"
+        - "README install instructions resolve the stable channel; dailies marked pre-release"
+        - "promotion procedure documented in methodology/versioning.yaml with e2e-evidence gate"
+        - "shape litmus asserting README install URL resolves the stable channel"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: "Operator directive 2026-07-12 (approaching stable point)."
+
+    - packet_id: opencode-tray-tui-spill-verify
+      order: 306
+      title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
+      status: ready
+      kind: verify
+      deliverable: plan/issues/opencode-tray-tui-escape-spill-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, e2e, tui]
+      estimated_hours: 2
+      outcome: >
+        This cycle muted npm stdout in ensure_forge_harnesses and redirected
+        the backgrounded installers' stdout to /tmp/forge-lifecycle.log in all
+        forge entrypoints (stderr kept for the order-299 loud floor). Needs an
+        interactive/local-build e2e confirmation on a cold cache; residual
+        suspects (live npm rewrite of the running harness, init-prompt
+        injection, debug stderr) ranked in the deliverable.
+      exit_criteria:
+        - "tray OpenCode session clean for >=5 minutes on a first-launch cold-cache run"
+        - "if live-rewrite implicated: updater never rewrites the active lane's package; fixture in scripts/test-harness-rollback.sh"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: "Operator repro fixed-in-part this cycle; verification packet."
+
+    - packet_id: antigravity-launch-crash
+      order: 307
+      title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
+      status: ready
+      kind: exploration
+      deliverable: plan/issues/antigravity-launch-crash-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, tray, e2e]
+      estimated_hours: 2
+      outcome: >
+        Operator repro 2026-07-12: window closed instantly, error unreadable.
+        This cycle added an exit-pause EXIT trap to every agent entrypoint and
+        fixed GIT_SSL_CAINFO; remaining candidates (missing Gemini credential
+        -> login-flow packets; agy installer failure; skip-permissions flag
+        drift) ranked in the deliverable.
+      exit_criteria:
+        - "actual error text captured into the deliverable via the exit-pause trap"
+        - "root cause fixed here or split to the owning packet (orders 303/304)"
+        - "antigravity lane reaches a usable TUI with a valid Gemini credential in the vault"
+      events:
+        - type: filed
+          ts: "2026-07-12T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
+          host: linux_mutable
+          summary: "Operator repro; observability fix landed this cycle."

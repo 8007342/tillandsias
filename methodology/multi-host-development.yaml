@@ -18,6 +18,23 @@ multi_host_development:
       on that branch until stable, then merges back to main. Cross-cutting work
       lands on main or the selected shared integration branch and is
       fast-forwarded to all platform branches only after ancestry is verified.
+    scope: >
+      These branch names (linux-next/windows-next/osx-next/main) are the
+      Tillandsias project's OWN development conventions. They apply ONLY when
+      the working repository is Tillandsias itself (including dogfooding forge
+      cycles launched on this repo). They are NOT a runtime convention of the
+      product: a forge launched on an end user's project MUST NOT create,
+      assume, or push these branches there.
+    forge_target_project_conventions: >
+      Agents running inside a Tillandsias forge operate on the TARGET project's
+      terms. Before any branch or push decision they discover that project's
+      conventions — default branch, existing branch naming, CONTRIBUTING.md /
+      repo docs, protection rules — and follow them. When the target project
+      declares no convention, agents use its default branch plus ordinary
+      short-lived feature branches and surface the choice to the operator;
+      they never import Tillandsias-internal branch names into someone else's
+      repository. The git mirror service is convention-neutral: it relays
+      whatever refs the target project uses.
 
   branch_convention:
     shared_logic:

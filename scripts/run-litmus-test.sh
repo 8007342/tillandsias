@@ -1287,6 +1287,17 @@ main() {
         fi
     done <<<"$specs_to_test"
 
+    # @trace spec:spec-traceability
+    # An explicit filter is a requested verification boundary. Treating a
+    # typo, renamed spec, or litmus-name-shaped argument as PASS with zero
+    # selected tests silently disables that boundary. Legitimately empty
+    # phase/size buckets still have TESTS_RUN > 0 because their bound tests
+    # are counted as skips, so this guard preserves those pass semantics.
+    if [[ -n "$FILTER_SPEC" && $TESTS_RUN -eq 0 ]]; then
+        log_fail "no litmus tests matched filter '$FILTER_SPEC'"
+        exit 1
+    fi
+
     # Print summary
     print_summary
     local exit_code=$?

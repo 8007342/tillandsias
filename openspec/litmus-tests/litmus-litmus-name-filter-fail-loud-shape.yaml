@@ -1,0 +1,54 @@
+# @trace spec:spec-traceability
+#
+# Regression pin for order 300. An explicit positional filter that resolved to
+# no bound tests used to leave TESTS_RUN=0 and reach the ordinary summary,
+# which reported PASS solely because TESTS_FAILED was also zero. This test
+# exercises the runner as a child process and distinguishes that invalid empty
+# selection from two valid empty execution buckets whose bound tests are all
+# skipped by a phase filter.
+name: litmus:litmus-name-filter-fail-loud-shape
+spec: spec-traceability
+phase: pre-build
+description: >
+  Pin that an explicit litmus filter selecting zero bound tests exits non-zero
+  with an actionable diagnostic, while a valid spec whose tests are excluded
+  by phase and a filterless empty phase bucket retain their pass semantics.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/run-litmus-test.sh
+  - bash and grep are available in PATH
+
+critical_path:
+  - step: "an explicit zero-match filter exits non-zero with the original argument in the diagnostic"
+    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh 'litmus:order-300-guaranteed-no-match' --phase pre-build --size instant --compact 2>&1); rc=$?; [ \"$rc\" -ne 0 ] && grep -Fq \"no litmus tests matched filter 'litmus:order-300-guaranteed-no-match'\" <<<\"$output\" && ! grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: explicit zero-match filter fails loud'"
+    timeout_ms: 5000
+    expected_behavior: "ok: explicit zero-match filter fails loud"
+
+  - step: "a valid explicit spec with every bound test excluded by phase still passes"
+    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh spec-traceability --phase order-300-empty-phase --size instant --compact 2>&1); rc=$?; [ \"$rc\" -eq 0 ] && grep -Fq 'executed: 0' <<<\"$output\" && grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: named empty phase bucket passes'"
+    timeout_ms: 5000
+    expected_behavior: "ok: named empty phase bucket passes"
+
+  - step: "a filterless phase bucket with every bound test excluded still passes"
+    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh --phase order-300-empty-phase --size instant --compact 2>&1); rc=$?; [ \"$rc\" -eq 0 ] && grep -Fq '(executed: 0,' <<<\"$output\" && ! grep -Fq 'Total: 0 ' <<<\"$output\" && grep -Fq 'Status: [PASS]' <<<\"$output\" && echo 'ok: filterless empty phase bucket passes'"
+    timeout_ms: 10000
+    expected_behavior: "ok: filterless empty phase bucket passes"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "explicit zero-match fails loud; named and filterless empty phase buckets pass"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-name-filter-fail-loud-shape"
+    artifact: "scripts/run-litmus-test.sh"
+
+rollback:
+  on_failure: >
+    The litmus runner's explicit-selection boundary regressed. Restore the
+    post-selection TESTS_RUN guard before print_summary, keyed on a non-empty
+    FILTER_SPEC. Do not key the guard on executed count: bound tests excluded
+    by phase or size are valid skips and must keep their existing pass behavior.
+  command: 'grep -n "no litmus tests matched filter\|TESTS_RUN -eq 0" scripts/run-litmus-test.sh'

@@ -203,3 +203,31 @@ the meta-orchestration contract.
 - Keep `/opt/cheatsheets` populated or remove/redirect
   `TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets`; this path was empty while
   `/opt/cheatsheets-image` had content.
+
+## 2026-07-12 Recurrence and Root Cause
+
+The stale mirror ref recurred during a normal Forge meta-orchestration push.
+The first push advanced direct GitHub from `17acd1d0` to `8965d23e`, while the
+mirror continued advertising `17acd1d0`; repeating the identical push made both
+advertise `8965d23e`.
+
+A deterministic two-bare-repository fixture identified the race:
+
+- `images/git/entrypoint.sh` configures
+  `remote.origin.fetch=+refs/*:refs/*`.
+- `images/git/post-receive-hook.sh` runs `git fetch origin` after receive-pack
+  has installed the new branch.
+- The fetch force-writes the stale upstream SHA over the mirror's just-received
+  exported branch. The hook still pushes its captured `NEWSHA:REFNAME`, so the
+  upstream advances while the mirror stays stale.
+
+The fixture produced mirror `ee964a99` / upstream `f7beb3df` after push one and
+converged after push two. It also showed the startup retry losing its named ref
+to a locally stranded commit. The bounded implementation and behavioral fixture
+were promoted as ready order 301,
+`git-mirror-fetch-clobbers-exported-ref`.
+
+The same Forge instant suite recorded the existing image/tooling boundaries:
+`diff` and `file` are absent, so `litmus:cheatsheet-host-image-sync` and
+`litmus:guest-binary-embed-integrity` fail; Podman remains intentionally absent
+and e2e eligibility returns `skip:no-podman-binary`.

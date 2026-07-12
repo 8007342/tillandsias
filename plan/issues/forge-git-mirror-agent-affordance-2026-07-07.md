@@ -82,3 +82,17 @@ the credential-free mirror route works when used explicitly. Remaining work:
 make future forge checkouts activate the injected project-specific mirror config
 by default so agents can use the normal blind `git push origin linux-next`
 affordance.
+
+## 2026-07-12 Fixture Isolation Finding
+
+The normal Forge checkout now has the project-specific global `url.insteadOf`
+mapping active and the production guard returns `ok:forge-git-mirror`. That
+success exposed an isolation flaw in
+`litmus:credential-channel-check-shape`: its "plain GitHub origin" negative
+fixture inherits the Forge's global Git configuration, so Git rewrites the
+fixture URL back to the mirror and the expected fail-closed assertion fails.
+
+The packet's remaining default-on affordance work should isolate that fixture
+from global and system Git config (while retaining its explicit local-config
+positive fixture). This is test-environment drift, not a production credential
+guard failure.

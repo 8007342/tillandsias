@@ -1,8 +1,216 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-11T19:45:00Z
+LastExecutionTime: 2026-07-12T19:30:00Z
+
+## Cycle 2026-07-12T18:56Z→19:30Z (linux_mutable macuahuitl — operator smoke-test feedback drain + sibling unblock)
+
+- **Startup/sync**: linux-next clean at 6136000b; credential guard
+  `ok:gh-keyring`. Sibling heads: main 9632165a, windows-next e50ab2f2,
+  osx-next 9632165a.
+- **Forge push transparency CONFIRMED**: the operator's in-forge
+  /meta-orchestration cycles (Codex/ChattyGPT commits 8965d23e+884d32f1,
+  Claude commits a1d1ea4c+3d9e583b, OpenCode 5ca01feb+6136000b) are ALL on
+  origin/linux-next — the git mirror relays pushes to GitHub; no local-only
+  commits. Redundant-second-push residual ships with order 302.
+- **Branch conventions**: forge Claude's order-301 changes were mirror
+  refspec mechanics, no methodology collision. Added explicit scope +
+  forge_target_project_conventions to
+  methodology/multi-host-development.yaml: linux-next/osx-next/windows-next
+  are Tillandsias-internal; forge agents in END-USER projects follow the
+  target project's own branch conventions.
+- **OpenCode tray TUI escape-spill (operator repro)**: root-caused to the
+  backgrounded first-run installers sharing the lane TTY (npm stdout
+  unredirected; Maintenance lane works because the updater finishes before
+  the user launches opencode). Muted npm stdout in ensure_forge_harnesses;
+  all forge entrypoints now route the backgrounded installers' stdout to
+  /tmp/forge-lifecycle.log (stderr kept for the order-299 loud floor).
+  Verification packet order 306.
+- **Forge brew SSL failure (operator repro)**: git/libcurl ignores
+  SSL_CERT_FILE and the injected gitconfig pins the enclave-CA-only file →
+  git HTTPS to non-MITMed remotes fails cert verify. All lanes now export
+  GIT_SSL_CAINFO to the combined CA bundle.
+- **Antigravity instant crash (operator repro)**: agent entrypoints gained
+  an exit-pause EXIT trap (window no longer vanishes unreadably);
+  candidates ranked in order 307 (top: missing Gemini credential → login
+  flows).
+- **Filed (operator directive, file-only)**: orders 303/304 Agent-Login
+  flows (tray-lane ensure_provider_auth parity; vault round-trip of
+  in-forge logins), order 305 stable release channel (README pins stable,
+  dailies pre-release).
+- **Sibling unblock (operator directive)**: orders 257 (macOS parity), 258
+  + 274 (Windows) flipped blocked→ready with unblock events — the operator
+  will attend those hosts and start agents to complete the platform
+  wrappers. macOS/Windows: you are UNBLOCKED; linux-next is a declared
+  stable point.
+- **Release**: /merge-to-main-and-release run this cycle (see release event
+  below / PR + tag evidence).
+
+## Cycle 2026-07-12T18:36Z→18:46Z (forge — meta-orchestration: order 237 fixture isolation DONE)
+
+- **Startup/sync**: Forge on `linux-next`, clean at 3d9e583b; credential guard
+  `ok:forge-git-mirror`. Sibling heads: main 9632165a, linux-next 3d9e583b,
+  windows-next e50ab2f2, osx-next 9632165a.
+- **Drained order 237 (forge-git-mirror-agent-affordance) — fixture isolation
+  residual**: litmus:credential-channel-check-shape steps 7 and 9 created temp
+  repos with plain GitHub origins to test that the credential guard fails closed
+  on forge. On forge hosts, the global `url.insteadOf` mapping rewrites these
+  URLs to the enclave mirror, causing a false positive pass. Fixed by adding
+  `GIT_CONFIG_GLOBAL=/dev/null` to both steps so the temp repos are isolated
+  from global/system Git config.
+- **Verifiable closure**: `litmus:credential-channel-check-shape` now 9/9 PASS
+  (was 7/9, steps 7+9 FAIL). Full pre-build: 128 PASS / 3 FAIL (all forge env
+  gaps: `diff` missing, `file` missing, no podman binary). `build.sh --check`
+  PASS. YAML validation PASS.
+- **Forge gitconfig default-on affordance confirmed**: `write_forge_gitconfig`
+  writes project-specific mirror config, bind-mounted read-only to
+  `/home/forge/.config/git/config`, `GIT_CONFIG_GLOBAL` set — forge agents push
+  through the mirror transparently.
+- **E2E**: Forge has no destructive E2E lane (`skip:no-podman-binary`).
+- **Finalization**: committed `5ca01feb`, pushed to `origin/linux-next` via
+  `git://tillandsias-git/tillandsias` mirror (forwarded to GitHub successfully).
+  Clean tree before exit.
+
+## Cycle 2026-07-12T18:15Z→18:30Z (forge — meta-orchestration: order 301 DONE, mirror ref-clobber fixed)
+
+- **Startup/sync**: Forge on `linux-next`, clean at 884d32f1; credential guard
+  `ok:forge-git-mirror`. Sibling heads: main 9632165a, linux-next 884d32f1,
+  windows-next e50ab2f2, osx-next 9632165a.
+- **Drained order 301 (mirror relay ref-clobber, the loop's own push-convergence
+  bug)**: `images/git/entrypoint.sh` reconcile fetch now uses
+  `+refs/heads/*:refs/remotes/origin/*` with `tagOpt=--no-tags`, so a
+  stale-upstream fetch in the post-receive hook / startup retry loop lands in
+  remote-tracking refs and no longer force-overwrites a just-received exported
+  branch. Empty mirrors are seeded once with an explicit
+  `+refs/heads/*:refs/heads/*` + `+refs/tags/*:refs/tags/*` refspec so clones
+  still see heads/tags. This is the root cause of "first push advances GitHub,
+  mirror stays one commit stale until an identical second push".
+- **Verifiable closure**: new offline fixture
+  `scripts/test-git-mirror-ref-convergence.sh` (bound as
+  `litmus:git-mirror-ref-convergence` under git-mirror-service) runs each
+  divergence case under BOTH the legacy unsafe `+refs/*:refs/*` (must reproduce
+  the bug) and the safe refspec (must converge) — a true differential
+  regression pin, no network/Podman. Spec gained the "Reconciliation fetch
+  never clobbers exported refs" requirement + 2 scenarios.
+- **Verification**: fixture PASS (3 cases + controls); `run-litmus-test.sh
+  git-mirror-service` instant 3/3 PASS (safe-refspec-push, ref-convergence,
+  yaml-gate-shape), 1 SKIP (enclave-isolation, no podman); `build.sh --check`
+  PASS; `tillandsias-policy validate-yaml` PASS; `bash -n` + `git diff --check`
+  clean.
+- **Captured (reduction engine)**: forge dev hosts set a global
+  `core.hooksPath` that silently shadows per-repo hooks (bit the fixture; cost
+  2 debug iterations) → `plan/issues/optimization/forge-global-hookspath-shadows-repo-hooks-2026-07-12.md`.
+- **E2E**: Forge has no destructive E2E lane (`skip:no-podman-binary`).
+- **Deployment residual → filed ready order 302**: the code fix cannot take
+  effect on the LIVE mirror from a forge host (no podman to rebuild the
+  tillandsias-git image; the running container still carries
+  `+refs/*:refs/*`). Confirmed live: this cycle's own push saw a1d1ea4c
+  clobbered to 884d32f1 and needed a redundant second push to converge — the
+  exact symptom the fix removes once the image is rebuilt. A podman host must
+  rebuild + restart the mirror and live-verify one-push convergence.
+- **Finalization**: local + mirror (git://tillandsias-git) + direct GitHub
+  `linux-next` all agree at a1d1ea4c after convergence; clean tree before exit.
+
+## Cycle 2026-07-12T17:52Z→18:06Z (forge — meta-orchestration: order 300 DONE, mirror race root-caused)
+
+- **Startup/sync**: Forge on `linux-next`; credential guard
+  `ok:forge-git-mirror`. Host `build.sh --install` startup regeneration was
+  checkpointed as `8965d23e` (version/build metadata + traces), then local,
+  mirror, and direct GitHub refs were synchronized before worker selection.
+- **Drained order 300**: explicit litmus filters selecting zero bound tests now
+  exit 1 with `no litmus tests matched filter '<arg>'` before a PASS summary.
+  Named and filterless empty phase/size buckets retain exit 0 because the guard
+  keys on matched `TESTS_RUN`, not executed count. New
+  `litmus:litmus-name-filter-fail-loud-shape` passes all 3 boundary probes;
+  `spec-traceability` instant suite is 5/5 PASS.
+- **Verification**: `bash -n`, authoritative YAML validation, direct boundary
+  probes, `git diff --check`, and Forge `./build.sh --check` PASS. Full instant
+  pre-build is 126 PASS / 4 FAIL / 123 SKIP: all four are captured Forge
+  environment gaps (missing `diff`, missing `file`, credential fixture inherits
+  global URL rewrite, and expected missing Podman).
+- **E2E**: Forge has no destructive E2E lane; eligibility probe records
+  `skip:no-podman-binary`.
+- **Finding reduction**: first push advanced GitHub while the mirror stayed one
+  commit stale; an identical second push converged. Offline fixture traced this
+  to fetch-before-relay plus `+refs/*:refs/*`, and also reproduced startup-retry
+  ref loss. Filed ready order 301 with a bounded offline convergence litmus.
+- **Finalization target**: push this single completion checkpoint, then require
+  local, mirror, and direct GitHub `linux-next` to agree before exit.
+
+## Cycle 2026-07-12T10:06Z→11:25Z (linux_mutable macuahuitl — drain: orders 298+299 DONE, windows-next merged, order 300 filed)
+
+- **Drained order 298 (ROOT-CAUSED + FIXED)**: ensure_enclave_for_project
+  ran the dependency-model ensure (starts the proxy) BEFORE
+  cleanup_shared_stack_if_no_running_forge (removes the proxy when no lane
+  is live) — on a pristine first launch no lane exists, so the launcher
+  tore down the proxy it had just started; any pre-existing lane masks it.
+  Cleanup now precedes the ensure; pinned by unit test
+  enclave_bringup_cleans_up_before_ensuring_prerequisites + curl-install
+  smoke step 4b (proxy-alive-alongside-lane host assertion). 144 headless
+  tests pass. Commit 00bc2fa7.
+- **Drained order 299**: ensure_forge_harnesses first-run FLOOR — zero
+  harnesses after the install pass now warns loudly and clears the 6h
+  cadence stamp (next launch retries); cached-harness update path stays
+  silent (order-181). Brew shim: 10-min negative-result backoff on failed
+  bootstrap. Fixtures 5/6 in scripts/test-harness-rollback.sh; litmus
+  suite default-image 6/6 PASS. Commit cf689371.
+- **Coordination**: origin/windows-next (order 282 closeout + e2e PASS
+  evidence) merged into linux-next; loop_status conflict mediated;
+  integration gate (markers/YAML/--check) green. Merge 06b7fdb5.
+- **Captured**: order 300 filed — run-litmus-test.sh reports PASS when an
+  explicit name filter matches zero tests (silent no-op gate hazard).
+- **NEXT / release note**: the operator's broken curl-install
+  (v0.3.260711.8) is only cured by SHIPPING 298/299 — next
+  /merge-to-main-and-release cycle should go out today; the subsequent
+  curl-install e2e must exercise smoke step 4b. Heavy local-build e2e
+  deferred this cycle (drain-scoped operator directive).
+
+## Cycle 2026-07-12T00:48Z (linux_mutable macuahuitl — operator curl-install repro captured, orders 298/299 filed)
+
+- Operator curl-installed v0.3.260711.8: terminal lane launched but ALL
+  egress failed ("Could not resolve proxy: proxy") and NO harnesses
+  existed (opencode/claude/codex/agy → 127). The order-289 fix IS in the
+  installed release, so this is the recurrence its residual anticipated.
+- Filed plan/issues/curl-install-first-launch-no-harnesses-2026-07-11.md
+  and two ready packets: order 298 (proxy absent at first launch —
+  evidence via the new unconditional teardown trace, launcher must prove
+  proxy liveness) and order 299 (first-run harness bootstrap must fail
+  loud when fail-soft has no cached harness to fall back to).
+- Capture-only cycle at operator direction; no drain, no e2e.
+
+## Cycle 2026-07-11T18:23Z→20:30Z (windows — meta-orchestration: order 282 DONE + verified, e2e run 4 PASS on attempt 2, staging-contract feature bug fixed)
+
+- **Host**: Windows 11, `windows-next`, agent windows-bullo-claude-20260711T182324Z.
+  Credential guard `ok:gh-credentials-store`. Started clean at 976f2539, merged
+  linux-next twice (18d78d99, then the release commit 9632165a — fast-forward
+  both times because the coordinator had already integrated our pushes).
+- **Drained: order 282 (guest-binary-embed-windows) COMPLETE with evidence**:
+  host-arch staging in build-windows-tray.ps1 (target-guest/ → assets/),
+  stale-binary version pin test, loud absent-asset warn, fetch demoted;
+  guest binaries built inside the local WSL distro (rustup musl toolchain).
+  Destructive e2e run 20260711T191912Z: attempt 1 FAILED (handshake timeout)
+  → ROOT-CAUSED to build-guest-binaries.sh cargo fallback using `--features
+  tray` (no vsock listener; flake uses `listen-vsock`) → fixed → attempt 2
+  PASS end-to-end incl. FULL-TOPIC push subscription on a pristine embedded
+  guest (order 154 slice-3 live check unblocked + passed, no legacy fallback).
+- **Release observed**: v0.3.260711.8 published 19:38Z (run 29165261781
+  success) with this cycle's windows commits in its lineage; watched to
+  terminal success per operator goal.
+- **Findings filed**: windows-litmus-strict-exit-fallout-2026-07-11.md (10
+  instant-suite FAILs on windows after strict-exit; incl. VERSION-clobber
+  hazard when a step-killed litmus skips its EXIT trap restore) + valid-YAML
+  mediation on litmus-litmus-stdlib-portability-shape.yaml (`\|` escape).
+- **Queue after cycle (windows)**: order 154 residual (watch-channel menu
+  wakeups + tick-task elimination), order 279 residual (N=10 quit/relaunch
+  litmus; macOS analog), 258/274 blocked-on-operator, any-host audits 245-251.
 
 ## Cycle 2026-07-11T17:57Z→19:45Z (linux_mutable macuahuitl — operator-goal drain + RELEASE gate green)
+
+- **RELEASE: v0.3.260711.8 PUBLISHED** — PR #71 merged (formatting-only
+  conflicts from the Jul-8 out-of-band main checkpoint mediated), tag +
+  workflow_dispatch run 29165261781 SUCCESS, full asset set (linux musl
+  x86_64/aarch64, macOS dmg+tar, windows zip, installers, SHA256SUMS,
+  cosign bundles). Latest tested release for curl-install e2e:
+  v0.3.260711.8.
 
 - **Drained**: 283 (smoke-lock fd close-on-exec + fixture), 284 (updater
   probe+rollback to last-good; BONUS: npm-update lock-leak trap bug fixed

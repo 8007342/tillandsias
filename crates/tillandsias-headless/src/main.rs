@@ -7467,6 +7467,27 @@ pub(crate) fn ensure_enclave_for_project(
     project_path: Option<&Path>,
     debug: bool,
 ) -> Result<PathBuf, String> {
+    // Idempotent re-attach wipe FIRST, prerequisites AFTER. The shared-stack
+    // cleanup removes tillandsias-proxy whenever no lane container is live —
+    // and on a FIRST launch none is — so running it after ensure_forge_launch
+    // tore down the proxy the dependency model had just started, handing the
+    // forge a baked proxy env that resolves to nothing ("Could not resolve
+    // proxy: proxy", order 298; operator repro on a pristine curl-install).
+    // Cleanup → ensure keeps exactly one proxy bring-up path (order 252) with
+    // no inline duplicate. Ordering pinned by
+    // enclave_bringup_cleans_up_before_ensuring_prerequisites.
+    {
+        let rt = podman_runtime()?;
+        let client = PodmanClient::new();
+        rt.block_on(async {
+            cleanup_stack_containers(&client, project_name).await;
+            // Order 233 (R5): shared containers are removed only when no
+            // forge is running anywhere; a parallel project's live session
+            // keeps them.
+            cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+        });
+    }
+
     // Prerequisites: enclave/egress networks, CA bundle, proxy — satisfied
     // through the container_deps topological model (order 252).  The proxy
     // image is verified by ensure_proxy_running inside the satisfier.
@@ -7498,11 +7519,6 @@ pub(crate) fn ensure_enclave_for_project(
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
-        cleanup_stack_containers(&client, project_name).await;
-        // Order 233 (R5): shared containers are removed only when no forge
-        // is running anywhere; a parallel project's live session keeps them.
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
-
         // Step 15 slice 2: bring the router up BEFORE the per-project
         // git/inference/forge spawn so the enclave's `router` alias
         // is live by the time Squid's cache_peer / git-service HTTPS
@@ -10067,6 +10083,29 @@ mod tests {
                 "{name} is infrastructure, not a lane — it must not self-perpetuate the stack"
             );
         }
+    }
+
+    /// Order 298: within `ensure_enclave_for_project`, the idempotency wipe
+    /// (which removes tillandsias-proxy when no lane is live — always true on
+    /// a first launch) must run BEFORE the dependency-model ensure, never
+    /// after it. The inverted order shipped in v0.3.260711.8 and handed every
+    /// pristine curl-install a forge whose baked proxy env resolved to
+    /// nothing ("Could not resolve proxy: proxy").
+    #[test]
+    fn enclave_bringup_cleans_up_before_ensuring_prerequisites() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn ensure_enclave_for_project(");
+        let cleanup_idx = window
+            .find("cleanup_shared_stack_if_no_running_forge(")
+            .expect("ensure_enclave_for_project must run the shared-stack idempotency wipe");
+        let ensure_idx = window
+            .find("container_deps::ensure_forge_launch(")
+            .expect("ensure_enclave_for_project must route through the dependency model");
+        assert!(
+            cleanup_idx < ensure_idx,
+            "shared-stack cleanup must precede ensure_forge_launch — the reverse \
+             order tears down the proxy the ensure just started (order 298)"
+        );
     }
 
     /// Drift litmus (order 229): every launch path that creates containers
