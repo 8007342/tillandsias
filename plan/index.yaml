@@ -5573,6 +5573,25 @@ plan_index:
           evidence:
             - "litmus:credential-channel-check-shape step 7 FAIL on forge"
             - "scripts/check-credential-channel.sh: ok:forge-git-mirror"
+        - type: progress
+          ts: "2026-07-12T18:40:00Z"
+          agent_id: "forge-big-pickle-20260712T1836Z"
+          host: forge
+          lease_id: "forge-git-mirror-agent-affordance-20260712T1836Z"
+          summary: >
+            Fixture isolation fixed: added GIT_CONFIG_GLOBAL=/dev/null to
+            litmus:credential-channel-check-shape steps 7 and 9 so the
+            temp repos are not contaminated by the forge host's global
+            url.insteadOf mapping. Full pre-build suite: 128 PASS / 3 FAIL
+            (all three are known forge env gaps: diff missing, file missing,
+            no podman binary). credential-channel-check-shape is 9/9 PASS.
+            Forge gitconfig default-on affordance (write_forge_gitconfig +
+            bind-mount + GIT_CONFIG_GLOBAL env) confirmed operational.
+          evidence:
+            - "openspec/litmus-tests/litmus-credential-channel-check-shape.yaml: GIT_CONFIG_GLOBAL=/dev/null added to steps 7+9"
+            - "litmus:credential-channel-check-shape: 9/9 PASS"
+            - "full pre-build: 128 PASS / 3 FAIL (forge env gaps only)"
+            - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS"
       scope_note: >
         Agents inside the forge currently fail git push because `git push origin`
         prompts for credentials or errors with `could not read Username`. The
