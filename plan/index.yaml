@@ -8948,6 +8948,34 @@ plan_index:
         - "WSL2 guest has forge-fit headroom (matching macOS 250G intent); forge-base builds without ENOSPC"
         - "a provisioning-time free-space / disk-size assertion fails loud on regression"
       events:
+        - type: progress
+          ts: "2026-07-12T20:02:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          lease_id: "windows-guest-disk-resize-forge-fit"
+          summary: >
+            RESEARCH closed: measured a fresh WSL 2.7.3 guest at 1007 GiB
+            total / 955 GiB available on / (dynamic VHDX, 1 TB default,
+            1.43 GB on host disk) — no ENOSPC wall on modern WSL, so no
+            resize step is needed; the residual risk is a capped
+            environment (legacy 256 GB default or a .wslconfig
+            defaultVhdSize cap). IMPLEMENT closed: provisioning-time
+            headroom assertion in wsl.rs on BOTH paths (recipe
+            configure_recipe_distro + legacy provision) — hard-fails
+            below a 32 GiB forge-fit floor (vz.rs floor parity) with an
+            actionable .wslconfig / wsl --manage --resize message, warns
+            below the 240 GiB macOS-250G-parity intent; host-side df -Pk
+            parse so the guest needs only coreutils. Pinned by
+            provisioning_asserts_guest_disk_headroom (source scan, runs
+            on all-platform CI) + parse/verdict boundary tests; vm-layer
+            27/27, fmt + clippy clean. Runtime confirmation on the live
+            cold path rides this session's destructive reprovision e2e.
+        - type: claim
+          ts: "2026-07-12T19:45:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          lease_id: "windows-guest-disk-resize-forge-fit"
+          expires_at: "2026-07-12T23:45:00Z"
         - type: filed
           ts: "2026-07-11T18:20:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260711T1758Z"
