@@ -8875,7 +8875,7 @@ plan_index:
     - packet_id: curl-install-first-launch-proxy-absent
       order: 298
       title: "Fresh curl-install (v0.3.260711.8): maintenance terminal comes up with proxy hostname unresolvable — order 289 recurrence post-fix"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -8908,11 +8908,17 @@ plan_index:
           summary: >
             Filed from operator curl-install repro; order 289 residual
             triggered (repro recurred on a build containing the fix).
+        - type: claim
+          ts: "2026-07-12T10:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          lease_id: "curl-install-first-launch-proxy-absent-20260712T1006Z"
+          expires_at: "2026-07-12T14:08:00Z"
 
     - packet_id: first-run-harness-bootstrap-fail-loud
       order: 299
       title: "Pristine forge with dead egress silently ships ZERO harnesses (opencode/claude/codex all 127) — first-run install failure must be loud"
-      status: ready
+      status: claimed
       kind: enhancement
       deliverable: images/default/lib-common.sh
       depends_on: []
@@ -8944,3 +8950,9 @@ plan_index:
           summary: >
             Filed from operator curl-install repro; fail-soft harness
             update has no first-run floor.
+        - type: claim
+          ts: "2026-07-12T10:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          lease_id: "first-run-harness-bootstrap-fail-loud-20260712T1006Z"
+          expires_at: "2026-07-12T14:08:00Z"
