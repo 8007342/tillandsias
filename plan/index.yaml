@@ -3006,6 +3006,24 @@ plan_index:
             upstream forwarding returns non-zero" both require the forge
             push path to go through the mirror. New blocker filed:
             plan/issues/forge-credential-guard-push-channel-gap-2026-07-08.md.
+        - type: progress
+          ts: "2026-07-12T18:06:31Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          summary: >
+            The stale-ref failure recurred on the normal blind push path:
+            GitHub advanced to 8965d23e while the mirror still advertised
+            17acd1d0; repeating the same push converged both refs. A local
+            two-bare-repository fixture root-caused the race to
+            remote.origin.fetch=+refs/*:refs/* combined with the post-receive
+            `git fetch origin`, which overwrites the just-received exported
+            branch before relaying its captured NEWSHA. Reduced the fix and
+            startup-retry regression into ready order 301.
+          evidence:
+            - "live after push 1: direct GitHub=8965d23e, mirror=17acd1d0"
+            - "live after push 2: direct GitHub=mirror=8965d23e"
+            - "fixture after push 1: upstream=f7beb3df, mirror=ee964a99; push 2 converged"
+            - "fixture startup retry: stranded 1983bea6 became dangling after fetch reset refs to ee17014c"
 
     - packet_id: forge-image-creation-vs-firstrun-split-research
       order: 178
@@ -5541,6 +5559,20 @@ plan_index:
           evidence:
             - "git://tillandsias-git/tillandsias accepted 5343c856 on linux-next"
             - "git-mirror post-receive reported: Push to origin (https://github.com/8007342/tillandsias.git): success"
+        - type: progress
+          ts: "2026-07-12T18:06:31Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          summary: >
+            The full instant pre-build suite exposed that the plain-GitHub-origin
+            fixture inherits the forge's global url.insteadOf mapping, so its
+            supposedly plain origin resolves to the mirror and the negative
+            assertion fails. The production credential guard itself passes
+            (`ok:forge-git-mirror`). Isolate this fixture from global/system Git
+            config while completing the packet's default-on affordance residual.
+          evidence:
+            - "litmus:credential-channel-check-shape step 7 FAIL on forge"
+            - "scripts/check-credential-channel.sh: ok:forge-git-mirror"
       scope_note: >
         Agents inside the forge currently fail git push because `git push origin`
         prompts for credentials or errors with `could not read Username`. The
@@ -5794,7 +5826,7 @@ plan_index:
           lease_id: "opencode-prompt-e2e-loop-status-contract-20260709T1730Z"
           commit_sha: "4d76aff6"
           evidence:
-            - "litmus: litmus-opencode-prompt-e2e-shape.yaml: s/loop_status.md/plan\//"
+            - "litmus: litmus-opencode-prompt-e2e-shape.yaml: s/loop_status.md/plan\\//"
             - "plan/index.yaml: order 242 done + completion event"
             - "./build.sh --check: PASS"
       exit_criteria:
@@ -9033,7 +9065,7 @@ plan_index:
     - packet_id: litmus-name-filter-silent-noop
       order: 300
       title: "run-litmus-test.sh: a name filter matching zero tests must fail loud, not report PASS on 0 executed"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: scripts/run-litmus-test.sh
       depends_on: []
@@ -9061,3 +9093,64 @@ plan_index:
           host: linux_mutable
           summary: >
             Reduction-engine capture from the order-299 verification pass.
+        - type: claim
+          ts: "2026-07-12T18:00:37Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          lease_id: "forge-tillandsias-codex-20260712T180037Z"
+          expires_at: "2026-07-12T22:00:37Z"
+        - type: completed
+          ts: "2026-07-12T18:06:31Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          lease_id: "forge-tillandsias-codex-20260712T180037Z"
+          summary: >
+            Explicit filters that select no bound tests now exit 1 before the
+            ordinary PASS summary and retain the original filter in the
+            diagnostic. The guard keys on TESTS_RUN rather than executed count,
+            preserving named and filterless empty phase/size buckets. Added the
+            instant litmus:litmus-name-filter-fail-loud-shape with all three
+            behavioral boundaries.
+          evidence:
+            - "direct zero-match probe: exit 1 + exact diagnostic, no Status PASS"
+            - "named empty phase bucket: exit 0, 5 skipped"
+            - "filterless empty phase bucket: exit 0, 253 skipped"
+            - "spec-traceability instant pre-build: 5/5 PASS"
+            - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS"
+            - "tillandsias-policy validate-yaml: bindings, new litmus, and plan/index.yaml PASS"
+
+    - packet_id: git-mirror-fetch-clobbers-exported-ref
+      order: 301
+      title: "Git mirror: prevent relay fetch from clobbering just-received exported refs"
+      status: ready
+      kind: bug+test
+      deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, forge, shell, litmus]
+      estimated_hours: 2
+      outcome: >
+        The mirror config maps origin fetches directly onto refs/*, and the
+        post-receive hook fetches origin after receive-pack has installed a new
+        exported branch. A stale upstream branch therefore overwrites the
+        just-received mirror ref before the hook relays its captured NEWSHA,
+        leaving GitHub advanced and the mirror stale until an identical second
+        push. Fetch upstream branches into refs/remotes/origin/*, retain an
+        explicit local heads/tags refspec only for empty-mirror seeding, and pin
+        push plus startup-retry convergence with an offline two-bare-repo fixture.
+      exit_criteria:
+        - "one push leaves the mirror and upstream advertising the same SHA"
+        - "startup retry preserves and forwards a locally stranded commit"
+        - "empty-mirror seeding still yields cloneable local heads and tags"
+        - "litmus:git-mirror-ref-convergence reproduces push and retry cases without network or Podman"
+        - "existing safe-refspec and YAML-gate litmuses remain green"
+      events:
+        - type: filed
+          ts: "2026-07-12T18:06:31Z"
+          agent_id: "forge-tillandsias-codex-20260712T180037Z"
+          host: forge
+          summary: >
+            Reduced the recurring order-177 stale-ref symptom after a live
+            first-push divergence and deterministic local fixture identified
+            the fetch refspec clobber. No production mirror code changed in this
+            cycle; order 300 remained the sole implementation packet.

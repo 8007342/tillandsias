@@ -1,6 +1,32 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T11:25:00Z
+LastExecutionTime: 2026-07-12T18:06:31Z
+
+## Cycle 2026-07-12T17:52Z→18:06Z (forge — meta-orchestration: order 300 DONE, mirror race root-caused)
+
+- **Startup/sync**: Forge on `linux-next`; credential guard
+  `ok:forge-git-mirror`. Host `build.sh --install` startup regeneration was
+  checkpointed as `8965d23e` (version/build metadata + traces), then local,
+  mirror, and direct GitHub refs were synchronized before worker selection.
+- **Drained order 300**: explicit litmus filters selecting zero bound tests now
+  exit 1 with `no litmus tests matched filter '<arg>'` before a PASS summary.
+  Named and filterless empty phase/size buckets retain exit 0 because the guard
+  keys on matched `TESTS_RUN`, not executed count. New
+  `litmus:litmus-name-filter-fail-loud-shape` passes all 3 boundary probes;
+  `spec-traceability` instant suite is 5/5 PASS.
+- **Verification**: `bash -n`, authoritative YAML validation, direct boundary
+  probes, `git diff --check`, and Forge `./build.sh --check` PASS. Full instant
+  pre-build is 126 PASS / 4 FAIL / 123 SKIP: all four are captured Forge
+  environment gaps (missing `diff`, missing `file`, credential fixture inherits
+  global URL rewrite, and expected missing Podman).
+- **E2E**: Forge has no destructive E2E lane; eligibility probe records
+  `skip:no-podman-binary`.
+- **Finding reduction**: first push advanced GitHub while the mirror stayed one
+  commit stale; an identical second push converged. Offline fixture traced this
+  to fetch-before-relay plus `+refs/*:refs/*`, and also reproduced startup-retry
+  ref loss. Filed ready order 301 with a bounded offline convergence litmus.
+- **Finalization target**: push this single completion checkpoint, then require
+  local, mirror, and direct GitHub `linux-next` to agree before exit.
 
 ## Cycle 2026-07-12T10:06Z→11:25Z (linux_mutable macuahuitl — drain: orders 298+299 DONE, windows-next merged, order 300 filed)
 

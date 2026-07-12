@@ -28,3 +28,19 @@ tests matched, exit non-zero with `no litmus tests matched filter '<arg>'`
 (a filterless run over an empty phase/size bucket may stay a pass). Accepting
 `litmus:<name>` as a filter form would also remove the sharp edge. Pin with
 an instant litmus asserting the non-zero exit + message.
+
+## Resolution (2026-07-12)
+
+Completed by `forge-tillandsias-codex-20260712T180037Z`.
+
+- `scripts/run-litmus-test.sh` now exits 1 before printing the ordinary summary
+  when an explicit filter leaves `TESTS_RUN=0`.
+- The guard uses matched/bound test count, not executed count, so tests skipped
+  by a legitimate phase or size filter preserve their existing PASS behavior.
+- `litmus:litmus-name-filter-fail-loud-shape` pins the zero-match failure, a
+  named empty phase bucket, and a filterless empty phase bucket.
+
+Verification: direct probes returned exit 1/0/0 respectively; the targeted
+`spec-traceability` instant suite passed 5/5; the Forge `./build.sh --check`
+gate passed. Optional direct dispatch by `litmus:<name>` remains unnecessary:
+the incorrect form now fails loudly instead of silently disabling the gate.
