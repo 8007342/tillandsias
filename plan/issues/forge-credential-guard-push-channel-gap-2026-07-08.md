@@ -47,6 +47,21 @@ Smallest next action: add a check in the forge-git-mirror branch that verifies t
 
 From order 177: even when mirror forwarding succeeds, the mirror advertises a stale ref afterward. The exit criteria "after a forge mirror push, mirror ls-remote and direct GitHub ls-remote agree on linux-next" is not testable in this forge because push does not go through the mirror.
 
+## Cycle Observations
+
+**2026-07-12T22:30Z** — forge cycle on `osx-next` (a74921f1). Guard correctly reports
+`missing:no-credential-channel` (false positive from 2026-07-08 is fixed). However the
+underlying gap remains: origin resolves to GitHub directly, no GH_TOKEN/.gh-credentials/gh
+auth, no `insteadOf` rewrite to the enclave mirror.
+
+**Resolution**: `tillandsias-git` resolves at `10.0.42.18` on the podman network.
+`git://tillandsias-git/tillandsias` works for push (dry-run confirmed). Added repo-local
+`url.insteadOf` to rewrite origin through the mirror. Cycle unblocked.
+
+Smallest next action: ensure the forge container image injects this `insteadOf` rule
+automatically (via gitconfig in the Containerfile or entrypoint) so every forge cycle
+starts with a transparent credential channel.
+
 ## Verifiable Closure
 
 ```bash
