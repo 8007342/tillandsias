@@ -63,14 +63,28 @@ fi
 
 # Lazy Homebrew bootstrap: pinned-tag clone into the standard prefix
 # (bottles are only prebuilt for this exact prefix). Fail-soft to the hint.
+# A recent failed bootstrap (typically dead enclave egress) is remembered
+# for 10 minutes so successive shim hits don't re-attempt the clone and
+# re-print the same failure every shell init (order 299 noise finding).
+FAIL_STAMP="${TILLANDSIAS_PROJECT_CACHE:-$HOME/.cache}/brew-bootstrap-fail-stamp"
 if [ ! -x "$BREW_PREFIX/bin/brew" ]; then
+    if [ -f "$FAIL_STAMP" ]; then
+        now="$(date +%s)"; last="$(cat "$FAIL_STAMP" 2>/dev/null || echo 0)"
+        case "$last" in *[!0-9]*|"") last=0 ;; esac
+        if [ $((now - last)) -lt 600 ]; then
+            echo "tillandsias: Homebrew bootstrap failed recently (network/proxy?); backing off." >&2
+            hint_and_exit
+        fi
+    fi
     echo "tillandsias: bootstrapping userspace Homebrew ($BREW_PIN_TAG) for on-demand tools..." >&2
     mkdir -p "$BREW_PREFIX" 2>/dev/null
     if ! git clone --quiet --depth 1 --branch "$BREW_PIN_TAG" \
         https://github.com/Homebrew/brew "$BREW_PREFIX" 2>&1 | tail -2 >&2; then
         echo "tillandsias: Homebrew bootstrap failed (network/proxy?)." >&2
+        date +%s > "$FAIL_STAMP" 2>/dev/null || true
         hint_and_exit
     fi
+    rm -f "$FAIL_STAMP" 2>/dev/null || true
 fi
 
 brew_env

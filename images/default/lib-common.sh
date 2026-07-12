@@ -955,6 +955,42 @@ ensure_forge_harnesses() {
         fi
     done
 
+    # Order 299 first-run floor: fail-soft is only sound when a cached
+    # harness exists to fall back to. On a PRISTINE cache (fresh curl-install,
+    # post `podman system reset`) a dead proxy means every install above
+    # failed and NOTHING is present — the operator gets a healthy-looking
+    # banner and four bare `command not found`s. Detect the zero-harness
+    # state, say so loudly on stderr (this function is backgrounded but its
+    # stderr reaches the lane terminal), and clear the cadence stamp so the
+    # very next launch retries instead of waiting out the 6h window. The
+    # update path stays silent as designed: with any cached harness present
+    # the floor check passes and this branch is never reached.
+    local floor_prefix="${NPM_CONFIG_PREFIX:-/usr/local}" floor_bin any_harness=0
+    # Fallback dir override exists for the fixtures in
+    # scripts/test-harness-rollback.sh (a dev host's own /usr/local/bin
+    # must not satisfy the floor check under test).
+    local floor_fallback="${TILLANDSIAS_HARNESS_FALLBACK_DIR:-/usr/local/bin}"
+    for floor_bin in opencode claude codex openspec; do
+        if [ -x "$floor_prefix/bin/$floor_bin" ] || [ -x "$floor_fallback/$floor_bin" ]; then
+            any_harness=1
+            break
+        fi
+    done
+    if [ "$any_harness" = "0" ]; then
+        rm -f "$update_stamp" 2>/dev/null || true
+        trace_lifecycle "harness" "FIRST-RUN FLOOR: zero harnesses present after install attempt"
+        {
+            echo ""
+            echo "WARNING: no agent harness is installed (opencode/claude/codex/openspec"
+            echo "all missing) and the launch-time npm installs failed. This is almost"
+            echo "always dead enclave egress — e.g. 'Could not resolve proxy: proxy'."
+            echo "Fix egress (or relaunch the forge: installs retry at every launch),"
+            echo "or retry by hand: npm install -g opencode-ai@latest"
+            echo ""
+        } >&2
+        return 0
+    fi
+
     trace_lifecycle "harness" "agent harnesses up to date"
 }
 

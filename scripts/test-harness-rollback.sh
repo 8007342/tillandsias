@@ -88,4 +88,32 @@ wait
 [ "$("$resolved")" = "raced-ok" ] || fail "resolved wrong binary"
 echo "fixture 4 ok: require waits out a sibling updater instead of racing it"
 
+# Fixture 5 (order 299): pristine cache + every npm install failing (dead
+# egress) → the first-run FLOOR fires: loud WARNING on stderr and the 6h
+# cadence stamp is cleared so the next launch retries immediately.
+mkdir -p "$WORK/failnpm" "$WORK/empty-fallback"
+printf '#!/bin/bash\nexit 1\n' > "$WORK/failnpm/npm"
+chmod +x "$WORK/failnpm/npm"
+export TILLANDSIAS_HARNESS_FALLBACK_DIR="$WORK/empty-fallback"
+rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock" "$NPM_CONFIG_PREFIX/bin"/*
+rm -f "$HOME/.cache/tillandsias-project/harness-update-stamp"
+out="$(PATH="$WORK/failnpm:$PATH" ensure_forge_harnesses 2>&1)" || fail "floor must stay fail-soft"
+echo "$out" | grep -q "WARNING: no agent harness is installed" || fail "missing first-run floor warning: $out"
+[ ! -f "$HOME/.cache/tillandsias-project/harness-update-stamp" ] \
+    || fail "cadence stamp must be cleared so the next launch retries"
+echo "fixture 5 ok: pristine cache + dead egress fails LOUD and clears the cadence stamp"
+
+# Fixture 6 (order 299): same failing npm but a cached harness exists →
+# the order-181 fail-soft contract holds: silent fallback, no floor warning.
+rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock"
+rm -f "$HOME/.cache/tillandsias-project/harness-update-stamp"
+printf '#!/bin/bash\necho cached\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
+chmod +x "$NPM_CONFIG_PREFIX/bin/opencode"
+out="$(PATH="$WORK/failnpm:$PATH" ensure_forge_harnesses 2>&1)" || fail "updater must stay fail-soft"
+echo "$out" | grep -q "WARNING: no agent harness is installed" \
+    && fail "update path with a cached harness must stay silent: $out"
+echo "$out" | grep -q "npm update failed" || fail "expected the quiet non-fatal trace: $out"
+echo "fixture 6 ok: cached-harness update failure stays silent (order-181 fail-soft intact)"
+unset TILLANDSIAS_HARNESS_FALLBACK_DIR
+
 echo "PASS: harness rollback fixtures"

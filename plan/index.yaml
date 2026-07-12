@@ -8937,7 +8937,7 @@ plan_index:
     - packet_id: first-run-harness-bootstrap-fail-loud
       order: 299
       title: "Pristine forge with dead egress silently ships ZERO harnesses (opencode/claude/codex all 127) — first-run install failure must be loud"
-      status: claimed
+      status: done
       kind: enhancement
       deliverable: images/default/lib-common.sh
       depends_on: []
@@ -8975,3 +8975,19 @@ plan_index:
           host: linux_mutable
           lease_id: "first-run-harness-bootstrap-fail-loud-20260712T1006Z"
           expires_at: "2026-07-12T14:08:00Z"
+        - type: completed
+          ts: "2026-07-12T11:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          summary: >
+            ensure_forge_harnesses gained a first-run FLOOR: when zero
+            harness binaries exist after the install pass (pristine cache
+            + dead egress), it prints a loud actionable WARNING to the
+            lane terminal and clears the 6h cadence stamp so the next
+            launch retries immediately; the order-181 fail-soft update
+            path (any cached harness present) stays silent. Bonus: the
+            brew-shim bootstrap remembers a failed clone for 10 min
+            (negative-result backoff) instead of re-attempting and
+            re-printing per shell init. Verified by fixtures 5/6 in
+            scripts/test-harness-rollback.sh (run by
+            litmus:harness-rollback-shape; default-image suite 6/6 PASS).
