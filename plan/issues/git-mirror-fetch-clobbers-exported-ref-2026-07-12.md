@@ -55,6 +55,19 @@ An offline fixture with a bare upstream, bare mirror, and working clone exited
 - Add `scripts/test-git-mirror-ref-convergence.sh` and bind it as
   `litmus:git-mirror-ref-convergence` under `git-mirror-service`.
 
+## Deployment residual (order 302)
+
+The code fix landed in `images/git/entrypoint.sh`, but the **running mirror
+container serves the old image** and its bare repo still has
+`remote.origin.fetch=+refs/*:refs/*`. Confirmed live during the fix's own push
+on 2026-07-12: commit `a1d1ea4c` reached the mirror bare repo, the reconcile
+fetch clobbered it back to `884d32f1` (forced-update trace), and convergence
+required a redundant second push. Forge hosts have no Podman and cannot rebuild
+the image, so a podman-capable host must rebuild `tillandsias-git`, restart the
+mirror container (the entrypoint re-applies the safe config on every start — no
+volume recreation needed), and live-verify one-push convergence. Tracked as
+ready order 302.
+
 ## Verifiable Closure
 
 - One Forge push leaves mirror and upstream on the same SHA.

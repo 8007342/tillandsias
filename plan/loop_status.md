@@ -32,8 +32,15 @@ LastExecutionTime: 2026-07-12T18:26:08Z
   `core.hooksPath` that silently shadows per-repo hooks (bit the fixture; cost
   2 debug iterations) → `plan/issues/optimization/forge-global-hookspath-shadows-repo-hooks-2026-07-12.md`.
 - **E2E**: Forge has no destructive E2E lane (`skip:no-podman-binary`).
-- **Finalization**: one completion checkpoint; require local + mirror + direct
-  GitHub `linux-next` agreement before exit (validates the very fix landed).
+- **Deployment residual → filed ready order 302**: the code fix cannot take
+  effect on the LIVE mirror from a forge host (no podman to rebuild the
+  tillandsias-git image; the running container still carries
+  `+refs/*:refs/*`). Confirmed live: this cycle's own push saw a1d1ea4c
+  clobbered to 884d32f1 and needed a redundant second push to converge — the
+  exact symptom the fix removes once the image is rebuilt. A podman host must
+  rebuild + restart the mirror and live-verify one-push convergence.
+- **Finalization**: local + mirror (git://tillandsias-git) + direct GitHub
+  `linux-next` all agree at a1d1ea4c after convergence; clean tree before exit.
 
 ## Cycle 2026-07-12T17:52Z→18:06Z (forge — meta-orchestration: order 300 DONE, mirror race root-caused)
 

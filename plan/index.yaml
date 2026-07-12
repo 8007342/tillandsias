@@ -9185,3 +9185,40 @@ plan_index:
             - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS (fmt, type-check, clippy strict + listen-vsock)"
             - "target/release/tillandsias-policy validate-yaml: new litmus, bindings, plan/index.yaml PASS"
             - "bash -n on entrypoint.sh + fixture, git diff --check: clean"
+            - "LIVE repro during this cycle's own push: the OLD-image mirror clobbered the just-received a1d1ea4c back to 884d32f1 (forced-update trace); convergence required a redundant second push — the exact symptom the committed fix removes once the git-mirror image is rebuilt (see order 302)."
+
+    - packet_id: git-mirror-ref-convergence-deploy-and-verify
+      order: 302
+      title: "Rebuild git-mirror image with the order-301 safe refspec and live-verify one-push convergence"
+      status: ready
+      kind: deploy+verify
+      deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
+      depends_on: [git-mirror-fetch-clobbers-exported-ref]
+      pickup_role: linux
+      capability_tags: [git-mirror, podman, forge, e2e]
+      estimated_hours: 1
+      outcome: >
+        Order 301 fixed images/git/entrypoint.sh but the running mirror
+        container still serves the old image and its bare repo still carries
+        remote.origin.fetch=+refs/*:refs/*, so live pushes keep needing a
+        redundant second push to converge (reproduced this cycle: a1d1ea4c was
+        clobbered to 884d32f1 by the reconcile fetch). Forge hosts cannot
+        rebuild container images (no podman). A podman-capable host must rebuild
+        the tillandsias-git image so the safe refspec + tagOpt + explicit
+        empty-mirror seed take effect (the entrypoint re-applies the config on
+        every start, so no volume recreation is needed once the image ships),
+        restart the mirror container, and live-verify.
+      exit_criteria:
+        - "tillandsias-git image rebuilt from the order-301 entrypoint.sh and the mirror container restarted"
+        - "the restarted mirror's bare repo advertises remote.origin.fetch=+refs/heads/*:refs/remotes/origin/* (not +refs/*:refs/*)"
+        - "a single push of a fresh commit leaves local, mirror (git://tillandsias-git), and GitHub advertising the same SHA with no redundant second push"
+        - "litmus:git-mirror-ref-convergence stays green"
+      events:
+        - type: filed
+          ts: "2026-07-12T18:32:00Z"
+          agent_id: "forge-tillandsias-opus48-20260712T1815Z"
+          host: forge
+          summary: >
+            Deployment residual of order 301: the code fix cannot take effect on
+            the live mirror from a forge host (no podman to rebuild the image).
+            Split out so a podman-capable host ships and live-verifies it.
