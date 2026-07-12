@@ -1,6 +1,39 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T18:06:31Z
+LastExecutionTime: 2026-07-12T18:26:08Z
+
+## Cycle 2026-07-12T18:15Z→18:30Z (forge — meta-orchestration: order 301 DONE, mirror ref-clobber fixed)
+
+- **Startup/sync**: Forge on `linux-next`, clean at 884d32f1; credential guard
+  `ok:forge-git-mirror`. Sibling heads: main 9632165a, linux-next 884d32f1,
+  windows-next e50ab2f2, osx-next 9632165a.
+- **Drained order 301 (mirror relay ref-clobber, the loop's own push-convergence
+  bug)**: `images/git/entrypoint.sh` reconcile fetch now uses
+  `+refs/heads/*:refs/remotes/origin/*` with `tagOpt=--no-tags`, so a
+  stale-upstream fetch in the post-receive hook / startup retry loop lands in
+  remote-tracking refs and no longer force-overwrites a just-received exported
+  branch. Empty mirrors are seeded once with an explicit
+  `+refs/heads/*:refs/heads/*` + `+refs/tags/*:refs/tags/*` refspec so clones
+  still see heads/tags. This is the root cause of "first push advances GitHub,
+  mirror stays one commit stale until an identical second push".
+- **Verifiable closure**: new offline fixture
+  `scripts/test-git-mirror-ref-convergence.sh` (bound as
+  `litmus:git-mirror-ref-convergence` under git-mirror-service) runs each
+  divergence case under BOTH the legacy unsafe `+refs/*:refs/*` (must reproduce
+  the bug) and the safe refspec (must converge) — a true differential
+  regression pin, no network/Podman. Spec gained the "Reconciliation fetch
+  never clobbers exported refs" requirement + 2 scenarios.
+- **Verification**: fixture PASS (3 cases + controls); `run-litmus-test.sh
+  git-mirror-service` instant 3/3 PASS (safe-refspec-push, ref-convergence,
+  yaml-gate-shape), 1 SKIP (enclave-isolation, no podman); `build.sh --check`
+  PASS; `tillandsias-policy validate-yaml` PASS; `bash -n` + `git diff --check`
+  clean.
+- **Captured (reduction engine)**: forge dev hosts set a global
+  `core.hooksPath` that silently shadows per-repo hooks (bit the fixture; cost
+  2 debug iterations) → `plan/issues/optimization/forge-global-hookspath-shadows-repo-hooks-2026-07-12.md`.
+- **E2E**: Forge has no destructive E2E lane (`skip:no-podman-binary`).
+- **Finalization**: one completion checkpoint; require local + mirror + direct
+  GitHub `linux-next` agreement before exit (validates the very fix landed).
 
 ## Cycle 2026-07-12T17:52Z→18:06Z (forge — meta-orchestration: order 300 DONE, mirror race root-caused)
 

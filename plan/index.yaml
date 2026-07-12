@@ -9122,7 +9122,7 @@ plan_index:
     - packet_id: git-mirror-fetch-clobbers-exported-ref
       order: 301
       title: "Git mirror: prevent relay fetch from clobbering just-received exported refs"
-      status: ready
+      status: done
       kind: bug+test
       deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
       depends_on: []
@@ -9154,3 +9154,34 @@ plan_index:
             first-push divergence and deterministic local fixture identified
             the fetch refspec clobber. No production mirror code changed in this
             cycle; order 300 remained the sole implementation packet.
+        - type: claim
+          ts: "2026-07-12T18:16:00Z"
+          agent_id: "forge-tillandsias-opus48-20260712T1815Z"
+          host: forge
+          lease_id: "forge-tillandsias-opus48-20260712T1815Z"
+          expires_at: "2026-07-12T22:16:00Z"
+        - type: completed
+          ts: "2026-07-12T18:30:00Z"
+          agent_id: "forge-tillandsias-opus48-20260712T1815Z"
+          host: forge
+          lease_id: "forge-tillandsias-opus48-20260712T1815Z"
+          summary: >
+            images/git/entrypoint.sh now sets remote.origin.fetch to
+            "+refs/heads/*:refs/remotes/origin/*" with tagOpt=--no-tags so the
+            post-receive and startup-retry reconcile fetches land in
+            remote-tracking refs only, never clobbering a just-received
+            exported branch; empty mirrors are seeded once with an explicit
+            "+refs/heads/*:refs/heads/*" + "+refs/tags/*:refs/tags/*" refspec so
+            clones still see heads and tags. Pinned by the new offline fixture
+            scripts/test-git-mirror-ref-convergence.sh (bound as
+            litmus:git-mirror-ref-convergence under git-mirror-service), which
+            runs each divergence case under both the legacy unsafe refspec (must
+            reproduce the bug) and the safe refspec (must converge). Spec
+            git-mirror-service gained the "Reconciliation fetch never clobbers
+            exported refs" requirement + two scenarios.
+          evidence:
+            - "scripts/test-git-mirror-ref-convergence.sh: PASS (case1 safe converges + unsafe control diverges; case2 safe forwards stranded + unsafe control strands; case3 empty-seed cloneable)"
+            - "run-litmus-test.sh git-mirror-service --phase pre-build --size instant: 3 PASS / 0 FAIL (safe-refspec-push, ref-convergence, yaml-gate-shape), 1 SKIP (enclave-isolation, no podman)"
+            - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS (fmt, type-check, clippy strict + listen-vsock)"
+            - "target/release/tillandsias-policy validate-yaml: new litmus, bindings, plan/index.yaml PASS"
+            - "bash -n on entrypoint.sh + fixture, git diff --check: clean"

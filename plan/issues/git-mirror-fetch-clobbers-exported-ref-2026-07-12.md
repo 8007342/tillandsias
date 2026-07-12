@@ -3,7 +3,9 @@
 - Date: 2026-07-12
 - Class: bug + behavioral test
 - Found on: Forge, normal blind `git push origin linux-next`
-- Status: ready (order 301)
+- Status: done (order 301) — fixed 2026-07-12 (forge, opus48). Safe reconcile
+  refspec + explicit empty-mirror seed in images/git/entrypoint.sh; pinned by
+  litmus:git-mirror-ref-convergence (scripts/test-git-mirror-ref-convergence.sh).
 
 ## Observation
 

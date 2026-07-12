@@ -373,9 +373,10 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:git-mirror-safe-refspec-push
+  - litmus:git-mirror-ref-convergence
   - litmus:git-mirror-yaml-gate-shape
   coverage_ratio: 75
-  last_verified: '2026-07-10'
+  last_verified: '2026-07-12'
 - spec_id: github-credential-health
   status: active
   litmus_tests:

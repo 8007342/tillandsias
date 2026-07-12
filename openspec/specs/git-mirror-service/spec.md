@@ -118,6 +118,34 @@ in the forge push. If no remote is configured, the hook SHALL be a no-op.
 - **AND** the commits SHALL remain safe in the local mirror
 - **AND** the user can refresh credentials via "GitHub Login" in the tray
 
+### Requirement: Reconciliation fetch never clobbers exported refs
+The mirror's reconciliation `git fetch origin` (in both the post-receive hook
+and the startup retry loop) SHALL update remote-tracking refs
+(`refs/remotes/origin/*`) only and SHALL NOT map upstream branches or tags onto
+the mirror's exported `refs/heads/*` or `refs/tags/*`. The bare repo's
+`remote.origin.fetch` SHALL be `+refs/heads/*:refs/remotes/origin/*` with
+`remote.origin.tagOpt=--no-tags`. A newly initialized empty mirror SHALL be
+seeded once with an explicit `+refs/heads/*:refs/heads/*` and
+`+refs/tags/*:refs/tags/*` refspec so clones over the git daemon observe heads
+and tags. The unsafe all-refs direct mapping (`+refs/*:refs/*`) SHALL NOT be
+restored.
+
+@trace spec:git-mirror-service
+
+#### Scenario: One push converges mirror and upstream
+- **WHEN** a forge pushes a new commit to the mirror while upstream is stale
+- **THEN** the post-receive reconcile fetch SHALL leave the just-received
+  `refs/heads/*` untouched
+- **AND** after the relay push the mirror and upstream SHALL advertise the same
+  SHA without requiring a second identical push
+
+#### Scenario: Startup retry forwards a locally stranded commit
+- **WHEN** a prior session left a commit in the mirror that never reached upstream
+- **AND** the startup retry loop reconcile-fetches before re-pushing
+- **THEN** the fetch SHALL NOT reset the mirror's exported head to the stale
+  upstream SHA
+- **AND** the stranded commit SHALL be forwarded to upstream
+
 ### Requirement: GitHub token delivery uses Vault AppRole
 The git service container SHALL receive a short-lived Vault AppRole token scoped
 to `git-mirror-policy`. The launcher SHALL mount that token as a podman secret
@@ -310,12 +338,14 @@ GitHub project the host user has cloned, without source changes.
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation` — Verify git service is enclave-only and credentials never leak
 - `litmus:git-mirror-safe-refspec-push` — Verify post-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and guard bulk deletes.
+- `litmus:git-mirror-ref-convergence` — Verify the reconcile fetch lands in remote-tracking refs only (one push converges mirror + upstream; startup retry forwards a stranded commit; empty-mirror seeding stays cloneable).
 
 Gating points:
 - Bare mirror created at `/srv/git/<project>` inside `tillandsias-mirror-<project>` on first launch
 - git daemon serves clones from enclave network only; external clones fail
 - Post-receive hook forwards only changed refs to remote if configured, logs result with no credentials
 - Startup retry-push uses explicit branch/tag refspecs, never `--mirror` or `--all`
+- Reconcile fetch maps upstream into `refs/remotes/origin/*` only; empty mirrors seeded with an explicit heads/tags refspec (one push converges mirror + upstream)
 - Vault AppRole token is the only credential path (legacy keyring fallback removed in v0.3)
 - Forge containers cannot access any credentials (no D-Bus, no token files, no git config)
 - Mirror sync event-driven by filesystem watcher, zero polling
