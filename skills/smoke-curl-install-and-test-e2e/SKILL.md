@@ -197,6 +197,26 @@ of findings come out of this step:
 
 File every distinct issue from both streams (see §5).
 
+### 4b — First-launch egress assertion (order 298 regression)
+
+While Step 4's forge lane is up (right after the agent terminal appears, or as
+soon as `04-opencode.log` shows the lane container starting), assert from the
+HOST that the shared proxy survived launch — v0.3.260711.8 tore down
+`tillandsias-proxy` during first-launch bring-up, so every pristine install got
+a forge whose baked proxy env resolved to nothing (`Could not resolve proxy:
+proxy`), and the fail-soft harness installer then shipped zero harnesses:
+
+```bash
+podman ps --format '{{.Names}}' | tee target/smoke-e2e/04b-containers.txt
+grep -q '^tillandsias-proxy$' target/smoke-e2e/04b-containers.txt \
+  && echo "egress assertion: proxy alive alongside lane" \
+  || echo "FINDING: tillandsias-proxy ABSENT while a lane container runs (order 298 regression)"
+```
+
+If the proxy is absent, also check `04-opencode.log` for the unconditional
+teardown trace (`no active lane containers; cleaning project + shared stack`)
+to identify the actor, and file the finding with that line as evidence.
+
 ---
 
 ## 5 — File findings as plan/issues work packets

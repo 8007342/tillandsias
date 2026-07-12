@@ -8875,7 +8875,7 @@ plan_index:
     - packet_id: curl-install-first-launch-proxy-absent
       order: 298
       title: "Fresh curl-install (v0.3.260711.8): maintenance terminal comes up with proxy hostname unresolvable — order 289 recurrence post-fix"
-      status: claimed
+      status: done
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -8914,6 +8914,25 @@ plan_index:
           host: linux_mutable
           lease_id: "curl-install-first-launch-proxy-absent-20260712T1006Z"
           expires_at: "2026-07-12T14:08:00Z"
+        - type: completed
+          ts: "2026-07-12T10:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T1006Z"
+          host: linux_mutable
+          summary: >
+            ROOT CAUSE (from source, no host log needed): in
+            ensure_enclave_for_project the order-252 migration put
+            container_deps::ensure_forge_launch (starts the proxy) BEFORE
+            cleanup_shared_stack_if_no_running_forge (removes the proxy
+            when no lane is live) — and on a pristine first launch no lane
+            exists yet, so the launcher tore down the proxy it had just
+            started, then launched the lane with a dead baked proxy env.
+            Any pre-existing running lane masks the bug, which is why only
+            fresh curl-installs hit it. FIX: cleanup now runs before the
+            dependency-model ensure (single bring-up path preserved);
+            ordering pinned by unit test
+            enclave_bringup_cleans_up_before_ensuring_prerequisites, and
+            the curl-install smoke gained step 4b (proxy-alive-alongside-
+            lane host assertion). 144 headless tests pass.
 
     - packet_id: first-run-harness-bootstrap-fail-loud
       order: 299
