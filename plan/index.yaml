@@ -9743,3 +9743,79 @@ plan_index:
             in-session by launching the tray from the elevated agent
             shell. This packet is the release gate for any
             standard-user-facing Windows install.
+
+    - packet_id: git-mirror-architecture-revamp
+      order: 315
+      title: "Revamp the git-mirror architecture: quarantine host origin config from the forge, env-scoped transparent routing, push success = durable upstream delivery"
+      status: ready
+      kind: research
+      deliverable: openspec change proposal for git-mirror-service (spec deltas + litmus updates), then staged implementation packets
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, git-mirror, enclave, forge, security, spec]
+      estimated_hours: 8
+      outcome: >
+        Operator directive (The Tlatoāni, 2026-07-12 attended macOS
+        smoke): "It's due time we revamp the git-mirror architecture."
+        One day produced: mirror push false-success (acked, tracking
+        refs updated, never relayed to GitHub — P1
+        git-mirror-push-false-success-not-relayed-2026-07-12.md);
+        in-forge agent hand-writing insteadOf into the HOST-SHARED
+        .git/config, breaking host git until quarantined
+        (forge-mirror-insteadof-missing-2026-07-12.md + addendum);
+        credential-channel guard's forge bypass never engaging in the
+        macOS lane AND being a false promise where it would have
+        (forge-credential-channel-missing-2026-07-12.md); loud reject
+        path vs silent lossy accept path
+        (mirror-pre-receive-openspec-yaml-reject-2026-07-12.md).
+        Design constraints and full defect inventory in
+        plan/issues/git-mirror-architecture-revamp-2026-07-12.md.
+      exit_criteria:
+        - "openspec change proposal for git-mirror-service accepted by The Tlatoani covering: forge-scoped routing/credential injection (never shared .git/config), relay-verified push acks or queryable relay state, re-derived ok:forge guard semantics"
+        - "guard/litmus fails loud when a forge agent writes url/credential config into the shared repo config"
+        - "cross-platform statement: same model holds for host-shared (macOS virtiofs) and mirror-materialized (Linux volume) checkouts"
+      events:
+        - type: filed
+          ts: "2026-07-12T23:30:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260712T2205Z"
+          host: macos
+          summary: >
+            Filed per operator directive during the attended smoke;
+            consolidates the day's push-channel defects into one
+            architecture packet. Shaping the openspec proposal is the
+            first claimable slice.
+
+    - packet_id: brew-aarch64-harness-strategy
+      order: 316
+      title: "Brew harness strategy: keep brew only for officially-brew-documented tools; per-arch policy for aarch64 Linux (Tier 2, no bottles)"
+      status: ready
+      kind: enhancement
+      deliverable: images/default brew shims + harness install channel inventory (plan/issues/brew-aarch64-harness-strategy-2026-07-12.md scope)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [images, forge, harnesses, brew, ux]
+      estimated_hours: 5
+      outcome: >
+        Operator decision (The Tlatoāni, 2026-07-12): keep brew as the
+        harness/agent install channel ONLY for tools whose official
+        websites document brew installs; use official channels (npm,
+        curl, release binaries) for the rest. Live evidence: Linux
+        aarch64 (every macOS-hosted guest) is Homebrew Tier 2 — no
+        supported bottles, source-build degradation — plus the
+        attestation token gap
+        (brew-shim-attestation-requires-gh-token-2026-07-12.md, folds
+        in). Scope, per-arch policy, and verifiable closure in
+        plan/issues/brew-aarch64-harness-strategy-2026-07-12.md.
+      exit_criteria:
+        - "harness inventory: official-brew set vs official-other set, recorded with provenance links"
+        - "aarch64 guest: every inventoried harness installs via its designated channel with visible progress, or fails with one actionable line (no silent 127s)"
+        - "shim wrapper owns the Tier-2 warning with a one-line policy statement"
+      events:
+        - type: filed
+          ts: "2026-07-12T23:30:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260712T2205Z"
+          host: macos
+          summary: >
+            Filed recording the operator's keep-brew-for-official-brew
+            decision from the attended macOS smoke; aarch64 Tier-2
+            behavior observed live in the guest.

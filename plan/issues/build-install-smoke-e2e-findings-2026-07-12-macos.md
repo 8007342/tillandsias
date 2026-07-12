@@ -67,3 +67,19 @@ against open `plan/issues/` packets from this run.
   `macos-lane-launch-dead-after-opencode-close-2026-07-12.md` (P1).
 - Windows P1 hardening audit ask: macOS unit templates grep clean
   (note appended to `headless-podman-events-watcher-rootless-wedge…`).
+
+## Attended smoke, phase 3 (~16:00–16:30): tray relaunch + operator verdict
+
+- Tray relaunch (dist/ bundle): recovers the lane wedge fully — GitHub
+  Login PASS first try, project listing PASS, OpenCode lane launches.
+  Fresh login WAS required after the VM restart (observation routed to
+  `agent-login-flows-vault-2026-07-12.md` scope).
+- Resize-not-propagated reproduced on the new session (already filed);
+  terminals otherwise behaved correctly.
+- In-forge meta-orchestration #2 failed fast on
+  `missing:no-credential-channel` and correctly filed a blocker +
+  local-only commit (`forge-credential-channel-missing-2026-07-12.md`,
+  picked up and pushed by the host this cycle).
+- Operator verdict: solid progress validating the macOS e2e architecture;
+  git-mirror architecture revamp is due (promoted as order 315); brew
+  stays for officially-brew-documented harnesses only (order 316).
