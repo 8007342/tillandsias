@@ -47,3 +47,23 @@ against open `plan/issues/` packets from this run.
 - brew direnv shim: **FAIL** — attestation verification requires a GitHub
   API token a pristine guest lacks (egress itself healthy). Filed as
   `brew-shim-attestation-requires-gh-token-2026-07-12.md` (P2).
+
+## Attended smoke, phase 2 (~15:30–16:00): forge lane exercised end-to-end
+
+- OpenCode lane retry: PASS — in-forge agent ("Big Pickle") ran a full
+  meta-orchestration cycle; first-attach blank-lane packet updated (race
+  confirmed first-attach-only).
+- TUI resize never propagates (colors + mouse fine): filed
+  `macos-opencode-pty-resize-not-propagated-2026-07-12.md` (P2).
+- Forge push channel: agent had no credentials → applied a repo-local
+  insteadOf rewrite (its own packets `forge-mirror-insteadof-missing…`,
+  `mirror-pre-receive-openspec-yaml-reject…`) which ALSO poisoned host git
+  (shared checkout — addendum appended to its packet; host quarantined the
+  line). Mirror acked the push but never relayed to GitHub: filed
+  `git-mirror-push-false-success-not-relayed-2026-07-12.md` (P1); stranded
+  commits re-delivered from the host (`33da90ab` verified on GitHub).
+- After closing OpenCode: ALL new lane launches die instantly while the
+  original maintenance lane stays live: filed
+  `macos-lane-launch-dead-after-opencode-close-2026-07-12.md` (P1).
+- Windows P1 hardening audit ask: macOS unit templates grep clean
+  (note appended to `headless-podman-events-watcher-rootless-wedge…`).

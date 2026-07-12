@@ -61,3 +61,14 @@ running while the OpenCode lane sat blank).
 Destructive reprovision (rm VM dir + cache, `--provision`), launch tray,
 `--github-login`, then click OpenCode on a project as the FIRST lane attach.
 Observed once (attended); rate unknown.
+
+## Update (same session, ~15:30): retry succeeded — first-attach-only race confirmed
+
+The operator relaunched the OpenCode lane after the shared stack was warm
+and it came up fully (ran a complete in-forge meta-orchestration cycle).
+This narrows the defect to the first-attach window while the shared-stack
+ensure/cleanup is in flight — strengthening hypothesis (2): the sibling
+lane's `cleaning project + shared stack` racing the OpenCode lane's ensure.
+Subsequent distinct defects from the same session are filed separately:
+`macos-opencode-pty-resize-not-propagated-2026-07-12.md`,
+`macos-lane-launch-dead-after-opencode-close-2026-07-12.md`.
