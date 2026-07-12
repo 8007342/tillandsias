@@ -41,6 +41,20 @@ next launch.
 - The GitHub Login Flow (vault write at `secret/github/token` +
   `gh auth login --with-token` inside the git service) is the UX model.
 
+## Operator amendment (2026-07-12, evening)
+
+For Claude and Codex, REPLACE the "paste your token" login flow with the
+**device login flow** (`--device` style): the provider prints a short code
+plus an easy-to-copy URL the user opens in any browser themselves. Do NOT
+rely on the agent's default interactive login, which tries to open a browser
+window / render a clickable terminal URL — in the forge terminal that either
+fails to render or spills escape garbage into the pasted OAuth token (the
+operator has hit exactly this, and has logged in successfully with the
+device flow before). Concretely: run the agent's regular login command with
+its device-flow flag so it never attempts to open a browser. The existing
+`AuthModel::OAuthDevice` in `run_provider_login` is the right shape; the
+token_script for Claude/Codex must drive the device flow, not paste-token.
+
 ## Desired behavior (spec sketch)
 
 For each of Claude / Codex / Antigravity, at launch (tray AND CLI lanes):

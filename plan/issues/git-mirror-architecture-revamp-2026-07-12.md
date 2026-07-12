@@ -1,7 +1,11 @@
 # Git-mirror architecture revamp — operator-directed consolidation of the 2026-07-12 push-channel failures
 
 - Date: 2026-07-12
-- Class: research → openspec change (promoted as plan/index.yaml order 315)
+- Class: research → INPUT to plan/index.yaml order 315
+  `git-mirror-architecture-audit` (linux-filed, broader, heavy-agent; the
+  order-315 collision between this file's own promotion and the audit was
+  resolved in the audit's favor — this file survives as its
+  design-constraints + defect-inventory input)
 - Directive: The Tlatoāni, 2026-07-12 attended smoke: "It's due time we
   revamp the git-mirror architecture."
 - Owner spec: `openspec/specs/git-mirror-service/`

@@ -9358,6 +9358,17 @@ plan_index:
         - "tray Claude/Codex/Antigravity launches call the ensure_provider_auth ladder before spawning the terminal"
         - "vault-present credential launches with no login prompt"
       events:
+        - type: amended
+          ts: "2026-07-13T00:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Operator amendment 2026-07-12: Claude/Codex login must use the
+            DEVICE flow (--device style: short code + copyable URL, never
+            open a browser or render clickable URLs — those spill escape
+            garbage into the pasted token in forge terminals). Paste-token
+            flow is replaced, not kept as fallback UX. Details in the
+            deliverable issue file.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -9389,6 +9400,17 @@ plan_index:
         - "vault paths per provider documented; no credential lands in the project workspace or image"
         - "fixture/litmus: synthetic token harvested from a fake agent credential path into the vault and injected on next launch"
       events:
+        - type: amended
+          ts: "2026-07-13T00:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Operator amendment 2026-07-12: Claude/Codex login must use the
+            DEVICE flow (--device style: short code + copyable URL, never
+            open a browser or render clickable URLs — those spill escape
+            garbage into the pasted token in forge terminals). Paste-token
+            flow is replaced, not kept as fallback UX. Details in the
+            deliverable issue file.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -9744,46 +9766,152 @@ plan_index:
             shell. This packet is the release gate for any
             standard-user-facing Windows install.
 
-    - packet_id: git-mirror-architecture-revamp
-      order: 315
-      title: "Revamp the git-mirror architecture: quarantine host origin config from the forge, env-scoped transparent routing, push success = durable upstream delivery"
+    - packet_id: inference-firstrun-install-resilience
+      order: 313
+      title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
       status: ready
-      kind: research
-      deliverable: openspec change proposal for git-mirror-service (spec deltas + litmus updates), then staged implementation packets
+      kind: bug
+      deliverable: images/inference/entrypoint.sh
       depends_on: []
       pickup_role: linux
-      capability_tags: [linux, git-mirror, enclave, forge, security, spec]
-      estimated_hours: 8
+      capability_tags: [inference, containers, shell, lifecycle, e2e]
+      estimated_hours: 3
       outcome: >
-        Operator directive (The Tlatoāni, 2026-07-12 attended macOS
-        smoke): "It's due time we revamp the git-mirror architecture."
-        One day produced: mirror push false-success (acked, tracking
-        refs updated, never relayed to GitHub — P1
-        git-mirror-push-false-success-not-relayed-2026-07-12.md);
-        in-forge agent hand-writing insteadOf into the HOST-SHARED
-        .git/config, breaking host git until quarantined
-        (forge-mirror-insteadof-missing-2026-07-12.md + addendum);
-        credential-channel guard's forge bypass never engaging in the
-        macOS lane AND being a false promise where it would have
-        (forge-credential-channel-missing-2026-07-12.md); loud reject
-        path vs silent lossy accept path
-        (mirror-pre-receive-openspec-yaml-reject-2026-07-12.md).
-        Design constraints and full defect inventory in
-        plan/issues/git-mirror-architecture-revamp-2026-07-12.md.
+        Attended Windows smoke 2026-07-12: on the pristine substrate the
+        first agent-lane launch raced the enclave proxy's restart/warm-up
+        window — the entrypoint's proxied ollama download failed, its
+        documented fallback ("retry direct, no proxy") is dead by design
+        INSIDE the enclave (no DNS egress: curl 6), both stderr streams
+        are discarded (2>/dev/null, order-291 class), and the container
+        exits 1 with only "install FAILED". Verified after warm-up that
+        the identical proxied curl succeeds (github is SPLICED by squid —
+        real Sectigo chain against the system store; HTTP 200, 1.4 GB).
+        Compounding defects found by inspection: (a) the CA-injection
+        block uses Debian's update-ca-certificates + /usr/local/share/
+        ca-certificates on a Fedora Minimal image — it has NEVER worked
+        (command absent, swallowed by || true); Fedora needs
+        /etc/pki/ca-trust/source/anchors + update-ca-trust — required the
+        day squid bumps instead of splicing; (b) OLLAMA_BINDIR
+        ("${OLLAMA_MODELS}.tools") is a SIBLING of the mounted models
+        volume, i.e. container-local — the "persists across restarts"
+        claim only holds for the same container, not recreation. Fix:
+        in-enclave-aware retry/backoff (retry PROXIED with delay, drop
+        the dead direct fallback when the proxy resolves), keep + surface
+        stderr, Fedora CA injection, move .tools inside the mounted
+        volume, and a first-run assertion mirroring order 299's loud
+        floor.
       exit_criteria:
-        - "openspec change proposal for git-mirror-service accepted by The Tlatoani covering: forge-scoped routing/credential injection (never shared .git/config), relay-verified push acks or queryable relay state, re-derived ok:forge guard semantics"
-        - "guard/litmus fails loud when a forge agent writes url/credential config into the shared repo config"
-        - "cross-platform statement: same model holds for host-shared (macOS virtiofs) and mirror-materialized (Linux volume) checkouts"
+        - "first-run install retries the proxied path with backoff and surfaces the real curl error on failure (no 2>/dev/null)"
+        - "CA injection works on the Fedora image (update-ca-trust; verified by a litmus or in-container probe)"
+        - "ollama binary persists across container recreation (path inside the mounted volume)"
+        - "pristine-substrate first lane launch installs ollama through a just-started proxy (e2e evidence)"
       events:
         - type: filed
-          ts: "2026-07-12T23:30:00Z"
+          ts: "2026-07-12T22:50:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Filed from live isolation during the attended smoke (probes:
+            enclave-dead direct path curl 6; post-warm-up proxied 200;
+            splice confirmed via Sectigo issuer). Operator unblocked by
+            removing the exited container so the next ensure recreates it.
+
+    - packet_id: container-ensure-not-idempotent-exited
+      order: 314
+      title: "P1: container ensure does bare `podman run --name` — an EXITED dependency container name-collides (125) and is classified retry-Permanent, blocking every lane"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, containers, rust, cross-host]
+      estimated_hours: 3
+      outcome: >
+        Attended Windows smoke 2026-07-12: after tillandsias-inference
+        exited 1 (order 313), EVERY lane launch — agent AND maintenance —
+        failed at the dependency-ensure stage: the ensure issues
+        `podman run --detach --name tillandsias-inference ...` while the
+        exited container still owns the name, podman exits 125 ("name
+        already in use"), and the stage classifies it retry: Permanent —
+        the operator-reported "now nothing launches". A manual
+        `podman start tillandsias-inference` re-ran the entrypoint fine.
+        DECIDED (The Tlatoāni, 2026-07-12, live during the smoke): use
+        `--replace` on the ensure's podman run — wipe the exited instance
+        and take over; fine for this use case, atomic, and a fresh run
+        still re-executes the entrypoint's own retry logic. Ensure must
+        be idempotent across container states (running: no-op; otherwise
+        run --replace); name-collision 125 must never be Permanent. Pin
+        with a unit/litmus on the ensure decision table. The
+        operator-facing error rendering was GOOD (structured cause +
+        argv + logs via the exit-pause trap) — keep it.
+      exit_criteria:
+        - "ensure runs with --replace (operator-decided); running containers are not needlessly replaced (decision-table test)"
+        - "an exited dependency container no longer blocks lane launches (repro: exit the inference container, launch a lane)"
+        - "125 name-in-use is never classified Permanent"
+      events:
+        - type: filed
+          ts: "2026-07-12T22:50:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Filed from the operator's structured lane-failure capture
+            (full podman argv + stderr + container state) during the
+            attended smoke; unblocked live via podman rm of the exited
+            container.
+
+    - packet_id: git-mirror-architecture-audit
+      order: 315
+      title: "Full git-mirror architecture audit — SIMPLICITY: DEFAULTS OVER CONFIGURATION (heavy-agent, provenance-backed)"
+      status: ready
+      kind: research
+      multi_cycle: true
+      deliverable: plan/issues/git-mirror-architecture-audit-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, security, architecture, research, heavy-agent]
+      estimated_hours: 12
+      outcome: >
+        Operator directive: audit the whole git-mirror + credential +
+        proxy-env architecture with the heaviest agents (Fable/Opus) against
+        enterprise best practices for git mirrors and distributed concurrent
+        teams. Facts + cheatsheets with rightful provenance. Principle:
+        DEFAULTS OVER CONFIGURATION — minimize env params (polluted,
+        runtime-incompatible); evaluate proper git credential helpers over
+        script hacks. Evidence base: mirror false-success P1, insteadOf
+        host-poisoning, ref-clobber (301/302), guard channel gap.
+      exit_criteria:
+        - "cheatsheets/git-mirror-architecture-audit.md exists: current-state map, every claim with file:line/commit provenance"
+        - "cheatsheets/git-mirror-enterprise-practices.md exists: sourced baseline (URL/man-page + retrieved date on every load-bearing claim)"
+        - "every env var / config injection dispositioned: keep-justified, replace-with-default, or delete"
+        - "mirror ack semantics specified: no success without durable relay state, pinned by litmus"
+        - "bidirectional host/forge git-config isolation fixture"
+        - "migration-ladder child packets filed"
+      events:
+        - type: filed
+          ts: "2026-07-13T00:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Filed per operator directive after macOS attended smoke surfaced
+            the mirror false-success P1 and insteadOf host-poisoning; audit
+            launched same cycle with Fable fork (current-state map) + Opus
+            researcher (best-practice baseline).
+        - type: progress
+          ts: "2026-07-13T00:20:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260712T2205Z"
           host: macos
           summary: >
-            Filed per operator directive during the attended smoke;
-            consolidates the day's push-channel defects into one
-            architecture packet. Shaping the openspec proposal is the
-            first claimable slice.
+            DEDUPE: macos independently promoted the same directive as a
+            "git-mirror-architecture-revamp" node (order-315 collision,
+            resolved in favor of this audit). Its design-constraints +
+            defect-inventory file
+            plan/issues/git-mirror-architecture-revamp-2026-07-12.md is
+            folded in as audit input: quarantine host origin config from
+            the forge (env-scoped injection, never shared .git/config),
+            relay-verified acks, re-derived ok:forge guard semantics,
+            host-shared (macOS virtiofs) vs mirror-materialized (Linux)
+            cross-platform statement, plus Big Pickle #2's in-forge
+            blocker forge-credential-channel-missing-2026-07-12.md.
 
     - packet_id: brew-aarch64-harness-strategy
       order: 316
