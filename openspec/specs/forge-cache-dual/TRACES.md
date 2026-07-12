@@ -21,6 +21,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/mcp/git-tools.sh#L133](../../../images/default/config-overlay/mcp/git-tools.sh#L133)
 - [images/default/config-overlay/shell-helpers.sh#L2](../../../images/default/config-overlay/shell-helpers.sh#L2)
 - [images/default/config-overlay/shell-helpers.sh#L213](../../../images/default/config-overlay/shell-helpers.sh#L213)
-- [images/default/lib-common.sh#L512](../../../images/default/lib-common.sh#L512)
-- [images/default/lib-common.sh#L550](../../../images/default/lib-common.sh#L550)
+- [images/default/lib-common.sh#L519](../../../images/default/lib-common.sh#L519)
+- [images/default/lib-common.sh#L557](../../../images/default/lib-common.sh#L557)
 - [scripts/test-cache-semantics.sh#L3](../../../scripts/test-cache-semantics.sh#L3)
