@@ -1,6 +1,57 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T19:45:00Z
+LastExecutionTime: 2026-07-12T21:50:00Z
+
+## Cycle 2026-07-12T19:40Z→21:50Z (windows — meta-orchestration + operator-attended smoke: orders 297+274 DONE, TWO new P1s root-caused live (308 unit cap-hardening, 310 antigravity singleton-kill), destructive cold e2e PASS)
+
+- **Host**: Windows 11, `windows-next`, agent windows-bullo-fable5-20260712T1940Z,
+  operator (The Tlatoāni) at the tray. Credential guard `ok:gh-credentials-store`.
+  Startup: merged origin/linux-next (fast-forward e50ab2f2→5a4d350d, release
+  v0.3.260712.1). Sibling heads: main 38d33cd8, osx-next 9632165a.
+- **Drained order 297 (windows-guest-disk, macOS-294 sibling) — DONE**: fresh
+  WSL 2.7.3 guest measured 1007 GiB / 955 GiB free (1 TB dynamic VHDX — no
+  macOS-style 5 GB wall); added provisioning-time headroom assertion to both
+  wsl.rs paths (32 GiB hard floor + 240 GiB parity warn, host-side df parse,
+  3 pin/boundary tests). Runtime-confirmed on the live cold path ("guest root
+  headroom OK: 954 GiB") and end-to-end by the forge-base build (3.1 GB image,
+  5 GiB used / 951 GiB free after). Commit 7eaa8319.
+- **Drained order 274 (lock-namespace) — DONE**: criterion-3 probe discharged
+  live — first GitHub Login on the pristine distro reached credential prompts,
+  completed twice, zero name-in-use hits in the full journal. Caveat recorded:
+  the suggested grep false-positives on unrelated build exit-125s.
+- **Destructive cold e2e PASS**: build+install (freshness gate: installed
+  0.3.260712.1==HEAD) → wsl --unregister + cache wipe → cold provision
+  (download stall self-recovered via Range retries; import; base packages;
+  configure; handshake attempt 1, wire v2) → status probe Ready/podman_ready.
+- **NEW P1 order 308 (DONE, 989173ba)**: recipe unit's NoNewPrivileges +
+  CapabilityBoundingSet left the uid-0 headless at CapEff=0x400 → cap-stripped
+  podman went ROOTLESS (empty store, pause fatals) → every headless-driven
+  ensure died 125 in a 2s loop while tray-driven wsl.exe flows worked → tray
+  stuck on "securing vault" after successful logins. Root-caused live
+  (journal _CMDLINE + CapEff), directives removed from the unit writer +
+  pin asserts; least-privilege reintroduction split to order 309 (incl. macOS
+  vz unit audit).
+- **NEW P1 order 310 (DONE)**: --antigravity missing from is_cli_mode — the
+  order-296 Antigravity leaf's lane invocation acquired the launcher
+  SingletonGuard and TERM+KILLed the running headless service (operator click
+  tore down the whole stack; auto-recovered). One-line census fix + source pin
+  test enumerating every lane flag; verified in-guest (headless is unix-only).
+- **Attended parity evidence (order 258, in progress)**: login state + cloud
+  submenu with real repos + local submenu + 7-leaf project submenu (Antigravity
+  leaf present) all confirmed live by the operator; agent-PTY + status-indicator
+  cells in flight at cycle close.
+- **Findings filed**: headless-podman-events-watcher-rootless-wedge (P1
+  forensics), headless-restart-wedges-guest-podman (interim), fetch-retry
+  eprintln invisible in GUI tray, installer exit-code leak, guest-embed
+  staging version-skew (order-282 pin is test-time only — build script gate
+  missing), windows-attach silent forge-base build, litmus strict-exit
+  fallout recurrence (same 9 + new order-300 litmus; VERSION clobbered to
+  0.0.0-test-retag AGAIN — restored).
+- **Guest binary ops**: embedded staged guest was v0.3.260711.8 (stale
+  target-guest/); restaged from the v0.3.260712.1 release asset
+  (SHA-verified) + hot-swapped in-guest; rolled back and forward during the
+  308 bisection — guest ends the cycle on v0.3.260712.1 with the unit
+  override live.
 
 ## Cycle 2026-07-12T18:56Z→19:30Z (linux_mutable macuahuitl — operator smoke-test feedback drain + sibling unblock)
 

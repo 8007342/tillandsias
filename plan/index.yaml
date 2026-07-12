@@ -7271,7 +7271,7 @@ plan_index:
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
-      status: ready
+      status: done
       unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended blocker lifted"
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
@@ -7297,6 +7297,24 @@ plan_index:
         - "source pin tests fail loud if the unit and any exec preamble drift apart"
         - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
       events:
+        - type: completed
+          ts: "2026-07-12T21:05:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          lease_id: "wsl-headless-unit-lock-namespace"
+          summary: >
+            Criterion 3 DISCHARGED live on the operator-attended smoke, on a
+            same-day pristine cold provision (wsl --unregister + cold cache):
+            the operator's FIRST GitHub Login opened the popup terminal and
+            reached the credential prompts; login completed successfully
+            (twice) and the full-journal probe for the vault name-in-use
+            flock race returned ZERO hits. Evidence caveat recorded: the
+            originally suggested grep ("name.*in use|exit 125") false-
+            positives on unrelated podman build exit-125s (the order-308
+            unit-hardening wedge, present the same evening) — the discharge
+            is based on the name-in-use signature specifically, which is the
+            race order 259/274 pinned. Criteria 1+2 were closed 2026-07-10
+            (d41b3493) and runtime-confirmed on e2e 20260710T090845Z.
         - type: unblock
           ts: "2026-07-12T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -8917,7 +8935,7 @@ plan_index:
     - packet_id: windows-guest-disk-resize-forge-fit
       order: 297
       title: "Windows/WSL2 guest disk sizing for the forge-base image build (sibling of macOS order 294)"
-      status: ready
+      status: done
       kind: research+bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -8948,6 +8966,24 @@ plan_index:
         - "WSL2 guest has forge-fit headroom (matching macOS 250G intent); forge-base builds without ENOSPC"
         - "a provisioning-time free-space / disk-size assertion fails loud on regression"
       events:
+        - type: completed
+          ts: "2026-07-12T21:15:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          lease_id: "windows-guest-disk-resize-forge-fit"
+          summary: >
+            All three exit criteria evidenced on the same-day destructive
+            cold provision (7eaa8319 tray, truly cold: distro unregistered +
+            rootfs cache wiped): (1) measured fresh guest 1007 GiB total /
+            955 GiB free; (2) forge-fit headroom confirmed END-TO-END — the
+            operator's first agent attach built the full forge-base image
+            (3.1 GB, 558 packages) with the guest at 5 GiB used / 951 GiB
+            free afterward, no ENOSPC; (3) the new provisioning-time
+            assertion ran LIVE on the cold recipe path ("guest root headroom
+            OK: 954 GiB available" in tray.log at 20:21:00Z before first
+            boot wiring). No resize step needed on WSL >= 2.x (1 TB dynamic
+            VHDX default); capped environments fail loud with actionable
+            remediation.
         - type: progress
           ts: "2026-07-12T20:02:00Z"
           agent_id: "windows-bullo-fable5-20260712T1940Z"
@@ -9441,3 +9477,134 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
           host: linux_mutable
           summary: "Operator repro; observability fix landed this cycle."
+
+    - packet_id: headless-unit-cap-hardening-podman-wedge
+      order: 308
+      title: "P1: recipe headless unit's NoNewPrivileges+CapabilityBoundingSet made uid-0 podman go rootless — every headless-driven ensure wedged; tray stuck on 'securing vault' after successful login"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, systemd, podman, vault, lifecycle]
+      estimated_hours: 4
+      outcome: >
+        Root-caused live on the 2026-07-12 operator-attended smoke: the
+        recipe-path unit writer shipped NoNewPrivileges=yes +
+        CapabilityBoundingSet=CAP_NET_BIND_SERVICE (zero-trust checklist
+        item applied without podman-path validation), leaving the uid-0
+        headless at CapEff=0x400. Cap-stripped root podman selects ROOTLESS
+        mode (empty store, pause-process fatals, newuidmap unusable under
+        NNP), so the events watcher and every vault/lane ensure died 125 in
+        an unbounded 2s loop — while tray-driven wsl.exe flows kept full
+        caps and worked, leaving genuinely-healthy containers the headless
+        could not see and the tray latched on 'securing vault' forever
+        after two successful GitHub logins. Fixed by removing the two
+        directives from the unit template (rationale comment + pin
+        assertions in wsl_headless_service_prepares_runtime_env); recovery
+        validated live via drop-in override (CapabilityBoundingSet=~ — note
+        the systemd gotcha that an EMPTY assignment means the EMPTY set)
+        with both v0.3.260711.8 and v0.3.260712.1 healthy afterwards. Full
+        forensics: plan/issues/headless-podman-events-watcher-rootless-wedge-2026-07-12.md
+        (+ the interim headless-restart-wedges-guest-podman note).
+        Least-privilege reintroduction split to order 309.
+      exit_criteria:
+        - "unit template no longer carries NoNewPrivileges=/CapabilityBoundingSet= (pin test)"
+        - "live: headless CapEff full, vault ensured healthy, login state propagates to the tray (operator-verified)"
+      events:
+        - type: completed
+          ts: "2026-07-12T21:15:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Fixed in 989173ba; live-verified on the attended smoke (vault
+            healthy in seconds after override, login state + cloud/local
+            submenus populated, forge-base build proceeded). windows-tray
+            suite 55+8+3 green, fmt clean.
+
+    - packet_id: headless-least-privilege-split
+      order: 309
+      title: "Reintroduce headless least-privilege correctly: split vsock listener from podman orchestrator (or delegate via podman socket); audit macOS vz unit for the same directives"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      depends_on: [headless-unit-cap-hardening-podman-wedge]
+      pickup_role: any
+      capability_tags: [security, systemd, podman, windows, macos, vsock]
+      estimated_hours: 6
+      outcome: >
+        Order 308 removed the unit hardening because the headless is both
+        the network-facing vsock listener AND the podman orchestrator — one
+        process cannot be cap-stripped without wedging the other role. The
+        zero-trust intent (selinux-zero-trust-vsock-policy-design
+        checklist) is still right; reintroduce it with a design that works:
+        e.g. a confined listener unit talking to an unconfined orchestrator
+        over a local socket, or podman API socket delegation with the
+        headless holding only client rights. ALSO: audit the macOS vz.rs
+        cloud-init unit for the same directives before the next macOS
+        release (same failure mode if present), and add a litmus that would
+        have caught this class (headless-driven podman smoke under the
+        shipped unit constraints).
+      exit_criteria:
+        - "least-privilege design chosen and recorded (listener/orchestrator split or socket delegation)"
+        - "macOS vz unit audited; same-directive hazard confirmed absent or fixed"
+        - "a verifiable check exercises headless-driven podman under the shipped unit constraints (litmus or e2e assertion)"
+      events:
+        - type: filed
+          ts: "2026-07-12T21:15:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Split from order 308 per the reduction discipline: the fix
+            removed the constraint; this packet restores the security
+            intent under a verifiable design.
+
+    - packet_id: antigravity-lane-flag-singleton-kills-service
+      order: 310
+      title: "P1: --antigravity missing from is_cli_mode — tray Antigravity click singleton-kills the running headless service (whole VM stack torn down)"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [headless, lifecycle, tray, rust, cross-host]
+      estimated_hours: 2
+      outcome: >
+        Found live on the 2026-07-12 operator-attended Windows smoke: the
+        operator clicked the (order 296) Antigravity leaf and the lane
+        "did not even reach" the known order-307 crash — instead the
+        headless SERVICE logged 'Received shutdown signal' one second
+        after the click, was SIGKILLed 5s later, conmon hung the unit's
+        stop until systemd aborted it, and the vault/proxy stack tore
+        down (auto-recovered by Restart= 50s later). Root cause: order
+        296 wired --antigravity into flag parsing and the agent-mode
+        dispatch but NOT into the is_cli_mode census, so the lane
+        invocation (tillandsias-headless --cloud <name> --antigravity,
+        spawned by the tray into wt.exe) acquired the "launcher"
+        SingletonGuard, whose contract is "newer instances signal and
+        terminate older instances" — TERM, 5s grace, KILL against the
+        running service (journal timeline matches exactly; --bash lane
+        worked because bash IS counted). Affects every host that spawns
+        agent lanes through the headless CLI. Fix: counted antigravity
+        in is_cli_mode (one line) + rationale comment + source pin test
+        cli_mode_counts_every_lane_flag asserting EVERY parsed lane flag
+        appears in the census, so the next added agent cannot repeat
+        this class.
+      exit_criteria:
+        - "is_cli_mode counts --antigravity (and the pin test enumerates all lane flags)"
+        - "pin test green on a linux-capable build (headless is unix-only)"
+        - "tray Antigravity click no longer terminates the headless service (live re-check after next guest binary refresh)"
+      events:
+        - type: completed
+          ts: "2026-07-12T21:45:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            One-line census fix + cli_mode_counts_every_lane_flag source
+            pin; verified by in-guest cargo test (headless does not
+            compile on the Windows host — the known litmus-fallout
+            class). Live lane re-check rides the next guest-binary
+            refresh; until then the running guest (release binary)
+            still carries the bug — operator advised not to relaunch
+            Antigravity this session. Order 307 (the lane's own crash)
+            remains open and unrelated.
