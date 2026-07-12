@@ -512,6 +512,15 @@ WantedBy=multi-user.target
         .await?;
 
         // 4. tillandsias-headless.service
+        //
+        // No NoNewPrivileges / CapabilityBoundingSet here: the headless
+        // ORCHESTRATES rootful podman in-guest, and a cap-stripped uid-0
+        // process makes podman select rootless mode (empty store, pause-
+        // process fatals) — every vault/lane ensure exits 125 in a 2s loop
+        // while tray-driven wsl.exe flows keep working, so the tray latches
+        // on "securing vault" forever. Confining the vsock listener is a
+        // separate packet (split units / socket delegation); see
+        // plan/issues/headless-podman-events-watcher-rootless-wedge-2026-07-12.md.
         let headless_unit = r#"[Unit]
 Description=Tillandsias headless (in-VM vsock control wire)
 After=network-online.target podman.socket tillandsias-headless-fetch.service
@@ -519,8 +528,6 @@ Wants=network-online.target podman.socket
 Requires=tillandsias-headless-fetch.service
 [Service]
 Type=exec
-NoNewPrivileges=yes
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ExecStartPre=/usr/bin/mkdir -p /run/user/0
 ExecStartPre=/usr/bin/chmod 0700 /run/user/0
 ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
@@ -934,6 +941,20 @@ mod tests {
         assert!(
             !headless_unit.contains("Requires=podman.socket"),
             "podman.socket is a wanted readiness input, not a hard dependency for diagnostics"
+        );
+        // 2026-07-12: cap-stripping the headless makes uid-0 podman go
+        // ROOTLESS (empty store, pause-process fatals) — every vault/lane
+        // ensure dies 125 in a 2s loop and the tray latches on "securing
+        // vault" while tray-driven wsl.exe flows keep working. The headless
+        // unit must keep full root until the listener/orchestrator split
+        // lands (headless-podman-events-watcher-rootless-wedge-2026-07-12).
+        assert!(
+            !headless_unit.contains("NoNewPrivileges="),
+            "NoNewPrivileges= breaks headless-driven podman (rootless fallback wedge)"
+        );
+        assert!(
+            !headless_unit.contains("CapabilityBoundingSet="),
+            "cap-stripped uid-0 podman selects rootless mode and wedges every ensure"
         );
     }
 

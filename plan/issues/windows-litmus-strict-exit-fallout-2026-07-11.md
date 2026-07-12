@@ -49,6 +49,23 @@ fails the gate stops being falsifiable on windows — every cycle has to
 eyeball whether a FAIL is "the known ten" or a real regression, exactly the
 advisory-guard drift the reduction engine forbids.
 
+## Recurrence 2026-07-12 (windows-bullo-fable5-20260712T1940Z)
+
+Instant suite at 7eaa8319 (post v0.3.260712.1 merge): PASS 121 / FAIL 10 /
+SKIP 123. The failing set is the SAME nine tests above **plus one new**:
+`litmus:litmus-name-filter-fail-loud-shape` (spec-traceability) — the
+order-300 litmus added 2026-07-12, failing the same windows-portability
+class on this host. No product regressions among the fails; today's
+destructive cold-provision e2e passed end-to-end on the same tree.
+
+**VERSION-clobber hazard fired AGAIN** (2nd occurrence): after the two
+suite runs, the repo `VERSION` was left at `0.0.0-test-retag`
+(`litmus:image-build-convergence-shape` step-killed before its EXIT-trap
+restore). Restored via `git checkout -- VERSION`. The hazard is now
+recurrent, not theoretical — it silently corrupts any subsequent build in
+the tree. Raising the priority of the copy-tree/`TILLANDSIAS_VERSION_FILE`
+fix called out below.
+
 ## Smallest next action
 
 Owner: any host with litmus DSL context (linux preferred — the strict-exit
