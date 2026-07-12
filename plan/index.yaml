@@ -1371,6 +1371,19 @@ plan_index:
       status: ready
       events:
         - type: progress
+          ts: "2026-07-11T20:22:00Z"
+          agent_id: "windows-bullo-claude-20260711T182324Z"
+          host: windows
+          summary: >
+            Slice-3 full-topic live verification UNBLOCKED and PASSED via
+            order 282 (e2e run 20260711T191912Z attempt 2): pristine
+            provision with the embedded v0.3.260711.8 guest, live tray
+            logged 'vm status push subscription established (polls
+            suppressed, SC-07)' — full topics including LocalProjects, no
+            legacy fallback engaged. REMAINING for this packet unchanged:
+            watch-channel menu listener wakeups + eliminating the 30s tick
+            task entirely.
+        - type: progress
           ts: "2026-07-10T09:36:00Z"
           agent_id: "windows-bullo-fable5-20260710T0536Z"
           host: windows
@@ -7103,7 +7116,7 @@ plan_index:
     - packet_id: guest-binary-embed-windows
       order: 282
       title: "Windows: embed the linux-staged musl guest headless + demote fetch-headless to fallback (order 190 steps 2-3, windows half)"
-      status: claimed
+      status: done
       kind: packaging
       deliverable: crates/tillandsias-windows-tray
       depends_on: []
@@ -7158,6 +7171,31 @@ plan_index:
             documented as part of this packet), then wire staging into
             build-windows-tray.ps1 and demote fetch-headless per order 190
             step 3.
+        - type: completed
+          ts: "2026-07-11T20:20:00Z"
+          agent_id: "windows-bullo-claude-20260711T182324Z"
+          host: windows
+          commits: ["50012f63", "9d311c5c"]
+          summary: >
+            All three exit criteria verified. (1) build-windows-tray.ps1
+            stages the HOST-arch musl binary from target-guest/ into assets/
+            (non-host arch reset to placeholder); in-VM
+            build-guest-binaries.sh --verify SUCCESS at v0.3.260711.8; new
+            unit pin embedded_guest_headless_matches_workspace_version fails
+            loud on stale staging (demonstrated live on a .5-vs-.7 skew).
+            (2) destructive e2e run 20260711T191912Z attempt 2: pristine
+            cold provision injected the embedded binary, handshake
+            wire_version=2 attempt=1, live tray logged the FULL-TOPIC
+            'vm status push subscription established (polls suppressed,
+            SC-07)' with no legacy-fallback line. (3) embedded path writes
+            no-op fetch-headless.sh; absent-asset fallback unchanged + loud
+            warn. BONUS ROOT-CAUSE: attempt 1 FAILED (handshake timeout) —
+            build-guest-binaries.sh cargo fallback built --features tray,
+            which lacks the vsock listener; fixed to --features listen-vsock
+            (flake.nix parity). Transport documented in the script
+            .DESCRIPTION (local WSL rustup build / linux checkout copy /
+            release fallback). Report:
+            build-install-smoke-e2e-findings-2026-07-11-windows.md.
 
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274

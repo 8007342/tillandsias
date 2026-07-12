@@ -136,19 +136,23 @@ build_with_cargo() {
     command -v cargo >/dev/null 2>&1 || return 1
 
     echo "[build-guest-binaries] Building guest binaries using local Cargo fallback..."
+    # Features MUST match the Nix packages (flake.nix tillandsias-headless-*-musl:
+    # `--features listen-vsock`). `--features tray` does NOT enable the vsock
+    # listener, producing a guest that boots but never binds the control wire
+    # (handshake timeout on a pristine provision — order 282 e2e, 2026-07-11).
     cargo build --package tillandsias-headless --bin tillandsias \
-        --release --target x86_64-unknown-linux-musl --features tray \
+        --release --target x86_64-unknown-linux-musl --features listen-vsock \
         --manifest-path "$ROOT/Cargo.toml" || return 1
     if command -v aarch64-linux-musl-gcc >/dev/null 2>&1; then
         cargo build --package tillandsias-headless --bin tillandsias \
-            --release --target aarch64-unknown-linux-musl --features tray \
+            --release --target aarch64-unknown-linux-musl --features listen-vsock \
             --manifest-path "$ROOT/Cargo.toml" || return 1
     elif command -v clang >/dev/null 2>&1; then
         CC_aarch64_unknown_linux_musl=clang \
         CFLAGS_aarch64_unknown_linux_musl='--target=aarch64-linux-musl' \
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
             cargo build --package tillandsias-headless --bin tillandsias \
-                --release --target aarch64-unknown-linux-musl --features tray \
+                --release --target aarch64-unknown-linux-musl --features listen-vsock \
                 --manifest-path "$ROOT/Cargo.toml" || return 1
     else
         echo "[build-guest-binaries] ERROR: missing aarch64 musl linker." >&2
