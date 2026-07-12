@@ -32,3 +32,18 @@ release acceptance.
 
 No new product defects observed in any reached gate; nothing to de-duplicate
 against open `plan/issues/` packets from this run.
+
+## Attended m8 smoke results (same substrate, operator session ~15:10–15:30)
+
+- `--github-login`: PASS — full credentialed login succeeded (screen session
+  completed and terminated cleanly).
+- First OpenCode lane attach: **FAIL** — lane terminal received zero bytes,
+  never recovered. Filed as
+  `macos-opencode-first-attach-blank-lane-2026-07-12.md` (P1).
+- Maintenance lane (2 min later): PASS — full stack came up (proxy, git
+  mirror, forge container) and reached an interactive fish prompt, but was
+  near-silent for ~8 minutes; macOS parity evidence appended to
+  `windows-attach-silent-forge-base-build-2026-07-12.md`.
+- brew direnv shim: **FAIL** — attestation verification requires a GitHub
+  API token a pristine guest lacks (egress itself healthy). Filed as
+  `brew-shim-attestation-requires-gh-token-2026-07-12.md` (P2).
