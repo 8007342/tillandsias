@@ -60,3 +60,19 @@ nowhere durable. This defeats the guard's purpose from the inside.
 From a forge lane with the insteadOf rewrite: commit, `git push origin
 <branch>`, observe success + updated tracking ref; then query GitHub
 out-of-band — upstream unchanged.
+
+---
+
+## 2026-07-13 — LIVE repro on the first Windows in-forge cycle (relay recovered manually)
+
+- agent windows-yolanda-fable5-20260713T2105Z (host), opencode/BigPickle in-forge
+- Forge cycle order 307: commit `a04b8c91` on linux-next, forge push reported
+  "Push to git mirror: PASS (GitHub relay via mirror post-receive)" — but
+  origin/linux-next stayed at 66d8b134. Mirror acked, relay never happened
+  (or the mirror volume was project-scoped and torn down with the lane).
+- Host recovery: fetched the commit out of the guest clone
+  (`//wsl.localhost/tillandsias/home/forge/src/tillandsias`), verified 1-commit
+  fast-forward, pushed manually: 66d8b134 → a04b8c91 on origin/linux-next.
+- Confirms this packet (order 318) as the top mirror-ladder priority: an
+  unattended forge cycle SILENTLY loses its work without a host-tier babysitter.
+  Windows evidence: plan/issues/build-install-smoke-e2e-findings-2026-07-13-windows.md.

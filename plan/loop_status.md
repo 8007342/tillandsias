@@ -1,6 +1,53 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-13T12:10:00Z
+LastExecutionTime: 2026-07-13T23:20:00Z
+
+## Cycle 2026-07-13T21:05Z→23:20Z (windows yolanda — NEW HOST from-scratch e2e + FIRST Windows in-forge BigPickle full /meta-orchestration cycle; orders 323-327 filed; order-318 false-success live repro + manual relay)
+
+- **New host bootstrap (Windows 11 Home, re-imaged from Silverblue)**: git
+  identity set (Tlatoani), guard `ok:gh-keyring`, rustup+cargo 1.97 + VS
+  Build Tools + WSL 2.7.10 provisioned from zero. Sequencing finding:
+  VirtualMachinePlatform enable (DISM 3010) demands a reboot BEFORE VS
+  Build Tools will install (5008) or WSL2 can start VMs — operator-approved
+  restart mid-cycle. Filed as orders **323/324** (operator directive: tray
+  must classify wsl-absent/reboot-pending/virt-off and say "WSL2 requires a
+  restart"; installer owns the restart instruction).
+- **Local-build destructive e2e (run 20260713T214101Z) gates 1-3 PASS**:
+  tray 0.3.260713.1 (fd2e11c6, embedded SHA==HEAD, 2m43s), truly-cold
+  destroy (pristine host), cold `--provision-once` ~4 min → `RESULT: VM
+  Ready — control wire up ✓` wire v2 attempt=1; diagnose exit 2
+  degraded-as-expected. Absent guest embed → release-fetch fallback
+  engaged (guest v0.3.260712.1, wire-compatible; skew recorded honestly).
+- **GOAL (operator): BigPickle full cycle inside the forge — ACHIEVED on
+  attempt 4**. Chain exercised: vault Phase-6.5 bootstrap (8 policies) →
+  containerized github-login (vault token write) → mirror clone → router →
+  forge-base/forge builds → opencode → /meta-orchestration: guard →
+  drain claimed **order 307** → 3 antigravity-entrypoint fixes →
+  in-forge `./build.sh --check` PASS → commit `a04b8c91` → filed its own
+  reduction-engine finding (root-owned .gh-credentials — caught the host's
+  seeding workaround!). Attempt 3 was a contract-perfect BLOCKED cycle
+  (guard `missing:no-credential-channel`, no committable work, clean exit).
+- **First-attach blockers found + filed**: order **326** (no forge user +
+  root-owned /home/forge/src → containerized clone EACCES), order **327**
+  (lazy enclave-ensure never builds tillandsias-router → cryptic
+  localhost-registry 125, order-76 parity gap), order **325**
+  (--github-login /dev/tty read hangs forever non-interactively). Windows
+  repro appended to forge-credential-guard-push-channel-gap-2026-07-08
+  (gitconfig/mirror injection absent on guest CLI lane; guard fix itself
+  CONFIRMED working).
+- **Order-318 P1 CONFIRMED LIVE**: BigPickle's mirror push was acked +
+  reported relayed; origin/linux-next never moved. Host recovered the
+  commit from the guest clone via //wsl.localhost and relayed manually:
+  linux-next 66d8b134 → **a04b8c91** (order 307 progress now durable).
+  An unattended forge cycle silently loses work without this babysitting —
+  318 is the top mirror-ladder priority from Windows' perspective too.
+- **Cross-platform corroborations**: proxy teardown SIGSEGV 139 (matches
+  this morning's Linux finding); guest minimal-env gaps (pgrep, script(1)
+  absent); in-forge YAML validation falls back to ad-hoc python3
+  (tillandsias-policy not shipped in forge image — enhancement candidate).
+- **Host state at exit**: keepalive killed, distro terminated (registered,
+  idle), tree clean at push, e2e evidence under
+  target/build-install-smoke-e2e/20260713T214101Z/.
 
 ## Cycle 2026-07-13T10:44Z→12:10Z (linux_immutable yolanda — NEW HOST first cycle: drain ×3 + order 285 DONE; curl-install e2e PASS on v0.3.260712.1; in-forge order 313 slice landed)
 

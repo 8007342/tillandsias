@@ -136,8 +136,51 @@ this required working around.
   De-dup: evidence appended to the 2026-07-08 issue (orders 173/177 +
   the 318-322 mirror ladder own the systemic fix); no duplicate packet.
   Full transcript: `$LOG_DIR/04-meta-orchestration.log`.
-- **Attempt 4 — full-cycle retry with credential workaround**: seeded the
-  repo-local store the guard checks first (`.git/.gh-credentials` +
-  credential.helper in the clone's .git/config — BigPickle's own
-  smallest-next-action), explicitly bypassing the broken mirror-relay leg
-  (recorded as NOT exercised). Results below.
+- **Attempt 4 — GOAL ACHIEVED: full /meta-orchestration cycle completed**
+  (with one relay leg manually recovered): seeded the repo-local store the
+  guard checks first (`.git/.gh-credentials` + credential.helper in the
+  clone's .git/config — BigPickle's own smallest-next-action). BigPickle
+  (opencode in-forge) then ran the COMPLETE cycle: guard
+  `ok:gh-credentials-store` → worker drain claimed **order 307**
+  (antigravity-launch-crash) → implemented 3 structural fixes
+  (require_antigravity retry+backoff, export_project_env parity,
+  agent-profile antigravity case) → verified (`bash -n`,
+  `TILLANDSIAS_HOST_KIND=forge ./build.sh --check` PASS in-forge) →
+  committed `a04b8c91` on linux-next → pushed → filed a reduction-engine
+  finding → clean teardown, unit exit 0.
+- **Push false-success (order 318 live repro, Windows guest lane)**: the
+  direct-GitHub push failed first (`could not read Username` — the seeded
+  .gh-credentials was root-owned/0600, unreadable by the forge user; see
+  the rescued finding file below), BigPickle fell back to the mirror push
+  and reported "Push to git mirror: PASS (GitHub relay via mirror
+  post-receive)" — but **origin/linux-next never advanced**. The mirror
+  acked a push it did not durably relay: exactly the P1 in
+  plan/issues/git-mirror-push-false-success-not-relayed-2026-07-12.md /
+  order 318. Recovery (host tier): fetched `a04b8c91` out of the guest
+  clone via `//wsl.localhost/tillandsias/...`, verified fast-forward
+  ancestry + 4-file diff, and relayed it manually:
+  `origin/linux-next 66d8b134 → a04b8c91` ✓ (hash-preserving; the manual
+  execution of the mirror's contract).
+- **Orphan finding rescued**: BigPickle wrote
+  `plan/issues/forge-gh-credentials-root-owned-2026-07-13.md` AFTER its
+  commit (never re-committed) — copied out of the guest working tree and
+  committed by the host on windows-next.
+- **In-forge tooling notes**: BigPickle validated YAML with ad-hoc
+  `python3 -c "import yaml..."` — the sanctioned `tillandsias-policy
+  validate-yaml` is not available in the forge image and ruby is absent
+  (runtime_language_policy discourages the python one-off; enhancement
+  candidate: ship the policy validator in forge-base).
+- Full transcripts: `$LOG_DIR/04-meta-orchestration.log` (blocked cycle,
+  attempt 3), `$LOG_DIR/04b-meta-orchestration-full-cycle.log` (full
+  cycle, attempt 4, 3144 lines).
+
+### Lane verdict
+
+**Windows full-stack forge lane: FUNCTIONAL end-to-end with 4 filed gaps**
+(orders 323-327 + the pre-existing 318/320 ladder). The stack exercised:
+tray build/install → WSL2 cold provision → vsock wire → vault (Phase 6.5,
+8 policies) → proxy → containerized github-login → mirror clone → router →
+forge-base/forge image builds → forge container → opencode harness →
+/meta-orchestration full cycle → packet drained (order 307) → commit.
+The one leg that required host intervention: mirror push relay
+(order 318) + the two first-attach blockers (orders 326/327).
