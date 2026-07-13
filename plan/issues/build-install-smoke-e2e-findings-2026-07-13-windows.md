@@ -83,4 +83,27 @@
 
 ## Run 1 lane — BigPickle /meta-orchestration inside the forge (operator goal)
 
-(section completed after lane run — see below)
+Operator goal for this cycle: OpenCode ("BigPickle") completes one
+`/meta-orchestration` cycle inside a Tillandsias Forge on the full Windows
+stack (tray → WSL2 guest → rootful podman → vault → git mirror → forge →
+opencode → push relay). Lane invocation mirrors the tray attach launch_spec
+(`vm_login_shell_argv` wrapper + `tillandsias-headless --cloud 'tillandsias'
+--opencode --prompt "Use the /meta-orchestration skill"`) via the
+`wsl.exe -d tillandsias` attach transport, as root (matches the vsock
+pty_handler context; rootful podman owns the enclave).
+
+Pre-lane seeding: `--github-login` (product surface) under in-guest
+`script(1)` PTY → `GitHub authentication complete for 8007342`, exit 0
+(vault write at secret/github/token). See finding 5 for the non-TTY hang
+this required working around.
+
+- **Attempt 1 — FAIL (order 326 filed)**: containerized `gh repo clone`
+  died in seconds: `could not create work tree dir
+  '/home/forge/src/tillandsias.tmp.18c1f90695d94a22': Permission denied`.
+  Guest inspection: NO `forge` user exists and `/home/forge/src` is
+  root:root 0755 — the WSL recipe writes wsl.conf `default user forge` but
+  never creates the user or chowns the src root; with `--cap-drop=ALL` no
+  container uid can write it. macOS VZ clones fine (order 273 capture), so
+  this is Windows-recipe-specific. Workaround applied for goal progress:
+  `chmod 0777 /home/forge/src` (recorded; NOT the fix).
+- **Attempt 2**: relaunched post-workaround — results below.

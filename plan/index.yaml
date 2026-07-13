@@ -10492,3 +10492,48 @@ plan_index:
             Found while seeding GitHub auth for the first Windows in-forge
             meta-orchestration cycle; workaround was in-guest script(1) PTY
             allocation (util-linux-script had to be installed first).
+
+    - packet_id: wsl-guest-forge-user-src-ownership
+      order: 326
+      title: "WSL2 guest provisioning: no forge user + root-owned /home/forge/src — every containerized cloud clone fails EACCES"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, provisioning, forge]
+      estimated_hours: 3
+      outcome: >
+        Live repro 2026-07-13 on a truly cold Windows provision (recipe
+        path, tray 0.3.260713.1/fd2e11c6, guest headless v0.3.260712.1):
+        the guest has NO forge user (id: 'forge': no such user) and
+        /home/forge/src is owned root:root 0755. First cloud attach
+        (--cloud tillandsias --opencode) fails in the containerized
+        gh repo clone with "could not create work tree dir
+        '/home/forge/src/tillandsias.tmp.<hex>': Permission denied"
+        (non-root uid inside the clone container + --cap-drop=ALL means
+        even a uid-0 container process has no DAC_OVERRIDE over the
+        root-owned mount). The macOS VZ lane clones fine (order 273
+        capture streamed a full clone), so this is a WSL recipe gap:
+        materialize/configure_recipe_distro writes wsl.conf default user
+        'forge' but never creates the user or chowns /home/forge/src.
+        Session workaround (recorded, NOT the fix): chmod 0777
+        /home/forge/src. Proper fix: create the forge user (stable uid),
+        chown -R forge:forge /home/forge, and add a provisioning-time
+        assertion (writability probe from the clone container's uid) that
+        fails loud, mirroring the order-297 headroom assertion pattern.
+        Evidence: plan/issues/build-install-smoke-e2e-findings-2026-07-13-windows.md
+        (Run 1 lane section).
+      exit_criteria:
+        - "fresh WSL2 provision creates the forge user and forge-owned /home/forge/src (asserted at provisioning time, fails loud)"
+        - "cold cloud attach clone succeeds on Windows without manual chmod"
+        - "regression pinned: provisioning-time writability probe or unit test on the recipe config step"
+      events:
+        - type: filed
+          ts: "2026-07-13T22:50:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            First Windows cold-provision cloud attach ever exercised; clone
+            EACCES root-caused to missing forge user + root-owned src in the
+            WSL recipe. Lane retried after chmod workaround.
