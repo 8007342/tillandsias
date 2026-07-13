@@ -3,7 +3,11 @@
 - class: verification-gap (order 258 residual; mirrors order 257 / the macOS
   gap packet `macos-tray-parity-attended-smoke-gap-2026-07-09.md`)
 - owner: operator (Tlatoāni) at the Windows tray + Windows agent recording results
-- status: open
+- status: RESOLVED 2026-07-12 — all 7 cells verified live on the operator-attended
+  smoke (see order 258's completion event); step-10 (order 274 first-login
+  probe) also discharged. Residual defects found DURING the pass are filed
+  as their own packets/issues (orders 308-314, wire stale-render, PTY
+  throughput, spinner burn).
 - trace: openspec/tray-parity-matrix.yaml, plan/index.yaml order 258,
   litmus:tray-parity-matrix-complete
 - filed_by: windows-bullo-fable5-20260709T2310Z
