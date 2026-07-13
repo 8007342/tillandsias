@@ -62,10 +62,12 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## concurrent-git
 
-- agent-handoff.md                 — you're an agent picking up work from `plan/`, you need to claim something, chec… [bundled, partial-verify]
-- branches.md                      — starting any work session on any platform host, or any time you're unsure which… [bundled, partial-verify]
-- commit-attribution.md            — deciding how AI-agent / LLM-authored commits are attributed in git [bundled, partial-verify]
-- plan-discipline.md               — you're writing or updating anything under `plan/`, `methodology/`, `openspec/`,… [bundled, partial-verify]
+- agent-handoff.md                   — you're an agent picking up work from `plan/`, you need to claim something, chec… [bundled, partial-verify]
+- branches.md                        — starting any work session on any platform host, or any time you're unsure which… [bundled, partial-verify]
+- commit-attribution.md              — deciding how AI-agent / LLM-authored commits are attributed in git [bundled, partial-verify]
+- git-mirror-architecture-audit.md   — claim below was verified in the tree during this audit; claims sourced from [bundled, partial-verify]
+- git-mirror-enterprise-practices.md — designing or debugging the local bare-mirror hop between forge [bundled, partial-verify]
+- plan-discipline.md                 — you're writing or updating anything under `plan/`, `methodology/`, `openspec/`,… [bundled, partial-verify]
 
 ## data
 
@@ -133,6 +135,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - cross-platform-terminal-launch.md [DRAFT] — Handling terminal window launch on Windows and Linux. [bundled, partial-verify]
 - dedicated-service-account-podman.md       — You want Tillandsias to own a dedicated rootless Podman runtime under a service [bundled, partial-verify]
 - enclave-network.md [DRAFT]                — Understanding enclave network topology and routing. [bundled, partial-verify]
+- enclave-proxy-patterns.md [DRAFT]         — Adding a new container to the enclave, reasoning about whether to [bundled, partial-verify]
 - enclave-services.md [DRAFT]               — Understanding enclave-scoped service routing and discovery. [bundled, partial-verify]
 - enclave-startup-sequencing.md [DRAFT]     — Starting the Tillandsias enclave (proxy → git → forge → inference), managing in… [bundled, partial-verify]
 - ephemeral-lifecycle.md                    — Understanding how Tillandsias manages container creation on first launch, cachi… [bundled, partial-verify]
@@ -148,6 +151,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - forge-shared-cache-via-nix.md             — You're trying to share a library across projects without paying the download co… [pull-on-demand: stub]
 - forge-standalone.md                       — You want only the forge container, one mounted project tree, and [bundled, partial-verify]
 - forge-standalone-runner.md [DRAFT]        — is `cheatsheets/runtime/forge-standalone.md`. [bundled, partial-verify]
+- forge-transparency.md                     — Understanding which infrastructure services are transparently [bundled, partial-verify]
 - gpu-tier-detection.md [DRAFT]             — Determining which LLM models to pre-pull or lazy-load based on GPU VRAM, select… [bundled, partial-verify]
 - hashicorp-vault-tillandsias.md [DRAFT]    — debugging Vault unseal/auth on a Linux host, writing a new policy file, adding … [bundled, partial-verify]
 - idiomatic-vm-exec.md [DRAFT]              — writing host-shell code that needs to invoke a process inside the VM, debugging… [bundled, partial-verify]
@@ -254,6 +258,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 - icon-library.md [DRAFT]               — Understanding icon design and usage in tray applications. [bundled, partial-verify]
 - tray-notification-patterns.md [DRAFT] — Understanding notification patterns in tray applications. [bundled, partial-verify]
+- ux-message-budget.md [DRAFT]          — writing or reviewing any string that gets displayed in the [bundled, partial-verify]
 
 ## web
 
