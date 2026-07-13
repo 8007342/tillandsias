@@ -22,9 +22,10 @@ sources:
   - https://docs.gitea.com/usage/repo-mirror
 authority: high
 status: current
-tier: research
+tier: bundled
 summary_generated_by: "claude-opus-4-8 order-315 research"
-committed_for_project: false
+bundled_into_image: true
+committed_for_project: true
 ---
 # Git Mirror — Enterprise Practices (order-315 research)
 

@@ -19,9 +19,9 @@ sources:
   - plan/issues/git-mirror-architecture-audit-2026-07-12.md
 authority: high
 status: current
-tier: repo-only
+tier: bundled
 summary_generated_by: "claude-fable-5 order-315 audit"
-bundled_into_image: false
+bundled_into_image: true
 committed_for_project: true
 ---
 # Git-Mirror Architecture Audit — Current State Map (order 315)
