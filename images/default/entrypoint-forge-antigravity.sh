@@ -90,6 +90,12 @@ export_ssh_env || true
 
 # ── Find project directory ──────────────────────────────────
 find_project_dir
+
+# ── Export project environment ───────────────────────────────
+# @trace spec:forge-environment-discoverability
+# Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
+export_project_env
+
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
@@ -105,29 +111,38 @@ show_banner "antigravity"
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 # Installed at launch (not baked): download the official installer WITH A TIMEOUT
 # then run it (NOT a `curl | bash` pipe — that pipes an unbounded fetch straight to
-# a shell). Fail-soft: if the install fails, exec below surfaces a clear error.
-if ! command -v agy >/dev/null 2>&1; then
-    trace_lifecycle "tools" "installing Antigravity CLI (agy) at launch"
-    _agy_installer="$(mktemp 2>/dev/null)"
-    if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 https://antigravity.google/cli/install.sh -o "$_agy_installer" 2>/dev/null; then
-        ANTIGRAVITY_BIN="/usr/local/bin/agy" bash "$_agy_installer" 2>/dev/null \
-            || trace_lifecycle "tools" "agy install failed (non-fatal)"
-    else
-        trace_lifecycle "tools" "agy installer fetch failed (non-fatal)"
-    fi
-    rm -f "$_agy_installer" 2>/dev/null || true
-fi
+# a shell). Retries up to 3 times with backoff (order 307: one-shot curl was
+# fragile against transient proxy/network issues).
+require_antigravity() {
+    command -v agy >/dev/null 2>&1 && return 0
 
-# Assert agy is on PATH — fail fast with a clear message instead of
-# a cryptic "command not found" from exec.
-# @trace order 187 (antigravity-agent-finish-up)
-if ! command -v agy >/dev/null 2>&1; then
-    trace_lifecycle "error" "agy not found on PATH — install failed or proxy blocked download"
+    local _agy_installer _agy_url="https://antigravity.google/cli/install.sh"
+    local _attempt _max_attempts=3 _delay=2
+
+    for _attempt in 1 2 3; do
+        trace_lifecycle "tools" "agy install attempt $_attempt/$_max_attempts"
+        _agy_installer="$(mktemp 2>/dev/null)"
+        if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 "$_agy_url" -o "$_agy_installer" 2>/dev/null; then
+            if ANTIGRAVITY_BIN="/usr/local/bin/agy" bash "$_agy_installer" 2>/dev/null; then
+                rm -f "$_agy_installer" 2>/dev/null || true
+                command -v agy >/dev/null 2>&1 && return 0
+            fi
+        fi
+        rm -f "$_agy_installer" 2>/dev/null || true
+        trace_lifecycle "tools" "agy install attempt $_attempt failed (retry in ${_delay}s)"
+        sleep "$_delay" 2>/dev/null || true
+        _delay=$(( _delay * 2 ))
+    done
+    return 1
+}
+
+if ! require_antigravity; then
+    trace_lifecycle "error" "agy not found on PATH after 3 install attempts"
     echo ""
     echo "═══════════════════════════════════════════════════════"
-    echo "ERROR: Antigravity CLI (agy) is not installed."
+    echo "ERROR: Antigravity CLI (agy) could not be installed."
     echo ""
-    echo "The installer could not download agy. Common causes:"
+    echo "The installer failed after 3 attempts. Common causes:"
     echo "  - Forge proxy does not allow antigravity.google domains"
     echo "  - Network timeout during installer download"
     echo ""
