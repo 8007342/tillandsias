@@ -9896,3 +9896,36 @@ plan_index:
             the mirror false-success P1 and insteadOf host-poisoning; audit
             launched same cycle with Fable fork (current-state map) + Opus
             researcher (best-practice baseline).
+
+    - packet_id: mirror-pre-receive-subshell-reject-loss
+      order: 316
+      title: "Mirror pre-receive: REJECTED=1 set in pipeline subshell is lost — YAML gate is advisory, never rejects"
+      status: ready
+      kind: bug
+      deliverable: images/git/pre-receive-hook.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, bash, litmus]
+      estimated_hours: 1
+      outcome: >
+        Found by the order-315 current-state audit and verified in-tree:
+        pre-receive-hook.sh pipes changed files into `while read`, so the
+        loop body runs in a subshell and its REJECTED=1 never reaches the
+        parent's final check. The ledger-YAML gate (order-263 lineage:
+        forge cycles pushing broken plan YAML) therefore never rejects.
+        Fix with process substitution / flag file / last-command exit,
+        and pin with a fixture that pushes a deliberately broken
+        plan/*.yaml to a temp bare repo carrying the hook and asserts
+        non-zero receive.
+      exit_criteria:
+        - "a push containing invalid ledger YAML is rejected (non-zero) by the hook fixture"
+        - "a valid push still succeeds (no false rejects)"
+        - "litmus binding added under git-mirror-service"
+      events:
+        - type: filed
+          ts: "2026-07-13T00:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Order-315 audit finding (Fable current-state map), verified at
+            pre-receive-hook.sh:125-142 as of 8875ba82.
