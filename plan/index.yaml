@@ -6644,7 +6644,7 @@ plan_index:
     - packet_id: windows-tray-parity-column-verify
       order: 258
       title: "Windows: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: done
       unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended-smoke blocker lifted"
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
@@ -6664,6 +6664,35 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the Windows host"
       events:
+        - type: completed
+          ts: "2026-07-12T23:45:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            All 7 remaining required cells verified LIVE by The Tlatoāni on
+            the 2026-07-12 attended smoke (fresh destructive provision,
+            tray 0.3.260712.2@5599c23d+fixes, guest v0.3.260712.1):
+            (1) per-project submenu — operator counted all 7 leaves incl.
+            the order-296 Antigravity; (2) GitHub login — popup wt.exe
+            terminal, credential prompts on a pristine distro, completed
+            twice (also discharged order 274); (3) cloud submenu — real
+            repo listing post-login; overflow subcase limited by the
+            account's repo count; (4) local submenu — the host's 5 ~/src
+            projects; (5) status indicator — healthy, degraded ("Wire
+            unreachable"), and failed ("provisioning failed") states all
+            rendered live; recovery-RENDER defect filed separately
+            (windows-tray-wire-reconnect-never-recovers: subscription
+            recovers, UI doesn't); (6) remote listing + cloud clone —
+            operator cloned a cloud repo into the guest via the tray flow
+            (capability parity; windows rides the tray flow, no CLI flag —
+            mechanism note in the 2026-07-09 progress event); (7)
+            interactive agent attach — live OpenCode TUI over the wsl.exe
+            bridge running an in-forge /meta-orchestration cycle
+            (mechanism note as above; throughput + spinner-burn findings
+            filed). Matrix flipped; capability text updated to the 7-leaf
+            set. The session ALSO surfaced and root-caused orders 308/310/
+            311/312/313/314 — the attended pass did exactly what order 243
+            designed it to do.
         - type: unblock
           ts: "2026-07-12T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
