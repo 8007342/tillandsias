@@ -74,6 +74,57 @@ pub fn parse_wsl_vm_id(hcsdiag_list: &str) -> Option<String> {
     None
 }
 
+/// True when the current process can query HCS: an ENABLED membership in
+/// BUILTIN\Administrators or Hyper-V Administrators. This is exactly the
+/// check `hcsdiag` enforces ("insufficient privileges … administrators or
+/// Hyper-V Administrators"), so the VM-ID lookup can distinguish "no VM
+/// running" from "no rights to look". Membership (CheckTokenMembership),
+/// NOT TokenElevation: filtered/restricted tokens carry the admin group
+/// deny-only, which membership correctly reports as false while the
+/// elevation flag can still read true.
+/// @trace plan/index.yaml windows-tray-requires-elevation-hcsdiag (order 312)
+pub fn process_can_query_hcs() -> bool {
+    use windows::Win32::Foundation::BOOL;
+    use windows::Win32::Security::{
+        CheckTokenMembership, CreateWellKnownSid, PSID, WELL_KNOWN_SID_TYPE,
+        WinBuiltinAdministratorsSid, WinBuiltinHyperVAdminsSid,
+    };
+
+    fn is_member(kind: WELL_KNOWN_SID_TYPE) -> bool {
+        // SECURITY_MAX_SID_SIZE is 68 bytes.
+        let mut sid_buf = [0u8; 68];
+        let mut sid_len = sid_buf.len() as u32;
+        unsafe {
+            let sid = PSID(sid_buf.as_mut_ptr() as *mut _);
+            if CreateWellKnownSid(kind, None, sid, &mut sid_len).is_err() {
+                return false;
+            }
+            let mut member = BOOL(0);
+            CheckTokenMembership(None, sid, &mut member).is_ok() && member.as_bool()
+        }
+    }
+
+    is_member(WinBuiltinAdministratorsSid) || is_member(WinBuiltinHyperVAdminsSid)
+}
+
+/// The error a failed VM-ID lookup surfaces, classified by elevation.
+/// Pure so the actionable text is unit-testable: a non-elevated process
+/// gets the order-312 remediation, not the misleading "distro not
+/// started?" that burned a full 36x5s handshake budget on the 2026-07-12
+/// attended smoke.
+fn vm_id_lookup_error(elevated: bool) -> io::Error {
+    if elevated {
+        io::Error::other("no running WSL utility VM in `hcsdiag list` (distro not started?)")
+    } else {
+        io::Error::other(
+            "cannot enumerate the WSL utility VM: this process is NOT elevated, and \
+             `hcsdiag` requires Administrator or 'Hyper-V Administrators' membership \
+             (https://aka.ms/hcsadmin). Relaunch Tillandsias as administrator, or add \
+             your user to the Hyper-V Administrators group and sign out/in (order 312).",
+        )
+    }
+}
+
 /// Shell out to `hcsdiag list` and return the WSL utility VM's GUID.
 pub fn wsl_utility_vm_id() -> io::Result<String> {
     // no_window: this runs once per handshake attempt from the GUI tray —
@@ -85,9 +136,7 @@ pub fn wsl_utility_vm_id() -> io::Result<String> {
         .output()
         .map_err(|e| io::Error::other(format!("hcsdiag list failed: {e}")))?;
     let text = String::from_utf8_lossy(&output.stdout);
-    parse_wsl_vm_id(&text).ok_or_else(|| {
-        io::Error::other("no running WSL utility VM in `hcsdiag list` (distro not started?)")
-    })
+    parse_wsl_vm_id(&text).ok_or_else(|| vm_id_lookup_error(process_can_query_hcs()))
 }
 
 /// Parse an `8-4-4-4-12` GUID string into a Win32 [`windows::core::GUID`].
@@ -308,6 +357,32 @@ mod tests {
         assert_eq!(
             parse_wsl_vm_id(FIXTURE).as_deref(),
             Some("A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA")
+        );
+    }
+
+    /// Order 312: a non-elevated lookup failure must surface the
+    /// remediation (Hyper-V Administrators / relaunch elevated), never
+    /// the misleading "distro not started?" — and the elevated variant
+    /// keeps the genuine no-VM text.
+    #[test]
+    fn vm_id_lookup_error_classifies_by_elevation() {
+        let non_elevated = vm_id_lookup_error(false).to_string();
+        assert!(
+            non_elevated.contains("NOT elevated"),
+            "must name the elevation problem: {non_elevated}"
+        );
+        assert!(
+            non_elevated.contains("Hyper-V Administrators"),
+            "must give the group remediation: {non_elevated}"
+        );
+        assert!(
+            !non_elevated.contains("distro not started"),
+            "must not mislead toward the distro: {non_elevated}"
+        );
+        let elevated = vm_id_lookup_error(true).to_string();
+        assert!(
+            elevated.contains("distro not started"),
+            "elevated no-VM keeps the genuine diagnosis: {elevated}"
         );
     }
 

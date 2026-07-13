@@ -9803,6 +9803,38 @@ plan_index:
         - "a standard-user (non-elevated) tray launch reaches a working control wire end-to-end on a stock host"
         - "windows e2e records the elevation context it ran under, so elevated agent runs can never again mask the standard-user path"
       events:
+        - type: progress
+          ts: "2026-07-13T05:40:00Z"
+          agent_id: "windows-bullo-fable5-20260713T0453Z"
+          host: windows
+          lease_id: "windows-tray-requires-elevation-hcsdiag"
+          summary: >
+            Slices 1+3 DONE; slice 2 (socat wire fallback) remains — THE
+            TLATOANI DECIDED (live, 2026-07-13): "both, slice 3 first" —
+            ship the installer group-add now, build the no-elevation
+            transport fallback next. SLICE 1: the VM-ID lookup now
+            classifies by CheckTokenMembership against BUILTIN\
+            Administrators + Hyper-V Administrators (membership, NOT
+            TokenElevation — filtered tokens carry admin deny-only and
+            the elevation flag lies under runas /trustlevel; membership
+            matches what hcsdiag enforces) and surfaces the aka.ms/
+            hcsadmin remediation instead of "distro not started?";
+            --diagnose --json gained an `elevated` field so e2e evidence
+            records its privilege context (criterion 3). LIVE-VERIFIED
+            both ways on this host: non-elevated probe prints the
+            remediation; elevated diagnose reports true. SLICE 3:
+            install-windows.ps1 offers a one-time elevated
+            Add-LocalGroupMember (group by SID S-1-5-32-578 — names are
+            localized; membership probe via IsInRole; interactive prompt
+            with TILLANDSIAS_NO_GROUP_ADD opt-out; sign-out/in guidance).
+            Parse-clean after two PS 5.1 traps worth recording: greedy
+            drive-qualified $env:X\ parsing inside expandable strings,
+            and — the nasty one — em-dashes inside strings on BOM-less
+            UTF-8 scripts decode under ANSI to a smart-quote byte that
+            5.1 treats as a REAL quote, flipping string parity (non-ASCII
+            stays in comments only). Tests: vm-layer 76/76 incl.
+            vm_id_lookup_error_classifies_by_elevation; windows-tray
+            54/55 (known embed pin); diagnose schema pins updated 17→18.
         - type: filed
           ts: "2026-07-12T22:20:00Z"
           agent_id: "windows-bullo-fable5-20260712T1940Z"

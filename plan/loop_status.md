@@ -1,6 +1,25 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-13T04:50:00Z
+LastExecutionTime: 2026-07-13T05:45:00Z
+
+## Cycle 2026-07-13T04:53Z→05:45Z (windows — meta-orchestration eager drain: order 312 slices 1+3 DONE per live Tlatoāni decision; 279 released back)
+
+- **Host**: Windows 11, `windows-next`, agent windows-bullo-fable5-20260713T0453Z.
+  Guard `ok:gh-credentials-store`; fast-forwarded to linux-next eff9bae8.
+- **Order 312 (elevation P1) slices 1+3 DONE** (decision: "both, slice 3
+  first", The Tlatoāni live): membership-based (NOT TokenElevation)
+  hcsdiag-failure classification with aka.ms/hcsadmin remediation;
+  --diagnose --json `elevated` field (e2e evidence now carries privilege
+  context); installer one-time Hyper-V Administrators group-add by SID
+  (localized names) with opt-out. Both live-verified (non-elevated probe
+  shows remediation; elevated diagnose true). Slice 2 (socat stdio wire
+  fallback, no-elevation transport) is the remaining scope — packet stays
+  ready for next cycle.
+- **Order 279 claimed then RELEASED unstarted**: multi-hour race-hardening
+  does not fit the remaining cycle budget after 312; no shaping changes.
+- **PS 5.1 traps recorded** (in the 312 event): greedy `$env:X\` parsing in
+  expandable strings; em-dash in strings on BOM-less UTF-8 = ANSI smart-
+  quote byte that 5.1 treats as a real quote (keep non-ASCII in comments).
 
 ## Cycle 2026-07-13T04:19Z→04:50Z (linux_mutable macuahuitl — drain: order 302 DONE (mirror deploy+verify), 315 ladder rungs 318-322 filed)
 

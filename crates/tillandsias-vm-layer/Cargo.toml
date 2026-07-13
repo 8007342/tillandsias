@@ -44,6 +44,9 @@ windows = { version = "0.58", features = [
     "Win32_Foundation",
     # HvSocket transport (transport_windows.rs / GuestTransport backend)
     "Win32_Networking_WinSock",
+    # Token elevation probe (order 312: hcsdiag needs elevation; classify
+    # the VM-ID lookup failure instead of reporting "distro not started")
+    "Win32_Security",
 ] }
 
 # @trace spec:vm-idiomatic-layer, spec:macos-native-tray, spec:vsock-transport
