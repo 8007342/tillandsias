@@ -10452,3 +10452,43 @@ plan_index:
             Sibling of order 323 (same operator directive): the installer is
             the first surface a brand-new Windows user touches; it should own
             the restart instruction instead of deferring to a failing tray.
+
+    - packet_id: github-login-non-tty-fail-loud
+      order: 325
+      title: "github-login: token read from /dev/tty hangs forever non-interactively — fail loud + stdin/--with-token mode"
+      status: ready
+      kind: bug+enhancement
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, auth, pty, automation]
+      estimated_hours: 3
+      outcome: >
+        Live repro 2026-07-13 (Windows guest, headless v0.3.260712.1): the
+        --github-login flow reads git identity from stdin (piped input
+        works) but then execs
+        `podman exec -it tillandsias-github-login-<pid> bash -c
+        'IFS= read -rs TOKEN < /dev/tty ...'` — the token read is /dev/tty
+        only, so any non-interactive invocation (automation, litmus, CI,
+        piped stdin) hangs FOREVER with no timeout and no error. Two
+        independent 10-minute hangs captured; full process tree in
+        plan/issues/build-install-smoke-e2e-findings-2026-07-13-windows.md
+        finding 5. Fix shape: (a) detect the non-TTY case and fail loud
+        with an actionable message; (b) add a non-interactive token path
+        (accept token on stdin when piped, or a documented env/flag akin
+        to gh's --with-token, which the flow already uses internally);
+        (c) inconsistent input channels (identity=stdin, token=/dev/tty)
+        should converge on one policy.
+      exit_criteria:
+        - "non-TTY --github-login exits non-zero with an actionable message within seconds (no hang); pinned by a test"
+        - "documented non-interactive token delivery works end-to-end (vault write confirmed)"
+        - "identity + token input channels consistent under both TTY and non-TTY invocation"
+      events:
+        - type: filed
+          ts: "2026-07-13T22:35:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            Found while seeding GitHub auth for the first Windows in-forge
+            meta-orchestration cycle; workaround was in-guest script(1) PTY
+            allocation (util-linux-script had to be installed first).
