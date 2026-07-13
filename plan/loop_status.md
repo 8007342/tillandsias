@@ -1,6 +1,24 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-13T00:30:00Z
+LastExecutionTime: 2026-07-13T00:45:00Z
+
+## Cycle 2026-07-13T00:32Z→00:45Z (forge — meta-orchestration: order 316 pre-receive YAML gate fix DONE)
+
+- **Host**: forge, `linux-next`, agent opencode-big-pickle-20260713T0032Z.
+  Credential guard `ok:forge-git-mirror`. Startup: resolved merge conflict
+  in plan/index.yaml (osx-next had added brew-aarch64-harness-strategy at
+  order 316; renumbered to 317). Sibling heads: main 38d33cd8, osx-next
+  837b066f, windows-next 01b38a0b.
+- **Drained order 316 (mirror-pre-receive-subshell-reject-loss) — DONE**:
+  Fixed pre-receive hook subshell variable loss. The inner `while read`
+  loop that iterated over changed files ran in a pipe subshell
+  (`echo FILES | while read`), so `REJECTED=1` was lost before the outer
+  loop could check it. Replaced with process substitution
+  (`while read ... done < <(echo FILES)`). 3-pass litmus
+  (scripts/test-pre-receive-yaml-gate.sh) confirms: invalid YAML rejected,
+  valid YAML accepted, multi-ref mixed validity rejected. All exit criteria
+  satisfied. Commit cb9bfd7f.
+- **E2E gates**: Skipped — no podman binary in forge container.
 
 ## Cycle 2026-07-13T00:15Z→00:30Z (linux_mutable — meta-orchestration: order 314 container-ensure-idempotency DONE)
 
