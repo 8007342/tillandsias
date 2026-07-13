@@ -27,11 +27,13 @@ RUN mkdir -p /home/ollama/.ollama/models/ \
 
 # -- CA bundle drop dir (writable by ollama uid so entrypoint can inject the enclave CA) --
 # The entrypoint runs as USER 1000:1000 and copies /etc/tillandsias/ca.crt into
-# /usr/local/share/ca-certificates/ for `update-ca-certificates`. Pre-creating
+# /etc/pki/ca-trust/source/anchors/ for `update-ca-trust`. Pre-creating
 # the directory here (while still root) avoids `mkdir: Permission denied`
 # tripping `set -e` and exiting the container immediately on startup.
-RUN mkdir -p /usr/local/share/ca-certificates \
-    && chown 1000:1000 /usr/local/share/ca-certificates
+# DISTRO: Fedora uses /etc/pki/ca-trust/source/anchors + update-ca-trust,
+#         NOT Debian's /usr/local/share/ca-certificates + update-ca-certificates.
+RUN mkdir -p /etc/pki/ca-trust/source/anchors \
+    && chown 1000:1000 /etc/pki/ca-trust/source/anchors
 
 # ── Prepare model cache directory ─────
 # @trace spec:inference-container, spec:zen-default-with-ollama-analysis-pool
