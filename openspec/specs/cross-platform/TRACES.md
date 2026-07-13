@@ -38,6 +38,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/runtime.rs#L11](../../../crates/tillandsias-podman/src/runtime.rs#L11)
 - [crates/tillandsias-podman/src/runtime.rs#L114](../../../crates/tillandsias-podman/src/runtime.rs#L114)
 - [crates/tillandsias-podman/src/runtime.rs#L253](../../../crates/tillandsias-podman/src/runtime.rs#L253)
+- [crates/tillandsias-vm-layer/src/lib.rs#L35](../../../crates/tillandsias-vm-layer/src/lib.rs#L35)
+- [crates/tillandsias-vm-layer/src/lib.rs#L46](../../../crates/tillandsias-vm-layer/src/lib.rs#L46)
 - [images/default/entrypoint-forge-antigravity.sh#L84](../../../images/default/entrypoint-forge-antigravity.sh#L84)
 - [images/default/entrypoint-forge-claude.sh#L96](../../../images/default/entrypoint-forge-claude.sh#L96)
 - [images/default/entrypoint-forge-codex.sh#L92](../../../images/default/entrypoint-forge-codex.sh#L92)
