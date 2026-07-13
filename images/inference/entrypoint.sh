@@ -12,12 +12,14 @@ set -e
 # inject it into the system trust store so ollama and curl can use the tillandsias-proxy
 # for transparent HTTPS caching.
 if [ -f /etc/tillandsias/ca.crt ]; then
-    # The directory is pre-created and chowned to uid 1000 in the Containerfile,
-    # but guard the mkdir in case we're running on an older image — `set -e` is
-    # active and a Permission denied here exits the container immediately.
-    mkdir -p /usr/local/share/ca-certificates/ 2>/dev/null || true
-    cp /etc/tillandsias/ca.crt /usr/local/share/ca-certificates/tillandsias.crt 2>/dev/null || true
-    update-ca-certificates 2>/dev/null || true
+    # Fedora Minimal: anchor + update-ca-trust (NOT Debian's update-ca-certificates
+    # + /usr/local/share/ca-certificates, which has NEVER worked on this image —
+    # the command is absent and the failure was swallowed by || true).
+    # Guard the mkdir in case we're running on an older image — `set -e` is active
+    # and a Permission denied here exits the container immediately.
+    mkdir -p /etc/pki/ca-trust/source/anchors/ 2>/dev/null || true
+    cp /etc/tillandsias/ca.crt /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null || true
+    update-ca-trust 2>/dev/null || true
 fi
 
 # Bind to all interfaces — reachable from other containers in the enclave.
@@ -64,21 +66,21 @@ if [ ! -x "$OLLAMA_BIN" ]; then
         TMP_O="$(mktemp -d 2>/dev/null)" || true
         if [ -n "$TMP_O" ]; then
             # The image bakes HTTP(S)_PROXY=http://proxy:3128 for enclave
-            # operation, but outside the enclave network (bare `podman run`,
-            # litmus shapes, dev loops) the name `proxy` does not resolve and
-            # curl dies with exit 5 before touching the network (order 268 —
-            # the enclave proxy-exemption class, orders 116/118/119). Try the
-            # configured route first; on ANY failure retry once with the
-            # proxy env cleared. Inside the enclave the direct retry is
-            # harmlessly blocked by the internal network; outside it, it is
-            # the path that actually works.
+            # operation. On first launch the proxy may not be fully warmed
+            # up yet (order 313: proxy warm-up race). Inside the enclave the
+            # proxy IS the only egress path (no direct DNS), so a "retry
+            # direct" fallback is dead by design — retry the proxied route
+            # after a short delay instead.
             OLLAMA_URL="https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${OLLAMA_ARCH}.tar.zst"
-            if curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
-                "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst" 2>/dev/null \
-                || { echo "[inference] proxied download failed — retrying direct (no proxy)" >&2; \
-                     env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
-                         curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
-                         "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst" 2>/dev/null; }; then
+            _ollama_dl=0
+            curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
+                "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst" \
+                || { echo "[inference] proxied download failed — retrying after 10s proxy warm-up delay" >&2; \
+                     sleep 10; \
+                     curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
+                         "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst"; } \
+                || _ollama_dl=1
+            if [ "$_ollama_dl" -eq 0 ]; then
                 if zstd -d "$TMP_O/ollama.tar.zst" -o "$TMP_O/ollama.tar" 2>/dev/null \
                     && tar -xf "$TMP_O/ollama.tar" -C "$TMP_O" bin/ollama 2>/dev/null \
                     && install -m 0755 "$TMP_O/bin/ollama" "$OLLAMA_BIN" 2>/dev/null; then

@@ -1,6 +1,46 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-13T05:45:00Z
+LastExecutionTime: 2026-07-13T12:10:00Z
+
+## Cycle 2026-07-13T10:44Z→12:10Z (linux_immutable yolanda — NEW HOST first cycle: drain ×3 + order 285 DONE; curl-install e2e PASS on v0.3.260712.1; in-forge order 313 slice landed)
+
+- **New host bootstrap**: fresh Fedora Silverblue (yolanda). Git identity
+  set (Tlatoani / bulloncito@gmail.com), guard `ok:gh-keyring`,
+  `eligible` + `allow:full-meta`. Sibling heads at start: main 38d33cd8,
+  linux-next eff9bae8, windows-next ac06ff86, osx-next 837b066f.
+- **TESTED RELEASE UPDATE**: `v0.3.260712.1` (latest published) passed its
+  first curl-install e2e — install/reset/cold-init/forge-lane/4b all
+  clean; the order-298 proxy-teardown regression is confirmed ABSENT.
+  Immutable hosts need not re-run until the next release.
+- **Fresh-host findings drained on the spot**: 79682b9f fixed four latent
+  with-tillandsias-builder.sh defects (missing --assumeyes, enclave-proxy
+  poisoning of host podman via containers.conf [engine] env,
+  _toolbox_exists grep -x never matching, broken standalone invocation) —
+  order 239's "fresh Silverblue" exit criterion had never run on its
+  target host class; falsification note added to the ledger. 10671807
+  fixed clippy 1.97 drift (fresh hosts break on new lints; pin decision
+  filed as rust-toolchain-unpinned-clippy-drift-2026-07-13.md).
+- **Order 285 DONE (d877e199)**: shared podman_daemon_reachable() gate in
+  tillandsias-headless tests; verified podman-absent / present-but-dead
+  (macOS repro via --remote dead socket) / reachable. Sweep disproved the
+  "other binaries share the podman gap" hypothesis — macOS stress reds
+  re-attributed to mock timing-ratio flakiness (finding filed for macOS).
+- **Forge lane (full-meta, recorded)**: OpenCode on big-pickle ran
+  /meta-orchestration → /advance-work-from-plan, claimed order 313,
+  landed slice 1 as 4281ce4e (inference Fedora CA fix, proxy warm-up
+  retry, error surfacing) through the mirror in one push; packet left
+  in_progress with residuals routed to Windows/linux_mutable. Lane exit 0.
+- **6 findings packets filed**:
+  plan/issues/smoke-e2e-findings-v0.3.260712.1-2026-07-13.md — two
+  forge-liveness-probe defects (exact-name inspect never matches
+  tillandsias-<project>-forge; dead_air-without-heartbeat makes `wait`
+  useless until order 265 lands), proxy teardown SIGSEGV 139, vault
+  approle re-enable ERROR noise + slow SIGTERM, stress mock timing
+  flakiness (macOS), installer-init discarded by smoke reset
+  (double-build waste).
+- **Host state at exit**: all containers stopped, builder toolbox
+  destroyed by the reset (auto-recreates on next ./build.sh via the fixed
+  wrapper), tree clean at push.
 
 ## Cycle 2026-07-13T04:53Z→05:45Z (windows — meta-orchestration eager drain: order 312 slices 1+3 DONE per live Tlatoāni decision; 279 released back)
 

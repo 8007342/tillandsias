@@ -8548,13 +8548,7 @@ fn run_evidence_bundle_retention() {
 
     let repo_root = std::env::current_dir()
         .ok()
-        .and_then(|p| {
-            if p.join("VERSION").exists() {
-                Some(p)
-            } else {
-                None
-            }
-        })
+        .filter(|p| p.join("VERSION").exists())
         .or_else(|| {
             // Fallback: assume CARGO_MANIFEST_DIR-relative path if invoked from workspace
             std::env::var("CARGO_MANIFEST_DIR").ok().and_then(|m| {

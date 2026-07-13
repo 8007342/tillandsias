@@ -31,3 +31,21 @@ toolbox list --containers 2>/dev/null | grep -qF "$TOOLBOX_NAME"
 ```
 
 Remove the `-x` (whole-line) flag so the substring match works across the columnar output.
+
+## Resolution — 2026-07-13
+
+Fixed on linux-next by the fresh-Silverblue provisioning drain
+(linux-yolanda-fable5-20260713T1058Z). `_toolbox_exists()` now extracts the
+CONTAINER NAME column and exact-matches it (safer than the proposed plain
+`grep -qF`, which would also match substrings and the IMAGE NAME column):
+
+```bash
+toolbox list --containers 2>/dev/null | awk 'NR > 1 { print $2 }' | grep -qxF "$TOOLBOX_NAME"
+```
+
+Verified live on host yolanda: first `./build.sh --check` created the toolbox,
+second invocation reused it (no recreate attempt). Same commit also fixes three
+sibling wrapper defects found the same morning — see the commit message on
+scripts/with-tillandsias-builder.sh (linux-next, 2026-07-13).
+
+Status: resolved.

@@ -172,7 +172,7 @@ async fn router_caddy_admin_api_reload() {
     let admin_url = format!("http://127.0.0.1:{}", admin_port);
 
     loop {
-        match SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url)).await {
+        match SimpleHttpClient::get(&format!("{}/config/apps/http/servers", admin_url)).await {
             Ok((200, _)) => {
                 eprintln!("[caddy_reload] admin API is responding");
                 break;
@@ -191,15 +191,14 @@ async fn router_caddy_admin_api_reload() {
         "[caddy_reload] Step 1: verify Caddy admin API responds on 127.0.0.1:{}",
         admin_port
     );
-    let (status, _body) =
-        SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
-            .await
-            .expect("admin API GET");
+    let (status, _body) = SimpleHttpClient::get(&format!("{}/config/apps/http/servers", admin_url))
+        .await
+        .expect("admin API GET");
     assert_eq!(status, 200, "Expected 200 from admin API");
 
     eprintln!("[caddy_reload] Step 2: GET initial server config");
     let (status, initial_config) =
-        SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
+        SimpleHttpClient::get(&format!("{}/config/apps/http/servers", admin_url))
             .await
             .expect("admin API GET");
     assert_eq!(status, 200, "Expected 200 from admin API");
@@ -230,7 +229,7 @@ async fn router_caddy_admin_api_reload() {
     eprintln!("[caddy_reload] Step 4: trigger reload via admin API");
     // The reload endpoint in Caddy 2.x is a POST to /reload
     // or via the raw config API. We'll use /reload for simplicity.
-    let (status, _body) = SimpleHttpClient::post(&format!("{}/reload", &admin_url), "{}")
+    let (status, _body) = SimpleHttpClient::post(&format!("{}/reload", admin_url), "{}")
         .await
         .expect("admin API POST /reload");
     assert_eq!(
@@ -244,7 +243,7 @@ async fn router_caddy_admin_api_reload() {
 
     eprintln!("[caddy_reload] Step 5: verify new routes are present after reload");
     let (status, updated_config) =
-        SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
+        SimpleHttpClient::get(&format!("{}/config/apps/http/servers", admin_url))
             .await
             .expect("admin API GET after reload");
     assert_eq!(status, 200, "Expected 200 from admin API");
@@ -263,12 +262,11 @@ async fn router_caddy_admin_api_reload() {
     eprintln!("[caddy_reload] Step 6: verify reload didn't drop existing connections");
     // Attempt several rapid requests to verify the admin API is still responsive
     for i in 0..5 {
-        let (status, _) =
-            SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
-                .await
-                .unwrap_or_else(|e| {
-                    panic!("Request {} failed after reload: {}", i, e);
-                });
+        let (status, _) = SimpleHttpClient::get(&format!("{}/config/apps/http/servers", admin_url))
+            .await
+            .unwrap_or_else(|e| {
+                panic!("Request {} failed after reload: {}", i, e);
+            });
         assert_eq!(status, 200, "Request {} got status {}", i, status);
     }
     eprintln!("[caddy_reload] All post-reload requests succeeded");
@@ -345,7 +343,7 @@ async fn router_caddy_reload_no_blocking() {
     // Wait for Caddy to come up
     let mut retry_count = 0;
     loop {
-        if SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
+        if SimpleHttpClient::get(&format!("{}/config/apps/http/servers", admin_url))
             .await
             .is_ok()
         {
@@ -363,7 +361,7 @@ async fn router_caddy_reload_no_blocking() {
     // Spawn multiple request tasks
     let mut handles = vec![];
     for i in 0..10 {
-        let url = format!("{}/config/apps/http/servers", &admin_url);
+        let url = format!("{}/config/apps/http/servers", admin_url);
         let handle = tokio::spawn(async move {
             // Each task makes 5 rapid requests
             for j in 0..5 {
@@ -391,7 +389,7 @@ async fn router_caddy_reload_no_blocking() {
             std::fs::File::create(&dynamic_caddyfile).expect("create updated dynamic.Caddyfile");
         writeln!(f, "# Updated during concurrent load").expect("write");
     }
-    let _ = SimpleHttpClient::post(&format!("{}/reload", &admin_url), "{}").await;
+    let _ = SimpleHttpClient::post(&format!("{}/reload", admin_url), "{}").await;
 
     // Wait for all request tasks to complete
     for handle in handles {
