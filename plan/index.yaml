@@ -9784,6 +9784,23 @@ plan_index:
         - "ollama binary persists across container recreation (path inside the mounted volume)"
         - "pristine-substrate first lane launch installs ollama through a just-started proxy (e2e evidence)"
       events:
+        - type: progress
+          ts: "2026-07-12T23:20:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            EVIDENCE UPDATE: the recreated container failed the install
+            AGAIN with the proxy long warm — the warm-up-race theory is
+            insufficient. All successful probes ran WITHOUT the ensure's
+            hardening flags; the failing container runs with
+            --cap-drop=ALL --security-opt=no-new-privileges
+            --userns=keep-id --pids-limit=128. Next repro MUST replicate
+            those flags (plus the CA mount + full env) to isolate which
+            one breaks the download; keep-id/pids-limit interactions with
+            curl+zstd+tar are the prime suspects. Lanes tolerate an
+            EXITED inference at launch (only the 125 name-collision kills
+            them — order 314), so the operator's OpenCode session ran
+            despite it.
         - type: filed
           ts: "2026-07-12T22:50:00Z"
           agent_id: "windows-bullo-fable5-20260712T1940Z"
