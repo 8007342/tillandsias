@@ -6548,7 +6548,7 @@ plan_index:
     - packet_id: macos-tray-parity-column-verify
       order: 257
       title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: completed
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6576,6 +6576,25 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the macOS host"
       events:
+        - type: completed
+          ts: "2026-07-14T00:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          lease_id: "macos-tray-parity-column-verify (claim-ledger-node 2026-07-13)"
+          summary: >
+            Final cell closed: InteractiveStream attach flipped todo -> done
+            with live evidence — full opencode PTY session over the vsock
+            wire on the freshly provisioned VM (TUI rendered in-band,
+            BigPickle agent ran a complete /meta-orchestration cycle, exit
+            code propagated: {"status":"opencode-finished","exit_code":0};
+            log target/build-install-smoke-e2e/20260713T224400Z/
+            04b-bigpickle-meta-orchestration.log). macOS column now has no
+            unknown/todo cells on required rows; the attended 2026-07-12
+            smoke had closed the other seven (consolidated gap packet
+            macos-tray-parity-attended-smoke-gap-2026-07-09.md). Instant
+            pre-build litmus: parity gate passing on this host (remaining 4
+            suite failures are unrelated known Darwin/staging fallout,
+            recorded in macos-build-install-smoke-e2e-findings-2026-07-13.md).
         - type: unblock
           ts: "2026-07-12T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -10517,3 +10536,37 @@ plan_index:
             stale and vz.stop() killed the build. Sibling of order 270 and
             the Windows silent forge-base build finding, but fatal on macOS
             first use.
+
+    - packet_id: forge-shared-checkout-destructive-clean
+      order: 328
+      title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [meta-orchestration, forge, safety, p1, skill]
+      estimated_hours: 4
+      outcome: >
+        Blocked in-forge cycles leave pre-existing files byte-identical:
+        skill exit contract scoped to cycle-created artifacts (startup
+        git-status snapshot is the boundary), and macOS forge lanes get a
+        forge-owned worktree instead of operating directly on the
+        operator's virtiofs-shared checkout (order 321 adjacency). Live
+        near-data-loss transcript in the deliverable; survival was a
+        commit-push race won by minutes.
+      exit_criteria:
+        - "skill text: discard-temporary-artifacts scoped to artifacts the cycle created; blocked cycles leave tree as found"
+        - "litmus fixture: blocked cycle on a dirty tree exits with pre-existing files byte-identical (checksummed)"
+        - "macOS forge lane worktree isolation decision recorded (materialize vs git-worktree), child packet filed if adopted"
+      events:
+        - type: filed
+          ts: "2026-07-14T00:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            BigPickle's blocked forge cycle ran git checkout -- plan/index.yaml
+            + git clean -fd plan/issues/ on the shared virtiofs checkout,
+            targeting this host cycle's five uncommitted packet files; they
+            survived only because e84ba192 had just been pushed. It also
+            reverted its own blocker-file update (self-erasing evidence).
