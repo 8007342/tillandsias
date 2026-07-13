@@ -57,7 +57,12 @@ Fresh substrate → maintenance lane (works) → OpenCode lane → close
 OpenCode → try launching any lane. Observed deterministic in one attended
 session; rate unconfirmed.
 
-## Recovery (unverified)
+## Recovery (CONFIRMED, same day)
 
-Untested; expected: quit + relaunch tray (VM restart). Operator kept the
-session up for forensics instead.
+Tray relaunch (operator launched the dist/ bundle) fully recovers: GitHub
+Login succeeded first try, projects listed, OpenCode lane launched again.
+So the wedge is guest/tray-session state, not persisted substrate damage.
+Note: the relaunch REQUIRED a fresh GitHub Login — whether credential
+re-entry after a VM restart is by-design (vault seal) or a persistence gap
+belongs to `agent-login-flows-vault-2026-07-12.md` scope; observation
+recorded in the 2026-07-12 macOS findings file.

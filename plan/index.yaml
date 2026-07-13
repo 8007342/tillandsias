@@ -9982,6 +9982,22 @@ plan_index:
             the mirror false-success P1 and insteadOf host-poisoning; audit
             launched same cycle with Fable fork (current-state map) + Opus
             researcher (best-practice baseline).
+        - type: progress
+          ts: "2026-07-13T00:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260712T2205Z"
+          host: macos
+          summary: >
+            DEDUPE: macos independently promoted the same directive as a
+            "git-mirror-architecture-revamp" node (order-315 collision;
+            renumbered brew packet to 317 by linux coordinator). Its design-constraints +
+            defect-inventory file
+            plan/issues/git-mirror-architecture-revamp-2026-07-12.md is
+            folded in as audit input: quarantine host origin config from
+            the forge (env-scoped injection, never shared .git/config),
+            relay-verified acks, re-derived ok:forge guard semantics,
+            host-shared (macOS virtiofs) vs mirror-materialized (Linux)
+            cross-platform statement, plus Big Pickle #2's in-forge
+            blocker forge-credential-channel-missing-2026-07-12.md.
 
     - packet_id: mirror-pre-receive-subshell-reject-loss
       order: 316
@@ -10015,3 +10031,47 @@ plan_index:
           summary: >
             Order-315 audit finding (Fable current-state map), verified at
             pre-receive-hook.sh:125-142 as of 8875ba82.
+
+    - packet_id: brew-aarch64-harness-strategy
+      order: 317
+      title: "Brew harness strategy: keep brew only for officially-brew-documented tools; per-arch policy for aarch64 Linux (Tier 2, no bottles)"
+      status: ready
+      kind: enhancement
+      deliverable: images/default brew shims + harness install channel inventory (plan/issues/brew-aarch64-harness-strategy-2026-07-12.md scope)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [images, forge, harnesses, brew, ux]
+      estimated_hours: 5
+      outcome: >
+        Operator decision (The Tlatoāni, 2026-07-12): keep brew as the
+        harness/agent install channel ONLY for tools whose official
+        websites document brew installs; use official channels (npm,
+        curl, release binaries) for the rest. Live evidence: Linux
+        aarch64 (every macOS-hosted guest) is Homebrew Tier 2 — no
+        supported bottles, source-build degradation — plus the
+        attestation token gap
+        (brew-shim-attestation-requires-gh-token-2026-07-12.md, folds
+        in). Scope, per-arch policy, and verifiable closure in
+        plan/issues/brew-aarch64-harness-strategy-2026-07-12.md.
+      exit_criteria:
+        - "harness inventory: official-brew set vs official-other set, recorded with provenance links"
+        - "aarch64 guest: every inventoried harness installs via its designated channel with visible progress, or fails with one actionable line (no silent 127s)"
+        - "shim wrapper owns the Tier-2 warning with a one-line policy statement"
+      events:
+        - type: filed
+          ts: "2026-07-12T23:30:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260712T2205Z"
+          host: macos
+          summary: >
+            Filed recording the operator's keep-brew-for-official-brew
+            decision from the attended macOS smoke; aarch64 Tier-2
+            behavior observed live in the guest.
+        - type: progress
+          ts: "2026-07-13T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Coordinator mediation: renumbered from 316 to 317 (order-316
+            was concurrently taken on linux-next by
+            mirror-pre-receive-subshell-reject-loss). Packet content
+            unchanged.
