@@ -10537,3 +10537,50 @@ plan_index:
             First Windows cold-provision cloud attach ever exercised; clone
             EACCES root-caused to missing forge user + root-owned src in the
             WSL recipe. Lane retried after chmod workaround.
+
+    - packet_id: guest-lazy-ensure-router-image
+      order: 327
+      title: "Guest lazy enclave-ensure never builds tillandsias-router — stage 'router' dies with cryptic localhost-registry pull 125 (order-76 parity gap)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, containers, forge, ux]
+      estimated_hours: 3
+      outcome: >
+        Live repro 2026-07-13, cold Windows WSL2 guest (headless
+        v0.3.260712.1), first cloud attach: the lane lazily built vault/
+        proxy/git/inference/forge-base/forge, then stage 'router' ran
+        `podman run ... localhost/tillandsias-router:v0.3.260712.1`
+        WITHOUT ensuring the image exists — podman fell through to
+        interpreting localhost as a registry ("pinging container registry
+        localhost: dial tcp 127.0.0.1:443: connection refused", 3 retries,
+        exit 125, lane dead). This is exactly the failure class order 76
+        fixed via ensure_image_exists build-on-missing for forge-base/
+        chromium-core; the router stage (newer, order-315-era Caddy router
+        + sidecar) was never added to that ladder. Note the router build
+        context needs the runtime-extracted tillandsias-router-sidecar
+        musl binary (images/router/Containerfile COPY), so the fix is
+        ensure_image_exists parity including the sidecar extraction, plus
+        the order-76-style actionable error if the build itself fails.
+        Linux hosts dodge this because `tillandsias --init` pre-builds all
+        images; the guest lazy path is the only consumer that hits it.
+        Session workaround: ran `tillandsias-headless --init --debug`
+        inside the guest to build the full image set, then relaunched the
+        lane. Evidence:
+        plan/issues/build-install-smoke-e2e-findings-2026-07-13-windows.md
+        (Run 1 lane section, attempt 2).
+      exit_criteria:
+        - "cold guest cloud attach builds tillandsias-router on demand (or ensures it before stage router); no localhost-registry pull attempt"
+        - "missing-image detection prints the order-76-style actionable error naming the image and the build command"
+        - "regression pinned by a unit/litmus test on the router ensure path"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:12:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            Second distinct first-attach blocker on the cold Windows lane
+            (after order 326); found because the Windows guest exercises the
+            lazy ensure path that --init masks on Linux hosts.
