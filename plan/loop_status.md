@@ -1,6 +1,38 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-13T01:20:00Z
+LastExecutionTime: 2026-07-13T04:50:00Z
+
+## Cycle 2026-07-13T04:19Z→04:50Z (linux_mutable macuahuitl — drain: order 302 DONE (mirror deploy+verify), 315 ladder rungs 318-322 filed)
+
+- **Startup/sync**: linux-next clean at 6f6071db == origin; guard
+  `ok:gh-keyring`. Sibling heads: main 38d33cd8, windows-next 01b38a0b,
+  osx-next 837b066f (both already merged).
+- **Order 302 DONE**: tillandsias-git image rebuilt from HEAD via
+  scripts/build-image.sh git (v0.3.260713.1 + latest) — verified inside
+  the image: order-301 safe refspec (entrypoint.sh:88) AND order-316
+  pre-receive process-substitution fix (pre-receive-hook.sh:142). No
+  long-lived mirror container (per-project on-demand); next lane start
+  picks up the new tag. Live one-push convergence evidence: the e2e
+  gate-4 in-forge push cb9bfd7f..b0bd75b8 relayed mirror→GitHub in ONE
+  push. git-mirror-service instant litmus 3/3 PASS.
+- **Order 315 reduction — migration ladder FILED (orders 318-322)**, all
+  ready, all traceable to the landed audit cheatsheets: 318
+  relay-verified acks (false-success P1 killer), 319 vault-backed
+  credential helper + GitHub App short-TTL token evaluation, 320 single
+  gitconfig injection point + image-baked CA on ALL platforms (deletes
+  the GIT_SSL_CAINFO/SSL_CERT_FILE/GIT_CONFIG_GLOBAL env mesh; fixes the
+  macOS no-insteadOf gap), 321 bidirectional host/forge git-config
+  quarantine (insteadOf host-poisoning class), 322 authenticated push
+  transport (research-first, Tlatoāni sign-off gate).
+- **Newly unblocked summary for sibling hosts**: with e2e proof on all 3
+  platforms, the fine-tuning queue is open — macOS: 257 parity cells,
+  attended-smoke P1s (blank first lane, lane wedge, resize), 317 brew
+  strategy; Windows: 312 (RELEASE-GATING elevation fix), 313 inference
+  resilience, 309 least-privilege split; any-host: 245-251 audit series,
+  318-322 mirror ladder (linux-first).
+- **Release note**: next daily /merge-to-main-and-release (due later
+  2026-07-13) carries orders 308/310/311/316 + both audit cheatsheets +
+  the rebuilt mirror image.
 
 ## Cycle 2026-07-12T23:54Z→2026-07-13T01:20Z (linux_mutable macuahuitl — coordinator: sibling integration ×2, order-315 audit LANDED, destructive e2e PASS)
 

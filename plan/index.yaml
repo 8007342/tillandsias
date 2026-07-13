@@ -9333,7 +9333,7 @@ plan_index:
     - packet_id: git-mirror-ref-convergence-deploy-and-verify
       order: 302
       title: "Rebuild git-mirror image with the order-301 safe refspec and live-verify one-push convergence"
-      status: ready
+      status: done
       kind: deploy+verify
       deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
       depends_on: [git-mirror-fetch-clobbers-exported-ref]
@@ -9357,6 +9357,24 @@ plan_index:
         - "a single push of a fresh commit leaves local, mirror (git://tillandsias-git), and GitHub advertising the same SHA with no redundant second push"
         - "litmus:git-mirror-ref-convergence stays green"
       events:
+        - type: completed
+          ts: "2026-07-13T04:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: >
+            Deployed and verified. tillandsias-git image rebuilt from HEAD
+            6f6071db via scripts/build-image.sh git (tags v0.3.260713.1 +
+            latest) — bakes BOTH the order-301 safe refspec
+            (entrypoint.sh:88 +refs/heads/*:refs/remotes/origin/*) and the
+            order-316 pre-receive process-substitution fix
+            (pre-receive-hook.sh:142 done < <), verified inside the image.
+            No long-lived mirror container exists (per-project on-demand;
+            e2e cleanup removed it) — next lane start picks up the new
+            image by tag. Live one-push convergence evidence: tonight's
+            in-forge push cb9bfd7f..b0bd75b8 relayed mirror->GitHub in a
+            single push during the destructive e2e (gate-4 log), on a
+            mirror built with the safe refspec. git-mirror-service instant
+            litmus 3/3 PASS.
         - type: filed
           ts: "2026-07-12T18:32:00Z"
           agent_id: "forge-tillandsias-opus48-20260712T1815Z"
@@ -9955,6 +9973,21 @@ plan_index:
         - "migration-ladder child packets filed"
       events:
         - type: progress
+          ts: "2026-07-13T04:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: >
+            Migration-ladder child packets FILED from the landed
+            cheatsheets: 318 relay-verified acks (false-success P1
+            killer), 319 credential-helper broker + GitHub App token
+            evaluation, 320 single gitconfig injection + image-baked CA
+            (all platforms; deletes the env mesh), 321 bidirectional
+            host/forge git-config quarantine (insteadOf poisoning class),
+            322 authenticated push transport (research-first, Tlatoani
+            sign-off gate). Remaining on 315 itself: gap-disposition
+            table sign-off + completion-gate verification once rungs
+            land. Order 302 deployed+verified this same cycle.
+        - type: progress
           ts: "2026-07-13T00:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
           host: linux_mutable
@@ -10086,3 +10119,153 @@ plan_index:
             was concurrently taken on linux-next by
             mirror-pre-receive-subshell-reject-loss). Packet content
             unchanged.
+
+    - packet_id: mirror-relay-verified-acks
+      order: 318
+      title: "Ladder rung A: mirror MUST NOT ack a push it has not durably relayed (or must expose relay state) — kills the false-success P1"
+      status: ready
+      kind: architecture
+      deliverable: images/git/ (entrypoint + hooks) + openspec/specs/git-mirror-service/
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [git-mirror, bash, litmus, architecture]
+      estimated_hours: 6
+      outcome: >
+        Order-315 audit: post-receive relays upstream but exits 0
+        unconditionally, and githooks(5) is explicit that post-receive
+        cannot affect the outcome the client already saw — the macOS
+        false-success P1 is architectural. Choose and implement per the
+        enterprise-practices cheatsheet: synchronous relay in pre-receive
+        (client success == upstream durable), or async relay with a
+        visible, durable queue + relay-state surface the credential guard
+        and exit contract can interrogate (git ls-remote against the
+        mirror is exactly the false signal — forbidden as evidence).
+        Relay uses push --atomic with explicit non-force refspecs.
+      exit_criteria:
+        - "a push that cannot be relayed (upstream credential removed in fixture) does NOT return unqualified success to the pusher"
+        - "litmus: ack-without-relay scenario FAILS the gate (new litmus:git-mirror-relay-verified-ack)"
+        - "spec git-mirror-service gains the ack-semantics requirement"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung A, from landed audit cheatsheets."
+
+    - packet_id: mirror-credential-helper-broker
+      order: 319
+      title: "Ladder rung B: git credential helper (vault-backed) on the mirror; evaluate short-TTL GitHub App installation tokens; kill token-in-URL"
+      status: ready
+      kind: architecture
+      deliverable: images/git/ + cheatsheets/concurrent-git/git-mirror-enterprise-practices.md follow-up
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [git-mirror, credentials, vault, security]
+      estimated_hours: 6
+      outcome: >
+        DEFAULTS OVER CONFIGURATION: replace scripted token plumbing with
+        the git-native credential.helper protocol — a helper on the MIRROR
+        container that fetches from vault at push time (secret never in
+        argv/URL/env, never in any forge). Evaluate GitHub App
+        installation tokens (short-TTL, repo-scoped) vs the current PAT.
+        Forge containers keep ZERO credentials (unchanged invariant).
+      exit_criteria:
+        - "mirror relay authenticates via credential.helper; no token appears in remote URLs, argv, or env dumps (fixture greps)"
+        - "credential rotation: swapping the vault secret takes effect without container rebuild"
+        - "decision record: GitHub App tokens adopted or rejected with reasons"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung B."
+
+    - packet_id: forge-gitconfig-single-injection
+      order: 320
+      title: "Ladder rung C: ONE gitconfig injection point (committed includeIf/include.path), image-baked CA trust; kill the env mesh on ALL platforms"
+      status: ready
+      kind: architecture
+      deliverable: images/default/lib-common.sh + crates/tillandsias-headless + macOS/Windows lane parity
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [forge, git, config, cross-platform]
+      estimated_hours: 8
+      outcome: >
+        Replace GIT_CONFIG_GLOBAL bind-mount + GIT_SSL_CAINFO/SSL_CERT_FILE
+        exports (CA logic duplicated in 7 files under 2 names) with: MITM
+        CA baked into the image system trust store at image build, and a
+        single Tillandsias-owned git include (include.path/includeIf
+        gitdir:) materialized by ONE code path used by ALL lanes on ALL
+        THREE platforms. Fixes the macOS gap (VM lane got no insteadOf
+        injection at all -> hand-hacked .git/config). Ladder discipline:
+        new path lands behind a flag, soaks, becomes default, old env
+        mesh removed.
+      exit_criteria:
+        - "macOS/Windows/Linux forge lanes get identical git config through the single injection point (fixture per platform)"
+        - "GIT_SSL_CAINFO/SSL_CERT_FILE exports deleted from entrypoints once CA is image-baked (grep gate)"
+        - "env-var inventory in the audit cheatsheet re-run: git-flow rows drop to <=2"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung C."
+
+    - packet_id: forge-host-gitconfig-bidirectional-quarantine
+      order: 321
+      title: "Ladder rung D: bidirectional host/forge git-config isolation — forge can never write host .git/config; host git state never leaks in"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless (mount spec) + fixture
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [forge, security, containers, git]
+      estimated_hours: 4
+      outcome: >
+        The insteadOf host-poisoning incident: project .git/ is bind-
+        mounted RW into the forge (unlike ~/.ssh and ~/.config/gh tmpfs
+        quarantines), so an in-forge `git config` write poisons the HOST
+        checkout. Quarantine .git/config-class state (overlay the config
+        file, or repo-level include indirection from rung C) so forge git
+        config edits stay forge-local while worktree/objects sharing is
+        preserved. Applies to Linux bind-mount and macOS virtiofs lanes.
+      exit_criteria:
+        - "fixture: in-forge `git config user.x y` (and url.insteadOf) does NOT appear in the host checkout's .git/config"
+        - "fixture: host-side credential helper / insteadOf entries are NOT visible to git inside the forge"
+        - "worktree object/ref sharing still works (clone/fetch/push flows green)"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung D (insteadOf host-poisoning class)."
+
+    - packet_id: mirror-authenticated-push-transport
+      order: 322
+      title: "Ladder rung E (research-first): forge pushes to the mirror over authenticated smart-HTTP/SSH; git:// demoted to fetch-only"
+      status: ready
+      kind: research
+      deliverable: plan/issues/git-mirror-architecture-audit-2026-07-12.md appendix + decision record
+      depends_on: [mirror-relay-verified-acks]
+      pickup_role: linux
+      capability_tags: [git-mirror, transport, security, research]
+      estimated_hours: 4
+      outcome: >
+        git-daemon docs: git:// receive-pack means "anybody can push
+        anything, including removal of refs". Acceptable risk-assessment
+        for the isolated enclave net is currently implicit — make it
+        explicit: research-first decision on serving pushes over smart-
+        HTTP (lighttpd already in the image) or SSH with per-forge
+        identity, so auth, pre-receive gating, and ff-denial are enforced
+        by the transport rather than network topology alone. Implement
+        only after the decision record is approved (Tlatoani sign-off;
+        contested-practice flag from the enterprise cheatsheet).
+      exit_criteria:
+        - "decision record: transport chosen with threat-model rationale, or explicit accept-risk for git:// with topology invariants pinned by litmus"
+        - "if adopted: one lane migrated behind a flag with fetch/push parity fixture"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung E (transport, research-first)."
