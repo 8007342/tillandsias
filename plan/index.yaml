@@ -9637,6 +9637,19 @@ plan_index:
             (plan/issues/forge-proxy-egress-antigravity-2026-07-12.md).
             Exit criteria 1+2 met; criterion 3 blocked on proxy allowlist
             + vault Gemini credential (orders 303/304).
+        - type: progress
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260713T2301Z"
+          host: forge
+          summary: >
+            Structural improvements: (1) require_antigravity() replaces
+            one-shot curl with 3-attempt retry + exponential backoff
+            (entrypoint-forge-antigravity.sh:116-137); (2) added
+            export_project_env for structural parity with claude/opencode
+            entrypoints; (3) added antigravity case to agent-profile.sh
+            (was falling through to "unknown"). bash -n syntax check
+            PASS on both files. Proxy egress + credential gaps still
+            block criterion 3 (orders 303/304).
 
     - packet_id: headless-unit-cap-hardening-podman-wedge
       order: 308

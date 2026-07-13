@@ -53,6 +53,20 @@ as a safety net for other failures.
 - **Gemini credential in vault**: requires Antigravity OAuth login flow
   (orders 303/304, deferred per operator directive until stable ships).
 
+## Structural improvements (forge 2026-07-13)
+
+1. **`require_antigravity()`** replaces one-shot curl installer with 3-attempt
+   retry + exponential backoff (2s, 4s, 8s). Aligns with the npm harness retry
+   pattern in `ensure_forge_harnesses`. Previous one-shot curl would fail
+   silently on proxy hiccups, leaving agy absent.
+
+2. **`export_project_env`** added — exports `TILLANDSIAS_PROJECT_PATH` and
+   `TILLANDSIAS_PROJECT_GENUS`. Present in all other entrypoints (claude, opencode)
+   but was missing from antigravity.
+
+3. **`agent-profile.sh`**: added `antigravity` case (was falling through to
+   `*) "Unknown"`).
+
 ## Exit criteria (order 307)
 
 - [x] Reproduce with the new exit-pause trap and capture the actual error text
