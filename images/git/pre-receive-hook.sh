@@ -121,8 +121,8 @@ while read -r OLDSHA NEWSHA REFNAME; do
 
     [ -n "$FILES" ] || continue
 
-    # Check each changed file
-    echo "$FILES" | while IFS= read -r FILEPATH; do
+    # Check each changed file (process substitution, not pipe, to avoid subshell)
+    while IFS= read -r FILEPATH; do
         [ -n "$FILEPATH" ] || continue
         is_ledger_yaml "$FILEPATH" || continue
 
@@ -139,7 +139,7 @@ while read -r OLDSHA NEWSHA REFNAME; do
         if ! validate_yaml_file "$FILEPATH" "$TMPFILE"; then
             REJECTED=1
         fi
-    done
+    done < <(echo "$FILES")
 done
 
 if [ "$REJECTED" -eq 1 ]; then

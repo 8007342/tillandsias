@@ -10002,9 +10002,9 @@ plan_index:
     - packet_id: mirror-pre-receive-subshell-reject-loss
       order: 316
       title: "Mirror pre-receive: REJECTED=1 set in pipeline subshell is lost — YAML gate is advisory, never rejects"
-      status: ready
+      status: done
       kind: bug
-      deliverable: images/git/pre-receive-hook.sh
+      deliverable: images/git/pre-receive-hook.sh + scripts/test-pre-receive-yaml-gate.sh
       depends_on: []
       pickup_role: linux
       capability_tags: [git-mirror, bash, litmus]
@@ -10031,6 +10031,17 @@ plan_index:
           summary: >
             Order-315 audit finding (Fable current-state map), verified at
             pre-receive-hook.sh:125-142 as of 8875ba82.
+        - type: progress
+          ts: "2026-07-13T00:40:00Z"
+          agent_id: "opencode-big-pickle-20260713T0032Z"
+          host: forge
+          summary: >
+            Implemented fix: replaced pipe (echo FILES | while read) with
+            process substitution (while read ... done < <(echo FILES)) at
+            pre-receive-hook.sh:125,142. Verified with 3-pass litmus
+            (scripts/test-pre-receive-yaml-gate.sh): invalid YAML rejected,
+            valid YAML accepted, multi-ref mixed validity rejected.
+            All three exit criteria satisfied.
 
     - packet_id: brew-aarch64-harness-strategy
       order: 317
