@@ -5725,6 +5725,22 @@ plan_index:
             - "Removed python3 python3-pyyaml from dnf install list to comply with no-python-runtime policy."
             - "scripts/check-no-python-scripts.sh PASS against the touched file."
             - "Deliverable filed: plan/issues/silverblue-toolbox-builder-2026-07-07.md."
+        - type: note
+          ts: "2026-07-13T11:25:00Z"
+          agent_id: "linux-yolanda-fable5-20260713T1058Z"
+          host: linux_immutable
+          summary: >
+            Exit criterion 1 ("./build.sh --check succeeds on a fresh
+            Silverblue host") was falsified live on the first pristine
+            Silverblue host to run it (yolanda, 2026-07-13): four latent
+            wrapper defects (missing --assumeyes on toolbox create,
+            enclave proxy env poisoning host podman pulls, _toolbox_exists
+            grep -x never matching, broken standalone re-exec) meant the
+            criterion had only ever been evaluated on hosts where the
+            wrapper's Silverblue path never executes. Fixed on linux-next
+            2026-07-13 (fix(builder) commit); packet stays done. Recorded
+            so future completions of host-class-specific criteria are
+            verified on the target host class, not by code inspection.
 
     - packet_id: forge-build-check-tooling-gap
       order: 240
@@ -8876,7 +8892,7 @@ plan_index:
     - packet_id: headless-integration-tests-podman-gate
       order: 285
       title: "Headless podman-integration tests must skip (not fail) when no podman daemon is reachable (macOS trunk sweep)"
-      status: in_progress
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-headless/tests/
       depends_on: []
@@ -8932,6 +8948,39 @@ plan_index:
             Claimed during meta-orchestration worker drain on the fresh
             Silverblue host (yolanda). Verification will run inside the
             newly provisioned tillandsias-builder toolbox.
+        - type: completed
+          ts: "2026-07-13T11:25:00Z"
+          agent_id: "linux-yolanda-fable5-20260713T1058Z"
+          host: linux_immutable
+          summary: >
+            Shared gate landed: tests/common/mod.rs exposes
+            podman_daemon_reachable() (podman info probe, OnceLock-cached
+            per test binary, ssh_keygen_available() shape) and
+            error_recovery::test_missing_image_error_handling now gates on
+            it, replacing the cycle-7 inline unreachable-arms with strict
+            assertions when a daemon answers. Empirical sweep finding: the
+            other binaries named in the filing (stress_concurrent_operations,
+            rapid_project_switch(_v2), network_validation, cache_peer_routing,
+            e2e_user_flow, signal_handling, singleton_coexistence) contain
+            ZERO podman shell-outs — they are mock- or binary-spawn-based
+            and pass 146/146 with no podman binary at all, so the
+            "likely share it" hypothesis is disproven on linux; their macOS
+            reds (if still live) have different roots (see the stress-test
+            timing-ratio finding in
+            plan/issues/smoke-e2e-findings-v0.3.260712.1-2026-07-13.md).
+            Verified in all three envs on host yolanda: podman absent
+            (builder toolbox, full suite green), podman present + daemon
+            unreachable via --remote dead-socket shim (the exact macOS
+            condition: gate skips, suite green), podman reachable (host run
+            of the compiled test binary: strict path asserts, green).
+            ./build.sh --check exit 0. Exit criterion "cargo test green on
+            bare macOS" is confirmed by the next osx trunk sweep; if that
+            sweep still reds on these binaries, reopen citing this event.
+          evidence:
+            - "commit linux-next (this push): tests/common/mod.rs + error_recovery gate refactor"
+            - "cargo test -p tillandsias-headless: 146 passed, 0 failed (toolbox, no podman)"
+            - "error_recovery --remote dead-socket run: 'skipping: podman daemon unreachable', 15/15 ok"
+            - "host run test_missing_image_error_handling (podman reachable): strict assertions, ok"
 
     - packet_id: macos-guest-disk-resize-forge-fit
       order: 294

@@ -15,6 +15,8 @@ use tempfile::TempDir;
 
 use tillandsias_core::cache_validation::{self, CacheStateWithChecksums, ValidationResult};
 
+mod common;
+
 // ===== Cache Corruption Detection & Recovery =====
 
 /// Test: Detect and report cache corruption
@@ -231,51 +233,34 @@ fn test_podman_error_message_clarity() {
 /// Test: Handle missing image gracefully (would retry in real scenario)
 #[test]
 fn test_missing_image_error_handling() {
+    // Missing-image semantics require a reachable daemon: with podman present
+    // but no daemon/machine (bare macOS host, CI without `podman machine
+    // start`) the CLI returns a CONNECTION error before it can evaluate the
+    // image reference, which failed the macOS trunk sweep and masked real
+    // regressions (found 2026-07-10; order 285 replaced the inline
+    // unreachable-arm with this shared gate).
+    if !common::podman_daemon_reachable() {
+        eprintln!("skipping: podman daemon unreachable");
+        return;
+    }
+
     // Test the principle: missing image is detected, logged, and offers clear recovery
     let fake_image = "tillandsias-fake-nonexistent-image:v0.1.0";
 
     let output = Command::new("podman")
-        .arg("image")
-        .arg("inspect")
-        .arg(fake_image)
-        .output();
+        .args(["image", "inspect", fake_image])
+        .output()
+        .expect("podman daemon is reachable (gated above), spawn must succeed");
 
-    match output {
-        Ok(output) if !output.status.success() => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Podman is present but has no reachable daemon/machine (common on
-            // a bare macOS dev host or CI without `podman machine start`) —
-            // the CLI returns a CONNECTION error before it can evaluate the
-            // image reference. We cannot exercise missing-image semantics
-            // without a daemon, so treat that as the same graceful-skip case
-            // as `podman` being absent entirely (Err arm below). Without this
-            // the macOS trunk test sweep fails on connection-refused, masking
-            // real regressions (found 2026-07-10). Otherwise the error must
-            // clearly indicate the missing image, not a generic failure.
-            let unreachable = stderr.contains("Cannot connect to Podman")
-                || stderr.contains("connection refused")
-                || stderr.contains("unable to connect to Podman socket");
-            if unreachable {
-                eprintln!("podman present but daemon unreachable; skipping: {stderr}");
-            } else {
-                assert!(
-                    stderr.contains("not known")
-                        || stderr.contains("no image with reference")
-                        || stderr.contains("not found"),
-                    "Error should clearly indicate missing image: {}",
-                    stderr
-                );
-            }
-        }
-        Ok(_) => {
-            // Image exists (unexpected in test)
-            panic!("Test image should not exist");
-        }
-        Err(e) => {
-            // podman command not found — acceptable in some CI
-            eprintln!("podman not available: {}", e);
-        }
-    }
+    assert!(!output.status.success(), "Test image should not exist");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not known")
+            || stderr.contains("no image with reference")
+            || stderr.contains("not found"),
+        "Error should clearly indicate missing image: {}",
+        stderr
+    );
 }
 
 // ===== Network Failure Scenarios =====
