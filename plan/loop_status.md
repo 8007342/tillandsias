@@ -1,6 +1,52 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-13T00:45:00Z
+LastExecutionTime: 2026-07-13T01:20:00Z
+
+## Cycle 2026-07-12T23:54Z→2026-07-13T01:20Z (linux_mutable macuahuitl — coordinator: sibling integration ×2, order-315 audit LANDED, destructive e2e PASS)
+
+- **Integration**: merged origin/windows-next (orders 297/274/308/310/311
+  done; 312/313/314 filed) and origin/osx-next (attended smoke phase 2
+  P1s) into linux-next — twice, as siblings kept advancing. Conflict
+  mediation: macOS's independently-filed git-mirror revamp DEDUPED into
+  order 315 (its constraints file kept as audit input);
+  brew-aarch64-harness-strategy renumbered 316→317.
+- **Order 315 audit (operator-directed, heavy agents) — cheatsheets LANDED**:
+  Fable fork produced cheatsheets/concurrent-git/git-mirror-architecture-audit.md
+  (current-state map, file:line provenance @ 8875ba82); Opus researcher
+  produced git-mirror-enterprise-practices.md (URL+date provenance).
+  Headline facts: post-receive relay exits 0 unconditionally (false-success
+  P1 is architectural); pre-receive REJECTED lost in pipeline subshell
+  (→ order 316, since FIXED in-forge cb9bfd7f); project .git/ not
+  quarantined (insteadOf host-poisoning vector); ~20 env vars across 4
+  trust domains, CA logic duplicated in 7 files. Headline recommendations:
+  relay OFF post-receive (githooks(5): cannot affect outcome); push
+  --atomic non-force refspecs; credential-helper broker + short-TTL GitHub
+  App installation tokens (secrets never enter the forge); replace env
+  mesh with committed includeIf gitdir: config + image-baked CA; forge
+  pushes over authenticated smart-HTTP/SSH, not git://. Remaining rungs on
+  order 315: gap-disposition sign-off, migration-ladder child packets,
+  ack-semantics litmus, isolation fixture.
+- **Device-login amendment**: orders 303/304 amended — Claude/Codex login
+  replaces paste-token with DEVICE flow (--device: code + copyable URL,
+  never opens a browser/renders clickable URLs that spill garbage into the
+  token). Operator-verified UX.
+- **Destructive local-build e2e PASS @ 0a5c2ca7** (installed
+  v0.3.260713.1): ci-full 17/17 (attempt 1 failed on the new cheatsheets'
+  tier/sync — fixed 0a5c2ca7); full podman reset; cold --init clean
+  (vault healthy); forge lane green — the in-forge agent claimed and
+  FIXED order 316 with a 3-pass fixture (cb9bfd7f) and its push relayed
+  through the live mirror to GitHub. New finding:
+  optimization/forge-openspec-init-fails-warning-2026-07-12.md.
+- **Platform state @ cycle close**: Linux GREEN (e2e PASS, release
+  v0.3.260712.1 live, mirror relay demonstrably working on this host).
+  Windows: order 258 parity DONE (all 7 cells green) but order 312 is
+  RELEASE-GATING — standard-user tray cannot handshake (hcsdiag requires
+  elevation); curl-install Windows dead-on-arrival until 312 ships.
+  macOS: attended smoke phase 2 open P1s — mirror push false-success
+  (order-315 lineage), lane wedge after OpenCode close, blank first
+  OpenCode lane — plus resize P2 and the macOS-forge credential channel
+  gap (no insteadOf injection on the VM lane; order 315 constraint
+  input).
 
 ## Cycle 2026-07-13T00:32Z→00:45Z (forge — meta-orchestration: order 316 pre-receive YAML gate fix DONE)
 
