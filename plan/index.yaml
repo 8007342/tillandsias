@@ -9358,6 +9358,17 @@ plan_index:
         - "tray Claude/Codex/Antigravity launches call the ensure_provider_auth ladder before spawning the terminal"
         - "vault-present credential launches with no login prompt"
       events:
+        - type: amended
+          ts: "2026-07-13T00:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Operator amendment 2026-07-12: Claude/Codex login must use the
+            DEVICE flow (--device style: short code + copyable URL, never
+            open a browser or render clickable URLs — those spill escape
+            garbage into the pasted token in forge terminals). Paste-token
+            flow is replaced, not kept as fallback UX. Details in the
+            deliverable issue file.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -9389,6 +9400,17 @@ plan_index:
         - "vault paths per provider documented; no credential lands in the project workspace or image"
         - "fixture/litmus: synthetic token harvested from a fake agent credential path into the vault and injected on next launch"
       events:
+        - type: amended
+          ts: "2026-07-13T00:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Operator amendment 2026-07-12: Claude/Codex login must use the
+            DEVICE flow (--device style: short code + copyable URL, never
+            open a browser or render clickable URLs — those spill escape
+            garbage into the pasted token in forge terminals). Paste-token
+            flow is replaced, not kept as fallback UX. Details in the
+            deliverable issue file.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -9853,3 +9875,93 @@ plan_index:
             (full podman argv + stderr + container state) during the
             attended smoke; unblocked live via podman rm of the exited
             container.
+
+    - packet_id: git-mirror-architecture-audit
+      order: 315
+      title: "Full git-mirror architecture audit — SIMPLICITY: DEFAULTS OVER CONFIGURATION (heavy-agent, provenance-backed)"
+      status: ready
+      kind: research
+      multi_cycle: true
+      deliverable: plan/issues/git-mirror-architecture-audit-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, security, architecture, research, heavy-agent]
+      estimated_hours: 12
+      outcome: >
+        Operator directive: audit the whole git-mirror + credential +
+        proxy-env architecture with the heaviest agents (Fable/Opus) against
+        enterprise best practices for git mirrors and distributed concurrent
+        teams. Facts + cheatsheets with rightful provenance. Principle:
+        DEFAULTS OVER CONFIGURATION — minimize env params (polluted,
+        runtime-incompatible); evaluate proper git credential helpers over
+        script hacks. Evidence base: mirror false-success P1, insteadOf
+        host-poisoning, ref-clobber (301/302), guard channel gap.
+      exit_criteria:
+        - "cheatsheets/git-mirror-architecture-audit.md exists: current-state map, every claim with file:line/commit provenance"
+        - "cheatsheets/git-mirror-enterprise-practices.md exists: sourced baseline (URL/man-page + retrieved date on every load-bearing claim)"
+        - "every env var / config injection dispositioned: keep-justified, replace-with-default, or delete"
+        - "mirror ack semantics specified: no success without durable relay state, pinned by litmus"
+        - "bidirectional host/forge git-config isolation fixture"
+        - "migration-ladder child packets filed"
+      events:
+        - type: progress
+          ts: "2026-07-13T00:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Both audit cheatsheets landed: current-state map (Fable fork,
+            file:line provenance @ 8875ba82) and enterprise best-practices
+            baseline (Opus researcher, URL+date provenance). Key
+            recommendations: relay off post-receive (structurally cannot be
+            must-succeed per githooks(5)); push --atomic with non-force
+            refspecs; credential-helper broker + short-TTL GitHub App
+            installation tokens so secrets never enter the forge; replace
+            GIT_CONFIG_GLOBAL/insteadOf/GIT_SSL_CAINFO env mesh with
+            committed includeIf gitdir: config + image-baked CA; forge
+            pushes over authenticated smart-HTTP/SSH instead of git://.
+            Order 316 already split out (pre-receive subshell reject loss).
+            Remaining rungs: gap-analysis disposition table sign-off,
+            migration-ladder child packets, ack-semantics litmus,
+            bidirectional git-config isolation fixture.
+        - type: filed
+          ts: "2026-07-13T00:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Filed per operator directive after macOS attended smoke surfaced
+            the mirror false-success P1 and insteadOf host-poisoning; audit
+            launched same cycle with Fable fork (current-state map) + Opus
+            researcher (best-practice baseline).
+
+    - packet_id: mirror-pre-receive-subshell-reject-loss
+      order: 316
+      title: "Mirror pre-receive: REJECTED=1 set in pipeline subshell is lost — YAML gate is advisory, never rejects"
+      status: ready
+      kind: bug
+      deliverable: images/git/pre-receive-hook.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, bash, litmus]
+      estimated_hours: 1
+      outcome: >
+        Found by the order-315 current-state audit and verified in-tree:
+        pre-receive-hook.sh pipes changed files into `while read`, so the
+        loop body runs in a subshell and its REJECTED=1 never reaches the
+        parent's final check. The ledger-YAML gate (order-263 lineage:
+        forge cycles pushing broken plan YAML) therefore never rejects.
+        Fix with process substitution / flag file / last-command exit,
+        and pin with a fixture that pushes a deliberately broken
+        plan/*.yaml to a temp bare repo carrying the hook and asserts
+        non-zero receive.
+      exit_criteria:
+        - "a push containing invalid ledger YAML is rejected (non-zero) by the hook fixture"
+        - "a valid push still succeeds (no false rejects)"
+        - "litmus binding added under git-mirror-service"
+      events:
+        - type: filed
+          ts: "2026-07-13T00:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Order-315 audit finding (Fable current-state map), verified at
+            pre-receive-hook.sh:125-142 as of 8875ba82.

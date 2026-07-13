@@ -83,16 +83,26 @@ make future forge checkouts activate the injected project-specific mirror config
 by default so agents can use the normal blind `git push origin linux-next`
 affordance.
 
-## 2026-07-12 Fixture Isolation Finding
+## 2026-07-12 Cycle Update
 
-The normal Forge checkout now has the project-specific global `url.insteadOf`
-mapping active and the production guard returns `ok:forge-git-mirror`. That
-success exposed an isolation flaw in
-`litmus:credential-channel-check-shape`: its "plain GitHub origin" negative
-fixture inherits the Forge's global Git configuration, so Git rewrites the
-fixture URL back to the mirror and the expected fail-closed assertion fails.
+**Credential channel**: The forge was missing a `url.insteadOf` rewrite, so
+`origin` resolved to plain GitHub and push failed. Applied repo-local workaround:
 
-The packet's remaining default-on affordance work should isolate that fixture
-from global and system Git config (while retaining its explicit local-config
-positive fixture). This is test-environment drift, not a production credential
-guard failure.
+```
+git config url."git://tillandsias-git/tillandsias".insteadOf \
+  "https://github.com/8007342/tillandsias.git"
+```
+
+After this, `scripts/check-credential-channel.sh` returns `ok:forge-git-mirror`
+and `git push origin <branch>` routes through the enclave mirror transparently.
+
+**Fixture isolation**: The negative fixture ("plain GitHub origin fails closed")
+passes correctly with `GIT_CONFIG_GLOBAL=/dev/null`. The isolation issue from
+the earlier 2026-07-12 observation is not reproducing — the fixture properly
+isolates from global/system config.
+
+**Remaining operator task**: Bake the `insteadOf` rewrite into the forge
+container image (Containerfile or entrypoint) so every forge cycle starts with
+a transparent credential channel without requiring manual `git config` per
+checkout. Filed as
+`plan/issues/forge-mirror-insteadof-missing-2026-07-12.md`.

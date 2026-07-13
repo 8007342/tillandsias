@@ -44,6 +44,11 @@ packet for reintroducing least-privilege correctly (split listener/
 orchestrator units or podman socket delegation). The macOS vz.rs unit
 must be audited for the same directives before its next release.
 
+> macOS audit result (macos cycle, 2026-07-12): `grep -rn 'NoNewPrivileges\|
+> CapabilityBoundingSet' crates/tillandsias-vm-layer/src/
+> crates/tillandsias-macos-tray/src/` → no matches at osx-next `33da90ab`.
+> The macOS unit templates do NOT carry the regression; audit ask satisfied.
+
 ---
 
 # Original triage narrative (interim theories, kept for the record)

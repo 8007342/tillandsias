@@ -32,3 +32,16 @@ first run takes several minutes") so silence has a stated cause.
 
 Fresh substrate (no forge-base image) → attach any lane from the tray →
 observe the cleanup line then silence for the build duration.
+
+## macOS parity evidence (2026-07-12 attended smoke) — NOT Windows-only
+
+The macOS maintenance lane on a pristine substrate (osx-next `374cb0b8`)
+shows the SAME near-silence: `[tillandsias] no active lane containers;
+cleaning project + shared stack for tillandsias` at 15:19, the `[forge]`
+git-mirror banner around 15:25, interactive prompt ~15:27 — two lines of
+output across ~8 minutes of first-run bring-up. This contradicts the earlier
+"macOS PTY tee streams the build output" observation above (order-294
+session), at least for the shared-stack/ensure phase on this path. Treat the
+heartbeat/progress fix as cross-platform, not a wsl.exe-bridge special case.
+The operator read the silence as a hang live on BOTH platforms — two
+independent reproductions of the same UX conclusion.
