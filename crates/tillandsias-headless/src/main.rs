@@ -2365,6 +2365,7 @@ fn build_inference_run_args(
 
     let mut args = vec![
         "--detach".into(),
+        "--replace".into(),
         "--name".into(),
         "tillandsias-inference".into(),
         "--hostname".into(),
@@ -10246,6 +10247,21 @@ mod tests {
                 "stack launch must let podman IPAM allocate addresses: {args:?}"
             );
         }
+    }
+
+    /// Order 314: the inference container ensure must be idempotent — an
+    /// EXITED container holding the name must not block the next launch with
+    /// a Permanent exit-125. `--replace` on `podman run` atomically removes
+    /// the exited container and creates a fresh one.
+    #[test]
+    fn inference_run_args_use_replace_for_idempotency() {
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_inference_run_args(&certs, "tillandsias-inference:v1", false);
+        assert!(
+            has_arg(&args, "--replace"),
+            "inference args must include --replace so an exited container does not \
+             block the next launch with a Permanent exit-125 (order 314): {args:?}"
+        );
     }
 
     #[test]

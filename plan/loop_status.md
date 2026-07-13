@@ -1,6 +1,28 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T21:50:00Z
+LastExecutionTime: 2026-07-13T00:30:00Z
+
+## Cycle 2026-07-13T00:15Z→00:30Z (linux_mutable — meta-orchestration: order 314 container-ensure-idempotency DONE)
+
+- **Host**: linux_mutable (macuahuitl), `linux-next`, agent
+  linux-bigpickle-20260713T0015Z. Credential guard `ok:gh-keyring`.
+  Startup: clean after checkpoint commit (abc1d239, 67 files TRACES.md
+  regen + VERSION bump). Sibling heads: main 38d33cd8, osx-next
+  837b066f, windows-next 01b38a0b.
+- **Worktree cleanup**: Committed 67 dirty tracked files (regenerated
+  TRACES.md + VERSION bump + Cargo.lock sync) as checkpoint abc1d239.
+- **Drained order 314 (container-ensure-not-idempotent-exited) — DONE**:
+  Added `--replace` to `build_inference_run_args` (main.rs:2367) so
+  `podman run --replace --detach --name tillandsias-inference` atomically
+  removes an exited container before creating a fresh one. Prevents the
+  exit-125 name-collision that blocked every lane when the inference
+  container exited uncleanly (order 313 proxy warm-up race). Unit test
+  `inference_run_args_use_replace_for_idempotency` pins the flag. Build
+  check passes (type-check + clippy + clippy listen-vsock); 146/149
+  tests pass (3 pre-existing: proxy DNS in fake-podman smoke, PoisonError
+  in forge-gitconfig tests — unrelated).
+- **E2E gates**: Skipped — no container runtime change (args-only fix
+  in the run builder; actual idempotency proven at next live lane launch).
 
 ## Cycle 2026-07-12T19:40Z→21:50Z (windows — meta-orchestration + operator-attended smoke: orders 297+274 DONE, TWO new P1s root-caused live (308 unit cap-hardening, 310 antigravity singleton-kill), destructive cold e2e PASS)
 

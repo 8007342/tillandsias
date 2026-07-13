@@ -9819,7 +9819,7 @@ plan_index:
     - packet_id: container-ensure-not-idempotent-exited
       order: 314
       title: "P1: container ensure does bare `podman run --name` — an EXITED dependency container name-collides (125) and is classified retry-Permanent, blocking every lane"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -9858,6 +9858,27 @@ plan_index:
             (full podman argv + stderr + container state) during the
             attended smoke; unblocked live via podman rm of the exited
             container.
+        - type: claim
+          ts: "2026-07-13T00:16:00Z"
+          agent_id: "linux-bigpickle-20260713T0015Z"
+          host: linux_mutable
+          lease_id: "container-ensure-not-idempotent-exited"
+        - type: completed
+          ts: "2026-07-13T00:30:00Z"
+          agent_id: "linux-bigpickle-20260713T0015Z"
+          host: linux_mutable
+          lease_id: "container-ensure-not-idempotent-exited"
+          summary: >
+            Added `--replace` to `build_inference_run_args` (main.rs:2367)
+            so `podman run --replace --detach --name tillandsias-inference`
+            atomically removes an exited container before creating a fresh
+            one. Prevents the exit-125 name-collision that blocked every
+            lane when the inference container exited uncleanly (order 313
+            proxy warm-up race). Unit test `inference_run_args_use_replace_for_idempotency`
+            pins the flag. build.sh --check passes (type-check + clippy +
+            clippy listen-vsock); 146/149 tests pass (3 pre-existing
+            failures: proxy DNS in fake-podman smoke, PoisonError in
+            forge-gitconfig tests — unrelated).
 
     - packet_id: git-mirror-architecture-audit
       order: 315
