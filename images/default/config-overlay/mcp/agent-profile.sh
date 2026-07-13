@@ -44,6 +44,12 @@ case "${AGENT_PREFERENCE}" in
         export AGENT_SUPPORTS_WEB="no"
         export AGENT_DISPLAY_NAME="Claude"
         ;;
+    antigravity)
+        # Google Antigravity: Gemini-powered coding agent
+        export AGENT_PROFILE="antigravity"
+        export AGENT_SUPPORTS_WEB="no"
+        export AGENT_DISPLAY_NAME="Antigravity"
+        ;;
     *)
         # Unknown agent — fallback to safe default
         export AGENT_PROFILE="unknown"
