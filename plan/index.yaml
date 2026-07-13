@@ -10377,3 +10377,78 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
           host: linux_mutable
           summary: "Order-315 migration ladder rung E (transport, research-first)."
+
+    - packet_id: wsl-platform-preflight-classification
+      order: 323
+      title: "Windows tray: classify wsl-platform-absent / reboot-pending / virtualization-disabled preflight states — 'WSL2 requires a restart' instead of generic VM-create failure"
+      status: ready
+      kind: enhancement+bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, diagnostics, ux, tray]
+      estimated_hours: 4
+      outcome: >
+        Operator directive 2026-07-13: end users installing WSL2 for the
+        first time land in a reboot-pending state (VirtualMachinePlatform
+        enable exits DISM 3010; Microsoft.WSL installer notes a restart is
+        required) and today WslRuntime::start()/provision burns 5 generic
+        retry pokes then fails crash-like (handshake-timeout family).
+        Introduce a classified preflight verdict enum
+        {ok, wsl-platform-absent, reboot-pending, virtualization-disabled}
+        mirroring the order-312 membership-classified hcsdiag pattern:
+        fail FAST on classified-fatal states with exact remediation
+        strings ("WSL2 requires a restart to finish installing - please
+        reboot Windows and relaunch Tillandsias"), surface the verdict in
+        the tray toast + menu status line and as a --diagnose --json
+        field (wsl_platform), and skip the retry storm. Detection recipes
+        with locale-stable signatures captured live on a fresh Win11 host:
+        plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md.
+      exit_criteria:
+        - "unit-tested classifier maps S1/S2/S3/S4 signatures (exit codes, aka.ms/wslinstall marker, RebootPending key, HypervisorPresent CIM) to the verdict enum"
+        - "provision/start on a classified-fatal state fails fast with the remediation string (no 5-poke retry storm); pinned by a string litmus"
+        - "--diagnose --json exposes wsl_platform; tray toast + status line show the classified message"
+      events:
+        - type: filed
+          ts: "2026-07-13T21:55:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            Filed at operator direction during the fresh-host cycle that hit
+            the exact reboot-pending state (DISM 3010 + VS Build Tools 5008
+            refusal + WSL notes requiring restart) before any tray run.
+
+    - packet_id: installer-wsl-absent-reboot-affordance
+      order: 324
+      title: "install-windows.ps1: detect WSL-absent / reboot-pending / virtualization-off at install time and instruct the restart before first launch"
+      status: ready
+      kind: enhancement
+      deliverable: scripts/install-windows.ps1
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, installer, wsl, ux]
+      estimated_hours: 2
+      outcome: >
+        The curl installer currently warns once when wsl.exe is missing
+        (S1) and continues; it never detects the reboot-pending state (S2)
+        or firmware-disabled virtualization (S3), so first tray launch
+        walks into the unclassified failure order 323 fixes. Add the same
+        S1/S2/S3 classification at install time: offer/perform
+        `wsl --install --no-distribution` where elevation permits, print
+        the explicit "restart Windows, then launch Tillandsias" step when
+        a reboot is pending, and default to -NoLaunch semantics in that
+        state so the tray's first impression is never a dead VM create.
+        Signatures + recipes: plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md.
+      exit_criteria:
+        - "installer classifies S1/S2/S3 and prints the matching remediation; healthy path unchanged"
+        - "when reboot-pending, installer does not auto-launch the tray and says exactly what to do next"
+        - "detection logic covered by a Pester or litmus-style check runnable on CI (no live VM needed)"
+      events:
+        - type: filed
+          ts: "2026-07-13T21:55:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            Sibling of order 323 (same operator directive): the installer is
+            the first surface a brand-new Windows user touches; it should own
+            the restart instruction instead of deferring to a failing tray.
