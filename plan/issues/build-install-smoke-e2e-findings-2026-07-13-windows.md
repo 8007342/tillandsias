@@ -106,4 +106,38 @@ this required working around.
   container uid can write it. macOS VZ clones fine (order 273 capture), so
   this is Windows-recipe-specific. Workaround applied for goal progress:
   `chmod 0777 /home/forge/src` (recorded; NOT the fix).
-- **Attempt 2**: relaunched post-workaround — results below.
+- **Attempt 2 — FAIL (order 327 filed)**: clone completed (vault-token
+  mirror auth works), lane lazily built vault/proxy/git/inference/
+  forge-base/forge (3.1 GB, ~15 min), then stage 'router' ran `podman run
+  localhost/tillandsias-router:v0.3.260712.1` WITHOUT ensuring the image →
+  podman treated localhost as a registry → "dial tcp 127.0.0.1:443:
+  connection refused" ×3 → exit 125, lane dead. Order-76 parity gap: the
+  router stage was never added to ensure_image_exists. Workaround: ran
+  `tillandsias-headless --init --debug` in the guest to build the full
+  image ladder (router:v0.3.260712.1 confirmed present).
+- **Attempt 3 — BigPickle cycle ran, verdict BLOCKED (contract-compliant)**:
+  relaunched as an in-guest systemd unit (`till-lane3`, keepalive wsl.exe
+  pinning the VM — the tray's own wsl_lifecycle pattern). Router started
+  clean this time, forge container up, OpenCode launched with the
+  /meta-orchestration prompt and executed the skill CORRECTLY: host
+  classified `forge` (TILLANDSIAS_HOST_KIND=forge set ✓), credential guard
+  run → `missing:no-credential-channel` → treated as the cycle-stopping
+  blocker per the exit contract, matched to the existing issue
+  forge-credential-guard-push-channel-gap-2026-07-08.md, no committable
+  work attempted, clean worktree at exit, owner + smallest-next-action
+  reported. BigPickle's own root-cause (verbatim): "Origin resolves to
+  https://github.com/8007342/tillandsias.git (direct GitHub), not the
+  enclave git mirror" — i.e. the forge gitconfig/mirror injection
+  (write_forge_gitconfig insteadOf + GIT_CONFIG_GLOBAL) did not engage on
+  the Windows guest CLI lane, and no tillandsias-git-<project> mirror
+  relay was observable. NOTE the same release binary pushed through the
+  mirror on the Linux curl-install e2e this morning, so the gap is
+  Windows-guest-lane-specific wiring, not a v0.3.260712.1-wide break.
+  De-dup: evidence appended to the 2026-07-08 issue (orders 173/177 +
+  the 318-322 mirror ladder own the systemic fix); no duplicate packet.
+  Full transcript: `$LOG_DIR/04-meta-orchestration.log`.
+- **Attempt 4 — full-cycle retry with credential workaround**: seeded the
+  repo-local store the guard checks first (`.git/.gh-credentials` +
+  credential.helper in the clone's .git/config — BigPickle's own
+  smallest-next-action), explicitly bypassing the broken mirror-relay leg
+  (recorded as NOT exercised). Results below.
