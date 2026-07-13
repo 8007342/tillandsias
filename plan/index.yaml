@@ -9887,6 +9887,25 @@ plan_index:
         - "bidirectional host/forge git-config isolation fixture"
         - "migration-ladder child packets filed"
       events:
+        - type: progress
+          ts: "2026-07-13T00:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Both audit cheatsheets landed: current-state map (Fable fork,
+            file:line provenance @ 8875ba82) and enterprise best-practices
+            baseline (Opus researcher, URL+date provenance). Key
+            recommendations: relay off post-receive (structurally cannot be
+            must-succeed per githooks(5)); push --atomic with non-force
+            refspecs; credential-helper broker + short-TTL GitHub App
+            installation tokens so secrets never enter the forge; replace
+            GIT_CONFIG_GLOBAL/insteadOf/GIT_SSL_CAINFO env mesh with
+            committed includeIf gitdir: config + image-baked CA; forge
+            pushes over authenticated smart-HTTP/SSH instead of git://.
+            Order 316 already split out (pre-receive subshell reject loss).
+            Remaining rungs: gap-analysis disposition table sign-off,
+            migration-ladder child packets, ack-semantics litmus,
+            bidirectional git-config isolation fixture.
         - type: filed
           ts: "2026-07-13T00:05:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
