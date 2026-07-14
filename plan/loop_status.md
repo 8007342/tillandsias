@@ -3344,8 +3344,8 @@ LastExecutionTime: 2026-06-28T09:20Z
 - **Cycle type**: macOS build/install/provision smoke plus a targeted
   `--github-login` verification.
 - **Startup**: `osx-next @ 7441cfad`, clean relative to `origin/osx-next`,
-  with the same pre-existing untracked files noted in
-  `plan/issues/ACTIVE.md`.
+  with the same pre-existing untracked files noted in the then-current
+  `plan/index.yaml` ledger.
 - **Build/install**: `scripts/build-macos-tray.sh` PASS; freshness gate matched
   HEAD.
 - **Destructive reset**: removed `~/Library/Application Support/tillandsias`
@@ -4373,7 +4373,7 @@ LastExecutionTime: 2026-06-28T09:20Z
 - **Linux primary**: Move to next independent ready packet in the plan.
 - **Windows primary**: Claim and execute Windows slice of `vault-flow/xplat-gating-parity`.
 - **macOS primary**: Claim and execute `macos-in-vm-enclave-provisioning` and the orchestrated GitHub Login route (m8).
-- **Coordinator fallback**: keep ACTIVE.md and host queues aligned with the new
+- **Coordinator fallback**: keep `plan/index.yaml` and host queues aligned with the new
   Windows/macOS parity packet.
 
 ## Pending Pings

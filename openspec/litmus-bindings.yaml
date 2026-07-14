@@ -189,8 +189,9 @@ specs:
   - litmus:forge-firstrun-prebuilt-tools-arch-shape
   - litmus:brew-ondemand-tools-shape
   - litmus:harness-rollback-shape
+  - litmus:forge-validation-profile
   coverage_ratio: 80
-  last_verified: '2026-07-05'
+  last_verified: '2026-07-14'
 - spec_id: dev-build
   status: active
   litmus_tests:

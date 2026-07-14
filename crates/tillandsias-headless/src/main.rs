@@ -9678,11 +9678,11 @@ mod tests {
             .find("ensure_provider_auth(mode, debug)")
             .expect("forge launch must gate on ensure_provider_auth (login-first)");
         let build_at = window
-            .find("build_forge_agent_run_args(")
-            .expect("forge launch must build run args");
+            .find("build_forge_agent_run_args_with_vault(")
+            .expect("forge launch must build Vault-aware run args");
         assert!(
             gate_at < build_at,
-            "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args"
+            "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args_with_vault"
         );
         // The gate itself must implement token-presence-then-login, not blind login.
         let gate = source
