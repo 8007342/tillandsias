@@ -1276,7 +1276,7 @@ plan_index:
     - packet_id: vm-headless-persistent-listener
       order: 153
       title: "VM Headless: persistent vsock listener + server-push event stream"
-      status: ready
+      status: claimed
       split_into:
         - "230 — headless-loginstatus-push (slice 2: LoginStatePush on Vault token change)"
         - "231 — headless-cloudprojects-push (slice 3: CloudProjectsPush on gh repo list change)"
@@ -1296,6 +1296,18 @@ plan_index:
         status queries — replace with Subscribe + Push. PTY sessions remain
         multiplexed on the same connection.
       events:
+        - type: claim
+          ts: "2026-07-14T23:04:26Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "fe0a18b40983"
+          expires_at: "2026-07-15T03:04:26Z"
+          summary: >
+            Claimed one cycle-scoped Linux slice to add the missing timed
+            1000ms slow-client isolation proof for SC-10. If the test and
+            existing listener suite pass, normalize the packet to the
+            long-running schema and move it to phase verification for the four
+            named agents; do not complete it in this implementing cycle.
         - type: progress
           ts: "2026-07-06T20:05:00Z"
           agent_id: "linux-macuahuitl-sonnet5-20260706T1903Z"
