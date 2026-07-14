@@ -683,21 +683,17 @@ async fn handle_connection(
     // Order 260: LocalProjects topic, same contract.
     let mut local_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
 
-    loop {
+    'connection: loop {
         tokio::select! {
             _ = connection_shutdown(&mut shutdown) => {
-                #[cfg(unix)]
-                pty_store.shutdown_all().await;
-                return;
+                break 'connection;
             }
             // Outbound PTY frame (PtyData{ToHost} from a pump or PtyClose
             // from child reap).
             Some(env) = pty_rx.recv() => {
                 if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                     debug!(spec = "vsock-transport", "vsock write failed during PTY outbound; closing connection");
-                    #[cfg(unix)]
-                    pty_store.shutdown_all().await;
-                    return;
+                    break 'connection;
                 }
                 continue;
             }
@@ -725,9 +721,7 @@ async fn handle_connection(
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
                         if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during VmStatusPush; closing connection");
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                     }
                     None => {
@@ -757,9 +751,7 @@ async fn handle_connection(
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
                         if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during LoginStatePush; closing connection");
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                     }
                     None => {
@@ -788,9 +780,7 @@ async fn handle_connection(
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
                         if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during CloudProjectsPush; closing connection");
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                     }
                     None => {
@@ -819,9 +809,7 @@ async fn handle_connection(
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
                         if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during LocalProjectsPush; closing connection");
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                     }
                     None => {
@@ -836,9 +824,7 @@ async fn handle_connection(
                     Ok(env) => env,
                     Err(err) => {
                         debug!(spec = "vsock-transport", error = %err, "vsock connection closed");
-                        #[cfg(unix)]
-                        pty_store.shutdown_all().await;
-                        return;
+                        break 'connection;
                     }
                 };
 
@@ -875,9 +861,7 @@ async fn handle_connection(
                             },
                         };
                         if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                         continue;
                     }
@@ -900,9 +884,7 @@ async fn handle_connection(
                             },
                         };
                         if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                         continue;
                     }
@@ -925,7 +907,7 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
-                    return;
+                    break 'connection;
                 }
             }
             // Order 153 slice 1 wired VmStatus; orders 230/231 wire the
@@ -950,7 +932,7 @@ async fn handle_connection(
                     body: ControlMessage::SubscribeAck,
                 };
                 if write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await.is_err() {
-                    return;
+                    break 'connection;
                 }
             }
             ControlMessage::EnumerateLocalProjects { seq } => {
@@ -970,7 +952,7 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
-                    return;
+                    break 'connection;
                 }
             }
             ControlMessage::CloudRefreshRequest { seq } => {
@@ -1001,7 +983,7 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
-                    return;
+                    break 'connection;
                 }
             }
             ControlMessage::GithubLoginStatusRequest { seq } => {
@@ -1031,7 +1013,7 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
-                    return;
+                    break 'connection;
                 }
             }
             ControlMessage::VmShutdownRequest { .. } => {
@@ -1043,9 +1025,7 @@ async fn handle_connection(
                     spec = "vsock-transport",
                     "VmShutdownRequest received; phase=Draining; closing connection (drain happens via signal path)"
                 );
-                #[cfg(unix)]
-                pty_store.shutdown_all().await;
-                return;
+                break 'connection;
             }
             // l3: PTY-attach variants (control-wire-pty-attach Tasks 4.x).
             // The handler module owns the PtySessionStore lifecycle; this
@@ -1075,8 +1055,7 @@ async fn handle_connection(
                         },
                     };
                     if write_envelope_with_shutdown(&mut stream, &err_env, &mut shutdown).await.is_err() {
-                        pty_store.shutdown_all().await;
-                        return;
+                        break 'connection;
                     }
                 }
             }
@@ -1147,7 +1126,7 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
-                    return;
+                    break 'connection;
                 }
             }
             ControlMessage::GetVaultHandover { seq } => {
@@ -1181,7 +1160,7 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
-                    return;
+                    break 'connection;
                 }
             }
             // Convergence-packet pre-filter caught Unsupported and
@@ -1209,15 +1188,19 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
-                    #[cfg(unix)]
-                    pty_store.shutdown_all().await;
-                    return;
+                    break 'connection;
                 }
             }
                 }
             }
         }
     }
+
+    // Every exit after the per-connection PTY store exists converges here.
+    // This prevents shutdown/write failures from detaching pump tasks and
+    // leaving their child processes alive.
+    #[cfg(unix)]
+    pty_store.shutdown_all().await;
 }
 
 async fn read_envelope<R>(stream: &mut R) -> io::Result<ControlEnvelope>
@@ -1578,6 +1561,27 @@ mod tests {
             .await
             .expect("connection handler must exit after shutdown")
             .expect("connection handler must not panic");
+    }
+
+    #[test]
+    fn post_store_connection_exits_share_pty_cleanup() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
+        let post_store = source
+            .split("let (pty_tx, mut pty_rx)")
+            .nth(1)
+            .and_then(|tail| tail.split("\nasync fn read_envelope").next())
+            .expect("post-store handle_connection source");
+        assert!(
+            !post_store.contains("return;"),
+            "post-store connection exits must break to shared PTY cleanup"
+        );
+        assert_eq!(
+            post_store
+                .matches("pty_store.shutdown_all().await;")
+                .count(),
+            1,
+            "handle_connection must have exactly one post-store PTY cleanup funnel"
+        );
     }
 
     /// Order 153 SC-10 timed criterion at the real connection-handler
