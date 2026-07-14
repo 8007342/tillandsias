@@ -34,6 +34,13 @@ printf 'mock-vault-token' >"$secret_dir/vault-token"
 "$podman_bin" exec --interactive --tty "$container_name" gh auth login \
   --hostname github.com --git-protocol https >/dev/null 2>&1
 
+# Automation path: the caller's stdin flows directly into podman exec, without
+# a pseudo-terminal or a host-side token read.
+printf '%s\n' "$LITMUS_FAKE_GITHUB_TOKEN" | \
+  "$podman_bin" exec --interactive "$container_name" /bin/bash -c \
+  'IFS= read -r TOKEN; printf "%s" "$TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token' \
+  >/dev/null 2>&1
+
 # Write token to Vault from inside the container (no host extraction)
 "$podman_bin" exec "$container_name" /bin/sh -c \
   "TOKEN=\$(gh auth token --hostname github.com); vault-cli.sh write secret/github/token \"token=\$TOKEN\"" \
@@ -43,6 +50,12 @@ printf 'mock-vault-token' >"$secret_dir/vault-token"
 
 grep -F 'podman run --detach --rm --name tillandsias-gh-login-shape' "$calls_file" >/dev/null
 grep -F 'podman exec --interactive --tty tillandsias-gh-login-shape gh auth login --hostname github.com --git-protocol https' "$calls_file" >/dev/null
+grep -F 'podman exec --interactive tillandsias-gh-login-shape /bin/bash -c' "$calls_file" | \
+  grep -F -- '--with-token' >/dev/null
+if grep -F 'podman exec --interactive --tty tillandsias-gh-login-shape /bin/bash -c' "$calls_file" >/dev/null; then
+  printf 'stdin-token login unexpectedly allocated a TTY\n' >&2
+  exit 1
+fi
 grep 'vault-cli.sh.*write.*secret/github/token' "$calls_file" >/dev/null
 
 printf 'GitHub login smoke completed\n'

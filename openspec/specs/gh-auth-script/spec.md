@@ -34,6 +34,28 @@ The CLI flag `--github-login` and the tray menu item "GitHub Login" MUST invoke 
 - **WHEN** the user runs `tillandsias --github-login` from a terminal (including a headless SSH session)
 - **THEN** `runner::run_github_login` MUST be invoked inline in the current terminal, with no popup
 
+### Requirement: Non-interactive login is explicit and cannot hang on `/dev/tty`
+
+The default GitHub login path MUST require a terminal. Automation MAY opt into
+stdin token delivery with `--github-login --with-token`; the token MUST flow
+directly from inherited stdin to the ephemeral container and MUST NOT be
+placed in argv, an environment variable, a project file, or host memory.
+
+@trace spec:gh-auth-script, spec:tillandsias-vault
+
+#### Scenario: Piped invocation without opt-in fails loud
+- **WHEN** stdin is not a terminal and the user runs `tillandsias --github-login` without `--with-token`
+- **THEN** the command MUST exit non-zero before starting Podman infrastructure
+- **AND** the error MUST name `--with-token` and the existing git identity prerequisite
+- **AND** the command MUST NOT attempt to open or read `/dev/tty`
+
+#### Scenario: Explicit stdin token delivery
+- **WHEN** a caller pipes one token line to `tillandsias --github-login --with-token`
+- **AND** git `user.name` and `user.email` already exist in the managed or host configuration
+- **THEN** Podman exec MUST inherit stdin with `--interactive` and MUST NOT allocate `--tty`
+- **AND** identity collection MUST use the existing values without consuming the token stream
+- **AND** successful authentication MUST follow the same in-container Vault write and verification path as interactive login
+
 ### Requirement: Interactive login uses an ephemeral git-service-image container
 
 The login flow MUST run `gh auth login` inside a dedicated, short-lived container started from the git service image. It MUST NOT exec into a long-lived per-project git service container.

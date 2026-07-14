@@ -10594,7 +10594,7 @@ plan_index:
     - packet_id: github-login-non-tty-fail-loud
       order: 325
       title: "github-login: token read from /dev/tty hangs forever non-interactively — fail loud + stdin/--with-token mode"
-      status: ready
+      status: done
       kind: bug+enhancement
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -10630,6 +10630,19 @@ plan_index:
             Found while seeding GitHub auth for the first Windows in-forge
             meta-orchestration cycle; workaround was in-guest script(1) PTY
             allocation (util-linux-script had to be installed first).
+        - type: completed
+          ts: "2026-07-14T20:30:22Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Default non-TTY --github-login now exits 2 before Podman startup
+            with an actionable --with-token message. Explicit stdin-token
+            mode inherits stdin directly into podman exec without --tty,
+            requires existing git identity rather than consuming token input,
+            and shares the existing in-container Vault write/verification.
+            Six targeted Rust tests passed; the live non-TTY fail-loud probe
+            returned rc=2 within the 5s bound; gh-auth-script pre-build
+            litmuses passed 2/2 including the fake stdin-to-Vault flow.
 
     - packet_id: wsl-guest-forge-user-src-ownership
       order: 326

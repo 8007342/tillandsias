@@ -38,7 +38,7 @@
 use signal_hook::flag;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::os::unix::net::UnixStream;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -129,6 +129,7 @@ fn main() {
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
     let github_login = user_args.iter().any(|a| a == "--github-login");
+    let with_token = user_args.iter().any(|a| a == "--with-token");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
     let codex_login = user_args.iter().any(|a| a == "--codex-login");
     let antigravity_login = user_args.iter().any(|a| a == "--antigravity-login");
@@ -250,6 +251,7 @@ fn main() {
         "--init",
         "--status-check",
         "--github-login",
+        "--with-token",
         "--claude-login",
         "--codex-login",
         "--antigravity-login",
@@ -282,6 +284,11 @@ fn main() {
     {
         eprintln!("Unsupported option: {unsupported}");
         eprintln!("Run 'tillandsias --help' for supported options.");
+        std::process::exit(2);
+    }
+
+    if with_token && !github_login {
+        eprintln!("Error: --with-token is only valid with --github-login");
         std::process::exit(2);
     }
 
@@ -342,11 +349,24 @@ fn main() {
     });
 
     let login_provider = if github_login {
+        let input_mode = match select_github_login_input_mode(with_token, io::stdin().is_terminal())
+        {
+            Ok(mode) => mode,
+            Err(error) => {
+                eprintln!("Error: {error}");
+                std::process::exit(2);
+            }
+        };
+        let token_script = match input_mode {
+            LoginInputMode::Terminal => GH_LOGIN_TOKEN_SCRIPT.to_string(),
+            LoginInputMode::StdinToken => GH_LOGIN_STDIN_TOKEN_SCRIPT.to_string(),
+        };
         Some((
             ProviderId::GitHub,
             AuthModel::OAuthDevice,
             "git",
-            GH_LOGIN_TOKEN_SCRIPT.to_string(),
+            token_script,
+            input_mode,
         ))
     } else if claude_login {
         Some((
@@ -354,6 +374,7 @@ fn main() {
             AuthModel::OAuthDevice,
             "curl",
             get_generic_login_token_script(&ProviderId::Claude),
+            LoginInputMode::Terminal,
         ))
     } else if codex_login {
         Some((
@@ -361,6 +382,7 @@ fn main() {
             AuthModel::OAuthDevice,
             "curl",
             get_generic_login_token_script(&ProviderId::Codex),
+            LoginInputMode::Terminal,
         ))
     } else if antigravity_login {
         Some((
@@ -368,17 +390,19 @@ fn main() {
             AuthModel::OAuthDevice,
             "curl",
             get_generic_login_token_script(&ProviderId::Antigravity),
+            LoginInputMode::Terminal,
         ))
     } else {
         None
     };
 
-    if let Some((provider, auth_model, image_name, token_script)) = login_provider {
+    if let Some((provider, auth_model, image_name, token_script, input_mode)) = login_provider {
         let config = ProviderLoginConfig {
             provider,
             auth_model,
             image_name,
             token_script,
+            input_mode,
         };
         if let Err(e) = run_provider_login(&config, debug) {
             eprintln!("Error: {}", e);
@@ -674,7 +698,7 @@ fn print_usage(version: &str) {
     println!("Usage: tillandsias [--headless|--tray] [config_path]");
     println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
-    println!("       tillandsias --github-login [--debug]");
+    println!("       tillandsias --github-login [--with-token] [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
     println!("       tillandsias --antigravity-login [--debug]");
@@ -710,6 +734,7 @@ fn print_usage(version: &str) {
     println!("  --cache-clear  Clear the initialization cache and build state");
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and store the token in Vault");
+    println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
     println!("  --claude-login Authenticate Claude and store the token in Vault");
     println!("  --codex-login Authenticate Codex and store the token in Vault");
     println!("  --antigravity-login Authenticate Antigravity and store the token in Vault");
@@ -4821,6 +4846,21 @@ fi
 printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token
 "#;
 
+/// Non-interactive token entry for `--github-login --with-token`.
+///
+/// Podman inherits the caller's stdin directly, so the Rust process never
+/// reads or stores the token. This mode deliberately avoids `/dev/tty` and a
+/// pseudo-terminal, which makes a one-line token pipe deterministic in CI and
+/// automation.
+const GH_LOGIN_STDIN_TOKEN_SCRIPT: &str = r#"
+IFS= read -r TOKEN
+if [ -z "$TOKEN" ]; then
+  printf 'No token received on stdin; aborting GitHub login.\n' >&2
+  exit 1
+fi
+printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token
+"#;
+
 /// Container-side bridge for the retired Tauri `--github-login` path.
 ///
 /// The host runtime only assumes Podman. GitHub CLI runs inside the git service
@@ -4912,11 +4952,52 @@ pub enum AuthModel {
     OAuthDevice,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LoginInputMode {
+    Terminal,
+    StdinToken,
+}
+
+fn select_github_login_input_mode(
+    with_token: bool,
+    stdin_is_terminal: bool,
+) -> Result<LoginInputMode, String> {
+    if with_token {
+        return Ok(LoginInputMode::StdinToken);
+    }
+    if stdin_is_terminal {
+        return Ok(LoginInputMode::Terminal);
+    }
+    Err(
+        "--github-login requires a terminal; for automation, configure git user.name and user.email, then pipe one token line to `tillandsias --github-login --with-token`"
+            .to_string(),
+    )
+}
+
+fn provider_login_exec_args(
+    container: &str,
+    token_script: &str,
+    input_mode: LoginInputMode,
+) -> Vec<String> {
+    let mut args = vec!["exec".to_string(), "--interactive".to_string()];
+    if matches!(input_mode, LoginInputMode::Terminal) {
+        args.push("--tty".to_string());
+    }
+    args.extend([
+        container.to_string(),
+        "/bin/bash".to_string(),
+        "-c".to_string(),
+        token_script.to_string(),
+    ]);
+    args
+}
+
 pub struct ProviderLoginConfig {
     pub provider: ProviderId,
     pub auth_model: AuthModel,
     pub image_name: &'static str,
     pub token_script: String,
+    pub input_mode: LoginInputMode,
 }
 
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
@@ -5040,19 +5121,18 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     check_auth_required_services(&required, debug)?;
 
     if matches!(config.provider, ProviderId::GitHub) {
-        prompt_and_store_git_identity()?;
+        match config.input_mode {
+            LoginInputMode::Terminal => prompt_and_store_git_identity()?,
+            LoginInputMode::StdinToken => store_existing_git_identity()?,
+        }
     }
 
     let mut login = podman_command();
-    login.args([
-        "exec",
-        "--interactive",
-        "--tty",
+    login.args(provider_login_exec_args(
         &container,
-        "/bin/bash",
-        "-c",
         &config.token_script,
-    ]);
+        config.input_mode,
+    ));
     run_command(login, debug)?;
 
     if matches!(config.provider, ProviderId::GitHub) {
@@ -5253,6 +5333,24 @@ fn prompt_and_store_git_identity() -> Result<(), String> {
     let name = prompt_with_default("Git author name", current.name.as_deref())?;
     let email = prompt_with_default("Git author email", current.email.as_deref())?;
 
+    store_git_identity(&name, &email)
+}
+
+fn store_existing_git_identity() -> Result<(), String> {
+    let current = read_git_identity_defaults();
+    let name = current.name.ok_or_else(|| {
+        "non-interactive GitHub login requires an existing git user.name; configure it before using --with-token"
+            .to_string()
+    })?;
+    let email = current.email.ok_or_else(|| {
+        "non-interactive GitHub login requires an existing git user.email; configure it before using --with-token"
+            .to_string()
+    })?;
+
+    store_git_identity(&name, &email)
+}
+
+fn store_git_identity(name: &str, email: &str) -> Result<(), String> {
     if name.trim().is_empty() {
         return Err("Git author name cannot be empty".to_string());
     }
@@ -7806,6 +7904,7 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             auth_model: AuthModel::OAuthDevice,
             image_name: "forge",
             token_script,
+            input_mode: LoginInputMode::Terminal,
         };
         run_provider_login(&config, debug)?;
     }
@@ -9921,6 +10020,50 @@ mod tests {
             login_window.contains("ensure_git_login(debug)?"),
             "run_provider_login must ensure enclave+egress+ca+vault+proxy via the dependency model: {login_window}"
         );
+    }
+
+    #[test]
+    fn github_login_non_tty_requires_explicit_stdin_mode() {
+        assert_eq!(
+            select_github_login_input_mode(false, true),
+            Ok(LoginInputMode::Terminal)
+        );
+        assert_eq!(
+            select_github_login_input_mode(true, false),
+            Ok(LoginInputMode::StdinToken)
+        );
+
+        let error = select_github_login_input_mode(false, false)
+            .expect_err("non-TTY login without --with-token must fail before Podman startup");
+        assert!(error.contains("--github-login requires a terminal"));
+        assert!(error.contains("--with-token"));
+    }
+
+    #[test]
+    fn github_login_stdin_mode_never_reads_from_dev_tty() {
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("IFS= read -r TOKEN"));
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("gh auth login"));
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("--with-token"));
+        assert!(!GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("/dev/tty"));
+
+        let args = provider_login_exec_args(
+            "login-helper",
+            GH_LOGIN_STDIN_TOKEN_SCRIPT,
+            LoginInputMode::StdinToken,
+        );
+        assert!(args.iter().any(|arg| arg == "--interactive"));
+        assert!(!args.iter().any(|arg| arg == "--tty"));
+    }
+
+    #[test]
+    fn github_login_terminal_mode_keeps_tty_allocation() {
+        let args = provider_login_exec_args(
+            "login-helper",
+            GH_LOGIN_TOKEN_SCRIPT,
+            LoginInputMode::Terminal,
+        );
+        assert!(args.iter().any(|arg| arg == "--interactive"));
+        assert!(args.iter().any(|arg| arg == "--tty"));
     }
 
     #[test]
