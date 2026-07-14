@@ -10,6 +10,7 @@ size: quick
 
 preconditions:
   - workspace contains scripts/forge-validate.sh
+  - workspace contains scripts/check-forge-service-health.sh
   - workspace contains scripts/test-forge-validate.sh
 
 critical_path:
@@ -19,14 +20,14 @@ critical_path:
     expected_behavior: "PASS: forge validation profile classifies PASS/SKIP/FAIL deterministically"
 
   - step: "validate production profile shell syntax"
-    command: "bash -n scripts/forge-validate.sh scripts/test-forge-validate.sh && echo 'ok: validation scripts parse successfully'"
+    command: "bash -n scripts/forge-validate.sh scripts/check-forge-service-health.sh scripts/test-forge-validate.sh && echo 'ok: validation scripts parse successfully'"
     timeout_ms: 2000
     expected_behavior: "ok: validation scripts parse successfully"
 
 observability:
   traces:
     - "@trace spec:default-image"
-  expected_log: "stable rows end in a SUMMARY whose failure count controls the exit status"
+  expected_log: "credential, write channel, workspace, headless, service, and eligibility rows precede the SUMMARY"
   log_fields:
     spec: default-image
     test: forge-validation-profile

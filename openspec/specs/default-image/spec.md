@@ -515,10 +515,14 @@ theater without weakening security.
 
 The repository SHALL provide `scripts/forge-validate.sh` as the maximal safe
 validation profile for agents running inside a forge. It SHALL check the push
-credential channel, the complete headless forge test target, and local-build
+credential prerequisites, an authenticated dry-run push, the workspace build,
+the complete headless forge test target, forge service health, and local-build
 e2e eligibility without performing a destructive reset. Each check SHALL emit
 exactly one stable `PASS`, `SKIP`, or `FAIL` row, followed by a `SUMMARY` row.
-The command SHALL exit non-zero if and only if at least one check fails.
+The command SHALL exit non-zero if and only if at least one check fails. Service
+health SHALL cover the enclave proxy, Git mirror, inference service, Vault, and
+outbound HTTPS when executed in a forge; non-forge hosts SHALL report that check
+as an explicit skip.
 
 #### Scenario: Forge without Podman remains a valid validation host
 
@@ -533,6 +537,13 @@ The command SHALL exit non-zero if and only if at least one check fails.
   grammar
 - **THEN** the profile SHALL emit a stable `FAIL` row for that check
 - **AND** SHALL exit non-zero after emitting its summary
+
+#### Scenario: Credential prerequisites do not substitute for write access
+
+- **WHEN** the credential guard reports an available channel
+- **THEN** the profile SHALL also run an authenticated `git push --dry-run`
+  against the current branch
+- **AND** SHALL fail if the remote does not authorize that dry-run push
 
 ## Sources of Truth
 
