@@ -613,7 +613,7 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-research
       order: 129
       title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
-      status: ready
+      status: claimed
       kind: research
       deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
       depends_on: []
@@ -634,6 +634,18 @@ plan_index:
         - "bump vs no-bump decision per new domain"
         - "Antigravity agent-wiring gap documented"
       events:
+        - type: claim
+          ts: "2026-07-14T23:55:07Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "1f03423c7b74"
+          expires_at: "2026-07-15T03:55:07Z"
+          summary: >
+            Claimed the stale-ledger repair. Earlier completion commit
+            64c271d0 contains the narrowed deny-log evidence, but later archive
+            churn left the index ready and restored unsupported GitHub denial
+            claims. This cycle will repair evidence and close the already
+            implemented research packet without changing proxy policy.
         - type: claim
           ts: "2026-06-28T23:40:00Z"
           agent_id: "linux-antigravity-20260628T2340Z"
