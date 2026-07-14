@@ -9464,6 +9464,7 @@ plan_index:
 
     - packet_id: agent-login-tray-lane-vault-parity
       order: 303
+      release_target: stable-milestone-v1
       title: "Tray forge launches run the same ensure_provider_auth vault ladder as the CLI lane"
       status: ready
       kind: enhancement
@@ -9518,6 +9519,7 @@ plan_index:
 
     - packet_id: agent-login-vault-roundtrip
       order: 304
+      release_target: stable-milestone-v1
       title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
       status: ready
       kind: enhancement
@@ -9605,6 +9607,7 @@ plan_index:
 
     - packet_id: opencode-tray-tui-spill-verify
       order: 306
+      release_target: stable-milestone-v1
       title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
       status: ready
       kind: verify
@@ -9632,6 +9635,7 @@ plan_index:
 
     - packet_id: antigravity-launch-crash
       order: 307
+      release_target: stable-milestone-v1
       title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
       status: ready
       kind: exploration
@@ -9887,6 +9891,7 @@ plan_index:
 
     - packet_id: windows-tray-requires-elevation-hcsdiag
       order: 312
+      release_target: stable-milestone-v1
       title: "P1: non-elevated Windows tray can NEVER connect — hcsdiag VM-ID lookup is admin/Hyper-V-Administrators-only; every standard-user install is dead on arrival"
       status: ready
       kind: bug
@@ -10294,6 +10299,7 @@ plan_index:
 
     - packet_id: mirror-relay-verified-acks
       order: 318
+      release_target: stable-milestone-v1
       title: "Ladder rung A: mirror MUST NOT ack a push it has not durably relayed (or must expose relay state) — kills the false-success P1"
       status: ready
       kind: architecture
@@ -10354,6 +10360,7 @@ plan_index:
 
     - packet_id: forge-gitconfig-single-injection
       order: 320
+      release_target: stable-milestone-v1
       title: "Ladder rung C: ONE gitconfig injection point (committed includeIf/include.path), image-baked CA trust; kill the env mesh on ALL platforms"
       status: ready
       kind: architecture
@@ -10444,6 +10451,7 @@ plan_index:
 
     - packet_id: wsl-platform-preflight-classification
       order: 323
+      release_target: stable-milestone-v1
       title: "Windows tray: classify wsl-platform-absent / reboot-pending / virtualization-disabled preflight states — 'WSL2 requires a restart' instead of generic VM-create failure"
       status: ready
       kind: enhancement+bug
@@ -10484,6 +10492,7 @@ plan_index:
 
     - packet_id: installer-wsl-absent-reboot-affordance
       order: 324
+      release_target: stable-milestone-v1
       title: "install-windows.ps1: detect WSL-absent / reboot-pending / virtualization-off at install time and instruct the restart before first launch"
       status: ready
       kind: enhancement
@@ -10559,6 +10568,7 @@ plan_index:
 
     - packet_id: wsl-guest-forge-user-src-ownership
       order: 326
+      release_target: stable-milestone-v1
       title: "WSL2 guest provisioning: no forge user + root-owned /home/forge/src — every containerized cloud clone fails EACCES"
       status: ready
       kind: bug
@@ -10757,6 +10767,7 @@ plan_index:
 
     - packet_id: macos-opencode-host-path-translation
       order: 331
+      release_target: stable-milestone-v1
       title: "macOS --opencode/--lane project path: translate host ~/src paths to /home/forge/src, fail fast pre-boot otherwise"
       status: ready
       kind: enhancement
@@ -10788,6 +10799,7 @@ plan_index:
 
     - packet_id: macos-opencode-firstuse-silent-build-idle-timeout
       order: 332
+      release_target: stable-milestone-v1
       title: "P1: first-use macOS --opencode dies at 300s vsock idle timeout during silent forge image build (VM torn down mid-build)"
       status: ready
       kind: bugfix
@@ -10892,6 +10904,17 @@ plan_index:
         - "every milestone_criteria row maps to a done packet or an operator-approved waiver recorded here"
         - "scripts/promote-stable.sh run on the candidate with the evidence gate passing un-forced"
       events:
+        - type: progress
+          ts: "2026-07-14T20:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T2005Z"
+          host: linux_mutable
+          summary: >
+            release_target markers applied (methodology
+            release_aware_packets, operator directive 2026-07-14): the 12
+            criteria packets now carry release_target: stable-milestone-v1
+            and outrank the backlog in worker step 4_pick_one. Marker
+            lifecycle is coordinator-owned. Follow-up research packet:
+            collaborative-work-scheduling-research (order 335).
         - type: filed
           ts: "2026-07-14T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
@@ -10900,3 +10923,44 @@ plan_index:
             Filed per operator directive; criteria derived from the merged
             sibling evidence (windows 312/323-327, macos 328-333 lines,
             linux 303-307/318).
+
+    - packet_id: collaborative-work-scheduling-research
+      order: 335
+      title: "Research: collaborative triage/scheduling/queueing for distributed agents — beyond the flat release_target marker"
+      status: ready
+      kind: research
+      deliverable: methodology/distributed-work.yaml (scheduling section) + plan/issues design record
+      depends_on: []
+      pickup_role: any
+      capability_tags: [methodology, coordination, scheduling, research]
+      estimated_hours: 6
+      outcome: >
+        Operator directive 2026-07-14: release_target is the deliberately
+        minimal first slice; we need more sophisticated ways to triage,
+        schedule, and queue work packets so agents picking up work do
+        COLLABORATIVE work and make progress rather than blocking each
+        other and idling. Survey the observed failure modes in our own
+        ledger history (order-number collisions, duplicate independent
+        filings 315/316+323-327, idempotent-but-wasteful closure races,
+        hosts idling while their platform's set is blocked, thrashing
+        mediation cases) and prior art (CI schedulers, Bazel/remote-exec
+        queues, kanban WIP limits, OS run-queues with aging, Gerrit
+        attention sets). Propose the SMALLEST mechanism set that fixes
+        what we actually hit — candidates: dependency-aware dispatch
+        waves, per-host reservations, priority lanes with aging,
+        blocked-set auto-fallback, milestone burndown surfacing in
+        loop_status. Each proposed mechanism needs a verifiable closure
+        and a migration rung; reject anything that cannot fail loud.
+      exit_criteria:
+        - "failure-mode inventory from ledger history with packet_id citations"
+        - "prior-art survey with provenance (docs/URLs + dates)"
+        - "proposed mechanism set, each with a verifiable closure + staged adoption rung"
+        - "Tlatoani sign-off recorded before any mechanism becomes worker-protocol contract"
+      events:
+        - type: filed
+          ts: "2026-07-14T20:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T2005Z"
+          host: linux_mutable
+          summary: >
+            Filed per operator directive alongside the release_aware_packets
+            methodology slice (flat marker + selection preference).

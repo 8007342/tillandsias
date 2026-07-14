@@ -1,6 +1,23 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-14T19:55:00Z
+LastExecutionTime: 2026-07-14T20:20:00Z
+
+## Cycle 2026-07-14T20:05Z→20:20Z (linux_mutable macuahuitl — release-aware work packets: methodology + markers + order 335)
+
+- **Methodology (operator directive)**: distributed-work.yaml gains
+  `release_aware_packets` — packets may carry
+  `release_target: <milestone-packet-id>`; worker step 4_pick_one now
+  prefers release-targeted packets FIRST (falling back to the normal
+  backlog when a host has no eligible targeted work, so nobody idles).
+  Marker lifecycle is coordinator/Tlatoani-owned; workers read-only.
+- **Markers applied**: the 12 stable-milestone-v1 criteria packets now
+  carry `release_target: stable-milestone-v1` — linux 303/304/306/307/318,
+  windows 312/323/324/326, macos 320/331/332. SIBLINGS: pick these first.
+- **Order 335 filed**: collaborative-work-scheduling-research — the
+  sophisticated triage/scheduling/queueing evolution (dispatch waves,
+  reservations, priority aging, blocked-set fallback), grounded in OUR
+  ledger's observed failure modes, Tlatoani-gated before it becomes
+  worker-protocol contract.
 
 ## Cycle 2026-07-14T18:38Z→19:55Z (linux_mutable macuahuitl — coordinator: siblings integrated, provisional-ID methodology, order 305 DONE + first stable promotion, RELEASE v0.3.260714.1 as first prerelease daily, order 334 milestone filed)
 

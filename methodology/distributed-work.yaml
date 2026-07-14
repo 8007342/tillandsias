@@ -407,11 +407,15 @@ distributed_work:
           independent fallback_when_blocked packet.
       - id: 4_pick_one
         action: >
-          Prefer (a) packets that unblock another host, (b) blocked items
-          where the blocker is now resolved, (c) failed-retryable items with a
-          narrow diagnostic chain, (d) the largest coherent ready packet that
-          fits the host capability and lease window. Tie-break by dependency
-          depth, then stable-ID lexicographic order.
+          FIRST prefer packets carrying a `release_target` matching the
+          active milestone (see release_aware_packets below) — release-
+          targeted work outranks everything except unblocking another
+          host. Within the same targeting tier, prefer (a) packets that
+          unblock another host, (b) blocked items where the blocker is
+          now resolved, (c) failed-retryable items with a narrow
+          diagnostic chain, (d) the largest coherent ready packet that
+          fits the host capability and lease window. Tie-break by
+          dependency depth, then stable-ID lexicographic order.
       - id: 5_claim
         action: >
           Mint lease_id, write a `claim` event to the work item's events
@@ -473,6 +477,40 @@ distributed_work:
       - "The integration loop ledger
         (plan/issues/multi-host-integration-loop-2026-05-24.md) records
         every conflict resolution it performs."
+
+  release_aware_packets:
+    decided_by: "The Tlatoāni, 2026-07-14"
+    purpose: >
+      Make the work queue release-aware so distributed agents converge on
+      the same shipping goal instead of each locally optimizing an
+      unrelated corner of the backlog.
+    marker: >
+      A packet MAY carry `release_target: <milestone-packet-id>` (e.g.
+      `release_target: stable-milestone-v1`). The named milestone is a
+      `kind: milestone` packet in plan/index.yaml whose milestone_criteria
+      enumerate the must-land set; the marker and the criteria list must
+      agree (the coordinator reconciles drift during integration).
+    selection_effect: >
+      Worker step 4_pick_one prefers release-targeted packets first. A
+      host with NO eligible release-targeted work falls back to the
+      normal backlog — release targeting concentrates effort, it never
+      idles a host.
+    lifecycle: >
+      The linux coordinator sets and clears markers: applied when a
+      milestone is declared, removed (or re-pointed) when the milestone
+      ships or a criterion is waived. Only the coordinator or The
+      Tlatoāni changes a marker; workers treat it as read-only input.
+    known_limits_and_next: >
+      This is deliberately the SIMPLEST slice: one flat marker + a
+      selection preference. It does not yet solve triage depth,
+      cross-host scheduling, queueing fairness, or anti-starvation —
+      agents can still contend for the same packet or idle when their
+      platform's targeted set is blocked. That evolution is tracked as a
+      research packet (collaborative-work-scheduling-research): candidate
+      mechanisms include dependency-aware dispatch waves, per-host work
+      reservations, priority lanes with aging, and blocked-set
+      auto-fallback. Do not grow this section ad hoc — reduce through
+      that packet.
 
   order_number_assignment:
     decided_by: "The Tlatoāni, 2026-07-14"
