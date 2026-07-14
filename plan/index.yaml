@@ -9483,6 +9483,20 @@ plan_index:
         - "tray Claude/Codex/Antigravity launches call the ensure_provider_auth ladder before spawning the terminal"
         - "vault-present credential launches with no login prompt"
       events:
+        - type: progress
+          ts: "2026-07-14T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
+          host: linux_mutable
+          summary: >
+            Drain attempt deferred with a design note: wiring
+            ensure_provider_auth into the tray lane TODAY would launch
+            get_generic_login_token_script — the PASTE-TOKEN flow the
+            2026-07-12 amendment explicitly replaces — and its silent
+            `read -s` needs a TTY the tray process lacks (order-325
+            non-TTY class). 303 therefore depends on the device-flow
+            token_script (304's flow) or must chain the login INSIDE the
+            popup terminal before the agent exec. Do not implement 303 as
+            a bare one-liner.
         - type: amended
           ts: "2026-07-13T00:08:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
@@ -9547,7 +9561,7 @@ plan_index:
     - packet_id: stable-release-channel
       order: 305
       title: "Introduce a 'stable' release label; README install scripts pin to stable while dailies keep shipping"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/stable-release-channel-2026-07-12.md
       depends_on: []
@@ -9565,6 +9579,24 @@ plan_index:
         - "promotion procedure documented in methodology/versioning.yaml with e2e-evidence gate"
         - "shape litmus asserting README install URL resolves the stable channel"
       events:
+        - type: completed
+          ts: "2026-07-14T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
+          host: linux_mutable
+          summary: >
+            DEFAULTS OVER CONFIGURATION implementation: dailies now ship
+            as GitHub PRE-releases (release.yml --prerelease), so the
+            README's existing /releases/latest/download URLs resolve to
+            the newest promoted stable with zero URL changes; the rolling
+            `stable` git tag no longer moves on dailies.
+            scripts/promote-stable.sh (evidence-gated: refuses without a
+            plan/ e2e PASS record; falsifiable refused:/promoted: grammar)
+            flips a vetted daily to prerelease=false + latest + moves the
+            stable tag. First promotion executed: promoted:v0.3.260712.1
+            (curl-install e2e PASS evidence 66d8b134 + linux destructive
+            e2e PASS). Procedure documented in methodology/versioning.yaml
+            stable_channel; pinned by litmus:stable-channel-shape (4/4
+            PASS in ci-release suite); README gains the two-channel note.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -10821,3 +10853,50 @@ plan_index:
             targeting this host cycle's five uncommitted packet files; they
             survived only because e84ba192 had just been pushed. It also
             reverted its own blocker-file update (self-erasing evidence).
+
+    - packet_id: stable-milestone-v1
+      order: 334
+      title: "STABLE MILESTONE v1: per-platform must-land set for the first stable-labeled release beyond v0.3.260712.1"
+      status: ready
+      kind: milestone
+      multi_cycle: true
+      deliverable: plan/index.yaml (this node tracks; children carry the work)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [coordination, release, milestone]
+      estimated_hours: 0
+      outcome: >
+        Operator directive 2026-07-14: converge on a stable milestone.
+        Channel mechanics shipped (order 305; v0.3.260712.1 promoted as
+        the first stable). This node enumerates what each platform must
+        land before the NEXT promotion — the first release labeled stable
+        under the full bar. Promotion stays Tlatoani-owned
+        (scripts/promote-stable.sh, evidence-gated).
+      milestone_criteria:
+        linux:
+          - "order 306 opencode-tray-tui-spill-verify: tray TUI clean on cold first launch"
+          - "order 307 antigravity-launch-crash: lane reaches usable TUI (retry-installer fix a04b8c91 needs verify)"
+          - "orders 303+304 agent-login: device flow, vault round-trip — no re-login on relaunch"
+          - "order 318 mirror-relay-verified-acks: no false-success acks (data-loss class barred from stable)"
+        windows:
+          - "order 312 remaining slice: standard-user (non-elevated) tray connects OR installer group-add verified end-to-end on a standard account"
+          - "orders 323/324 WSL reboot-pending first-install UX: cold install on a no-WSL machine gives actionable guidance, not a cryptic VM failure"
+          - "order 326 wsl-guest-forge-user-src-ownership: cloud clones work in the guest forge"
+        macos:
+          - "order 331 macos-opencode-host-path-translation: host-path forge lane launches (operator repro FAIL)"
+          - "order 332 macos-opencode-firstuse-silent-build-idle-timeout: first-use build survives >300s without VM kill"
+          - "order 320 (or interim): macOS forge gets the gitconfig/insteadOf injection — forge cycles can push"
+        cross:
+          - "curl-install e2e PASS on the promotion candidate on ALL THREE platforms, recorded in plan/"
+      exit_criteria:
+        - "every milestone_criteria row maps to a done packet or an operator-approved waiver recorded here"
+        - "scripts/promote-stable.sh run on the candidate with the evidence gate passing un-forced"
+      events:
+        - type: filed
+          ts: "2026-07-14T19:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
+          host: linux_mutable
+          summary: >
+            Filed per operator directive; criteria derived from the merged
+            sibling evidence (windows 312/323-327, macos 328-333 lines,
+            linux 303-307/318).

@@ -140,8 +140,9 @@ specs:
   - litmus:ci-release-musl-binary-policy
   - litmus:ci-release-toolchain-shape
   - litmus:guest-binary-embed-integrity
+  - litmus:stable-channel-shape
   coverage_ratio: 75
-  last_verified: '2026-07-05'
+  last_verified: '2026-07-14'
 - spec_id: codex-tray-launcher
   status: active
   litmus_tests:

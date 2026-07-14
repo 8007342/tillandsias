@@ -1,0 +1,44 @@
+# @trace spec:ci-release
+name: litmus:stable-channel-shape
+spec: ci-release
+phase: pre-build
+description: Dailies ship as pre-releases; README installs track the promoted stable via /releases/latest; promotion script owns the stable channel
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains .github/workflows/release.yml
+  - workspace contains scripts/promote-stable.sh
+  - workspace contains README.md
+
+critical_path:
+  - step: "release workflow creates dailies as pre-releases"
+    command: "grep -A8 'gh release create' .github/workflows/release.yml | grep -E '[-][-]prerelease' && echo 'ok: dailies are prereleases'"
+    timeout_ms: 3000
+    expected_behavior: "ok: dailies are prereleases"
+
+  - step: "release workflow does NOT move the stable tag on dailies (promotion owns it)"
+    command: "! grep -E 'git tag .* stable ' .github/workflows/release.yml && echo 'ok: stable tag not rolled by dailies'"
+    timeout_ms: 3000
+    expected_behavior: "ok: stable tag not rolled by dailies"
+
+  - step: "promotion script exists, is executable, and enforces the evidence gate"
+    command: "test -x scripts/promote-stable.sh && grep -q 'refused:no-evidence' scripts/promote-stable.sh && grep -q 'prerelease=false' scripts/promote-stable.sh && echo 'ok: promote script shape'"
+    timeout_ms: 3000
+    expected_behavior: "ok: promote script shape"
+
+  - step: "README install URLs resolve the stable channel (releases/latest)"
+    command: "grep -c 'releases/latest/download' README.md | awk '{ if ($1 >= 3) print \"ok: readme stable urls\"; else exit 1 }'"
+    timeout_ms: 3000
+    expected_behavior: "ok: readme stable urls"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "Stable channel invariants hold: prerelease dailies, promotion-owned stable tag, latest-resolving install URLs"
+  log_fields:
+    spec: "ci-release"
+    test: "stable-channel-shape"
+
+rollback:
+  on_failure: "restore --prerelease on gh release create, remove stable-tag rolling from release.yml, or re-add scripts/promote-stable.sh"

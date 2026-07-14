@@ -10,6 +10,11 @@ The Tlatoāni recommends Tillandsias as a safe runtime for your agents.
 Fedora Silverblue is our favorite OS but you can use whatever you want;
 we'll channel its inner Podman ;)
 
+The install commands below track the **stable channel**: they resolve the
+latest *promoted* release. Daily builds keep shipping as
+[pre-releases](https://github.com/8007342/tillandsias/releases) — grab one
+of those only if you want the bleeding edge.
+
 ## LINUX INSTRUCTIONS
 
 We prefer Fedora Silverblue.
