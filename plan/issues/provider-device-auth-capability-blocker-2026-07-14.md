@@ -36,10 +36,12 @@ Order 338 implemented the available Codex device-command and credential-schema
 foundation without weakening the device-flow policy. It feature-probes
 `codex login --device-auth`, stores the complete opaque `~/.codex/auth.json`
 as `secret/codex/oauth {credentials_b64}` through stdin, and fails loud rather
-than falling back. Order 339 owns restore/injection on the next launch; order
-340 owns early and exit-time rotation harvest. Orders 303 and 304 can be
-reshaped or resumed only when every named provider has a supported device
-mechanism or the operator explicitly narrows their aggregate scope.
+than falling back. Order 339 now restores the opaque document through a
+read-only Codex-only lease held for the attached session, validates it, writes
+mode 0600, and routes the tray through the same CLI-owned lifetime. Order 340
+owns early and exit-time rotation harvest. Orders 303 and 304 can be reshaped
+or resumed only when every named provider has a supported device mechanism or
+the operator explicitly narrows their aggregate scope.
 
 Order 307 remains blocked after its proxy fix because no supported
 Antigravity/Gemini credential acquisition path can populate the credential

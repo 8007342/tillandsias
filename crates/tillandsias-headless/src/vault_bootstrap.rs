@@ -2266,6 +2266,7 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
         Policy::GithubLogin => "github-login",
         Policy::ClaudeLogin => "claude-login",
         Policy::CodexLogin => "codex-login",
+        Policy::CodexForge => "codex-forge",
         Policy::AntigravityLogin => "antigravity-login",
     }
 }
@@ -2285,6 +2286,7 @@ mod tests {
         assert_eq!(policy_role_name(&Policy::GithubLogin), "github-login");
         assert_eq!(policy_role_name(&Policy::ClaudeLogin), "claude-login");
         assert_eq!(policy_role_name(&Policy::CodexLogin), "codex-login");
+        assert_eq!(policy_role_name(&Policy::CodexForge), "codex-forge");
         assert_eq!(
             policy_role_name(&Policy::AntigravityLogin),
             "antigravity-login"

@@ -115,6 +115,13 @@ inject_startup_context "$PROJECT_DIR"
 require_codex
 [ -x "$CX_BIN" ] || harness_missing_fatal codex
 
+# API-key launches need no OAuth state. Otherwise restore the complete opaque
+# Codex credential document from the scoped Vault lease mounted only for this
+# agent mode; failure is loud before the TUI starts.
+if [ -z "${OPENAI_API_KEY:-}" ]; then
+    /usr/local/bin/codex-oauth-vault restore
+fi
+
 # ── Banner ──────────────────────────────────────────────────
 show_banner "codex"
 

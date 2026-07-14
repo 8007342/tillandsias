@@ -7756,6 +7756,26 @@ pub(crate) fn build_forge_agent_run_args(
     mode: ForgeAgentMode,
     debug: bool,
 ) -> Vec<String> {
+    build_forge_agent_run_args_with_vault(
+        project_path,
+        project_name,
+        certs_dir,
+        version,
+        mode,
+        debug,
+        None,
+    )
+}
+
+fn build_forge_agent_run_args_with_vault(
+    project_path: &Path,
+    project_name: &str,
+    certs_dir: &Path,
+    version: &str,
+    mode: ForgeAgentMode,
+    debug: bool,
+    vault_secret: Option<&str>,
+) -> Vec<String> {
     let image = forge_image_tag(version);
     let spec = ContainerSpec::new(image)
         .name(forge_container_name_for_mode(project_name, mode))
@@ -7809,6 +7829,11 @@ pub(crate) fn build_forge_agent_run_args(
         .env("GIT_CONFIG_GLOBAL", "/home/forge/.config/git/config")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
+    if mode == ForgeAgentMode::Codex
+        && let Some(secret_name) = vault_secret
+    {
+        spec = spec.secret(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
+    }
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");
     }
@@ -7990,8 +8015,31 @@ fn run_forge_agent_cli_mode(
     let version = VERSION.trim();
     let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
     ensure_provider_auth(mode, debug)?;
-    let forge_args =
-        build_forge_agent_run_args(&canonical, project_name, &certs_dir, version, mode, debug);
+
+    #[cfg(feature = "vault")]
+    let codex_vault_lease = if mode == ForgeAgentMode::Codex {
+        Some(vault_bootstrap::mint_approle_secret_lease(
+            "codex-forge",
+            &forge_container_name_for_mode(project_name, mode),
+            debug,
+        )?)
+    } else {
+        None
+    };
+    #[cfg(feature = "vault")]
+    let codex_vault_secret = codex_vault_lease.as_ref().map(|lease| lease.secret_name());
+    #[cfg(not(feature = "vault"))]
+    let codex_vault_secret: Option<&str> = None;
+
+    let forge_args = build_forge_agent_run_args_with_vault(
+        &canonical,
+        project_name,
+        &certs_dir,
+        version,
+        mode,
+        debug,
+        codex_vault_secret,
+    );
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -8042,10 +8090,10 @@ fn run_forge_agent_cli_mode(
 ///
 /// Flow:
 /// 1. Resolve project name + canonical path.
-/// 2. Bring up enclave (proxy + git + inference) via the shared idiomatic
-///    podman layer.
-/// 3. Build the forge `podman run` argv via `ContainerSpec`.
-/// 4. Detect host terminal, spawn it detached with the argv appended.
+/// 2. For Codex, re-exec the CLI lane in the terminal so its scoped Vault
+///    lease lives for the attached session. Other modes build the forge
+///    `podman run` argv via `ContainerSpec` after bringing up the enclave.
+/// 3. Detect host terminal, spawn it detached with the argv appended.
 ///
 /// The terminal window is the user-facing surface. When the user closes it,
 /// `podman run --rm` tears the container down.
@@ -8064,7 +8112,6 @@ pub(crate) fn launch_forge_agent(
     let canonical = project_path
         .canonicalize()
         .unwrap_or_else(|_| project_path.to_path_buf());
-    let version = VERSION.trim();
 
     if debug {
         eprintln!(
@@ -8074,20 +8121,39 @@ pub(crate) fn launch_forge_agent(
         );
     }
 
-    // Unconditional progress receipt: bringing the enclave online can take
-    // several seconds (and minutes on the very first run if the proxy/git/
-    // inference/forge images still need building). Without this line a menu
-    // click looks like it did nothing until the terminal window finally opens.
-    // @trace spec:tray-ux
-    eprintln!(
-        "[tillandsias] launch_forge_agent: preparing enclave for '{project_name}' ({} agent); the terminal opens once it's ready…",
-        mode.slug()
-    );
-
-    let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
-
-    let argv =
-        build_forge_agent_run_argv(&canonical, project_name, &certs_dir, version, mode, debug);
+    let argv = if mode == ForgeAgentMode::Codex {
+        eprintln!(
+            "[tillandsias] launch_forge_agent: opening the Codex terminal for '{project_name}'; the CLI lane prepares the enclave and scoped credential lease"
+        );
+        let current_exe = std::env::current_exe()
+            .map_err(|e| format!("failed to resolve Tillandsias executable: {e}"))?;
+        let mut argv = vec![
+            current_exe.display().to_string(),
+            "--codex".to_string(),
+            canonical.display().to_string(),
+        ];
+        if debug {
+            argv.push("--debug".to_string());
+        }
+        argv
+    } else {
+        // Unconditional progress receipt: bringing the enclave online can take
+        // several seconds (and minutes on the first run). Without this line a
+        // menu click looks idle until the terminal opens.
+        eprintln!(
+            "[tillandsias] launch_forge_agent: preparing enclave for '{project_name}' ({} agent); the terminal opens once it's ready…",
+            mode.slug()
+        );
+        let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
+        build_forge_agent_run_argv(
+            &canonical,
+            project_name,
+            &certs_dir,
+            VERSION.trim(),
+            mode,
+            debug,
+        )
+    };
 
     let mut term = detect_host_terminal()?;
     if debug {
@@ -10761,6 +10827,46 @@ mod tests {
         assert!(has_arg(&argv, "PROJECT=alpha"));
         assert!(has_arg(&argv, "TILLANDSIAS_PROJECT=alpha"));
         assert!(has_arg(&argv, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+    }
+
+    #[test]
+    fn codex_forge_mounts_scoped_vault_lease_only_for_codex() {
+        let codex_args = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            Some("codex-forge-lease"),
+        );
+        assert!(has_arg(&codex_args, "--secret"));
+        assert!(has_arg(
+            &codex_args,
+            &format!("codex-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
+        ));
+
+        let claude_args = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+            Some("must-not-mount"),
+        );
+        assert!(!has_arg(&claude_args, "--secret"));
+        assert!(!claude_args.iter().any(|arg| arg.contains("must-not-mount")));
+    }
+
+    #[test]
+    fn tray_codex_launch_reexecs_cli_for_lease_lifetime() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source_window(source, "pub(crate) fn launch_forge_agent(");
+        assert!(body.contains("mode == ForgeAgentMode::Codex"));
+        assert!(body.contains("std::env::current_exe()"));
+        assert!(body.contains("\"--codex\".to_string()"));
+        assert!(body.contains("canonical.display().to_string()"));
     }
 
     #[test]

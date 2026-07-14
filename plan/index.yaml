@@ -11240,7 +11240,7 @@ plan_index:
       order: 339
       release_target: stable-milestone-v1
       title: "Codex OAuth restore: inject opaque Vault auth document into the ephemeral forge home"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
       depends_on: [codex-device-auth-command-and-schema]
@@ -11264,12 +11264,25 @@ plan_index:
           host: linux
           summary: >
             First bounded follow-on from order 338's proven opaque schema.
+        - type: completed
+          ts: "2026-07-14T20:47:26Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Added a read-only codex-forge Vault policy and typed ContainerSpec
+            secret mount. The CLI owns the AppRole lease for the full attached
+            session; tray Codex re-execs that CLI path. The entrypoint restores
+            validated opaque JSON before launch with mode 0600 and skips OAuth
+            only when OPENAI_API_KEY is present. Restore fixture proves
+            byte-identical content and no argv/env/project/log leak; Podman,
+            policy, mount, and tray routing tests pass; Vault quick litmuses
+            pass 6/6.
 
     - packet_id: codex-oauth-rotation-harvest
       order: 340
       release_target: stable-milestone-v1
       title: "Codex OAuth rotation harvest: persist credential-file changes before ephemeral forge teardown"
-      status: pending
+      status: ready
       kind: enhancement
       deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
       depends_on: [codex-oauth-restore-inject]
@@ -11293,3 +11306,8 @@ plan_index:
           summary: >
             Second bounded follow-on from order 338; pending on restore/inject
             so lifecycle tests share one canonical schema and helper.
+        - type: dependency-unblocked
+          ts: "2026-07-14T20:47:26Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: "Order 339 restore/inject completed; rotation harvest is ready."

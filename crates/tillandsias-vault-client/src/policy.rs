@@ -20,6 +20,7 @@ const INFERENCE_HCL: &str = include_str!("../../../images/vault/policies/inferen
 const GITHUB_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/github-login.hcl");
 const CLAUDE_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/claude-login.hcl");
 const CODEX_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/codex-login.hcl");
+const CODEX_FORGE_HCL: &str = include_str!("../../../images/vault/policies/codex-forge.hcl");
 const ANTIGRAVITY_LOGIN_HCL: &str =
     include_str!("../../../images/vault/policies/antigravity-login.hcl");
 
@@ -33,6 +34,7 @@ const ANTIGRAVITY_LOGIN_HCL: &str =
 /// - `ClaudeLogin`/`CodexLogin`/`AntigravityLogin` — write-capable policies for
 ///   the one-shot provider-login containers (`run_provider_login` mints role
 ///   `<provider>-login`); scoped to `secret/data/<provider>/oauth` only.
+/// - `CodexForge` — read-only on the opaque Codex OAuth document for restore.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Policy {
     GitMirror,
@@ -42,6 +44,7 @@ pub enum Policy {
     GithubLogin,
     ClaudeLogin,
     CodexLogin,
+    CodexForge,
     AntigravityLogin,
 }
 
@@ -57,6 +60,7 @@ impl Policy {
             Policy::GithubLogin => "github-login-policy",
             Policy::ClaudeLogin => "claude-login-policy",
             Policy::CodexLogin => "codex-login-policy",
+            Policy::CodexForge => "codex-forge-policy",
             Policy::AntigravityLogin => "antigravity-login-policy",
         }
     }
@@ -73,6 +77,7 @@ impl Policy {
             Policy::GithubLogin => "images/vault/policies/github-login.hcl",
             Policy::ClaudeLogin => "images/vault/policies/claude-login.hcl",
             Policy::CodexLogin => "images/vault/policies/codex-login.hcl",
+            Policy::CodexForge => "images/vault/policies/codex-forge.hcl",
             Policy::AntigravityLogin => "images/vault/policies/antigravity-login.hcl",
         }
     }
@@ -89,6 +94,7 @@ impl Policy {
             Policy::GithubLogin => GITHUB_LOGIN_HCL,
             Policy::ClaudeLogin => CLAUDE_LOGIN_HCL,
             Policy::CodexLogin => CODEX_LOGIN_HCL,
+            Policy::CodexForge => CODEX_FORGE_HCL,
             Policy::AntigravityLogin => ANTIGRAVITY_LOGIN_HCL,
         }
     }
@@ -103,6 +109,7 @@ impl Policy {
             Policy::GithubLogin,
             Policy::ClaudeLogin,
             Policy::CodexLogin,
+            Policy::CodexForge,
             Policy::AntigravityLogin,
         ]
     }
@@ -147,6 +154,7 @@ mod tests {
         assert_eq!(Policy::GithubLogin.name(), "github-login-policy");
         assert_eq!(Policy::ClaudeLogin.name(), "claude-login-policy");
         assert_eq!(Policy::CodexLogin.name(), "codex-login-policy");
+        assert_eq!(Policy::CodexForge.name(), "codex-forge-policy");
         assert_eq!(Policy::AntigravityLogin.name(), "antigravity-login-policy");
     }
 
@@ -164,5 +172,14 @@ mod tests {
                 && !hcl.contains("\"delete\""),
             "forge policy must be read-only; got:\n{hcl}"
         );
+    }
+
+    #[test]
+    fn codex_forge_policy_is_read_only_and_provider_scoped() {
+        let hcl = Policy::CodexForge.hcl();
+        assert!(hcl.contains("secret/data/codex/oauth"));
+        assert!(hcl.contains("capabilities = [\"read\"]"));
+        assert!(!hcl.contains("github/token"));
+        assert!(!hcl.contains("\"create\"") && !hcl.contains("\"update\""));
     }
 }

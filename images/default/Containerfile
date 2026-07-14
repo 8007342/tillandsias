@@ -38,6 +38,7 @@ COPY brew-tools-allowlist.txt /usr/local/lib/tillandsias/brew-tools-allowlist.tx
 COPY brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 COPY codex-device-auth.sh /usr/local/bin/codex-device-auth
+COPY codex-oauth-vault.sh /usr/local/bin/codex-oauth-vault
 # @trace spec:error-message-localization
 COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 
@@ -60,6 +61,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/tillandsias-brew-shim-exec \
              /usr/local/bin/vault-cli.sh \
              /usr/local/bin/codex-device-auth \
+             /usr/local/bin/codex-oauth-vault \
              /usr/local/bin/sse-keepalive-proxy.js
 
 # ── Locale ──────────────────────────────────────────────────────

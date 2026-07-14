@@ -9,6 +9,7 @@ size: quick
 preconditions:
   - workspace contains images/default/codex-device-auth.sh
   - workspace contains scripts/test-codex-device-auth.sh
+  - workspace contains scripts/test-codex-oauth-restore.sh
   - workspace contains crates/tillandsias-headless/src/main.rs
 
 critical_path:
@@ -21,6 +22,11 @@ critical_path:
     command: "grep -Fq 'login_program: \"/usr/local/bin/codex-device-auth\"' crates/tillandsias-headless/src/main.rs && grep -Fq 'credential_path: \"~/.codex/auth.json\"' crates/tillandsias-headless/src/main.rs && grep -Fq 'vault_field: \"credentials_b64\"' crates/tillandsias-headless/src/main.rs && echo 'ok: codex device schema'"
     timeout_ms: 3000
     expected_behavior: "ok: codex device schema"
+
+  - step: "restore the opaque document into the private Codex home before launch"
+    command: "scripts/test-codex-oauth-restore.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: Codex OAuth restored byte-identically with mode 0600 and no surface leak"
 
 observability:
   traces:
