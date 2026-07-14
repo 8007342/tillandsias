@@ -3366,11 +3366,9 @@ fn build_opencode_forge_args(
         args.extend([
             "--mount".into(),
             format!(
-                "type=bind,source={},target=/home/forge/.config/git/config,readonly=true",
+                "type=bind,source={},target=/home/forge/.gitconfig,readonly=true",
                 gitconfig_path.display()
             ),
-            "--env".into(),
-            "GIT_CONFIG_GLOBAL=/home/forge/.config/git/config".into(),
         ]);
     }
     append_git_identity_env_args(&mut args);
@@ -5524,8 +5522,8 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 /// The generated config prepopulates the mirror redirect (`url.insteadOf`),
 /// `safe.directory`, and `http.sslCAInfo` so the forge entrypoint's
 /// `rewrite_origin_for_enclave_push` can skip redundant writes on a read-only
-/// mount. The caller bind-mounts this file into the container at
-/// `$GIT_CONFIG_GLOBAL`.
+/// mount. The caller bind-mounts this file into the container at Git's
+/// standard global path, `/home/forge/.gitconfig`.
 ///
 /// Returns `Some(path)` on success, `None` on any I/O error.
 /// @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
@@ -7992,8 +7990,8 @@ fn build_forge_agent_run_args_with_vault(
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
         // Credential quarantine (order 170): empty tmpfs overlays at
-        // credential-surface paths prevent host ~/.ssh, ~/.config/gh,
-        // and ~/.config/git from leaking into the forge even when the
+        // credential-surface paths prevent host ~/.ssh and ~/.config/gh
+        // from leaking into the forge even when the
         // host checkout IS the source mount. These are FORGE-OWNED empty
         // directories that mask any host material Podman would otherwise
         // resolve from the host filesystem (Podman does NOT auto-bind
@@ -8002,7 +8000,6 @@ fn build_forge_agent_run_args_with_vault(
         // .ssh/.config would be visible). The tmpfs prevents that.
         .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
         .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
-        .env("GIT_CONFIG_GLOBAL", "/home/forge/.config/git/config")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     if mode == ForgeAgentMode::Codex
@@ -8059,8 +8056,8 @@ fn build_forge_agent_run_args_with_vault(
         );
     }
 
-    // Forge gitconfig injection (order 224): pre-populate $GIT_CONFIG_GLOBAL
-    // with mirror redirect, safe.directory, and CA cert path so the
+    // Forge gitconfig injection (order 224): pre-populate Git's standard
+    // global config with mirror redirect, safe.directory, and CA cert path so the
     // entrypoint's rewrite_origin_for_enclave_push can skip redundant writes
     // on a read-only mount. Replaces the empty tmpfs formerly used at
     // /home/forge/.config/git — the file is owned by Tillandsias, stored
@@ -8069,7 +8066,7 @@ fn build_forge_agent_run_args_with_vault(
     if let Some(gitconfig_path) = write_forge_gitconfig(project_name, project_path) {
         spec = spec.bind_mount(
             gitconfig_path.display().to_string(),
-            "/home/forge/.config/git/config",
+            "/home/forge/.gitconfig",
             true,
         );
     }
@@ -10137,9 +10134,9 @@ mod tests {
         // Verify the credential quarantine tmpfs overlays (order 170/224) are
         // present in the forge agent mount args. These mask host credential
         // surfaces when the source mount overlaps the host checkout.
-        // ~/.ssh and ~/.config/gh remain empty tmpfs dirs; ~/.config/git/config
-        // is replaced by a read-only bind-mount of a Tillandsias-owned pre-populated
-        // .gitconfig (order 224) so the mirror redirect is available at launch.
+        // ~/.ssh and ~/.config/gh remain empty tmpfs dirs; ~/.gitconfig is a
+        // read-only bind-mount of a Tillandsias-owned pre-populated config
+        // (order 224) so the mirror redirect is available at launch.
         // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
         // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
         let argv = build_forge_agent_run_argv(
@@ -10161,10 +10158,10 @@ mod tests {
             if arg.contains("/home/forge/.config/gh") && arg.contains("size=1m") {
                 found_gh_config = true;
             }
-            // The .git/config is now a read-only bind mount of a pre-populated
+            // The global config is a read-only bind mount of a pre-populated
             // forge-owned config (order 224), not an empty tmpfs.
             if arg.contains("forge-gitconfig")
-                && arg.contains("/home/forge/.config/git/config")
+                && arg.contains("/home/forge/.gitconfig")
                 && arg.contains("readonly=true")
             {
                 found_git_config_ro = true;
@@ -10180,16 +10177,12 @@ mod tests {
         );
         assert!(
             found_git_config_ro,
-            "must mount forge-owned gitconfig at /home/forge/.config/git/config (order 224)"
+            "must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)"
         );
 
-        // Verify GIT_CONFIG_GLOBAL redirects to the injected config.
-        let has_git_config_global = argv.iter().any(|a| {
-            a.starts_with("GIT_CONFIG_GLOBAL=") && a.contains("/home/forge/.config/git/config")
-        });
         assert!(
-            has_git_config_global,
-            "must set GIT_CONFIG_GLOBAL to forge gitconfig path"
+            !argv.iter().any(|a| a.starts_with("GIT_CONFIG_GLOBAL=")),
+            "standard ~/.gitconfig mount must not require GIT_CONFIG_GLOBAL"
         );
     }
 
@@ -10927,9 +10920,8 @@ mod tests {
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
         );
         // Credential quarantine (order 224): .ssh and .config/gh must be
-        // empty tmpfs overlays, GIT_CONFIG_GLOBAL must be set to the
-        // forge-injected gitconfig path (may or may not be present depending
-        // on whether HOME is set in the test environment).
+        // empty tmpfs overlays. The standard ~/.gitconfig mount may or may
+        // not be present depending on whether HOME is set in the test environment.
         assert!(has_arg(&args, "--tmpfs"));
         assert!(
             args.iter()
@@ -10941,6 +10933,17 @@ mod tests {
                 .any(|arg| arg == "/home/forge/.config/gh:size=1m,mode=0700"),
             "opencode forge args must quarantine .config/gh via tmpfs; got {args:?}"
         );
+        assert!(
+            !args.iter().any(|arg| arg.starts_with("GIT_CONFIG_GLOBAL=")),
+            "opencode forge args must use Git's standard global config path; got {args:?}"
+        );
+        if args.iter().any(|arg| arg.contains("forge-gitconfig")) {
+            assert!(
+                args.iter()
+                    .any(|arg| arg.contains("target=/home/forge/.gitconfig,readonly=true")),
+                "opencode forge args must mount generated config at ~/.gitconfig; got {args:?}"
+            );
+        }
     }
 
     #[test]

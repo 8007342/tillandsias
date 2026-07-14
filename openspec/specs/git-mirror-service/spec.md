@@ -62,6 +62,13 @@ The git service container SHALL run `git daemon` with `--export-all --enable=rec
 - **THEN** the push SHALL succeed only after the upstream atomically accepts the proposed refs
 - **AND** the commits SHALL then be persisted in the bare mirror volume
 
+#### Scenario: Forge launcher installs one standard global Git config
+- **WHEN** any forge agent launcher starts a container
+- **THEN** it SHALL generate the Tillandsias-owned mirror and quarantine config through one shared generator
+- **AND** SHALL bind-mount that file read-only at `/home/forge/.gitconfig`
+- **AND** SHALL NOT set `GIT_CONFIG_GLOBAL` in the container environment
+- **AND** `git config --global --show-origin` SHALL report `/home/forge/.gitconfig`
+
 #### Scenario: Forge commits use GitHub Login identity
 - **WHEN** a forge container starts after GitHub Login saved a git identity
 - **THEN** the launcher SHALL inject `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,

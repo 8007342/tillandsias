@@ -119,7 +119,7 @@ fi
 
 # Avoid git "dubious ownership" on host-mounted repos with different UID.
 # Pre-injected by the launcher (order 224) — skip if already present so the
-# command does not fail against a read-only $GIT_CONFIG_GLOBAL.
+# command does not fail against the read-only injected global config.
 if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "/home/forge/src/*"; then
     git config --global --add safe.directory /home/forge/src/\* 2>/dev/null || true
 fi
@@ -345,7 +345,7 @@ rewrite_origin_for_enclave_push() {
 
     # Check whether the redirect is already installed (pre-injected by the
     # launcher's write_forge_gitconfig in order 224). If so, skip redundant
-    # writes that would fail on a read-only $GIT_CONFIG_GLOBAL mount.
+    # writes that would fail on the read-only injected global config mount.
     if git config --global --get-all "url.${mirror_url}.insteadOf" 2>/dev/null | grep -Fxq "$original"; then
         trace_lifecycle "git-mirror" "redirect already installed for ${original}; skipping"
         return 0

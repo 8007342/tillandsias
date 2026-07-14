@@ -1,0 +1,46 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-standard-gitconfig-path
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Prove both forge launchers use one generated read-only ~/.gitconfig without
+  GIT_CONFIG_GLOBAL and Git resolves that standard path inside the image.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-forge-standard-gitconfig-path.sh
+  - localhost/tillandsias-forge:latest exists
+
+critical_path:
+  - step: "Git resolves the injected config from its standard global path"
+    command: "scripts/test-forge-standard-gitconfig-path.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: forge uses the standard read-only global gitconfig path"
+
+  - step: "typed forge launcher uses the standard path without an override"
+    command: "cargo test -p tillandsias-headless forge_credential_quarantine_mounts_present"
+    timeout_ms: 120000
+    expected_behavior: "forge_credential_quarantine_mounts_present ... ok"
+
+  - step: "raw OpenCode launcher uses the standard path without an override"
+    command: "cargo test -p tillandsias-headless opencode_args_mount_workspace_and_prompt"
+    timeout_ms: 120000
+    expected_behavior: "opencode_args_mount_workspace_and_prompt ... ok"
+
+  - step: "production forge sources contain no global-config environment mesh"
+    command: "! grep -R 'GIT_CONFIG_GLOBAL' images/default/entrypoint-*.sh && ! grep -Fq 'GIT_CONFIG_GLOBAL=/home/forge' crates/tillandsias-headless/src/main.rs && ! grep -Fq '.env(\"GIT_CONFIG_GLOBAL\", \"/home/forge' crates/tillandsias-headless/src/main.rs && echo 'ok: no production global-config override'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no production global-config override"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "Git reports file:/home/forge/.gitconfig as its global origin"
+  log_fields:
+    spec: git-mirror-service
+    test: forge-standard-gitconfig-path
+
+rollback:
+  on_failure: "inspect the launcher mount target and Git's effective global config origin"
+  command: "scripts/test-forge-standard-gitconfig-path.sh"
