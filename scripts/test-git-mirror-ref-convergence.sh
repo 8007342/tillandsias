@@ -3,17 +3,18 @@
 # Offline reproduction + regression pin for order 301: the git mirror's
 # reconciliation fetch must NOT clobber a just-received exported ref.
 #
-# Three bare-repo cases (no network, no Podman), each run in BOTH the unsafe
-# legacy refspec ("+refs/*:refs/*") and the safe refspec now configured by
-# images/git/entrypoint.sh ("+refs/heads/*:refs/remotes/origin/*"). The unsafe
-# runs must reproduce the divergence; the safe runs must converge. The
-# post-receive case exercises the real images/git/post-receive-hook.sh.
+# Three bare-repo cases (no network, no Podman). The receive case exercises
+# the production pre-receive relay and must converge in one acknowledged push.
+# Startup retry still runs under both the unsafe legacy fetch refspec and the
+# safe tracking-only refspec to preserve the order-301 regression control.
 #
 # Run: scripts/test-git-mirror-ref-convergence.sh   (exit 0 = all cases pass)
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOOK="$ROOT/images/git/post-receive-hook.sh"
+PRE_HOOK="$ROOT/images/git/pre-receive-hook.sh"
+POST_HOOK="$ROOT/images/git/post-receive-hook.sh"
+RELAY_HELPER="$ROOT/images/git/relay-refs.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -22,6 +23,7 @@ trap 'rm -rf "$WORK"' EXIT
 export GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@t
 export GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@t
 export HOME="$WORK/home"; mkdir -p "$HOME"
+export GIT_ALLOW_PROTOCOL=ext:file
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -38,7 +40,11 @@ configure_mirror() {
     # mirror container which has no such global override.
     git -C "$1" config core.hooksPath "$1/hooks"
     git -C "$1" remote remove origin 2>/dev/null || true
-    git -C "$1" remote add origin "$2"
+    # Local receive-pack would inherit the current hook's quarantine marker.
+    # Sanitize the distinct upstream receiver through ext, matching the process
+    # boundary provided by production HTTPS/SSH remotes.
+    local remote="ext::env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES %S $2"
+    git -C "$1" remote add origin "$remote"
     if [ "$3" = safe ]; then
         git -C "$1" config remote.origin.fetch "$SAFE_FETCH"
         git -C "$1" config remote.origin.tagOpt "--no-tags"
@@ -48,14 +54,12 @@ configure_mirror() {
 }
 
 # ---------------------------------------------------------------------------
-# Case 1: post-receive relay. Mirror and upstream both start at BASE; the forge
-# pushes PROBE to the mirror while upstream is still BASE. The real hook fires,
-# reconcile-fetches, and relays PROBE. Safe => mirror and upstream both PROBE.
-# Unsafe => reconcile fetch clobbers the mirror back to BASE while the relay
-# advances upstream to PROBE (the observed order-301 divergence).
+# Case 1: pre-receive relay. Mirror and upstream both start at BASE; the forge
+# pushes PROBE to the mirror while upstream is still BASE. Client success is
+# returned only after the real relay helper atomically advances upstream.
 # Echoes "<mirror_sha> <upstream_sha>".
 push_case() {
-    local mode="$1" d="$WORK/push-$1"
+    local d="$WORK/push"
     rm -rf "$d"; mkdir -p "$d"
     git init -q --bare "$d/upstream"
     git clone -q "$d/upstream" "$d/work" 2>/dev/null
@@ -64,8 +68,12 @@ push_case() {
       git branch -M main
       git push -q origin HEAD:refs/heads/main )
     git init -q --bare "$d/mirror"
-    configure_mirror "$d/mirror" "$d/upstream" "$mode"
-    cp "$HOOK" "$d/mirror/hooks/post-receive"; chmod +x "$d/mirror/hooks/post-receive"
+    configure_mirror "$d/mirror" "$d/upstream" safe
+    cp "$PRE_HOOK" "$d/mirror/hooks/pre-receive"
+    cp "$POST_HOOK" "$d/mirror/hooks/post-receive"
+    cp "$RELAY_HELPER" "$d/mirror/hooks/tillandsias-relay-refs"
+    chmod +x "$d/mirror/hooks/pre-receive" "$d/mirror/hooks/post-receive" \
+        "$d/mirror/hooks/tillandsias-relay-refs"
     # Seed the mirror at BASE (relay is a no-op; upstream already has BASE).
     git -C "$d/work" push -q "$d/mirror" main >/dev/null 2>&1
     # The divergence-inducing push: a new commit while upstream is stale.
@@ -74,13 +82,9 @@ push_case() {
     echo "$(git -C "$d/mirror" rev-parse refs/heads/main) $(git -C "$d/upstream" rev-parse refs/heads/main)"
 }
 
-read -r M_SAFE U_SAFE <<<"$(push_case safe)"
+read -r M_SAFE U_SAFE <<<"$(push_case)"
 [ "$M_SAFE" = "$U_SAFE" ] || fail "case1 safe: mirror $M_SAFE != upstream $U_SAFE (relay must converge in one push)"
 echo "case 1 ok (safe): one push converges mirror and upstream at ${M_SAFE:0:8}"
-
-read -r M_UNSAFE U_UNSAFE <<<"$(push_case unsafe)"
-[ "$M_UNSAFE" != "$U_UNSAFE" ] || fail "case1 control: unsafe refspec unexpectedly converged — fixture no longer reproduces the bug"
-echo "case 1 control (unsafe): reproduces divergence mirror ${M_UNSAFE:0:8} != upstream ${U_UNSAFE:0:8}"
 
 # ---------------------------------------------------------------------------
 # Case 2: startup retry-push of a locally stranded commit. A prior session left
@@ -100,7 +104,9 @@ retry_case() {
       git push -q origin HEAD:refs/heads/main )
     git init -q --bare "$d/mirror"
     configure_mirror "$d/mirror" "$d/upstream" "$mode"
-    # NO hook here — this case exercises the entrypoint startup retry loop.
+    cp "$RELAY_HELPER" "$d/mirror/hooks/tillandsias-relay-refs"
+    chmod +x "$d/mirror/hooks/tillandsias-relay-refs"
+    # NO receive hook here — this case exercises the entrypoint startup retry.
     # Seed the mirror at BASE, then strand a child commit only in the mirror.
     git -C "$d/mirror" fetch origin '+refs/heads/*:refs/heads/*' >/dev/null 2>&1
     ( cd "$d/work"; echo stranded >> f; git commit -qam stranded )
@@ -109,12 +115,13 @@ retry_case() {
     # Replicate the entrypoint retry sequence: reconcile fetch, then push each
     # local head/tag by explicit refspec.
     git -C "$d/mirror" fetch origin >/dev/null 2>&1 || true
-    local refspecs="" ref
+    local updates="" ref newsha zero="0000000000000000000000000000000000000000"
     for ref in $(git -C "$d/mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
-        refspecs="$refspecs $ref:$ref"
+        newsha="$(git -C "$d/mirror" rev-parse "$ref")"
+        updates="${updates}${zero} ${newsha} ${ref}
+"
     done
-    # shellcheck disable=SC2086
-    git -C "$d/mirror" push origin $refspecs >/dev/null 2>&1 || true
+    printf '%s' "$updates" | (cd "$d/mirror" && hooks/tillandsias-relay-refs) >/dev/null 2>&1 || true
     echo "$(git -C "$d/mirror" rev-parse refs/heads/main) $(git -C "$d/upstream" rev-parse refs/heads/main) $stranded"
 }
 

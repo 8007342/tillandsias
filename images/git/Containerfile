@@ -31,7 +31,7 @@ FROM docker.io/library/alpine:3.20
 #
 # Security: ALL operations run as unprivileged 'git' user
 # @trace spec:tillandsias-vault — curl + jq are required by /usr/local/bin/vault-cli
-# so the post-receive hook can fetch the GitHub token from Vault at push time.
+# so the relay helper can fetch the GitHub token from Vault at push time.
 RUN apk add --no-cache \
         git \
         git-daemon \
@@ -51,9 +51,10 @@ RUN apk add --no-cache \
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
 # @trace spec:git-mirror-service, spec:podman-orchestration
-# Copy git post-receive hook (for push notifications to remote)
+# Copy receive hooks and the synchronous upstream relay helper.
 COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
 COPY pre-receive-hook.sh /usr/local/share/git-service/pre-receive-hook.sh
+COPY relay-refs.sh /usr/local/share/git-service/relay-refs.sh
 COPY lighttpd.conf /usr/local/share/git-service/lighttpd.conf
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
@@ -72,7 +73,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
               /usr/local/bin/vault-cli.sh \
               /usr/local/bin/vault-cli \
               /usr/local/share/git-service/post-receive-hook.sh \
-              /usr/local/share/git-service/pre-receive-hook.sh
+              /usr/local/share/git-service/pre-receive-hook.sh \
+              /usr/local/share/git-service/relay-refs.sh
 
 USER git
 

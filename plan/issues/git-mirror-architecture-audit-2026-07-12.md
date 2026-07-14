@@ -105,6 +105,6 @@ Credential / config-surface class:
 | Current-state map and provenance | PASS | Audit refreshed through linux-next `6a5af9a2`; resolved pre-receive and live-image findings corrected. |
 | Enterprise best-practice baseline | PASS | Bundled enterprise-practices cheatsheet retains source URL/man-page and retrieval provenance. |
 | Explicit variable/config disposition | PASS | Audit section 6 assigns every section-4 variable `keep-justified`, `replace-with-default`, or `delete`; no unknown rows remain. |
-| Relay-verified acknowledgement litmus | OPEN | Order 318 (`mirror-relay-verified-acks`). |
+| Relay-verified acknowledgement litmus | PASS | Order 318: missing credential rejects the client ack; success converges; multi-ref rejection is atomic. |
 | Bidirectional config-isolation fixture | OPEN | Order 321 (`forge-git-config-quarantine`). |
 | Migration child packets | PASS | Orders 318-322 are filed with staged deliverables and verification gates. |

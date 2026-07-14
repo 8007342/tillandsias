@@ -10269,6 +10269,17 @@ plan_index:
         - "migration-ladder child packets filed"
       events:
         - type: progress
+          ts: "2026-07-14T21:13:16Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux_mutable
+          summary: >
+            Order 318 completed the relay-verified acknowledgement gate.
+            The current-state audit now records synchronous pre-receive
+            atomic relay, missing-credential client failure, post-receive
+            bookkeeping, and Vault-backed startup recovery. Only order 321's
+            bidirectional host/forge git-config isolation fixture remains for
+            the multi-cycle audit completion gate.
+        - type: progress
           ts: "2026-07-14T20:56:26Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
           host: linux_mutable
@@ -10434,7 +10445,7 @@ plan_index:
       order: 318
       release_target: stable-milestone-v1
       title: "Ladder rung A: mirror MUST NOT ack a push it has not durably relayed (or must expose relay state) — kills the false-success P1"
-      status: claimed
+      status: done
       kind: architecture
       deliverable: images/git/ (entrypoint + hooks) + openspec/specs/git-mirror-service/
       depends_on: []
@@ -10457,6 +10468,25 @@ plan_index:
         - "litmus: ack-without-relay scenario FAILS the gate (new litmus:git-mirror-relay-verified-ack)"
         - "spec git-mirror-service gains the ack-semantics requirement"
       events:
+        - type: completed
+          ts: "2026-07-14T21:13:16Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "6a0a444dcd89"
+          evidence_refs:
+            - scripts/test-git-mirror-relay-verified-ack.sh
+            - openspec/litmus-tests/litmus-git-mirror-relay-verified-ack.yaml
+            - "litmus:git-mirror-service pre-build instant 4/4 PASS"
+            - "tillandsias-git:d7d1dd7affed78c79e0acb49155f2fd1ea67b051de0e0a50ac0aed437e80ca26"
+          summary: >
+            Replaced fire-and-forget post-receive relay with a synchronous
+            pre-receive helper that sends one atomic explicit-ref transaction
+            and rejects the forge push on missing Vault credentials or any
+            upstream failure. Post-receive is bookkeeping only; startup
+            recovery reuses the same Vault-backed helper. The offline fixture
+            proves missing-credential non-zero ack, strict-fsck convergence,
+            and all-or-nothing multi-ref rejection. Git image build and
+            executable-helper smoke passed.
         - type: claim
           ts: "2026-07-14T21:00:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -11076,6 +11106,15 @@ plan_index:
         - "every milestone_criteria row maps to a done packet or an operator-approved waiver recorded here"
         - "scripts/promote-stable.sh run on the candidate with the evidence gate passing un-forced"
       events:
+        - type: progress
+          ts: "2026-07-14T21:13:16Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux_mutable
+          summary: >
+            Linux milestone criterion order 318 is DONE: configured-upstream
+            pushes cannot return success until one atomic explicit-ref relay
+            succeeds; missing credentials and upstream multi-ref rejection
+            return non-zero without partial mirror or upstream ref updates.
         - type: progress
           ts: "2026-07-14T20:15:00Z"
           agent_id: "linux-macuahuitl-fable5-20260714T2005Z"

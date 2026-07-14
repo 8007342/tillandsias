@@ -50,36 +50,34 @@ forge container ──git:// (9418) / http (8080)──► tillandsias-git conta
   → entrypoint.sh:72-92).
 - Upstream credential: podman secret → `/run/secrets/vault-token`
   (`GIT_VAULT_TOKEN_SECRET_OPTS` main.rs:2259-2260, uid=1000 mode=0400);
-  post-receive reads `vault-cli read -field=token secret/github/token` at
-  push time (post-receive-hook.sh:120-123). No token → `PUSH_URL` stays the
-  clean https URL and the relay push fails "could not read Username".
+  the pre-receive relay reads `vault-cli read -field=token
+  secret/github/token` at push time. No token rejects an HTTPS push before
+  Git can prompt or the mirror can update its local refs.
 
 ## 2. Ack/relay semantics (the P1)
 
 | Stage | Behavior | Provenance |
 |---|---|---|
-| pre-receive | validates plan/openspec YAML of pushed refs | pre-receive-hook.sh:103-148 |
-| local accept | `receive.denyNonFastforwards=false`, `denyDeletes=false` — forge push ALWAYS lands locally | entrypoint.sh:67-68 |
-| post-receive relay | synchronous per-ref push `NEWSHA:REFNAME` to upstream, token injected in-memory | post-receive-hook.sh:65-144 |
-| relay failure | logged as WARNING, **hook still `exit 0`** — pusher sees success | post-receive-hook.sh:146-157 |
-| startup retry | re-push each local head/tag by name; failures logged only | entrypoint.sh:142-188 |
+| pre-receive | validates ledger YAML, then relays the complete proposed ref set upstream with `git push --atomic` | pre-receive-hook.sh + relay-refs.sh |
+| relay failure | pre-receive exits non-zero; neither the local nor upstream ref transaction partially updates | scripts/test-git-mirror-relay-verified-ack.sh |
+| local accept | occurs only after configured-upstream acceptance; no-origin projects are explicitly durable local-only | pre-receive-hook.sh + post-receive-hook.sh |
+| post-receive | bookkeeping only; never establishes relay success | post-receive-hook.sh |
+| startup retry | synthesizes receive records and reuses the Vault-backed atomic relay helper | entrypoint.sh |
 
-**Finding A (verified, root cause of the macOS false-success P1):** the
-success signal to the pusher is *local accept*, never *durable relay*. Relay
-failure is indistinguishable from success at the forge (`exit 0` at
-post-receive-hook.sh:157; the WARNING lines go to the push stderr stream but
-agents/tools treat exit status as truth). With a missing/unreadable
-vault-token secret the relay deterministically fails while every push "succeeds"
-(plan/issues/git-mirror-push-false-success-not-relayed-2026-07-12.md — GitHub
-stale 15 min behind an acked push; operator hypothesis "missing upstream
-credentials in mirror" is consistent with post-receive-hook.sh:120-137).
+**Finding A (fixed and pinned):** order 318 moved must-succeed relay out of
+post-receive and into pre-receive. The helper forwards one atomic transaction
+of explicit SHA refspecs, and receive-pack rejects the forge push if an HTTPS
+credential is absent or the upstream rejects any member. The offline fixture
+proves missing-credential failure, successful convergence with strict upstream
+`fsck`, and all-or-nothing multi-ref rejection. Post-receive now records only
+the already-decided local transaction.
 
-**Finding B (fixed and pinned):** order 316 replaced the pipeline subshell
-with process substitution, so `REJECTED=1` reaches the parent and the final
-`exit 1` is effective. `scripts/test-pre-receive-yaml-gate.sh` proves an
-invalid update is rejected, a valid update is accepted, and a mixed
-multi-ref push is rejected. Order 336 made the fixture use the production
-Rust `tillandsias-policy` parser, removing the divergent PyYAML wrapper.
+**Finding B (fixed and pinned):** order 316 removed the lost pipeline state;
+the current POSIX loop writes a failure marker that the parent checks before
+relay, so the final `exit 1` is effective. `scripts/test-pre-receive-yaml-gate.sh`
+proves an invalid update is rejected, a valid update is accepted, and a mixed
+multi-ref push is rejected. Order 336 made the fixture use the production Rust
+`tillandsias-policy` parser, removing the divergent PyYAML wrapper.
 
 **Finding C (fixed and deployed):** order 301 replaced the clobbering
 `+refs/*:refs/*` reconcile with the safe
@@ -139,19 +137,18 @@ Ladder (scripts/check-credential-channel.sh:44-108): `.git/.gh-credentials`
 → `GH_TOKEN` → `GITHUB_TOKEN` → `gh auth status` → forge branch. The forge
 branch no longer trusts `TILLANDSIAS_HOST_KIND` alone: it requires effective
 origin to resolve to the mirror AND a live `git ls-remote` through it
-(:66-104). **But** per Finding A, a *reachable* mirror that acks-and-drops
-still satisfies the guard — reachability ≠ relay
-(plan/issues/forge-credential-guard-push-channel-gap-2026-07-08.md;
-git-mirror-push-false-success P1). GitHub token storage: Vault
-`secret/github/token`, written by the GitHub Login flow, read only inside
-the mirror at push time (post-receive-hook.sh:114-123).
+(:66-104). Reachability remains a read-channel probe, but it is no longer
+used as proof of relay: the write operation itself now returns non-zero until
+the configured upstream atomically accepts it. GitHub token storage remains
+Vault `secret/github/token`, written by GitHub Login and read only inside the
+mirror at relay time.
 
 ## 6. Hack inventory → DEFAULTS OVER CONFIGURATION dispositions
 
 | Mechanism | Why it exists | Breaks if removed | Git-native candidate | Disposition |
 |---|---|---|---|---|
 | insteadOf rewrites (3 variants: image-injected global, runtime global, repo-local) | route GitHub URLs to mirror without touching host config | forge pushes hit GitHub w/o creds | ONE canonical remote: clone from mirror with origin=mirror; present upstream as separate `upstream` remote, or keep exactly one injected-gitconfig insteadOf | replace-with-default (single injection point, all platforms) |
-| post-receive `exit 0` always | never block forge UX | relay failures become blocking | proper mirror semantics: `receive.*` accept + **report relay state**; or make relay synchronous-failing (agent retries are cheap) | replace — ack must reflect relay (order 315 exit criterion) |
+| pre-receive atomic relay | make client success mean configured-upstream durability | false-success data loss returns if removed | keep synchronous `git push --atomic` with explicit refspecs; post-receive remains bookkeeping only | keep-justified (order 318 fixture) |
 | token-in-URL `https://oauth2:TOKEN@` built in-shell | no credential helper in Alpine image | relay auth | `git credential` helper (`credential.helper` invoking vault-cli via the documented git-credential protocol); token never in argv/URL | replace-with-default |
 | `http.sslCAInfo` enclave-CA-only + GIT_SSL_CAINFO combined-bundle band-aid | proxy MITM trust | git TLS through proxy | install combined CA at the DISTRO default path at image build (update-ca-certificates) → zero TLS env vars for every tool | replace-with-default |
 | CA-block duplication in 6 entrypoints + lib-common | historical copy-paste | drift (already: COMBINED vs COMBINED_CA) | single lib-common function; better: image-baked trust store | delete-candidate (after trust-store fix) |

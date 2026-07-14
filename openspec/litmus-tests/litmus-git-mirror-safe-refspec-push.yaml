@@ -2,7 +2,7 @@
 name: litmus:git-mirror-safe-refspec-push
 spec: git-mirror-service
 description: >
-  Verify git mirror post-receive and startup retry paths use explicit refspecs,
+  Verify git mirror pre-receive and startup retry paths use explicit refspecs,
   reject mirror/all pushes, and retain the bulk-delete guard required for sparse
   mirror caches.
 severity: critical
@@ -10,28 +10,28 @@ size: instant
 phase: pre-build
 
 preconditions:
-  - workspace contains images/git/post-receive-hook.sh
+  - workspace contains images/git/relay-refs.sh
   - workspace contains images/git/entrypoint.sh
   - workspace contains openspec/specs/git-mirror-service/spec.md
 
 critical_path:
-  - step: "post-receive hook forbids mirror/all and documents sparse mirror safety"
-    command: "grep -Fq 'DO NOT USE `git push --mirror` HERE' images/git/post-receive-hook.sh && grep -Fq 'git push \"$PUSH_URL\" $REFSPECS' images/git/post-receive-hook.sh && awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' images/git/post-receive-hook.sh && echo 'post-receive safe refspec contract present'"
+  - step: "relay helper forbids mirror/all and uses atomic explicit refspecs"
+    command: "grep -Fq 'git push --atomic \"$PUSH_URL\" $REFSPECS' images/git/relay-refs.sh && awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' images/git/relay-refs.sh && echo 'relay safe refspec contract present'"
     timeout_ms: 10000
-    expected_behavior: "post-receive safe refspec contract present"
+    expected_behavior: "relay safe refspec contract present"
 
-  - step: "post-receive reads stdin and guards bulk deletes"
-    command: "grep -Fq 'while read -r OLDSHA NEWSHA REFNAME' images/git/post-receive-hook.sh && grep -Fq 'TILLANDSIAS_ALLOW_BULK_DELETE' images/git/post-receive-hook.sh && echo 'post-receive stdin and bulk delete guard present'"
+  - step: "relay helper reads stdin and guards bulk deletes"
+    command: "grep -Fq 'while read -r OLDSHA NEWSHA REFNAME' images/git/relay-refs.sh && grep -Fq 'TILLANDSIAS_ALLOW_BULK_DELETE' images/git/relay-refs.sh && echo 'relay stdin and bulk delete guard present'"
     timeout_ms: 10000
-    expected_behavior: "post-receive stdin and bulk delete guard present"
+    expected_behavior: "relay stdin and bulk delete guard present"
 
   - step: "startup retry uses explicit refs and never mirror/all"
-    command: "grep -Fq \"for-each-ref --format='%(refname)' refs/heads refs/tags\" images/git/entrypoint.sh && grep -Fq 'push origin $REFSPECS' images/git/entrypoint.sh && awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' images/git/entrypoint.sh && echo 'startup safe refspec contract present'"
+    command: "grep -Fq \"for-each-ref --format='%(refname)' refs/heads refs/tags\" images/git/entrypoint.sh && grep -Fq 'hooks/tillandsias-relay-refs' images/git/entrypoint.sh && grep -Fq 'UPDATE_RECORDS=' images/git/entrypoint.sh && awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' images/git/entrypoint.sh && echo 'startup safe refspec contract present'"
     timeout_ms: 10000
     expected_behavior: "startup safe refspec contract present"
 
   - step: "spec requires safe refspec forwarding"
-    command: "grep -Fq 'MUST NOT run `git push --mirror`' openspec/specs/git-mirror-service/spec.md && grep -Fq 'litmus:git-mirror-safe-refspec-push' openspec/specs/git-mirror-service/spec.md && echo 'git mirror safe refspec spec present'"
+    command: "grep -Fq 'The relay MUST NOT run' openspec/specs/git-mirror-service/spec.md && grep -Fq 'litmus:git-mirror-safe-refspec-push' openspec/specs/git-mirror-service/spec.md && echo 'git mirror safe refspec spec present'"
     timeout_ms: 10000
     expected_behavior: "git mirror safe refspec spec present"
 
@@ -44,5 +44,5 @@ observability:
     test: "git-mirror-safe-refspec-push"
 
 rollback:
-  on_failure: "inspect images/git/post-receive-hook.sh and images/git/entrypoint.sh for unsafe mirror/all pushes or missing stdin refspec handling"
+  on_failure: "inspect images/git/relay-refs.sh and images/git/entrypoint.sh for unsafe mirror/all pushes or missing stdin refspec handling"
   command: "rg -n -- '--mirror|--all|REFSPECS|TILLANDSIAS_ALLOW_BULK_DELETE' images/git openspec/specs/git-mirror-service/spec.md"

@@ -9,11 +9,11 @@ status: active
 
 Per-project bare mirror repositories live inside a named Podman volume mounted
 at `/srv/git` in the git service container. Git daemon serves clones and pushes
-over the enclave network. Post-receive hooks forward only the refs changed by
-the forge push to the configured remote. GitHub credentials arrive through the
-Phase 6.5 Vault AppRole path. The git service reads the GitHub token from Vault
-at push time via Vault CLI; the token never crosses the host-container boundary
-as a podman secret.
+over the enclave network. A pre-receive relay forwards exactly the proposed ref
+transaction to the configured upstream with `git push --atomic` before the
+mirror acknowledges it locally. GitHub credentials arrive through the Phase
+6.5 Vault AppRole path. The git service reads the GitHub token from Vault at
+push time via Vault CLI; the token never crosses into a forge container.
 ## Requirements
 ### Requirement: Bare mirror repository management
 The system SHALL create and maintain a bare mirror repository for each project
@@ -34,7 +34,7 @@ available, and SHALL survive git service container restarts.
 - **WHEN** a project directory is a git repo without a remote `origin`
 - **AND** no mirror exists for this project
 - **THEN** the git service SHALL create `/srv/git/<project>` via `git init --bare`
-- **AND** the post-receive hook SHALL log "no remote configured, skipping push"
+- **AND** the pre-receive hook SHALL accept the update as durable local-only state
 - **AND** forge pushes SHALL remain persisted in the bare mirror volume
 
 #### Scenario: Project directory is not a git repo
@@ -58,8 +58,9 @@ The git service container SHALL run `git daemon` with `--export-all --enable=rec
 
 #### Scenario: Forge container pushes to mirror
 - **WHEN** a forge container runs `git push origin <branch>`
-- **THEN** the push SHALL succeed against the git daemon's receive-pack
-- **AND** the commits SHALL be persisted in the bare mirror on the host filesystem
+- **AND** the mirror has a configured upstream
+- **THEN** the push SHALL succeed only after the upstream atomically accepts the proposed refs
+- **AND** the commits SHALL then be persisted in the bare mirror volume
 
 #### Scenario: Forge commits use GitHub Login identity
 - **WHEN** a forge container starts after GitHub Login saved a git identity
@@ -75,52 +76,59 @@ The git service container SHALL run `git daemon` with `--export-all --enable=rec
 - **THEN** each SHALL have an independent working tree
 - **AND** pushes from one SHALL be visible to the other after fetch
 
-### Requirement: Post-receive hook forwards only changed refs
-The bare mirror SHALL contain a `post-receive` hook that automatically pushes to
-`origin` after receiving refs from forge containers. The hook SHALL read the
-`oldsha newsha refname` records from stdin and SHALL construct an explicit
-refspec list for exactly those refs. The hook MUST NOT run `git push --mirror`,
-`git push --all`, or any other command that rewrites or deletes refs not present
-in the forge push. If no remote is configured, the hook SHALL be a no-op.
+### Requirement: Pre-receive relay verifies acknowledgement durability
+The bare mirror SHALL preserve receive-pack's complete `oldsha newsha refname`
+transaction, validate local policy, and invoke the Tillandsias relay helper
+from `pre-receive`. The relay helper SHALL construct explicit refspecs for
+exactly those refs and SHALL issue one `git push --atomic` to `origin`. The
+mirror SHALL acknowledge and commit its local ref transaction only after the
+configured upstream accepts the complete atomic transaction. `post-receive`
+SHALL perform bookkeeping only and MUST NOT be the relay authority because its
+exit status cannot change receive-pack's result. The relay MUST NOT run
+`git push --mirror`, `git push --all`, or touch an unmentioned upstream ref.
+If no upstream is configured, the pre-receive hook SHALL explicitly classify
+the update as durable local-only state.
 
 @trace spec:git-mirror-service
 
-#### Scenario: Push triggers auto-push to remote
+#### Scenario: Push is acknowledged only after upstream acceptance
 - **WHEN** a forge container pushes to the mirror
 - **AND** the mirror has a remote `origin` configured
-- **THEN** the post-receive hook SHALL push only the stdin-provided refs using
-  explicit `<newsha>:<refname>` refspecs
-- **AND** SHALL log the update/deletion counts and result via `--log-git`
+- **THEN** the pre-receive relay SHALL push only the stdin-provided refs using
+  one atomic transaction of explicit `<newsha>:<refname>` refspecs
+- **AND** receive-pack SHALL report success only after that relay succeeds
+- **AND** SHALL log the update/deletion counts and verified result via `--log-git`
 
 #### Scenario: Unmentioned upstream refs are never touched
 - **WHEN** a forge push updates `refs/heads/feature-a`
 - **AND** the upstream repository has `refs/heads/main`, `refs/heads/release`,
   and tags that are absent from the sparse mirror
-- **THEN** the post-receive hook SHALL NOT delete, force-update, or rewrite any
+- **THEN** the relay helper SHALL NOT delete, force-update, or rewrite any
   upstream ref except `refs/heads/feature-a`
 - **AND** the hook source SHALL contain a guard explaining that `--mirror` is forbidden
 
 #### Scenario: Bulk deletes are guarded
-- **WHEN** a forge push deletes more than ten refs in one post-receive batch
-- **THEN** the hook SHALL refuse to forward those deletions unless
+- **WHEN** a forge push deletes more than ten refs in one receive transaction
+- **THEN** the relay helper SHALL reject those deletions unless
   `TILLANDSIAS_ALLOW_BULK_DELETE=1`
-- **AND** the forge push SHALL remain accepted locally so user commits are not lost
+- **AND** the local ref transaction SHALL remain unchanged
 
 #### Scenario: Push to local-only mirror
 - **WHEN** a forge container pushes to the mirror
 - **AND** the mirror has no remote `origin`
-- **THEN** the post-receive hook SHALL log "no remote configured, skipping push" and exit cleanly
+- **THEN** the pre-receive hook SHALL classify and accept a durable local-only update
+- **AND** post-receive SHALL NOT label the update upstream-verified
 
-#### Scenario: Remote push fails (expired credentials)
-- **WHEN** the post-receive hook attempts to push to remote
-- **AND** the push fails (e.g., 401 Unauthorized)
-- **THEN** the hook SHALL log the error via `--log-git`
-- **AND** the commits SHALL remain safe in the local mirror
+#### Scenario: Remote push fails (missing or expired credentials)
+- **WHEN** the pre-receive relay has an HTTPS upstream without a readable Vault credential
+- **OR** the atomic upstream push fails (e.g., 401 Unauthorized)
+- **THEN** the hook SHALL fail without an interactive prompt and log a redacted error
+- **AND** the forge's `git push` SHALL return non-zero
+- **AND** neither the mirror nor upstream SHALL partially update the proposed refs
 - **AND** the user can refresh credentials via "GitHub Login" in the tray
 
 ### Requirement: Reconciliation fetch never clobbers exported refs
-The mirror's reconciliation `git fetch origin` (in both the post-receive hook
-and the startup retry loop) SHALL update remote-tracking refs
+The mirror's startup reconciliation `git fetch origin` SHALL update remote-tracking refs
 (`refs/remotes/origin/*`) only and SHALL NOT map upstream branches or tags onto
 the mirror's exported `refs/heads/*` or `refs/tags/*`. The bare repo's
 `remote.origin.fetch` SHALL be `+refs/heads/*:refs/remotes/origin/*` with
@@ -134,9 +142,9 @@ restored.
 
 #### Scenario: One push converges mirror and upstream
 - **WHEN** a forge pushes a new commit to the mirror while upstream is stale
-- **THEN** the post-receive reconcile fetch SHALL leave the just-received
-  `refs/heads/*` untouched
-- **AND** after the relay push the mirror and upstream SHALL advertise the same
+- **THEN** the pre-receive relay SHALL leave the proposed local
+  `refs/heads/*` transaction intact
+- **AND** after the acknowledged relay the mirror and upstream SHALL advertise the same
   SHA without requiring a second identical push
 
 #### Scenario: Startup retry forwards a locally stranded commit
@@ -169,8 +177,8 @@ boundary. The deprecated `--legacy-keyring-secrets` fallback was removed in v0.3
 - **THEN** the git service container SHALL start without a token mount
 - **AND** authenticated pushes SHALL fail loudly until the user re-authenticates via "GitHub Login"
 
-#### Scenario: Hook reads the GitHub token from Vault
-- **WHEN** the git service's post-receive hook pushes to an HTTPS origin
+#### Scenario: Relay helper reads the GitHub token from Vault
+- **WHEN** the git service's pre-receive relay pushes to an HTTPS origin
 - **AND** `/run/secrets/vault-token` is present
 - **THEN** the hook SHALL run `vault-cli read -field=token secret/github/token`
 - **AND** construct the HTTPS auth URL in memory only
@@ -200,8 +208,8 @@ All git mirror operations SHALL be logged to the `--log-git` accountability wind
 - **THEN** the system SHALL log `[git] Mirror created: <project>` with `@trace spec:git-mirror-service`
 
 #### Scenario: Remote push result logged
-- **WHEN** a post-receive hook pushes to remote
-- **THEN** the system SHALL log `[git] Remote push: <project> → origin (<success|failure>)` with `@trace spec:git-mirror-service`
+- **WHEN** a pre-receive relay pushes to remote
+- **THEN** the system SHALL log the redacted atomic relay result with `@trace spec:git-mirror-service`
 
 ### Requirement: Mirror → host working-copy auto-sync on push
 
@@ -276,7 +284,7 @@ directory found under `$CACHE_DIR/tillandsias/mirrors/`, iterating the
 configured `scanner.watch_paths` to find the corresponding host working
 copy. This catches any push that landed in the mirror after the last
 session exited but before the host was synced (e.g. tray crash between
-mirror post-receive and working-copy fast-forward).
+mirror receive and working-copy fast-forward).
 
 #### Scenario: Startup sweep catches stranded commits
 - **WHEN** the tray starts and a project's mirror has
@@ -322,7 +330,7 @@ GitHub project the host user has cloned, without source changes.
 - **THEN** the git service SHALL create `/srv/git/<repo>` (not
   `/srv/git/tillandsias` or any other hardcoded name)
 - **AND** the forge's `insteadOf` rule SHALL include `<repo>` in the mirror URL
-- **AND** the post-receive hook SHALL forward pushes to
+- **AND** the pre-receive relay SHALL forward pushes to
   `https://github.com/<user>/<repo>` (the project's actual remote)
 
 #### Scenario: Forge transparency — agents never configure git
@@ -337,14 +345,16 @@ GitHub project the host user has cloned, without source changes.
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation` — Verify git service is enclave-only and credentials never leak
-- `litmus:git-mirror-safe-refspec-push` — Verify post-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and guard bulk deletes.
+- `litmus:git-mirror-relay-verified-ack` — Verify missing credentials fail the client push, successful relay converges, and multi-ref rejection is atomic.
+- `litmus:git-mirror-safe-refspec-push` — Verify pre-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and guard bulk deletes.
 - `litmus:git-mirror-ref-convergence` — Verify the reconcile fetch lands in remote-tracking refs only (one push converges mirror + upstream; startup retry forwards a stranded commit; empty-mirror seeding stays cloneable).
 
 Gating points:
 - Bare mirror created at `/srv/git/<project>` inside `tillandsias-mirror-<project>` on first launch
 - git daemon serves clones from enclave network only; external clones fail
-- Post-receive hook forwards only changed refs to remote if configured, logs result with no credentials
-- Startup retry-push uses explicit branch/tag refspecs, never `--mirror` or `--all`
+- Pre-receive relays only changed refs atomically and fails acknowledgement when the configured upstream fails
+- Post-receive performs bookkeeping only and cannot establish relay success
+- Startup retry uses the same Vault-backed atomic relay helper, never `--mirror` or `--all`
 - Reconcile fetch maps upstream into `refs/remotes/origin/*` only; empty mirrors seeded with an explicit heads/tags refspec (one push converges mirror + upstream)
 - Vault AppRole token is the only credential path (legacy keyring fallback removed in v0.3)
 - Forge containers cannot access any credentials (no D-Bus, no token files, no git config)

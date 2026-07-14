@@ -26,7 +26,9 @@ git init --bare "$BARE" 2>/dev/null
 git -C "$BARE" config core.hooksPath "$BARE/hooks"
 mkdir -p "$BARE/hooks"
 cp "$HOOK_SRC" "$BARE/hooks/pre-receive"
+cp "$PROJECT_ROOT/images/git/relay-refs.sh" "$BARE/hooks/tillandsias-relay-refs"
 chmod +x "$BARE/hooks/pre-receive"
+chmod +x "$BARE/hooks/tillandsias-relay-refs"
 
 git init "$WORK" 2>/dev/null
 git -C "$WORK" config core.hooksPath ""
