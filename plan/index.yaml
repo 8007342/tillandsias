@@ -10631,7 +10631,7 @@ plan_index:
       provisional_id: linux-260714-2
       release_target: stable-milestone-v1
       title: "Forge Git configuration: standard read-only ~/.gitconfig path, one generator, no GIT_CONFIG_GLOBAL"
-      status: ready
+      status: claimed
       kind: architecture+implementation
       deliverable: crates/tillandsias-headless/src/main.rs + fixture
       depends_on: [git-mirror-architecture-audit]
@@ -10649,6 +10649,15 @@ plan_index:
         - "GIT_CONFIG_GLOBAL is absent from production forge launch args and default-image entrypoints"
         - "git config --global --show-origin inside the fixture resolves only the Tillandsias-owned standard path"
       events:
+        - type: claim
+          ts: "2026-07-14T21:51:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "3b7a0e1b5c5b"
+          expires_at: "2026-07-15T01:51:00Z"
+          summary: >
+            Claimed the first bounded order-320 child: standard-path config
+            injection and production removal of GIT_CONFIG_GLOBAL.
         - type: filed
           ts: "2026-07-14T21:49:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
