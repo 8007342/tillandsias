@@ -6039,7 +6039,13 @@ plan_index:
       multi_cycle: true
       capability_tags: [network, architecture, design, spec, all-platforms]
       estimated_hours: 16
-      phase: research
+      phase: review
+      progress_summary: >
+        GPT verification 2026-07-14 failed NA-01, NA-03, and NA-06 and
+        passed NA-04 only with notes. The draft predates RuntimeLane,
+        ForgeLaunch dependency modeling, Vault-in-init, mirrored WSL
+        networking documentation, and the cooked-read GitHub-login fix.
+        Revise the cited architecture facts before re-verification.
       verification_required:
         agents:
           - id: opencode-bigpickle
@@ -6098,6 +6104,27 @@ plan_index:
           evidence_refs:
             - "plan/issues/network-architecture-audit-2026-07-09.md (DRAFT v1 section)"
             - "exit criteria NA-01..NA-06 drafted with file:line citations"
+        - type: verified-by
+          ts: "2026-07-14T19:41:14Z"
+          agent_id: "codex-gpt55-highthink"
+          criteria: [NA-01, NA-03, NA-04, NA-06]
+          verdict: fail
+          evidence: >
+            Audited HEAD 9e2fdade. NA-01 FAIL: the draft's four-kind
+            taxonomy is not implemented by the current three-value
+            RuntimeLane and omits mirrored WSL plus remote-project
+            containers. NA-03 FAIL: container_deps now models GitLogin and
+            ForgeLaunch and Vault is in init, while the proposed
+            RuntimeContext dimension remains absent. NA-04 PASS-WITH-NOTES:
+            host-guest transport mapping is substantially source-backed but
+            WSL is not always NAT and byte-identical container behavior lacks
+            evidence. NA-06 FAIL: Vault-in-init and login fast paths already
+            landed, and the 401 diagnosis is contradicted by the cooked-read
+            GitHub-login fix. Evidence: crates/tillandsias-podman/src/lib.rs,
+            crates/tillandsias-headless/src/{container_deps.rs,main.rs,
+            remote_projects.rs,vault_bootstrap.rs},
+            openspec/specs/host-guest-transport/spec.md, and
+            docs/cheatsheets/runtime/wsl/networking-modes.md.
 
     - packet_id: credential-secrets-architecture-audit
       order: 246
@@ -6311,13 +6338,11 @@ plan_index:
       estimated_hours: 6
       phase: verification
       progress_summary: >
-        Implementation complete 2026-07-10 (windows cycle): canonical
-        long_running_packets section added to distributed-work.yaml (schema
-        extension LM-01, verified-by protocol LM-02, additive update policy
-        LM-05, sub-queue rule), meta-orchestration + advance-work-from-plan
-        skills updated to recognize multi_cycle packets (LM-03),
-        plan/long-running.md created (LM-04). Awaiting verified-by events
-        from the 3 named agents; any fail verdict returns this to review.
+        Implementation complete 2026-07-10. GPT verification on 2026-07-14
+        passed LM-03/LM-05 but found LM-04 drift: active multi-cycle orders
+        315, 330, and 334 were absent from plan/long-running.md. The active
+        view was repaired in this cycle and returned to verification;
+        awaiting fresh GPT verification plus the other two named agents.
       verification_required:
         agents:
           - id: opencode-bigpickle
@@ -6378,6 +6403,46 @@ plan_index:
             - "methodology/distributed-work.yaml (long_running_packets section)"
             - "plan/long-running.md"
             - "skills/meta-orchestration/SKILL.md, skills/advance-work-from-plan/SKILL.md"
+        - type: verified-by
+          ts: "2026-07-14T19:41:14Z"
+          agent_id: "codex-gpt55-highthink"
+          criteria: [LM-03, LM-04, LM-05]
+          verdict: fail
+          evidence: >
+            Audited HEAD 9e2fdade. LM-03 PASS: both worker skills enforce
+            cycle-scoped multi_cycle claims and named-agent completion gates.
+            LM-04 FAIL: plan/long-running.md omitted active multi-cycle
+            orders 315, 330, and 334. LM-05 PASS: distributed-work.yaml
+            requires new-file/new-section/supersedes-only additive updates.
+            Ruby YAML and active-set checks supplied executable evidence.
+        - type: revision
+          ts: "2026-07-14T19:44:12Z"
+          agent_id: "linux-tlatoani-codex-20260714T1938Z"
+          host: linux_mutable
+          criteria: [LM-04]
+          summary: >
+            Repaired the manually maintained active view by adding orders
+            315, 330, and 334 and updating orders 245/251 to reflect this
+            cycle's verification state. Returned the packet to verification
+            for a fresh codex-gpt55-highthink verdict.
+        - type: verified-by
+          ts: "2026-07-14T19:45:40Z"
+          agent_id: "codex-gpt55-highthink"
+          criteria: [LM-03, LM-04, LM-05]
+          verdict: pass
+          evidence: >
+            Fresh re-verification after the LM-04 revision, against the
+            intentional worktree based on HEAD 41623756. LM-03 PASS: the
+            meta-orchestration and advance-work skills enforce cycle-scoped
+            multi_cycle work and named-agent completion gates. LM-04 PASS:
+            an executable Ruby comparison of plan/index.yaml against
+            plan/long-running.md found identical active order/packet sets
+            245-251,315,330,334 with no missing, extra, duplicate, or
+            mismatched rows. LM-05 PASS: distributed-work.yaml documents
+            the new-file/new-section/supersedes additive policy and prohibits
+            concurrent in-place rewrites. YAML parses with Ruby Psych. This
+            post-revision event preserves the earlier failed event in the
+            append-only history.
 
     - packet_id: launch-paths-route-through-dependency-model
       order: 252
@@ -9523,6 +9588,7 @@ plan_index:
 
     - packet_id: agent-login-tray-lane-vault-parity
       order: 303
+      release_target: stable-milestone-v1
       title: "Tray forge launches run the same ensure_provider_auth vault ladder as the CLI lane"
       status: ready
       kind: enhancement
@@ -9577,6 +9643,7 @@ plan_index:
 
     - packet_id: agent-login-vault-roundtrip
       order: 304
+      release_target: stable-milestone-v1
       title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
       status: ready
       kind: enhancement
@@ -9664,6 +9731,7 @@ plan_index:
 
     - packet_id: opencode-tray-tui-spill-verify
       order: 306
+      release_target: stable-milestone-v1
       title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
       status: ready
       kind: verify
@@ -9691,6 +9759,7 @@ plan_index:
 
     - packet_id: antigravity-launch-crash
       order: 307
+      release_target: stable-milestone-v1
       title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
       status: ready
       kind: exploration
@@ -9946,6 +10015,7 @@ plan_index:
 
     - packet_id: windows-tray-requires-elevation-hcsdiag
       order: 312
+      release_target: stable-milestone-v1
       title: "P1: non-elevated Windows tray can NEVER connect — hcsdiag VM-ID lookup is admin/Hyper-V-Administrators-only; every standard-user install is dead on arrival"
       status: ready
       kind: bug
@@ -10353,6 +10423,7 @@ plan_index:
 
     - packet_id: mirror-relay-verified-acks
       order: 318
+      release_target: stable-milestone-v1
       title: "Ladder rung A: mirror MUST NOT ack a push it has not durably relayed (or must expose relay state) — kills the false-success P1"
       status: ready
       kind: architecture
@@ -10413,6 +10484,7 @@ plan_index:
 
     - packet_id: forge-gitconfig-single-injection
       order: 320
+      release_target: stable-milestone-v1
       title: "Ladder rung C: ONE gitconfig injection point (committed includeIf/include.path), image-baked CA trust; kill the env mesh on ALL platforms"
       status: ready
       kind: architecture
@@ -10503,6 +10575,7 @@ plan_index:
 
     - packet_id: wsl-platform-preflight-classification
       order: 323
+      release_target: stable-milestone-v1
       title: "Windows tray: classify wsl-platform-absent / reboot-pending / virtualization-disabled preflight states — 'WSL2 requires a restart' instead of generic VM-create failure"
       status: ready
       kind: enhancement+bug
@@ -10543,6 +10616,7 @@ plan_index:
 
     - packet_id: installer-wsl-absent-reboot-affordance
       order: 324
+      release_target: stable-milestone-v1
       title: "install-windows.ps1: detect WSL-absent / reboot-pending / virtualization-off at install time and instruct the restart before first launch"
       status: ready
       kind: enhancement
@@ -10618,6 +10692,7 @@ plan_index:
 
     - packet_id: wsl-guest-forge-user-src-ownership
       order: 326
+      release_target: stable-milestone-v1
       title: "WSL2 guest provisioning: no forge user + root-owned /home/forge/src — every containerized cloud clone fails EACCES"
       status: ready
       kind: bug
@@ -10664,7 +10739,7 @@ plan_index:
     - packet_id: guest-lazy-ensure-router-image
       order: 327
       title: "Guest lazy enclave-ensure never builds tillandsias-router — stage 'router' dies with cryptic localhost-registry pull 125 (order-76 parity gap)"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -10707,6 +10782,21 @@ plan_index:
             Second distinct first-attach blocker on the cold Windows lane
             (after order 326); found because the Windows guest exercises the
             lazy ensure path that --init masks on Linux hosts.
+        - type: completed
+          ts: "2026-07-14T19:43:08Z"
+          agent_id: "linux-tlatoani-codex-20260714T1938Z"
+          host: linux_mutable
+          summary: >
+            Closed the stale-open packet around the production fix already
+            landed in 254585c6: ensure_enclave_for_project preflights router
+            through ensure_versioned_images before ensure_router_running.
+            Added a direct regression test for that ordering and made lazy
+            image-build failures name the missing image plus the explicit
+            `tillandsias --init` recovery command.
+          evidence_refs:
+            - "commit 254585c6 (router added to the forge-launch ensure list)"
+            - "cargo test -p tillandsias-headless forge_launch_preflights_router_image_before_start (PASS)"
+            - "cargo test -p tillandsias-headless on_demand_image_build_error_names_image_and_recovery_command (PASS)"
     - packet_id: guest-container-metrics-over-control-wire
       order: 333
       title: "Guest/container metrics over the control wire (per-container + per-mount I/O) — no VM-boundary hacks"
@@ -10816,6 +10906,7 @@ plan_index:
 
     - packet_id: macos-opencode-host-path-translation
       order: 331
+      release_target: stable-milestone-v1
       title: "macOS --opencode/--lane project path: translate host ~/src paths to /home/forge/src, fail fast pre-boot otherwise"
       status: ready
       kind: enhancement
@@ -10847,6 +10938,7 @@ plan_index:
 
     - packet_id: macos-opencode-firstuse-silent-build-idle-timeout
       order: 332
+      release_target: stable-milestone-v1
       title: "P1: first-use macOS --opencode dies at 300s vsock idle timeout during silent forge image build (VM torn down mid-build)"
       status: ready
       kind: bugfix
@@ -10951,6 +11043,17 @@ plan_index:
         - "every milestone_criteria row maps to a done packet or an operator-approved waiver recorded here"
         - "scripts/promote-stable.sh run on the candidate with the evidence gate passing un-forced"
       events:
+        - type: progress
+          ts: "2026-07-14T20:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T2005Z"
+          host: linux_mutable
+          summary: >
+            release_target markers applied (methodology
+            release_aware_packets, operator directive 2026-07-14): the 12
+            criteria packets now carry release_target: stable-milestone-v1
+            and outrank the backlog in worker step 4_pick_one. Marker
+            lifecycle is coordinator-owned. Follow-up research packet:
+            collaborative-work-scheduling-research (order 335).
         - type: filed
           ts: "2026-07-14T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
@@ -10959,3 +11062,44 @@ plan_index:
             Filed per operator directive; criteria derived from the merged
             sibling evidence (windows 312/323-327, macos 328-333 lines,
             linux 303-307/318).
+
+    - packet_id: collaborative-work-scheduling-research
+      order: 335
+      title: "Research: collaborative triage/scheduling/queueing for distributed agents — beyond the flat release_target marker"
+      status: ready
+      kind: research
+      deliverable: methodology/distributed-work.yaml (scheduling section) + plan/issues design record
+      depends_on: []
+      pickup_role: any
+      capability_tags: [methodology, coordination, scheduling, research]
+      estimated_hours: 6
+      outcome: >
+        Operator directive 2026-07-14: release_target is the deliberately
+        minimal first slice; we need more sophisticated ways to triage,
+        schedule, and queue work packets so agents picking up work do
+        COLLABORATIVE work and make progress rather than blocking each
+        other and idling. Survey the observed failure modes in our own
+        ledger history (order-number collisions, duplicate independent
+        filings 315/316+323-327, idempotent-but-wasteful closure races,
+        hosts idling while their platform's set is blocked, thrashing
+        mediation cases) and prior art (CI schedulers, Bazel/remote-exec
+        queues, kanban WIP limits, OS run-queues with aging, Gerrit
+        attention sets). Propose the SMALLEST mechanism set that fixes
+        what we actually hit — candidates: dependency-aware dispatch
+        waves, per-host reservations, priority lanes with aging,
+        blocked-set auto-fallback, milestone burndown surfacing in
+        loop_status. Each proposed mechanism needs a verifiable closure
+        and a migration rung; reject anything that cannot fail loud.
+      exit_criteria:
+        - "failure-mode inventory from ledger history with packet_id citations"
+        - "prior-art survey with provenance (docs/URLs + dates)"
+        - "proposed mechanism set, each with a verifiable closure + staged adoption rung"
+        - "Tlatoani sign-off recorded before any mechanism becomes worker-protocol contract"
+      events:
+        - type: filed
+          ts: "2026-07-14T20:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T2005Z"
+          host: linux_mutable
+          summary: >
+            Filed per operator directive alongside the release_aware_packets
+            methodology slice (flat marker + selection preference).
