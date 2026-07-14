@@ -11048,7 +11048,7 @@ plan_index:
     - packet_id: pre-receive-yaml-fixture-no-python-policy
       order: 336
       title: "Pre-receive YAML gate fixture violates the repository no-Python policy"
-      status: ready
+      status: done
       kind: bugfix
       deliverable: scripts/test-pre-receive-yaml-gate.sh
       depends_on: []
@@ -11074,6 +11074,16 @@ plan_index:
             scripts/test-pre-receive-yaml-gate.sh invokes python3 with
             PyYAML. Evidence and reproduction are recorded in
             plan/issues/linux-build-install-smoke-e2e-findings-2026-07-14.md.
+        - type: completed
+          ts: "2026-07-14T20:11:29Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Replaced the fixture-only PyYAML wrapper with the production Rust
+            tillandsias-policy binary. The invalid, valid, and multi-ref
+            receive-hook cases pass, and scripts/check-no-python-scripts.sh
+            reports no runtime references. Implementation and closure are in
+            this completion commit.
 
     - packet_id: git-mirror-audit-cheatsheet-image-sync
       order: 337

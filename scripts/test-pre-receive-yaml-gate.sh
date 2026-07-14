@@ -12,20 +12,11 @@ HOOK_SRC="$PROJECT_ROOT/images/git/pre-receive-hook.sh"
 TMPDIR_WORK="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_WORK"' EXIT
 
-# Provide a minimal YAML validator on PATH for the hook to find
+# Build the production YAML validator and expose it on PATH for the hook.
+cargo build --quiet --manifest-path "$PROJECT_ROOT/Cargo.toml" -p tillandsias-policy
 BIN_DIR="$TMPDIR_WORK/bin"
 mkdir -p "$BIN_DIR"
-cat > "$BIN_DIR/tillandsias-policy" <<'WRAPPER'
-#!/bin/sh
-# Minimal validator wrapper for test environments
-if [ "$1" = "validate-yaml" ] && [ -n "${2:-}" ]; then
-    python3 -c "import yaml; yaml.safe_load(open('$2'))" 2>&1
-    exit $?
-fi
-echo "usage: tillandsias-policy validate-yaml <file>" >&2
-exit 2
-WRAPPER
-chmod +x "$BIN_DIR/tillandsias-policy"
+ln -s "$PROJECT_ROOT/target/debug/tillandsias-policy" "$BIN_DIR/tillandsias-policy"
 export PATH="$BIN_DIR:$PATH"
 
 BARE="$TMPDIR_WORK/test-mirror.git"
