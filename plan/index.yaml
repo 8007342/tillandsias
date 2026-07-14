@@ -11044,3 +11044,63 @@ plan_index:
           summary: >
             Filed per operator directive alongside the release_aware_packets
             methodology slice (flat marker + selection preference).
+
+    - packet_id: pre-receive-yaml-fixture-no-python-policy
+      order: 336
+      title: "Pre-receive YAML gate fixture violates the repository no-Python policy"
+      status: ready
+      kind: bugfix
+      deliverable: scripts/test-pre-receive-yaml-gate.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, policy, yaml, pre-build]
+      estimated_hours: 1
+      outcome: >
+        The pre-receive YAML fixture validates generated YAML without Python
+        or PyYAML, using the repository's sanctioned validation path while
+        preserving the positive and negative fixture coverage introduced by
+        order 316.
+      exit_criteria:
+        - "scripts/check-no-python-scripts.sh passes"
+        - "scripts/test-pre-receive-yaml-gate.sh passes without python or python3"
+        - "the pre-build policy/litmus suite no longer reports no-python-scripts"
+      events:
+        - type: filed
+          ts: "2026-07-14T19:54:23Z"
+          agent_id: "linux-tlatoani-codex-20260714T1938Z"
+          host: linux_mutable
+          summary: >
+            Local-build e2e gate 1 failed at commit d8af7540 because
+            scripts/test-pre-receive-yaml-gate.sh invokes python3 with
+            PyYAML. Evidence and reproduction are recorded in
+            plan/issues/linux-build-install-smoke-e2e-findings-2026-07-14.md.
+
+    - packet_id: git-mirror-audit-cheatsheet-image-sync
+      order: 337
+      title: "Order-315 git-mirror audit documents are absent from the default image cheatsheet mirror"
+      status: ready
+      kind: bugfix
+      deliverable: images/default/cheatsheets/concurrent-git/
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, cheatsheets, image, pre-build, git-mirror]
+      estimated_hours: 1
+      outcome: >
+        The default image mirror contains byte-current copies of the
+        git-mirror architecture audit and enterprise practices documents,
+        including any generated cheatsheet index update required by the
+        existing tooling.
+      exit_criteria:
+        - "both git-mirror audit documents exist in images/default/cheatsheets/concurrent-git/"
+        - "litmus:cheatsheet-host-image-sync passes"
+        - "the compact pre-build cheatsheet-tooling suite passes"
+      events:
+        - type: filed
+          ts: "2026-07-14T19:54:23Z"
+          agent_id: "linux-tlatoani-codex-20260714T1938Z"
+          host: linux_mutable
+          summary: >
+            Local-build e2e gate 1 found two host-only order-315 documents:
+            git-mirror-architecture-audit.md and
+            git-mirror-enterprise-practices.md. Evidence and reproduction
+            are recorded in the dated Linux smoke report.

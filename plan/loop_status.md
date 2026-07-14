@@ -1,6 +1,29 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-14T20:20:00Z
+LastExecutionTime: 2026-07-14T20:25:00Z
+
+## Cycle 2026-07-14T19:38Z->20:25Z (linux_mutable macuahuitl - queue drain, delegated GPT audits, local-build e2e gate failure)
+
+- **Sync + guard**: `linux-next` fast-forwarded from `ee94611c` to
+  `9e2fdade`; credential guard returned `ok:gh-keyring`. Sibling heads were
+  already ancestors of `linux-next`.
+- **Linux drain**: order 327 `guest-lazy-ensure-router-image` closed in
+  `41623756`. Forge launch now has direct router-preflight regression
+  coverage, and lazy image-build failures name the missing image plus the
+  `tillandsias --init` recovery command. Focused tests and
+  `./build.sh --check` passed.
+- **Delegated GPT audits**: order 245 returned FAIL for NA-01/03/06 and
+  PASS-WITH-NOTES for NA-04, moving the stale network draft to review.
+  Order 251 initially failed LM-04 because the active view omitted orders
+  315/330/334; after repair, a fresh from-scratch GPT verification passed
+  LM-03/04/05. Evidence is append-only in `plan/index.yaml` (`d8af7540`).
+- **Local-build e2e**: gate 1 failed before install/reset. The no-Python
+  policy found `python3` in the pre-receive YAML fixture, and
+  `litmus:cheatsheet-host-image-sync` found two order-315 documents absent
+  from the default image mirror. Orders 336 and 337 are ready; dated report:
+  `plan/issues/linux-build-install-smoke-e2e-findings-2026-07-14.md`.
+- **Release**: held. No Podman reset, cold init, forge lane, published-release
+  smoke, or release action ran because the local-build gate is red.
 
 ## Cycle 2026-07-14T20:05Z→20:20Z (linux_mutable macuahuitl — release-aware work packets: methodology + markers + order 335)
 
