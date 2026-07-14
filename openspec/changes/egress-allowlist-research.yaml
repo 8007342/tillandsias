@@ -1,18 +1,29 @@
 id: egress-allowlist-research
 title: "Determine Exact Denied FQDNs per Agent"
 description: >
-  Identified exact domains blocked by proxy at startup for Claude and Codex.
+  Identified exact domains blocked by proxy at startup for Claude and Codex,
+  reduced them to the two parent-domain no-bump entries, and documented the
+  historical Antigravity wiring gap.
 status: research-complete
 findings:
   codex:
     denied_fqdns:
+      - ab.chatgpt.com
       - chatgpt.com
-      - github.com
-      - api.github.com
   claude:
     denied_fqdns:
       - platform.claude.com
-      - raw.githubusercontent.com
   antigravity:
-    status: "not wired as an agent"
-    notes: "No entrypoint-forge-antigravity.sh exists."
+    status_at_research_time: "not wired as an agent"
+    notes: "No entrypoint-forge-antigravity.sh existed; later resolved by 6f3ad337/35ba3d3f/d8b597dc."
+  minimal_delta:
+    - domain: .chatgpt.com
+      tls_policy: no-bump
+    - domain: .claude.com
+      tls_policy: no-bump
+evidence:
+  canonical_report: plan/archive/agent-services-egress-allowlist-research-2026-06-28.md
+  disposable_source_sha256: a9c526c2e1550a04652036e32d49ce880b0cd68da7085224f43052bebdf280ed
+  classification_note: >
+    github.com, api.github.com, and raw.githubusercontent.com records were
+    NONE_NONE_ABORTED allowed requests, not TCP_DENIED findings.

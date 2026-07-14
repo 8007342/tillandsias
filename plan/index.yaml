@@ -613,27 +613,43 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-research
       order: 129
       title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
-      status: claimed
+      status: done
       kind: research
-      deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
+      deliverable: plan/archive/agent-services-egress-allowlist-research-2026-06-28.md
       depends_on: []
       pickup_role: linux
       capability_tags: [podman, proxy, testing]
       estimated_hours: 3
       outcome: >
-        Claude/Codex/Antigravity fail to launch+connect. Model APIs are already
-        allowlisted (.anthropic.com/.openai.com/.googleapis.com), so the gaps are in
-        auth/sign-in/telemetry endpoints. Determine the exact denied FQDNs per agent
-        by harvesting TCP_DENIED from `podman logs tillandsias-proxy` (not guessing),
-        reduce to a minimal parent-domain delta (no Squid duplicate-subdomain FATALs),
-        and classify bump/no-bump. Also: antigravity has no entrypoint-forge-antigravity.sh
-        (not wired as an agent) — documented for the impl packet.
+        Historical proxy logs proved Codex denials for ab.chatgpt.com and
+        chatgpt.com plus Claude denial for platform.claude.com. The minimal
+        parent-domain delta is .chatgpt.com + .claude.com, both no-bump.
+        GitHub/raw requests were allowed-but-aborted, not denied, and were
+        already covered. Antigravity's then-missing entrypoint was documented
+        and subsequently implemented.
       exit_criteria:
         - "Per-agent confirmed TCP_DENIED domain list from proxy logs (evidence cited)"
         - "Minimal allowlist delta (parent domains, no duplicate-subdomain FATALs)"
         - "bump vs no-bump decision per new domain"
         - "Antigravity agent-wiring gap documented"
       events:
+        - type: completed
+          ts: "2026-07-14T23:57:16Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "1f03423c7b74"
+          commits: [9a51cee4, 64c271d0, 25d79376, 6f3ad337]
+          summary: >
+            Reconciled the stale ready index and later archival evidence
+            regression. Preserved representative deny-log lines and source SHA,
+            removed unsupported GitHub/raw denial claims, repointed the
+            deliverable to its archive, and confirmed the landed proxy delta is
+            exactly .chatgpt.com + .claude.com with no-bump classification.
+          validation:
+            - "proxy-container instant litmuses: 2/2 passed"
+            - "archived deliverable exists and OpenSpec/index YAML parse"
+            - "implementation ancestry: 6f3ad337; archive move: 25d79376"
+            - "./build.sh --check passed from detached integrated HEAD"
         - type: claim
           ts: "2026-07-14T23:55:07Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
