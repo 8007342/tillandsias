@@ -27,7 +27,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:default-image"
-  expected_log: "credential, write channel, workspace, headless, service, and eligibility rows precede the SUMMARY"
+  expected_log: "credential, push route, workspace, headless, service, and eligibility rows precede the SUMMARY"
   log_fields:
     spec: default-image
     test: forge-validation-profile

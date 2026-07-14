@@ -39,7 +39,7 @@ run_success_case() {
 
 run_success_case skip skip:no-podman-binary "$(cat <<'EOF'
 PASS credential-channel ok:fixture
-PASS push-dry-run
+PASS push-route-dry-run
 PASS workspace-check
 PASS headless-tests
 SKIP service-health skip:not-forge-host
@@ -50,7 +50,7 @@ EOF
 
 run_success_case eligible eligible "$(cat <<'EOF'
 PASS credential-channel ok:fixture
-PASS push-dry-run
+PASS push-route-dry-run
 PASS workspace-check
 PASS headless-tests
 SKIP service-health skip:not-forge-host
@@ -73,7 +73,7 @@ if failure_output="$(FORGE_VALIDATE_CHECK_DIR="$checks" scripts/forge-validate.s
 fi
 expected_failure="$(cat <<'EOF'
 FAIL credential-channel missing:no-credential-channel
-FAIL push-dry-run exit:6
+FAIL push-route-dry-run exit:6
 FAIL workspace-check exit:8
 FAIL headless-tests exit:7
 FAIL service-health failed:vault-health
@@ -89,7 +89,7 @@ EOF
 
 health_checks="$tmp/health"
 mkdir -p "$health_checks"
-write_stub "$health_checks/services" '{"services":[{"status":"up"},{"status":"up"}]}' 0
+write_stub "$health_checks/services" '{"services":[{"name":"proxy","status":"up"},{"name":"git-service","status":"up"},{"name":"inference","status":"up"}]}' 0
 write_stub "$health_checks/vault" "vault healthy" 0
 write_stub "$health_checks/outbound" "outbound healthy" 0
 health_output="$(
@@ -101,7 +101,7 @@ health_output="$(
     echo "FAIL: healthy forge service fixture did not pass" >&2
     exit 1
 }
-write_stub "$health_checks/services" '{"services":[{"status":"unreachable"}]}' 0
+write_stub "$health_checks/services" '{"services":[{"name":"proxy","status":"up"},{"name":"git-service","status":"up"}]}' 0
 if health_output="$(
     TILLANDSIAS_HOST_KIND=forge \
     FORGE_SERVICE_HEALTH_CHECK_DIR="$health_checks" \

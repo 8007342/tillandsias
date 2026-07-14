@@ -65,11 +65,11 @@ if [ -z "${FORGE_VALIDATE_CHECK_DIR:-}" ]; then
 fi
 if [ "${#push_cmd[@]}" -gt 0 ] \
     && "${push_cmd[@]}" >"$tmp/push.stdout" 2>"$tmp/push.stderr"; then
-    printf 'PASS push-dry-run\n'
+    printf 'PASS push-route-dry-run\n'
     pass=$((pass + 1))
 else
     push_rc=$?
-    printf 'FAIL push-dry-run exit:%s\n' "$push_rc"
+    printf 'FAIL push-route-dry-run exit:%s\n' "$push_rc"
     fail=$((fail + 1))
     report_failure_logs push
 fi

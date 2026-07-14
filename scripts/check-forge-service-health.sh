@@ -17,19 +17,23 @@ else
     outbound_cmd=(curl -fsS --max-time 10 https://api.github.com/rate_limit)
 fi
 
-if ! services_json="$("${services_cmd[@]}")"; then
+if ! services_json="$(timeout 10 "${services_cmd[@]}")"; then
     echo "failed:enclave-services"
     exit 1
 fi
-if ! jq -e 'all(.services[]; .status == "up")' >/dev/null <<<"$services_json"; then
+if ! jq -e '
+    ([.services[] | select(.name == "proxy" and .status == "up")] | length) == 1
+    and ([.services[] | select(.name == "git-service" and .status == "up")] | length) == 1
+    and ([.services[] | select(.name == "inference" and .status == "up")] | length) == 1
+' >/dev/null <<<"$services_json"; then
     echo "failed:enclave-services"
     exit 1
 fi
-if ! "${vault_cmd[@]}" >/dev/null; then
+if ! timeout 10 "${vault_cmd[@]}" >/dev/null; then
     echo "failed:vault-health"
     exit 1
 fi
-if ! "${outbound_cmd[@]}" >/dev/null; then
+if ! timeout 15 "${outbound_cmd[@]}" >/dev/null; then
     echo "failed:outbound-https"
     exit 1
 fi
