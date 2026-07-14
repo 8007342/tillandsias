@@ -1630,7 +1630,7 @@ fn ensure_image_exists(
                 &build_args,
             )
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format_on_demand_image_build_error(image_tag, &e.to_string()))?;
 
         if debug {
             eprintln!("[tillandsias] built image {image_name}: {image_tag}");
@@ -1638,6 +1638,13 @@ fn ensure_image_exists(
 
         Ok(())
     })
+}
+
+fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
+    format!(
+        "Required image '{image_tag}' is absent and failed to build on demand: {error}.\n\
+         Build it explicitly with: tillandsias --init"
+    )
 }
 
 fn ensure_versioned_images(
@@ -11006,6 +11013,30 @@ mod tests {
             window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
             "observatorium mode must ensure the web image exists before launch"
         );
+    }
+
+    #[test]
+    fn forge_launch_preflights_router_image_before_start() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "pub(crate) fn ensure_enclave_for_project(");
+
+        assert!(
+            window.contains("let images = [\"router\", \"git\", \"inference\", \"forge\"];")
+                && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            "cold forge launch must build the router image before starting its container"
+        );
+    }
+
+    #[test]
+    fn on_demand_image_build_error_names_image_and_recovery_command() {
+        let message = format_on_demand_image_build_error(
+            "localhost/tillandsias-router:v1.2.3",
+            "fixture build failure",
+        );
+
+        assert!(message.contains("localhost/tillandsias-router:v1.2.3"));
+        assert!(message.contains("fixture build failure"));
+        assert!(message.contains("tillandsias --init"));
     }
 
     #[test]

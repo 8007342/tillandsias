@@ -10615,7 +10615,7 @@ plan_index:
     - packet_id: guest-lazy-ensure-router-image
       order: 327
       title: "Guest lazy enclave-ensure never builds tillandsias-router — stage 'router' dies with cryptic localhost-registry pull 125 (order-76 parity gap)"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -10658,6 +10658,21 @@ plan_index:
             Second distinct first-attach blocker on the cold Windows lane
             (after order 326); found because the Windows guest exercises the
             lazy ensure path that --init masks on Linux hosts.
+        - type: completed
+          ts: "2026-07-14T19:43:08Z"
+          agent_id: "linux-tlatoani-codex-20260714T1938Z"
+          host: linux_mutable
+          summary: >
+            Closed the stale-open packet around the production fix already
+            landed in 254585c6: ensure_enclave_for_project preflights router
+            through ensure_versioned_images before ensure_router_running.
+            Added a direct regression test for that ordering and made lazy
+            image-build failures name the missing image plus the explicit
+            `tillandsias --init` recovery command.
+          evidence_refs:
+            - "commit 254585c6 (router added to the forge-launch ensure list)"
+            - "cargo test -p tillandsias-headless forge_launch_preflights_router_image_before_start (PASS)"
+            - "cargo test -p tillandsias-headless on_demand_image_build_error_names_image_and_recovery_command (PASS)"
     - packet_id: guest-container-metrics-over-control-wire
       order: 333
       title: "Guest/container metrics over the control wire (per-container + per-mount I/O) — no VM-boundary hacks"
