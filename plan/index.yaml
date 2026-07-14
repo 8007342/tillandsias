@@ -10570,10 +10570,13 @@ plan_index:
       order: 320
       release_target: stable-milestone-v1
       title: "Ladder rung C: ONE gitconfig injection point (committed includeIf/include.path), image-baked CA trust; kill the env mesh on ALL platforms"
-      status: claimed
+      status: pending
       kind: architecture
       deliverable: images/default/lib-common.sh + crates/tillandsias-headless + macOS/Windows lane parity
-      depends_on: [git-mirror-architecture-audit]
+      depends_on:
+        - forge-standard-gitconfig-path
+        - forge-runtime-ca-trust-convergence
+        - forge-config-trust-cross-platform-parity
       pickup_role: linux
       capability_tags: [forge, git, config, cross-platform]
       estimated_hours: 8
@@ -10592,6 +10595,20 @@ plan_index:
         - "GIT_SSL_CAINFO/SSL_CERT_FILE exports deleted from entrypoints once CA is image-baked (grep gate)"
         - "env-var inventory in the audit cheatsheet re-run: git-flow rows drop to <=2"
       events:
+        - type: progress
+          ts: "2026-07-14T21:49:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "cdabeb19f856"
+          summary: >
+            Shaping cycle complete. Split the over-budget architecture packet
+            into a standard Git config path (2h), dynamic runtime CA trust
+            convergence (3h), and three-platform parity verification (3h).
+            The CA packet explicitly resolves the original wording conflict:
+            the per-install proxy CA is generated at runtime and cannot be
+            baked into an immutable image; image-baked trust tooling plus one
+            runtime anchor path must replace the seven entrypoint env blocks.
+            Parent waits on all three independently claimable children.
         - type: claim
           ts: "2026-07-14T21:47:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -10608,6 +10625,96 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
           host: linux_mutable
           summary: "Order-315 migration ladder rung C."
+
+    - packet_id: forge-standard-gitconfig-path
+      order: provisional
+      provisional_id: linux-260714-2
+      release_target: stable-milestone-v1
+      title: "Forge Git configuration: standard read-only ~/.gitconfig path, one generator, no GIT_CONFIG_GLOBAL"
+      status: ready
+      kind: architecture+implementation
+      deliverable: crates/tillandsias-headless/src/main.rs + fixture
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [forge, git, config, testing]
+      estimated_hours: 2
+      outcome: >
+        Both raw OpenCode and typed agent launchers call one Tillandsias-owned
+        generator and mount its whitelist config at Git's standard
+        /home/forge/.gitconfig path. GIT_CONFIG_GLOBAL is absent; mirror
+        redirect, safe.directory, CA setting, and credential-helper clearing
+        remain identical for host-mounted and VM-materialized lanes.
+      exit_criteria:
+        - "one generator feeds every Linux/guest forge launcher; ordered mount fixture covers raw and typed paths"
+        - "GIT_CONFIG_GLOBAL is absent from production forge launch args and default-image entrypoints"
+        - "git config --global --show-origin inside the fixture resolves only the Tillandsias-owned standard path"
+      events:
+        - type: filed
+          ts: "2026-07-14T21:49:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: "Split from over-budget parent forge-gitconfig-single-injection."
+
+    - packet_id: forge-runtime-ca-trust-convergence
+      order: provisional
+      provisional_id: linux-260714-3
+      release_target: stable-milestone-v1
+      title: "Forge dynamic CA trust: one rootless system-default path; delete duplicated SSL_CERT_FILE/GIT_SSL_CAINFO mesh"
+      status: ready
+      kind: research+implementation
+      deliverable: images/default/Containerfile* + images/default/lib-common.sh + entrypoints
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [forge, tls, images, security, testing]
+      estimated_hours: 3
+      outcome: >
+        Resolve the immutable-image/runtime-CA constraint explicitly: the
+        image bakes the trust tooling and safe writable boundary, while the
+        per-install CA generated at runtime enters through exactly one
+        rootless initialization path. Git, curl, Node, Python, and package
+        managers use their system-default trust lookup without seven copied
+        entrypoint blocks or Git-specific CA environment variables.
+      exit_criteria:
+        - "decision record explains why runtime-generated CA bytes cannot be image-baked and names the least-privilege trust boundary"
+        - "one lib-common trust initializer replaces per-entrypoint CA concatenation blocks"
+        - "GIT_SSL_CAINFO and SSL_CERT_FILE are absent from default-image production entrypoints; TLS fixture covers Git + curl + Node/Python representative clients"
+      events:
+        - type: filed
+          ts: "2026-07-14T21:49:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: "Split from over-budget parent forge-gitconfig-single-injection."
+
+    - packet_id: forge-config-trust-cross-platform-parity
+      order: provisional
+      provisional_id: linux-260714-4
+      release_target: stable-milestone-v1
+      title: "Forge Git/trust parity: Linux, macOS-guest, and Windows-guest fixtures converge on the same injection path"
+      status: pending
+      kind: verification
+      deliverable: cross-platform forge launch fixtures + audit inventory refresh
+      depends_on:
+        - forge-standard-gitconfig-path
+        - forge-runtime-ca-trust-convergence
+      pickup_role: any
+      capability_tags: [forge, git, tls, cross-platform, testing]
+      estimated_hours: 3
+      outcome: >
+        Linux native, macOS VM, and Windows WSL lanes expose the same effective
+        Git configuration and trust behavior through the shared in-guest
+        launcher/image path. Platform fixtures prove no host-specific fallback
+        or repo-local hand edit is required, then the order-315 environment
+        inventory is rerun and falls to at most two justified Git-flow values.
+      exit_criteria:
+        - "fixture evidence from Linux, macOS, and Windows shows identical effective Git config origins and mirror redirect"
+        - "all three lanes complete representative TLS and mirror Git operations without host config edits"
+        - "audit env inventory refresh records <=2 justified Git-flow rows; parent forge-gitconfig-single-injection closes"
+      events:
+        - type: filed
+          ts: "2026-07-14T21:49:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: "Split from over-budget parent forge-gitconfig-single-injection."
 
     - packet_id: forge-host-gitconfig-bidirectional-quarantine
       order: 321
