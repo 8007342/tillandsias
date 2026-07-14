@@ -2955,7 +2955,7 @@ plan_index:
     - packet_id: forge-validation-findings-2026-07-04
       order: 177
       title: "Forge: reduce in-forge validation findings from Codex meta-orchestration"
-      status: pending
+      status: claimed
       kind: enhancement+optimization+test-fix
       deliverable: plan/issues/forge-validation-findings-2026-07-04.md
       depends_on: []
@@ -2984,6 +2984,18 @@ plan_index:
         - "after a forge mirror push, mirror ls-remote and direct GitHub ls-remote agree on linux-next"
         - "if upstream forwarding fails, git push from the forge returns non-zero"
       events:
+        - type: claim
+          ts: "2026-07-14T22:46:49Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "834d4ba385b7"
+          expires_at: "2026-07-15T02:46:49Z"
+          summary: >
+            Claimed for a bounded shaping cycle. Existing orders 301/318 close
+            the mirror race and false acknowledgement criteria; the HOME test
+            and startup snapshot wording are also already fixed. This cycle
+            will split validation reporting/handoff and fresh-image diagnostic
+            tooling into independently verifiable residual packets.
         - type: filed
           ts: "2026-07-04T04:18:00Z"
           agent_id: "forge-codex-20260704T0402Z"
