@@ -11195,7 +11195,7 @@ plan_index:
       order: 338
       release_target: stable-milestone-v1
       title: "Codex device-auth foundation: exact provider command and opaque credential schema"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
       depends_on: []
@@ -11222,3 +11222,74 @@ plan_index:
             CLI audit found Codex 0.144.4 is the only named provider with a
             compliant device command. Sized as one worker cycle; it establishes
             the exact command and persistence schema, not the later round trip.
+        - type: completed
+          ts: "2026-07-14T20:40:27Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Replaced the Codex curl/paste placeholder with a forge-image
+            provider spec and feature-probed codex login --device-auth helper.
+            The complete auth.json is stored as credentials_b64 through a
+            stdin-only Vault write, never helper argv or env. Unsupported CLI
+            fixture fails rc=2 without running login; supported fixture restores
+            byte-identical JSON. Rust provider tests pass 2/2, installed Codex
+            exposes --device-auth, and tillandsias-vault quick pre-build
+            litmuses pass 6/6. Follow-ons are orders 339 and 340.
+
+    - packet_id: codex-oauth-restore-inject
+      order: 339
+      release_target: stable-milestone-v1
+      title: "Codex OAuth restore: inject opaque Vault auth document into the ephemeral forge home"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
+      depends_on: [codex-device-auth-command-and-schema]
+      pickup_role: linux
+      capability_tags: [linux, codex, auth, vault, forge]
+      estimated_hours: 2
+      outcome: >
+        A Codex forge launch mounts only a scoped read lease, decodes
+        credentials_b64 from secret/codex/oauth into ~/.codex/auth.json mode
+        0600 before Codex starts, and leaves no credential in argv, env,
+        project workspace, image, or logs. Missing/invalid Vault data fails
+        loud with the device-login command.
+      exit_criteria:
+        - "Codex-only launch mounts the scoped Vault lease; other agent modes do not"
+        - "fixture restores auth.json byte-identically with mode 0600 before fake Codex starts"
+        - "fixture asserts no credential in argv, env, project, image, or logs"
+      events:
+        - type: filed
+          ts: "2026-07-14T20:40:27Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            First bounded follow-on from order 338's proven opaque schema.
+
+    - packet_id: codex-oauth-rotation-harvest
+      order: 340
+      release_target: stable-milestone-v1
+      title: "Codex OAuth rotation harvest: persist credential-file changes before ephemeral forge teardown"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
+      depends_on: [codex-oauth-restore-inject]
+      pickup_role: linux
+      capability_tags: [linux, codex, auth, vault, forge]
+      estimated_hours: 2
+      outcome: >
+        The Codex entrypoint runs the agent as a child, detects the first
+        credential creation/change promptly, stores the complete opaque file
+        through stdin, and performs a final best-effort harvest before exit so
+        refresh rotation survives --rm teardown without extending secret scope.
+      exit_criteria:
+        - "fixture proves first creation and later rotation each update Vault byte-identically"
+        - "normal exit and signal-forwarded exit both perform bounded final harvest"
+        - "no credential reaches argv, env, project workspace, image, or logs"
+      events:
+        - type: filed
+          ts: "2026-07-14T20:40:27Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Second bounded follow-on from order 338; pending on restore/inject
+            so lifecycle tests share one canonical schema and helper.

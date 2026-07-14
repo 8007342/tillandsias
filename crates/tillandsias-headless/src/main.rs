@@ -377,11 +377,13 @@ fn main() {
             LoginInputMode::Terminal,
         ))
     } else if codex_login {
+        let spec = provider_device_auth_spec(&ProviderId::Codex)
+            .expect("Codex device-auth provider spec must exist");
         Some((
             ProviderId::Codex,
             AuthModel::OAuthDevice,
-            "curl",
-            get_generic_login_token_script(&ProviderId::Codex),
+            spec.image_name,
+            spec.login_script(),
             LoginInputMode::Terminal,
         ))
     } else if antigravity_login {
@@ -4941,7 +4943,7 @@ impl ProviderId {
         match self {
             ProviderId::GitHub => "token",
             ProviderId::Claude => "access_token",
-            ProviderId::Codex => "access_token",
+            ProviderId::Codex => CODEX_DEVICE_AUTH_SPEC.vault_field,
             ProviderId::Antigravity => "access_token",
         }
     }
@@ -4950,6 +4952,40 @@ impl ProviderId {
 pub enum AuthModel {
     Token,
     OAuthDevice,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ProviderDeviceAuthSpec {
+    image_name: &'static str,
+    login_program: &'static str,
+    login_args: &'static [&'static str],
+    credential_path: &'static str,
+    vault_path: &'static str,
+    vault_field: &'static str,
+}
+
+impl ProviderDeviceAuthSpec {
+    fn login_script(&self) -> String {
+        let mut command = vec![self.login_program];
+        command.extend_from_slice(self.login_args);
+        format!("exec {}", command.join(" "))
+    }
+}
+
+const CODEX_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
+    image_name: "forge",
+    login_program: "/usr/local/bin/codex-device-auth",
+    login_args: &[],
+    credential_path: "~/.codex/auth.json",
+    vault_path: "secret/codex/oauth",
+    vault_field: "credentials_b64",
+};
+
+fn provider_device_auth_spec(provider: &ProviderId) -> Option<&'static ProviderDeviceAuthSpec> {
+    match provider {
+        ProviderId::Codex => Some(&CODEX_DEVICE_AUTH_SPEC),
+        ProviderId::GitHub | ProviderId::Claude | ProviderId::Antigravity => None,
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -7884,10 +7920,13 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
             return Ok(());
         }
 
-        let is_oauth_logged_in =
-            crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
-                .map(|v| !v.is_empty())
-                .unwrap_or(false);
+        let is_oauth_logged_in = crate::vault_bootstrap::vault_kv_get_via_exec(
+            op.vault_path(),
+            op.secret_field(),
+            debug,
+        )
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
         if is_oauth_logged_in {
             return Ok(());
         }
@@ -7898,11 +7937,14 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
                 op.name()
             );
         }
-        let token_script = get_generic_login_token_script(&op);
+        let (image_name, token_script) = match provider_device_auth_spec(&op) {
+            Some(spec) => (spec.image_name, spec.login_script()),
+            None => ("forge", get_generic_login_token_script(&op)),
+        };
         let config = ProviderLoginConfig {
             provider: op,
             auth_model: AuthModel::OAuthDevice,
-            image_name: "forge",
+            image_name,
             token_script,
             input_mode: LoginInputMode::Terminal,
         };
@@ -10064,6 +10106,36 @@ mod tests {
         );
         assert!(args.iter().any(|arg| arg == "--interactive"));
         assert!(args.iter().any(|arg| arg == "--tty"));
+    }
+
+    #[test]
+    fn codex_device_auth_spec_pins_command_and_opaque_schema() {
+        let spec = provider_device_auth_spec(&ProviderId::Codex)
+            .expect("Codex must expose the supported device-auth spec");
+        assert_eq!(spec.image_name, "forge");
+        assert_eq!(spec.login_program, "/usr/local/bin/codex-device-auth");
+        assert!(spec.login_args.is_empty());
+        assert_eq!(spec.credential_path, "~/.codex/auth.json");
+        assert_eq!(spec.vault_path, "secret/codex/oauth");
+        assert_eq!(spec.vault_field, "credentials_b64");
+        assert_eq!(spec.login_script(), "exec /usr/local/bin/codex-device-auth");
+        assert_eq!(ProviderId::Codex.secret_field(), "credentials_b64");
+    }
+
+    #[test]
+    fn codex_login_never_uses_generic_paste_token_script() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("} else if codex_login {")
+            .expect("Codex login dispatch must exist");
+        let end = source[start..]
+            .find("} else if antigravity_login {")
+            .map(|offset| start + offset)
+            .expect("Antigravity branch must follow Codex");
+        let branch = &source[start..end];
+        assert!(branch.contains("provider_device_auth_spec(&ProviderId::Codex)"));
+        assert!(!branch.contains("get_generic_login_token_script"));
+        assert!(!branch.contains("read -r -s"));
     }
 
     #[test]

@@ -1,0 +1,35 @@
+# @trace spec:tillandsias-vault
+name: litmus:codex-device-auth-shape
+spec: tillandsias-vault
+phase: pre-build
+description: Pin the supported Codex device command and opaque stdin-to-Vault credential schema
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains images/default/codex-device-auth.sh
+  - workspace contains scripts/test-codex-device-auth.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+
+critical_path:
+  - step: "exercise supported and unsupported Codex device-command fixtures"
+    command: "scripts/test-codex-device-auth.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: Codex device auth command, opaque schema, and fail-loud probe"
+
+  - step: "pin the Rust provider schema and prohibit the generic paste-token branch"
+    command: "grep -Fq 'login_program: \"/usr/local/bin/codex-device-auth\"' crates/tillandsias-headless/src/main.rs && grep -Fq 'credential_path: \"~/.codex/auth.json\"' crates/tillandsias-headless/src/main.rs && grep -Fq 'vault_field: \"credentials_b64\"' crates/tillandsias-headless/src/main.rs && echo 'ok: codex device schema'"
+    timeout_ms: 3000
+    expected_behavior: "ok: codex device schema"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "Codex device capability is feature-probed and the complete auth document reaches Vault over stdin"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "codex-device-auth-shape"
+
+rollback:
+  on_failure: "restore the exact Codex provider spec, feature probe, and opaque stdin Vault schema"
+  command: "scripts/test-codex-device-auth.sh"
