@@ -6548,7 +6548,7 @@ plan_index:
     - packet_id: macos-tray-parity-column-verify
       order: 257
       title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: completed
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6576,6 +6576,25 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the macOS host"
       events:
+        - type: completed
+          ts: "2026-07-14T00:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          lease_id: "macos-tray-parity-column-verify (claim-ledger-node 2026-07-13)"
+          summary: >
+            Final cell closed: InteractiveStream attach flipped todo -> done
+            with live evidence — full opencode PTY session over the vsock
+            wire on the freshly provisioned VM (TUI rendered in-band,
+            BigPickle agent ran a complete /meta-orchestration cycle, exit
+            code propagated: {"status":"opencode-finished","exit_code":0};
+            log target/build-install-smoke-e2e/20260713T224400Z/
+            04b-bigpickle-meta-orchestration.log). macOS column now has no
+            unknown/todo cells on required rows; the attended 2026-07-12
+            smoke had closed the other seven (consolidated gap packet
+            macos-tray-parity-attended-smoke-gap-2026-07-09.md). Instant
+            pre-build litmus: parity gate passing on this host (remaining 4
+            suite failures are unrelated known Darwin/staging fallout,
+            recorded in macos-build-install-smoke-e2e-findings-2026-07-13.md).
         - type: unblock
           ts: "2026-07-12T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -10597,3 +10616,208 @@ plan_index:
             Second distinct first-attach blocker on the cold Windows lane
             (after order 326); found because the Windows guest exercises the
             lazy ensure path that --init masks on Linux hosts.
+    - packet_id: guest-container-metrics-over-control-wire
+      order: 333
+      title: "Guest/container metrics over the control wire (per-container + per-mount I/O) — no VM-boundary hacks"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/guest-container-metrics-over-control-wire-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [observability, metrics, control-wire, guest, forge]
+      estimated_hours: 8
+      outcome: >
+        Guest headless samples per-container CPU/mem/blkio (proxy, cache,
+        router, vault, git-mirror, forge) plus per-mount I/O counters for
+        the hot paths, and exposes a MetricsSnapshot over the existing
+        vsock control wire so macOS/Windows trays and --diagnose --json can
+        read it idiomatically. Existing TCP /metrics stays for Linux-local
+        scrapes. Direct input for the ramdisk placement decision (order 324).
+      exit_criteria:
+        - "control-wire MetricsSnapshot round-trip returns per-container samples for every running service container"
+        - "per-mount I/O counters cover /home/forge/src, pull cache root, /opt/cheatsheets, git-mirror storage, proxy cache dir"
+        - "collection failure surfaces as an error field, never a fabricated healthy sample (spec:observability-metrics)"
+        - "--diagnose --json gains a metrics block on macOS (read over the wire)"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Operator-directed monitoring pass during the BigPickle macOS e2e:
+            host side can only see whole-VM aggregates (tray process +
+            VM-dir growth); guest TCP /metrics is unreachable over vsock and
+            per-container/per-mount attribution does not exist. Filed per
+            idiomatic-layers policy (order 271) instead of boundary hacks.
+
+    - packet_id: forge-hot-path-placement-metrics
+      order: 329
+      title: "Measure forge hot paths (checkout/pull-cache/proxy/router/git-mirror) and decide ramdisk vs disk vs virtiofs with data"
+      status: ready
+      kind: research
+      deliverable: plan/issues/forge-hot-path-placement-metrics-2026-07-13.md
+      depends_on: [guest-container-metrics-over-control-wire]
+      pickup_role: linux
+      capability_tags: [performance, forge, ramdisk, research]
+      estimated_hours: 6
+      outcome: >
+        Placement table with measured I/O per hot path from a standard
+        BigPickle cycle on Linux and macOS guests. Answers: is virtiofs
+        /home/forge/src a measurable drag vs the Linux tmpfs clone; does
+        pull-cache path 1 (userspace LRU) need path 2 (real tmpfs); do
+        proxy/cache/router/git-mirror I/O matter. Every disposition
+        respects the 4 GiB guest RAM budget (vz.rs:941) and files its own
+        implementation child packet.
+      exit_criteria:
+        - "placement table complete with measured numbers + provenance for every row"
+        - "each move-* disposition names an implementation child packet"
+        - "macOS virtiofs-vs-Linux-tmpfs checkout comparison answered with numbers"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Operator directive: forge checkout was intended to be ramdisk;
+            verified it is virtiofs-to-host-SSD on macOS and tmpfs only on
+            Linux; pull-cache real-tmpfs path 2 was deferred pending
+            profiling that never existed. This packet creates that data.
+
+    - packet_id: git-mirror-observability-and-managed-alternatives
+      order: 330
+      title: "Git-mirror: mirror-as-a-service observability + build-vs-adopt evaluation of off-the-shelf mirror containers (Forgejo/Gitea et al.)"
+      status: ready
+      kind: research
+      multi_cycle: true
+      deliverable: plan/issues/git-mirror-observability-and-managed-alternatives-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, research, heavy-agent, observability]
+      estimated_hours: 10
+      outcome: >
+        Declared audit input to order 315. Scored matrix
+        (cheatsheets/concurrent-git/git-mirror-managed-alternatives.md) of
+        off-the-shelf mirror containers vs keep-bespoke+rungs-B-E, on
+        footprint (4 GiB guest), relay/ack semantics (rung A satisfiable),
+        vault credential injection, policy hooks (order-316 YAML gate),
+        out-of-box observability, config surface (DEFAULTS OVER
+        CONFIGURATION), license, migration cost both directions. Plus the
+        mirror observability requirements list (relay queue depth, last
+        relay per ref, divergence, ack latency, reject/credential-failure
+        counters) as testable statements, transport via order 323.
+        Recommendation ratified through order 315; The Tlatoani owns the
+        adopt/keep decision.
+      exit_criteria:
+        - "matrix complete: no empty cells across the declared axes for the candidate set"
+        - "one named recommendation with a migration-ladder sketch"
+        - "mirror observability requirements enumerated as litmus-pinnable statements"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Operator directive during macOS monitoring pass: the mirror is a
+            critical backbone turning finicky; rungs 318-322 harden the
+            bespoke mirror but nobody owns runtime monitoring, and the
+            adopt-vs-build question was never evaluated. Multi-cycle
+            heavy-agent research.
+
+    - packet_id: macos-opencode-host-path-translation
+      order: 331
+      title: "macOS --opencode/--lane project path: translate host ~/src paths to /home/forge/src, fail fast pre-boot otherwise"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/macos-opencode-host-path-not-translated-2026-07-13.md
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, tray, ux, cli]
+      estimated_hours: 2
+      outcome: >
+        opencode_main (and sibling project-path lanes) rewrite host
+        $HOME/src/<name> paths to /home/forge/src/<name>, pass through
+        guest-absolute paths, and reject anything else on the host BEFORE
+        booting the VM with a message naming both accepted forms; pure
+        translation function pinned by unit test.
+      exit_criteria:
+        - "host ~/src/<name> path boots and attaches (live repro from 2026-07-13 no longer fails)"
+        - "invalid path fails on host pre-boot with actionable message"
+        - "translation function unit-pinned"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Live e2e finding: --opencode /Users/tlatoani/src/tillandsias
+            booted the VM then failed in-guest with "Project not found";
+            /home/forge/src/tillandsias works. One-minute boot wasted per
+            wrong guess; no user will guess the guest path.
+
+    - packet_id: macos-opencode-firstuse-silent-build-idle-timeout
+      order: 332
+      title: "P1: first-use macOS --opencode dies at 300s vsock idle timeout during silent forge image build (VM torn down mid-build)"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/macos-opencode-firstuse-silent-build-idle-timeout-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [vm-layer, control-wire, forge, macos, p1]
+      estimated_hours: 4
+      outcome: >
+        Cold-substrate --opencode reaches the agent prompt: headless streams
+        image-build progress (serves order 270 too), the exec idle timeout
+        distinguishes no-bytes from peer-dead via a wire heartbeat, and the
+        three IDLE_TIMEOUT_SECS literals (vsock_exec.rs:195/317/555) collapse
+        into one env-overridable constant. Live repro + host-side resource
+        evidence in the deliverable; workaround (exec-guest --init pre-build,
+        streamed) validated on macOS 2026-07-13.
+      exit_criteria:
+        - "cold-substrate --opencode with no forge images reaches the agent prompt (no idle-timeout death)"
+        - "wire-level liveness heartbeat or streamed build output pinned by litmus with a synthetic slow-build fixture"
+        - "single IDLE_TIMEOUT_SECS constant, env-overridable"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Live e2e: guest pinned at ~200% CPU building forge-base while the
+            exec stream stayed silent; at 300s the lane declared the wire
+            stale and vz.stop() killed the build. Sibling of order 270 and
+            the Windows silent forge-base build finding, but fatal on macOS
+            first use.
+
+    - packet_id: forge-shared-checkout-destructive-clean
+      order: 328
+      title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [meta-orchestration, forge, safety, p1, skill]
+      estimated_hours: 4
+      outcome: >
+        Blocked in-forge cycles leave pre-existing files byte-identical:
+        skill exit contract scoped to cycle-created artifacts (startup
+        git-status snapshot is the boundary), and macOS forge lanes get a
+        forge-owned worktree instead of operating directly on the
+        operator's virtiofs-shared checkout (order 321 adjacency). Live
+        near-data-loss transcript in the deliverable; survival was a
+        commit-push race won by minutes.
+      exit_criteria:
+        - "skill text: discard-temporary-artifacts scoped to artifacts the cycle created; blocked cycles leave tree as found"
+        - "litmus fixture: blocked cycle on a dirty tree exits with pre-existing files byte-identical (checksummed)"
+        - "macOS forge lane worktree isolation decision recorded (materialize vs git-worktree), child packet filed if adopted"
+      events:
+        - type: filed
+          ts: "2026-07-14T00:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            BigPickle's blocked forge cycle ran git checkout -- plan/index.yaml
+            + git clean -fd plan/issues/ on the shared virtiofs checkout,
+            targeting this host cycle's five uncommitted packet files; they
+            survived only because e84ba192 had just been pushed. It also
+            reverted its own blocker-file update (self-erasing evidence).

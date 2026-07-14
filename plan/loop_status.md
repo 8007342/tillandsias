@@ -1,6 +1,52 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-13T23:20:00Z
+LastExecutionTime: 2026-07-14T00:20:00Z
+
+## Cycle 2026-07-13T22:43Z→00:20Z (macos — operator-directed: full destructive e2e + BigPickle in-forge /meta-orchestration + resource-monitoring pass; orders filed (coordinator-renumbered: metrics packet now order 333; see index), 257 CLOSED, mirror blocker re-evidenced)
+
+- **Host**: macOS arm64 (10-core/16 GiB), `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z. Guard `ok:gh-keyring`,
+  e2e preflight `eligible`. Startup: merged origin/linux-next
+  (fast-forward 837b066f→66d8b134); sibling heads main 38d33cd8,
+  windows-next ac06ff86.
+- **Destructive e2e**: build+codesign+install (freshness 66d8b134==HEAD) →
+  VM dir 5.5G destroyed → cold provision PASS (528 MB rootfs, 250 GiB
+  sparse disk) → diagnose exit 0.
+- **BigPickle in-forge /meta-orchestration (operator goal)**: attempt 1
+  FAIL host-path (order 326); attempt 2 FAIL P1 — silent forge-base build
+  tripped the 300s vsock idle timeout, vz.stop() killed the build (order
+  327); workaround `--exec-guest --init` streamed ALL 10 image builds to
+  success; attempt 3 (warm) — **BigPickle executed a complete, disciplined
+  cycle** (mode/host detection, guard, blocker re-derivation, contract
+  exit, exit_code 0 propagated over the PTY wire) — verdict BLOCKED
+  `missing:no-credential-channel`: macOS shared-checkout origin is public
+  GitHub despite the entrypoint mirror banner (order 320 path), and a cold
+  substrate has no vault credential until a GitHub login runs (114/303/304).
+  Evidence appended to forge-credential-channel-missing-2026-07-12.md.
+- **NEW P1 order 328**: BigPickle's blocked cycle `git clean -fd`'d the
+  virtiofs-SHARED checkout — sibling uncommitted packet files survived only
+  because e84ba192 had just been pushed. Exit-contract cleanliness must
+  scope to cycle-created artifacts; macOS forge lane needs a forge-owned
+  worktree.
+- **Order 257 CLOSED (drain)**: InteractiveStream cell verified live by the
+  BigPickle PTY session (last todo cell); macOS parity column complete;
+  parity litmus green on this host.
+- **Monitoring pass (operator-directed, no boundary hacks)**: VM resources
+  attribute to the com.apple.Virtualization.VirtualMachine XPC process
+  (tray is a 14 MB driver); guest vCPU cap (4) is the build bottleneck
+  (~200% sustained, peak 265%), host never stressed (mem free ≥63%, swap 0,
+  load ≤3.7/10 cores); VM disk 0→12 GiB. Forge checkout on macOS is
+  virtiofs-to-host-SSD, NOT ramdisk (intent≠code); pull-cache real-tmpfs
+  path was deferred pending profiling that never existed. Filed orders 323
+  (guest/container metrics over control wire), 324 (hot-path placement
+  decided with data, 4 GiB guest budget), 325 (git-mirror observability +
+  off-the-shelf mirror evaluation — Forgejo/Gitea et al., declared order-315
+  audit input, multi_cycle).
+- **Litmus**: instant pre-build 127/131 after syncing the two order-315
+  cheatsheets into the tracked image mirror (in this commit); remaining 4
+  are known non-macOS-gated shape checks (recorded in findings, not
+  refiled).
+- **Report**: plan/issues/macos-build-install-smoke-e2e-findings-2026-07-13.md.
 
 ## Cycle 2026-07-13T21:05Z→23:20Z (windows yolanda — NEW HOST from-scratch e2e + FIRST Windows in-forge BigPickle full /meta-orchestration cycle; orders 323-327 filed; order-318 false-success live repro + manual relay)
 

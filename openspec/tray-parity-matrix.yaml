@@ -31,7 +31,7 @@ features:
     parity: "required"
   - capability: "Interactive agent attach (InteractiveStream)"
     linux: "done"
-    macos: "todo"
+    macos: "done"
     windows: "done"
     parity: "required"
   - capability: "One-off status/probe (ExecOneShot)"
