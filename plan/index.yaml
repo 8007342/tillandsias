@@ -10745,7 +10745,7 @@ plan_index:
       provisional_id: linux-260714-4
       release_target: stable-milestone-v1
       title: "Forge Git/trust parity: Linux, macOS-guest, and Windows-guest fixtures converge on the same injection path"
-      status: pending
+      status: claimed
       kind: verification
       deliverable: cross-platform forge launch fixtures + audit inventory refresh
       depends_on:
@@ -10765,6 +10765,16 @@ plan_index:
         - "all three lanes complete representative TLS and mirror Git operations without host config edits"
         - "audit env inventory refresh records <=2 justified Git-flow rows; parent forge-gitconfig-single-injection closes"
       events:
+        - type: claim
+          ts: "2026-07-14T22:24:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "30373b7bdbc9"
+          expires_at: "2026-07-15T02:24:00Z"
+          summary: >
+            Claimed the final order-320 child for shared guest-path source
+            fixtures, Linux live evidence, environment inventory refresh, and
+            classification of any macOS/Windows attended verification gates.
         - type: filed
           ts: "2026-07-14T21:49:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
