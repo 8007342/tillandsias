@@ -2990,21 +2990,21 @@ plan_index:
           host: linux
           summary: >
             Closed the consolidated forge validation residuals. Commits
-            700f6d6e and 2d16881d repair the stale login-first assertion and
+            700f6d6e, 2d16881d, and 28ae0b59 repair the stale login-first assertion and
             add a non-destructive six-check PASS/SKIP/FAIL profile covering
-            credential prerequisites, authenticated dry-run push, workspace,
+            credential prerequisites, client-to-origin dry-run routing, workspace,
             full headless tests, forge service health, and e2e eligibility.
             Obsolete ACTIVE.md handoffs now use plan/index.yaml. Earlier commit
             35ba3d3f supplied HOME-safe bind assertions, forge CA fallback,
             diagnostic tools, and startup-snapshot wording. Orders 301/302 and
             318 close mirror ref convergence and relay failure acknowledgement.
           evidence:
-            - "implementation: 700f6d6e, 2d16881d"
+            - "implementation: 700f6d6e, 2d16881d, 28ae0b59"
             - "prior forge residuals: 35ba3d3f"
             - "mirror convergence: a1d1ea4c, 3d9e583b, 0c57c344"
             - "relay acknowledgement: aeebb939"
             - "scripts/forge-validate.sh: 5 PASS, service-health SKIP not-forge-host, 0 FAIL"
-            - "hermetic service health fixture covers proxy/Git/inference aggregate, Vault, outbound HTTPS, and unreachable failure"
+            - "hermetic service health fixture requires named proxy/Git/inference services, Vault, outbound HTTPS, and incomplete-set failure"
             - "default-image quick pre-build litmus: 7 passed, 0 failed"
             - "git mirror ref-convergence and relay-verified acknowledgement fixtures: PASS"
             - "cargo fmt --all -- --check and ./build.sh --check: PASS"

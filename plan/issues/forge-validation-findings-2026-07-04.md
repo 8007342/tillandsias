@@ -17,15 +17,18 @@ host-ineligible.
 
 ## Resolution
 
-Commits `700f6d6e` and `2d16881d` added the non-destructive six-check forge
-validation profile, repaired the remaining stale forge headless test, and
-redirected obsolete active-work handoffs to `plan/index.yaml`. Commit
+Commits `700f6d6e`, `2d16881d`, and `28ae0b59` added the non-destructive
+six-check forge validation profile, repaired the remaining stale forge
+headless test, and redirected obsolete active-work handoffs to
+`plan/index.yaml`. Commit
 `35ba3d3f` had already closed the HOME, CA fallback, diagnostic-tool, and
 startup-snapshot findings. Orders 301/302 closed mirror ref convergence, and
 order 318 made a failed upstream relay fail the originating push. The real
-Linux validation run passed credential, dry-run push, workspace, headless, and
-e2e checks; service health correctly skipped outside a forge and its forge
-success/failure paths pass hermetic fixtures.
+Linux validation run passed credential, dry-run push routing, workspace, headless, and
+e2e checks; service health correctly skipped outside a forge and its bounded
+forge success/incomplete-service paths pass hermetic fixtures. The dry-run
+checks the client-to-origin route; order 318's rejecting-hook fixture separately
+proves that upstream relay failure rejects a real push.
 
 ## Validation Evidence
 
