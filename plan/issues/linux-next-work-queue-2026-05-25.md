@@ -21,3 +21,4 @@
 - 2026-07-14T21:46Z linux macuahuitl: order 306 BLOCKED on attended tray visual verification — active user OpenCode session preserved; no Wayland input/screenshot tooling is available to certify the five-minute cursor-clean criterion autonomously.
 - 2026-07-14T21:49Z linux macuahuitl: order 320 shaped into three cycle-sized children — standard Git config path, runtime-generated CA trust convergence, then cross-platform parity; parent now waits on those gates.
 - 2026-07-14T21:57Z 4c04ff5f linux macuahuitl: forge-standard-gitconfig-path DONE — raw and typed forge launchers mount one generated read-only `/home/forge/.gitconfig` without `GIT_CONFIG_GLOBAL`; git-mirror-service litmuses pass 7/7.
+- 2026-07-14T22:23Z 6b299368 linux macuahuitl: forge-runtime-ca-trust-convergence DONE — one rootless system-default bundle serves Git/curl/Node/Python; six duplicate entrypoint blocks and four CA override variables removed; fresh-image and default-image gates pass.
