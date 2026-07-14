@@ -9703,7 +9703,9 @@ plan_index:
       order: 306
       release_target: stable-milestone-v1
       title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
-      status: ready
+      status: blocked
+      retryable: true
+      blocked_on: operator-attended-tray-visual-verification
       kind: verify
       deliverable: plan/issues/opencode-tray-tui-escape-spill-2026-07-12.md
       depends_on: []
@@ -9721,6 +9723,20 @@ plan_index:
         - "tray OpenCode session clean for >=5 minutes on a first-launch cold-cache run"
         - "if live-rewrite implicated: updater never rewrites the active lane's package; fixture in scripts/test-harness-rollback.sh"
       events:
+        - type: blocked
+          ts: "2026-07-14T21:46:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            This host has an active Wayland desktop and installed tray, but an
+            existing user-owned OpenCode session is running and the session
+            exposes no Wayland input/screenshot tool with which an autonomous
+            worker can exercise cursor movement and certify five minutes of
+            visual cleanliness. Do not destroy the user's active session or
+            cold-cache volume. Retry as an attended tray verification: launch
+            OpenCode with a cold per-project cache, move the cursor during the
+            background update window for at least five minutes, and record the
+            visual verdict in the deliverable.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
