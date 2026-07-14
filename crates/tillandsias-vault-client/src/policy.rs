@@ -175,11 +175,11 @@ mod tests {
     }
 
     #[test]
-    fn codex_forge_policy_is_read_only_and_provider_scoped() {
+    fn codex_forge_policy_is_session_write_capable_and_provider_scoped() {
         let hcl = Policy::CodexForge.hcl();
         assert!(hcl.contains("secret/data/codex/oauth"));
-        assert!(hcl.contains("capabilities = [\"read\"]"));
+        assert!(hcl.contains("capabilities = [\"create\", \"update\", \"read\"]"));
         assert!(!hcl.contains("github/token"));
-        assert!(!hcl.contains("\"create\"") && !hcl.contains("\"update\""));
+        assert!(!hcl.contains("claude/oauth") && !hcl.contains("antigravity/oauth"));
     }
 }

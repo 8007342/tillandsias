@@ -13,3 +13,4 @@
 - 2026-07-14T20:33Z linux macuahuitl: orders 303/304/307 BLOCKED on provider capability after source + installed-CLI audit; only Codex exposes compliant device auth. Filed shaped Codex foundation order 338; no paste/browser fallback accepted.
 - 2026-07-14T20:40Z linux macuahuitl: order 338 DONE — feature-probed Codex device auth stores complete opaque auth.json through stdin as Vault credentials_b64; supported/unsupported fixtures and Vault quick litmuses pass. Restore/harvest split to orders 339/340.
 - 2026-07-14T20:47Z linux macuahuitl: order 339 DONE — read-only Codex-only lease survives the attached session, tray reuses the CLI lifetime, and validated auth.json restores mode 0600 with no surface leak. Order 340 promoted ready.
+- 2026-07-14T20:52Z linux macuahuitl: order 340 DONE — Codex child lifecycle harvests credential creation/rotation and final signal-exit state through stdin with provider-only Vault scope; fixture and Vault quick litmuses pass.

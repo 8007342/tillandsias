@@ -1,7 +1,8 @@
 # @trace spec:tillandsias-vault
-# Read-only policy mounted only into a running Codex forge session.
+# Provider-scoped session policy mounted only into a running Codex forge.
+# Read restores startup state; create/update persist provider rotation.
 path "secret/data/codex/oauth" {
-  capabilities = ["read"]
+  capabilities = ["create", "update", "read"]
 }
 path "secret/metadata/codex/oauth" {
   capabilities = ["read"]

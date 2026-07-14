@@ -146,4 +146,4 @@ if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
 fi
 trace_lifecycle "entrypoint" "codex launching"
 trace_lifecycle "exec" "launching codex"
-exec codex "${codex_forge_args[@]}" "$@"
+exec /usr/local/bin/codex-oauth-session -- codex "${codex_forge_args[@]}" "$@"

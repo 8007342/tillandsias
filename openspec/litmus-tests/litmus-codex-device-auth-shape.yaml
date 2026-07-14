@@ -10,6 +10,7 @@ preconditions:
   - workspace contains images/default/codex-device-auth.sh
   - workspace contains scripts/test-codex-device-auth.sh
   - workspace contains scripts/test-codex-oauth-restore.sh
+  - workspace contains scripts/test-codex-oauth-harvest.sh
   - workspace contains crates/tillandsias-headless/src/main.rs
 
 critical_path:
@@ -27,6 +28,11 @@ critical_path:
     command: "scripts/test-codex-oauth-restore.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: Codex OAuth restored byte-identically with mode 0600 and no surface leak"
+
+  - step: "harvest creation, rotation, and signal-exit changes before teardown"
+    command: "scripts/test-codex-oauth-harvest.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: Codex OAuth creation, rotation, and signal-exit harvest"
 
 observability:
   traces:

@@ -39,9 +39,12 @@ as `secret/codex/oauth {credentials_b64}` through stdin, and fails loud rather
 than falling back. Order 339 now restores the opaque document through a
 read-only Codex-only lease held for the attached session, validates it, writes
 mode 0600, and routes the tray through the same CLI-owned lifetime. Order 340
-owns early and exit-time rotation harvest. Orders 303 and 304 can be reshaped
-or resumed only when every named provider has a supported device mechanism or
-the operator explicitly narrows their aggregate scope.
+now runs Codex as a signal-forwarded child, watches the private file for first
+creation and rotation, writes changes through stdin, and performs a bounded
+final harvest before teardown. The provider-scoped session policy has no
+access to other provider paths. Orders 303 and 304 can be reshaped or resumed
+only when every named provider has a supported device mechanism or the
+operator explicitly narrows their aggregate scope.
 
 Order 307 remains blocked after its proxy fix because no supported
 Antigravity/Gemini credential acquisition path can populate the credential

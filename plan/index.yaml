@@ -11282,7 +11282,7 @@ plan_index:
       order: 340
       release_target: stable-milestone-v1
       title: "Codex OAuth rotation harvest: persist credential-file changes before ephemeral forge teardown"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
       depends_on: [codex-oauth-restore-inject]
@@ -11311,3 +11311,17 @@ plan_index:
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
           host: linux
           summary: "Order 339 restore/inject completed; rotation harvest is ready."
+        - type: completed
+          ts: "2026-07-14T20:52:54Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Codex now runs as a child behind a signal-forwarding session
+            wrapper. A private-file watcher harvests first creation and later
+            rotation promptly; normal and signal-forwarded exits perform a
+            final bounded stdin-only write before teardown and preserve the
+            child status. The codex-forge policy gains create/update only on
+            secret/codex/oauth and cannot access other providers. Fixture
+            proves creation, rotation, TERM-exit, and absence from argv,
+            environment output, logs, and project; Vault quick litmuses pass
+            6/6.
