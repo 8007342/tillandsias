@@ -10570,7 +10570,7 @@ plan_index:
       order: 320
       release_target: stable-milestone-v1
       title: "Ladder rung C: ONE gitconfig injection point (committed includeIf/include.path), image-baked CA trust; kill the env mesh on ALL platforms"
-      status: ready
+      status: claimed
       kind: architecture
       deliverable: images/default/lib-common.sh + crates/tillandsias-headless + macOS/Windows lane parity
       depends_on: [git-mirror-architecture-audit]
@@ -10592,6 +10592,17 @@ plan_index:
         - "GIT_SSL_CAINFO/SSL_CERT_FILE exports deleted from entrypoints once CA is image-baked (grep gate)"
         - "env-var inventory in the audit cheatsheet re-run: git-flow rows drop to <=2"
       events:
+        - type: claim
+          ts: "2026-07-14T21:47:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "cdabeb19f856"
+          expires_at: "2026-07-15T01:47:00Z"
+          summary: >
+            Claimed for a shaping cycle because the eight-hour cross-platform
+            architecture packet exceeds the worker-cycle budget. This cycle
+            will split the config injection, dynamic CA trust, and platform
+            parity gates into independently executable packets.
         - type: filed
           ts: "2026-07-13T04:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
