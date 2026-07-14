@@ -219,6 +219,14 @@ where
                 session_id: sid,
                 exit,
             } if sid == session_id => return Ok(ExecOutput { exit, stdout }),
+            // A guest-reported error (e.g. PtyOpen rejected by the exec
+            // allowlist) is terminal for the session. Without this arm the
+            // drain loop ignored it and hung until the idle timeout —
+            // caught live by the order-128 conformance harness 2026-07-14
+            // (the streaming variant below always had the arm).
+            ControlMessage::Error { message, .. } => {
+                return Err(format!("vsock_exec: guest error: {message}"));
+            }
             _ => { /* unrelated frame — ignore */ }
         }
     }
@@ -619,6 +627,65 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression pin (order 128 conformance harness, 2026-07-14): when the
+    /// guest answers PtyOpen with a terminal `Error` envelope (e.g. exec
+    /// allowlist rejection), `exec_over_stream_with_input` MUST return that
+    /// error immediately instead of ignoring the frame and idling until the
+    /// 300s timeout — the hang that made every trait-level `exec` against a
+    /// rejected argv look like a dead wire.
+    #[tokio::test]
+    async fn exec_with_input_surfaces_guest_error_instead_of_hanging() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+
+        let guest_task = tokio::spawn(async move {
+            let hello = read_envelope(&mut guest).await.unwrap();
+            assert!(matches!(hello.body, ControlMessage::Hello { .. }));
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+            let open = read_envelope(&mut guest).await.unwrap();
+            assert!(matches!(open.body, ControlMessage::PtyOpen { .. }));
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 2,
+                    body: ControlMessage::Error {
+                        seq_in_reply_to: Some(open.seq),
+                        code: tillandsias_control_wire::ErrorCode::Internal,
+                        message: "PtyOpen rejected: exec allowlist violation".to_string(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let err = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            exec_over_stream_with_input(client, &["/bin/false"], b""),
+        )
+        .await
+        .expect("must resolve well before the idle timeout — not hang")
+        .expect_err("guest Error envelope must surface as Err");
+        assert!(
+            err.contains("guest error") && err.contains("allowlist"),
+            "wrong diagnosis: {err}"
+        );
+        guest_task.await.unwrap();
+    }
 
     /// Drive `exec_over_stream` against an in-memory fake guest that completes
     /// the handshake, streams output, and closes with exit code 0 — proving the
