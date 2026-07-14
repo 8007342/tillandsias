@@ -82,4 +82,4 @@ against open `plan/issues/` packets from this run.
   picked up and pushed by the host this cycle).
 - Operator verdict: solid progress validating the macOS e2e architecture;
   git-mirror architecture revamp is due (promoted as order 315); brew
-  stays for officially-brew-documented harnesses only (order 316).
+  stays for officially-brew-documented harnesses only (order 317 `brew-aarch64-harness-strategy`, renumbered from 316).

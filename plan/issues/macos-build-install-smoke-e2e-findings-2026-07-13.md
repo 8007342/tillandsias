@@ -20,8 +20,8 @@
 | 2 destroy substrate (5.5G VM dir + cache removed, verified absent) | PASS |
 | 3 cold provision (528 MB rootfs download → convert → resize → `{"status":"provisioned"}`, exit 0; 250 GiB sparse disk) | PASS |
 | 3b `--diagnose --json` post-provision | PASS (exit 0, `provisioned: true`) |
-| 4a forge lane, attempt 1 (host path) | FAIL — "Project not found" (order 326 filed) |
-| 4b forge lane, attempt 2 (guest path, cold images) | FAIL — 300s idle timeout killed VM mid-forge-base build (P1, order 327 filed) |
+| 4a forge lane, attempt 1 (host path) | FAIL — "Project not found" (order 331 `macos-opencode-host-path-translation`; coordinator-renumbered from provisional 326) |
+| 4b forge lane, attempt 2 (guest path, cold images) | FAIL — 300s idle timeout killed VM mid-forge-base build (P1, order 332 `macos-opencode-firstuse-silent-build-idle-timeout`; coordinator-renumbered from provisional 327) |
 | 4c `--exec-guest … --init` pre-build (workaround, streamed) | images: ALL 10 built+tagged PASS; vault bring-up FAIL by design ("no root token delivered from host" — order 114 flow needs the tray) |
 | 4d forge lane, attempt 3 (warm images) | **BigPickle ran a full /meta-orchestration cycle to a contract-clean exit 0** — cycle verdict BLOCKED `missing:no-credential-channel` (pre-existing filed blocker; evidence appended there) |
 | ext parity: InteractiveStream attach cell | PASS live → order 257 CLOSED (matrix macOS column complete) |
@@ -80,11 +80,11 @@ Partially — the infrastructure goal yes, the payload goal no:
 - **Memory**: XPC RSS = full 4 GiB guest allocation; host mem free 63-69%
   throughout, swap 0.00M the whole run. Comfortable at 16 GiB host — but
   the 4 GiB guest is the budget every tmpfs/ramdisk proposal spends
-  (order 324's constraint).
+  (order 329 `forge-hot-path-placement-metrics`, renumbered from provisional 324).
 - **Disk**: VM dir grew 0 → 12.0 GiB across provision + image builds
   (~800 MB/15s during pull phases); host has 785 GiB free — no host disk
   pressure. Per-path attribution inside the guest is impossible from the
-  host — that is order 323's job.
+  host — that is order 333 `guest-container-metrics-over-control-wire`'s job (renumbered from provisional 323).
 - **Ramdisk reality check** (operator's stated intent vs shipping code):
   the forge checkout on macOS is **virtiofs to host SSD, not ramdisk**
   (vz.rs:479-491); Linux forges get per-launch tmpfs clones; the pull-cache

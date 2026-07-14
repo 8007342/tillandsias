@@ -1,7 +1,7 @@
 # Brew harness strategy: keep brew, but only for officially-brew-documented tools; solve aarch64 Tier-2 reality
 
 - Date: 2026-07-12
-- Class: enhancement (promoted as plan/index.yaml order 316)
+- Class: enhancement (promoted as plan/index.yaml order 317 `brew-aarch64-harness-strategy`; coordinator-renumbered from 316)
 - Decision recorded: The Tlatoāni, 2026-07-12 attended smoke — "we need to
   revisit our brew support. It might still be the most compatible and
   reliable way for now to install the harnesses and the agents; let's keep
