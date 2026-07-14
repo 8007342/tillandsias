@@ -10686,7 +10686,7 @@ plan_index:
       provisional_id: linux-260714-3
       release_target: stable-milestone-v1
       title: "Forge dynamic CA trust: one rootless system-default path; delete duplicated SSL_CERT_FILE/GIT_SSL_CAINFO mesh"
-      status: ready
+      status: claimed
       kind: research+implementation
       deliverable: images/default/Containerfile* + images/default/lib-common.sh + entrypoints
       depends_on: [git-mirror-architecture-audit]
@@ -10705,6 +10705,16 @@ plan_index:
         - "one lib-common trust initializer replaces per-entrypoint CA concatenation blocks"
         - "GIT_SSL_CAINFO and SSL_CERT_FILE are absent from default-image production entrypoints; TLS fixture covers Git + curl + Node/Python representative clients"
       events:
+        - type: claim
+          ts: "2026-07-14T21:58:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "ebfddc1624b5"
+          expires_at: "2026-07-15T01:58:00Z"
+          summary: >
+            Claimed the second bounded order-320 child to converge runtime CA
+            trust behind one least-privilege initializer and remove duplicated
+            Git/OpenSSL environment exports from production entrypoints.
         - type: filed
           ts: "2026-07-14T21:49:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
