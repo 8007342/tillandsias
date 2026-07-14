@@ -6,11 +6,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-headless/src/main.rs#L147](../../../crates/tillandsias-headless/src/main.rs#L147)
-- [crates/tillandsias-headless/src/main.rs#L386](../../../crates/tillandsias-headless/src/main.rs#L386)
-- [crates/tillandsias-headless/src/main.rs#L2251](../../../crates/tillandsias-headless/src/main.rs#L2251)
-- [crates/tillandsias-headless/src/main.rs#L2921](../../../crates/tillandsias-headless/src/main.rs#L2921)
-- [crates/tillandsias-headless/src/main.rs#L2944](../../../crates/tillandsias-headless/src/main.rs#L2944)
-- [crates/tillandsias-headless/src/main.rs#L5185](../../../crates/tillandsias-headless/src/main.rs#L5185)
+- [crates/tillandsias-headless/src/main.rs#L393](../../../crates/tillandsias-headless/src/main.rs#L393)
+- [crates/tillandsias-headless/src/main.rs#L2258](../../../crates/tillandsias-headless/src/main.rs#L2258)
+- [crates/tillandsias-headless/src/main.rs#L2928](../../../crates/tillandsias-headless/src/main.rs#L2928)
+- [crates/tillandsias-headless/src/main.rs#L2951](../../../crates/tillandsias-headless/src/main.rs#L2951)
+- [crates/tillandsias-headless/src/main.rs#L5192](../../../crates/tillandsias-headless/src/main.rs#L5192)
 - [crates/tillandsias-headless/src/remote_projects.rs#L1](../../../crates/tillandsias-headless/src/remote_projects.rs#L1)
 - [crates/tillandsias-headless/src/remote_projects.rs#L24](../../../crates/tillandsias-headless/src/remote_projects.rs#L24)
 - [crates/tillandsias-headless/src/remote_projects.rs#L30](../../../crates/tillandsias-headless/src/remote_projects.rs#L30)
@@ -43,4 +43,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/tray/mod.rs#L5152](../../../crates/tillandsias-headless/src/tray/mod.rs#L5152)
 - [crates/tillandsias-host-shell/src/pty/mod.rs#L232](../../../crates/tillandsias-host-shell/src/pty/mod.rs#L232)
 - [crates/tillandsias-macos-tray/src/diagnose.rs#L762](../../../crates/tillandsias-macos-tray/src/diagnose.rs#L762)
-- [crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L561](../../../crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L561)
+- [crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L580](../../../crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L580)

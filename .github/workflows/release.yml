@@ -276,6 +276,12 @@ jobs:
             printf '\n%s\n' "${GENERATED}" >> "${NOTES_FILE}"
           fi
 
+          # Stable channel (plan order 305): dailies are PRE-RELEASES.
+          # GitHub resolves /releases/latest (the README install URLs) to
+          # the newest NON-prerelease, so installs keep pointing at the
+          # last promoted stable while breaking dailies ship alongside.
+          # Promotion (scripts/promote-stable.sh) flips a vetted daily to
+          # prerelease=false; this workflow never does.
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             gh release upload "v${VERSION}" release-artifacts/* --clobber
             gh release edit "v${VERSION}" --title "v${VERSION}" --notes-file "${NOTES_FILE}"
@@ -284,6 +290,7 @@ jobs:
               release-artifacts/* \
               --target "${GITHUB_SHA}" \
               --title "v${VERSION}" \
+              --prerelease \
               --notes-file "${NOTES_FILE}"
           fi
 
@@ -291,11 +298,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f -a stable -m "Rolling tag: stable release v${VERSION}" "${GITHUB_SHA}"
+          # `latest` rolls with every daily. `stable` is NOT touched here —
+          # it moves only when scripts/promote-stable.sh promotes a vetted
+          # release (plan order 305).
           git tag -f -a latest -m "Rolling tag: latest release v${VERSION}" "${GITHUB_SHA}"
-          git push origin refs/tags/stable --force
           git push origin refs/tags/latest --force
-          echo "Updated rolling tags: stable, latest -> ${GITHUB_SHA}"
+          echo "Updated rolling tag: latest -> ${GITHUB_SHA}"
 
   # @trace spec:macos-tray-build-and-release, spec:macos-native-tray
   # macOS Apple-Silicon tray release: builds Tillandsias.app via the same

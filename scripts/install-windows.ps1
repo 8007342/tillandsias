@@ -117,6 +117,55 @@ if (-not $wsl) {
     SayWn "Tillandsias will install, but provisioning requires WSL2 on next launch."
 }
 
+# ── Hyper-V Administrators membership (order 312) ───────────────────────────
+# The tray's hvsocket VM lookup (hcsdiag) requires an ENABLED membership in
+# Administrators or 'Hyper-V Administrators' (BUILTIN SID S-1-5-32-578) —
+# standard-user installs can otherwise never connect to the VM (masked for
+# months by elevated dev shells). Offer a one-time elevated group-add.
+# SIDs, not names: group names are localized ("Administrateurs Hyper-V").
+# IsInRole, not token-group scan: it correctly ignores deny-only (UAC-
+# filtered) memberships, matching what hcsdiag actually enforces.
+function Test-HcsAccess {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    foreach ($sid in 'S-1-5-32-544', 'S-1-5-32-578') {
+        $role = New-Object Security.Principal.SecurityIdentifier($sid)
+        if ($principal.IsInRole($role)) { return $true }
+    }
+    return $false
+}
+if (-not (Test-HcsAccess)) {
+    SayWn "Your account is not in 'Hyper-V Administrators' - Tillandsias cannot"
+    SayWn "reach its VM without it (https://aka.ms/hcsadmin)."
+    $doAdd = $true
+    if ([Environment]::UserInteractive -and -not $env:TILLANDSIAS_NO_GROUP_ADD) {
+        $resp = Read-Host "  Add your user to Hyper-V Administrators now? (one admin approval) [Y/n]"
+        if ($resp -match '^[nN]') { $doAdd = $false }
+    } elseif ($env:TILLANDSIAS_NO_GROUP_ADD) {
+        $doAdd = $false
+    }
+    if ($doAdd) {
+        $me = "${env:USERDOMAIN}\${env:USERNAME}"
+        try {
+            Start-Process powershell -Verb RunAs -Wait -ArgumentList @(
+                '-NoProfile', '-Command',
+                "Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '$me'"
+            ) -ErrorAction Stop
+            if (Test-HcsAccess) {
+                SayOk "Membership active."
+            } else {
+                SayOk "Added to Hyper-V Administrators. SIGN OUT AND BACK IN before launching Tillandsias (new logon token required)."
+            }
+        } catch {
+            SayWn "Group add declined or failed ($_). Fix later from an elevated PowerShell:"
+            SayWn "  Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '$me'"
+        }
+    } else {
+        SayWn "Skipped. Fix later from an elevated PowerShell:"
+        SayWn "  Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '<your DOMAIN\username>'"
+    }
+}
+
 Write-Host ""
 Say "Tillandsias Installer"
 Say "====================="

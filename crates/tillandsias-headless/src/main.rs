@@ -288,10 +288,17 @@ fn main() {
     let headless = user_args.iter().any(|a| a == "--headless");
     let tray = user_args.iter().any(|a| a == "--tray");
 
+    // Every agent/one-shot lane flag MUST be counted here: a lane invocation
+    // that is not recognized as CLI mode acquires the "launcher" singleton,
+    // which SIGTERMs (then SIGKILLs) the RUNNING headless service — i.e. a
+    // tray click tears down the whole VM stack (2026-07-12 attended-smoke
+    // repro: --antigravity was missing from this list after order 296 wired
+    // it into parsing + dispatch). Pinned by cli_mode_counts_every_lane_flag.
     let is_cli_mode = opencode
         || codex
         || claude
         || bash
+        || antigravity
         || opencode_web
         || observatorium
         || init
@@ -2358,6 +2365,7 @@ fn build_inference_run_args(
 
     let mut args = vec![
         "--detach".into(),
+        "--replace".into(),
         "--name".into(),
         "tillandsias-inference".into(),
         "--hostname".into(),
@@ -8540,13 +8548,7 @@ fn run_evidence_bundle_retention() {
 
     let repo_root = std::env::current_dir()
         .ok()
-        .and_then(|p| {
-            if p.join("VERSION").exists() {
-                Some(p)
-            } else {
-                None
-            }
-        })
+        .filter(|p| p.join("VERSION").exists())
         .or_else(|| {
             // Fallback: assume CARGO_MANIFEST_DIR-relative path if invoked from workspace
             std::env::var("CARGO_MANIFEST_DIR").ok().and_then(|m| {
@@ -9218,6 +9220,42 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    /// 2026-07-12 (windows attended smoke): a lane flag missing from
+    /// `is_cli_mode` makes that lane's invocation acquire the "launcher"
+    /// singleton, which SIGTERM+SIGKILLs the RUNNING headless service — a
+    /// tray click tears down the whole VM stack. `--antigravity` shipped
+    /// exactly this way (order 296 wired parsing + dispatch but not the
+    /// CLI-mode census). Source pin: every agent/one-shot lane flag parsed
+    /// above must be counted in the `is_cli_mode` expression.
+    #[test]
+    fn cli_mode_counts_every_lane_flag() {
+        let source = include_str!("main.rs");
+        let window = source
+            .split("let is_cli_mode = ")
+            .nth(1)
+            .and_then(|tail| tail.split(';').next())
+            .expect("is_cli_mode expression window");
+        for lane in [
+            "opencode",
+            "codex",
+            "claude",
+            "bash",
+            "antigravity",
+            "opencode_web",
+            "observatorium",
+            "github_login",
+            "claude_login",
+            "codex_login",
+            "antigravity_login",
+        ] {
+            assert!(
+                window.split(&['|', '\n', ' '][..]).any(|tok| tok == lane),
+                "lane flag `{lane}` missing from is_cli_mode — its tray click would \
+                 singleton-kill the running headless service (2026-07-12 repro)"
+            );
+        }
+    }
 
     #[test]
     fn forge_launch_proxy_bringup_is_idempotent() {
@@ -10203,6 +10241,21 @@ mod tests {
                 "stack launch must let podman IPAM allocate addresses: {args:?}"
             );
         }
+    }
+
+    /// Order 314: the inference container ensure must be idempotent — an
+    /// EXITED container holding the name must not block the next launch with
+    /// a Permanent exit-125. `--replace` on `podman run` atomically removes
+    /// the exited container and creates a fresh one.
+    #[test]
+    fn inference_run_args_use_replace_for_idempotency() {
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_inference_run_args(&certs, "tillandsias-inference:v1", false);
+        assert!(
+            has_arg(&args, "--replace"),
+            "inference args must include --replace so an exited container does not \
+             block the next launch with a Permanent exit-125 (order 314): {args:?}"
+        );
     }
 
     #[test]

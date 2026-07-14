@@ -39,15 +39,85 @@ impl WslRuntime {
     }
 }
 
+/// Hard floor for available space on the guest root filesystem, in GiB.
+/// Below this the forge-base image build (full dev toolchain + podman
+/// overlay store + project checkout) WILL run the root filesystem out of
+/// space and every agent attach dies with a blank timing-out terminal —
+/// the exact macOS order-294 failure (guest disk was the ~5 GB Fedora
+/// default). Matches the >=32 GiB floor vz.rs pins for its 250G resize.
+/// @trace plan/index.yaml windows-guest-disk-resize-forge-fit (order 297)
+const MIN_GUEST_ROOT_AVAIL_GIB: u64 = 32;
+
+/// Parity intent with macOS `GUEST_DISK_SIZE` ("250G"): a 250 GiB disk
+/// yields ~240 GiB available after ext4 overhead. WSL2's dynamic VHDX
+/// default (1 TB on current WSL, 256 GB historically) clears this on any
+/// stock host; a `.wslconfig` `defaultVhdSize` cap or a fixed-size rootfs
+/// import can drop below it. Below intent we WARN (forge still fits);
+/// below the floor we fail provisioning loud.
+const INTENDED_GUEST_ROOT_AVAIL_GIB: u64 = 240;
+
+/// Parse `df -Pk <mount>` output (POSIX format) into available KiB —
+/// column 4 of the first data line. Host-side parse so the guest needs
+/// nothing beyond coreutils `df`.
+fn parse_df_avail_kib(df_output: &str) -> Option<u64> {
+    df_output
+        .lines()
+        .nth(1)?
+        .split_whitespace()
+        .nth(3)?
+        .parse()
+        .ok()
+}
+
+/// Provisioning-time headroom verdict for the guest root filesystem.
+/// `Err(msg)` = fail provisioning loud (below the forge-fit floor);
+/// `Ok(Some(msg))` = proceed but warn (below the macOS 250G parity
+/// intent); `Ok(None)` = full headroom.
+fn evaluate_guest_root_headroom(avail_kib: u64) -> Result<Option<String>, String> {
+    let avail_gib = avail_kib / (1024 * 1024);
+    if avail_gib < MIN_GUEST_ROOT_AVAIL_GIB {
+        return Err(format!(
+            "guest root filesystem has only {avail_gib} GiB available — below the \
+             {MIN_GUEST_ROOT_AVAIL_GIB} GiB forge-fit floor, so the forge-base image \
+             build will run out of space and every agent attach will fail (order 297; \
+             macOS sibling order 294). Check `.wslconfig` for a defaultVhdSize cap, or \
+             grow the distro disk: `wsl --manage <distro> --resize <size>` then \
+             `resize2fs` inside the guest."
+        ));
+    }
+    if avail_gib < INTENDED_GUEST_ROOT_AVAIL_GIB {
+        return Ok(Some(format!(
+            "guest root filesystem has {avail_gib} GiB available — above the \
+             {MIN_GUEST_ROOT_AVAIL_GIB} GiB floor but below the \
+             {INTENDED_GUEST_ROOT_AVAIL_GIB} GiB target (macOS 250G parity, order 297). \
+             Large forge workloads may exhaust it; consider growing the distro VHDX."
+        )));
+    }
+    Ok(None)
+}
+
 // ---------------------------------------------------------------------------
 // Windows: real wsl.exe shell-outs.
 // @trace spec:vm-idiomatic-layer
 // ---------------------------------------------------------------------------
 
+/// Build a background `wsl.exe` command with CREATE_NO_WINDOW applied.
+/// Every non-interactive wsl spawn in this module must come from here —
+/// from the GUI-subsystem tray a raw console child flashes a visible
+/// window per invocation (operator repro 2026-07-12: start-poke +
+/// wait_ready + handshake retries flashed consoles every few seconds).
+/// The deliberately-interactive debug keepalive is the one exemption.
+#[cfg(target_os = "windows")]
+fn wsl_cmd() -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new("wsl");
+    crate::no_window_async(&mut cmd);
+    cmd
+}
+
 #[cfg(target_os = "windows")]
 impl WslRuntime {
     async fn wsl_list_quiet() -> Result<String, VmError> {
-        let output = tokio::process::Command::new("wsl")
+        let output = wsl_cmd()
             .args(["--list", "--quiet"])
             .output()
             .await
@@ -102,7 +172,7 @@ impl WslRuntime {
 
     pub async fn perform_wsl_shutdown_recovery() -> Result<(), String> {
         tracing::warn!("WSL service appears wedged. Attempting recovery via wsl --shutdown...");
-        let status = tokio::process::Command::new("wsl")
+        let status = wsl_cmd()
             .arg("--shutdown")
             .status()
             .await
@@ -123,7 +193,7 @@ impl WslRuntime {
     /// post-import wiring (wsl.conf, systemd unit install). Captures
     /// stderr for error messages.
     async fn wsl_root_sh(&self, script: &str) -> Result<(), VmError> {
-        let output = tokio::process::Command::new("wsl")
+        let output = wsl_cmd()
             .arg("--distribution")
             .arg(&self.distro_name)
             .arg("--user")
@@ -145,6 +215,50 @@ impl WslRuntime {
         Ok(())
     }
 
+    /// Measure available KiB on the guest root filesystem via `df -Pk /`.
+    async fn guest_root_avail_kib(&self) -> Result<u64, VmError> {
+        let output = wsl_cmd()
+            .arg("--distribution")
+            .arg(&self.distro_name)
+            .arg("--user")
+            .arg("root")
+            .arg("--")
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg("df -Pk /")
+            .output()
+            .await
+            .map_err(|e| format!("guest df spawn failed: {e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "guest df exited {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout).replace('\u{0}', "");
+        parse_df_avail_kib(&stdout)
+            .ok_or_else(|| format!("guest df output unparseable: {stdout:?}"))
+    }
+
+    /// Provisioning-time guest disk headroom assertion (order 297, macOS
+    /// sibling of order 294): fail loud BEFORE the first forge-base build
+    /// when the imported distro's root filesystem is capped near the
+    /// Fedora default (~5 GB), instead of every agent attach dying later
+    /// with a blank timing-out terminal. Runs on both provisioning paths
+    /// (recipe `configure_recipe_distro` + legacy `provision`).
+    async fn assert_guest_disk_headroom(&self) -> Result<(), VmError> {
+        let avail_kib = self.guest_root_avail_kib().await?;
+        match evaluate_guest_root_headroom(avail_kib)? {
+            Some(warning) => tracing::warn!("{warning}"),
+            None => tracing::info!(
+                "guest root headroom OK: {} GiB available",
+                avail_kib / (1024 * 1024)
+            ),
+        }
+        Ok(())
+    }
+
     /// Post-import wiring for a RECIPE-materialized distro (w5 path): write
     /// `/etc/wsl.conf` (systemd on, /mnt automount off, default user `forge`)
     /// then `wsl --terminate` so the next start boots under systemd. Unlike
@@ -154,6 +268,9 @@ impl WslRuntime {
     ///
     /// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
     pub async fn configure_recipe_distro(&self) -> Result<(), VmError> {
+        // Fail loud before any wiring if the imported root filesystem lacks
+        // forge-fit headroom (order 297).
+        self.assert_guest_disk_headroom().await?;
         // NOTE: no `[user] default = forge` here (unlike `provision`): the recipe
         // rootfs does NOT create a `forge` Linux user (verified via E2E import,
         // 2026-05-26), so defaulting to it would break `wsl -d tillandsias` login.
@@ -172,7 +289,7 @@ impl WslRuntime {
         )
         .await?;
         // Terminate so the next start picks up systemd + the new wsl.conf.
-        let _ = tokio::process::Command::new("wsl")
+        let _ = wsl_cmd()
             .arg("--terminate")
             .arg(&self.distro_name)
             .status()
@@ -194,6 +311,9 @@ impl WslRuntime {
     ///
     /// @trace spec:vm-idiomatic-layer, plan/issues/tray-convergence-coordination.md (w9)
     pub fn spawn_keepalive(&self, debug: bool) -> Result<tokio::process::Child, VmError> {
+        // Deliberate wsl_cmd() exemption: the debug keepalive IS an
+        // interactive console (titled journalctl follow) — only the
+        // non-debug variant must stay windowless.
         let mut cmd = tokio::process::Command::new("wsl");
         cmd.arg("--distribution")
             .arg(&self.distro_name)
@@ -211,12 +331,7 @@ impl WslRuntime {
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null());
-
-            #[cfg(target_os = "windows")]
-            {
-                const CREATE_NO_WINDOW: u32 = 0x08000000;
-                cmd.creation_flags(CREATE_NO_WINDOW);
-            }
+            crate::no_window_async(&mut cmd);
         }
 
         cmd.spawn()
@@ -260,7 +375,7 @@ impl VmRuntime for WslRuntime {
         }
 
         // Step 1: import.
-        let status = tokio::process::Command::new("wsl")
+        let status = wsl_cmd()
             .arg("--import")
             .arg(&self.distro_name)
             .arg(&self.install_root)
@@ -273,6 +388,10 @@ impl VmRuntime for WslRuntime {
         if !status.success() {
             return Err(format!("wsl --import exited {status}"));
         }
+
+        // Fail loud before any wiring if the imported root filesystem lacks
+        // forge-fit headroom (order 297).
+        self.assert_guest_disk_headroom().await?;
 
         // Step 2: write /etc/wsl.conf with systemd + automount=false.
         self.wsl_root_sh(
@@ -306,7 +425,7 @@ impl VmRuntime for WslRuntime {
         let binary_bytes = tokio::fs::read(&manifest.tillandsias_binary)
             .await
             .map_err(|e| format!("read tillandsias binary failed: {e}"))?;
-        let mut child = tokio::process::Command::new("wsl")
+        let mut child = wsl_cmd()
             .arg("--distribution")
             .arg(&self.distro_name)
             .arg("--user")
@@ -378,7 +497,7 @@ impl VmRuntime for WslRuntime {
 
         // Step 5: terminate so the next start picks up the new wsl.conf
         // and systemd.
-        let _ = tokio::process::Command::new("wsl")
+        let _ = wsl_cmd()
             .arg("--terminate")
             .arg(&self.distro_name)
             .status()
@@ -410,7 +529,7 @@ impl VmRuntime for WslRuntime {
 
             let status_res = tokio::time::timeout(
                 Duration::from_secs(10),
-                tokio::process::Command::new("wsl")
+                wsl_cmd()
                     .arg("--distribution")
                     .arg(&self.distro_name)
                     .arg("--exec")
@@ -456,7 +575,7 @@ impl VmRuntime for WslRuntime {
     }
 
     async fn stop(&self, _drain_timeout: Duration) -> Result<(), VmError> {
-        let status = tokio::process::Command::new("wsl")
+        let status = wsl_cmd()
             .arg("--terminate")
             .arg(&self.distro_name)
             .status()
@@ -472,7 +591,7 @@ impl VmRuntime for WslRuntime {
         if argv.is_empty() {
             return Err("wsl exec: argv is empty".to_string());
         }
-        let mut cmd = tokio::process::Command::new("wsl");
+        let mut cmd = wsl_cmd();
         cmd.arg("--distribution")
             .arg(&self.distro_name)
             .arg("--exec");
@@ -487,7 +606,7 @@ impl VmRuntime for WslRuntime {
     async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError> {
         let deadline = std::time::Instant::now() + timeout;
         loop {
-            let probe = tokio::process::Command::new("wsl")
+            let probe = wsl_cmd()
                 .arg("--distribution")
                 .arg(&self.distro_name)
                 .arg("--exec")
@@ -540,6 +659,8 @@ impl VmRuntime for WslRuntime {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     /// The legacy tarball-path unit writer (`WslRuntime::provision` step 4)
     /// must pin the same lock-namespace environment as the recipe-path unit
     /// (windows-tray `wsl_lifecycle.rs`) and the macOS unit (`vz.rs`): the
@@ -577,5 +698,89 @@ mod tests {
             unit_window.contains("ExecStartPre=/usr/bin/chmod 0700 /run/user/0"),
             "runtime dir must keep the 0700 mode logind would give it"
         );
+    }
+
+    /// 2026-07-12 (order 297, macOS sibling order 294): a guest root
+    /// filesystem capped near the ~5 GB Fedora default makes the forge-base
+    /// image build ENOSPC and every agent attach die with a blank
+    /// timing-out terminal. Both provisioning paths must assert forge-fit
+    /// headroom BEFORE first use, and the floor must stay generous.
+    ///
+    /// Source pin (vz.rs `convert_grows_raw_disk_before_first_boot` shape):
+    /// the assertion call sites live inside the cfg(windows) impl, so this
+    /// runs on every platform's CI.
+    /// @trace plan/index.yaml windows-guest-disk-resize-forge-fit (order 297)
+    #[test]
+    fn provisioning_asserts_guest_disk_headroom() {
+        let source = include_str!("wsl.rs");
+        let recipe_window = source
+            .split("pub async fn configure_recipe_distro")
+            .nth(1)
+            .and_then(|tail| tail.split("pub fn spawn_keepalive").next())
+            .expect("configure_recipe_distro window");
+        assert!(
+            recipe_window.contains("self.assert_guest_disk_headroom().await?"),
+            "recipe provisioning path must assert guest disk headroom (order 297)"
+        );
+        let provision_window = source
+            .split("async fn provision(&self, manifest: &ProvisionManifest)")
+            .nth(1)
+            .and_then(|tail| tail.split("async fn start").next())
+            .expect("legacy provision window");
+        assert!(
+            provision_window.contains("self.assert_guest_disk_headroom().await?"),
+            "legacy provision path must assert guest disk headroom (order 297)"
+        );
+        // Floor parity with vz.rs (>= 32 GiB) and the macOS 250G intent,
+        // pinned behaviorally: 31 GiB must fail, 199 GiB must not be clean.
+        const KIB_PER_GIB: u64 = 1024 * 1024;
+        assert!(
+            evaluate_guest_root_headroom(31 * KIB_PER_GIB).is_err(),
+            "forge-fit floor must stay >= 32 GiB (vz.rs floor parity)"
+        );
+        assert_ne!(
+            evaluate_guest_root_headroom(199 * KIB_PER_GIB),
+            Ok(None),
+            "headroom intent must track the macOS 250G target (>= 200 GiB)"
+        );
+    }
+
+    /// `df -Pk /` host-side parse: real WSL2 shape (the 2026-07-12 measured
+    /// guest), header-only, and garbage all behave.
+    #[test]
+    fn parse_df_avail_kib_handles_real_and_degenerate_output() {
+        let real = "Filesystem     1024-blocks    Used Available Capacity Mounted on\n\
+                    /dev/sdd        1055762868 1191700 1000878304       1% /\n";
+        assert_eq!(parse_df_avail_kib(real), Some(1_000_878_304));
+        assert_eq!(parse_df_avail_kib("Filesystem 1024-blocks\n"), None);
+        assert_eq!(parse_df_avail_kib(""), None);
+        assert_eq!(
+            parse_df_avail_kib("Filesystem\n/dev/sdd not-a-number x y\n"),
+            None
+        );
+    }
+
+    /// Headroom verdict boundaries: below floor fails loud with an
+    /// actionable message; between floor and intent warns; at/above intent
+    /// is clean.
+    #[test]
+    fn guest_root_headroom_verdict_boundaries() {
+        const KIB_PER_GIB: u64 = 1024 * 1024;
+        // ~5 GiB — the exact macOS order-294 regression class.
+        let err = evaluate_guest_root_headroom(5 * KIB_PER_GIB)
+            .expect_err("below-floor must fail provisioning");
+        assert!(err.contains("forge-fit floor"), "names the floor: {err}");
+        assert!(err.contains(".wslconfig"), "actionable remediation: {err}");
+        // Just under the floor still fails; at the floor passes with warning.
+        assert!(evaluate_guest_root_headroom(MIN_GUEST_ROOT_AVAIL_GIB * KIB_PER_GIB - 1).is_err());
+        let warn = evaluate_guest_root_headroom(MIN_GUEST_ROOT_AVAIL_GIB * KIB_PER_GIB)
+            .expect("at-floor proceeds");
+        assert!(warn.is_some(), "below intent must warn");
+        // At intent and above (the measured 955 GiB host) are clean.
+        assert_eq!(
+            evaluate_guest_root_headroom(INTENDED_GUEST_ROOT_AVAIL_GIB * KIB_PER_GIB),
+            Ok(None)
+        );
+        assert_eq!(evaluate_guest_root_headroom(955 * KIB_PER_GIB), Ok(None));
     }
 }

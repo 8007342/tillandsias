@@ -23,6 +23,36 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+/// Apply CREATE_NO_WINDOW to a tokio Command on Windows; no-op elsewhere.
+/// Mirrors `tillandsias_podman::no_window_async` (this crate cannot depend on
+/// the podman crate for one flag). Every BACKGROUND `wsl.exe` invocation must
+/// pass through this: spawned from the GUI-subsystem tray, a console child
+/// otherwise allocates a visible console window — the operator-reported
+/// "terminals popping open and closing" during VM boot (2026-07-12; the
+/// start-poke + wait_ready polls flashed one console each). Deliberately
+/// interactive spawns (the debug-console keepalive, lane terminals) are the
+/// only exemptions.
+/// @trace spec:cross-platform, spec:no-terminal-flicker
+pub fn no_window_async(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.as_std_mut().creation_flags(0x0800_0000);
+    }
+    cmd
+}
+
+/// Sync-Command sibling of [`no_window_async`].
+/// @trace spec:cross-platform, spec:no-terminal-flicker
+pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    cmd
+}
+
 // Both wsl and vz modules compile on every target so call sites can hold
 // `WslRuntime` / `VzRuntime` symbols and tests can verify the trait impl
 // shape on Linux. Real backend bodies are cfg-gated inside the modules.

@@ -474,6 +474,38 @@ distributed_work:
         (plan/issues/multi-host-integration-loop-2026-05-24.md) records
         every conflict resolution it performs."
 
+  order_number_assignment:
+    decided_by: "The Tlatoāni, 2026-07-14"
+    problem: >
+      Sibling hosts filing packets concurrently mint colliding integer
+      order numbers (2026-07-12: 315/316 collided macOS↔linux; 2026-07-13:
+      323-327 collided windows↔macos and 328 was used twice). Coordinator
+      renumbering then silently breaks every prose reference to the old
+      number — the reference debt this rule eliminates.
+    rule: >
+      `packet_id` (stable kebab-case) is the ONLY authoritative reference
+      to a packet. The integer `order` is a coordinator-assigned
+      convenience index, unique on linux-next. Hosts other than the linux
+      coordinator MUST NOT mint integer orders when filing: file with
+      `order: provisional` plus `provisional_id: <host>-<yymmdd>-<n>`
+      (e.g. `osx-260714-1`, `win-260714-2`). The linux coordinator assigns
+      the final integer during sibling integration, records an
+      `order-assigned` event on the packet, and leaves `provisional_id` in
+      place as a permanent alias so the filing host's prose references
+      stay resolvable.
+    reference_discipline: >
+      Cross-references in prose (plan/issues, loop_status, commit
+      messages, cheatsheets) SHOULD cite `packet_id` (or the
+      provisional_id before stabilization). A bare "order N" is valid
+      only for numbers already stabilized on linux-next at writing time.
+    remediation: >
+      Collisions predating this rule were resolved by coordinator
+      renumbering (brew-aarch64-harness-strategy 316→317,
+      guest-container-metrics-over-control-wire 328→333; the 2026-07-13
+      windows block kept 323-327). A prose-reference audit accompanies
+      this rule's introduction; future renumbering must update or
+      packet_id-ify stale references in the same commit.
+
   active_multi_host_mediation_and_conflict_handling:
     purpose: >
       Active coordination rules to spot and resolve multi-host cooperation

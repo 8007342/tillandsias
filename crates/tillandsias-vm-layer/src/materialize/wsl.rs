@@ -70,8 +70,10 @@ pub async fn tar_to_wsl_import(
         ));
     }
     let args = wsl_import_args(distro, install_dir, rootfs);
-    let status = tokio::process::Command::new("wsl")
-        .args(&args)
+    let mut cmd = tokio::process::Command::new("wsl");
+    cmd.args(&args);
+    crate::no_window_async(&mut cmd);
+    let status = cmd
         .status()
         .await
         .map_err(|e| format!("wsl --import failed to spawn: {e}"))?;

@@ -17,5 +17,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/run-litmus-test.sh#L543](../../../scripts/run-litmus-test.sh#L543)
 - [scripts/run-litmus-test.sh#L786](../../../scripts/run-litmus-test.sh#L786)
 - [scripts/run-litmus-test.sh#L940](../../../scripts/run-litmus-test.sh#L940)
+- [scripts/run-litmus-test.sh#L1290](../../../scripts/run-litmus-test.sh#L1290)
 - [scripts/update-convergence-dashboard.sh#L2](../../../scripts/update-convergence-dashboard.sh#L2)
 - [scripts/validate-traces.sh#L16](../../../scripts/validate-traces.sh#L16)

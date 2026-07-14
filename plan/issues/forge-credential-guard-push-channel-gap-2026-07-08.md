@@ -47,6 +47,21 @@ Smallest next action: add a check in the forge-git-mirror branch that verifies t
 
 From order 177: even when mirror forwarding succeeds, the mirror advertises a stale ref afterward. The exit criteria "after a forge mirror push, mirror ls-remote and direct GitHub ls-remote agree on linux-next" is not testable in this forge because push does not go through the mirror.
 
+## Cycle Observations
+
+**2026-07-12T22:30Z** — forge cycle on `osx-next` (a74921f1). Guard correctly reports
+`missing:no-credential-channel` (false positive from 2026-07-08 is fixed). However the
+underlying gap remains: origin resolves to GitHub directly, no GH_TOKEN/.gh-credentials/gh
+auth, no `insteadOf` rewrite to the enclave mirror.
+
+**Resolution**: `tillandsias-git` resolves at `10.0.42.18` on the podman network.
+`git://tillandsias-git/tillandsias` works for push (dry-run confirmed). Added repo-local
+`url.insteadOf` to rewrite origin through the mirror. Cycle unblocked.
+
+Smallest next action: ensure the forge container image injects this `insteadOf` rule
+automatically (via gitconfig in the Containerfile or entrypoint) so every forge cycle
+starts with a transparent credential channel.
+
 ## Verifiable Closure
 
 ```bash
@@ -57,3 +72,29 @@ TILLANDSIAS_HOST_KIND=forge origin=https://github.com/8007342/tillandsias.git \
 ```
 
 A fixture with `TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1` + direct-GitHub origin + no creds should also fail the guard.
+
+---
+
+## 2026-07-13 — Windows/WSL guest CLI lane repro (guard fix CONFIRMED, gap persists)
+
+- agent: windows-yolanda-fable5-20260713T2105Z (host tier), opencode/BigPickle (in-forge)
+- environment: cold-provisioned WSL2 guest, headless + enclave images v0.3.260712.1,
+  tray 0.3.260713.1 (fd2e11c6), first-ever Windows in-forge /meta-orchestration cycle
+
+The guard-side false positive documented above is FIXED in this environment:
+the in-forge cycle got the correct `missing:no-credential-channel` verdict and
+stopped before committable work (contract-compliant BLOCKED cycle). The
+underlying channel gap persists on the Windows guest CLI lane:
+
+- origin = `https://github.com/8007342/tillandsias.git` (direct GitHub) — no
+  `url.insteadOf` rewrite active inside the forge; write_forge_gitconfig /
+  GIT_CONFIG_GLOBAL injection did not engage;
+- no `tillandsias-git-tillandsias` mirror container observable during the lane;
+- same release binary pushed through the mirror on the Linux curl-install e2e
+  the same morning → Windows-guest-lane wiring, not a release-wide break.
+
+Evidence: `target/build-install-smoke-e2e/20260713T214101Z/04-meta-orchestration.log`
+(windows-next), full findings in
+`plan/issues/build-install-smoke-e2e-findings-2026-07-13-windows.md`.
+Systemic fix ownership: orders 318-322 mirror ladder + order 320 single
+gitconfig injection point.

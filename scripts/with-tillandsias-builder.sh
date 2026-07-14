@@ -30,28 +30,41 @@ SELF="${BASH_SOURCE[0]}"
 TOOLBOX_NAME="${TILLANDSIAS_BUILDER_TOOLBOX:-tillandsias-builder}"
 MARKER_FILE="$HOME/.cache/tillandsias/builder-toolbox-initialized"
 
+# Direct invocation (`scripts/with-tillandsias-builder.sh <cmd> [args...]`)
+# runs <cmd> in the build environment; sourced invocation re-execs the calling
+# script inside the toolbox. Every skip-guard below must therefore run the
+# command for the direct case instead of silently returning — a bare
+# `return 0 || exit 0` turns a direct call into a no-op that lies with exit 0.
+_TB_DIRECT=0
+[[ "${BASH_SOURCE[0]}" == "$0" ]] && _TB_DIRECT=1
+
 # ── Guard: skip if already inside the builder toolbox ─────────────────────
 if [[ -n "${TOOLBOX_PATH:-}" ]]; then
+    [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
     return 0 2>/dev/null || exit 0
 fi
 
 # ── Guard: skip inside any OCI/container runtime ──────────────────────────
 if [[ "${container:-}" == "oci" ]] || [[ "${container:-}" == "podman" ]]; then
+    [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
     return 0 2>/dev/null || exit 0
 fi
 
 # ── Guard: explicit skip ─────────────────────────────────────────────────
 if [[ "${TILLANDSIAS_SKIP_TOOLBOX:-}" == "1" ]]; then
+    [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
     return 0 2>/dev/null || exit 0
 fi
 
 # ── Guard: only trigger on Silverblue / rpm-ostree hosts ──────────────────
 if [[ ! -f /etc/os-release ]]; then
+    [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
     return 0 2>/dev/null || exit 0
 fi
 
 VARIANT_ID="$(grep -oP '^VARIANT_ID=\K.*' /etc/os-release 2>/dev/null || true)"
 if [[ "$VARIANT_ID" != "silverblue" ]] && ! command -v rpm-ostree &>/dev/null; then
+    [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
     return 0 2>/dev/null || exit 0
 fi
 
@@ -65,9 +78,27 @@ if ! command -v toolbox &>/dev/null; then
     exit 1
 fi
 
-# ── Helper: toolbox list returns the name only if present ────────────────
+# ── Neutralize enclave-only proxy env for host podman operations ─────────
+# tillandsias --init writes an enclave-only proxy (http://proxy:3128) into
+# ~/.config/containers/containers.conf [engine] env; podman injects those vars
+# into its own image pulls and every container it launches. That hostname only
+# resolves inside enclave pod networks, so on the host it poisons the
+# `toolbox create` image pull and dnf/rustup/cargo inside the builder toolbox
+# (plan/issues/podman-proxy-reset-chicken-and-egg-2026-07-08.md). An empty
+# value set in the spawning environment overrides [engine] env — the same
+# pattern as BUILD_PROXY_NEUTRALIZE_VARS in tillandsias-headless. A proxy var
+# the operator really set stays untouched.
+for _proxy_var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; do
+    if [[ -z "${!_proxy_var+x}" ]]; then
+        export "$_proxy_var="
+    fi
+done
+unset _proxy_var
+
+# ── Helper: exact-match the CONTAINER NAME column (list output is columned,
+#    so a whole-line grep -x can never match) ──────────────────────────────
 _toolbox_exists() {
-    toolbox list --containers 2>/dev/null | grep -qxF "$TOOLBOX_NAME"
+    toolbox list --containers 2>/dev/null | awk 'NR > 1 { print $2 }' | grep -qxF "$TOOLBOX_NAME"
 }
 
 # ── Helper: rustup installed inside the toolbox ──────────────────────────
@@ -78,7 +109,9 @@ _toolbox_has_rustup() {
 # ── Ensure toolbox exists and is initialized ──────────────────────────────
 if ! _toolbox_exists; then
     echo "[tillandsias-builder] Creating '$TOOLBOX_NAME' toolbox (first run)..."
-    toolbox create --container "$TOOLBOX_NAME"
+    # --assumeyes: a pristine host has no fedora-toolbox image cached, and a
+    # non-interactive `toolbox create` refuses to download it without consent.
+    toolbox create --assumeyes --container "$TOOLBOX_NAME"
 fi
 
 if ! _toolbox_has_rustup; then
@@ -117,32 +150,6 @@ fi
 # At this point we are on the host (not in toolbox). Re-exec the current
 # command inside the toolbox.
 
-SCRIPT=""
-if [[ "$0" == *"$SELF"* ]] || [[ "$0" == bash ]] || [[ "$0" == */bash ]]; then
-    # Direct execution — use BASH_SOURCE to find our caller
-    for ((i = 0; i < ${#BASH_SOURCE[@]}; i++)); do
-        src="${BASH_SOURCE[$i]}"
-        if [[ "$src" != *"$SELF"* ]] && [[ -x "$src" ]] || [[ "$src" != *"$SELF"* && "$src" == *.sh ]]; then
-            SCRIPT="$src"
-            break
-        fi
-    done
-    if [[ -z "$SCRIPT" ]]; then
-        SCRIPT="${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}"
-    fi
-else
-    # Sourced inside a script — $0 is the caller
-    SCRIPT="$0"
-fi
-
-# Ensure we're at the repo root (relative $0 is relative to CWD)
-if [[ "$SCRIPT" != /* ]]; then
-    SCRIPT="$(pwd)/$SCRIPT"
-fi
-if [[ ! -f "$SCRIPT" ]]; then
-    SCRIPT="$(cd "$(dirname "$SELF")/.." && pwd)/build.sh"
-fi
-
 # Escape arguments for safe insertion into bash -c string
 ARGS_QUOTED=""
 for arg in "$@"; do
@@ -151,5 +158,25 @@ done
 PWD_QUOTED="$(printf '%q' "$(pwd)")"
 
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."
+
+if [[ "$_TB_DIRECT" == 1 ]]; then
+    # Direct execution: `scripts/with-tillandsias-builder.sh <cmd> [args...]`
+    # runs <cmd> itself inside the toolbox. (The previous BASH_SOURCE walk
+    # could only ever find this file, fell back to build.sh, and re-ran it
+    # with the command line as bogus arguments.)
+    if [[ $# -eq 0 ]]; then
+        echo "usage: $SELF <command> [args...]" >&2
+        exit 2
+    fi
+    exec toolbox run --container "$TOOLBOX_NAME" \
+        bash -l -c "export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec $ARGS_QUOTED"
+fi
+
+# Sourced from a build script: when `source`d, $0 and $@ are the calling
+# script and its original arguments — re-exec that script inside the toolbox.
+SCRIPT="$0"
+if [[ "$SCRIPT" != /* ]]; then
+    SCRIPT="$(pwd)/$SCRIPT"
+fi
 exec toolbox run --container "$TOOLBOX_NAME" \
-    bash -l -c "export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec bash '$SCRIPT' $ARGS_QUOTED"
+    bash -l -c "export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec bash $(printf '%q' "$SCRIPT") $ARGS_QUOTED"

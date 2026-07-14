@@ -1775,6 +1775,13 @@ struct DiagnoseReport {
     /// payload is invariant). `None` if `cmd.exe` isn't on PATH (extremely
     /// unusual) or the command fails.
     os_version: Option<String>,
+    /// True when this process runs elevated (Administrator token). The
+    /// hvsocket VM-ID lookup (`hcsdiag`) requires elevation or Hyper-V
+    /// Administrators membership (order 312), and elevated agent shells
+    /// masked that for months — e2e evidence that captures this JSON now
+    /// records the elevation context it ran under, so an elevated PASS
+    /// can never again be mistaken for standard-user coverage.
+    elevated: bool,
     wt_present: bool,
     /// Pre-computed `--diagnose` exit code, derived from
     /// `distro_registered + wire.reachable + wire.phase` via
@@ -1846,11 +1853,10 @@ fn first_line(s: &str) -> Option<String> {
 /// via [`first_line`]'s `str::trim` — the BOM survives as `\u{FEFF}` which
 /// `trim` removes as whitespace per Unicode).
 fn sniff_wsl_version() -> Option<String> {
-    let output = std::process::Command::new("wsl")
-        .arg("--version")
-        .env("WSL_UTF8", "1")
-        .output()
-        .ok()?;
+    let mut cmd = std::process::Command::new("wsl");
+    cmd.arg("--version").env("WSL_UTF8", "1");
+    tillandsias_vm_layer::no_window_sync(&mut cmd);
+    let output = cmd.output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -1866,11 +1872,11 @@ fn sniff_wsl_version() -> Option<String> {
 /// older WSL builds; `WSL_UTF8=1` forces UTF-8 (we tolerate either by
 /// trimming embedded null bytes from each line).
 fn distro_running() -> bool {
-    let Ok(output) = std::process::Command::new("wsl")
-        .args(["--list", "--running", "--quiet"])
-        .env("WSL_UTF8", "1")
-        .output()
-    else {
+    let mut cmd = std::process::Command::new("wsl");
+    cmd.args(["--list", "--running", "--quiet"])
+        .env("WSL_UTF8", "1");
+    tillandsias_vm_layer::no_window_sync(&mut cmd);
+    let Ok(output) = cmd.output() else {
         return false;
     };
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -2058,6 +2064,7 @@ fn collect_report() -> DiagnoseReport {
         log_size_bytes,
         wsl_version: sniff_wsl_version(),
         os_version: sniff_windows_version(),
+        elevated: tillandsias_vm_layer::transport_windows::process_can_query_hcs(),
         wt_present,
         distro: crate::wsl_lifecycle::DISTRO_NAME,
         distro_registered,
@@ -2106,6 +2113,14 @@ fn print_human(r: &DiagnoseReport) {
             "present \u{2713}"
         } else {
             "not found (bare console fallback will be used)"
+        }
+    );
+    println!(
+        "Elevated:     {}",
+        if r.elevated {
+            "yes (hcsdiag VM lookup available)"
+        } else {
+            "NO — hvsocket connect will fail without Hyper-V Administrators membership (order 312)"
         }
     );
 
@@ -2998,6 +3013,7 @@ mod tests {
             log_size_bytes: None,
             wsl_version: Some("WSL version: 2.7.3.0".to_string()),
             os_version: Some("Microsoft Windows [version 10.0.26200.8524]".to_string()),
+            elevated: false,
             log_exists: false,
             wt_present: true,
             distro: "tillandsias",
@@ -3031,6 +3047,7 @@ mod tests {
             "log_size_bytes",
             "wsl_version",
             "os_version",
+            "elevated",
             "wt_present",
             "distro",
             "distro_registered",
@@ -3136,8 +3153,8 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         assert_eq!(
             obj.len(),
-            17,
-            "DiagnoseReport should have exactly 17 top-level keys; got {}: {:?}",
+            18,
+            "DiagnoseReport should have exactly 18 top-level keys (order 312 added `elevated`); got {}: {:?}",
             obj.len(),
             obj.keys().collect::<Vec<_>>()
         );

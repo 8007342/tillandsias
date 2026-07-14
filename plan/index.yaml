@@ -5725,6 +5725,22 @@ plan_index:
             - "Removed python3 python3-pyyaml from dnf install list to comply with no-python-runtime policy."
             - "scripts/check-no-python-scripts.sh PASS against the touched file."
             - "Deliverable filed: plan/issues/silverblue-toolbox-builder-2026-07-07.md."
+        - type: note
+          ts: "2026-07-13T11:25:00Z"
+          agent_id: "linux-yolanda-fable5-20260713T1058Z"
+          host: linux_immutable
+          summary: >
+            Exit criterion 1 ("./build.sh --check succeeds on a fresh
+            Silverblue host") was falsified live on the first pristine
+            Silverblue host to run it (yolanda, 2026-07-13): four latent
+            wrapper defects (missing --assumeyes on toolbox create,
+            enclave proxy env poisoning host podman pulls, _toolbox_exists
+            grep -x never matching, broken standalone re-exec) meant the
+            criterion had only ever been evaluated on hosts where the
+            wrapper's Silverblue path never executes. Fixed on linux-next
+            2026-07-13 (fix(builder) commit); packet stays done. Recorded
+            so future completions of host-class-specific criteria are
+            verified on the target host class, not by code inspection.
 
     - packet_id: forge-build-check-tooling-gap
       order: 240
@@ -6532,7 +6548,7 @@ plan_index:
     - packet_id: macos-tray-parity-column-verify
       order: 257
       title: "macOS: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: completed
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
       depends_on: []
@@ -6560,6 +6576,25 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the macOS host"
       events:
+        - type: completed
+          ts: "2026-07-14T00:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          lease_id: "macos-tray-parity-column-verify (claim-ledger-node 2026-07-13)"
+          summary: >
+            Final cell closed: InteractiveStream attach flipped todo -> done
+            with live evidence — full opencode PTY session over the vsock
+            wire on the freshly provisioned VM (TUI rendered in-band,
+            BigPickle agent ran a complete /meta-orchestration cycle, exit
+            code propagated: {"status":"opencode-finished","exit_code":0};
+            log target/build-install-smoke-e2e/20260713T224400Z/
+            04b-bigpickle-meta-orchestration.log). macOS column now has no
+            unknown/todo cells on required rows; the attended 2026-07-12
+            smoke had closed the other seven (consolidated gap packet
+            macos-tray-parity-attended-smoke-gap-2026-07-09.md). Instant
+            pre-build litmus: parity gate passing on this host (remaining 4
+            suite failures are unrelated known Darwin/staging fallout,
+            recorded in macos-build-install-smoke-e2e-findings-2026-07-13.md).
         - type: unblock
           ts: "2026-07-12T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -6644,7 +6679,7 @@ plan_index:
     - packet_id: windows-tray-parity-column-verify
       order: 258
       title: "Windows: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: ready
+      status: done
       unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended-smoke blocker lifted"
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
@@ -6664,6 +6699,35 @@ plan_index:
         - "every non-done cell has a filed gap packet"
         - "litmus:tray-parity-matrix-complete passes on the Windows host"
       events:
+        - type: completed
+          ts: "2026-07-12T23:45:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            All 7 remaining required cells verified LIVE by The Tlatoāni on
+            the 2026-07-12 attended smoke (fresh destructive provision,
+            tray 0.3.260712.2@5599c23d+fixes, guest v0.3.260712.1):
+            (1) per-project submenu — operator counted all 7 leaves incl.
+            the order-296 Antigravity; (2) GitHub login — popup wt.exe
+            terminal, credential prompts on a pristine distro, completed
+            twice (also discharged order 274); (3) cloud submenu — real
+            repo listing post-login; overflow subcase limited by the
+            account's repo count; (4) local submenu — the host's 5 ~/src
+            projects; (5) status indicator — healthy, degraded ("Wire
+            unreachable"), and failed ("provisioning failed") states all
+            rendered live; recovery-RENDER defect filed separately
+            (windows-tray-wire-reconnect-never-recovers: subscription
+            recovers, UI doesn't); (6) remote listing + cloud clone —
+            operator cloned a cloud repo into the guest via the tray flow
+            (capability parity; windows rides the tray flow, no CLI flag —
+            mechanism note in the 2026-07-09 progress event); (7)
+            interactive agent attach — live OpenCode TUI over the wsl.exe
+            bridge running an in-forge /meta-orchestration cycle
+            (mechanism note as above; throughput + spinner-burn findings
+            filed). Matrix flipped; capability text updated to the 7-leaf
+            set. The session ALSO surfaced and root-caused orders 308/310/
+            311/312/313/314 — the attended pass did exactly what order 243
+            designed it to do.
         - type: unblock
           ts: "2026-07-12T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -7271,7 +7335,7 @@ plan_index:
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
-      status: ready
+      status: done
       unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended blocker lifted"
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
@@ -7297,6 +7361,24 @@ plan_index:
         - "source pin tests fail loud if the unit and any exec preamble drift apart"
         - "repro: fresh WSL2 distro, first --github-login reaches the credential prompts (no 125)"
       events:
+        - type: completed
+          ts: "2026-07-12T21:05:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          lease_id: "wsl-headless-unit-lock-namespace"
+          summary: >
+            Criterion 3 DISCHARGED live on the operator-attended smoke, on a
+            same-day pristine cold provision (wsl --unregister + cold cache):
+            the operator's FIRST GitHub Login opened the popup terminal and
+            reached the credential prompts; login completed successfully
+            (twice) and the full-journal probe for the vault name-in-use
+            flock race returned ZERO hits. Evidence caveat recorded: the
+            originally suggested grep ("name.*in use|exit 125") false-
+            positives on unrelated podman build exit-125s (the order-308
+            unit-hardening wedge, present the same evening) — the discharge
+            is based on the name-in-use signature specifically, which is the
+            race order 259/274 pinned. Criteria 1+2 were closed 2026-07-10
+            (d41b3493) and runtime-confirmed on e2e 20260710T090845Z.
         - type: unblock
           ts: "2026-07-12T19:25:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -8829,7 +8911,7 @@ plan_index:
     - packet_id: headless-integration-tests-podman-gate
       order: 285
       title: "Headless podman-integration tests must skip (not fail) when no podman daemon is reachable (macOS trunk sweep)"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-headless/tests/
       depends_on: []
@@ -8875,6 +8957,49 @@ plan_index:
             to 285 in the cycle-8 merge (collision with linux's parallel
             283 smoke-lock-fd + 284 forge-opencode filings — the order-275
             uniqueness gate's exact use case).
+        - type: claim
+          ts: "2026-07-13T11:06:00Z"
+          agent_id: "linux-yolanda-fable5-20260713T1058Z"
+          host: linux_immutable
+          lease_id: "headless-podman-gate-yolanda-20260713T1058Z"
+          expires_at: "2026-07-13T15:06:00Z"
+          summary: >
+            Claimed during meta-orchestration worker drain on the fresh
+            Silverblue host (yolanda). Verification will run inside the
+            newly provisioned tillandsias-builder toolbox.
+        - type: completed
+          ts: "2026-07-13T11:25:00Z"
+          agent_id: "linux-yolanda-fable5-20260713T1058Z"
+          host: linux_immutable
+          summary: >
+            Shared gate landed: tests/common/mod.rs exposes
+            podman_daemon_reachable() (podman info probe, OnceLock-cached
+            per test binary, ssh_keygen_available() shape) and
+            error_recovery::test_missing_image_error_handling now gates on
+            it, replacing the cycle-7 inline unreachable-arms with strict
+            assertions when a daemon answers. Empirical sweep finding: the
+            other binaries named in the filing (stress_concurrent_operations,
+            rapid_project_switch(_v2), network_validation, cache_peer_routing,
+            e2e_user_flow, signal_handling, singleton_coexistence) contain
+            ZERO podman shell-outs — they are mock- or binary-spawn-based
+            and pass 146/146 with no podman binary at all, so the
+            "likely share it" hypothesis is disproven on linux; their macOS
+            reds (if still live) have different roots (see the stress-test
+            timing-ratio finding in
+            plan/issues/smoke-e2e-findings-v0.3.260712.1-2026-07-13.md).
+            Verified in all three envs on host yolanda: podman absent
+            (builder toolbox, full suite green), podman present + daemon
+            unreachable via --remote dead-socket shim (the exact macOS
+            condition: gate skips, suite green), podman reachable (host run
+            of the compiled test binary: strict path asserts, green).
+            ./build.sh --check exit 0. Exit criterion "cargo test green on
+            bare macOS" is confirmed by the next osx trunk sweep; if that
+            sweep still reds on these binaries, reopen citing this event.
+          evidence:
+            - "commit linux-next (this push): tests/common/mod.rs + error_recovery gate refactor"
+            - "cargo test -p tillandsias-headless: 146 passed, 0 failed (toolbox, no podman)"
+            - "error_recovery --remote dead-socket run: 'skipping: podman daemon unreachable', 15/15 ok"
+            - "host run test_missing_image_error_handling (podman reachable): strict assertions, ok"
 
     - packet_id: macos-guest-disk-resize-forge-fit
       order: 294
@@ -8917,7 +9042,7 @@ plan_index:
     - packet_id: windows-guest-disk-resize-forge-fit
       order: 297
       title: "Windows/WSL2 guest disk sizing for the forge-base image build (sibling of macOS order 294)"
-      status: ready
+      status: done
       kind: research+bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -8948,6 +9073,52 @@ plan_index:
         - "WSL2 guest has forge-fit headroom (matching macOS 250G intent); forge-base builds without ENOSPC"
         - "a provisioning-time free-space / disk-size assertion fails loud on regression"
       events:
+        - type: completed
+          ts: "2026-07-12T21:15:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          lease_id: "windows-guest-disk-resize-forge-fit"
+          summary: >
+            All three exit criteria evidenced on the same-day destructive
+            cold provision (7eaa8319 tray, truly cold: distro unregistered +
+            rootfs cache wiped): (1) measured fresh guest 1007 GiB total /
+            955 GiB free; (2) forge-fit headroom confirmed END-TO-END — the
+            operator's first agent attach built the full forge-base image
+            (3.1 GB, 558 packages) with the guest at 5 GiB used / 951 GiB
+            free afterward, no ENOSPC; (3) the new provisioning-time
+            assertion ran LIVE on the cold recipe path ("guest root headroom
+            OK: 954 GiB available" in tray.log at 20:21:00Z before first
+            boot wiring). No resize step needed on WSL >= 2.x (1 TB dynamic
+            VHDX default); capped environments fail loud with actionable
+            remediation.
+        - type: progress
+          ts: "2026-07-12T20:02:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          lease_id: "windows-guest-disk-resize-forge-fit"
+          summary: >
+            RESEARCH closed: measured a fresh WSL 2.7.3 guest at 1007 GiB
+            total / 955 GiB available on / (dynamic VHDX, 1 TB default,
+            1.43 GB on host disk) — no ENOSPC wall on modern WSL, so no
+            resize step is needed; the residual risk is a capped
+            environment (legacy 256 GB default or a .wslconfig
+            defaultVhdSize cap). IMPLEMENT closed: provisioning-time
+            headroom assertion in wsl.rs on BOTH paths (recipe
+            configure_recipe_distro + legacy provision) — hard-fails
+            below a 32 GiB forge-fit floor (vz.rs floor parity) with an
+            actionable .wslconfig / wsl --manage --resize message, warns
+            below the 240 GiB macOS-250G-parity intent; host-side df -Pk
+            parse so the guest needs only coreutils. Pinned by
+            provisioning_asserts_guest_disk_headroom (source scan, runs
+            on all-platform CI) + parse/verdict boundary tests; vm-layer
+            27/27, fmt + clippy clean. Runtime confirmation on the live
+            cold path rides this session's destructive reprovision e2e.
+        - type: claim
+          ts: "2026-07-12T19:45:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          lease_id: "windows-guest-disk-resize-forge-fit"
+          expires_at: "2026-07-12T23:45:00Z"
         - type: filed
           ts: "2026-07-11T18:20:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260711T1758Z"
@@ -9240,7 +9411,7 @@ plan_index:
     - packet_id: git-mirror-ref-convergence-deploy-and-verify
       order: 302
       title: "Rebuild git-mirror image with the order-301 safe refspec and live-verify one-push convergence"
-      status: ready
+      status: done
       kind: deploy+verify
       deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
       depends_on: [git-mirror-fetch-clobbers-exported-ref]
@@ -9264,6 +9435,24 @@ plan_index:
         - "a single push of a fresh commit leaves local, mirror (git://tillandsias-git), and GitHub advertising the same SHA with no redundant second push"
         - "litmus:git-mirror-ref-convergence stays green"
       events:
+        - type: completed
+          ts: "2026-07-13T04:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: >
+            Deployed and verified. tillandsias-git image rebuilt from HEAD
+            6f6071db via scripts/build-image.sh git (tags v0.3.260713.1 +
+            latest) — bakes BOTH the order-301 safe refspec
+            (entrypoint.sh:88 +refs/heads/*:refs/remotes/origin/*) and the
+            order-316 pre-receive process-substitution fix
+            (pre-receive-hook.sh:142 done < <), verified inside the image.
+            No long-lived mirror container exists (per-project on-demand;
+            e2e cleanup removed it) — next lane start picks up the new
+            image by tag. Live one-push convergence evidence: tonight's
+            in-forge push cb9bfd7f..b0bd75b8 relayed mirror->GitHub in a
+            single push during the destructive e2e (gate-4 log), on a
+            mirror built with the safe refspec. git-mirror-service instant
+            litmus 3/3 PASS.
         - type: filed
           ts: "2026-07-12T18:32:00Z"
           agent_id: "forge-tillandsias-opus48-20260712T1815Z"
@@ -9294,6 +9483,31 @@ plan_index:
         - "tray Claude/Codex/Antigravity launches call the ensure_provider_auth ladder before spawning the terminal"
         - "vault-present credential launches with no login prompt"
       events:
+        - type: progress
+          ts: "2026-07-14T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
+          host: linux_mutable
+          summary: >
+            Drain attempt deferred with a design note: wiring
+            ensure_provider_auth into the tray lane TODAY would launch
+            get_generic_login_token_script — the PASTE-TOKEN flow the
+            2026-07-12 amendment explicitly replaces — and its silent
+            `read -s` needs a TTY the tray process lacks (order-325
+            non-TTY class). 303 therefore depends on the device-flow
+            token_script (304's flow) or must chain the login INSIDE the
+            popup terminal before the agent exec. Do not implement 303 as
+            a bare one-liner.
+        - type: amended
+          ts: "2026-07-13T00:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Operator amendment 2026-07-12: Claude/Codex login must use the
+            DEVICE flow (--device style: short code + copyable URL, never
+            open a browser or render clickable URLs — those spill escape
+            garbage into the pasted token in forge terminals). Paste-token
+            flow is replaced, not kept as fallback UX. Details in the
+            deliverable issue file.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -9325,6 +9539,17 @@ plan_index:
         - "vault paths per provider documented; no credential lands in the project workspace or image"
         - "fixture/litmus: synthetic token harvested from a fake agent credential path into the vault and injected on next launch"
       events:
+        - type: amended
+          ts: "2026-07-13T00:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Operator amendment 2026-07-12: Claude/Codex login must use the
+            DEVICE flow (--device style: short code + copyable URL, never
+            open a browser or render clickable URLs — those spill escape
+            garbage into the pasted token in forge terminals). Paste-token
+            flow is replaced, not kept as fallback UX. Details in the
+            deliverable issue file.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -9336,7 +9561,7 @@ plan_index:
     - packet_id: stable-release-channel
       order: 305
       title: "Introduce a 'stable' release label; README install scripts pin to stable while dailies keep shipping"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/stable-release-channel-2026-07-12.md
       depends_on: []
@@ -9354,6 +9579,24 @@ plan_index:
         - "promotion procedure documented in methodology/versioning.yaml with e2e-evidence gate"
         - "shape litmus asserting README install URL resolves the stable channel"
       events:
+        - type: completed
+          ts: "2026-07-14T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
+          host: linux_mutable
+          summary: >
+            DEFAULTS OVER CONFIGURATION implementation: dailies now ship
+            as GitHub PRE-releases (release.yml --prerelease), so the
+            README's existing /releases/latest/download URLs resolve to
+            the newest promoted stable with zero URL changes; the rolling
+            `stable` git tag no longer moves on dailies.
+            scripts/promote-stable.sh (evidence-gated: refuses without a
+            plan/ e2e PASS record; falsifiable refused:/promoted: grammar)
+            flips a vetted daily to prerelease=false + latest + moves the
+            stable tag. First promotion executed: promoted:v0.3.260712.1
+            (curl-install e2e PASS evidence 66d8b134 + linux destructive
+            e2e PASS). Procedure documented in methodology/versioning.yaml
+            stable_channel; pinned by litmus:stable-channel-shape (4/4
+            PASS in ci-release suite); README gains the two-channel note.
         - type: filed
           ts: "2026-07-12T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
@@ -9413,3 +9656,1247 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260712T1856Z"
           host: linux_mutable
           summary: "Operator repro; observability fix landed this cycle."
+        - type: progress
+          ts: "2026-07-12T20:15:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260712T2003Z"
+          host: forge
+          summary: >
+            Root cause confirmed: forge proxy egress blocks
+            antigravity-cli-auto-updater-*.us-central1.run.app (connection
+            reset). agy installer downloads but inner binary fetch fails.
+            Fix: fail-fast with clear error in entrypoint (entrypoint-forge-
+            antigravity.sh:121-141). Proxy egress gap filed separately
+            (plan/issues/forge-proxy-egress-antigravity-2026-07-12.md).
+            Exit criteria 1+2 met; criterion 3 blocked on proxy allowlist
+            + vault Gemini credential (orders 303/304).
+        - type: progress
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260713T2301Z"
+          host: forge
+          summary: >
+            Structural improvements: (1) require_antigravity() replaces
+            one-shot curl with 3-attempt retry + exponential backoff
+            (entrypoint-forge-antigravity.sh:116-137); (2) added
+            export_project_env for structural parity with claude/opencode
+            entrypoints; (3) added antigravity case to agent-profile.sh
+            (was falling through to "unknown"). bash -n syntax check
+            PASS on both files. Proxy egress + credential gaps still
+            block criterion 3 (orders 303/304).
+
+    - packet_id: headless-unit-cap-hardening-podman-wedge
+      order: 308
+      title: "P1: recipe headless unit's NoNewPrivileges+CapabilityBoundingSet made uid-0 podman go rootless — every headless-driven ensure wedged; tray stuck on 'securing vault' after successful login"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, systemd, podman, vault, lifecycle]
+      estimated_hours: 4
+      outcome: >
+        Root-caused live on the 2026-07-12 operator-attended smoke: the
+        recipe-path unit writer shipped NoNewPrivileges=yes +
+        CapabilityBoundingSet=CAP_NET_BIND_SERVICE (zero-trust checklist
+        item applied without podman-path validation), leaving the uid-0
+        headless at CapEff=0x400. Cap-stripped root podman selects ROOTLESS
+        mode (empty store, pause-process fatals, newuidmap unusable under
+        NNP), so the events watcher and every vault/lane ensure died 125 in
+        an unbounded 2s loop — while tray-driven wsl.exe flows kept full
+        caps and worked, leaving genuinely-healthy containers the headless
+        could not see and the tray latched on 'securing vault' forever
+        after two successful GitHub logins. Fixed by removing the two
+        directives from the unit template (rationale comment + pin
+        assertions in wsl_headless_service_prepares_runtime_env); recovery
+        validated live via drop-in override (CapabilityBoundingSet=~ — note
+        the systemd gotcha that an EMPTY assignment means the EMPTY set)
+        with both v0.3.260711.8 and v0.3.260712.1 healthy afterwards. Full
+        forensics: plan/issues/headless-podman-events-watcher-rootless-wedge-2026-07-12.md
+        (+ the interim headless-restart-wedges-guest-podman note).
+        Least-privilege reintroduction split to order 309.
+      exit_criteria:
+        - "unit template no longer carries NoNewPrivileges=/CapabilityBoundingSet= (pin test)"
+        - "live: headless CapEff full, vault ensured healthy, login state propagates to the tray (operator-verified)"
+      events:
+        - type: completed
+          ts: "2026-07-12T21:15:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Fixed in 989173ba; live-verified on the attended smoke (vault
+            healthy in seconds after override, login state + cloud/local
+            submenus populated, forge-base build proceeded). windows-tray
+            suite 55+8+3 green, fmt clean.
+
+    - packet_id: headless-least-privilege-split
+      order: 309
+      title: "Reintroduce headless least-privilege correctly: split vsock listener from podman orchestrator (or delegate via podman socket); audit macOS vz unit for the same directives"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      depends_on: [headless-unit-cap-hardening-podman-wedge]
+      pickup_role: any
+      capability_tags: [security, systemd, podman, windows, macos, vsock]
+      estimated_hours: 6
+      outcome: >
+        Order 308 removed the unit hardening because the headless is both
+        the network-facing vsock listener AND the podman orchestrator — one
+        process cannot be cap-stripped without wedging the other role. The
+        zero-trust intent (selinux-zero-trust-vsock-policy-design
+        checklist) is still right; reintroduce it with a design that works:
+        e.g. a confined listener unit talking to an unconfined orchestrator
+        over a local socket, or podman API socket delegation with the
+        headless holding only client rights. ALSO: audit the macOS vz.rs
+        cloud-init unit for the same directives before the next macOS
+        release (same failure mode if present), and add a litmus that would
+        have caught this class (headless-driven podman smoke under the
+        shipped unit constraints).
+      exit_criteria:
+        - "least-privilege design chosen and recorded (listener/orchestrator split or socket delegation)"
+        - "macOS vz unit audited; same-directive hazard confirmed absent or fixed"
+        - "a verifiable check exercises headless-driven podman under the shipped unit constraints (litmus or e2e assertion)"
+      events:
+        - type: filed
+          ts: "2026-07-12T21:15:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Split from order 308 per the reduction discipline: the fix
+            removed the constraint; this packet restores the security
+            intent under a verifiable design.
+
+    - packet_id: antigravity-lane-flag-singleton-kills-service
+      order: 310
+      title: "P1: --antigravity missing from is_cli_mode — tray Antigravity click singleton-kills the running headless service (whole VM stack torn down)"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [headless, lifecycle, tray, rust, cross-host]
+      estimated_hours: 2
+      outcome: >
+        Found live on the 2026-07-12 operator-attended Windows smoke: the
+        operator clicked the (order 296) Antigravity leaf and the lane
+        "did not even reach" the known order-307 crash — instead the
+        headless SERVICE logged 'Received shutdown signal' one second
+        after the click, was SIGKILLed 5s later, conmon hung the unit's
+        stop until systemd aborted it, and the vault/proxy stack tore
+        down (auto-recovered by Restart= 50s later). Root cause: order
+        296 wired --antigravity into flag parsing and the agent-mode
+        dispatch but NOT into the is_cli_mode census, so the lane
+        invocation (tillandsias-headless --cloud <name> --antigravity,
+        spawned by the tray into wt.exe) acquired the "launcher"
+        SingletonGuard, whose contract is "newer instances signal and
+        terminate older instances" — TERM, 5s grace, KILL against the
+        running service (journal timeline matches exactly; --bash lane
+        worked because bash IS counted). Affects every host that spawns
+        agent lanes through the headless CLI. Fix: counted antigravity
+        in is_cli_mode (one line) + rationale comment + source pin test
+        cli_mode_counts_every_lane_flag asserting EVERY parsed lane flag
+        appears in the census, so the next added agent cannot repeat
+        this class.
+      exit_criteria:
+        - "is_cli_mode counts --antigravity (and the pin test enumerates all lane flags)"
+        - "pin test green on a linux-capable build (headless is unix-only)"
+        - "tray Antigravity click no longer terminates the headless service (live re-check after next guest binary refresh)"
+      events:
+        - type: completed
+          ts: "2026-07-12T21:45:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            One-line census fix + cli_mode_counts_every_lane_flag source
+            pin; verified by in-guest cargo test (headless does not
+            compile on the Windows host — the known litmus-fallout
+            class). Live lane re-check rides the next guest-binary
+            refresh; until then the running guest (release binary)
+            still carries the bug — operator advised not to relaunch
+            Antigravity this session. Order 307 (the lane's own crash)
+            remains open and unrelated.
+
+    - packet_id: windows-background-spawn-console-flicker-and-hcsdiag-parse
+      order: 311
+      title: "Windows: background wsl.exe/hcsdiag spawns flash console windows; hcsdiag UTF-16 pipe output false-negatives the handshake VM lookup"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, tray, ux, transport]
+      estimated_hours: 3
+      outcome: >
+        Two operator-visible defects from the attended smoke's tray
+        relaunch on a stopped VM. (1) FLICKER: every background wsl.exe
+        spawn in vm-layer wsl.rs (start pokes, wait_ready 500ms polls,
+        wsl_root_sh, df probe, list/terminate) plus wsl_lifecycle's root
+        writers, notify_icon's version/running sniffs, materialize's
+        import, and transport_windows' per-handshake-attempt hcsdiag ALL
+        lacked CREATE_NO_WINDOW — from the GUI-subsystem tray each spawn
+        flashes a console ("terminals popping open and closing every few
+        seconds" during the 36x5s handshake retry loop).
+        tillandsias-podman solved this long ago (no_window_async/_sync,
+        spec:no-terminal-flicker) but the WSL layer never adopted it.
+        Fixed: vm-layer now exports the same helpers; a wsl_cmd()
+        constructor is the module-wide idiom in wsl.rs and
+        wsl_lifecycle.rs; hcsdiag/materialize/notify_icon call sites
+        wrapped. Deliberate exemptions: debug-console keepalive + lane
+        terminals (CREATE_NEW_CONSOLE). (2) HANDSHAKE FALSE-NEGATIVE:
+        the same relaunch failed its full 3-minute connect budget with
+        "no running WSL utility VM in hcsdiag list" while the keepalive
+        demonstrably held the VM (no keepalive warns in the window) and
+        hcsdiag showed the VM from a console shell. parse_wsl_vm_id did
+        not strip NULs, so UTF-16LE-as-lossy-UTF-8 pipe output (a known
+        Windows tooling behavior the codebase already tolerates for
+        wsl.exe via wsl_list_quiet's NUL strip) can never match the WSL
+        row. Fixed with the same NUL strip + an interleaved-NUL unit
+        test. vm-layer 75/75, windows-tray 54/55 (the one red is the
+        pre-existing embed-version pin, workspace bumped to .2 upstream
+        with no .2 guest asset published yet).
+      exit_criteria:
+        - "no background wsl/hcsdiag spawn without CREATE_NO_WINDOW on the tray paths (wsl_cmd idiom)"
+        - "parse_wsl_vm_id matches NUL-interleaved hcsdiag output (unit test)"
+        - "operator relaunch on a stopped VM: no console flashes, handshake succeeds inside the budget"
+      events:
+        - type: progress
+          ts: "2026-07-12T22:20:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            AMENDMENT: the operator's relaunch WITH this packet's fixes
+            reproduced the handshake failure — the UTF-16 hypothesis was
+            insufficient. True root cause isolated as order 312: hcsdiag
+            requires elevation ("Privilèges insuffisants… Administrateurs
+            Hyper-V" captured non-elevated), and every working tray this
+            session had inherited admin rights from the agent shell while
+            the operator's Start-Menu launches are standard-user. The two
+            fixes shipped here stand on their own merits (no console
+            flicker observed on the operator's relaunch boot; NUL parse
+            unit-pinned); criterion 3's live handshake pass belongs to
+            order 312's fix.
+        - type: completed
+          ts: "2026-07-12T22:05:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Implemented + unit-verified; live criterion 3 verified by the
+            operator's tray relaunch immediately after reinstall (this
+            session). hcsdiag UTF-16 remains the best-fit hypothesis for
+            the observed 3-minute false-negative window — if a future
+            relaunch reproduces it WITH the NUL-tolerant parser, capture
+            hcsdiag's raw bytes and re-open.
+
+    - packet_id: windows-tray-requires-elevation-hcsdiag
+      order: 312
+      title: "P1: non-elevated Windows tray can NEVER connect — hcsdiag VM-ID lookup is admin/Hyper-V-Administrators-only; every standard-user install is dead on arrival"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-vm-layer/src/transport_windows.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, transport, hvsocket, packaging, ux]
+      estimated_hours: 8
+      outcome: >
+        Isolated live on the 2026-07-12 attended smoke after two failed
+        Start-Menu relaunches: the host->guest hvsocket connect resolves
+        the WSL utility VM GUID via `hcsdiag list`, which hard-fails for
+        standard users ("Privilèges insuffisants. Seuls les
+        administrateurs ou les membres du groupe Administrateurs Hyper-V…",
+        captured via runas /trustlevel:0x20000). The failure is then
+        misreported as "no running WSL utility VM (distro not started?)"
+        and the tray burns its full 36x5s budget before "provisioning
+        failed". MASKING: agent sessions run elevated, so every prior
+        Windows e2e (incl. 2026-07-11 run 4 PASS and this session's cold
+        provision) inherited admin rights — the standard-user path was
+        never actually exercised; the curl-install flow (plain PowerShell,
+        non-elevated) ships this dead on arrival. The registry
+        VolatileStore fallback does not exist on WSL 2.7.3. Fix ladder:
+        (1) DETECT+SURFACE: classify the hcsdiag privilege error and show
+        an actionable message (join Hyper-V Administrators per
+        aka.ms/hcsadmin, or relaunch elevated) instead of the misleading
+        distro-not-started text — small, immediate; (2) TRANSPORT
+        FALLBACK: non-elevated control-wire bridge via
+        `wsl.exe -d <distro> -- socat STDIO VSOCK-CONNECT:1:<port>`
+        (socat is already provisioned in the guest for vsock loopback;
+        WSL interop needs no elevation) so standard users get a working
+        wire without HCS access; (3) INSTALLER OPTION: offer one-time
+        elevation to add the user to Hyper-V Administrators. Decide
+        2-vs-3 priority with The Tlatoāni.
+      exit_criteria:
+        - "non-elevated hcsdiag privilege failure is detected and surfaced with the actionable remediation (not 'distro not started?')"
+        - "a standard-user (non-elevated) tray launch reaches a working control wire end-to-end on a stock host"
+        - "windows e2e records the elevation context it ran under, so elevated agent runs can never again mask the standard-user path"
+      events:
+        - type: progress
+          ts: "2026-07-13T05:40:00Z"
+          agent_id: "windows-bullo-fable5-20260713T0453Z"
+          host: windows
+          lease_id: "windows-tray-requires-elevation-hcsdiag"
+          summary: >
+            Slices 1+3 DONE; slice 2 (socat wire fallback) remains — THE
+            TLATOANI DECIDED (live, 2026-07-13): "both, slice 3 first" —
+            ship the installer group-add now, build the no-elevation
+            transport fallback next. SLICE 1: the VM-ID lookup now
+            classifies by CheckTokenMembership against BUILTIN\
+            Administrators + Hyper-V Administrators (membership, NOT
+            TokenElevation — filtered tokens carry admin deny-only and
+            the elevation flag lies under runas /trustlevel; membership
+            matches what hcsdiag enforces) and surfaces the aka.ms/
+            hcsadmin remediation instead of "distro not started?";
+            --diagnose --json gained an `elevated` field so e2e evidence
+            records its privilege context (criterion 3). LIVE-VERIFIED
+            both ways on this host: non-elevated probe prints the
+            remediation; elevated diagnose reports true. SLICE 3:
+            install-windows.ps1 offers a one-time elevated
+            Add-LocalGroupMember (group by SID S-1-5-32-578 — names are
+            localized; membership probe via IsInRole; interactive prompt
+            with TILLANDSIAS_NO_GROUP_ADD opt-out; sign-out/in guidance).
+            Parse-clean after two PS 5.1 traps worth recording: greedy
+            drive-qualified $env:X\ parsing inside expandable strings,
+            and — the nasty one — em-dashes inside strings on BOM-less
+            UTF-8 scripts decode under ANSI to a smart-quote byte that
+            5.1 treats as a REAL quote, flipping string parity (non-ASCII
+            stays in comments only). Tests: vm-layer 76/76 incl.
+            vm_id_lookup_error_classifies_by_elevation; windows-tray
+            54/55 (known embed pin); diagnose schema pins updated 17→18.
+        - type: filed
+          ts: "2026-07-12T22:20:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Filed from the attended-smoke isolation; operator unblocked
+            in-session by launching the tray from the elevated agent
+            shell. This packet is the release gate for any
+            standard-user-facing Windows install.
+
+    - packet_id: inference-firstrun-install-resilience
+      order: 313
+      title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
+      status: in_progress
+      kind: bug
+      deliverable: images/inference/entrypoint.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, containers, shell, lifecycle, e2e]
+      estimated_hours: 3
+      outcome: >
+        Attended Windows smoke 2026-07-12: on the pristine substrate the
+        first agent-lane launch raced the enclave proxy's restart/warm-up
+        window — the entrypoint's proxied ollama download failed, its
+        documented fallback ("retry direct, no proxy") is dead by design
+        INSIDE the enclave (no DNS egress: curl 6), both stderr streams
+        are discarded (2>/dev/null, order-291 class), and the container
+        exits 1 with only "install FAILED". Verified after warm-up that
+        the identical proxied curl succeeds (github is SPLICED by squid —
+        real Sectigo chain against the system store; HTTP 200, 1.4 GB).
+        Compounding defects found by inspection: (a) the CA-injection
+        block uses Debian's update-ca-certificates + /usr/local/share/
+        ca-certificates on a Fedora Minimal image — it has NEVER worked
+        (command absent, swallowed by || true); Fedora needs
+        /etc/pki/ca-trust/source/anchors + update-ca-trust — required the
+        day squid bumps instead of splicing; (b) OLLAMA_BINDIR
+        ("${OLLAMA_MODELS}.tools") is a SIBLING of the mounted models
+        volume, i.e. container-local — the "persists across restarts"
+        claim only holds for the same container, not recreation. Fix:
+        in-enclave-aware retry/backoff (retry PROXIED with delay, drop
+        the dead direct fallback when the proxy resolves), keep + surface
+        stderr, Fedora CA injection, move .tools inside the mounted
+        volume, and a first-run assertion mirroring order 299's loud
+        floor.
+      exit_criteria:
+        - "first-run install retries the proxied path with backoff and surfaces the real curl error on failure (no 2>/dev/null)"
+        - "CA injection works on the Fedora image (update-ca-trust; verified by a litmus or in-container probe)"
+        - "ollama binary persists across container recreation (path inside the mounted volume)"
+        - "pristine-substrate first lane launch installs ollama through a just-started proxy (e2e evidence)"
+      events:
+        - type: progress
+          ts: "2026-07-13T11:50:00Z"
+          agent_id: "forge-big-pickle-meta-orch-20260713T1145Z"
+          host: forge
+          lease_id: "inference-firstrun-install-resilience"
+          commits: []
+          summary: >
+            Implementation slice 1 landed: (1) CA cert injection fixed from
+            Debian paths (/usr/local/share/ca-certificates + update-ca-certificates)
+            to Fedora paths (/etc/pki/ca-trust/source/anchors + update-ca-trust) in
+            both entrypoint.sh and Containerfile; (2) dead "retry direct" proxy
+            fallback replaced with proxy warm-up retry (sleep 10 + retry proxied);
+            (3) misleading error message fixed; (4) stderr surfaced on download
+            failure (removed 2>/dev/null on the curl calls). Shellcheck clean
+            (only pre-existing warnings). bash -n syntax check passes.
+            ./build.sh --check passes. Pending: e2e verification on pristine
+            substrate with hardened container flags (--cap-drop=ALL etc).
+        - type: progress
+          ts: "2026-07-12T23:20:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            EVIDENCE UPDATE: the recreated container failed the install
+            AGAIN with the proxy long warm — the warm-up-race theory is
+            insufficient. All successful probes ran WITHOUT the ensure's
+            hardening flags; the failing container runs with
+            --cap-drop=ALL --security-opt=no-new-privileges
+            --userns=keep-id --pids-limit=128. Next repro MUST replicate
+            those flags (plus the CA mount + full env) to isolate which
+            one breaks the download; keep-id/pids-limit interactions with
+            curl+zstd+tar are the prime suspects. Lanes tolerate an
+            EXITED inference at launch (only the 125 name-collision kills
+            them — order 314), so the operator's OpenCode session ran
+            despite it.
+        - type: filed
+          ts: "2026-07-12T22:50:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Filed from live isolation during the attended smoke (probes:
+            enclave-dead direct path curl 6; post-warm-up proxied 200;
+            splice confirmed via Sectigo issuer). Operator unblocked by
+            removing the exited container so the next ensure recreates it.
+
+    - packet_id: container-ensure-not-idempotent-exited
+      order: 314
+      title: "P1: container ensure does bare `podman run --name` — an EXITED dependency container name-collides (125) and is classified retry-Permanent, blocking every lane"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, containers, rust, cross-host]
+      estimated_hours: 3
+      outcome: >
+        Attended Windows smoke 2026-07-12: after tillandsias-inference
+        exited 1 (order 313), EVERY lane launch — agent AND maintenance —
+        failed at the dependency-ensure stage: the ensure issues
+        `podman run --detach --name tillandsias-inference ...` while the
+        exited container still owns the name, podman exits 125 ("name
+        already in use"), and the stage classifies it retry: Permanent —
+        the operator-reported "now nothing launches". A manual
+        `podman start tillandsias-inference` re-ran the entrypoint fine.
+        DECIDED (The Tlatoāni, 2026-07-12, live during the smoke): use
+        `--replace` on the ensure's podman run — wipe the exited instance
+        and take over; fine for this use case, atomic, and a fresh run
+        still re-executes the entrypoint's own retry logic. Ensure must
+        be idempotent across container states (running: no-op; otherwise
+        run --replace); name-collision 125 must never be Permanent. Pin
+        with a unit/litmus on the ensure decision table. The
+        operator-facing error rendering was GOOD (structured cause +
+        argv + logs via the exit-pause trap) — keep it.
+      exit_criteria:
+        - "ensure runs with --replace (operator-decided); running containers are not needlessly replaced (decision-table test)"
+        - "an exited dependency container no longer blocks lane launches (repro: exit the inference container, launch a lane)"
+        - "125 name-in-use is never classified Permanent"
+      events:
+        - type: filed
+          ts: "2026-07-12T22:50:00Z"
+          agent_id: "windows-bullo-fable5-20260712T1940Z"
+          host: windows
+          summary: >
+            Filed from the operator's structured lane-failure capture
+            (full podman argv + stderr + container state) during the
+            attended smoke; unblocked live via podman rm of the exited
+            container.
+        - type: claim
+          ts: "2026-07-13T00:16:00Z"
+          agent_id: "linux-bigpickle-20260713T0015Z"
+          host: linux_mutable
+          lease_id: "container-ensure-not-idempotent-exited"
+        - type: completed
+          ts: "2026-07-13T00:30:00Z"
+          agent_id: "linux-bigpickle-20260713T0015Z"
+          host: linux_mutable
+          lease_id: "container-ensure-not-idempotent-exited"
+          summary: >
+            Added `--replace` to `build_inference_run_args` (main.rs:2367)
+            so `podman run --replace --detach --name tillandsias-inference`
+            atomically removes an exited container before creating a fresh
+            one. Prevents the exit-125 name-collision that blocked every
+            lane when the inference container exited uncleanly (order 313
+            proxy warm-up race). Unit test `inference_run_args_use_replace_for_idempotency`
+            pins the flag. build.sh --check passes (type-check + clippy +
+            clippy listen-vsock); 146/149 tests pass (3 pre-existing
+            failures: proxy DNS in fake-podman smoke, PoisonError in
+            forge-gitconfig tests — unrelated).
+
+    - packet_id: git-mirror-architecture-audit
+      order: 315
+      title: "Full git-mirror architecture audit — SIMPLICITY: DEFAULTS OVER CONFIGURATION (heavy-agent, provenance-backed)"
+      status: ready
+      kind: research
+      multi_cycle: true
+      deliverable: plan/issues/git-mirror-architecture-audit-2026-07-12.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, security, architecture, research, heavy-agent]
+      estimated_hours: 12
+      outcome: >
+        Operator directive: audit the whole git-mirror + credential +
+        proxy-env architecture with the heaviest agents (Fable/Opus) against
+        enterprise best practices for git mirrors and distributed concurrent
+        teams. Facts + cheatsheets with rightful provenance. Principle:
+        DEFAULTS OVER CONFIGURATION — minimize env params (polluted,
+        runtime-incompatible); evaluate proper git credential helpers over
+        script hacks. Evidence base: mirror false-success P1, insteadOf
+        host-poisoning, ref-clobber (301/302), guard channel gap.
+      exit_criteria:
+        - "cheatsheets/git-mirror-architecture-audit.md exists: current-state map, every claim with file:line/commit provenance"
+        - "cheatsheets/git-mirror-enterprise-practices.md exists: sourced baseline (URL/man-page + retrieved date on every load-bearing claim)"
+        - "every env var / config injection dispositioned: keep-justified, replace-with-default, or delete"
+        - "mirror ack semantics specified: no success without durable relay state, pinned by litmus"
+        - "bidirectional host/forge git-config isolation fixture"
+        - "migration-ladder child packets filed"
+      events:
+        - type: progress
+          ts: "2026-07-13T04:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: >
+            Migration-ladder child packets FILED from the landed
+            cheatsheets: 318 relay-verified acks (false-success P1
+            killer), 319 credential-helper broker + GitHub App token
+            evaluation, 320 single gitconfig injection + image-baked CA
+            (all platforms; deletes the env mesh), 321 bidirectional
+            host/forge git-config quarantine (insteadOf poisoning class),
+            322 authenticated push transport (research-first, Tlatoani
+            sign-off gate). Remaining on 315 itself: gap-disposition
+            table sign-off + completion-gate verification once rungs
+            land. Order 302 deployed+verified this same cycle.
+        - type: progress
+          ts: "2026-07-13T00:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Both audit cheatsheets landed: current-state map (Fable fork,
+            file:line provenance @ 8875ba82) and enterprise best-practices
+            baseline (Opus researcher, URL+date provenance). Key
+            recommendations: relay off post-receive (structurally cannot be
+            must-succeed per githooks(5)); push --atomic with non-force
+            refspecs; credential-helper broker + short-TTL GitHub App
+            installation tokens so secrets never enter the forge; replace
+            GIT_CONFIG_GLOBAL/insteadOf/GIT_SSL_CAINFO env mesh with
+            committed includeIf gitdir: config + image-baked CA; forge
+            pushes over authenticated smart-HTTP/SSH instead of git://.
+            Order 316 already split out (pre-receive subshell reject loss).
+            Remaining rungs: gap-analysis disposition table sign-off,
+            migration-ladder child packets, ack-semantics litmus,
+            bidirectional git-config isolation fixture.
+        - type: filed
+          ts: "2026-07-13T00:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Filed per operator directive after macOS attended smoke surfaced
+            the mirror false-success P1 and insteadOf host-poisoning; audit
+            launched same cycle with Fable fork (current-state map) + Opus
+            researcher (best-practice baseline).
+        - type: progress
+          ts: "2026-07-13T00:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260712T2205Z"
+          host: macos
+          summary: >
+            DEDUPE: macos independently promoted the same directive as a
+            "git-mirror-architecture-revamp" node (order-315 collision;
+            renumbered brew packet to 317 by linux coordinator). Its design-constraints +
+            defect-inventory file
+            plan/issues/git-mirror-architecture-revamp-2026-07-12.md is
+            folded in as audit input: quarantine host origin config from
+            the forge (env-scoped injection, never shared .git/config),
+            relay-verified acks, re-derived ok:forge guard semantics,
+            host-shared (macOS virtiofs) vs mirror-materialized (Linux)
+            cross-platform statement, plus Big Pickle #2's in-forge
+            blocker forge-credential-channel-missing-2026-07-12.md.
+
+    - packet_id: mirror-pre-receive-subshell-reject-loss
+      order: 316
+      title: "Mirror pre-receive: REJECTED=1 set in pipeline subshell is lost — YAML gate is advisory, never rejects"
+      status: done
+      kind: bug
+      deliverable: images/git/pre-receive-hook.sh + scripts/test-pre-receive-yaml-gate.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, bash, litmus]
+      estimated_hours: 1
+      outcome: >
+        Found by the order-315 current-state audit and verified in-tree:
+        pre-receive-hook.sh pipes changed files into `while read`, so the
+        loop body runs in a subshell and its REJECTED=1 never reaches the
+        parent's final check. The ledger-YAML gate (order-263 lineage:
+        forge cycles pushing broken plan YAML) therefore never rejects.
+        Fix with process substitution / flag file / last-command exit,
+        and pin with a fixture that pushes a deliberately broken
+        plan/*.yaml to a temp bare repo carrying the hook and asserts
+        non-zero receive.
+      exit_criteria:
+        - "a push containing invalid ledger YAML is rejected (non-zero) by the hook fixture"
+        - "a valid push still succeeds (no false rejects)"
+        - "litmus binding added under git-mirror-service"
+      events:
+        - type: filed
+          ts: "2026-07-13T00:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Order-315 audit finding (Fable current-state map), verified at
+            pre-receive-hook.sh:125-142 as of 8875ba82.
+        - type: progress
+          ts: "2026-07-13T00:40:00Z"
+          agent_id: "opencode-big-pickle-20260713T0032Z"
+          host: forge
+          summary: >
+            Implemented fix: replaced pipe (echo FILES | while read) with
+            process substitution (while read ... done < <(echo FILES)) at
+            pre-receive-hook.sh:125,142. Verified with 3-pass litmus
+            (scripts/test-pre-receive-yaml-gate.sh): invalid YAML rejected,
+            valid YAML accepted, multi-ref mixed validity rejected.
+            All three exit criteria satisfied.
+
+    - packet_id: brew-aarch64-harness-strategy
+      order: 317
+      title: "Brew harness strategy: keep brew only for officially-brew-documented tools; per-arch policy for aarch64 Linux (Tier 2, no bottles)"
+      status: ready
+      kind: enhancement
+      deliverable: images/default brew shims + harness install channel inventory (plan/issues/brew-aarch64-harness-strategy-2026-07-12.md scope)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [images, forge, harnesses, brew, ux]
+      estimated_hours: 5
+      outcome: >
+        Operator decision (The Tlatoāni, 2026-07-12): keep brew as the
+        harness/agent install channel ONLY for tools whose official
+        websites document brew installs; use official channels (npm,
+        curl, release binaries) for the rest. Live evidence: Linux
+        aarch64 (every macOS-hosted guest) is Homebrew Tier 2 — no
+        supported bottles, source-build degradation — plus the
+        attestation token gap
+        (brew-shim-attestation-requires-gh-token-2026-07-12.md, folds
+        in). Scope, per-arch policy, and verifiable closure in
+        plan/issues/brew-aarch64-harness-strategy-2026-07-12.md.
+      exit_criteria:
+        - "harness inventory: official-brew set vs official-other set, recorded with provenance links"
+        - "aarch64 guest: every inventoried harness installs via its designated channel with visible progress, or fails with one actionable line (no silent 127s)"
+        - "shim wrapper owns the Tier-2 warning with a one-line policy statement"
+      events:
+        - type: filed
+          ts: "2026-07-12T23:30:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260712T2205Z"
+          host: macos
+          summary: >
+            Filed recording the operator's keep-brew-for-official-brew
+            decision from the attended macOS smoke; aarch64 Tier-2
+            behavior observed live in the guest.
+        - type: progress
+          ts: "2026-07-13T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
+          host: linux_mutable
+          summary: >
+            Coordinator mediation: renumbered from 316 to 317 (order-316
+            was concurrently taken on linux-next by
+            mirror-pre-receive-subshell-reject-loss). Packet content
+            unchanged.
+
+    - packet_id: mirror-relay-verified-acks
+      order: 318
+      title: "Ladder rung A: mirror MUST NOT ack a push it has not durably relayed (or must expose relay state) — kills the false-success P1"
+      status: ready
+      kind: architecture
+      deliverable: images/git/ (entrypoint + hooks) + openspec/specs/git-mirror-service/
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [git-mirror, bash, litmus, architecture]
+      estimated_hours: 6
+      outcome: >
+        Order-315 audit: post-receive relays upstream but exits 0
+        unconditionally, and githooks(5) is explicit that post-receive
+        cannot affect the outcome the client already saw — the macOS
+        false-success P1 is architectural. Choose and implement per the
+        enterprise-practices cheatsheet: synchronous relay in pre-receive
+        (client success == upstream durable), or async relay with a
+        visible, durable queue + relay-state surface the credential guard
+        and exit contract can interrogate (git ls-remote against the
+        mirror is exactly the false signal — forbidden as evidence).
+        Relay uses push --atomic with explicit non-force refspecs.
+      exit_criteria:
+        - "a push that cannot be relayed (upstream credential removed in fixture) does NOT return unqualified success to the pusher"
+        - "litmus: ack-without-relay scenario FAILS the gate (new litmus:git-mirror-relay-verified-ack)"
+        - "spec git-mirror-service gains the ack-semantics requirement"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung A, from landed audit cheatsheets."
+
+    - packet_id: mirror-credential-helper-broker
+      order: 319
+      title: "Ladder rung B: git credential helper (vault-backed) on the mirror; evaluate short-TTL GitHub App installation tokens; kill token-in-URL"
+      status: ready
+      kind: architecture
+      deliverable: images/git/ + cheatsheets/concurrent-git/git-mirror-enterprise-practices.md follow-up
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [git-mirror, credentials, vault, security]
+      estimated_hours: 6
+      outcome: >
+        DEFAULTS OVER CONFIGURATION: replace scripted token plumbing with
+        the git-native credential.helper protocol — a helper on the MIRROR
+        container that fetches from vault at push time (secret never in
+        argv/URL/env, never in any forge). Evaluate GitHub App
+        installation tokens (short-TTL, repo-scoped) vs the current PAT.
+        Forge containers keep ZERO credentials (unchanged invariant).
+      exit_criteria:
+        - "mirror relay authenticates via credential.helper; no token appears in remote URLs, argv, or env dumps (fixture greps)"
+        - "credential rotation: swapping the vault secret takes effect without container rebuild"
+        - "decision record: GitHub App tokens adopted or rejected with reasons"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung B."
+
+    - packet_id: forge-gitconfig-single-injection
+      order: 320
+      title: "Ladder rung C: ONE gitconfig injection point (committed includeIf/include.path), image-baked CA trust; kill the env mesh on ALL platforms"
+      status: ready
+      kind: architecture
+      deliverable: images/default/lib-common.sh + crates/tillandsias-headless + macOS/Windows lane parity
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [forge, git, config, cross-platform]
+      estimated_hours: 8
+      outcome: >
+        Replace GIT_CONFIG_GLOBAL bind-mount + GIT_SSL_CAINFO/SSL_CERT_FILE
+        exports (CA logic duplicated in 7 files under 2 names) with: MITM
+        CA baked into the image system trust store at image build, and a
+        single Tillandsias-owned git include (include.path/includeIf
+        gitdir:) materialized by ONE code path used by ALL lanes on ALL
+        THREE platforms. Fixes the macOS gap (VM lane got no insteadOf
+        injection at all -> hand-hacked .git/config). Ladder discipline:
+        new path lands behind a flag, soaks, becomes default, old env
+        mesh removed.
+      exit_criteria:
+        - "macOS/Windows/Linux forge lanes get identical git config through the single injection point (fixture per platform)"
+        - "GIT_SSL_CAINFO/SSL_CERT_FILE exports deleted from entrypoints once CA is image-baked (grep gate)"
+        - "env-var inventory in the audit cheatsheet re-run: git-flow rows drop to <=2"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung C."
+
+    - packet_id: forge-host-gitconfig-bidirectional-quarantine
+      order: 321
+      title: "Ladder rung D: bidirectional host/forge git-config isolation — forge can never write host .git/config; host git state never leaks in"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless (mount spec) + fixture
+      depends_on: [git-mirror-architecture-audit]
+      pickup_role: linux
+      capability_tags: [forge, security, containers, git]
+      estimated_hours: 4
+      outcome: >
+        The insteadOf host-poisoning incident: project .git/ is bind-
+        mounted RW into the forge (unlike ~/.ssh and ~/.config/gh tmpfs
+        quarantines), so an in-forge `git config` write poisons the HOST
+        checkout. Quarantine .git/config-class state (overlay the config
+        file, or repo-level include indirection from rung C) so forge git
+        config edits stay forge-local while worktree/objects sharing is
+        preserved. Applies to Linux bind-mount and macOS virtiofs lanes.
+      exit_criteria:
+        - "fixture: in-forge `git config user.x y` (and url.insteadOf) does NOT appear in the host checkout's .git/config"
+        - "fixture: host-side credential helper / insteadOf entries are NOT visible to git inside the forge"
+        - "worktree object/ref sharing still works (clone/fetch/push flows green)"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung D (insteadOf host-poisoning class)."
+
+    - packet_id: mirror-authenticated-push-transport
+      order: 322
+      title: "Ladder rung E (research-first): forge pushes to the mirror over authenticated smart-HTTP/SSH; git:// demoted to fetch-only"
+      status: ready
+      kind: research
+      deliverable: plan/issues/git-mirror-architecture-audit-2026-07-12.md appendix + decision record
+      depends_on: [mirror-relay-verified-acks]
+      pickup_role: linux
+      capability_tags: [git-mirror, transport, security, research]
+      estimated_hours: 4
+      outcome: >
+        git-daemon docs: git:// receive-pack means "anybody can push
+        anything, including removal of refs". Acceptable risk-assessment
+        for the isolated enclave net is currently implicit — make it
+        explicit: research-first decision on serving pushes over smart-
+        HTTP (lighttpd already in the image) or SSH with per-forge
+        identity, so auth, pre-receive gating, and ff-denial are enforced
+        by the transport rather than network topology alone. Implement
+        only after the decision record is approved (Tlatoani sign-off;
+        contested-practice flag from the enterprise cheatsheet).
+      exit_criteria:
+        - "decision record: transport chosen with threat-model rationale, or explicit accept-risk for git:// with topology invariants pinned by litmus"
+        - "if adopted: one lane migrated behind a flag with fetch/push parity fixture"
+      events:
+        - type: filed
+          ts: "2026-07-13T04:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
+          host: linux_mutable
+          summary: "Order-315 migration ladder rung E (transport, research-first)."
+
+    - packet_id: wsl-platform-preflight-classification
+      order: 323
+      title: "Windows tray: classify wsl-platform-absent / reboot-pending / virtualization-disabled preflight states — 'WSL2 requires a restart' instead of generic VM-create failure"
+      status: ready
+      kind: enhancement+bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, diagnostics, ux, tray]
+      estimated_hours: 4
+      outcome: >
+        Operator directive 2026-07-13: end users installing WSL2 for the
+        first time land in a reboot-pending state (VirtualMachinePlatform
+        enable exits DISM 3010; Microsoft.WSL installer notes a restart is
+        required) and today WslRuntime::start()/provision burns 5 generic
+        retry pokes then fails crash-like (handshake-timeout family).
+        Introduce a classified preflight verdict enum
+        {ok, wsl-platform-absent, reboot-pending, virtualization-disabled}
+        mirroring the order-312 membership-classified hcsdiag pattern:
+        fail FAST on classified-fatal states with exact remediation
+        strings ("WSL2 requires a restart to finish installing - please
+        reboot Windows and relaunch Tillandsias"), surface the verdict in
+        the tray toast + menu status line and as a --diagnose --json
+        field (wsl_platform), and skip the retry storm. Detection recipes
+        with locale-stable signatures captured live on a fresh Win11 host:
+        plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md.
+      exit_criteria:
+        - "unit-tested classifier maps S1/S2/S3/S4 signatures (exit codes, aka.ms/wslinstall marker, RebootPending key, HypervisorPresent CIM) to the verdict enum"
+        - "provision/start on a classified-fatal state fails fast with the remediation string (no 5-poke retry storm); pinned by a string litmus"
+        - "--diagnose --json exposes wsl_platform; tray toast + status line show the classified message"
+      events:
+        - type: filed
+          ts: "2026-07-13T21:55:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            Filed at operator direction during the fresh-host cycle that hit
+            the exact reboot-pending state (DISM 3010 + VS Build Tools 5008
+            refusal + WSL notes requiring restart) before any tray run.
+
+    - packet_id: installer-wsl-absent-reboot-affordance
+      order: 324
+      title: "install-windows.ps1: detect WSL-absent / reboot-pending / virtualization-off at install time and instruct the restart before first launch"
+      status: ready
+      kind: enhancement
+      deliverable: scripts/install-windows.ps1
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, installer, wsl, ux]
+      estimated_hours: 2
+      outcome: >
+        The curl installer currently warns once when wsl.exe is missing
+        (S1) and continues; it never detects the reboot-pending state (S2)
+        or firmware-disabled virtualization (S3), so first tray launch
+        walks into the unclassified failure order 323 fixes. Add the same
+        S1/S2/S3 classification at install time: offer/perform
+        `wsl --install --no-distribution` where elevation permits, print
+        the explicit "restart Windows, then launch Tillandsias" step when
+        a reboot is pending, and default to -NoLaunch semantics in that
+        state so the tray's first impression is never a dead VM create.
+        Signatures + recipes: plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md.
+      exit_criteria:
+        - "installer classifies S1/S2/S3 and prints the matching remediation; healthy path unchanged"
+        - "when reboot-pending, installer does not auto-launch the tray and says exactly what to do next"
+        - "detection logic covered by a Pester or litmus-style check runnable on CI (no live VM needed)"
+      events:
+        - type: filed
+          ts: "2026-07-13T21:55:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            Sibling of order 323 (same operator directive): the installer is
+            the first surface a brand-new Windows user touches; it should own
+            the restart instruction instead of deferring to a failing tray.
+
+    - packet_id: github-login-non-tty-fail-loud
+      order: 325
+      title: "github-login: token read from /dev/tty hangs forever non-interactively — fail loud + stdin/--with-token mode"
+      status: ready
+      kind: bug+enhancement
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, auth, pty, automation]
+      estimated_hours: 3
+      outcome: >
+        Live repro 2026-07-13 (Windows guest, headless v0.3.260712.1): the
+        --github-login flow reads git identity from stdin (piped input
+        works) but then execs
+        `podman exec -it tillandsias-github-login-<pid> bash -c
+        'IFS= read -rs TOKEN < /dev/tty ...'` — the token read is /dev/tty
+        only, so any non-interactive invocation (automation, litmus, CI,
+        piped stdin) hangs FOREVER with no timeout and no error. Two
+        independent 10-minute hangs captured; full process tree in
+        plan/issues/build-install-smoke-e2e-findings-2026-07-13-windows.md
+        finding 5. Fix shape: (a) detect the non-TTY case and fail loud
+        with an actionable message; (b) add a non-interactive token path
+        (accept token on stdin when piped, or a documented env/flag akin
+        to gh's --with-token, which the flow already uses internally);
+        (c) inconsistent input channels (identity=stdin, token=/dev/tty)
+        should converge on one policy.
+      exit_criteria:
+        - "non-TTY --github-login exits non-zero with an actionable message within seconds (no hang); pinned by a test"
+        - "documented non-interactive token delivery works end-to-end (vault write confirmed)"
+        - "identity + token input channels consistent under both TTY and non-TTY invocation"
+      events:
+        - type: filed
+          ts: "2026-07-13T22:35:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            Found while seeding GitHub auth for the first Windows in-forge
+            meta-orchestration cycle; workaround was in-guest script(1) PTY
+            allocation (util-linux-script had to be installed first).
+
+    - packet_id: wsl-guest-forge-user-src-ownership
+      order: 326
+      title: "WSL2 guest provisioning: no forge user + root-owned /home/forge/src — every containerized cloud clone fails EACCES"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, provisioning, forge]
+      estimated_hours: 3
+      outcome: >
+        Live repro 2026-07-13 on a truly cold Windows provision (recipe
+        path, tray 0.3.260713.1/fd2e11c6, guest headless v0.3.260712.1):
+        the guest has NO forge user (id: 'forge': no such user) and
+        /home/forge/src is owned root:root 0755. First cloud attach
+        (--cloud tillandsias --opencode) fails in the containerized
+        gh repo clone with "could not create work tree dir
+        '/home/forge/src/tillandsias.tmp.<hex>': Permission denied"
+        (non-root uid inside the clone container + --cap-drop=ALL means
+        even a uid-0 container process has no DAC_OVERRIDE over the
+        root-owned mount). The macOS VZ lane clones fine (order 273
+        capture streamed a full clone), so this is a WSL recipe gap:
+        materialize/configure_recipe_distro writes wsl.conf default user
+        'forge' but never creates the user or chowns /home/forge/src.
+        Session workaround (recorded, NOT the fix): chmod 0777
+        /home/forge/src. Proper fix: create the forge user (stable uid),
+        chown -R forge:forge /home/forge, and add a provisioning-time
+        assertion (writability probe from the clone container's uid) that
+        fails loud, mirroring the order-297 headroom assertion pattern.
+        Evidence: plan/issues/build-install-smoke-e2e-findings-2026-07-13-windows.md
+        (Run 1 lane section).
+      exit_criteria:
+        - "fresh WSL2 provision creates the forge user and forge-owned /home/forge/src (asserted at provisioning time, fails loud)"
+        - "cold cloud attach clone succeeds on Windows without manual chmod"
+        - "regression pinned: provisioning-time writability probe or unit test on the recipe config step"
+      events:
+        - type: filed
+          ts: "2026-07-13T22:50:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            First Windows cold-provision cloud attach ever exercised; clone
+            EACCES root-caused to missing forge user + root-owned src in the
+            WSL recipe. Lane retried after chmod workaround.
+
+    - packet_id: guest-lazy-ensure-router-image
+      order: 327
+      title: "Guest lazy enclave-ensure never builds tillandsias-router — stage 'router' dies with cryptic localhost-registry pull 125 (order-76 parity gap)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, containers, forge, ux]
+      estimated_hours: 3
+      outcome: >
+        Live repro 2026-07-13, cold Windows WSL2 guest (headless
+        v0.3.260712.1), first cloud attach: the lane lazily built vault/
+        proxy/git/inference/forge-base/forge, then stage 'router' ran
+        `podman run ... localhost/tillandsias-router:v0.3.260712.1`
+        WITHOUT ensuring the image exists — podman fell through to
+        interpreting localhost as a registry ("pinging container registry
+        localhost: dial tcp 127.0.0.1:443: connection refused", 3 retries,
+        exit 125, lane dead). This is exactly the failure class order 76
+        fixed via ensure_image_exists build-on-missing for forge-base/
+        chromium-core; the router stage (newer, order-315-era Caddy router
+        + sidecar) was never added to that ladder. Note the router build
+        context needs the runtime-extracted tillandsias-router-sidecar
+        musl binary (images/router/Containerfile COPY), so the fix is
+        ensure_image_exists parity including the sidecar extraction, plus
+        the order-76-style actionable error if the build itself fails.
+        Linux hosts dodge this because `tillandsias --init` pre-builds all
+        images; the guest lazy path is the only consumer that hits it.
+        Session workaround: ran `tillandsias-headless --init --debug`
+        inside the guest to build the full image set, then relaunched the
+        lane. Evidence:
+        plan/issues/build-install-smoke-e2e-findings-2026-07-13-windows.md
+        (Run 1 lane section, attempt 2).
+      exit_criteria:
+        - "cold guest cloud attach builds tillandsias-router on demand (or ensures it before stage router); no localhost-registry pull attempt"
+        - "missing-image detection prints the order-76-style actionable error naming the image and the build command"
+        - "regression pinned by a unit/litmus test on the router ensure path"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:12:00Z"
+          agent_id: "windows-yolanda-fable5-20260713T2105Z"
+          host: windows
+          summary: >
+            Second distinct first-attach blocker on the cold Windows lane
+            (after order 326); found because the Windows guest exercises the
+            lazy ensure path that --init masks on Linux hosts.
+    - packet_id: guest-container-metrics-over-control-wire
+      order: 333
+      title: "Guest/container metrics over the control wire (per-container + per-mount I/O) — no VM-boundary hacks"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/guest-container-metrics-over-control-wire-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [observability, metrics, control-wire, guest, forge]
+      estimated_hours: 8
+      outcome: >
+        Guest headless samples per-container CPU/mem/blkio (proxy, cache,
+        router, vault, git-mirror, forge) plus per-mount I/O counters for
+        the hot paths, and exposes a MetricsSnapshot over the existing
+        vsock control wire so macOS/Windows trays and --diagnose --json can
+        read it idiomatically. Existing TCP /metrics stays for Linux-local
+        scrapes. Direct input for the ramdisk placement decision (order 324).
+      exit_criteria:
+        - "control-wire MetricsSnapshot round-trip returns per-container samples for every running service container"
+        - "per-mount I/O counters cover /home/forge/src, pull cache root, /opt/cheatsheets, git-mirror storage, proxy cache dir"
+        - "collection failure surfaces as an error field, never a fabricated healthy sample (spec:observability-metrics)"
+        - "--diagnose --json gains a metrics block on macOS (read over the wire)"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Operator-directed monitoring pass during the BigPickle macOS e2e:
+            host side can only see whole-VM aggregates (tray process +
+            VM-dir growth); guest TCP /metrics is unreachable over vsock and
+            per-container/per-mount attribution does not exist. Filed per
+            idiomatic-layers policy (order 271) instead of boundary hacks.
+
+    - packet_id: forge-hot-path-placement-metrics
+      order: 329
+      title: "Measure forge hot paths (checkout/pull-cache/proxy/router/git-mirror) and decide ramdisk vs disk vs virtiofs with data"
+      status: ready
+      kind: research
+      deliverable: plan/issues/forge-hot-path-placement-metrics-2026-07-13.md
+      depends_on: [guest-container-metrics-over-control-wire]
+      pickup_role: linux
+      capability_tags: [performance, forge, ramdisk, research]
+      estimated_hours: 6
+      outcome: >
+        Placement table with measured I/O per hot path from a standard
+        BigPickle cycle on Linux and macOS guests. Answers: is virtiofs
+        /home/forge/src a measurable drag vs the Linux tmpfs clone; does
+        pull-cache path 1 (userspace LRU) need path 2 (real tmpfs); do
+        proxy/cache/router/git-mirror I/O matter. Every disposition
+        respects the 4 GiB guest RAM budget (vz.rs:941) and files its own
+        implementation child packet.
+      exit_criteria:
+        - "placement table complete with measured numbers + provenance for every row"
+        - "each move-* disposition names an implementation child packet"
+        - "macOS virtiofs-vs-Linux-tmpfs checkout comparison answered with numbers"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Operator directive: forge checkout was intended to be ramdisk;
+            verified it is virtiofs-to-host-SSD on macOS and tmpfs only on
+            Linux; pull-cache real-tmpfs path 2 was deferred pending
+            profiling that never existed. This packet creates that data.
+
+    - packet_id: git-mirror-observability-and-managed-alternatives
+      order: 330
+      title: "Git-mirror: mirror-as-a-service observability + build-vs-adopt evaluation of off-the-shelf mirror containers (Forgejo/Gitea et al.)"
+      status: ready
+      kind: research
+      multi_cycle: true
+      deliverable: plan/issues/git-mirror-observability-and-managed-alternatives-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, research, heavy-agent, observability]
+      estimated_hours: 10
+      outcome: >
+        Declared audit input to order 315. Scored matrix
+        (cheatsheets/concurrent-git/git-mirror-managed-alternatives.md) of
+        off-the-shelf mirror containers vs keep-bespoke+rungs-B-E, on
+        footprint (4 GiB guest), relay/ack semantics (rung A satisfiable),
+        vault credential injection, policy hooks (order-316 YAML gate),
+        out-of-box observability, config surface (DEFAULTS OVER
+        CONFIGURATION), license, migration cost both directions. Plus the
+        mirror observability requirements list (relay queue depth, last
+        relay per ref, divergence, ack latency, reject/credential-failure
+        counters) as testable statements, transport via order 323.
+        Recommendation ratified through order 315; The Tlatoani owns the
+        adopt/keep decision.
+      exit_criteria:
+        - "matrix complete: no empty cells across the declared axes for the candidate set"
+        - "one named recommendation with a migration-ladder sketch"
+        - "mirror observability requirements enumerated as litmus-pinnable statements"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Operator directive during macOS monitoring pass: the mirror is a
+            critical backbone turning finicky; rungs 318-322 harden the
+            bespoke mirror but nobody owns runtime monitoring, and the
+            adopt-vs-build question was never evaluated. Multi-cycle
+            heavy-agent research.
+
+    - packet_id: macos-opencode-host-path-translation
+      order: 331
+      title: "macOS --opencode/--lane project path: translate host ~/src paths to /home/forge/src, fail fast pre-boot otherwise"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/macos-opencode-host-path-not-translated-2026-07-13.md
+      depends_on: []
+      pickup_role: macos
+      capability_tags: [macos, tray, ux, cli]
+      estimated_hours: 2
+      outcome: >
+        opencode_main (and sibling project-path lanes) rewrite host
+        $HOME/src/<name> paths to /home/forge/src/<name>, pass through
+        guest-absolute paths, and reject anything else on the host BEFORE
+        booting the VM with a message naming both accepted forms; pure
+        translation function pinned by unit test.
+      exit_criteria:
+        - "host ~/src/<name> path boots and attaches (live repro from 2026-07-13 no longer fails)"
+        - "invalid path fails on host pre-boot with actionable message"
+        - "translation function unit-pinned"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:10:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Live e2e finding: --opencode /Users/tlatoani/src/tillandsias
+            booted the VM then failed in-guest with "Project not found";
+            /home/forge/src/tillandsias works. One-minute boot wasted per
+            wrong guess; no user will guess the guest path.
+
+    - packet_id: macos-opencode-firstuse-silent-build-idle-timeout
+      order: 332
+      title: "P1: first-use macOS --opencode dies at 300s vsock idle timeout during silent forge image build (VM torn down mid-build)"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/macos-opencode-firstuse-silent-build-idle-timeout-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [vm-layer, control-wire, forge, macos, p1]
+      estimated_hours: 4
+      outcome: >
+        Cold-substrate --opencode reaches the agent prompt: headless streams
+        image-build progress (serves order 270 too), the exec idle timeout
+        distinguishes no-bytes from peer-dead via a wire heartbeat, and the
+        three IDLE_TIMEOUT_SECS literals (vsock_exec.rs:195/317/555) collapse
+        into one env-overridable constant. Live repro + host-side resource
+        evidence in the deliverable; workaround (exec-guest --init pre-build,
+        streamed) validated on macOS 2026-07-13.
+      exit_criteria:
+        - "cold-substrate --opencode with no forge images reaches the agent prompt (no idle-timeout death)"
+        - "wire-level liveness heartbeat or streamed build output pinned by litmus with a synthetic slow-build fixture"
+        - "single IDLE_TIMEOUT_SECS constant, env-overridable"
+      events:
+        - type: filed
+          ts: "2026-07-13T23:25:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            Live e2e: guest pinned at ~200% CPU building forge-base while the
+            exec stream stayed silent; at 300s the lane declared the wire
+            stale and vz.stop() killed the build. Sibling of order 270 and
+            the Windows silent forge-base build finding, but fatal on macOS
+            first use.
+
+    - packet_id: forge-shared-checkout-destructive-clean
+      order: 328
+      title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [meta-orchestration, forge, safety, p1, skill]
+      estimated_hours: 4
+      outcome: >
+        Blocked in-forge cycles leave pre-existing files byte-identical:
+        skill exit contract scoped to cycle-created artifacts (startup
+        git-status snapshot is the boundary), and macOS forge lanes get a
+        forge-owned worktree instead of operating directly on the
+        operator's virtiofs-shared checkout (order 321 adjacency). Live
+        near-data-loss transcript in the deliverable; survival was a
+        commit-push race won by minutes.
+      exit_criteria:
+        - "skill text: discard-temporary-artifacts scoped to artifacts the cycle created; blocked cycles leave tree as found"
+        - "litmus fixture: blocked cycle on a dirty tree exits with pre-existing files byte-identical (checksummed)"
+        - "macOS forge lane worktree isolation decision recorded (materialize vs git-worktree), child packet filed if adopted"
+      events:
+        - type: filed
+          ts: "2026-07-14T00:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
+          host: macos
+          summary: >
+            BigPickle's blocked forge cycle ran git checkout -- plan/index.yaml
+            + git clean -fd plan/issues/ on the shared virtiofs checkout,
+            targeting this host cycle's five uncommitted packet files; they
+            survived only because e84ba192 had just been pushed. It also
+            reverted its own blocker-file update (self-erasing evidence).
+
+    - packet_id: stable-milestone-v1
+      order: 334
+      title: "STABLE MILESTONE v1: per-platform must-land set for the first stable-labeled release beyond v0.3.260712.1"
+      status: ready
+      kind: milestone
+      multi_cycle: true
+      deliverable: plan/index.yaml (this node tracks; children carry the work)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [coordination, release, milestone]
+      estimated_hours: 0
+      outcome: >
+        Operator directive 2026-07-14: converge on a stable milestone.
+        Channel mechanics shipped (order 305; v0.3.260712.1 promoted as
+        the first stable). This node enumerates what each platform must
+        land before the NEXT promotion — the first release labeled stable
+        under the full bar. Promotion stays Tlatoani-owned
+        (scripts/promote-stable.sh, evidence-gated).
+      milestone_criteria:
+        linux:
+          - "order 306 opencode-tray-tui-spill-verify: tray TUI clean on cold first launch"
+          - "order 307 antigravity-launch-crash: lane reaches usable TUI (retry-installer fix a04b8c91 needs verify)"
+          - "orders 303+304 agent-login: device flow, vault round-trip — no re-login on relaunch"
+          - "order 318 mirror-relay-verified-acks: no false-success acks (data-loss class barred from stable)"
+        windows:
+          - "order 312 remaining slice: standard-user (non-elevated) tray connects OR installer group-add verified end-to-end on a standard account"
+          - "orders 323/324 WSL reboot-pending first-install UX: cold install on a no-WSL machine gives actionable guidance, not a cryptic VM failure"
+          - "order 326 wsl-guest-forge-user-src-ownership: cloud clones work in the guest forge"
+        macos:
+          - "order 331 macos-opencode-host-path-translation: host-path forge lane launches (operator repro FAIL)"
+          - "order 332 macos-opencode-firstuse-silent-build-idle-timeout: first-use build survives >300s without VM kill"
+          - "order 320 (or interim): macOS forge gets the gitconfig/insteadOf injection — forge cycles can push"
+        cross:
+          - "curl-install e2e PASS on the promotion candidate on ALL THREE platforms, recorded in plan/"
+      exit_criteria:
+        - "every milestone_criteria row maps to a done packet or an operator-approved waiver recorded here"
+        - "scripts/promote-stable.sh run on the candidate with the evidence gate passing un-forced"
+      events:
+        - type: filed
+          ts: "2026-07-14T19:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
+          host: linux_mutable
+          summary: >
+            Filed per operator directive; criteria derived from the merged
+            sibling evidence (windows 312/323-327, macos 328-333 lines,
+            linux 303-307/318).

@@ -1,6 +1,369 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-12T19:30:00Z
+LastExecutionTime: 2026-07-14T00:20:00Z
+
+## Cycle 2026-07-13T22:43Z→00:20Z (macos — operator-directed: full destructive e2e + BigPickle in-forge /meta-orchestration + resource-monitoring pass; orders filed (coordinator-renumbered: metrics packet now order 333; see index), 257 CLOSED, mirror blocker re-evidenced)
+
+- **Host**: macOS arm64 (10-core/16 GiB), `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z. Guard `ok:gh-keyring`,
+  e2e preflight `eligible`. Startup: merged origin/linux-next
+  (fast-forward 837b066f→66d8b134); sibling heads main 38d33cd8,
+  windows-next ac06ff86.
+- **Destructive e2e**: build+codesign+install (freshness 66d8b134==HEAD) →
+  VM dir 5.5G destroyed → cold provision PASS (528 MB rootfs, 250 GiB
+  sparse disk) → diagnose exit 0.
+- **BigPickle in-forge /meta-orchestration (operator goal)**: attempt 1
+  FAIL host-path (order 326); attempt 2 FAIL P1 — silent forge-base build
+  tripped the 300s vsock idle timeout, vz.stop() killed the build (order
+  327); workaround `--exec-guest --init` streamed ALL 10 image builds to
+  success; attempt 3 (warm) — **BigPickle executed a complete, disciplined
+  cycle** (mode/host detection, guard, blocker re-derivation, contract
+  exit, exit_code 0 propagated over the PTY wire) — verdict BLOCKED
+  `missing:no-credential-channel`: macOS shared-checkout origin is public
+  GitHub despite the entrypoint mirror banner (order 320 path), and a cold
+  substrate has no vault credential until a GitHub login runs (114/303/304).
+  Evidence appended to forge-credential-channel-missing-2026-07-12.md.
+- **NEW P1 order 328**: BigPickle's blocked cycle `git clean -fd`'d the
+  virtiofs-SHARED checkout — sibling uncommitted packet files survived only
+  because e84ba192 had just been pushed. Exit-contract cleanliness must
+  scope to cycle-created artifacts; macOS forge lane needs a forge-owned
+  worktree.
+- **Order 257 CLOSED (drain)**: InteractiveStream cell verified live by the
+  BigPickle PTY session (last todo cell); macOS parity column complete;
+  parity litmus green on this host.
+- **Monitoring pass (operator-directed, no boundary hacks)**: VM resources
+  attribute to the com.apple.Virtualization.VirtualMachine XPC process
+  (tray is a 14 MB driver); guest vCPU cap (4) is the build bottleneck
+  (~200% sustained, peak 265%), host never stressed (mem free ≥63%, swap 0,
+  load ≤3.7/10 cores); VM disk 0→12 GiB. Forge checkout on macOS is
+  virtiofs-to-host-SSD, NOT ramdisk (intent≠code); pull-cache real-tmpfs
+  path was deferred pending profiling that never existed. Filed orders 323
+  (guest/container metrics over control wire), 324 (hot-path placement
+  decided with data, 4 GiB guest budget), 325 (git-mirror observability +
+  off-the-shelf mirror evaluation — Forgejo/Gitea et al., declared order-315
+  audit input, multi_cycle).
+- **Litmus**: instant pre-build 127/131 after syncing the two order-315
+  cheatsheets into the tracked image mirror (in this commit); remaining 4
+  are known non-macOS-gated shape checks (recorded in findings, not
+  refiled).
+- **Report**: plan/issues/macos-build-install-smoke-e2e-findings-2026-07-13.md.
+
+## Cycle 2026-07-13T21:05Z→23:20Z (windows yolanda — NEW HOST from-scratch e2e + FIRST Windows in-forge BigPickle full /meta-orchestration cycle; orders 323-327 filed; order-318 false-success live repro + manual relay)
+
+- **New host bootstrap (Windows 11 Home, re-imaged from Silverblue)**: git
+  identity set (Tlatoani), guard `ok:gh-keyring`, rustup+cargo 1.97 + VS
+  Build Tools + WSL 2.7.10 provisioned from zero. Sequencing finding:
+  VirtualMachinePlatform enable (DISM 3010) demands a reboot BEFORE VS
+  Build Tools will install (5008) or WSL2 can start VMs — operator-approved
+  restart mid-cycle. Filed as orders **323/324** (operator directive: tray
+  must classify wsl-absent/reboot-pending/virt-off and say "WSL2 requires a
+  restart"; installer owns the restart instruction).
+- **Local-build destructive e2e (run 20260713T214101Z) gates 1-3 PASS**:
+  tray 0.3.260713.1 (fd2e11c6, embedded SHA==HEAD, 2m43s), truly-cold
+  destroy (pristine host), cold `--provision-once` ~4 min → `RESULT: VM
+  Ready — control wire up ✓` wire v2 attempt=1; diagnose exit 2
+  degraded-as-expected. Absent guest embed → release-fetch fallback
+  engaged (guest v0.3.260712.1, wire-compatible; skew recorded honestly).
+- **GOAL (operator): BigPickle full cycle inside the forge — ACHIEVED on
+  attempt 4**. Chain exercised: vault Phase-6.5 bootstrap (8 policies) →
+  containerized github-login (vault token write) → mirror clone → router →
+  forge-base/forge builds → opencode → /meta-orchestration: guard →
+  drain claimed **order 307** → 3 antigravity-entrypoint fixes →
+  in-forge `./build.sh --check` PASS → commit `a04b8c91` → filed its own
+  reduction-engine finding (root-owned .gh-credentials — caught the host's
+  seeding workaround!). Attempt 3 was a contract-perfect BLOCKED cycle
+  (guard `missing:no-credential-channel`, no committable work, clean exit).
+- **First-attach blockers found + filed**: order **326** (no forge user +
+  root-owned /home/forge/src → containerized clone EACCES), order **327**
+  (lazy enclave-ensure never builds tillandsias-router → cryptic
+  localhost-registry 125, order-76 parity gap), order **325**
+  (--github-login /dev/tty read hangs forever non-interactively). Windows
+  repro appended to forge-credential-guard-push-channel-gap-2026-07-08
+  (gitconfig/mirror injection absent on guest CLI lane; guard fix itself
+  CONFIRMED working).
+- **Order-318 P1 CONFIRMED LIVE**: BigPickle's mirror push was acked +
+  reported relayed; origin/linux-next never moved. Host recovered the
+  commit from the guest clone via //wsl.localhost and relayed manually:
+  linux-next 66d8b134 → **a04b8c91** (order 307 progress now durable).
+  An unattended forge cycle silently loses work without this babysitting —
+  318 is the top mirror-ladder priority from Windows' perspective too.
+- **Cross-platform corroborations**: proxy teardown SIGSEGV 139 (matches
+  this morning's Linux finding); guest minimal-env gaps (pgrep, script(1)
+  absent); in-forge YAML validation falls back to ad-hoc python3
+  (tillandsias-policy not shipped in forge image — enhancement candidate).
+- **Host state at exit**: keepalive killed, distro terminated (registered,
+  idle), tree clean at push, e2e evidence under
+  target/build-install-smoke-e2e/20260713T214101Z/.
+
+## Cycle 2026-07-13T10:44Z→12:10Z (linux_immutable yolanda — NEW HOST first cycle: drain ×3 + order 285 DONE; curl-install e2e PASS on v0.3.260712.1; in-forge order 313 slice landed)
+
+- **New host bootstrap**: fresh Fedora Silverblue (yolanda). Git identity
+  set (Tlatoani / bulloncito@gmail.com), guard `ok:gh-keyring`,
+  `eligible` + `allow:full-meta`. Sibling heads at start: main 38d33cd8,
+  linux-next eff9bae8, windows-next ac06ff86, osx-next 837b066f.
+- **TESTED RELEASE UPDATE**: `v0.3.260712.1` (latest published) passed its
+  first curl-install e2e — install/reset/cold-init/forge-lane/4b all
+  clean; the order-298 proxy-teardown regression is confirmed ABSENT.
+  Immutable hosts need not re-run until the next release.
+- **Fresh-host findings drained on the spot**: 79682b9f fixed four latent
+  with-tillandsias-builder.sh defects (missing --assumeyes, enclave-proxy
+  poisoning of host podman via containers.conf [engine] env,
+  _toolbox_exists grep -x never matching, broken standalone invocation) —
+  order 239's "fresh Silverblue" exit criterion had never run on its
+  target host class; falsification note added to the ledger. 10671807
+  fixed clippy 1.97 drift (fresh hosts break on new lints; pin decision
+  filed as rust-toolchain-unpinned-clippy-drift-2026-07-13.md).
+- **Order 285 DONE (d877e199)**: shared podman_daemon_reachable() gate in
+  tillandsias-headless tests; verified podman-absent / present-but-dead
+  (macOS repro via --remote dead socket) / reachable. Sweep disproved the
+  "other binaries share the podman gap" hypothesis — macOS stress reds
+  re-attributed to mock timing-ratio flakiness (finding filed for macOS).
+- **Forge lane (full-meta, recorded)**: OpenCode on big-pickle ran
+  /meta-orchestration → /advance-work-from-plan, claimed order 313,
+  landed slice 1 as 4281ce4e (inference Fedora CA fix, proxy warm-up
+  retry, error surfacing) through the mirror in one push; packet left
+  in_progress with residuals routed to Windows/linux_mutable. Lane exit 0.
+- **6 findings packets filed**:
+  plan/issues/smoke-e2e-findings-v0.3.260712.1-2026-07-13.md — two
+  forge-liveness-probe defects (exact-name inspect never matches
+  tillandsias-<project>-forge; dead_air-without-heartbeat makes `wait`
+  useless until order 265 lands), proxy teardown SIGSEGV 139, vault
+  approle re-enable ERROR noise + slow SIGTERM, stress mock timing
+  flakiness (macOS), installer-init discarded by smoke reset
+  (double-build waste).
+- **Host state at exit**: all containers stopped, builder toolbox
+  destroyed by the reset (auto-recreates on next ./build.sh via the fixed
+  wrapper), tree clean at push.
+
+## Cycle 2026-07-13T04:53Z→05:45Z (windows — meta-orchestration eager drain: order 312 slices 1+3 DONE per live Tlatoāni decision; 279 released back)
+
+- **Host**: Windows 11, `windows-next`, agent windows-bullo-fable5-20260713T0453Z.
+  Guard `ok:gh-credentials-store`; fast-forwarded to linux-next eff9bae8.
+- **Order 312 (elevation P1) slices 1+3 DONE** (decision: "both, slice 3
+  first", The Tlatoāni live): membership-based (NOT TokenElevation)
+  hcsdiag-failure classification with aka.ms/hcsadmin remediation;
+  --diagnose --json `elevated` field (e2e evidence now carries privilege
+  context); installer one-time Hyper-V Administrators group-add by SID
+  (localized names) with opt-out. Both live-verified (non-elevated probe
+  shows remediation; elevated diagnose true). Slice 2 (socat stdio wire
+  fallback, no-elevation transport) is the remaining scope — packet stays
+  ready for next cycle.
+- **Order 279 claimed then RELEASED unstarted**: multi-hour race-hardening
+  does not fit the remaining cycle budget after 312; no shaping changes.
+- **PS 5.1 traps recorded** (in the 312 event): greedy `$env:X\` parsing in
+  expandable strings; em-dash in strings on BOM-less UTF-8 = ANSI smart-
+  quote byte that 5.1 treats as a real quote (keep non-ASCII in comments).
+
+## Cycle 2026-07-13T04:19Z→04:50Z (linux_mutable macuahuitl — drain: order 302 DONE (mirror deploy+verify), 315 ladder rungs 318-322 filed)
+
+- **Startup/sync**: linux-next clean at 6f6071db == origin; guard
+  `ok:gh-keyring`. Sibling heads: main 38d33cd8, windows-next 01b38a0b,
+  osx-next 837b066f (both already merged).
+- **Order 302 DONE**: tillandsias-git image rebuilt from HEAD via
+  scripts/build-image.sh git (v0.3.260713.1 + latest) — verified inside
+  the image: order-301 safe refspec (entrypoint.sh:88) AND order-316
+  pre-receive process-substitution fix (pre-receive-hook.sh:142). No
+  long-lived mirror container (per-project on-demand); next lane start
+  picks up the new tag. Live one-push convergence evidence: the e2e
+  gate-4 in-forge push cb9bfd7f..b0bd75b8 relayed mirror→GitHub in ONE
+  push. git-mirror-service instant litmus 3/3 PASS.
+- **Order 315 reduction — migration ladder FILED (orders 318-322)**, all
+  ready, all traceable to the landed audit cheatsheets: 318
+  relay-verified acks (false-success P1 killer), 319 vault-backed
+  credential helper + GitHub App short-TTL token evaluation, 320 single
+  gitconfig injection point + image-baked CA on ALL platforms (deletes
+  the GIT_SSL_CAINFO/SSL_CERT_FILE/GIT_CONFIG_GLOBAL env mesh; fixes the
+  macOS no-insteadOf gap), 321 bidirectional host/forge git-config
+  quarantine (insteadOf host-poisoning class), 322 authenticated push
+  transport (research-first, Tlatoāni sign-off gate).
+- **Newly unblocked summary for sibling hosts**: with e2e proof on all 3
+  platforms, the fine-tuning queue is open — macOS: 257 parity cells,
+  attended-smoke P1s (blank first lane, lane wedge, resize), 317 brew
+  strategy; Windows: 312 (RELEASE-GATING elevation fix), 313 inference
+  resilience, 309 least-privilege split; any-host: 245-251 audit series,
+  318-322 mirror ladder (linux-first).
+- **Release note**: next daily /merge-to-main-and-release (due later
+  2026-07-13) carries orders 308/310/311/316 + both audit cheatsheets +
+  the rebuilt mirror image.
+
+## Cycle 2026-07-12T23:54Z→2026-07-13T01:20Z (linux_mutable macuahuitl — coordinator: sibling integration ×2, order-315 audit LANDED, destructive e2e PASS)
+
+- **Integration**: merged origin/windows-next (orders 297/274/308/310/311
+  done; 312/313/314 filed) and origin/osx-next (attended smoke phase 2
+  P1s) into linux-next — twice, as siblings kept advancing. Conflict
+  mediation: macOS's independently-filed git-mirror revamp DEDUPED into
+  order 315 (its constraints file kept as audit input);
+  brew-aarch64-harness-strategy renumbered 316→317.
+- **Order 315 audit (operator-directed, heavy agents) — cheatsheets LANDED**:
+  Fable fork produced cheatsheets/concurrent-git/git-mirror-architecture-audit.md
+  (current-state map, file:line provenance @ 8875ba82); Opus researcher
+  produced git-mirror-enterprise-practices.md (URL+date provenance).
+  Headline facts: post-receive relay exits 0 unconditionally (false-success
+  P1 is architectural); pre-receive REJECTED lost in pipeline subshell
+  (→ order 316, since FIXED in-forge cb9bfd7f); project .git/ not
+  quarantined (insteadOf host-poisoning vector); ~20 env vars across 4
+  trust domains, CA logic duplicated in 7 files. Headline recommendations:
+  relay OFF post-receive (githooks(5): cannot affect outcome); push
+  --atomic non-force refspecs; credential-helper broker + short-TTL GitHub
+  App installation tokens (secrets never enter the forge); replace env
+  mesh with committed includeIf gitdir: config + image-baked CA; forge
+  pushes over authenticated smart-HTTP/SSH, not git://. Remaining rungs on
+  order 315: gap-disposition sign-off, migration-ladder child packets,
+  ack-semantics litmus, isolation fixture.
+- **Device-login amendment**: orders 303/304 amended — Claude/Codex login
+  replaces paste-token with DEVICE flow (--device: code + copyable URL,
+  never opens a browser/renders clickable URLs that spill garbage into the
+  token). Operator-verified UX.
+- **Destructive local-build e2e PASS @ 0a5c2ca7** (installed
+  v0.3.260713.1): ci-full 17/17 (attempt 1 failed on the new cheatsheets'
+  tier/sync — fixed 0a5c2ca7); full podman reset; cold --init clean
+  (vault healthy); forge lane green — the in-forge agent claimed and
+  FIXED order 316 with a 3-pass fixture (cb9bfd7f) and its push relayed
+  through the live mirror to GitHub. New finding:
+  optimization/forge-openspec-init-fails-warning-2026-07-12.md.
+- **Platform state @ cycle close**: Linux GREEN (e2e PASS, release
+  v0.3.260712.1 live, mirror relay demonstrably working on this host).
+  Windows: order 258 parity DONE (all 7 cells green) but order 312 is
+  RELEASE-GATING — standard-user tray cannot handshake (hcsdiag requires
+  elevation); curl-install Windows dead-on-arrival until 312 ships.
+  macOS: attended smoke phase 2 open P1s — mirror push false-success
+  (order-315 lineage), lane wedge after OpenCode close, blank first
+  OpenCode lane — plus resize P2 and the macOS-forge credential channel
+  gap (no insteadOf injection on the VM lane; order 315 constraint
+  input).
+
+## Cycle 2026-07-13T00:32Z→00:45Z (forge — meta-orchestration: order 316 pre-receive YAML gate fix DONE)
+
+- **Host**: forge, `linux-next`, agent opencode-big-pickle-20260713T0032Z.
+  Credential guard `ok:forge-git-mirror`. Startup: resolved merge conflict
+  in plan/index.yaml (osx-next had added brew-aarch64-harness-strategy at
+  order 316; renumbered to 317). Sibling heads: main 38d33cd8, osx-next
+  837b066f, windows-next 01b38a0b.
+- **Drained order 316 (mirror-pre-receive-subshell-reject-loss) — DONE**:
+  Fixed pre-receive hook subshell variable loss. The inner `while read`
+  loop that iterated over changed files ran in a pipe subshell
+  (`echo FILES | while read`), so `REJECTED=1` was lost before the outer
+  loop could check it. Replaced with process substitution
+  (`while read ... done < <(echo FILES)`). 3-pass litmus
+  (scripts/test-pre-receive-yaml-gate.sh) confirms: invalid YAML rejected,
+  valid YAML accepted, multi-ref mixed validity rejected. All exit criteria
+  satisfied. Commit cb9bfd7f.
+- **E2E gates**: Skipped — no podman binary in forge container.
+
+## Cycle 2026-07-13T00:15Z→00:30Z (linux_mutable — meta-orchestration: order 314 container-ensure-idempotency DONE)
+
+- **Host**: linux_mutable (macuahuitl), `linux-next`, agent
+  linux-bigpickle-20260713T0015Z. Credential guard `ok:gh-keyring`.
+  Startup: clean after checkpoint commit (abc1d239, 67 files TRACES.md
+  regen + VERSION bump). Sibling heads: main 38d33cd8, osx-next
+  837b066f, windows-next 01b38a0b.
+- **Worktree cleanup**: Committed 67 dirty tracked files (regenerated
+  TRACES.md + VERSION bump + Cargo.lock sync) as checkpoint abc1d239.
+- **Drained order 314 (container-ensure-not-idempotent-exited) — DONE**:
+  Added `--replace` to `build_inference_run_args` (main.rs:2367) so
+  `podman run --replace --detach --name tillandsias-inference` atomically
+  removes an exited container before creating a fresh one. Prevents the
+  exit-125 name-collision that blocked every lane when the inference
+  container exited uncleanly (order 313 proxy warm-up race). Unit test
+  `inference_run_args_use_replace_for_idempotency` pins the flag. Build
+  check passes (type-check + clippy + clippy listen-vsock); 146/149
+  tests pass (3 pre-existing: proxy DNS in fake-podman smoke, PoisonError
+  in forge-gitconfig tests — unrelated).
+- **E2E gates**: Skipped — no container runtime change (args-only fix
+  in the run builder; actual idempotency proven at next live lane launch).
+
+## Cycle 2026-07-12T19:40Z→21:50Z (windows — meta-orchestration + operator-attended smoke: orders 297+274 DONE, TWO new P1s root-caused live (308 unit cap-hardening, 310 antigravity singleton-kill), destructive cold e2e PASS)
+
+- **Host**: Windows 11, `windows-next`, agent windows-bullo-fable5-20260712T1940Z,
+  operator (The Tlatoāni) at the tray. Credential guard `ok:gh-credentials-store`.
+  Startup: merged origin/linux-next (fast-forward e50ab2f2→5a4d350d, release
+  v0.3.260712.1). Sibling heads: main 38d33cd8, osx-next 9632165a.
+- **Drained order 297 (windows-guest-disk, macOS-294 sibling) — DONE**: fresh
+  WSL 2.7.3 guest measured 1007 GiB / 955 GiB free (1 TB dynamic VHDX — no
+  macOS-style 5 GB wall); added provisioning-time headroom assertion to both
+  wsl.rs paths (32 GiB hard floor + 240 GiB parity warn, host-side df parse,
+  3 pin/boundary tests). Runtime-confirmed on the live cold path ("guest root
+  headroom OK: 954 GiB") and end-to-end by the forge-base build (3.1 GB image,
+  5 GiB used / 951 GiB free after). Commit 7eaa8319.
+- **Drained order 274 (lock-namespace) — DONE**: criterion-3 probe discharged
+  live — first GitHub Login on the pristine distro reached credential prompts,
+  completed twice, zero name-in-use hits in the full journal. Caveat recorded:
+  the suggested grep false-positives on unrelated build exit-125s.
+- **Destructive cold e2e PASS**: build+install (freshness gate: installed
+  0.3.260712.1==HEAD) → wsl --unregister + cache wipe → cold provision
+  (download stall self-recovered via Range retries; import; base packages;
+  configure; handshake attempt 1, wire v2) → status probe Ready/podman_ready.
+- **NEW P1 order 308 (DONE, 989173ba)**: recipe unit's NoNewPrivileges +
+  CapabilityBoundingSet left the uid-0 headless at CapEff=0x400 → cap-stripped
+  podman went ROOTLESS (empty store, pause fatals) → every headless-driven
+  ensure died 125 in a 2s loop while tray-driven wsl.exe flows worked → tray
+  stuck on "securing vault" after successful logins. Root-caused live
+  (journal _CMDLINE + CapEff), directives removed from the unit writer +
+  pin asserts; least-privilege reintroduction split to order 309 (incl. macOS
+  vz unit audit).
+- **NEW P1 order 310 (DONE)**: --antigravity missing from is_cli_mode — the
+  order-296 Antigravity leaf's lane invocation acquired the launcher
+  SingletonGuard and TERM+KILLed the running headless service (operator click
+  tore down the whole stack; auto-recovered). One-line census fix + source pin
+  test enumerating every lane flag; verified in-guest (headless is unix-only).
+- **Attended parity evidence (order 258, in progress)**: login state + cloud
+  submenu with real repos + local submenu + 7-leaf project submenu (Antigravity
+  leaf present) all confirmed live by the operator; agent-PTY + status-indicator
+  cells in flight at cycle close.
+- **Findings filed**: headless-podman-events-watcher-rootless-wedge (P1
+  forensics), headless-restart-wedges-guest-podman (interim), fetch-retry
+  eprintln invisible in GUI tray, installer exit-code leak, guest-embed
+  staging version-skew (order-282 pin is test-time only — build script gate
+  missing), windows-attach silent forge-base build, litmus strict-exit
+  fallout recurrence (same 9 + new order-300 litmus; VERSION clobbered to
+  0.0.0-test-retag AGAIN — restored).
+- **Guest binary ops**: embedded staged guest was v0.3.260711.8 (stale
+  target-guest/); restaged from the v0.3.260712.1 release asset
+  (SHA-verified) + hot-swapped in-guest; rolled back and forward during the
+  308 bisection — guest ends the cycle on v0.3.260712.1 with the unit
+  override live.
+- **Late-session P1s (attended relaunches)**: order 311 DONE (4c8a9650) —
+  every background wsl/hcsdiag spawn lacked CREATE_NO_WINDOW (operator saw
+  consoles popping per handshake retry; vm-layer now exports
+  no_window_async/_sync, wsl_cmd() idiom adopted) + NUL-tolerant
+  parse_wsl_vm_id. Order 312 FILED (release-gating): the handshake's
+  hcsdiag VM-ID lookup is admin/Hyper-V-Administrators-only — a
+  standard-user (Start-Menu) tray can NEVER connect ("Privilèges
+  insuffisants" captured non-elevated) and the failure masquerades as
+  "distro not started". ALL prior Windows e2e ran elevated (agent shells),
+  so the standard-user path was never exercised: curl-install Windows is
+  dead on arrival until 312 ships. Operator unblocked in-session via an
+  elevated launch (handshake then succeeded in 10s).
+- **Attended session outcome**: elevated tray connected instantly; OpenCode
+  lane launched (brew shims first-use bootstrap observed live — order 294);
+  router built on demand at lane launch (order 293 live evidence); wire
+  reconnect stale-render finding filed (subscription re-established but UI
+  stayed "Wire unreachable"; Quit worked from the wedged-looking tray —
+  order-288-class quittability holds).
+
+## Cycle 2026-07-12T20:03Z→20:20Z (forge — meta-orchestration: order 307 antigravity root-cause)
+
+- **Startup/sync**: Forge on `linux-next`, 5 unpushed commits (merge PR #72
+  + post-merge + VERSION bump + trace regen). Credential guard
+  `ok:forge-git-mirror`. Sibling heads: main 9632165a, linux-next 5ca01feb,
+  windows-next e50ab2f2, osx-next 9632165a.
+- **Worktree cleanup**: Committed 32 dirty tracked files (regenerated
+  TRACES.md + VERSION bump to 0.3.260712.2) as checkpoint before new work.
+- **Drained order 307 (antigravity-launch-crash) — root cause confirmed**:
+  Forge proxy egress blocks `antigravity-cli-auto-updater-*.us-central1.
+  run.app` (connection reset by peer). agy installer shell script downloads
+  but inner binary fetch fails; binary never installed; `exec agy` exits 127.
+  Fix: fail-fast with clear error message in entrypoint (line 121-141).
+  Proxy egress gap filed as separate finding.
+- **Filed**: `plan/issues/forge-proxy-egress-antigravity-2026-07-12.md`
+  (proxy egress allowlist gap for *.us-central1.run.app).
+- **Exit criteria**: 1+2 met (error captured, root cause identified).
+  Criterion 3 (usable TUI) blocked on proxy allowlist change (operator
+  action) + vault Gemini credential (orders 303/304, deferred per operator
+  directive).
+- **E2E gates**: skipped — no runtime code change; entrypoint fix is
+  shell-level and needs proxy allowlist change to be end-to-end testable.
+- **LastExecutionTime updated**: cycle closed 2026-07-12T20:20Z.
 
 ## Cycle 2026-07-12T18:56Z→19:30Z (linux_mutable macuahuitl — operator smoke-test feedback drain + sibling unblock)
 
@@ -42,8 +405,15 @@ LastExecutionTime: 2026-07-12T19:30:00Z
   will attend those hosts and start agents to complete the platform
   wrappers. macOS/Windows: you are UNBLOCKED; linux-next is a declared
   stable point.
-- **Release**: /merge-to-main-and-release run this cycle (see release event
-  below / PR + tag evidence).
+- **Release: v0.3.260712.1 PUBLISHED** (PR #72 merged 19:15Z, merge
+  38d33cd8, tag pushed, run 29205458140 SUCCESS 19:15→19:39Z, 25 assets
+  all platforms + cosign). Parity gate: 8 required cells todo (all
+  macOS/Windows), operator-approved release-with-parity-gaps 2026-07-12.
+  Curl-install e2e hosts: latest release is now v0.3.260712.1 — it carries
+  the order-298/299 first-launch fixes that cure the operator's broken
+  v0.3.260711.8 curl-install, plus the forge image entrypoint fixes
+  (TUI-spill silencing, GIT_SSL_CAINFO, exit-pause traps).
+- **LastExecutionTime updated**: cycle closed 2026-07-12T19:45Z.
 
 ## Cycle 2026-07-12T18:36Z→18:46Z (forge — meta-orchestration: order 237 fixture isolation DONE)
 

@@ -445,7 +445,30 @@ metadata_tracking:
     - "These M specs converged in this batch"
     - "Change lag: spec X was integrated on day Y, released on day Z (lag = Z-Y days)"
 
+stable_channel:
+  decided_by: "The Tlatoāni, 2026-07-12 (plan order 305); mechanics landed 2026-07-14"
+  model: >
+    Two channels from ONE release stream. Dailies (merge-to-main-and-release)
+    are published as GitHub PRE-releases. GitHub resolves
+    /releases/latest/download/... — the README install URLs — to the newest
+    NON-prerelease, so end users installing from the README always get the
+    last PROMOTED release while breaking dailies keep shipping alongside.
+    DEFAULTS OVER CONFIGURATION: no separate URL scheme, no channel file,
+    no install-script branching — the prerelease bit IS the channel.
+  promotion:
+    owner: "The Tlatoāni (explicit operator action, never automatic)"
+    command: "scripts/promote-stable.sh vX.Y.YYMMDD.N"
+    gate: >
+      The script refuses (refused:no-evidence) unless plan/ contains a dated
+      e2e/smoke PASS record naming that version; --force overrides loudly
+      and must be recorded in plan/loop_status.md. On success it flips
+      prerelease=false, marks the release "latest", and moves the annotated
+      `stable` git tag to the release commit.
+    demotion: "gh release edit <tag> --prerelease (README URLs fall back to the previous stable)"
+  pinned_by: "litmus:stable-channel-shape (spec ci-release)"
+
 references:
   - "methodology/spec-system.yaml — Spec versioning rules"
   - "methodology/between-commits-work-discipline.yaml — Agent ephemeral versioning"
   - "scripts/verify-version-monotonic.sh — Current monotonicity verification script"
+  - "scripts/promote-stable.sh — Stable-channel promotion (order 305)"
