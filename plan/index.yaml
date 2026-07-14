@@ -12045,3 +12045,61 @@ plan_index:
             proves creation, rotation, TERM-exit, and absence from argv,
             environment output, logs, and project; Vault quick litmuses pass
             6/6.
+
+    - packet_id: test-scripts-mutable-image-tag
+      order: 343
+      title: "Pin mutable :latest image tags in three test scripts to satisfy container-base-policy"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/local-ci-prebuild-gate-blockers-2026-07-14.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [scripts, policy, testing, images]
+      estimated_hours: 1
+      outcome: >
+        Three test scripts (test-forge-gitconfig-bidirectional-quarantine.sh,
+        test-forge-standard-gitconfig-path.sh, test-forge-runtime-ca-trust.sh)
+        use mutable :latest image tags. Pin them to VERSION or a fixed digest
+        so container-base-policy passes.
+      exit_criteria:
+        - "all three scripts use a version-pinned or VERSION-derived image tag"
+        - "scripts/local-ci.sh --phase pre-build container-base-policy check passes"
+
+    - packet_id: test-scripts-python3-elimination
+      order: 344
+      title: "Eliminate python3 from test-forge-runtime-ca-trust.sh (no-python-scripts + litmus gate blocker)"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/local-ci-prebuild-gate-blockers-2026-07-14.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [scripts, policy, python, testing]
+      estimated_hours: 2
+      outcome: >
+        Rewrite the python3 test helpers (port allocation, HTTPS server, URL
+        fetch) in bash/openssl/curl equivalents so no-python-scripts passes.
+        This also fixes the two litmus:forge-runtime-ca-trust and
+        litmus:forge-config-trust-cross-platform-parity failures that invoke
+        this script inside the forge container (which has no python3).
+      exit_criteria:
+        - "scripts/test-forge-runtime-ca-trust.sh contains zero python3 invocations"
+        - "scripts/local-ci.sh --phase pre-build no-python-scripts check passes"
+        - "litmus:forge-runtime-ca-trust and litmus:forge-config-trust-cross-platform-parity pass"
+
+    - packet_id: test-scripts-base64-injection-elimination
+      order: 345
+      title: "Eliminate base64 decode-to-executable from codex auth test scripts"
+      status: ready
+      kind: bugfix
+      deliverable: plan/issues/local-ci-prebuild-gate-blockers-2026-07-14.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [scripts, security, testing]
+      estimated_hours: 1
+      outcome: >
+        Rewrite the base64-decoded script materialization in
+        test-codex-device-auth.sh and test-codex-oauth-harvest.sh as proper
+        committed script files so no-base64-script-injection passes.
+      exit_criteria:
+        - "neither script materializes+executes from a base64 literal"
+        - "scripts/local-ci.sh --phase pre-build no-base64-script-injection check passes"
