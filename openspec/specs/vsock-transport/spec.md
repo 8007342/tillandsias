@@ -94,28 +94,30 @@ as named constants.
 - **ID**: vsock-transport.framing.protocol-unchanged@v1
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [vsock-transport.invariant.framing-shared-with-unix, vsock-transport.invariant.wire-version-1]
+- **Invariants**: [vsock-transport.invariant.framing-shared-with-unix, vsock-transport.invariant.wire-version-2]
 
 The vsock transport SHALL reuse the existing
 `tillandsias-control-wire` framing without modification: 4-byte big-endian
 `u32` length prefix followed by a `postcard`-serialised `ControlEnvelope`.
 `WIRE_VERSION`, `MAX_MESSAGE_BYTES`, and `MAX_MCP_FRAME_BYTES` SHALL retain
-their current values. The `Hello`/`HelloAck` handshake (client sends
-`Hello { wire_version, client_kind }`; server replies `HelloAck { wire_version,
-server_kind }`; mismatched versions abort the connection) SHALL be byte-for-byte
-identical to the Unix-socket variant.
+their current values. The `Hello`/`HelloAck` handshake uses a
+`ControlEnvelope { wire_version, ... }`: the client body is
+`Hello { from, capabilities }` and the server body is
+`HelloAck { wire_version, server_caps }`. Mismatched versions abort the
+connection. Framing and message shapes SHALL be byte-for-byte identical to the
+Unix-socket variant.
 
 @trace spec:vsock-transport
 
 #### Scenario: Same encoder/decoder serves both transports
 - **WHEN** the encoder code path is inspected
-- **THEN** the same `encode_envelope` and `decode_envelope` functions SHALL serve both Unix and vsock streams
+- **THEN** the same `encode` and `decode` functions SHALL serve both Unix and vsock streams
 - **AND** the transport difference SHALL be isolated to `connect()` / `bind()` only
 
 #### Scenario: Handshake version mismatch aborts cleanly
-- **WHEN** a client with `wire_version = 2` connects to a server with `wire_version = 1`
-- **THEN** the server SHALL reply with `HelloAck { wire_version: 1, … }`
-- **AND** the client SHALL detect the mismatch, close the connection with a structured `VersionMismatch` error, and surface the error in `MenuStructure.status_text`
+- **WHEN** a legacy client with envelope `wire_version = 1` connects to the current version-2 server
+- **THEN** the server SHALL log the mismatch and close before sending `HelloAck`
+- **AND** the client SHALL observe a failed/EOF handshake instead of treating the connection as ready
 
 #### Scenario: Message size enforcement
 - **WHEN** a peer sends a framed message larger than `MAX_MESSAGE_BYTES`
@@ -233,12 +235,12 @@ values below 60 seconds SHALL fail loudly.
 
 ### Invariant: Framing shared with Unix transport
 - **ID**: vsock-transport.invariant.framing-shared-with-unix
-- **Expression**: `encode_envelope AND decode_envelope ARE_SHARED_FNS BETWEEN unix AND vsock paths`
+- **Expression**: `encode AND decode ARE_SHARED_FNS BETWEEN unix AND vsock paths`
 - **Measurable**: true
 
-### Invariant: Wire version is 1
-- **ID**: vsock-transport.invariant.wire-version-1
-- **Expression**: `WIRE_VERSION == 1`
+### Invariant: Wire version is 2
+- **ID**: vsock-transport.invariant.wire-version-2
+- **Expression**: `WIRE_VERSION == 2`
 - **Measurable**: true
 
 ### Invariant: New variants are postcard-stable

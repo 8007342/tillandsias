@@ -109,7 +109,7 @@ async fn test_vsock_end_to_end_localhost() {
             unsafe { libc::kill(self.0, libc::SIGTERM) };
         }
     }
-    let _guard = ChildGuard(pid);
+    let guard = ChildGuard(pid);
 
     // Wait for the listener to come up. Retry connect with a short backoff
     // until either it succeeds or 10s elapse.
@@ -158,8 +158,10 @@ async fn test_vsock_end_to_end_localhost() {
         other => panic!("expected HelloAck, got {other:?}"),
     }
 
-    // Drop the connection and let ChildGuard reap the spawned tillandsias.
+    // Close the connection, terminate the listener, then reap it. Waiting
+    // before dropping the PID guard deadlocks the capable-host success path.
     drop(stream);
+    drop(guard);
 
     // Best-effort wait for child exit.
     let _ = child.wait();

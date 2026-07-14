@@ -936,6 +936,7 @@ specs:
 - spec_id: vsock-transport
   status: active
   litmus_tests:
+  - litmus:vsock-handshake
   - litmus:vsock-exec-heartbeat
-  coverage_ratio: 75
+  coverage_ratio: 100
   last_verified: '2026-07-14'

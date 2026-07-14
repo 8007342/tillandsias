@@ -3,58 +3,37 @@ name: litmus:vsock-handshake
 spec: vsock-transport
 phase: 2
 description: >
-  Host connects to the in-VM tillandsias-headless via virtio-vsock,
-  exchanges Hello/HelloAck, and verifies the wire version is 1. Exercises
-  the connect-side CID/port allocation contract and the framing-shared-with-unix
-  invariant.
+  Exercise the maintained headless vsock listener fixture, exchange the real
+  Hello/HelloAck schema at wire version 2, and prove the same typed framing on
+  the deterministic Unix transport. Unsupported runtime hosts report an
+  explicit skip after the definition and shared-framing gates pass.
 severity: critical
 size: e2e
 
 preconditions:
-  - tillandsias-host-shell built with the vsock transport feature
-  - tillandsias-headless built with --listen-vsock feature
-  - VM is provisioned and running (WSL2 distro 'tillandsias' OR macOS VZ guest with allocated CID)
-  - host CID is 2; guest CID known via 'wsl --list -v' or VZ machine config
-  - on Linux dev hosts a 'fake VM' loop may bind vsock loopback (CID 1 = local)
+  - workspace contains the maintained vsock_listener_e2e integration target
+  - Linux runtime hosts may bind vsock loopback as the unprivileged user
 
 caveats:
   - requires_vsock_capable_host: "Linux host kernel needs CONFIG_VSOCKETS; Windows needs WSL2; macOS needs VZ-capable hardware"
-  - skip_on_unsupported: "Test should skip with exit 77 (TAP skip) on hosts without vsock"
+  - skip_on_unsupported: "The helper prints an explicit SKIP marker after deterministic framing tests pass"
 
 critical_path:
-  - step: "verify vsock is available on the host"
-    phase: pre-run
-    command: "bash -lc 'modprobe vsock_loopback 2>/dev/null; lsmod | grep -qE \"^vsock\" || lsmod | grep -qE \"vhost_vsock\" || (echo \"SKIP: vsock not available\" && exit 77)'"
-    timeout_ms: 5000
-    expected_behavior: "succeeds (or skips with 77 on unsupported hosts)"
-
-  - step: "VM is reachable on vsock port 42420 (or fake-vm CID 1)"
+  - step: "wire-v2 definition, typed framing, and maintained runtime fixture pass or skip explicitly"
     phase: runtime
-    command: "bash -lc 'timeout 5 socat -u VSOCK-CONNECT:${TILLANDSIAS_VM_CID:-1}:42420 /dev/null && echo OK'"
-    timeout_ms: 8000
-    expected_behavior: "succeeds (TCP-like accept) before handshake"
-
-  - step: "perform handshake and verify wire_version=1"
-    phase: runtime
-    command: "cargo run -p tillandsias-control-wire --example vsock-handshake-probe -- --cid ${TILLANDSIAS_VM_CID:-1} --port 42420 --expect-wire-version 1"
-    timeout_ms: 15000
-    expected_behavior: "exits 0 after receiving HelloAck { wire_version: 1, server_kind: 'tillandsias-headless' }"
-
-  - step: "verify no token leaks in the handshake payload"
-    phase: runtime
-    command: "bash -lc '! cargo run -p tillandsias-control-wire --example vsock-handshake-probe --quiet -- --cid ${TILLANDSIAS_VM_CID:-1} --port 42420 --dump-payload 2>&1 | grep -E \"ghp_|gho_|hvs\\.|s\\.\"'"
-    timeout_ms: 15000
-    expected_behavior: "succeeds (no token patterns in any payload)"
+    command: "scripts/test-vsock-handshake-wire-v2.sh"
+    timeout_ms: 180000
+    success_pattern: "(PASS|SKIP): wire-v2 vsock"
 
 observability:
   traces:
     - "@trace spec:vsock-transport"
     - "@trace spec:host-shell-architecture"
-  expected_log: "Host establishes vsock connection, exchanges Hello/HelloAck, wire_version matches"
+  expected_log: "wire-v2 Hello/HelloAck passes on loopback or reports an explicit unsupported-host skip"
   log_fields:
     spec: "vsock-transport"
     test: "vsock-handshake"
 
 rollback:
-  on_failure: "if step 1 skips, the host lacks vsock — run on a vsock-capable host. If step 2 fails, the VM is not listening: check tillandsias-headless logs in the VM for 'app.started' and --listen-vsock 42420. If step 3 fails with version mismatch, the host and VM are on different tillandsias releases — rebuild both from the same checkout."
-  command: "bash -lc 'echo \"VM CID: ${TILLANDSIAS_VM_CID:-unset}\" && wsl --list -v 2>/dev/null || true && ls -la /sys/class/misc/vhost-vsock 2>/dev/null || true'"
+  on_failure: "inspect WIRE_VERSION/spec drift first, then the maintained integration fixture and unprivileged loopback permissions"
+  command: "scripts/test-vsock-handshake-wire-v2.sh"

@@ -492,28 +492,43 @@ mod tests {
         assert_eq!(envelope, &decoded);
     }
 
+    fn assert_no_credential_markers(envelope: &ControlEnvelope) {
+        let encoded = encode(envelope).expect("encode succeeds");
+        for marker in [b"ghp_".as_slice(), b"gho_", b"hvs.", b"s."] {
+            assert!(
+                !encoded.windows(marker.len()).any(|window| window == marker),
+                "Hello handshake payload must not contain credential marker {:?}",
+                String::from_utf8_lossy(marker)
+            );
+        }
+    }
+
     #[test]
     fn hello_roundtrip() {
-        roundtrip(&ControlEnvelope {
+        let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq: 1,
             body: ControlMessage::Hello {
                 from: "router".to_string(),
                 capabilities: vec!["IssueWebSession".to_string()],
             },
-        });
+        };
+        roundtrip(&envelope);
+        assert_no_credential_markers(&envelope);
     }
 
     #[test]
     fn hello_ack_roundtrip() {
-        roundtrip(&ControlEnvelope {
+        let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq: 2,
             body: ControlMessage::HelloAck {
                 wire_version: WIRE_VERSION,
                 server_caps: vec!["v1".to_string()],
             },
-        });
+        };
+        roundtrip(&envelope);
+        assert_no_credential_markers(&envelope);
     }
 
     #[test]
