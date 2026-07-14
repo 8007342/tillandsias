@@ -2955,7 +2955,7 @@ plan_index:
     - packet_id: forge-validation-findings-2026-07-04
       order: 177
       title: "Forge: reduce in-forge validation findings from Codex meta-orchestration"
-      status: claimed
+      status: done
       kind: enhancement+optimization+test-fix
       deliverable: plan/issues/forge-validation-findings-2026-07-04.md
       depends_on: []
@@ -2984,6 +2984,30 @@ plan_index:
         - "after a forge mirror push, mirror ls-remote and direct GitHub ls-remote agree on linux-next"
         - "if upstream forwarding fails, git push from the forge returns non-zero"
       events:
+        - type: completed
+          ts: "2026-07-14T23:00:37Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Closed the consolidated forge validation residuals. Commits
+            700f6d6e and 2d16881d repair the stale login-first assertion and
+            add a non-destructive six-check PASS/SKIP/FAIL profile covering
+            credential prerequisites, authenticated dry-run push, workspace,
+            full headless tests, forge service health, and e2e eligibility.
+            Obsolete ACTIVE.md handoffs now use plan/index.yaml. Earlier commit
+            35ba3d3f supplied HOME-safe bind assertions, forge CA fallback,
+            diagnostic tools, and startup-snapshot wording. Orders 301/302 and
+            318 close mirror ref convergence and relay failure acknowledgement.
+          evidence:
+            - "implementation: 700f6d6e, 2d16881d"
+            - "prior forge residuals: 35ba3d3f"
+            - "mirror convergence: a1d1ea4c, 3d9e583b, 0c57c344"
+            - "relay acknowledgement: aeebb939"
+            - "scripts/forge-validate.sh: 5 PASS, service-health SKIP not-forge-host, 0 FAIL"
+            - "hermetic service health fixture covers proxy/Git/inference aggregate, Vault, outbound HTTPS, and unreachable failure"
+            - "default-image quick pre-build litmus: 7 passed, 0 failed"
+            - "git mirror ref-convergence and relay-verified acknowledgement fixtures: PASS"
+            - "cargo fmt --all -- --check and ./build.sh --check: PASS"
         - type: claim
           ts: "2026-07-14T22:46:49Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
