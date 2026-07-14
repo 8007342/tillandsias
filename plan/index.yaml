@@ -11088,7 +11088,7 @@ plan_index:
     - packet_id: git-mirror-audit-cheatsheet-image-sync
       order: 337
       title: "Order-315 git-mirror audit documents are absent from the default image cheatsheet mirror"
-      status: ready
+      status: done
       kind: bugfix
       deliverable: images/default/cheatsheets/concurrent-git/
       depends_on: []
@@ -11114,3 +11114,12 @@ plan_index:
             git-mirror-architecture-audit.md and
             git-mirror-enterprise-practices.md. Evidence and reproduction
             are recorded in the dated Linux smoke report.
+        - type: completed
+          ts: "2026-07-14T20:18:29Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Synchronized byte-identical copies of both order-315 audit
+            documents into the default image cheatsheet tree. Direct cmp
+            checks passed and the compact pre-build cheatsheet-tooling suite
+            passed 2/2, including litmus:cheatsheet-host-image-sync.

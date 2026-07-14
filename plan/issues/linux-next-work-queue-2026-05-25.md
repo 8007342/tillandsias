@@ -7,3 +7,4 @@
 - 2026-07-14T19:43Z 41623756 linux_mutable: order 327 DONE — cold forge launch router preflight regression pinned; lazy image-build failures now name the image and `tillandsias --init` recovery command; focused tests + `./build.sh --check` PASS.
 - 2026-07-14T20:25Z linux_mutable macuahuitl: local-build e2e STOPPED at gate 1 before install/reset — no-Python policy rejected the pre-receive YAML fixture and cheatsheet host/image sync found two order-315 mirror omissions. Filed ready orders 336/337; release held. Evidence: `target/build-install-smoke-e2e/20260714T194724Z/`.
 - 2026-07-14T20:11Z linux macuahuitl: order 336 DONE — pre-receive YAML fixture now exercises the production Rust policy validator; all three hook cases and the repository no-Python check pass.
+- 2026-07-14T20:18Z linux macuahuitl: order 337 DONE — synchronized both order-315 git-mirror audit documents into the default image tree; byte comparison and compact pre-build cheatsheet tooling passed 2/2.
