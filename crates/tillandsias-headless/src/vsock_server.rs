@@ -15,7 +15,7 @@
 //! @trace spec:vsock-transport, spec:host-shell-architecture
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::RwLock;
@@ -1243,7 +1243,11 @@ fn in_vm_project_root() -> PathBuf {
 /// @trace spec:host-shell-architecture, plan/issues/multi-host-integration-loop-2026-05-24.md l4
 pub(crate) fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
     let root = in_vm_project_root();
-    let out = crate::local_projects::scan_project_root(&root);
+    enumerate_local_projects_at(&root)
+}
+
+fn enumerate_local_projects_at(root: &Path) -> Vec<LocalProjectEntry> {
+    let out = crate::local_projects::scan_project_root(root);
     if out.is_empty() {
         debug!(
             spec = "host-shell-architecture",
@@ -1442,6 +1446,54 @@ mod tests {
             Err(broadcast::error::TryRecvError::Lagged(_)) => {}
             other => panic!("expected Lagged, got {other:?}"),
         }
+    }
+
+    /// Order 153 SC-10 timed criterion: a receiver that deliberately waits
+    /// 1000ms before polling cannot delay a fast receiver on the same
+    /// broadcast. The fast path retains SC-09's 500ms delivery bound.
+    #[tokio::test]
+    async fn slow_client_1000ms_lag_does_not_delay_fast_client() {
+        let state = VmStateHandle::new();
+        let mut slow_rx = state.subscribe_vm_status();
+        let mut fast_rx = state.subscribe_vm_status();
+
+        let slow_client = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            slow_rx
+                .recv()
+                .await
+                .expect("slow client still receives the push")
+        });
+
+        let started = std::time::Instant::now();
+        state.set_phase(VmPhase::Ready);
+        let fast_message = tokio::time::timeout(Duration::from_millis(500), fast_rx.recv())
+            .await
+            .expect("fast client must not wait for the slow client")
+            .expect("VmStatus broadcast remains open");
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "fast client exceeded the 500ms push bound"
+        );
+        assert!(matches!(
+            fast_message,
+            ControlMessage::VmStatusPush {
+                phase: VmPhase::Ready,
+                ..
+            }
+        ));
+
+        let slow_message = tokio::time::timeout(Duration::from_millis(1250), slow_client)
+            .await
+            .expect("slow client task must finish after its simulated lag")
+            .expect("slow client task must not panic");
+        assert!(matches!(
+            slow_message,
+            ControlMessage::VmStatusPush {
+                phase: VmPhase::Ready,
+                ..
+            }
+        ));
     }
 
     // ── LoginState / CloudProjects push sources (orders 230/231) ────────────
@@ -1767,16 +1819,7 @@ mod tests {
         fs::write(tmp.path().join("loose-file"), b"not a project").unwrap();
         fs::create_dir(tmp.path().join(".hidden")).unwrap();
 
-        // SAFETY: tests in this binary may run concurrently; this env var is
-        // owned by `enumerate_local_projects` only, no other test reads or
-        // writes it.
-        unsafe {
-            std::env::set_var(IN_VM_PROJECT_ROOT_ENV, tmp.path());
-        }
-        let entries = enumerate_local_projects();
-        unsafe {
-            std::env::remove_var(IN_VM_PROJECT_ROOT_ENV);
-        }
+        let entries = enumerate_local_projects_at(tmp.path());
 
         let labels: Vec<&str> = entries.iter().map(|e| e.label.as_str()).collect();
         assert_eq!(labels, vec!["alpha", "beta"]);
@@ -1784,16 +1827,9 @@ mod tests {
 
     #[test]
     fn enumerate_local_projects_returns_empty_when_root_missing() {
-        unsafe {
-            std::env::set_var(
-                IN_VM_PROJECT_ROOT_ENV,
-                "/this/dir/intentionally/does/not/exist/under/tillandsias",
-            );
-        }
-        let entries = enumerate_local_projects();
-        unsafe {
-            std::env::remove_var(IN_VM_PROJECT_ROOT_ENV);
-        }
+        let entries = enumerate_local_projects_at(Path::new(
+            "/this/dir/intentionally/does/not/exist/under/tillandsias",
+        ));
         assert!(entries.is_empty());
     }
 }
