@@ -11405,7 +11405,7 @@ plan_index:
       order: provisional
       provisional_id: linux-260714-1
       title: "Repair stale vsock handshake contract/litmus: wire v1 assertion and nonexistent probe binary"
-      status: claimed
+      status: done
       kind: test-fix
       deliverable: openspec/specs/vsock-transport/spec.md + openspec/litmus-tests/litmus-vsock-handshake.yaml
       depends_on: []
@@ -11422,6 +11422,23 @@ plan_index:
         - "litmus invokes only binaries/examples that exist in the workspace"
         - "litmus:vsock-handshake passes on a provisioned/vsock-capable host or reports an explicit unsupported-host skip"
       events:
+        - type: completed
+          ts: "2026-07-14T22:44:15Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "2880dc0aa94a"
+          commits: ["9d265850"]
+          validation:
+            - "scripts/test-vsock-handshake-wire-v2.sh: deterministic framing passed; explicit unprivileged loopback SKIP"
+            - "litmus:vsock-transport --size e2e --strict: 2/2 passed"
+            - "Hello/HelloAck credential-marker tests: 2/2 passed"
+            - "./build.sh --check: passed"
+          summary: >
+            Replaced the nonexistent v1 probe/socat path with the maintained
+            headless listener fixture, corrected the spec to the production v2
+            envelope and mismatch behavior, pinned credential-free typed
+            payloads, and repaired the capable-host child cleanup deadlock. The
+            descriptor is active again and unsupported loopback is explicit.
         - type: claim
           ts: "2026-07-14T22:36:38Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
