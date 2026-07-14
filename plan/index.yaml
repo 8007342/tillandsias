@@ -10631,7 +10631,7 @@ plan_index:
       provisional_id: linux-260714-2
       release_target: stable-milestone-v1
       title: "Forge Git configuration: standard read-only ~/.gitconfig path, one generator, no GIT_CONFIG_GLOBAL"
-      status: claimed
+      status: done
       kind: architecture+implementation
       deliverable: crates/tillandsias-headless/src/main.rs + fixture
       depends_on: [git-mirror-architecture-audit]
@@ -10649,6 +10649,23 @@ plan_index:
         - "GIT_CONFIG_GLOBAL is absent from production forge launch args and default-image entrypoints"
         - "git config --global --show-origin inside the fixture resolves only the Tillandsias-owned standard path"
       events:
+        - type: completed
+          ts: "2026-07-14T21:57:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "3b7a0e1b5c5b"
+          commits: ["4c04ff5f"]
+          validation:
+            - "litmus:git-mirror-service: 7/7 passed"
+            - "scripts/test-forge-standard-gitconfig-path.sh: passed"
+            - "cargo test -p tillandsias-headless forge_credential_quarantine_mounts_present: passed"
+            - "cargo test -p tillandsias-headless opencode_args_mount_workspace_and_prompt: passed"
+            - "./build.sh --check: passed"
+          summary: >
+            Both raw OpenCode and typed forge launchers now mount the shared
+            generated whitelist at read-only /home/forge/.gitconfig without
+            GIT_CONFIG_GLOBAL. Git reports that standard path as the effective
+            global origin, and the fixture proves it remains immutable.
         - type: claim
           ts: "2026-07-14T21:51:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
