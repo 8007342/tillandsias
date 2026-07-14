@@ -2,7 +2,7 @@
 tags: [git, git-mirror, credentials, proxy, forge, architecture, audit]
 languages: [bash, rust]
 since: 2026-07-12
-last_verified: 2026-07-12
+last_verified: 2026-07-14
 sources:
   - images/git/entrypoint.sh
   - images/git/post-receive-hook.sh
@@ -26,7 +26,8 @@ committed_for_project: true
 ---
 # Git-Mirror Architecture Audit — Current State Map (order 315)
 
-All file:line references are as of linux-next `8875ba82` (2026-07-13). Every
+All file:line references were refreshed against linux-next `6a5af9a2`
+(2026-07-14). Every
 claim below was verified in the tree during this audit; claims sourced from
 plan issues cite the issue file.
 
@@ -73,19 +74,19 @@ vault-token secret the relay deterministically fails while every push "succeeds"
 stale 15 min behind an acked push; operator hypothesis "missing upstream
 credentials in mirror" is consistent with post-receive-hook.sh:120-137).
 
-**Finding B (verified, latent):** pre-receive's reject flag is set inside a
-pipeline subshell (`echo "$FILES" | while … REJECTED=1; done`,
-pre-receive-hook.sh:125-142), so `REJECTED` never propagates to the parent
-and the final `exit 1` (:145-148) is unreachable. The YAML gate is currently
-advisory noise, not a gate — independently confirmed by
-plan/issues/mirror-pre-receive-openspec-yaml-reject-2026-07-12.md ("the
-rejects are advisory, not blocking"). Separate defect there: ruby validator
-rejects legal `Date` scalars in archived openspec files.
+**Finding B (fixed and pinned):** order 316 replaced the pipeline subshell
+with process substitution, so `REJECTED=1` reaches the parent and the final
+`exit 1` is effective. `scripts/test-pre-receive-yaml-gate.sh` proves an
+invalid update is rejected, a valid update is accepted, and a mixed
+multi-ref push is rejected. Order 336 made the fixture use the production
+Rust `tillandsias-policy` parser, removing the divergent PyYAML wrapper.
 
-**Finding C (fixed in code, not yet live):** reconcile fetches used
-`+refs/*:refs/*` and clobbered just-received exported refs (order 301, fixed
-at entrypoint.sh:80-89 + seed at :148-158); live mirror still runs the old
-image until order 302 rebuilds it.
+**Finding C (fixed and deployed):** order 301 replaced the clobbering
+`+refs/*:refs/*` reconcile with the safe
+`+refs/heads/*:refs/remotes/origin/*` refspec and retained explicit per-ref
+pushes. Order 302 rebuilt and installed the image, then verified that a
+fresh mirror container carried the corrected entrypoint and preserved an
+exported ref across reconcile.
 
 ## 3. Config injection into forges — per platform
 
@@ -161,6 +162,42 @@ the mirror at push time (post-receive-hook.sh:114-123).
 | pre-receive YAML gate | protect shared ledger | broken YAML reaches GitHub | fix subshell + `safe_load permitted_classes: [Date]`; keep as real gate | keep (after Finding B fix) |
 | explicit per-ref refspecs everywhere (never `--mirror`) | `--mirror` nearly wiped upstream (wave 24) | catastrophic ref deletion | keep — this IS the enterprise practice for sparse mirrors | keep-justified |
 
+### Explicit environment-variable dispositions
+
+These rows close the inventory mechanically: every variable named in section
+4 has exactly one disposition and no unresolved category. A
+`replace-with-default` row describes the migration target; its child packet
+remains responsible for implementation and removal.
+
+| Variable | Disposition | Default or retained contract |
+|---|---|---|
+| `GIT_CONFIG_GLOBAL` | replace-with-default | Install one standard read-only `~/.gitconfig`/include path in every forge lane; stop redirecting Git with an environment variable. |
+| `GIT_SSL_CAINFO` | replace-with-default | Install the combined trust chain in the image's system trust store so Git/libcurl uses its distro default. |
+| `SSL_CERT_FILE` | replace-with-default | Use the image's system trust store rather than an entrypoint-generated bundle path. |
+| `REQUESTS_CA_BUNDLE` | replace-with-default | Use the image's system trust store rather than an entrypoint-generated bundle path. |
+| `NODE_EXTRA_CA_CERTS` | replace-with-default | Install proxy trust in the image and enable Node's system-CA behavior in the image, pinned by a Node TLS litmus before removal. |
+| `HTTP_PROXY` | keep-justified | Standard proxy interface required while the allowlisted enclave proxy remains the egress boundary. |
+| `HTTPS_PROXY` | keep-justified | Standard proxy interface required while the allowlisted enclave proxy remains the egress boundary. |
+| `NO_PROXY` | keep-justified | Standard proxy bypass interface for canonical enclave-local services. |
+| `http_proxy` | keep-justified | Compatibility form for clients that only honor lowercase proxy variables; remove only after a client-matrix litmus. |
+| `https_proxy` | keep-justified | Compatibility form for clients that only honor lowercase proxy variables; remove only after a client-matrix litmus. |
+| `no_proxy` | keep-justified | Compatibility form for clients that only honor lowercase proxy variables; remove only after a client-matrix litmus. |
+| `GH_TOKEN` | keep-justified | Standard host-only `gh` credential input and guard signal; it must never be injected into a forge. |
+| `GITHUB_TOKEN` | keep-justified | Standard host-only compatibility credential input and guard signal; it must never be injected into a forge. |
+| `TILLANDSIAS_HOST_KIND` | delete | Replace the forge guard branch with verified mirror/relay state; a self-declared host kind is not a security fact. |
+| `TILLANDSIAS_PROJECT` | replace-with-default | Derive the project from the working directory or one canonical project descriptor instead of a process-wide variable. |
+| `TILLANDSIAS_PROJECT_HOST_MOUNT` | delete | Make the selected mount/transport spec authoritative; do not infer topology from a boolean environment flag. |
+| `TILLANDSIAS_GIT_SERVICE` | replace-with-default | Pass one canonical mirror URL through the transport descriptor or Git remote. |
+| `TILLANDSIAS_GIT_MIRROR_PATH` | replace-with-default | Pass one canonical mirror URL through the transport descriptor or Git remote. |
+| `TILLANDSIAS_PROJECT_REMOTE_URL` | replace-with-default | Persist the clean upstream as the bare repository's `origin` during mirror creation instead of exposing it to every process. |
+| `GIT_AUTHOR_NAME` | keep-justified | Standard Git non-secret identity interface; avoids mutating shared configuration. |
+| `GIT_AUTHOR_EMAIL` | keep-justified | Standard Git non-secret identity interface; avoids mutating shared configuration. |
+| `GIT_COMMITTER_NAME` | keep-justified | Standard Git non-secret identity interface; avoids mutating shared configuration. |
+| `GIT_COMMITTER_EMAIL` | keep-justified | Standard Git non-secret identity interface; avoids mutating shared configuration. |
+| `VAULT_ADDR` | keep-justified | Standard Vault client endpoint, scoped to the mirror container. |
+| `VAULT_ROLE` | delete | The current baked `vault-cli` consumes the mounted token and `VAULT_ADDR`; it never reads this launcher-only label. |
+| `CURL_CA_BUNDLE` | replace-with-default | Install the combined trust chain in the image's system trust store so curl uses its distro default. |
+
 ## Open questions (not fully verifiable from the tree)
 
 1. Which transport/lane produced the macOS forge with a DIRECT GitHub origin
@@ -173,5 +210,3 @@ the mirror at push time (post-receive-hook.sh:114-123).
 3. Whether Windows/WSL bare-mirror hooks execute with vault-cli available
    (post-receive-hook.sh:15-19 says hooks run in the forge distro context —
    token path there is unclear).
-4. Live mirror image still pre-order-301 (order 302 pending) — deploy state
-   not verifiable from the tree.

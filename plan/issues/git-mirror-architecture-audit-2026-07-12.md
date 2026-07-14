@@ -29,7 +29,7 @@ P1 class — the mirror's trust contract is broken from the inside:
   so a lying mirror silently voids every forge exit contract.
 - `git-mirror-fetch-clobbers-exported-ref-2026-07-12.md` (orders 301/302) —
   reconcile fetch under `+refs/*:refs/*` raced/reverted just-received refs;
-  code fixed, live deploy still pending (order 302).
+  code and live image deployment were verified complete on 2026-07-13.
 - `mirror-pre-receive-openspec-yaml-reject-2026-07-12.md` — reject path is
   loud while the accept path can silently drop; asymmetric failure semantics.
 
@@ -97,3 +97,14 @@ Credential / config-surface class:
 - Host/forge git-config isolation is bidirectional: forge cannot write host
   .git/config; host credentials/config cannot leak into forge (fixture).
 - Child packets filed for the migration ladder.
+
+## Current completion matrix (2026-07-14)
+
+| Gate | State | Evidence / remaining owner |
+|---|---|---|
+| Current-state map and provenance | PASS | Audit refreshed through linux-next `6a5af9a2`; resolved pre-receive and live-image findings corrected. |
+| Enterprise best-practice baseline | PASS | Bundled enterprise-practices cheatsheet retains source URL/man-page and retrieval provenance. |
+| Explicit variable/config disposition | PASS | Audit section 6 assigns every section-4 variable `keep-justified`, `replace-with-default`, or `delete`; no unknown rows remain. |
+| Relay-verified acknowledgement litmus | OPEN | Order 318 (`mirror-relay-verified-acks`). |
+| Bidirectional config-isolation fixture | OPEN | Order 321 (`forge-git-config-quarantine`). |
+| Migration child packets | PASS | Orders 318-322 are filed with staged deliverables and verification gates. |

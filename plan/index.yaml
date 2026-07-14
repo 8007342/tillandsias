@@ -10269,6 +10269,20 @@ plan_index:
         - "migration-ladder child packets filed"
       events:
         - type: progress
+          ts: "2026-07-14T20:56:26Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux_mutable
+          summary: >
+            Refreshed the current-state audit through linux-next 6a5af9a2:
+            orders 316/336 now pin the effective production YAML rejection
+            gate and orders 301/302 are recorded as deployed. Added an
+            explicit disposition for every inventoried environment variable
+            with no unknown rows. Current-state provenance, the enterprise
+            baseline, variable/config disposition, and child-packet filing
+            now pass; order 315 remains ready and multi-cycle only for order
+            318's relay-ack litmus and order 321's bidirectional config
+            isolation fixture.
+        - type: progress
           ts: "2026-07-13T04:45:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
           host: linux_mutable
