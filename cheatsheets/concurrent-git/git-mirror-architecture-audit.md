@@ -26,7 +26,7 @@ committed_for_project: true
 ---
 # Git-Mirror Architecture Audit — Current State Map (order 315)
 
-All file:line references were refreshed against linux-next `6a5af9a2`
+All file:line references were refreshed through the order-320 Linux checkpoint
 (2026-07-14). Every
 claim below was verified in the tree during this audit; claims sourced from
 plan issues cite the issue file.
@@ -86,15 +86,26 @@ pushes. Order 302 rebuilt and installed the image, then verified that a
 fresh mirror container carried the corrected entrypoint and preserved an
 exported ref across reconcile.
 
-## 3. Config injection into forges — per platform
+## 3. Config and trust injection into forges - per platform
 
-| Mechanism | Linux podman (tray/CLI) | macOS VM forge | Windows/WSL |
+As of orders 320/321, configuration and trust are owned by the shared Linux
+guest implementation. Both forge launch builders generate one whitelist and
+mount it read-only at Git's standard `/home/forge/.gitconfig` path. They mount
+the public runtime CA once at `/run/tillandsias/ca-chain.crt`; the default image
+atomically composes it with Fedora vendor roots at its system-default trust
+path. No forge launcher or default-image entrypoint sets a Git-, OpenSSL-,
+Requests-, or Node-specific CA override.
+
+| Lane | Shared implementation path | Host-specific Git/CA override | Verification state |
 |---|---|---|---|
-| `write_forge_gitconfig` file (safe.directory, http.sslCAInfo=/etc/tillandsias/ca.crt, credential.helper=, core.hooksPath, insteadOf) bind-mounted RO at `/home/forge/.config/git/config` + `GIT_CONFIG_GLOBAL` | YES (main.rs:5379-5436, mounted at main.rs:7696-7702) | **NO equivalent observed** — macOS forge had bare GitHub origin, agent hand-hacked `.git/config` (plan/issues/forge-mirror-insteadof-missing-2026-07-12.md) | n/a (filesystem transport does repo-local insteadOf) |
-| `rewrite_origin_for_enclave_push` (entrypoint runtime, `git config --global` insteadOf; only fires when `TILLANDSIAS_PROJECT_HOST_MOUNT=1` and origin is GitHub) | YES, host-mount lane (lib-common.sh:290-383) | not reached if HOST_MOUNT unset (lib-common.sh:321) | not reached |
-| `clone_project_from_mirror` network transport: origin=`git://tillandsias-git/<p>`, push-url forced to mirror | YES (lib-common.sh:487-511) | intended, but see divergence below | — |
-| filesystem transport: clone from `TILLANDSIAS_GIT_MIRROR_PATH`, cosmetic GitHub origin + repo-LOCAL insteadOf | — | — | YES (lib-common.sh:436-482) |
-| tmpfs quarantine of ~/.ssh, ~/.config/gh (order 170) | YES (main.rs:7658-7659) | unverified | unverified |
+| Linux podman | native tray/CLI calls the shared headless forge builders and default image | none | live config-origin, mirror-redirect, Git/curl/Node/Python TLS fixtures pass |
+| macOS VZ | guest systemd and tray `--opencode` exec `/usr/local/bin/tillandsias-headless` | none found in VZ or tray sources | source parity passes; current-build live gate remains |
+| Windows WSL | guest systemd execs `/usr/local/bin/tillandsias-headless` | none found in WSL or tray sources | source parity passes; current-build live gate remains |
+
+The live qualification matters: VZ may fetch a release binary when no staged
+guest exists, and an already registered WSL distro can retain its installed
+binary. Therefore source parity does not substitute for live evidence from a
+locally built/current tray on each sibling host.
 
 **Finding D (host↔forge bidirectional leak, verified by evidence chain):**
 the Linux host-mount lane bind-mounts the host checkout RW
@@ -116,30 +127,29 @@ hooks, or index writes back to the checkout. The rootless Podman fixture
 byte-identical after forge-local `git config` edits while fetch, commit, shared
 objects/refs, and upstream push still converge.
 
-## 4. Env-var inventory crossing runtime boundaries
+## 4. Forge Git-flow environment inventory
 
-Producers: `build_forge_agent_run_args` (main.rs:7602-7724), `apply_proxy_env`/
-`proxy_env_args` (main.rs:856-905), `build_git_run_args` (main.rs:2273-2349),
-CA blocks in every entrypoint (e.g. entrypoint-forge-opencode.sh:44-68) and
-lib-common.sh:15-33.
+Scope is deliberately mechanical: production environment values injected into
+a forge whose purpose is configuring Git behavior. Standard proxy protocol
+variables, product/project metadata, host-only credentials, mirror-container
+internals, and command-local test/index isolation are reported separately and
+do not count as forge Git configuration.
 
-| Var | Set by | Consumed by | Runtime notes |
-|---|---|---|---|
-| GIT_CONFIG_GLOBAL | podman env (main.rs:7660) | git in forge | Linux lanes only; forge dev hosts' global hooksPath shadowing bit order-301 fixture (plan/issues/optimization/forge-global-hookspath-shadows-repo-hooks-2026-07-12.md) |
-| GIT_SSL_CAINFO | entrypoints (added 9d04c99f); mirror entrypoint.sh:39-43 | git/libcurl | exists because injected gitconfig pins enclave-CA-only http.sslCAInfo |
-| SSL_CERT_FILE / REQUESTS_CA_BUNDLE | entrypoint CA blocks; lib-common.sh:25-27 | OpenSSL tools, curl, pip | duplicated logic in 7 files (6 entrypoints + lib-common), two variable names (COMBINED vs COMBINED_CA) |
-| NODE_EXTRA_CA_CERTS | podman env (main.rs:7680) | Node/undici | separate from OpenSSL trust |
-| HTTP(S)_PROXY / NO_PROXY (+lowercase) | proxy_env_args (main.rs:864-889) | curl/git/node in enclave containers | 3 P0s from missing exemptions (memory: enclave-proxy-exemption-pattern) |
-| GH_TOKEN / GITHUB_TOKEN | host env only | check-credential-channel.sh:52-59; gh | never injected into forges (by design) |
-| TILLANDSIAS_HOST_KIND=forge | every entrypoint | credential guard forge branch | guard now live-probes mirror (scripts/check-credential-channel.sh:66-104) |
-| TILLANDSIAS_PROJECT / _HOST_MOUNT / _GIT_SERVICE / _GIT_MIRROR_PATH / _PROJECT_REMOTE_URL | launcher per lane | lib-common clone/rewrite; mirror entrypoint | transport selection is implicit in which var is set — three-way branching (lib-common.sh:403-516) |
-| GIT_AUTHOR/COMMITTER_* pairs | git_identity_env_pairs (main.rs:5314) | git in forge | identity without touching config files |
-| VAULT_ADDR / VAULT_ROLE / CURL_CA_BUNDLE | build_git_run_args (main.rs:2332-2337) | vault-cli in mirror | mirror-only |
+| Logical value | Environment names | Justification |
+|---|---|---|
+| commit identity name | `GIT_AUTHOR_NAME`, `GIT_COMMITTER_NAME` | one non-secret name is copied into Git's standard author/committer interfaces without mutating shared config |
+| commit identity email | `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL` | one non-secret email is copied into Git's standard author/committer interfaces without mutating shared config |
 
-Count: ~20 vars spanning 4 trust domains (host, VM guest, enclave containers,
-forge). The operator's "polluted and incompatible" verdict maps to: 7-file CA
-duplication, transport-by-env-presence, per-tool CA vars (git vs OpenSSL vs
-Node vs Requests), and platform-divergent injection (§3).
+Count: **2 justified Git-flow values**. There are no production forge
+`GIT_CONFIG_GLOBAL`, `GIT_SSL_CAINFO`, `SSL_CERT_FILE`,
+`REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, or `CURL_CA_BUNDLE` values.
+
+Surrounding runtime contracts remain but are not Git configuration:
+standard upper/lowercase proxy variables define enclave egress;
+`TILLANDSIAS_PROJECT`, `TILLANDSIAS_PROJECT_HOST_MOUNT`,
+`TILLANDSIAS_GIT_SERVICE`, and `TILLANDSIAS_GIT_MIRROR_PATH` describe project
+and transport topology; host `GH_TOKEN`/`GITHUB_TOKEN` never enter a forge;
+and `VAULT_ADDR` plus any Git-service CA setting are mirror-container only.
 
 ## 5. Credential surfaces & the guard
 
@@ -157,11 +167,11 @@ mirror at relay time.
 
 | Mechanism | Why it exists | Breaks if removed | Git-native candidate | Disposition |
 |---|---|---|---|---|
-| insteadOf rewrites (3 variants: image-injected global, runtime global, repo-local) | route GitHub URLs to mirror without touching host config | forge pushes hit GitHub w/o creds | ONE canonical remote: clone from mirror with origin=mirror; present upstream as separate `upstream` remote, or keep exactly one injected-gitconfig insteadOf | replace-with-default (single injection point, all platforms) |
+| insteadOf rewrites | route GitHub URLs to mirror without touching host config | forge pushes hit GitHub w/o creds | one generated read-only standard global config, plus the transport-specific remote set by shared guest code | converged (orders 320/321; live sibling verification pending) |
 | pre-receive atomic relay | make client success mean configured-upstream durability | false-success data loss returns if removed | keep synchronous `git push --atomic` with explicit refspecs; post-receive remains bookkeeping only | keep-justified (order 318 fixture) |
 | token-in-URL `https://oauth2:TOKEN@` built in-shell | no credential helper in Alpine image | relay auth | `git credential` helper (`credential.helper` invoking vault-cli via the documented git-credential protocol); token never in argv/URL | replace-with-default |
-| `http.sslCAInfo` enclave-CA-only + GIT_SSL_CAINFO combined-bundle band-aid | proxy MITM trust | git TLS through proxy | install combined CA at the DISTRO default path at image build (update-ca-certificates) → zero TLS env vars for every tool | replace-with-default |
-| CA-block duplication in 6 entrypoints + lib-common | historical copy-paste | drift (already: COMBINED vs COMBINED_CA) | single lib-common function; better: image-baked trust store | delete-candidate (after trust-store fix) |
+| `http.sslCAInfo` enclave-CA-only + per-client CA overrides | proxy MITM trust | git TLS through proxy | immutable vendor roots plus one runtime CA input at the distro-default path | removed (order 320 runtime trust fixture) |
+| CA-block duplication in 6 entrypoints + lib-common | historical copy-paste | drift (already: COMBINED vs COMBINED_CA) | one fail-loud rootless initializer | removed (order 320) |
 | transport selection by env-var presence | Windows lacks git daemon | wrong-transport confusion | one explicit `TILLANDSIAS_GIT_TRANSPORT={mirror-daemon,mirror-path,host-mount}` or derive from a single mirror URL | replace (1 var instead of 4) |
 | `denyNonFastforwards=false` on mirror | initial host sync looks like force-push | first push rejected | seed mirror from upstream at init (entrypoint already fetches); then default `denyNonFastforwards=true` restores git's own safety | replace-with-default |
 | credential guard forge branch trusting reachability | pre-push verifiability | none (it under-verifies today) | mirror exposes relay state (e.g. `refs/notes/relay` or status file over HTTP :8080); guard checks it | replace (pairs with ack fix) |
@@ -171,18 +181,15 @@ mirror at relay time.
 
 ### Explicit environment-variable dispositions
 
-These rows close the inventory mechanically: every variable named in section
-4 has exactly one disposition and no unresolved category. A
-`replace-with-default` row describes the migration target; its child packet
-remains responsible for implementation and removal.
+These rows retain the original audit scope and record the current disposition.
 
 | Variable | Disposition | Default or retained contract |
 |---|---|---|
-| `GIT_CONFIG_GLOBAL` | replace-with-default | Install one standard read-only `~/.gitconfig`/include path in every forge lane; stop redirecting Git with an environment variable. |
-| `GIT_SSL_CAINFO` | replace-with-default | Install the combined trust chain in the image's system trust store so Git/libcurl uses its distro default. |
-| `SSL_CERT_FILE` | replace-with-default | Use the image's system trust store rather than an entrypoint-generated bundle path. |
-| `REQUESTS_CA_BUNDLE` | replace-with-default | Use the image's system trust store rather than an entrypoint-generated bundle path. |
-| `NODE_EXTRA_CA_CERTS` | replace-with-default | Install proxy trust in the image and enable Node's system-CA behavior in the image, pinned by a Node TLS litmus before removal. |
+| `GIT_CONFIG_GLOBAL` | removed from forge production | Git reads the generated read-only `/home/forge/.gitconfig` through its standard lookup. Command-local `/dev/null` isolation remains outside production launch. |
+| `GIT_SSL_CAINFO` | removed from forge production | Git/libcurl use the default image trust bundle. A mirror-container-only setting remains outside the forge. |
+| `SSL_CERT_FILE` | removed from forge production | Forge clients use the default image trust bundle. A Chromium-container setting remains outside the forge. |
+| `REQUESTS_CA_BUNDLE` | removed | Python/Requests uses the default image trust bundle. |
+| `NODE_EXTRA_CA_CERTS` | removed | The image enables Node system-CA behavior. |
 | `HTTP_PROXY` | keep-justified | Standard proxy interface required while the allowlisted enclave proxy remains the egress boundary. |
 | `HTTPS_PROXY` | keep-justified | Standard proxy interface required while the allowlisted enclave proxy remains the egress boundary. |
 | `NO_PROXY` | keep-justified | Standard proxy bypass interface for canonical enclave-local services. |
@@ -194,8 +201,8 @@ remains responsible for implementation and removal.
 | `TILLANDSIAS_HOST_KIND` | delete | Replace the forge guard branch with verified mirror/relay state; a self-declared host kind is not a security fact. |
 | `TILLANDSIAS_PROJECT` | replace-with-default | Derive the project from the working directory or one canonical project descriptor instead of a process-wide variable. |
 | `TILLANDSIAS_PROJECT_HOST_MOUNT` | delete | Make the selected mount/transport spec authoritative; do not infer topology from a boolean environment flag. |
-| `TILLANDSIAS_GIT_SERVICE` | replace-with-default | Pass one canonical mirror URL through the transport descriptor or Git remote. |
-| `TILLANDSIAS_GIT_MIRROR_PATH` | replace-with-default | Pass one canonical mirror URL through the transport descriptor or Git remote. |
+| `TILLANDSIAS_GIT_SERVICE` | keep as topology metadata | Selects the guest-visible network mirror; not a Git configuration override. |
+| `TILLANDSIAS_GIT_MIRROR_PATH` | keep as topology metadata | Selects the WSL filesystem mirror; not a Git configuration override. |
 | `TILLANDSIAS_PROJECT_REMOTE_URL` | replace-with-default | Persist the clean upstream as the bare repository's `origin` during mirror creation instead of exposing it to every process. |
 | `GIT_AUTHOR_NAME` | keep-justified | Standard Git non-secret identity interface; avoids mutating shared configuration. |
 | `GIT_AUTHOR_EMAIL` | keep-justified | Standard Git non-secret identity interface; avoids mutating shared configuration. |
@@ -203,17 +210,19 @@ remains responsible for implementation and removal.
 | `GIT_COMMITTER_EMAIL` | keep-justified | Standard Git non-secret identity interface; avoids mutating shared configuration. |
 | `VAULT_ADDR` | keep-justified | Standard Vault client endpoint, scoped to the mirror container. |
 | `VAULT_ROLE` | delete | The current baked `vault-cli` consumes the mounted token and `VAULT_ADDR`; it never reads this launcher-only label. |
-| `CURL_CA_BUNDLE` | replace-with-default | Install the combined trust chain in the image's system trust store so curl uses its distro default. |
+| `CURL_CA_BUNDLE` | removed from forge production | curl uses the default image trust bundle; mirror-container use is separately scoped. |
 
 ## Open questions (not fully verifiable from the tree)
 
-1. Which transport/lane produced the macOS forge with a DIRECT GitHub origin
-   (forge-mirror-insteadof-missing): host-mount without
-   `TILLANDSIAS_PROJECT_HOST_MOUNT=1` propagated, or a remote-projects clone
-   path outside `clone_project_from_mirror`? Needs a live macOS repro trace.
+1. Whether a locally built/current macOS guest reports the standard config
+   origin and mirror redirect without a host edit. Source parity passes, but a
+   release-download fallback can otherwise execute an older guest binary.
 2. Whether the macOS guest mirror container receives the vault-token secret
    at all (the false-success P1's credential hypothesis) — requires in-guest
    `podman inspect tillandsias-git-<p>`.
-3. Whether Windows/WSL bare-mirror hooks execute with vault-cli available
+3. Whether a locally built/current Windows WSL guest reports the same config
+   origin and TLS behavior. Registered distros may retain an installed binary,
+   so the live gate must prove the guest revision before collecting evidence.
+4. Whether Windows/WSL bare-mirror hooks execute with vault-cli available
    (post-receive-hook.sh:15-19 says hooks run in the forge distro context —
    token path there is unclear).

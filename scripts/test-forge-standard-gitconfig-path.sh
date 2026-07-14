@@ -17,6 +17,8 @@ trap cleanup EXIT
 config="$tmp/gitconfig"
 git config --file "$config" safe.directory '/home/forge/src/*'
 git config --file "$config" credential.helper ''
+git config --file "$config" url.http://tillandsias-git:8080/.insteadOf \
+    https://github.com/example/
 
 podman run --rm \
     --cap-drop=ALL \
@@ -33,6 +35,11 @@ podman run --rm \
         case "$origin" in
             file:/home/forge/.gitconfig*) ;;
             *) printf "FAIL: unexpected global config origin: %s\n" "$origin" >&2; exit 1 ;;
+        esac
+        redirect="$(git config --global --show-origin --get-regexp "^url\..*\.insteadof$")"
+        case "$redirect" in
+            "file:/home/forge/.gitconfig"*"https://github.com/example/") ;;
+            *) printf "FAIL: unexpected mirror redirect: %s\n" "$redirect" >&2; exit 1 ;;
         esac
         ! git config --global user.name forge-write-must-fail 2>/dev/null
     '

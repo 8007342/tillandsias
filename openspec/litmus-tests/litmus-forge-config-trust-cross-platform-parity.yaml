@@ -1,0 +1,31 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-config-trust-cross-platform-parity
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Prove Linux live Git/trust behavior and the macOS VZ and Windows WSL source
+  lanes converge on the same in-guest headless launcher without host overrides.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-forge-config-trust-cross-platform-parity.sh
+  - TILLANDSIAS_FORGE_IMAGE names a freshly built forge image, or latest exists
+
+critical_path:
+  - step: "shared guest launch path and Linux live config/trust behavior converge"
+    command: "scripts/test-forge-config-trust-cross-platform-parity.sh"
+    timeout_ms: 300000
+    expected_behavior: "PASS: Linux live behavior and macOS/Windows shared-guest source paths converge"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "standard ~/.gitconfig origin, mirror redirect, and system-default TLS clients pass"
+  log_fields:
+    spec: git-mirror-service
+    test: forge-config-trust-cross-platform-parity
+
+rollback:
+  on_failure: "inspect guest service generation, host-specific overrides, then the config and CA fixtures"
+  command: "scripts/test-forge-config-trust-cross-platform-parity.sh"

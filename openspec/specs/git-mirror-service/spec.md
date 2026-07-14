@@ -370,6 +370,17 @@ disabled while loose refs are shared with a private `packed-refs` snapshot.
 - **AND** a forge fetch, commit, and push SHALL update the shared objects and
   refs and converge the configured upstream
 
+#### Scenario: Host platforms use one in-guest Git and trust implementation
+- **WHEN** Linux launches a forge directly, macOS launches one through its VZ
+  guest, or Windows launches one through WSL
+- **THEN** every lane SHALL execute the same `tillandsias-headless` forge
+  launcher and default image
+- **AND** host tray and VM provisioning code SHALL NOT inject a platform-local
+  Git configuration path or per-client CA environment override
+- **AND** live verification on each host SHALL report the standard
+  `/home/forge/.gitconfig` origin, the Tillandsias mirror redirect, and working
+  Git/TLS clients without a host configuration edit
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
@@ -378,6 +389,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:git-mirror-safe-refspec-push` — Verify pre-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and guard bulk deletes.
 - `litmus:git-mirror-ref-convergence` — Verify the reconcile fetch lands in remote-tracking refs only (one push converges mirror + upstream; startup retry forwards a stranded commit; empty-mirror seeding stays cloneable).
 - `litmus:forge-gitconfig-bidirectional-quarantine` — Verify writable forge-local config isolation while fetch, commit, object/ref sharing, and push remain functional.
+- `litmus:forge-config-trust-cross-platform-parity` — Verify the shared VZ/WSL guest path has no host override and Linux live config/trust behavior passes; sibling-host packets own live macOS/Windows evidence.
 
 Gating points:
 - Bare mirror created at `/srv/git/<project>` inside `tillandsias-mirror-<project>` on first launch

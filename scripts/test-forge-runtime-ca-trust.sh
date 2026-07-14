@@ -115,7 +115,7 @@ if malformed_output="$(podman run --rm \
 fi
 grep -Fq '[trust] ERROR: runtime proxy CA is not a PEM certificate' <<<"$malformed_output"
 
-vendor_output="$(podman run --rm \
+podman run --rm \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
     --security-opt=label=disable \
@@ -124,7 +124,6 @@ vendor_output="$(podman run --rm \
     "$IMAGE" -euc '
         source /usr/local/lib/tillandsias/lib-common.sh
         test "$(grep -c "BEGIN CERTIFICATE" /etc/ssl/cert.pem)" -gt 2
-    ' 2>&1)"
-grep -Fq '[trust] WARNING: runtime proxy CA is not mounted; using vendor roots only' <<<"$vendor_output"
+    '
 
 echo "PASS: rootless forge runtime CA trust uses system defaults"

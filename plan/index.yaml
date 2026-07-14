@@ -10569,7 +10569,7 @@ plan_index:
     - packet_id: forge-gitconfig-single-injection
       order: 320
       release_target: stable-milestone-v1
-      title: "Ladder rung C: ONE gitconfig injection point (committed includeIf/include.path), image-baked CA trust; kill the env mesh on ALL platforms"
+      title: "Ladder rung C: one standard gitconfig injection point and system-default runtime CA trust on all platforms"
       status: pending
       kind: architecture
       deliverable: images/default/lib-common.sh + crates/tillandsias-headless + macOS/Windows lane parity
@@ -10581,18 +10581,16 @@ plan_index:
       capability_tags: [forge, git, config, cross-platform]
       estimated_hours: 8
       outcome: >
-        Replace GIT_CONFIG_GLOBAL bind-mount + GIT_SSL_CAINFO/SSL_CERT_FILE
-        exports (CA logic duplicated in 7 files under 2 names) with: MITM
-        CA baked into the image system trust store at image build, and a
-        single Tillandsias-owned git include (include.path/includeIf
-        gitdir:) materialized by ONE code path used by ALL lanes on ALL
-        THREE platforms. Fixes the macOS gap (VM lane got no insteadOf
-        injection at all -> hand-hacked .git/config). Ladder discipline:
-        new path lands behind a flag, soaks, becomes default, old env
-        mesh removed.
+        Replace the GIT_CONFIG_GLOBAL bind mount and duplicated per-client CA
+        exports with one generated config at Git's standard global path and
+        one image-owned system trust mechanism. The immutable image preserves
+        vendor roots and accepts the per-install CA through one runtime anchor;
+        a single shared headless code path supplies all forge lanes on Linux,
+        macOS guests, and Windows guests. Fixes the macOS no-redirect gap
+        without repository-local or host configuration edits.
       exit_criteria:
         - "macOS/Windows/Linux forge lanes get identical git config through the single injection point (fixture per platform)"
-        - "GIT_SSL_CAINFO/SSL_CERT_FILE exports deleted from entrypoints once CA is image-baked (grep gate)"
+        - "GIT_SSL_CAINFO/SSL_CERT_FILE exports deleted from entrypoints once the runtime CA feeds the system-default trust path (grep gate)"
         - "env-var inventory in the audit cheatsheet re-run: git-flow rows drop to <=2"
       events:
         - type: progress
@@ -10745,12 +10743,14 @@ plan_index:
       provisional_id: linux-260714-4
       release_target: stable-milestone-v1
       title: "Forge Git/trust parity: Linux, macOS-guest, and Windows-guest fixtures converge on the same injection path"
-      status: claimed
+      status: pending
       kind: verification
       deliverable: cross-platform forge launch fixtures + audit inventory refresh
       depends_on:
         - forge-standard-gitconfig-path
         - forge-runtime-ca-trust-convergence
+        - macos-forge-config-trust-live-parity
+        - windows-forge-config-trust-live-parity
       pickup_role: any
       capability_tags: [forge, git, tls, cross-platform, testing]
       estimated_hours: 3
@@ -10765,6 +10765,25 @@ plan_index:
         - "all three lanes complete representative TLS and mirror Git operations without host config edits"
         - "audit env inventory refresh records <=2 justified Git-flow rows; parent forge-gitconfig-single-injection closes"
       events:
+        - type: progress
+          ts: "2026-07-14T22:30:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "30373b7bdbc9"
+          validation:
+            - "litmus:git-mirror-service: 8/8 passed"
+            - "portable source gate: macOS VZ and Windows WSL execute the shared in-guest tillandsias-headless path"
+            - "Linux live standard-config, mirror-redirect, and runtime-CA fixtures: passed"
+            - "audit inventory refreshed to 2 logical Git-flow values (identity name and email)"
+            - "./build.sh --check: passed"
+          summary: >
+            Linux-verifiable implementation is complete: the parity fixture
+            rejects platform-local config/CA overrides, pins the shared guest
+            launcher, and composes the live Linux Git-origin, mirror-redirect,
+            and multi-client TLS fixtures. Source evidence cannot meet the
+            literal three-host exit criteria: VZ has a release fallback and a
+            registered WSL distro may retain an older guest. Filed current-build
+            live gates for macOS and Windows and returned this packet to pending.
         - type: claim
           ts: "2026-07-14T22:24:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -10780,6 +10799,75 @@ plan_index:
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
           host: linux
           summary: "Split from over-budget parent forge-gitconfig-single-injection."
+
+    - packet_id: macos-forge-config-trust-live-parity
+      order: provisional
+      provisional_id: linux-260714-5
+      release_target: stable-milestone-v1
+      title: "macOS current-build forge live config, mirror, and TLS parity gate"
+      status: ready
+      kind: verification
+      deliverable: attended macOS VZ forge evidence packet
+      depends_on:
+        - forge-standard-gitconfig-path
+        - forge-runtime-ca-trust-convergence
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, forge, git, tls, testing]
+      estimated_hours: 1
+      outcome: >
+        A locally built macOS tray stages the current checkout's guest binary
+        and launches a VZ forge through the public tray/headless path. Evidence
+        proves the guest and image are current before measuring Git config and
+        TLS behavior, so the release-download fallback cannot mask skew.
+      exit_criteria:
+        - "record current checkout, staged guest binary, and running forge image identity before behavior evidence"
+        - "inside the public macOS forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
+        - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
+      events:
+        - type: filed
+          ts: "2026-07-14T22:30:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Split from forge-config-trust-cross-platform-parity because a Linux
+            source fixture cannot certify a running VZ guest, current image, or
+            attended macOS mirror/TLS operation.
+
+    - packet_id: windows-forge-config-trust-live-parity
+      order: provisional
+      provisional_id: linux-260714-6
+      release_target: stable-milestone-v1
+      title: "Windows current-build forge live config, mirror, and TLS parity gate"
+      status: ready
+      kind: verification
+      deliverable: attended Windows WSL forge evidence packet
+      depends_on:
+        - forge-standard-gitconfig-path
+        - forge-runtime-ca-trust-convergence
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, forge, git, tls, testing]
+      estimated_hours: 1
+      outcome: >
+        A locally built Windows tray injects the current checkout's guest into
+        a refreshed WSL runtime and launches a forge through the public
+        tray/headless path. Evidence proves the installed guest and image are
+        current before measuring Git config and TLS behavior, so registered
+        distro version skew cannot produce a false parity result.
+      exit_criteria:
+        - "record current checkout, installed WSL guest binary, and running forge image identity before behavior evidence"
+        - "inside the public Windows forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
+        - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
+      events:
+        - type: filed
+          ts: "2026-07-14T22:30:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Split from forge-config-trust-cross-platform-parity because a Linux
+            source fixture cannot certify a running registered WSL guest,
+            current image, or attended Windows mirror/TLS operation.
 
     - packet_id: forge-host-gitconfig-bidirectional-quarantine
       order: 321
