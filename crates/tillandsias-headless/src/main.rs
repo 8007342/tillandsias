@@ -2096,24 +2096,8 @@ fn build_stack_common_args(
             "{}:/home/forge/src/{project_name}:rw",
             project_path.display()
         ),
-        "--mount".into(),
-        format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
-        // NODE_EXTRA_CA_CERTS (order 241): tell Node.js to trust the
-        // Tillandsias intermediate CA so opencode (which uses undici under
-        // the hood) can validate the proxy-issued TLS certificate during
-        // SSL bump. Without this, `opencode run --diagnostics` fails with
-        // a TLS validation error when connecting to models.dev through the
-        // MITM proxy, causing the diagnostics annex to record state=failed.
-        "--env".into(),
-        "NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt".into(),
-        // Mount the same CA cert at the path lib-common.sh's entrypoint
-        // expects ($CA_CHAIN) so the forge container builds a combined
-        // bundle that includes both the system CAs and the Tillandsias CA,
-        // exported as SSL_CERT_FILE / REQUESTS_CA_BUNDLE for non-Node
-        // tools (curl, pip, git, etc.).
+        // One runtime trust input feeds lib-common.sh's rootless initializer.
+        // Git, curl, Node, and Python then use the image's system-default path.
         "--mount".into(),
         format!(
             "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
@@ -3343,20 +3327,13 @@ fn build_opencode_forge_args(
         ),
         "--mount".into(),
         format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
-        "--env".into(),
-        "NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt".into(),
-        "--mount".into(),
-        format!(
             "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
     append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
     // Forge gitconfig injection (order 224): pre-populate global git config
-    // with mirror redirect, safe.directory, and CA cert path, bind-mounted
+    // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
     // Tillandsias, written before container start, and never writable inside
     // the forge. lib-common.sh's rewrite_origin_for_enclave_push detects the
@@ -5519,8 +5496,8 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 
 /// Write a forge-owned `.gitconfig` to disk for injection into forge containers.
 ///
-/// The generated config prepopulates the mirror redirect (`url.insteadOf`),
-/// `safe.directory`, and `http.sslCAInfo` so the forge entrypoint's
+/// The generated config prepopulates the mirror redirect (`url.insteadOf`)
+/// and `safe.directory` so the forge entrypoint's
 /// `rewrite_origin_for_enclave_push` can skip redundant writes on a read-only
 /// mount. The caller bind-mounts this file into the container at Git's
 /// standard global path, `/home/forge/.gitconfig`.
@@ -5546,9 +5523,6 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
     let mut config = String::new();
     config.push_str("[safe]\n");
     config.push_str("\tdirectory = /home/forge/src/*\n");
-    config.push('\n');
-    config.push_str("[http]\n");
-    config.push_str("\tsslCAInfo = /etc/tillandsias/ca.crt\n");
     config.push('\n');
     config.push_str("[credential]\n");
     config.push_str("\thelper =\n");
@@ -5576,7 +5550,7 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
 
     // Preserve existing git identity if the file exists (e.g., from a prior
     // `managed_gitconfig_path` write by the identity prompt). We only inject
-    // structural config (redirect, safe.directory, CA) — identity comes from
+    // structural config (redirect and safe.directory) — identity comes from
     // launch env vars.
     if let Ok(existing) = std::fs::read_to_string(&config_path)
         && let Some(user_section) = extract_gitconfig_section(&existing, "user")
@@ -7906,7 +7880,7 @@ pub(crate) fn ensure_enclave_for_project(
 ///
 /// Every option flows through the policy-validated `build_run_argv()` path —
 /// no raw `--unsafe` flags, no host home mounts. Project workspace lands at
-/// `/home/forge/src/<project>/`, CA cert at `/etc/tillandsias/ca.crt`.
+/// `/home/forge/src/<project>/`, CA cert at `/run/tillandsias/ca-chain.crt`.
 /// @trace spec:forge-as-only-runtime
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 /// Name of the podman named volume backing a project's persistent forge tool/
@@ -8042,22 +8016,13 @@ fn build_forge_agent_run_args_with_vault(
     if ca_cert.exists() {
         spec = spec.bind_mount(
             ca_cert.display().to_string(),
-            "/etc/tillandsias/ca.crt",
-            true,
-        );
-    }
-    // NODE_EXTRA_CA_CERTS (order 241): Node.js TLS trust for proxy SSL bump.
-    spec = spec.env("NODE_EXTRA_CA_CERTS", "/etc/tillandsias/ca.crt");
-    if ca_cert.exists() {
-        spec = spec.bind_mount(
-            ca_cert.display().to_string(),
             "/run/tillandsias/ca-chain.crt",
             true,
         );
     }
 
     // Forge gitconfig injection (order 224): pre-populate Git's standard
-    // global config with mirror redirect, safe.directory, and CA cert path so the
+    // global config with mirror redirect and safe.directory so the
     // entrypoint's rewrite_origin_for_enclave_push can skip redundant writes
     // on a read-only mount. Replaces the empty tmpfs formerly used at
     // /home/forge/.config/git — the file is owned by Tillandsias, stored
@@ -10139,10 +10104,13 @@ mod tests {
         // (order 224) so the mirror redirect is available at launch.
         // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
         // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
+        let certs = tempfile::tempdir().expect("cert directory");
+        std::fs::write(certs.path().join("intermediate.crt"), "fixture CA")
+            .expect("write fixture CA");
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
-            &PathBuf::from("/tmp/ca"),
+            certs.path(),
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
@@ -10183,6 +10151,29 @@ mod tests {
         assert!(
             !argv.iter().any(|a| a.starts_with("GIT_CONFIG_GLOBAL=")),
             "standard ~/.gitconfig mount must not require GIT_CONFIG_GLOBAL"
+        );
+        assert!(
+            argv.iter().any(|a| {
+                a.contains("target=/run/tillandsias/ca-chain.crt") && a.contains("readonly=true")
+            }),
+            "typed forge launcher must mount the single runtime CA input"
+        );
+        for forbidden in [
+            "GIT_SSL_CAINFO=",
+            "SSL_CERT_FILE=",
+            "REQUESTS_CA_BUNDLE=",
+            "NODE_EXTRA_CA_CERTS=",
+        ] {
+            assert!(
+                !argv.iter().any(|a| a.starts_with(forbidden)),
+                "typed forge launcher must not inject {forbidden}"
+            );
+        }
+        assert!(
+            !argv
+                .iter()
+                .any(|a| a.contains("target=/etc/tillandsias/ca.crt")),
+            "typed forge launcher must not duplicate the runtime CA mount"
         );
     }
 
@@ -10944,6 +10935,30 @@ mod tests {
                 "opencode forge args must mount generated config at ~/.gitconfig; got {args:?}"
             );
         }
+        assert!(
+            args.iter().any(|arg| {
+                arg.contains("target=/run/tillandsias/ca-chain.crt")
+                    && arg.contains("readonly=true")
+            }),
+            "opencode forge args must mount the single runtime CA input; got {args:?}"
+        );
+        for forbidden in [
+            "GIT_SSL_CAINFO=",
+            "SSL_CERT_FILE=",
+            "REQUESTS_CA_BUNDLE=",
+            "NODE_EXTRA_CA_CERTS=",
+        ] {
+            assert!(
+                !args.iter().any(|arg| arg.starts_with(forbidden)),
+                "opencode forge args must not inject {forbidden}; got {args:?}"
+            );
+        }
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.contains("target=/etc/tillandsias/ca.crt")),
+            "opencode forge args must not duplicate the runtime CA mount; got {args:?}"
+        );
     }
 
     #[test]
@@ -11148,8 +11163,8 @@ mod tests {
             "config must contain safe.directory"
         );
         assert!(
-            contents.contains("sslCAInfo = /etc/tillandsias/ca.crt"),
-            "config must contain CA cert path"
+            !contents.contains("sslCAInfo"),
+            "config must rely on the image's system-default CA path"
         );
         assert!(
             contents.contains(&format!("insteadOf = {}", origin_url)),

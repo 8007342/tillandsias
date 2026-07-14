@@ -10,30 +10,52 @@ set -euo pipefail
 
 # ── Certificate Authority injection ──────────────────────────
 # @trace spec:transparent-https-caching
-# If the enclave CA cert is mounted at /etc/tillandsias/ca.crt (from orchestrate-enclave.sh),
-# build a combined CA bundle in /tmp and point trust-aware tools at it. Forge
-# containers run rootless, so they cannot write system trust stores.
-if [ -f /etc/tillandsias/ca.crt ]; then
-    SYSTEM_CA=""
-    if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
-        SYSTEM_CA=/etc/pki/tls/certs/ca-bundle.crt
-    elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-        SYSTEM_CA=/etc/ssl/certs/ca-certificates.crt
+# The image preserves Fedora's vendor roots at an immutable path and points
+# Fedora's standard extracted bundle symlink at this forge-owned /run target.
+# Compose the per-install CA into that target atomically, before any network
+# client starts. The forge remains rootless and can only alter its own
+# ephemeral trust bundle; no environment-specific CA path is required.
+init_runtime_ca_trust() {
+    local vendor_bundle="/usr/local/share/tillandsias/vendor-ca-bundle.crt"
+    local runtime_ca="/run/tillandsias/ca-chain.crt"
+    local trust_bundle="/run/tillandsias/ca-bundle.crt"
+    local temporary_bundle
+
+    if [ ! -r "$vendor_bundle" ]; then
+        echo "[trust] ERROR: image vendor CA bundle is missing: $vendor_bundle" >&2
+        return 1
     fi
-    if [ -n "$SYSTEM_CA" ]; then
-        COMBINED_CA="/tmp/tillandsias-combined-ca.crt"
-        cat "$SYSTEM_CA" /etc/tillandsias/ca.crt > "$COMBINED_CA" 2>/dev/null || true
-        export SSL_CERT_FILE="$COMBINED_CA"
-        export REQUESTS_CA_BUNDLE="$COMBINED_CA"
-        # git uses libcurl, which ignores SSL_CERT_FILE, and the injected
-        # gitconfig pins http.sslCAInfo to the enclave-CA-only file — so a
-        # git HTTPS fetch to a non-MITMed remote (real GitHub cert chain)
-        # fails "unable to get local issuer certificate" (operator repro
-        # 2026-07-12: Homebrew install clone). GIT_SSL_CAINFO wins over
-        # http.sslCAInfo; point git at the combined bundle.
-        export GIT_SSL_CAINFO="$COMBINED_CA"
+    if [ ! -w "$(dirname "$trust_bundle")" ]; then
+        echo "[trust] ERROR: runtime trust boundary is not writable: $(dirname "$trust_bundle")" >&2
+        return 1
     fi
-fi
+
+    temporary_bundle="$(mktemp "${trust_bundle}.XXXXXX")"
+    if [ -r "$runtime_ca" ]; then
+        if ! grep -q '^-----BEGIN CERTIFICATE-----$' "$runtime_ca" || \
+            ! grep -q '^-----END CERTIFICATE-----$' "$runtime_ca"; then
+            rm -f "$temporary_bundle"
+            echo "[trust] ERROR: runtime proxy CA is not a PEM certificate" >&2
+            return 1
+        fi
+        if ! cat "$vendor_bundle" "$runtime_ca" >"$temporary_bundle"; then
+            rm -f "$temporary_bundle"
+            echo "[trust] ERROR: could not compose runtime CA bundle" >&2
+            return 1
+        fi
+    else
+        echo "[trust] WARNING: runtime proxy CA is not mounted; using vendor roots only" >&2
+        if ! cp "$vendor_bundle" "$temporary_bundle"; then
+            rm -f "$temporary_bundle"
+            echo "[trust] ERROR: could not initialize vendor CA bundle" >&2
+            return 1
+        fi
+    fi
+    chmod 0444 "$temporary_bundle"
+    mv -f "$temporary_bundle" "$trust_bundle"
+}
+init_runtime_ca_trust
+unset -f init_runtime_ca_trust
 
 # Ensure all files created by this script and any process it execs are
 # user-writable. Without this, tools running inside the container may

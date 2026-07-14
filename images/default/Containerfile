@@ -8,7 +8,8 @@ FROM ${BASE_IMAGE}
 # ── Environment exports for diagnostics and agent discovery ─────
 ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
     DART_ROOT=/opt/dart-sdk \
-    FLUTTER_ROOT=/opt/flutter
+    FLUTTER_ROOT=/opt/flutter \
+    NODE_USE_SYSTEM_CA=1
 
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
@@ -25,6 +26,18 @@ RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.config/opencode \
     && mkdir -p /home/linuxbrew && chown forge:forge /home/linuxbrew \
     && mkdir -p /opt/cheatsheets /opt/cheatsheets-image /opt/cheatsheet-sources \
+    && mkdir -p /usr/local/share/tillandsias /run/tillandsias \
+    && cp -L /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+        /usr/local/share/tillandsias/vendor-ca-bundle.crt \
+    && rm /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    && ln -s /run/tillandsias/ca-bundle.crt \
+        /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    && ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+        /etc/pki/tls/cert.pem \
+    && cp /usr/local/share/tillandsias/vendor-ca-bundle.crt \
+        /run/tillandsias/ca-bundle.crt \
+    && chmod 0444 /run/tillandsias/ca-bundle.crt \
+    && chown forge:forge /run/tillandsias \
     && mkdir -p /tmp && chmod 1777 /tmp
 
 # ── Cheatsheets ────────────────────────────────────────────────

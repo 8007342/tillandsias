@@ -631,6 +631,12 @@ specs:
   - litmus:agent-egress-allowlist-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
+- spec_id: transparent-https-caching
+  status: active
+  litmus_tests:
+  - litmus:forge-runtime-ca-trust
+  coverage_ratio: 100
+  last_verified: '2026-07-14'
 - spec_id: remote-projects
   status: active
   litmus_tests:
