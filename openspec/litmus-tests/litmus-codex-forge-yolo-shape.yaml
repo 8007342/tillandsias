@@ -35,12 +35,12 @@ critical_path:
     expected_behavior: "ok: gated-on-forge"
 
   - step: "the gated args array is threaded into the codex exec line"
-    command: "grep -qF 'exec codex \"${codex_forge_args[@]}\" \"$@\"' images/default/entrypoint-forge-codex.sh && echo 'ok: args-in-exec'"
+    command: "grep -qF 'codex \"${codex_forge_args[@]}\" \"$@\"' images/default/entrypoint-forge-codex.sh && echo 'ok: args-in-exec'"
     timeout_ms: 3000
     expected_behavior: "ok: args-in-exec"
 
   - step: "no ungated bare 'exec codex \"$@\"' whole line remains (drift back to prompting launch)"
-    command: "grep -qxF 'exec codex \"$@\"' images/default/entrypoint-forge-codex.sh && { echo 'FAIL: bare ungated exec codex present'; exit 1; } || echo 'ok: no-bare-exec'"
+    command: "grep -qF 'exec codex \"$@\"' images/default/entrypoint-forge-codex.sh && ! grep -qF 'codex \"${codex_forge_args[@]}\" \"$@\"' images/default/entrypoint-forge-codex.sh && { echo 'FAIL: bare ungated exec codex present'; exit 1; } || echo 'ok: no-bare-exec'"
     timeout_ms: 3000
     expected_behavior: "ok: no-bare-exec"
 
