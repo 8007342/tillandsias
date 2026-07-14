@@ -1,6 +1,47 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-14T00:20:00Z
+LastExecutionTime: 2026-07-14T19:55:00Z
+
+## Cycle 2026-07-14T18:38Z→19:55Z (linux_mutable macuahuitl — coordinator: siblings integrated, provisional-ID methodology, order 305 DONE + first stable promotion, RELEASE v0.3.260714.1 as first prerelease daily, order 334 milestone filed)
+
+- **Integration**: merged origin/windows-next (order 312 slices 1+3 —
+  hcsdiag membership-classified failure + installer Hyper-V-Admins
+  group-add; orders 323-327 filed; first Windows in-forge BigPickle
+  cycle; order-318 false-success live repro) and origin/osx-next (order
+  257 CLOSED — macOS parity column done; macOS destructive e2e + in-forge
+  cycle; orders filed for path translation, idle-timeout, metrics,
+  observability). Mediated the 323-327 double-collision: windows keeps
+  323-327; macOS block renumbered (metrics → 333); stale prose refs fixed
+  with packet_id citations.
+- **Methodology (operator directive)**: distributed-work.yaml gains
+  `order_number_assignment` — packet_id is the only authoritative
+  reference; non-coordinator hosts file `order: provisional` +
+  `provisional_id: <host>-<yymmdd>-<n>`; the linux coordinator assigns
+  final integers at integration with an order-assigned event; prose cites
+  packet_id. SIBLINGS: adopt on your next filing.
+- **Order 305 DONE — stable channel live**: dailies are now GitHub
+  PRE-releases; README's /releases/latest URLs resolve the last PROMOTED
+  release (no URL changes needed — the prerelease bit IS the channel).
+  scripts/promote-stable.sh (evidence-gated, refused:/promoted: grammar)
+  owns promotion + the stable git tag (no longer rolled by dailies).
+  FIRST PROMOTION: v0.3.260712.1 (curl-install + destructive e2e PASS
+  evidence). Pinned by litmus:stable-channel-shape. Documented in
+  methodology/versioning.yaml stable_channel.
+- **RELEASE v0.3.260714.1** (PR #73, run 29359472815, 25 assets):
+  first prerelease daily — verified live that /releases/latest still
+  resolves v0.3.260712.1. Parity gate CLEAN (0 required-cell gaps, first
+  time ever: 257+258 both done).
+- **Order 334 filed — STABLE MILESTONE v1 tracker** (multi_cycle): the
+  per-platform must-land set for the next promotion. Linux: 306, 307
+  verify, 303+304 device-flow login, 318 relay-verified acks. Windows:
+  312 standard-user slice, 323/324 reboot-pending UX, 326 guest forge
+  user. macOS: 331 path translation, 332 idle-timeout, 320-or-interim
+  gitconfig injection. Cross: curl-install e2e PASS on the candidate on
+  all three platforms.
+- **Order 303 annotated (do not one-liner it)**: wiring tray →
+  ensure_provider_auth today would ship the rejected PASTE-TOKEN flow and
+  hang without a TTY; depends on the device-flow token_script (304) or
+  in-terminal login chaining.
 
 ## Cycle 2026-07-13T22:43Z→00:20Z (macos — operator-directed: full destructive e2e + BigPickle in-forge /meta-orchestration + resource-monitoring pass; orders filed (coordinator-renumbered: metrics packet now order 333; see index), 257 CLOSED, mirror blocker re-evidenced)
 
