@@ -10,3 +10,4 @@
 - 2026-07-14T20:18Z linux macuahuitl: order 337 DONE — synchronized both order-315 git-mirror audit documents into the default image tree; byte comparison and compact pre-build cheatsheet tooling passed 2/2.
 - 2026-07-14T20:30Z linux macuahuitl: order 325 DONE — non-TTY GitHub login fails immediately unless explicit --with-token stdin mode is selected; fake container flow confirms no TTY and the same Vault write; targeted Rust 6/6 and gh-auth-script litmuses 2/2 pass.
 - 2026-07-14T20:32Z linux macuahuitl: order 307 progress — exact Antigravity updater host added to strict allow/no-bump policy and pinned against broad suffix access; proxy instant litmuses 2/2 pass. Credential acquisition/injection remains.
+- 2026-07-14T20:33Z linux macuahuitl: orders 303/304/307 BLOCKED on provider capability after source + installed-CLI audit; only Codex exposes compliant device auth. Filed shaped Codex foundation order 338; no paste/browser fallback accepted.

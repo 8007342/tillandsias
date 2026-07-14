@@ -9531,7 +9531,9 @@ plan_index:
       order: 303
       release_target: stable-milestone-v1
       title: "Tray forge launches run the same ensure_provider_auth vault ladder as the CLI lane"
-      status: ready
+      status: blocked
+      retryable: false
+      blocked_on: provider-device-auth-capability
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
       depends_on: []
@@ -9581,12 +9583,28 @@ plan_index:
           summary: >
             Operator repro: relaunching Claude/Codex from the tray prompts
             for login again despite a prior successful in-forge login.
+        - type: blocked
+          ts: "2026-07-14T20:33:43Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Fresh source plus installed-CLI audit confirmed this aggregate
+            cannot meet its device-flow amendment: only Codex exposes a true
+            device command; Claude exposes no device option and Antigravity
+            has no auth command. The current generic path is a prohibited
+            paste-token placeholder using a nonexistent curl image, wrong
+            Vault read field, and no OAuth injection. Exact evidence is in
+            provider-device-auth-capability-blocker-2026-07-14.md. Resume only
+            when provider capabilities exist or the aggregate scope changes;
+            Codex-only foundation is ready as order 338.
 
     - packet_id: agent-login-vault-roundtrip
       order: 304
       release_target: stable-milestone-v1
       title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
-      status: ready
+      status: blocked
+      retryable: false
+      blocked_on: provider-device-auth-capability
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
       depends_on: [agent-login-tray-lane-vault-parity]
@@ -9624,6 +9642,17 @@ plan_index:
           summary: >
             Operator smoke-test 2026-07-12; design sketch and existing
             plumbing inventory in the deliverable issue file.
+        - type: blocked
+          ts: "2026-07-14T20:33:43Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            The aggregate round trip is not implementable from current
+            provider CLIs. Only Codex has a compliant device command; Claude
+            and Antigravity cannot satisfy the no-browser/no-paste contract.
+            The implementation also has no OAuth file restore or harvest path.
+            Evidence and the safe Codex continuation are recorded in
+            provider-device-auth-capability-blocker-2026-07-14.md.
 
     - packet_id: stable-release-channel
       order: 305
@@ -9702,7 +9731,9 @@ plan_index:
       order: 307
       release_target: stable-milestone-v1
       title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
-      status: ready
+      status: blocked
+      retryable: true
+      blocked_on: antigravity-device-auth-capability
       kind: exploration
       deliverable: plan/issues/antigravity-launch-crash-2026-07-12.md
       depends_on: []
@@ -9763,6 +9794,17 @@ plan_index:
             pre-build litmuses pass 2/2 and entrypoint bash syntax passes.
             Packet remains ready because no supported Gemini credential
             acquisition/injection path exists; orders 303/304 own that work.
+        - type: blocked
+          ts: "2026-07-14T20:33:43Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Proxy egress is fixed, but installed Antigravity 1.1.0 exposes no
+            auth/login command and the runtime has no supported writer for the
+            Gemini API-key path launch injects. A usable authenticated TUI
+            cannot be verified without weakening the device-flow contract.
+            Smallest recheck: run `agy --help` after a provider CLI update and
+            inspect for a supported device-auth command.
 
     - packet_id: headless-unit-cap-hardening-podman-wedge
       order: 308
@@ -11148,3 +11190,35 @@ plan_index:
             documents into the default image cheatsheet tree. Direct cmp
             checks passed and the compact pre-build cheatsheet-tooling suite
             passed 2/2, including litmus:cheatsheet-host-image-sync.
+
+    - packet_id: codex-device-auth-command-and-schema
+      order: 338
+      release_target: stable-milestone-v1
+      title: "Codex device-auth foundation: exact provider command and opaque credential schema"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, codex, auth, vault, rust]
+      estimated_hours: 2
+      outcome: >
+        Replace generic provider-login placeholders for Codex with an exact,
+        feature-probed `codex login --device-auth` provider spec and an opaque
+        auth-file Vault schema suitable for later byte-identical restore and
+        harvest. No browser launch, terminal hyperlink, or paste-token fallback
+        is permitted; unsupported provider commands fail loud.
+      exit_criteria:
+        - "Codex provider spec names forge image, codex login --device-auth, ~/.codex/auth.json, Vault path, and opaque field"
+        - "tests pin feature-probe failure and prohibit read -s/paste-token fallback for Codex"
+        - "follow-on restore/harvest packet is shaped from the proven schema"
+      events:
+        - type: filed
+          ts: "2026-07-14T20:33:43Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Split from blocked aggregate orders 303/304 after local installed
+            CLI audit found Codex 0.144.4 is the only named provider with a
+            compliant device command. Sized as one worker cycle; it establishes
+            the exact command and persistence schema, not the later round trip.
