@@ -10567,10 +10567,10 @@ plan_index:
     - packet_id: forge-host-gitconfig-bidirectional-quarantine
       order: 321
       title: "Ladder rung D: bidirectional host/forge git-config isolation — forge can never write host .git/config; host git state never leaks in"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: crates/tillandsias-headless (mount spec) + fixture
-      depends_on: [git-mirror-architecture-audit]
+      depends_on: []
       pickup_role: linux
       capability_tags: [forge, security, containers, git]
       estimated_hours: 4
@@ -10587,6 +10587,17 @@ plan_index:
         - "fixture: host-side credential helper / insteadOf entries are NOT visible to git inside the forge"
         - "worktree object/ref sharing still works (clone/fetch/push flows green)"
       events:
+        - type: claim
+          ts: "2026-07-14T21:17:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "604ec11ce2c3"
+          expires_at: "2026-07-15T01:17:00Z"
+          summary: >
+            Claimed after order 315 completed the audit inputs. Removed the
+            stale parent dependency because this isolation fixture is the
+            final completion gate for that multi-cycle parent; retaining the
+            edge made the dependency graph cyclic.
         - type: filed
           ts: "2026-07-13T04:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
