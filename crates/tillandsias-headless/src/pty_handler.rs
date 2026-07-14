@@ -77,7 +77,7 @@ struct PtySession {
 /// host. Inserts on `PtyOpen`, removes on `PtyClose` (either direction).
 pub struct PtySessionStore {
     sessions: HashMap<u32, PtySession>,
-    outbound: mpsc::UnboundedSender<ControlEnvelope>,
+    outbound: mpsc::Sender<ControlEnvelope>,
     heartbeat_interval: Option<Duration>,
 }
 
@@ -85,7 +85,7 @@ impl PtySessionStore {
     /// Create a new store. `outbound` is the per-connection channel that
     /// `PtyData{ToHost}` and child-exit `PtyClose` envelopes are pushed
     /// to; the connection's writer task drains it.
-    pub fn new(outbound: mpsc::UnboundedSender<ControlEnvelope>) -> Self {
+    pub fn new(outbound: mpsc::Sender<ControlEnvelope>) -> Self {
         Self {
             sessions: HashMap::new(),
             outbound,
@@ -95,7 +95,7 @@ impl PtySessionStore {
 
     /// Enable PTY liveness frames for a client that advertised
     /// `pty.heartbeat@v1` during the control-wire handshake.
-    pub fn new_with_heartbeat(outbound: mpsc::UnboundedSender<ControlEnvelope>) -> Self {
+    pub fn new_with_heartbeat(outbound: mpsc::Sender<ControlEnvelope>) -> Self {
         Self {
             sessions: HashMap::new(),
             outbound,
@@ -499,7 +499,7 @@ fn spawn_pump_task(
     session_id: u32,
     child_pid: Pid,
     master: Arc<AsyncFd<OwnedFd>>,
-    outbound: mpsc::UnboundedSender<ControlEnvelope>,
+    outbound: mpsc::Sender<ControlEnvelope>,
     mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
     heartbeat_interval: Option<Duration>,
 ) -> tokio::task::JoinHandle<()> {
@@ -530,7 +530,7 @@ fn spawn_pump_task(
                         None => std::future::pending().await,
                     };
                 } => {
-                    if outbound.send(pty_heartbeat_envelope(session_id)).is_err() {
+                    if outbound.send(pty_heartbeat_envelope(session_id)).await.is_err() {
                         return;
                     }
                     continue;
@@ -583,7 +583,7 @@ fn spawn_pump_task(
                     bytes,
                 },
             };
-            if outbound.send(env).is_err() {
+            if outbound.send(env).await.is_err() {
                 // Outbound channel closed = connection going away.
                 debug!(
                     spec = "vsock-transport",
@@ -600,7 +600,7 @@ fn spawn_pump_task(
             seq: 0,
             body: ControlMessage::PtyClose { session_id, exit },
         };
-        let _ = outbound.send(env);
+        let _ = outbound.send(env).await;
         info!(
             spec = "vsock-transport",
             session_id,
@@ -634,10 +634,9 @@ async fn reap_child(pid: Pid) -> PtyExit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc::unbounded_channel;
 
-    fn store() -> (PtySessionStore, mpsc::UnboundedReceiver<ControlEnvelope>) {
-        let (tx, rx) = unbounded_channel();
+    fn store() -> (PtySessionStore, mpsc::Receiver<ControlEnvelope>) {
+        let (tx, rx) = mpsc::channel(64);
         (PtySessionStore::new(tx), rx)
     }
 
@@ -662,7 +661,7 @@ mod tests {
 
     #[tokio::test]
     async fn quiet_pty_pump_emits_empty_to_host_heartbeat() {
-        let (tx, mut rx) = unbounded_channel();
+        let (tx, mut rx) = mpsc::channel(64);
         let mut store = PtySessionStore {
             sessions: HashMap::new(),
             outbound: tx,
