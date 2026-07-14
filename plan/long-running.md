@@ -8,6 +8,7 @@ cycle that changes a listed packet's phase, status, or verification tally.
 
 | Order | Packet | Phase | Blocked on | Outstanding verifications |
 |---:|---|---|---|---|
+| 153 | `vm-headless-persistent-listener` | verification | — | claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink (SC-08,09,10,17) |
 | 245 | `network-architecture-audit` | review (GPT audit failed 2026-07-14) | stale runtime taxonomy and root-cause claims | opencode-bigpickle (NA-01..06), antigravity-gemini (NA-01,02,03,05), codex-gpt55-highthink re-verification after revision (NA-01,03,04,06) |
 | 246 | `credential-secrets-architecture-audit` | research | order 245 ratification | opencode-bigpickle (CS-01..06), antigravity-gemini (CS-01,02,03,05), codex-gpt55-highthink (CS-02,04,05,06) |
 | 247 | `proxy-git-mirror-configuration-audit` | research | order 245 ratification | opencode-bigpickle (PG-01..05), antigravity-gemini (PG-01,03,04), codex-gpt55-highthink (PG-02,03,05) |

@@ -1276,7 +1276,17 @@ plan_index:
     - packet_id: vm-headless-persistent-listener
       order: 153
       title: "VM Headless: persistent vsock listener + server-push event stream"
-      status: claimed
+      status: ready
+      multi_cycle: true
+      phase: verification
+      progress_summary: >
+        Implementation complete. Persistent handlers, all-topic pushes, the real
+        two-handler SC-10 backpressure proof, 64-frame bounded PTY outbound, and
+        watch-based idle/inbound handler shutdown are green. Every post-store exit
+        converges through one PTY cleanup funnel. Active dispatched request
+        operations may complete before the handler loop observes shutdown; this
+        packet's shutdown criterion covers the persistent reader/select boundary.
+        Awaiting four named verified-by events for SC-08, SC-09, SC-10, and SC-17.
       split_into:
         - "230 — headless-loginstatus-push (slice 2: LoginStatePush on Vault token change)"
         - "231 — headless-cloudprojects-push (slice 3: CloudProjectsPush on gh repo list change)"
@@ -1296,6 +1306,29 @@ plan_index:
         status queries — replace with Subscribe + Push. PTY sessions remain
         multiplexed on the same connection.
       events:
+        - type: progress
+          ts: "2026-07-14T23:22:03Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "fe0a18b40983"
+          phase: verification
+          commits: [7115cb8a, 25c31f3b, 705d57ae]
+          summary: >
+            Implementation-complete for order 153; status returned to ready and
+            the packet entered its four-agent verification phase. The strong
+            SC-10 test uses two real handlers and proves a fast peer receives all
+            20 ordered pushes while a one-byte-buffer peer stalls for 1000ms.
+            PTY outbound is bounded at 64 frames, shutdown reaches idle and
+            inbound-waiting handlers, and all post-store exits share one cleanup
+            funnel. Active dispatched request operations may finish before the
+            persistent handler loop observes shutdown; they are outside this
+            packet's reader/select shutdown criterion.
+          evidence:
+            - "full listen-vsock headless: 208 passed, 0 failed, 3 ignored"
+            - "strong SC-10 two-handler wire test passed repeatedly in 1.00s"
+            - "strict listen-vsock all-target clippy passed with -D warnings"
+            - "./build.sh --check passed after integration"
+            - "independent review found no blocker to verification"
         - type: claim
           ts: "2026-07-14T23:04:26Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -1372,10 +1405,22 @@ plan_index:
         - "VmStatusPush sent to all clients on VmPhase change (SC-09, <500ms) — DONE"
         - "LoginStatePush sent on Vault token change — DONE (order 230, commit 744f4749)"
         - "CloudProjectsPush sent when gh repo list result changes — DONE (order 231, commit 744f4749)"
-        - "Per-client reader task uses select! over message type + shutdown signal — DONE"
-        - "All in-memory channels bounded; documented capacity in code — DONE for VmStatus; PTY mpsc channel remains unbounded (pre-existing, out of this slice's scope)"
-        - "Slow client (simulated 1000ms lag) does not affect fast client (SC-10)"
-      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+        - "Per-client connection task selects inbound/push/PTY plus shutdown signal — DONE; active dispatched request work may finish before the loop observes shutdown"
+        - "All listener push topics and per-connection PTY outbound channels are bounded with documented capacities — DONE"
+        - "Slow client stalled for 1000ms does not affect fast client or lose its 20 ordered frames (SC-10) — DONE"
+      verification_required:
+        agents:
+          - id: claude-opus-highthink
+            criteria: [SC-08, SC-09, SC-10, SC-17]
+          - id: opencode-bigpickle
+            criteria: [SC-08, SC-09, SC-10, SC-17]
+          - id: antigravity-gemini
+            criteria: [SC-08, SC-09, SC-10, SC-17]
+          - id: codex-gpt55-highthink
+            criteria: [SC-08, SC-09, SC-10, SC-17]
+        completion_gate: >
+          ALL four agents must emit passing verified-by events for every assigned
+          criterion after implementation commit 705d57ae.
 
     - packet_id: windows-tray-stream-refactor
       order: 154
