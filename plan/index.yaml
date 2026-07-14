@@ -11405,7 +11405,7 @@ plan_index:
       order: provisional
       provisional_id: linux-260714-1
       title: "Repair stale vsock handshake contract/litmus: wire v1 assertion and nonexistent probe binary"
-      status: ready
+      status: claimed
       kind: test-fix
       deliverable: openspec/specs/vsock-transport/spec.md + openspec/litmus-tests/litmus-vsock-handshake.yaml
       depends_on: []
@@ -11422,6 +11422,16 @@ plan_index:
         - "litmus invokes only binaries/examples that exist in the workspace"
         - "litmus:vsock-handshake passes on a provisioned/vsock-capable host or reports an explicit unsupported-host skip"
       events:
+        - type: claim
+          ts: "2026-07-14T22:36:38Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "2880dc0aa94a"
+          expires_at: "2026-07-15T02:36:38Z"
+          summary: >
+            Claimed the dependency-free drift-protection packet to align the
+            handshake contract with WIRE_VERSION=2, replace the nonexistent
+            probe target, and make unsupported-host behavior explicit.
         - type: filed
           ts: "2026-07-14T21:43:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
