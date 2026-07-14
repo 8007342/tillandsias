@@ -11556,10 +11556,15 @@ plan_index:
     - packet_id: forge-shared-checkout-destructive-clean
       order: 328
       title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
-      status: ready
+      status: pending
       kind: bugfix
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
-      depends_on: []
+      depends_on:
+        - forge-dirty-tree-exit-contract
+        - macos-forge-owned-checkout-isolation
+      split_into:
+        - "341 — forge-dirty-tree-exit-contract (Linux-safe skill contract and checksum fixture)"
+        - "342 — macos-forge-owned-checkout-isolation (structural decision and live macOS proof)"
       pickup_role: linux
       capability_tags: [meta-orchestration, forge, safety, p1, skill]
       estimated_hours: 4
@@ -11576,6 +11581,16 @@ plan_index:
         - "litmus fixture: blocked cycle on a dirty tree exits with pre-existing files byte-identical (checksummed)"
         - "macOS forge lane worktree isolation decision recorded (materialize vs git-worktree), child packet filed if adopted"
       events:
+        - type: split
+          ts: "2026-07-14T23:25:16Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Split the immediate shared-skill safety repair from the macOS-owned
+            checkout isolation decision. The Linux child can close the
+            destructive-clean hazard without writing VZ/runtime surfaces; the
+            parent remains pending until a current-build macOS lane proves the
+            structural isolation child.
         - type: filed
           ts: "2026-07-14T00:05:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
@@ -11586,6 +11601,69 @@ plan_index:
             targeting this host cycle's five uncommitted packet files; they
             survived only because e84ba192 had just been pushed. It also
             reverted its own blocker-file update (self-erasing evidence).
+
+    - packet_id: forge-dirty-tree-exit-contract
+      order: 341
+      title: "Meta-orchestration: preserve pre-existing dirty-tree bytes on blocked exit"
+      status: claimed
+      kind: bugfix
+      deliverable: skills/meta-orchestration/SKILL.md + openspec/litmus-tests/litmus-meta-orchestration-dirty-tree-contract.yaml
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [meta-orchestration, forge, safety, testing, skill]
+      estimated_hours: 2
+      outcome: >
+        Meta-orchestration records the startup dirty-tree boundary and scopes
+        exit cleanup to artifacts created by the current cycle. A blocked cycle
+        never runs checkout, restore, reset, or clean against paths that were
+        already dirty at startup, and a checksum fixture proves tracked edits
+        and untracked files remain byte-identical.
+      exit_criteria:
+        - "skill explicitly defines startup dirty paths as sibling/operator work that cleanup must not touch"
+        - "exit cleanliness applies only to cycle-created artifacts and never authorizes destructive Git commands on pre-existing work"
+        - "instant fixture forces a blocked exit with tracked and untracked startup dirt and verifies byte-identical checksums"
+      events:
+        - type: claim
+          ts: "2026-07-14T23:25:16Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "b8095dc38880"
+          expires_at: "2026-07-15T03:25:16Z"
+          summary: >
+            Claimed the bounded Linux-safe child: repair the shared skill's
+            contradictory exit wording, add a blocked-cycle dirty-tree fixture,
+            bind it to the meta-orchestration instant suite, and leave macOS
+            checkout materialization to the sibling-owned child.
+
+    - packet_id: macos-forge-owned-checkout-isolation
+      order: 342
+      title: "macOS forge: isolate in-forge agents from the operator checkout"
+      status: ready
+      kind: design+implementation
+      deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, forge, git, isolation, testing]
+      estimated_hours: 2
+      outcome: >
+        Choose and record mirror materialization versus a linked worktree, then
+        run the macOS forge lane from a forge-owned checkout whose index,
+        untracked files, and cleanup operations cannot mutate the operator's
+        virtiofs-shared working tree.
+      exit_criteria:
+        - "materialize-vs-worktree decision records lifecycle, credential, and object-sharing tradeoffs"
+        - "macOS forge launch routes the agent project path to the isolated checkout"
+        - "live dirty-host fixture proves forge-created edits and cleanup cannot change operator tracked or untracked bytes"
+      events:
+        - type: filed
+          ts: "2026-07-14T23:25:16Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Split from order 328 for the macOS owner because Linux source
+            inspection cannot certify the VZ virtiofs runtime boundary or the
+            live operator-checkout isolation criterion.
 
     - packet_id: stable-milestone-v1
       order: 334
