@@ -11052,7 +11052,7 @@ plan_index:
       order: 332
       release_target: stable-milestone-v1
       title: "P1: first-use macOS --opencode dies at 300s vsock idle timeout during silent forge image build (VM torn down mid-build)"
-      status: ready
+      status: claimed
       kind: bugfix
       deliverable: plan/issues/macos-opencode-firstuse-silent-build-idle-timeout-2026-07-13.md
       depends_on: []
@@ -11072,6 +11072,18 @@ plan_index:
         - "wire-level liveness heartbeat or streamed build output pinned by litmus with a synthetic slow-build fixture"
         - "single IDLE_TIMEOUT_SECS constant, env-overridable"
       events:
+        - type: claim
+          ts: "2026-07-14T21:32:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "1965a628cbaf"
+          expires_at: "2026-07-15T01:32:00Z"
+          summary: >
+            Claimed as the highest-priority dependency-clear Linux-owned P1
+            on the stable milestone. This cycle will consolidate the three
+            idle-timeout literals, add the environment override, and pin
+            liveness during a synthetic slow control-wire stream; attended
+            cold macOS evidence remains a separate completion gate.
         - type: filed
           ts: "2026-07-13T23:25:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
