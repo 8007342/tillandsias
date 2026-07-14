@@ -11605,7 +11605,7 @@ plan_index:
     - packet_id: forge-dirty-tree-exit-contract
       order: 341
       title: "Meta-orchestration: preserve pre-existing dirty-tree bytes on blocked exit"
-      status: claimed
+      status: done
       kind: bugfix
       deliverable: skills/meta-orchestration/SKILL.md + openspec/litmus-tests/litmus-meta-orchestration-dirty-tree-safety.yaml
       depends_on: []
@@ -11613,16 +11613,37 @@ plan_index:
       capability_tags: [meta-orchestration, forge, safety, testing, skill]
       estimated_hours: 2
       outcome: >
-        Meta-orchestration records the startup dirty-tree boundary and scopes
-        exit cleanup to artifacts created by the current cycle. A blocked cycle
-        never runs checkout, restore, reset, or clean against paths that were
-        already dirty at startup, and a checksum fixture proves tracked edits
-        and status-visible untracked files remain byte-identical.
+        Meta-orchestration records the startup dirty-tree boundary and performs
+        no automated worktree cleanup. A blocked cycle never runs checkout,
+        restore, reset, clean, or unlink against the checkout; disposable
+        diagnostics stay in the external boundary directory. A checksum
+        fixture proves tracked edits and status-visible untracked files remain
+        byte-identical, and canonical skill changes invalidate forge caches.
       exit_criteria:
         - "skill explicitly defines startup dirty paths as sibling/operator work that cleanup must not touch"
         - "dirty-start preflight refuses committable work; exit never authorizes destructive Git commands on pre-existing work"
         - "instant fixture forces a blocked exit with tracked and status-visible untracked startup dirt and verifies byte-identical checksums"
       events:
+        - type: completed
+          ts: "2026-07-14T23:53:17Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "b8095dc38880"
+          commits: [425e5db7]
+          validation:
+            - "dirty-start fixture: tracked and status-visible untracked bytes preserved; tamper rejected"
+            - "meta-orchestration instant suite: 8/8 executed passed"
+            - "nix-builder instant suite: 2/2 passed"
+            - "forge cache fixture: content, mode, symlink target, untracked, and ignored canonical skill changes covered"
+            - "./build.sh --check passed after integration"
+            - "independent safety review: no remaining findings"
+          summary: >
+            Dirty startup is now a preflight refusal with a final-handoff
+            blocker channel; finalization never deletes or restores a worktree
+            path. The snapshot guard verifies status, index/worktree diffs, and
+            path hashes while scratch output stays outside the checkout. Forge
+            and NanoClaw image hashes include their canonical copied sources,
+            preventing cached images from retaining stale skill contracts.
         - type: claim
           ts: "2026-07-14T23:25:16Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
