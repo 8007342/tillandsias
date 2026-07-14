@@ -9751,6 +9751,18 @@ plan_index:
             (was falling through to "unknown"). bash -n syntax check
             PASS on both files. Proxy egress + credential gaps still
             block criterion 3 (orders 303/304).
+        - type: progress
+          ts: "2026-07-14T20:32:09Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Closed the proxy half of criterion 3: strict Squid policy now
+            allows and no-bumps only the exact observed Antigravity Cloud Run
+            updater hostname, while the broader service suffix stays denied.
+            Extended agent-egress-allowlist-shape; proxy-container instant
+            pre-build litmuses pass 2/2 and entrypoint bash syntax passes.
+            Packet remains ready because no supported Gemini credential
+            acquisition/injection path exists; orders 303/304 own that work.
 
     - packet_id: headless-unit-cap-hardening-podman-wedge
       order: 308

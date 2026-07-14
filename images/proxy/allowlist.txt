@@ -90,6 +90,8 @@
 .claude.com
 # Antigravity CLI product surface (not a subdomain of google.com; uses .google gTLD).
 .antigravity.google
+# Antigravity CLI binary updater (exact observed Cloud Run service, order 307).
+antigravity-cli-auto-updater-974169037036.us-central1.run.app
 .together.ai
 .groq.com
 .fireworks.ai

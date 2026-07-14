@@ -14,13 +14,13 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "Verify Claude and ChatGPT parent domains are allowlisted"
-    command: "grep -Fq '.chatgpt.com' images/proxy/allowlist.txt && grep -Fq '.claude.com' images/proxy/allowlist.txt && echo \"ok: allowlisted\""
+  - step: "Verify Claude, ChatGPT, and the exact Antigravity updater host are allowlisted"
+    command: "grep -Fq '.chatgpt.com' images/proxy/allowlist.txt && grep -Fq '.claude.com' images/proxy/allowlist.txt && grep -Fq 'antigravity-cli-auto-updater-974169037036.us-central1.run.app' images/proxy/allowlist.txt && ! grep -Fxq '.us-central1.run.app' images/proxy/allowlist.txt && echo \"ok: allowlisted\""
     timeout_ms: 3000
     expected_behavior: "ok: allowlisted"
 
   - step: "Verify domains are marked no-bump in squid.conf"
-    command: "grep -Fq 'no_bump_domains dstdomain' images/proxy/squid.conf && grep -Fq '.chatgpt.com' images/proxy/squid.conf && grep -Fq '.claude.com' images/proxy/squid.conf && echo \"ok: no-bump\""
+    command: "grep -Fq 'no_bump_domains dstdomain' images/proxy/squid.conf && grep -Fq '.chatgpt.com' images/proxy/squid.conf && grep -Fq '.claude.com' images/proxy/squid.conf && grep -Fq 'antigravity-cli-auto-updater-974169037036.us-central1.run.app' images/proxy/squid.conf && echo \"ok: no-bump\""
     timeout_ms: 3000
     expected_behavior: "ok: no-bump"
 
@@ -34,5 +34,5 @@ observability:
     artifact: "images/proxy/{allowlist.txt,squid.conf}"
 
 rollback:
-  on_failure: "Restore .chatgpt.com and .claude.com to allowlist.txt and squid.conf no_bump_domains."
+  on_failure: "Restore .chatgpt.com, .claude.com, and the exact Antigravity updater host to allowlist.txt and squid.conf no_bump_domains."
   command: "echo rollback"
