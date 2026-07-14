@@ -285,7 +285,7 @@ where
             match &envelope.body {
                 tillandsias_control_wire::ControlMessage::PtyData {
                     session_id, bytes, ..
-                } => {
+                } if !bytes.is_empty() => {
                     eprintln!(
                         "[pty-debug] session={} {} bytes: {}",
                         session_id,

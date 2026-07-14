@@ -11052,7 +11052,7 @@ plan_index:
       order: 332
       release_target: stable-milestone-v1
       title: "P1: first-use macOS --opencode dies at 300s vsock idle timeout during silent forge image build (VM torn down mid-build)"
-      status: claimed
+      status: ready
       kind: bugfix
       deliverable: plan/issues/macos-opencode-firstuse-silent-build-idle-timeout-2026-07-13.md
       depends_on: []
@@ -11072,6 +11072,25 @@ plan_index:
         - "wire-level liveness heartbeat or streamed build output pinned by litmus with a synthetic slow-build fixture"
         - "single IDLE_TIMEOUT_SECS constant, env-overridable"
       events:
+        - type: progress
+          ts: "2026-07-14T21:44:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "1965a628cbaf"
+          evidence_refs:
+            - openspec/litmus-tests/litmus-vsock-exec-heartbeat.yaml
+            - "litmus:vsock-transport 1/1 PASS (heartbeat 4/4 steps)"
+            - "./build.sh --check PASS"
+          summary: >
+            Linux implementation and synthetic verification are complete.
+            All exec readers now share one 300-second environment-overridable
+            deadline; capability-gated empty PTY frames provide 30-second
+            liveness without affecting mixed-version interactive clients.
+            A synthetic silent build survives multiple injected deadlines,
+            while a peer with neither data nor heartbeat still times out.
+            Missing image builds now announce slow work before Podman's
+            buffered build call. Status returns ready for the remaining
+            attended cold-substrate macOS launch criterion.
         - type: claim
           ts: "2026-07-14T21:32:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -11094,6 +11113,38 @@ plan_index:
             stale and vz.stop() killed the build. Sibling of order 270 and
             the Windows silent forge-base build finding, but fatal on macOS
             first use.
+
+    - packet_id: vsock-handshake-litmus-wire-v2-repair
+      order: provisional
+      provisional_id: linux-260714-1
+      title: "Repair stale vsock handshake contract/litmus: wire v1 assertion and nonexistent probe binary"
+      status: ready
+      kind: test-fix
+      deliverable: openspec/specs/vsock-transport/spec.md + openspec/litmus-tests/litmus-vsock-handshake.yaml
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [vsock, control-wire, testing, spec]
+      estimated_hours: 2
+      outcome: >
+        The vsock handshake spec and e2e descriptor reflect production wire
+        version 2 and execute a real maintained probe or deterministic
+        fixture. Unsupported hosts skip explicitly; missing binaries and
+        stale version assertions fail the test definition gate before runtime.
+      exit_criteria:
+        - "vsock-transport invariant and handshake expectation match production WIRE_VERSION=2"
+        - "litmus invokes only binaries/examples that exist in the workspace"
+        - "litmus:vsock-handshake passes on a provisioned/vsock-capable host or reports an explicit unsupported-host skip"
+      events:
+        - type: filed
+          ts: "2026-07-14T21:43:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          summary: >
+            Discovered while broad-running the new order-332 heartbeat gate:
+            the legacy handshake descriptor expects wire version 1 although
+            production is 2, and both payload steps invoke the nonexistent
+            tillandsias-control-wire example `vsock-handshake-probe`. Kept the
+            stale e2e descriptor out of the active binding until repaired.
 
     - packet_id: forge-shared-checkout-destructive-clean
       order: 328
@@ -11167,6 +11218,16 @@ plan_index:
         - "every milestone_criteria row maps to a done packet or an operator-approved waiver recorded here"
         - "scripts/promote-stable.sh run on the candidate with the evidence gate passing un-forced"
       events:
+        - type: progress
+          ts: "2026-07-14T21:44:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux_mutable
+          summary: >
+            Order 332's Linux implementation gate is complete: negotiated
+            PTY heartbeats keep silent cold builds alive, the idle deadline is
+            unified and configurable, and the synthetic vsock litmus passes.
+            The macOS milestone row remains open only for an attended cold-
+            substrate --opencode run reaching the agent prompt.
         - type: progress
           ts: "2026-07-14T21:13:16Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"

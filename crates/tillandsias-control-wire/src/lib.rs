@@ -69,6 +69,12 @@ pub const MAX_PTY_FRAME_BYTES: usize = 64_000;
 /// @trace openspec/changes/control-wire-pty-attach/proposal.md, spec:vsock-transport
 pub const CAP_PTY_ATTACH_V1: &str = "pty.attach@v1";
 
+/// Capability advertised by exec clients that understand empty
+/// `PtyData{ToHost}` frames as liveness heartbeats rather than terminal data.
+/// The server emits heartbeats only when the client advertises this token,
+/// keeping mixed-version interactive attach clients unchanged.
+pub const CAP_PTY_HEARTBEAT_V1: &str = "pty.heartbeat@v1";
+
 /// Maximum permitted MCP frame payload size (for McpFrame variant only).
 /// Screenshots and large tool responses may require multi-MB capacity.
 ///

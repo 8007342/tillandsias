@@ -184,6 +184,36 @@ emitted as a structured log event with `spec = "vsock-transport"`.
 - **THEN** the receiver SHALL emit `Err(TransportError::DecodeFailed)` and close the connection
 - **AND** SHALL log `spec = "vsock-transport"` with the byte offset where decoding failed
 
+### Requirement: Silent guest work remains live through capability-gated heartbeats
+- **ID**: vsock-transport.exec.heartbeat-liveness@v1
+- **Modality**: MUST
+- **Measurable**: true
+
+Long-running PTY exec clients SHALL advertise `pty.heartbeat@v1`. While a
+child is alive and produces no terminal bytes, the guest SHALL send an empty
+`PtyData{ToHost}` frame every 30 seconds only to clients that advertised that
+capability. The frame SHALL reset the shared exec idle deadline and SHALL NOT
+be delivered to terminal output callbacks or mark an interactive terminal
+attached. All exec readers SHALL use one default 300-second deadline,
+overridable with `TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS`; invalid values and
+values below 60 seconds SHALL fail loudly.
+
+@trace spec:vsock-transport
+
+#### Scenario: A silent cold image build outlives the idle deadline
+- **WHEN** a guest image build emits no terminal bytes for longer than the
+  configured exec idle deadline
+- **AND** both peers negotiated `pty.heartbeat@v1`
+- **THEN** empty heartbeat frames SHALL keep the exec connection live
+- **AND** the eventual build output and `PtyClose` SHALL reach the host
+- **AND** a peer that sends neither data nor heartbeat SHALL still time out
+
+#### Scenario: Mixed-version interactive clients receive no heartbeat frames
+- **WHEN** a PTY client advertises `pty.attach@v1` without
+  `pty.heartbeat@v1`
+- **THEN** the guest SHALL NOT emit empty heartbeat frames on that connection
+- **AND** defensive host routing SHALL ignore any empty `PtyData{ToHost}` frame
+
 ## Invariants
 
 ### Invariant: Host CID is 2
@@ -236,6 +266,7 @@ emitted as a structured log event with `spec = "vsock-transport"`.
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:vsock-handshake` — primary handshake verification.
 - `litmus:vm-shutdown-drains-forges` — exercises `VmShutdownRequest` semantics.
+- `litmus:vsock-exec-heartbeat` — pins capability-gated silent-work liveness, the unified timeout policy, and empty-frame suppression.
 
 ## Litmus Chain
 

@@ -49,6 +49,8 @@ use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
+const PTY_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
+
 /// One active PTY session for a single connection.
 struct PtySession {
     session_id: u32,
@@ -76,6 +78,7 @@ struct PtySession {
 pub struct PtySessionStore {
     sessions: HashMap<u32, PtySession>,
     outbound: mpsc::UnboundedSender<ControlEnvelope>,
+    heartbeat_interval: Option<Duration>,
 }
 
 impl PtySessionStore {
@@ -86,6 +89,17 @@ impl PtySessionStore {
         Self {
             sessions: HashMap::new(),
             outbound,
+            heartbeat_interval: None,
+        }
+    }
+
+    /// Enable PTY liveness frames for a client that advertised
+    /// `pty.heartbeat@v1` during the control-wire handshake.
+    pub fn new_with_heartbeat(outbound: mpsc::UnboundedSender<ControlEnvelope>) -> Self {
+        Self {
+            sessions: HashMap::new(),
+            outbound,
+            heartbeat_interval: Some(PTY_HEARTBEAT_INTERVAL),
         }
     }
 
@@ -229,6 +243,7 @@ impl PtySessionStore {
             master_arc.clone(),
             self.outbound.clone(),
             cancel_rx,
+            self.heartbeat_interval,
         );
 
         self.sessions.insert(
@@ -468,15 +483,33 @@ fn spawn_terminator(pid: Pid, grace: Duration) {
     });
 }
 
+fn pty_heartbeat_envelope(session_id: u32) -> ControlEnvelope {
+    ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: 0,
+        body: ControlMessage::PtyData {
+            session_id,
+            direction: PtyDirection::ToHost,
+            bytes: Vec::new(),
+        },
+    }
+}
+
 fn spawn_pump_task(
     session_id: u32,
     child_pid: Pid,
     master: Arc<AsyncFd<OwnedFd>>,
     outbound: mpsc::UnboundedSender<ControlEnvelope>,
     mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+    heartbeat_interval: Option<Duration>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut buf = vec![0u8; MAX_PTY_FRAME_BYTES];
+        let mut heartbeat = heartbeat_interval.map(tokio::time::interval);
+        if let Some(heartbeat) = heartbeat.as_mut() {
+            heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            heartbeat.tick().await;
+        }
         loop {
             // Race the next readable-edge against the explicit cancel.
             // Cancel fires when close_host_initiated / shutdown_all drops
@@ -490,6 +523,17 @@ fn spawn_pump_task(
                         session_id, "PTY pump: cancel signalled; exiting to reap"
                     );
                     break;
+                }
+                _ = async {
+                    match heartbeat.as_mut() {
+                        Some(heartbeat) => heartbeat.tick().await,
+                        None => std::future::pending().await,
+                    };
+                } => {
+                    if outbound.send(pty_heartbeat_envelope(session_id)).is_err() {
+                        return;
+                    }
+                    continue;
                 }
                 readable = master.readable() => match readable {
                     Ok(g) => g,
@@ -595,6 +639,57 @@ mod tests {
     fn store() -> (PtySessionStore, mpsc::UnboundedReceiver<ControlEnvelope>) {
         let (tx, rx) = unbounded_channel();
         (PtySessionStore::new(tx), rx)
+    }
+
+    #[test]
+    fn pty_heartbeat_is_an_empty_tohost_frame() {
+        assert_eq!(PTY_HEARTBEAT_INTERVAL, Duration::from_secs(30));
+        let heartbeat = pty_heartbeat_envelope(42);
+        assert_eq!(heartbeat.seq, 0);
+        match heartbeat.body {
+            ControlMessage::PtyData {
+                session_id,
+                direction,
+                bytes,
+            } => {
+                assert_eq!(session_id, 42);
+                assert_eq!(direction, PtyDirection::ToHost);
+                assert!(bytes.is_empty());
+            }
+            other => panic!("expected PtyData heartbeat, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn quiet_pty_pump_emits_empty_to_host_heartbeat() {
+        let (tx, mut rx) = unbounded_channel();
+        let mut store = PtySessionStore {
+            sessions: HashMap::new(),
+            outbound: tx,
+            heartbeat_interval: Some(Duration::from_millis(20)),
+        };
+        store
+            .open(
+                77,
+                24,
+                80,
+                vec![
+                    "/bin/bash".to_string(),
+                    "-lc".to_string(),
+                    "sleep 1".to_string(),
+                ],
+                vec![],
+                None,
+            )
+            .await
+            .expect("quiet PTY opens");
+
+        let heartbeat = tokio::time::timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("heartbeat arrives before deadline")
+            .expect("outbound channel remains open");
+        assert_eq!(heartbeat, pty_heartbeat_envelope(77));
+        store.shutdown_all().await;
     }
 
     /// A cleared env with no caller PATH gets the sane default seeded, so

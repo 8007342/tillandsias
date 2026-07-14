@@ -1,0 +1,49 @@
+# @trace spec:vsock-transport
+name: litmus:vsock-exec-heartbeat
+spec: vsock-transport
+phase: pre-build
+description: >
+  Synthetic slow-stream verification for capability-gated empty PTY
+  heartbeats, the unified environment-backed idle timeout, and suppression of
+  liveness frames from terminal output.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-vm-layer/src/vsock_exec.rs
+  - workspace contains crates/tillandsias-headless/src/pty_handler.rs
+
+critical_path:
+  - step: "slow exec survives repeated heartbeat windows and silent peers still time out"
+    command: "cargo test -p tillandsias-vm-layer 'vsock_exec::tests'"
+    timeout_ms: 120000
+    expected_behavior: "test result: ok"
+
+  - step: "quiet guest PTY pump emits a session-scoped empty ToHost heartbeat"
+    command: "cargo test -p tillandsias-headless --features listen-vsock quiet_pty_pump_emits_empty_to_host_heartbeat"
+    timeout_ms: 120000
+    expected_behavior: "quiet_pty_pump_emits_empty_to_host_heartbeat ... ok"
+
+  - step: "interactive terminal routing suppresses empty heartbeat data"
+    command: "cargo test -p tillandsias-host-shell open_write_resize_close_roundtrip"
+    timeout_ms: 120000
+    expected_behavior: "open_write_resize_close_roundtrip ... ok"
+
+  - step: "one timeout constant and negotiated heartbeat capability remain wired"
+    command: "test \"$(rg -c '^const IDLE_TIMEOUT_SECS:' crates/tillandsias-vm-layer/src/vsock_exec.rs)\" -eq 1 && rg -q 'TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS' crates/tillandsias-vm-layer/src/vsock_exec.rs && rg -q 'CAP_PTY_HEARTBEAT_V1' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: heartbeat policy shape'"
+    timeout_ms: 5000
+    expected_behavior: "ok: heartbeat policy shape"
+
+observability:
+  traces:
+    - "@trace spec:vsock-transport"
+  expected_log: "silent exec remains connected while negotiated heartbeat frames arrive"
+  log_fields:
+    spec: vsock-transport
+    test: vsock-exec-heartbeat
+
+rollback:
+  on_failure: >
+    Keep the existing PTY message variants. Inspect capability negotiation,
+    guest pump heartbeat cadence, and the shared client idle-timeout reader.
+  command: "cargo test -p tillandsias-vm-layer 'vsock_exec::tests'"

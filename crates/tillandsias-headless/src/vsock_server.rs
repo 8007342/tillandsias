@@ -26,8 +26,8 @@ use tillandsias_control_wire::transport::{
     AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
 };
 use tillandsias_control_wire::{
-    CAP_PTY_ATTACH_V1, CloudProjectEntry, ControlEnvelope, ControlMessage, ErrorCode,
-    LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
+    CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CloudProjectEntry, ControlEnvelope, ControlMessage,
+    ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -38,6 +38,12 @@ use tracing::{debug, info, warn};
 use crate::pty_handler::PtySessionStore;
 
 const SERVER_NAME: &str = "tillandsias-in-vm";
+
+fn client_supports_pty_heartbeat(capabilities: &[String]) -> bool {
+    capabilities
+        .iter()
+        .any(|capability| capability == CAP_PTY_HEARTBEAT_V1)
+}
 
 /// Guard so vault bootstrap runs at most once per process even if multiple
 /// tray connections deliver credentials concurrently.
@@ -596,8 +602,8 @@ async fn handle_connection(
         return;
     }
 
-    let hello_from = match &first.body {
-        ControlMessage::Hello { from, .. } => from.clone(),
+    let (hello_from, client_capabilities) = match &first.body {
+        ControlMessage::Hello { from, capabilities } => (from.clone(), capabilities.clone()),
         other => {
             warn!(
                 spec = "vsock-transport",
@@ -621,6 +627,7 @@ async fn handle_connection(
                 "VmShutdownRequest".into(),
                 "GithubLoginStatusRequest".into(),
                 CAP_PTY_ATTACH_V1.into(),
+                CAP_PTY_HEARTBEAT_V1.into(),
             ],
         },
     };
@@ -637,7 +644,11 @@ async fn handle_connection(
     // disconnect.
     let (pty_tx, mut pty_rx) = mpsc::unbounded_channel::<ControlEnvelope>();
     #[cfg(unix)]
-    let mut pty_store = PtySessionStore::new(pty_tx.clone());
+    let mut pty_store = if client_supports_pty_heartbeat(&client_capabilities) {
+        PtySessionStore::new_with_heartbeat(pty_tx.clone())
+    } else {
+        PtySessionStore::new(pty_tx.clone())
+    };
     // Hold a tx clone so the sender side stays open for the lifetime of
     // the connection even if `pty_store` empties (which would otherwise
     // close pty_rx).
@@ -1295,6 +1306,16 @@ pub(crate) fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pty_heartbeat_requires_explicit_client_capability() {
+        assert!(!client_supports_pty_heartbeat(&[]));
+        assert!(!client_supports_pty_heartbeat(&[CAP_PTY_ATTACH_V1.into()]));
+        assert!(client_supports_pty_heartbeat(&[
+            CAP_PTY_ATTACH_V1.into(),
+            CAP_PTY_HEARTBEAT_V1.into(),
+        ]));
+    }
 
     // (parse_gh_repo_list tests moved to crate::cloud_projects with the
     // function itself. The vsock-side fetch_cloud_projects wrapper is

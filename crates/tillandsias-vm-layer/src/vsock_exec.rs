@@ -24,10 +24,33 @@
 //!        plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
 
 use tillandsias_control_wire::{
-    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit,
-    VmPhase, WIRE_VERSION, decode, encode,
+    CAP_PTY_HEARTBEAT_V1, ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, MAX_PTY_FRAME_BYTES,
+    PtyDirection, PtyExit, VmPhase, WIRE_VERSION, decode, encode,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+const IDLE_TIMEOUT_SECS: u64 = 300;
+const MIN_EXEC_IDLE_TIMEOUT_SECS: u64 = 60;
+const EXEC_IDLE_TIMEOUT_ENV: &str = "TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS";
+
+fn exec_idle_timeout_from(value: Option<&str>) -> Result<std::time::Duration, String> {
+    let Some(value) = value else {
+        return Ok(std::time::Duration::from_secs(IDLE_TIMEOUT_SECS));
+    };
+    let seconds = value.parse::<u64>().map_err(|_| {
+        format!("{EXEC_IDLE_TIMEOUT_ENV} must be an integer number of seconds, got {value:?}")
+    })?;
+    if seconds < MIN_EXEC_IDLE_TIMEOUT_SECS {
+        return Err(format!(
+            "{EXEC_IDLE_TIMEOUT_ENV} must be at least {MIN_EXEC_IDLE_TIMEOUT_SECS} seconds, got {seconds}"
+        ));
+    }
+    Ok(std::time::Duration::from_secs(seconds))
+}
+
+fn exec_idle_timeout() -> Result<std::time::Duration, String> {
+    exec_idle_timeout_from(std::env::var(EXEC_IDLE_TIMEOUT_ENV).ok().as_deref())
+}
 
 /// Outcome of a non-interactive guest exec.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +104,25 @@ async fn read_envelope<R: AsyncRead + Unpin>(r: &mut R) -> Result<ControlEnvelop
     decode(&buf).map_err(|e| format!("vsock_exec: decode: {e}"))
 }
 
+async fn read_exec_envelope<R: AsyncRead + Unpin>(
+    r: &mut R,
+    idle_timeout: std::time::Duration,
+) -> Result<ControlEnvelope, String> {
+    match tokio::time::timeout(idle_timeout, read_envelope(r)).await {
+        Ok(result) => result,
+        Err(_) => {
+            let elapsed = if idle_timeout.as_secs() > 0 {
+                format!("{}s", idle_timeout.as_secs())
+            } else {
+                format!("{}ms", idle_timeout.as_millis())
+            };
+            Err(format!(
+                "vsock_exec: no data from guest for {elapsed} — connection stale (override with {EXEC_IDLE_TIMEOUT_ENV})"
+            ))
+        }
+    }
+}
+
 /// Run `argv` to completion in the guest over an already-connected control-wire
 /// `stream`, collecting multiplexed output and the exit status. No stdin is
 /// forwarded — see [`exec_over_stream_with_input`] for the variant that does.
@@ -128,7 +170,10 @@ where
             seq,
             body: ControlMessage::Hello {
                 from: "tillandsias-vm-layer::vsock_exec".to_string(),
-                capabilities: vec!["pty.attach@v1".to_string()],
+                capabilities: vec![
+                    "pty.attach@v1".to_string(),
+                    CAP_PTY_HEARTBEAT_V1.to_string(),
+                ],
             },
         },
     )
@@ -191,24 +236,13 @@ where
         .await?;
     }
 
-    // 4) Drain until PtyClose for our session. 5-minute idle timeout per frame.
-    const IDLE_TIMEOUT_SECS: u64 = 300;
+    // 4) Drain until PtyClose for our session. Empty ToHost frames are guest
+    // liveness heartbeats and reset the per-frame idle deadline without
+    // changing collected output.
+    let idle_timeout = exec_idle_timeout()?;
     let mut stdout = Vec::new();
     loop {
-        let env = match tokio::time::timeout(
-            std::time::Duration::from_secs(IDLE_TIMEOUT_SECS),
-            read_envelope(&mut stream),
-        )
-        .await
-        {
-            Ok(Ok(e)) => e,
-            Ok(Err(e)) => return Err(e),
-            Err(_) => {
-                return Err(format!(
-                    "vsock_exec: no data from guest for {IDLE_TIMEOUT_SECS}s — connection stale"
-                ));
-            }
-        };
+        let env = read_exec_envelope(&mut stream, idle_timeout).await?;
         match env.body {
             ControlMessage::PtyData {
                 session_id: sid,
@@ -230,10 +264,31 @@ where
 /// matters; the caller receives `ExecOutput { exit, stdout: vec![] }` on
 /// success (`stdout` is always empty — the caller owns the output via callback).
 pub async fn exec_over_stream_with_input_streaming<S, F>(
-    mut stream: S,
+    stream: S,
     argv: &[&str],
     input: &[u8],
     mut on_output: F,
+) -> Result<ExecOutput, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+    F: FnMut(&[u8]),
+{
+    exec_over_stream_with_input_streaming_timeout(
+        stream,
+        argv,
+        input,
+        &mut on_output,
+        exec_idle_timeout()?,
+    )
+    .await
+}
+
+async fn exec_over_stream_with_input_streaming_timeout<S, F>(
+    mut stream: S,
+    argv: &[&str],
+    input: &[u8],
+    on_output: &mut F,
+    idle_timeout: std::time::Duration,
 ) -> Result<ExecOutput, String>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -252,7 +307,10 @@ where
             seq,
             body: ControlMessage::Hello {
                 from: "tillandsias-vm-layer::vsock_exec::streaming".to_string(),
-                capabilities: vec!["pty.attach@v1".to_string()],
+                capabilities: vec![
+                    "pty.attach@v1".to_string(),
+                    CAP_PTY_HEARTBEAT_V1.to_string(),
+                ],
             },
         },
     )
@@ -310,33 +368,14 @@ where
         .await?;
     }
 
-    // 5-minute idle timeout per frame: if the guest sends nothing for this
-    // long the vsock connection is considered stale (e.g. WiFi drop without
-    // RST, or a hung guest process). Long-running commands like `--init` or
-    // forge sessions regularly go quiet for minutes, so the window is generous.
-    const IDLE_TIMEOUT_SECS: u64 = 300;
-
     loop {
-        let env = match tokio::time::timeout(
-            std::time::Duration::from_secs(IDLE_TIMEOUT_SECS),
-            read_envelope(&mut stream),
-        )
-        .await
-        {
-            Ok(Ok(e)) => e,
-            Ok(Err(e)) => return Err(e),
-            Err(_) => {
-                return Err(format!(
-                    "vsock_exec: no data from guest for {IDLE_TIMEOUT_SECS}s — connection stale"
-                ));
-            }
-        };
+        let env = read_exec_envelope(&mut stream, idle_timeout).await?;
         match env.body {
             ControlMessage::PtyData {
                 session_id: sid,
                 direction: PtyDirection::ToHost,
                 bytes,
-            } if sid == session_id => on_output(&bytes),
+            } if sid == session_id && !bytes.is_empty() => on_output(&bytes),
             ControlMessage::PtyClose {
                 session_id: sid,
                 exit,
@@ -511,7 +550,10 @@ where
             seq,
             body: ControlMessage::Hello {
                 from: "tillandsias-vm-layer::vsock_exec".to_string(),
-                capabilities: vec!["pty.attach@v1".to_string()],
+                capabilities: vec![
+                    "pty.attach@v1".to_string(),
+                    CAP_PTY_HEARTBEAT_V1.to_string(),
+                ],
             },
         },
     )
@@ -552,23 +594,10 @@ where
     let mut search_start = 0usize;
     let mut pending = expects.into_iter();
     let mut current = pending.next();
-    const IDLE_TIMEOUT_SECS: u64 = 300;
+    let idle_timeout = exec_idle_timeout()?;
 
     loop {
-        let env = match tokio::time::timeout(
-            std::time::Duration::from_secs(IDLE_TIMEOUT_SECS),
-            read_envelope(&mut stream),
-        )
-        .await
-        {
-            Ok(Ok(e)) => e,
-            Ok(Err(e)) => return Err(e),
-            Err(_) => {
-                return Err(format!(
-                    "vsock_exec: no data from guest for {IDLE_TIMEOUT_SECS}s — connection stale"
-                ));
-            }
-        };
+        let env = read_exec_envelope(&mut stream, idle_timeout).await?;
         match env.body {
             ControlMessage::PtyData {
                 session_id: sid,
@@ -619,6 +648,28 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exec_idle_timeout_is_single_env_overridable_policy() {
+        assert_eq!(
+            exec_idle_timeout_from(None).unwrap(),
+            std::time::Duration::from_secs(IDLE_TIMEOUT_SECS)
+        );
+        assert_eq!(
+            exec_idle_timeout_from(Some("60")).unwrap(),
+            std::time::Duration::from_secs(60)
+        );
+        assert!(
+            exec_idle_timeout_from(Some("0"))
+                .unwrap_err()
+                .contains("at least 60")
+        );
+        assert!(
+            exec_idle_timeout_from(Some("invalid"))
+                .unwrap_err()
+                .contains("must be an integer")
+        );
+    }
 
     /// Drive `exec_over_stream` against an in-memory fake guest that completes
     /// the handshake, streams output, and closes with exit code 0 — proving the
@@ -702,6 +753,128 @@ mod tests {
         );
         assert_eq!(out.stdout, b"HELLO\n");
         guest_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let guest_task = tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap();
+
+            for seq in 3..=7 {
+                tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                write_envelope(
+                    &mut guest,
+                    &ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq,
+                        body: ControlMessage::PtyData {
+                            session_id: 1,
+                            direction: PtyDirection::ToHost,
+                            bytes: Vec::new(),
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+            }
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 8,
+                    body: ControlMessage::PtyData {
+                        session_id: 1,
+                        direction: PtyDirection::ToHost,
+                        bytes: b"build complete\n".to_vec(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 9,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let started = std::time::Instant::now();
+        let mut output = Vec::new();
+        let out = exec_over_stream_with_input_streaming_timeout(
+            client,
+            &["/bin/sh", "-c", "slow build"],
+            &[],
+            &mut |bytes: &[u8]| output.extend_from_slice(bytes),
+            std::time::Duration::from_millis(35),
+        )
+        .await
+        .expect("heartbeat frames must keep a silent build alive");
+
+        assert!(started.elapsed() > std::time::Duration::from_millis(70));
+        assert_eq!(out.exit.code, 0);
+        assert_eq!(output, b"build complete\n");
+        guest_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn streaming_exec_times_out_when_slow_guest_sends_no_frames() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let guest_task = tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        });
+
+        let err = exec_over_stream_with_input_streaming_timeout(
+            client,
+            &["/bin/sh", "-c", "silent build"],
+            &[],
+            &mut |_| {},
+            std::time::Duration::from_millis(25),
+        )
+        .await
+        .expect_err("a silent peer without heartbeats must still time out");
+        assert!(err.contains("no data from guest for 25ms"), "got: {err}");
+        guest_task.abort();
     }
 
     /// `exec_over_stream_with_input` delivers stdin/PTY input to the guest — the

@@ -1645,6 +1645,10 @@ fn ensure_image_exists(
             return Ok(());
         }
 
+        eprintln!(
+            "[tillandsias] building missing image {image_name} ({image_tag}); this may take several minutes"
+        );
+
         client
             .build_image(
                 containerfile
@@ -11723,6 +11727,21 @@ mod tests {
         assert!(message.contains("localhost/tillandsias-router:v1.2.3"));
         assert!(message.contains("fixture build failure"));
         assert!(message.contains("tillandsias --init"));
+    }
+
+    #[test]
+    fn on_demand_image_build_announces_slow_work_before_buffered_build() {
+        let source = source_window(
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
+            "fn ensure_image_exists(",
+        );
+        let announce = source
+            .find("[tillandsias] building missing image")
+            .expect("missing-image build must announce slow work");
+        let build = source
+            .find(".build_image(")
+            .expect("image build call must remain present");
+        assert!(announce < build, "announcement must precede buffered build");
     }
 
     #[test]

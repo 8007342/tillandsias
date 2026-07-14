@@ -925,3 +925,9 @@ specs:
   - litmus:host-guest-no-cfg-transport-selection
   coverage_ratio: 67
   last_verified: '2026-07-06'
+- spec_id: vsock-transport
+  status: active
+  litmus_tests:
+  - litmus:vsock-exec-heartbeat
+  coverage_ratio: 75
+  last_verified: '2026-07-14'
