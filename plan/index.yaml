@@ -10434,10 +10434,10 @@ plan_index:
       order: 318
       release_target: stable-milestone-v1
       title: "Ladder rung A: mirror MUST NOT ack a push it has not durably relayed (or must expose relay state) — kills the false-success P1"
-      status: ready
+      status: claimed
       kind: architecture
       deliverable: images/git/ (entrypoint + hooks) + openspec/specs/git-mirror-service/
-      depends_on: [git-mirror-architecture-audit]
+      depends_on: []
       pickup_role: linux
       capability_tags: [git-mirror, bash, litmus, architecture]
       estimated_hours: 6
@@ -10457,6 +10457,17 @@ plan_index:
         - "litmus: ack-without-relay scenario FAILS the gate (new litmus:git-mirror-relay-verified-ack)"
         - "spec git-mirror-service gains the ack-semantics requirement"
       events:
+        - type: claim
+          ts: "2026-07-14T21:00:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "6a0a444dcd89"
+          expires_at: "2026-07-15T01:00:00Z"
+          summary: >
+            Claimed after order 315 completed the audit inputs. Removed the
+            stale parent dependency because this relay-ack litmus is itself
+            a required completion gate for the multi-cycle parent; retaining
+            the edge made the graph cyclic and the packet unclaimable.
         - type: filed
           ts: "2026-07-13T04:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
