@@ -3350,6 +3350,7 @@ fn build_opencode_forge_args(
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
+    append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect, safe.directory, and CA cert path, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
@@ -5536,7 +5537,9 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
 
     // Read the host origin URL for mirror redirect.
-    let origin_url = read_host_project_origin_url(project_path);
+    let origin_url = read_host_project_origin_url(project_path)
+        .as_deref()
+        .and_then(sanitize_forge_origin_url);
 
     let mut config = String::new();
     config.push_str("[safe]\n");
@@ -5582,6 +5585,175 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
 
     std::fs::write(&config_path, config.as_bytes()).ok()?;
     Some(config_path)
+}
+
+#[derive(Debug)]
+struct ForgeRepoGitDir {
+    root: PathBuf,
+    objects: PathBuf,
+    refs: PathBuf,
+}
+
+fn git_config_set(config_path: &Path, key: &str, value: &str) -> Option<()> {
+    let status = Command::new("git")
+        .args(["config", "--file"])
+        .arg(config_path)
+        .args([key, value])
+        .status()
+        .ok()?;
+    status.success().then_some(())
+}
+
+fn write_forge_index(root: &Path, project_path: &Path, host_gitdir: &Path) -> Option<()> {
+    let tree = Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args(["rev-parse", "--verify", "HEAD^{tree}"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|tree| tree.trim().to_string());
+
+    let mut command = Command::new("git");
+    command
+        .arg("--git-dir")
+        .arg(root)
+        .arg("read-tree")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_OBJECT_DIRECTORY", host_gitdir.join("objects"));
+    if let Some(tree) = tree.filter(|tree| !tree.is_empty()) {
+        command.arg(tree);
+    } else {
+        command.arg("--empty");
+    }
+    command.status().ok()?.success().then_some(())
+}
+
+fn sanitize_forge_origin_url(origin: &str) -> Option<String> {
+    let origin = origin.trim();
+    if origin.is_empty() || origin.chars().any(char::is_control) {
+        return None;
+    }
+
+    for scheme in ["https://", "http://"] {
+        let Some(rest) = origin.strip_prefix(scheme) else {
+            continue;
+        };
+        let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+        let (authority, suffix) = rest.split_at(authority_end);
+        let host = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, host)| host);
+        if host.is_empty() {
+            return None;
+        }
+        return Some(format!("{scheme}{host}{suffix}"));
+    }
+
+    Some(origin.to_string())
+}
+
+/// Materialize a writable, forge-owned repository metadata directory.
+///
+/// The project bind mount remains read-write, but this directory is mounted
+/// over `<project>/.git`. Host `objects` and `refs` are then nested beneath it,
+/// preserving commit/ref sharing without exposing host config, hooks, or index.
+///
+/// Only ordinary checkouts with a `.git` directory are supported. Worktree
+/// gitfiles are already unusable in the forge because their referenced gitdir
+/// is outside the project bind mount; returning `None` preserves that behavior
+/// without exposing the referenced host metadata.
+/// @trace spec:git-mirror-service
+fn write_forge_repo_gitdir(project_name: &str, project_path: &Path) -> Option<ForgeRepoGitDir> {
+    let host_gitdir = project_path.join(".git");
+    if !host_gitdir.is_dir() {
+        return None;
+    }
+
+    let home = std::env::var("HOME").ok()?;
+    let root = PathBuf::from(home)
+        .join(".cache")
+        .join("tillandsias")
+        .join("forge-repo-gitdir")
+        .join(project_name);
+    std::fs::create_dir_all(root.join("objects")).ok()?;
+    std::fs::create_dir_all(root.join("refs")).ok()?;
+    std::fs::create_dir_all(root.join("logs")).ok()?;
+
+    for filename in ["HEAD", "packed-refs", "shallow"] {
+        let source = host_gitdir.join(filename);
+        let target = root.join(filename);
+        if source.is_file() {
+            std::fs::copy(source, target).ok()?;
+        } else if target.exists() {
+            std::fs::remove_file(target).ok()?;
+        }
+    }
+
+    let config_path = root.join("config");
+    std::fs::write(&config_path, []).ok()?;
+    git_config_set(&config_path, "core.repositoryformatversion", "0")?;
+    git_config_set(&config_path, "core.bare", "false")?;
+    git_config_set(&config_path, "core.logallrefupdates", "true")?;
+    git_config_set(&config_path, "gc.auto", "0")?;
+    git_config_set(&config_path, "maintenance.auto", "false")?;
+    git_config_set(&config_path, "push.autoSetupRemote", "true")?;
+    git_config_set(&config_path, "push.default", "current")?;
+    git_config_set(
+        &config_path,
+        "core.hooksPath",
+        "/home/forge/.cache/tillandsias/git-hooks",
+    )?;
+
+    if let Some(origin) = read_host_project_origin_url(project_path)
+        .as_deref()
+        .and_then(sanitize_forge_origin_url)
+    {
+        git_config_set(&config_path, "remote.origin.url", &origin)?;
+        git_config_set(
+            &config_path,
+            "remote.origin.fetch",
+            "+refs/heads/*:refs/remotes/origin/*",
+        )?;
+    }
+    write_forge_index(&root, project_path, &host_gitdir)?;
+
+    Some(ForgeRepoGitDir {
+        root,
+        objects: host_gitdir.join("objects"),
+        refs: host_gitdir.join("refs"),
+    })
+}
+
+fn append_forge_repo_gitdir_mount_args(
+    args: &mut Vec<String>,
+    project_name: &str,
+    project_path: &Path,
+) {
+    let target = format!("/home/forge/src/{project_name}/.git");
+    let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) else {
+        // A standard checkout must never fall back to the host `.git` tree.
+        // Mask it even if facade materialization failed; Git will fail closed.
+        if project_path.join(".git").is_dir() {
+            args.extend(["--tmpfs".into(), format!("{target}:size=8m,mode=0700")]);
+        }
+        return;
+    };
+    for (source, mount_target) in [
+        (&gitdir.root, target.clone()),
+        (&gitdir.objects, format!("{target}/objects")),
+        (&gitdir.refs, format!("{target}/refs")),
+    ] {
+        args.extend([
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target={mount_target}",
+                source.display()
+            ),
+        ]);
+    }
 }
 
 /// Extract a named `[section]` (including its key=value lines) from a gitconfig string.
@@ -7842,6 +8014,29 @@ fn build_forge_agent_run_args_with_vault(
         spec = spec.env(name, value);
     }
 
+    let repo_gitdir_target = format!("/home/forge/src/{project_name}/.git");
+    if let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) {
+        spec = spec
+            .bind_mount(
+                gitdir.root.display().to_string(),
+                &repo_gitdir_target,
+                false,
+            )
+            .bind_mount(
+                gitdir.objects.display().to_string(),
+                format!("{repo_gitdir_target}/objects"),
+                false,
+            )
+            .bind_mount(
+                gitdir.refs.display().to_string(),
+                format!("{repo_gitdir_target}/refs"),
+                false,
+            );
+    } else if project_path.join(".git").is_dir() {
+        // Match the raw OpenCode path's fail-closed fallback.
+        spec = spec.tmpfs(format!("{repo_gitdir_target}:size=8m,mode=0700"));
+    }
+
     let ca_cert = certs_dir.join("intermediate.crt");
     if ca_cert.exists() {
         spec = spec.bind_mount(
@@ -9608,7 +9803,10 @@ mod tests {
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+        ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     #[test]
@@ -11031,6 +11229,173 @@ mod tests {
         // SAFETY: single-threaded test, no concurrent env reads.
         match orig_home {
             Some(h) => unsafe { std::env::set_var("HOME", h) },
+            None => unsafe { std::env::remove_var("HOME") },
+        }
+    }
+
+    #[test]
+    fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
+        let _guard = env_lock();
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("project");
+        std::fs::create_dir_all(&project_path).expect("create project");
+
+        let git = |args: &[&str]| {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(&project_path)
+                .args(args)
+                .output()
+                .expect("run git");
+            assert!(
+                output.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init"]);
+        git(&[
+            "config",
+            "remote.origin.url",
+            "https://host-user:host-secret@github.com/example/repo.git",
+        ]);
+        git(&["config", "credential.helper", "host-secret-helper"]);
+        git(&[
+            "config",
+            "url.ssh://host-only/.insteadOf",
+            "https://github.com/",
+        ]);
+        git(&["config", "include.path", "/host/secret.gitconfig"]);
+        git(&["config", "core.hooksPath", "/host/hooks"]);
+        std::fs::write(project_path.join("tracked.txt"), "tracked\n").expect("write worktree");
+        git(&["add", "tracked.txt"]);
+
+        let original_home = std::env::var_os("HOME");
+        // SAFETY: serialized with all other environment-mutating tests.
+        unsafe { std::env::set_var("HOME", tmp.path()) };
+
+        let host_config = project_path.join(".git/config");
+        let host_config_before = std::fs::read(&host_config).expect("read host config");
+        let gitdir = write_forge_repo_gitdir("alpha", &project_path).expect("forge gitdir");
+        let config =
+            std::fs::read_to_string(gitdir.root.join("config")).expect("read forge local config");
+
+        assert!(config.contains("https://github.com/example/repo.git"));
+        assert!(config.contains("fetch = +refs/heads/*:refs/remotes/origin/*"));
+        assert!(config.contains("auto = 0"));
+        for forbidden in [
+            "host-secret",
+            "credential",
+            "insteadOf",
+            "include",
+            "/host/hooks",
+        ] {
+            assert!(
+                !config.contains(forbidden),
+                "forge local config leaked host key/value {forbidden:?}: {config}"
+            );
+        }
+        assert!(gitdir.root.join("HEAD").is_file());
+        assert!(gitdir.root.join("index").is_file());
+        let forge_index = Command::new("git")
+            .arg("--git-dir")
+            .arg(&gitdir.root)
+            .arg("ls-files")
+            .output()
+            .expect("read forge index");
+        assert!(forge_index.status.success());
+        assert!(
+            forge_index.stdout.is_empty(),
+            "host-only staged state must not enter the forge index"
+        );
+
+        let agent_args = build_forge_agent_run_args(
+            &project_path,
+            "alpha",
+            &tmp.path().join("ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+        let raw_args = build_opencode_forge_args(
+            &project_path,
+            "alpha",
+            None,
+            &tmp.path().join("ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            false,
+            false,
+        );
+        for args in [&agent_args, &raw_args] {
+            let workspace = args
+                .iter()
+                .position(|arg| arg.contains(":/home/forge/src/alpha:rw"))
+                .expect("workspace mount");
+            let facade = args
+                .iter()
+                .position(|arg| {
+                    arg.contains("forge-repo-gitdir")
+                        && arg.contains("target=/home/forge/src/alpha/.git")
+                        && !arg.contains("target=/home/forge/src/alpha/.git/")
+                })
+                .expect("gitdir facade mount");
+            let objects = args
+                .iter()
+                .position(|arg| arg.contains("target=/home/forge/src/alpha/.git/objects"))
+                .expect("objects mount");
+            let refs = args
+                .iter()
+                .position(|arg| arg.contains("target=/home/forge/src/alpha/.git/refs"))
+                .expect("refs mount");
+            assert!(workspace < facade && facade < objects && objects < refs);
+            assert!(!args[facade].contains("readonly=true"));
+        }
+
+        let status = Command::new("git")
+            .args(["config", "--file"])
+            .arg(gitdir.root.join("config"))
+            .args(["user.x", "forge-only"])
+            .status()
+            .expect("write forge-local config");
+        assert!(status.success());
+        assert_eq!(
+            std::fs::read(&host_config).expect("re-read host config"),
+            host_config_before,
+            "forge-local config writes must not alter host .git/config"
+        );
+
+        // SAFETY: serialized with all other environment-mutating tests.
+        unsafe { std::env::remove_var("HOME") };
+        let fail_closed_agent = build_forge_agent_run_args(
+            &project_path,
+            "alpha",
+            &tmp.path().join("ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+        let fail_closed_raw = build_opencode_forge_args(
+            &project_path,
+            "alpha",
+            None,
+            &tmp.path().join("ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            false,
+            false,
+        );
+        for args in [&fail_closed_agent, &fail_closed_raw] {
+            assert!(
+                args.iter()
+                    .any(|arg| { arg == "/home/forge/src/alpha/.git:size=8m,mode=0700" }),
+                "facade errors must mask host .git with a fail-closed tmpfs"
+            );
+        }
+
+        // SAFETY: serialized with all other environment-mutating tests.
+        match original_home {
+            Some(home) => unsafe { std::env::set_var("HOME", home) },
             None => unsafe { std::env::remove_var("HOME") },
         }
     }

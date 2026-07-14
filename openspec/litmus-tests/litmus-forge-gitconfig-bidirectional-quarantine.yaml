@@ -1,0 +1,40 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-gitconfig-bidirectional-quarantine
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Rootless Podman fixture proving host repository config cannot enter the
+  forge, forge-local config writes cannot modify the host checkout, and the
+  ordered gitdir facade preserves fetch, commit, object/ref sharing, and push.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-forge-gitconfig-bidirectional-quarantine.sh
+  - localhost/tillandsias-forge:latest exists
+
+critical_path:
+  - step: "run the bidirectional repository-config quarantine fixture"
+    command: "scripts/test-forge-gitconfig-bidirectional-quarantine.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: forge gitconfig bidirectional quarantine (order 321)"
+
+  - step: "both Linux forge launchers install the ordered gitdir facade"
+    command: "cargo test -p tillandsias-headless forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts"
+    timeout_ms: 120000
+    expected_behavior: "forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts ... ok"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "forge-local config changes remain in the facade while shared refs converge upstream"
+  log_fields:
+    spec: git-mirror-service
+    test: forge-gitconfig-bidirectional-quarantine
+
+rollback:
+  on_failure: >
+    Do not restore a direct config-file bind: Git's lock-and-rename update
+    fails on a file mountpoint. Inspect facade ordering and nested object/ref
+    mounts.
+  command: "scripts/test-forge-gitconfig-bidirectional-quarantine.sh"

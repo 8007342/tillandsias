@@ -377,6 +377,7 @@ specs:
   - litmus:git-mirror-ref-convergence
   - litmus:git-mirror-yaml-gate-shape
   - litmus:git-mirror-relay-verified-ack
+  - litmus:forge-gitconfig-bidirectional-quarantine
   coverage_ratio: 80
   last_verified: '2026-07-14'
 - spec_id: github-credential-health

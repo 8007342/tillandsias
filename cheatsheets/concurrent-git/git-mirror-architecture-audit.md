@@ -106,6 +106,16 @@ host (osx-next 258327d6 "insteadOf host-poisoning addendum"). Conversely the
 host's `.git/config` (origin URL, hooks, helpers) flows INTO the forge. The
 quarantine covers `~/.ssh`/`~/.config/gh` but NOT the project `.git/`.
 
+**Resolution (2026-07-14, order 321):** both Linux forge launch builders now
+mount a writable Tillandsias-owned `.git` facade after the host worktree and
+then mount only the host object database and loose refs beneath it. The facade
+config is rebuilt from a whitelist, strips HTTPS userinfo, disables automatic
+ref packing, and never copies host credential helpers, includes, URL rewrites,
+hooks, or index writes back to the checkout. The rootless Podman fixture
+`scripts/test-forge-gitconfig-bidirectional-quarantine.sh` proves host config is
+byte-identical after forge-local `git config` edits while fetch, commit, shared
+objects/refs, and upstream push still converge.
+
 ## 4. Env-var inventory crossing runtime boundaries
 
 Producers: `build_forge_agent_run_args` (main.rs:7602-7724), `apply_proxy_env`/

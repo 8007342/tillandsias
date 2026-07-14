@@ -106,5 +106,9 @@ Credential / config-surface class:
 | Enterprise best-practice baseline | PASS | Bundled enterprise-practices cheatsheet retains source URL/man-page and retrieval provenance. |
 | Explicit variable/config disposition | PASS | Audit section 6 assigns every section-4 variable `keep-justified`, `replace-with-default`, or `delete`; no unknown rows remain. |
 | Relay-verified acknowledgement litmus | PASS | Order 318: missing credential rejects the client ack; success converges; multi-ref rejection is atomic. |
-| Bidirectional config-isolation fixture | OPEN | Order 321 (`forge-git-config-quarantine`). |
+| Bidirectional config-isolation fixture | PASS | Order 321: writable forge-owned `.git` facade; rootless Podman fetch/commit/push fixture preserves host config byte-for-byte. |
 | Migration child packets | PASS | Orders 318-322 are filed with staged deliverables and verification gates. |
+
+All completion gates passed on 2026-07-14. The full `git-mirror-service`
+litmus set passed 6/6, including relay-verified acknowledgment and the
+bidirectional config-isolation fixture.

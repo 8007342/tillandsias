@@ -10243,7 +10243,7 @@ plan_index:
     - packet_id: git-mirror-architecture-audit
       order: 315
       title: "Full git-mirror architecture audit — SIMPLICITY: DEFAULTS OVER CONFIGURATION (heavy-agent, provenance-backed)"
-      status: ready
+      status: done
       kind: research
       multi_cycle: true
       deliverable: plan/issues/git-mirror-architecture-audit-2026-07-12.md
@@ -10268,6 +10268,24 @@ plan_index:
         - "bidirectional host/forge git-config isolation fixture"
         - "migration-ladder child packets filed"
       events:
+        - type: completed
+          ts: "2026-07-14T21:30:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux_mutable
+          evidence_refs:
+            - cheatsheets/concurrent-git/git-mirror-architecture-audit.md
+            - cheatsheets/concurrent-git/git-mirror-enterprise-practices.md
+            - scripts/test-git-mirror-relay-verified-ack.sh
+            - scripts/test-forge-gitconfig-bidirectional-quarantine.sh
+            - "litmus:git-mirror-service all 6/6 PASS"
+          summary: >
+            Closed the multi-cycle audit after all six exit criteria passed.
+            The current-state and enterprise baselines carry provenance, every
+            inventoried variable/config injection has an explicit disposition,
+            orders 318-322 shape the migration ladder, and executable fixtures
+            now pin both relay-verified acknowledgement and bidirectional
+            host/forge repository-config isolation. No named verification gate
+            is configured for this packet.
         - type: progress
           ts: "2026-07-14T21:13:16Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -10567,7 +10585,7 @@ plan_index:
     - packet_id: forge-host-gitconfig-bidirectional-quarantine
       order: 321
       title: "Ladder rung D: bidirectional host/forge git-config isolation — forge can never write host .git/config; host git state never leaks in"
-      status: claimed
+      status: done
       kind: bug
       deliverable: crates/tillandsias-headless (mount spec) + fixture
       depends_on: []
@@ -10587,6 +10605,26 @@ plan_index:
         - "fixture: host-side credential helper / insteadOf entries are NOT visible to git inside the forge"
         - "worktree object/ref sharing still works (clone/fetch/push flows green)"
       events:
+        - type: completed
+          ts: "2026-07-14T21:30:00Z"
+          agent_id: "linux-macuahuitl-codex-20260714T2010Z"
+          host: linux
+          lease_id: "604ec11ce2c3"
+          evidence_refs:
+            - crates/tillandsias-headless/src/main.rs
+            - scripts/test-forge-gitconfig-bidirectional-quarantine.sh
+            - openspec/litmus-tests/litmus-forge-gitconfig-bidirectional-quarantine.yaml
+            - "litmus:git-mirror-service all 6/6 PASS"
+            - "./build.sh --check PASS"
+          summary: >
+            Both Linux forge launch paths now overlay the host checkout's .git
+            with a writable whitelist-generated forge facade, then remount only
+            host objects and loose refs beneath it. Host credentials, includes,
+            hooks, URL rewrites, and index writes are isolated; HTTPS userinfo
+            is stripped and automatic ref packing is disabled. The rootless
+            Podman fixture proves forge-local config writes leave host config
+            byte-identical while fetch, commit, shared refs/objects, and push
+            converge.
         - type: claim
           ts: "2026-07-14T21:17:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"

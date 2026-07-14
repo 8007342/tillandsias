@@ -341,6 +341,28 @@ GitHub project the host user has cloned, without source changes.
 - **AND** the agent SHALL NOT need to know about the mirror, Vault tokens,
   or the proxy
 
+### Requirement: Repository-local Git metadata is bidirectionally quarantined
+
+For a host-mounted checkout, the forge SHALL use a writable forge-owned Git
+administration directory instead of the host checkout's `.git` directory.
+The host worktree, object database, and loose refs SHALL remain shared through
+ordered nested mounts. Host repository config, hooks, index, credentials, and
+URL rewrites SHALL NOT be visible in the forge, and forge-local Git config
+writes SHALL NOT modify the host checkout. Automatic ref packing SHALL be
+disabled while loose refs are shared with a private `packed-refs` snapshot.
+
+@trace spec:git-mirror-service
+
+#### Scenario: Forge-local config write cannot poison the host checkout
+- **WHEN** a forge runs `git config --local user.x y` or adds a local
+  `url.*.insteadOf` rule
+- **THEN** the write SHALL succeed against the forge-owned config
+- **AND** the host checkout's `.git/config` SHALL remain byte-identical
+- **AND** host credential helpers, includes, hooks, and URL rewrites SHALL be
+  absent from the forge's effective local config
+- **AND** a forge fetch, commit, and push SHALL update the shared objects and
+  refs and converge the configured upstream
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
@@ -348,6 +370,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:git-mirror-relay-verified-ack` — Verify missing credentials fail the client push, successful relay converges, and multi-ref rejection is atomic.
 - `litmus:git-mirror-safe-refspec-push` — Verify pre-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and guard bulk deletes.
 - `litmus:git-mirror-ref-convergence` — Verify the reconcile fetch lands in remote-tracking refs only (one push converges mirror + upstream; startup retry forwards a stranded commit; empty-mirror seeding stays cloneable).
+- `litmus:forge-gitconfig-bidirectional-quarantine` — Verify writable forge-local config isolation while fetch, commit, object/ref sharing, and push remain functional.
 
 Gating points:
 - Bare mirror created at `/srv/git/<project>` inside `tillandsias-mirror-<project>` on first launch
@@ -358,6 +381,7 @@ Gating points:
 - Reconcile fetch maps upstream into `refs/remotes/origin/*` only; empty mirrors seeded with an explicit heads/tags refspec (one push converges mirror + upstream)
 - Vault AppRole token is the only credential path (legacy keyring fallback removed in v0.3)
 - Forge containers cannot access any credentials (no D-Bus, no token files, no git config)
+- Host and forge repository-local Git config are isolated through the writable `.git` facade while objects and refs remain shared
 - Mirror sync event-driven by filesystem watcher, zero polling
 - Sync skips if host has uncommitted changes, diverged branch, or detached HEAD
 - Tray startup sweeps all mirrors and syncs host working copies that are clean and ahead
