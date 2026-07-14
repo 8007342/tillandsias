@@ -503,8 +503,9 @@ specs:
   - litmus:forge-liveness-probe-shape
   - litmus:forge-e2e-rate-limit-shape
   - litmus:smoke-lock-fd-isolation-shape
+  - litmus:meta-orchestration-dirty-tree-safety
   coverage_ratio: 100
-  last_verified: '2026-07-11'
+  last_verified: '2026-07-14'
 - spec_id: logging-levels
   status: obsolete
   litmus_tests: []

@@ -234,56 +234,8 @@ _remove_stale_image_tags() {
 # @trace spec:forge-staleness, spec:init-incremental-builds
 _remove_stale_hashes
 
-_compute_hash() {
-    # Hash Containerfile and related source files in the image directory.
-    # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds, spec:nix-builder
-    local image_dir="$1"
-    local image_rel
-    local -a file_list=() untracked_rel=()
-
-    if [[ ! -d "$image_dir" ]]; then
-        echo "no-sources"
-        return
-    fi
-
-    image_rel="${image_dir#"$ROOT"/}"
-
-    if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        # `mapfile -d ''` is a bash-4+ builtin; stock macOS ships bash 3.2,
-        # so use the same portable NUL-delimited `while read -d ''` pattern
-        # the git-less fallback below already relies on (discovered running
-        # forge-staleness's litmus on macOS for the first time — see
-        # plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md).
-        while IFS= read -r -d '' rel; do
-            [[ -n "$rel" ]] && untracked_rel+=("$rel")
-        done < <(git -C "$ROOT" ls-files --others --exclude-standard -z -- "$image_rel" 2>/dev/null || true)
-        if [[ ${#untracked_rel[@]} -gt 0 ]]; then
-            _error "Untracked files detected under ${image_rel}:"
-            printf '  %s\n' "${untracked_rel[@]}" >&2
-            _error "Run git add before rebuilding image sources."
-            exit 1
-        fi
-
-        while IFS= read -r -d '' rel; do
-            [[ -n "$rel" ]] && file_list+=("$ROOT/$rel")
-        done < <(git -C "$ROOT" ls-files -z -- "$image_rel" 2>/dev/null || true)
-    else
-        _warn "Not in a git repository; falling back to find-based source enumeration for ${image_rel}"
-        while IFS= read -r -d '' f; do
-            [[ -n "$f" ]] && file_list+=("$f")
-        done < <(find "$image_dir" -type f -print0 2>/dev/null | sort -z)
-    fi
-
-    if [[ ${#file_list[@]} -eq 0 ]]; then
-        echo "no-sources"
-        return
-    fi
-
-    sha256sum "${file_list[@]}" 2>/dev/null | sha256sum | cut -d' ' -f1
-}
-
 IMAGE_DIR="${CONTAINERFILE%/*}"
-CURRENT_HASH="$(_compute_hash "$IMAGE_DIR")"
+CURRENT_HASH="$("$SCRIPT_DIR/hash-image-sources.sh" "$IMAGE_NAME" "$IMAGE_DIR" "$ROOT")"
 
 if [[ -z "$FLAG_TAG" ]]; then
     IMAGE_CANONICAL_TAG="${IMAGE_LABEL_PREFIX}:${CURRENT_HASH}"

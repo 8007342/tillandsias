@@ -11607,7 +11607,7 @@ plan_index:
       title: "Meta-orchestration: preserve pre-existing dirty-tree bytes on blocked exit"
       status: claimed
       kind: bugfix
-      deliverable: skills/meta-orchestration/SKILL.md + openspec/litmus-tests/litmus-meta-orchestration-dirty-tree-contract.yaml
+      deliverable: skills/meta-orchestration/SKILL.md + openspec/litmus-tests/litmus-meta-orchestration-dirty-tree-safety.yaml
       depends_on: []
       pickup_role: linux
       capability_tags: [meta-orchestration, forge, safety, testing, skill]
@@ -11617,11 +11617,11 @@ plan_index:
         exit cleanup to artifacts created by the current cycle. A blocked cycle
         never runs checkout, restore, reset, or clean against paths that were
         already dirty at startup, and a checksum fixture proves tracked edits
-        and untracked files remain byte-identical.
+        and status-visible untracked files remain byte-identical.
       exit_criteria:
         - "skill explicitly defines startup dirty paths as sibling/operator work that cleanup must not touch"
-        - "exit cleanliness applies only to cycle-created artifacts and never authorizes destructive Git commands on pre-existing work"
-        - "instant fixture forces a blocked exit with tracked and untracked startup dirt and verifies byte-identical checksums"
+        - "dirty-start preflight refuses committable work; exit never authorizes destructive Git commands on pre-existing work"
+        - "instant fixture forces a blocked exit with tracked and status-visible untracked startup dirt and verifies byte-identical checksums"
       events:
         - type: claim
           ts: "2026-07-14T23:25:16Z"

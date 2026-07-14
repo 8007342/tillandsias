@@ -69,3 +69,24 @@ clause becomes a data-shredder.
   files + tracked modifications, forced into the blocked path, exits
   leaving those files byte-identical (checksum before/after), with the
   blocker recorded.
+
+## Reduction decision (2026-07-14)
+
+The immediate safety repair is order 341, `forge-dirty-tree-exit-contract`:
+dirty-start cycles are preflight refusals, automated finalization never
+deletes or restores a worktree path, and a snapshot/verify guard checks every
+status-visible startup path byte-for-byte. Disposable diagnostics live only in
+the unique external boundary directory. Canonical skills, cheatsheets, and
+cheatsheet sources now participate in the forge image cache key so a cached
+image cannot retain an older destructive contract.
+
+The structural macOS child is order 342,
+`macos-forge-owned-checkout-isolation`. It MUST use an independent guest-owned
+clone/materialization for unattended meta-orchestration, sourced and pushed
+through the enclave mirror. A `git worktree` linked to the virtiofs host repo is
+rejected: it still shares and mutates host `.git/worktrees`, refs, objects,
+branch locks, and lifecycle state. `/home/forge/src/<project>` remains the
+read-only source identity/input for unattended runs; normal interactive forge
+editing behavior is outside this child. Live closure requires a current VZ run
+over a dirty host checkout proving unchanged before/after hashes and successful
+isolated-clone push convergence.
