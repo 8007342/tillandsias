@@ -24,6 +24,30 @@ use crate::{ProvisionManifest, VmError, VmRuntime};
 /// still link against it.
 pub const DEFAULT_WSL_DISTRO: &str = "tillandsias";
 
+/// The order-326 forge-user + `/home/forge/src` ownership contract as one
+/// idempotent root shell script (uid 1000 + rootless-podman subordinate
+/// ranges per `images/default/cheatsheets/runtime/fedora-minimal-wsl2.md`).
+/// Ends with a writability probe FROM the forge uid so a wrong state fails
+/// the provision loudly instead of surfacing minutes later as a clone
+/// EACCES inside a lane container. Explicit `\n` escapes (not source
+/// newlines) so a CRLF checkout can never smuggle `\r` into the guest sh.
+const FORGE_USER_SETUP_SCRIPT: &str = "set -eu\n\
+    if ! id forge >/dev/null 2>&1; then\n\
+    useradd -u 1000 -m -s /bin/bash forge\n\
+    fi\n\
+    grep -q '^forge:' /etc/subuid 2>/dev/null || usermod --add-subuids 100000-165535 forge\n\
+    grep -q '^forge:' /etc/subgid 2>/dev/null || usermod --add-subgids 100000-165535 forge\n\
+    mkdir -p /home/forge/src\n\
+    chown -R forge:forge /home/forge\n\
+    probe=/home/forge/src/.tillandsias-write-probe\n\
+    if command -v runuser >/dev/null 2>&1; then\n\
+    runuser -u forge -- /bin/sh -c \": > $probe && rm -f $probe\"\n\
+    elif command -v su >/dev/null 2>&1; then\n\
+    su -s /bin/sh forge -c \": > $probe && rm -f $probe\"\n\
+    else\n\
+    [ \"$(stat -c %U /home/forge/src)\" = forge ]\n\
+    fi || { echo 'order-326 assertion: /home/forge/src is not writable by the forge user' >&2; exit 1; }\n";
+
 /// WSL2-backed VM runtime.
 ///
 /// On Windows the methods invoke `wsl.exe` under the hood (Phase-2 skeleton:
@@ -267,6 +291,22 @@ impl WslRuntime {
         Ok(())
     }
 
+    /// Provisioning-time forge-user + `/home/forge/src` ownership ensure
+    /// (order 326). The recipe rootfs ships NEITHER the `forge` user NOR
+    /// forge-owned `/home/forge/src`: on a cold Windows provision the dir
+    /// arrives root:root 0755 and the first containerized cloud clone dies
+    /// with EACCES (`--cap-drop=ALL` leaves no DAC_OVERRIDE, even for a
+    /// uid-0 container process). Runs on both provisioning paths and fails
+    /// loud at provision time via an in-script writability probe from the
+    /// forge uid — mirroring the order-297 headroom assertion pattern —
+    /// instead of at first clone, minutes later, with a misleading error.
+    /// @trace plan/index.yaml wsl-guest-forge-user-src-ownership (order 326)
+    async fn ensure_forge_user_and_src(&self) -> Result<(), VmError> {
+        self.wsl_root_sh(FORGE_USER_SETUP_SCRIPT).await?;
+        tracing::info!("forge user + /home/forge/src ownership ensured (order 326)");
+        Ok(())
+    }
+
     /// Post-import wiring for a RECIPE-materialized distro (w5 path): write
     /// `/etc/wsl.conf` (systemd on, /mnt automount off, default user `forge`)
     /// then `wsl --terminate` so the next start boots under systemd. Unlike
@@ -279,6 +319,9 @@ impl WslRuntime {
         // Fail loud before any wiring if the imported root filesystem lacks
         // forge-fit headroom (order 297).
         self.assert_guest_disk_headroom().await?;
+        // Create the forge user and hand it /home/forge before any lane can
+        // clone into it (order 326).
+        self.ensure_forge_user_and_src().await?;
         // NOTE: no `[user] default = forge` here (unlike `provision`): the recipe
         // rootfs does NOT create a `forge` Linux user (verified via E2E import,
         // 2026-05-26), so defaulting to it would break `wsl -d tillandsias` login.
@@ -400,6 +443,11 @@ impl VmRuntime for WslRuntime {
         // Fail loud before any wiring if the imported root filesystem lacks
         // forge-fit headroom (order 297).
         self.assert_guest_disk_headroom().await?;
+
+        // This path sets `[user] default = forge` below, so the user must
+        // exist (and own /home/forge) before the next distro start — the
+        // rootfs does not ship it (order 326).
+        self.ensure_forge_user_and_src().await?;
 
         // Step 2: write /etc/wsl.conf with systemd + automount=false.
         self.wsl_root_sh(
@@ -750,6 +798,53 @@ mod tests {
             evaluate_guest_root_headroom(199 * KIB_PER_GIB),
             Ok(None),
             "headroom intent must track the macOS 250G target (>= 200 GiB)"
+        );
+    }
+
+    /// Order 326: the forge-user setup script is a contract with the guest
+    /// (stable uid, rootless-podman ranges, ownership handoff, loud probe)
+    /// — pin its load-bearing lines so drift fails here, not in a lane.
+    #[test]
+    fn forge_user_setup_script_contract() {
+        let s = FORGE_USER_SETUP_SCRIPT;
+        assert!(s.starts_with("set -eu\n"), "must fail loud on any step");
+        assert!(
+            s.contains("useradd -u 1000 -m -s /bin/bash forge"),
+            "stable uid 1000 per fedora-minimal-wsl2 cheatsheet"
+        );
+        assert!(s.contains("--add-subuids 100000-165535"));
+        assert!(s.contains("--add-subgids 100000-165535"));
+        assert!(s.contains("mkdir -p /home/forge/src"));
+        assert!(s.contains("chown -R forge:forge /home/forge"));
+        assert!(
+            s.contains(".tillandsias-write-probe") && s.contains("order-326 assertion"),
+            "must probe writability from the forge uid and name the order on failure"
+        );
+        assert!(!s.contains('\r'), "CR would break the guest /bin/sh");
+    }
+
+    /// Order 326: both provisioning paths must run the forge-user ensure
+    /// (same source-window pin pattern as the order-297 headroom assert).
+    #[test]
+    fn provisioning_ensures_forge_user_and_src() {
+        let source = include_str!("wsl.rs");
+        let recipe_window = source
+            .split("pub async fn configure_recipe_distro")
+            .nth(1)
+            .and_then(|tail| tail.split("pub fn spawn_keepalive").next())
+            .expect("configure_recipe_distro window");
+        assert!(
+            recipe_window.contains("self.ensure_forge_user_and_src().await?"),
+            "recipe provisioning path must ensure the forge user (order 326)"
+        );
+        let provision_window = source
+            .split("async fn provision(&self, manifest: &ProvisionManifest)")
+            .nth(1)
+            .and_then(|tail| tail.split("async fn start").next())
+            .expect("legacy provision window");
+        assert!(
+            provision_window.contains("self.ensure_forge_user_and_src().await?"),
+            "legacy provision path must ensure the forge user (order 326)"
         );
     }
 
