@@ -6332,7 +6332,12 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = ["proxy", "git", "inference", "forge"];
+    // Router MUST be in this preflight list: run_opencode_mode later calls
+    // ensure_router_running, and podman-running an absent versioned image
+    // dies pulling localhost/tillandsias-router from a nonexistent registry
+    // (order-327 class; the OpenCode CLI lane was the one lane the 293/327
+    // fixes missed — reproduced live on macOS cold-forge 2026-07-15).
+    let images = ["proxy", "router", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
     ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
 
@@ -11893,6 +11898,19 @@ mod tests {
         assert!(
             window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
             "observatorium mode must ensure the web image exists before launch"
+        );
+    }
+
+    #[test]
+    fn opencode_mode_preflights_router_image_before_start() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_opencode_mode(");
+        assert!(
+            window.contains(
+                "let images = [\"proxy\", \"router\", \"git\", \"inference\", \"forge\"];"
+            ) && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            "OpenCode CLI lane must build the router image before ensure_router_running \
+             (order-327 class; macOS cold-forge live repro 2026-07-15)"
         );
     }
 
