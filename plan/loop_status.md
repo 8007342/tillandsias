@@ -27,9 +27,32 @@ LastExecutionTime: 2026-07-15T08:25:00Z
   filed) — plus an un-gated unix-only test (E0433, Windows test target;
   cfg(unix) gate; the two stub-contract tests now pin the not-unix stub).
   dev-build litmus back to 3/3; wrapped --check exit 0.
-- **Windows queue after this cycle**: 326 (in_progress, clone-ride
-  residual), 350 (needs attended/live forge), 365/366 (final numbers for
-  the earlier provisionals), 154 (multi_cycle), 279 (multi-hour).
+- **Order 366 DONE (f8f0c4d1, same cycle)**: all three script-shaped
+  wsl_root_sh call sites (2× wsl.conf heredoc + systemd unit writer)
+  migrated to stdin delivery; arg path rejects multi-line payloads
+  pre-spawn; 2 pins. vm-layer 47/47.
+- **WINDOWS QUEUE DRAIN BOUNDARY REACHED (goal: drain to empty-or-blocked)**.
+  Everything unattended-and-bounded is done: 312, 323, 324, 326-impl,
+  366, wsl2-wrappers, plus three trunk repairs caught by the new wrapped
+  gate. Remaining items and why the unattended loop cannot take them:
+  - **326 residual** (in_progress): criterion 2 = the REAL cold
+    cloud-attach clone — needs the first full forge-lane bring-up on the
+    freshly re-provisioned guest (e2e wiped all guest images; first lane
+    = full image-build chain, hours, 313/314-class first-run edges).
+    Ownership precondition already e2e-proven. Next action: verify
+    during the next lane-running/attended session.
+  - **350** (ready): deliverable is literally an ATTENDED Windows forge
+    evidence packet; same lane bring-up dependency as above. Owner: The
+    Tlatoāni (attended) or a dedicated lane session.
+  - **154** (ready, multi_cycle): remaining scope (watch-channel menu
+    wakeups + tick-task elimination) is a dedicated multi-hour slice —
+    exceeds the recurring-loop budget after three drained packets;
+    correct next claim for a fresh windows cycle.
+  - **279** (ready): multi-hour race-hardening, previously
+    claimed-and-released for exactly this budget reason (2026-07-13).
+  Per worker_agent_protocol drain exit conditions this is a complete
+  drain: remaining items are operator-attended or exceed the loop
+  budget; none is silently dropped.
 - **Host state at exit**: build distro tillandsias-build registered
   (persistent build substrate, by design); runtime distro untouched;
   tree clean at push.
