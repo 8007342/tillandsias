@@ -106,3 +106,34 @@ container image (Containerfile or entrypoint) so every forge cycle starts with
 a transparent credential channel without requiring manual `git config` per
 checkout. Filed as
 `plan/issues/forge-mirror-insteadof-missing-2026-07-12.md`.
+
+## 2026-07-15 Closure (order 237 → done)
+
+**Agent:** forge-fable5-20260715T1811Z (meta-orchestration cycle)
+
+The default-on affordance — the packet's remaining scope after the
+operator-authorized 2026-07-09 narrowing — is verified live in a fresh forge
+container with zero manual configuration:
+
+- Container PID 1 started 2026-07-15T18:09:35Z; `/home/forge/.gitconfig`
+  carrying `url."git://tillandsias-git/tillandsias".insteadOf =
+  https://github.com/8007342/tillandsias.git` has mtime 18:09:34 — injected at
+  launch, before the container process. The "remaining operator task" above is
+  therefore done: no per-checkout `git config` was needed this cycle.
+- The shared repo `.git/config` keeps `origin` as plain GitHub HTTPS —
+  honoring the host-poisoning constraint from the 2026-07-12 host-side
+  addendum (routing lives only in the container-scoped global config).
+- `git ls-remote --get-url origin` → `git://tillandsias-git/tillandsias`;
+  `scripts/check-credential-channel.sh` → `ok:forge-git-mirror`.
+- Blind `git push --dry-run origin linux-next`: exit 0, no credential prompt.
+  The commit+push of this very closure is the exit-criterion-5 evidence
+  (meta-orchestration pushing plan changes through the mirror route).
+
+**Exit-criteria disposition:** criteria 1/2/5 verified live in-forge.
+Criteria 3/4 (cryptographically valid, session-ephemeral mirror credential)
+are dispositioned to order 238 per the 2026-07-09 operator-authorized scope
+narrowing ("Auth research stays in order 238"). The accepted current
+mechanism is the credential-free `git://` route scoped by the enclave
+network; the per-launch injected gitconfig is the session-ephemeral carrier
+of the affordance. Order 238 is promoted `pending → ready` and inherits that
+residual research question explicitly.

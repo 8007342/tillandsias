@@ -1,6 +1,41 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T17:53:00Z
+LastExecutionTime: 2026-07-15T18:15:00Z
+
+## Cycle 2026-07-15T18:11Z→18:20Z (forge — meta-orchestration: order 237 CLOSED with live default-on evidence; 238 promoted)
+
+- **Host**: forge, `linux-next`, agent forge-fable5-20260715T1811Z (Claude
+  Fable 5). Credential guard `ok:forge-git-mirror`; boundary snapshot clean.
+  Sibling heads: main 38d33cd8, linux-next d9c281b0, windows-next 01b38a0b,
+  osx-next 837b066f.
+- **Order 237 DONE (forge-git-mirror-agent-affordance)**: the remaining scope
+  (default-on mirror gitconfig so blind `git push origin linux-next` works)
+  verified LIVE in this fresh forge container — `~/.gitconfig` with the
+  insteadOf mapping injected at launch (mtime precedes PID 1; zero manual
+  config), repo `.git/config` origin stays plain GitHub (host-safe per the
+  2026-07-12 addendum constraint), dry-run blind push exit 0, and this
+  cycle's own finalization push is the exit-criterion-5 evidence. Criteria
+  3/4 (cryptographic per-session credential) dispositioned to order 238 per
+  the operator-authorized 2026-07-09 narrowing.
+- **Order 238 promoted pending → ready**: inherits 237's criteria-3/4
+  residual (time-limited mirror tokens / authenticated git-daemon IF network
+  scoping proves insufficient); annotated that mirror→GitHub forwarding
+  currently works so the research documents the live mechanism first.
+- **Finding (exploration, reproduced + consequential)**: mirror ref-state
+  staleness, two hits in one cycle — (1) transient `rev-parse` failure on
+  sibling heads right after fetch; (2) finalization push rejected with
+  `fetch first` because GitHub linux-next (b8dcde46) was ahead of the
+  mirror's advertised head (d9c281b0) and the mirror does not self-reconcile
+  after a failed relay, so in-forge fetch could not see the divergence.
+  Recovery: anonymous direct fetch via the no-`.git`-suffix GitHub URL
+  (bypasses insteadOf), rebase, re-push through the mirror. No credential
+  failure at any point — order 237's closure stands. Evidence + shaped
+  options filed in
+  plan/issues/forge-sibling-head-rev-parse-transient-2026-07-15.md as input
+  to order 330 (mirror observability).
+- **Forge budget**: one packet drained (closure + promotion), per
+  worker_agent_protocol.forge_cycle_budget. E2E gates skipped —
+  `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-binary`.
 
 ## Cycle 2026-07-15T17:51Z→17:54Z (forge — meta-orchestration: verified order 245 + order 251)
 
