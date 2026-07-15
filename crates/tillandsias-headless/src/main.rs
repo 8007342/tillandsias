@@ -8240,6 +8240,27 @@ fn build_forge_agent_run_args_with_vault(
         }
     }
 
+    // GitHub token injection (order 359): forge tooling that talks to GitHub —
+    // brew attestation verification (bottles + the GitHub API) and any direct
+    // git-over-HTTPS — otherwise goes ANONYMOUS and gets rate-limited/blocked
+    // (operator repro 2026-07-15: brew could not verify the ncurses bottle,
+    // "missing GitHub API token"). We control the credential, so inject it.
+    // Read HOST-SIDE from Vault (the tray has access) and hand it to the lane
+    // as env, EXACTLY like the provider keys above — never on disk, never in
+    // argv. The forge's OWN vault policy still cannot read secret/github/token
+    // (forge-policy-has-no-token-read invariant is untouched); a compromised
+    // lane holds only this one env value, same trust level as the LLM keys.
+    // Injected for every lane because brew is available in all of them.
+    // @trace plan/issues/forge-github-token-injection (order 359)
+    if let Ok(gh_token) =
+        crate::vault_bootstrap::vault_kv_get_via_exec("secret/github/token", "token", debug)
+        && !gh_token.is_empty()
+    {
+        // HOMEBREW_GITHUB_API_TOKEN: brew's documented env for authenticated
+        // ghcr.io bottle pulls + attestation verification.
+        spec = spec.env("HOMEBREW_GITHUB_API_TOKEN", &gh_token);
+    }
+
     spec.build_run_args()
 }
 
@@ -9810,6 +9831,28 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn github_token_injected_as_env_host_side_never_argv() {
+        // Order 359: the github token reaches the forge as an env var read
+        // HOST-SIDE, never on argv/disk, and the forge's own vault policy is
+        // untouched (still cannot read secret/github/token).
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn build_forge_agent_run_args_with_vault(");
+        // Injected via .env(), the same seam as the LLM provider keys.
+        assert!(window.contains("spec = spec.env(\"HOMEBREW_GITHUB_API_TOKEN\""));
+        // Read host-side from vault (the tray has access; the forge does not).
+        assert!(window.contains("vault_kv_get_via_exec(\"secret/github/token\", \"token\""));
+        // Quarantine invariant unchanged: forge-policy still forbids the read.
+        let forge_hcl = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/vault/policies/forge.hcl"
+        ));
+        assert!(
+            !forge_hcl.contains("github/token"),
+            "forge policy must never grant github/token read"
+        );
+    }
 
     // ── enclave service catalog: publish-it-locally MVP (order 357) ──
 
