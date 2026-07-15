@@ -1,6 +1,45 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T20:20:00Z
+LastExecutionTime: 2026-07-16T00:45:00Z
+
+## Cycle 2026-07-15T23:14Z→00:45Z (macos — coordination pass: order 342 COMPLETED with live dirty-host proof; darwin gate green after unwedging the new litmus podman preflight; tray smoke PASS)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260715T2314Z. Guard `ok:gh-keyring`;
+  startup-boundary snapshot clean (order-341 guard). Merge of linux-next
+  1380a4e1 fast-forwarded (all osx work already integrated upstream).
+- **Darwin gate on the merged head (coordinator ask)**: build.sh --check
+  PASS; workspace tests PASS (the previously filed codex vault-lease pin
+  is fixed upstream); order-363 MCP tunnel cfg-gating compiles clean on
+  darwin. ONE wedge found + FIXED (adc488d8): the hardened litmus
+  runner's podman ENV-FAIL preflight assumed host podman is the substrate
+  — on macOS a machineless CLI is normal (podman is VM-internal) and it
+  blanket-ENV-FAILed 35 source-shape checks (96%→72%). Preflight now
+  Linux-hosts-only; trigger over-breadth (file-level grep) noted for the
+  owner. Suite back to 97% (137/141; only the 4 known Darwin-shape fails).
+- **Order 342 COMPLETED (adc488d8)**: macOS --opencode lane now runs
+  from a guest-owned checkout — operator tree staged READ-ONLY at
+  /home/forge/src-host/<project>, materialized via the entrypoint's
+  existing filesystem clone transport; host-mount claim + gitdir
+  facade/mask confined to the default branch. Live dirty-host fixture:
+  in-forge clobber/commit/git clean -fdx/rm + a kernel-rejected RO write
+  probe → HOST-BYTES-IDENTICAL. The order-328 data-loss class is closed
+  on macOS at the runtime boundary, not just the skill contract.
+- **Order 153**: verification roster names four in-forge harness agents
+  (opus/bigpickle/gemini/codex) — no macOS host agent; no verified-by
+  from this host. Roster note only.
+- **Tray smoke (/build-macos-tray gate set, adc488d8 installed)**:
+  codesign + diagnose-schema (provisioned=true) + 3s-alive + clean
+  SIGTERM all OK — plan/issues/macos-build-findings-2026-07-15.md.
+- **Findings filed**: stress_concurrent_attach_detach load-flaky on
+  darwin (52/100 under full-workspace load, 3/3 standalone);
+  shared-checkout stale stashes near-miss (bare `stash pop` applied a
+  2026-07-01 foreign stash; conflict aborted it, boundary restored —
+  operator triage ask incl. the exec-guest-interactive draft in
+  stash@{0}).
+- **Queue after drain**: order 155 (tray stream refactor, 8h) is the
+  next macOS pick — deferred per recurring-loop budget after 342 + gate
+  + fixes; no other macOS-role release-targeted ready work.
 
 ## Cycle 2026-07-15T19:42Z→20:20Z (windows — HYBRID: linux order 238 DONE from the windows lane via wsl2 wrappers; decision boundary codified in methodology)
 
