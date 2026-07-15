@@ -1,0 +1,67 @@
+# @trace spec:wsl-runtime
+#
+# Pins the order-323 WSL platform preflight classification (plan packet
+# wsl-platform-preflight-classification). First-install Windows hosts sit in
+# states where no VM-start retry can succeed (WSL stub only, VirtualMachine-
+# Platform pending its reboot — DISM 3010, firmware virtualization off); the
+# operator directive (2026-07-13) requires those to fail FAST with exact
+# remediation strings instead of the crash-like 5-poke retry storm. This test
+# falsifies drift in: the classifier + verdict enum, the operator-directed
+# remediation strings, the start() fail-fast wiring, and the --diagnose --json
+# wsl_platform field the e2e evidence records.
+name: litmus:wsl-platform-preflight-shape
+spec: wsl-runtime
+phase: pre-build
+description: >
+  Pin the WslPlatformVerdict classifier surface in
+  crates/tillandsias-vm-layer/src/wsl.rs: the S1/S2/S3 remediation strings
+  (operator UX contract), the start() preflight fail-fast, the poke-exhaustion
+  re-classification, and the tray DiagnoseReport wsl_platform field.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-vm-layer/src/wsl.rs
+  - workspace contains crates/tillandsias-windows-tray/src/notify_icon.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "verdict enum + pure classifier exist"
+    command: "grep -q 'pub enum WslPlatformVerdict' crates/tillandsias-vm-layer/src/wsl.rs && grep -q 'pub fn classify_wsl_platform' crates/tillandsias-vm-layer/src/wsl.rs && echo 'ok: classifier-defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: classifier-defined"
+
+  - step: "operator-directed S2 remediation string is verbatim-present (reboot-pending)"
+    command: "grep -q 'WSL2 requires a restart to finish installing' crates/tillandsias-vm-layer/src/wsl.rs && echo 'ok: s2-string'"
+    timeout_ms: 3000
+    expected_behavior: "ok: s2-string"
+
+  - step: "S1 remediation names the exact install command; S3 points at BIOS/UEFI"
+    command: "grep -q 'wsl --install --no-distribution' crates/tillandsias-vm-layer/src/wsl.rs && grep -q 'BIOS/UEFI' crates/tillandsias-vm-layer/src/wsl.rs && echo 'ok: s1-s3-strings'"
+    timeout_ms: 3000
+    expected_behavior: "ok: s1-s3-strings"
+
+  - step: "S1 detection matches the locale-stable aka.ms/wslinstall marker, not English prose"
+    command: "grep -q 'aka.ms/wslinstall' crates/tillandsias-vm-layer/src/wsl.rs && echo 'ok: locale-stable-marker'"
+    timeout_ms: 3000
+    expected_behavior: "ok: locale-stable-marker"
+
+  - step: "start() consults the preflight BEFORE the poke loop (fail fast, no retry storm)"
+    command: "awk '/async fn start\\(&self\\)/,/WSL start poke: attempt/' crates/tillandsias-vm-layer/src/wsl.rs | grep -q 'wsl_platform_preflight' && echo 'ok: fail-fast-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fail-fast-wired"
+
+  - step: "poke exhaustion re-classifies before surfacing the generic error (S2 with healthy-looking status)"
+    command: "awk '/WSL start poke failed after 5 attempts/{found=1} END{exit !found}' crates/tillandsias-vm-layer/src/wsl.rs && grep -q 'collect_wsl_platform_probes' crates/tillandsias-vm-layer/src/wsl.rs && echo 'ok: exhaustion-reclassify'"
+    timeout_ms: 3000
+    expected_behavior: "ok: exhaustion-reclassify"
+
+  - step: "tray --diagnose --json carries the wsl_platform field"
+    command: "grep -q 'wsl_platform' crates/tillandsias-windows-tray/src/notify_icon.rs && echo 'ok: diagnose-field'"
+    timeout_ms: 3000
+    expected_behavior: "ok: diagnose-field"
+
+  - step: "classifier + remediation contracts are unit-pinned"
+    command: "grep -q 'fn wsl_platform_classifier_maps_captured_signatures' crates/tillandsias-vm-layer/src/wsl.rs && grep -q 'fn wsl_platform_verdict_remediation_and_tokens' crates/tillandsias-vm-layer/src/wsl.rs && echo 'ok: unit-pinned'"
+    timeout_ms: 3000
+    expected_behavior: "ok: unit-pinned"

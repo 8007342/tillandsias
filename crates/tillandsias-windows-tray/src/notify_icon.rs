@@ -1782,6 +1782,14 @@ struct DiagnoseReport {
     /// records the elevation context it ran under, so an elevated PASS
     /// can never again be mistaken for standard-user coverage.
     elevated: bool,
+    /// Classified WSL platform preflight state (order 323):
+    /// `ok | absent | reboot-pending | virtualization-disabled`. First-install
+    /// hosts sit in states where no VM start can succeed (WSL stub only,
+    /// VirtualMachinePlatform pending its reboot, firmware VT off) — this
+    /// field lets `--diagnose` evidence name that state directly instead of
+    /// leaving a generic handshake-timeout to be misread as a crash. Token
+    /// values come from `WslPlatformVerdict::as_diagnose_str` (unit-pinned).
+    wsl_platform: &'static str,
     wt_present: bool,
     /// Pre-computed `--diagnose` exit code, derived from
     /// `distro_registered + wire.reachable + wire.phase` via
@@ -2065,6 +2073,7 @@ fn collect_report() -> DiagnoseReport {
         wsl_version: sniff_wsl_version(),
         os_version: sniff_windows_version(),
         elevated: tillandsias_vm_layer::transport_windows::process_can_query_hcs(),
+        wsl_platform: tillandsias_vm_layer::wsl::wsl_platform_preflight().as_diagnose_str(),
         wt_present,
         distro: crate::wsl_lifecycle::DISTRO_NAME,
         distro_registered,
@@ -2118,9 +2127,20 @@ fn print_human(r: &DiagnoseReport) {
     println!(
         "Elevated:     {}",
         if r.elevated {
-            "yes (hcsdiag VM lookup available)"
+            "yes (direct hvsocket path; hcsdiag VM lookup available)"
         } else {
-            "NO — hvsocket connect will fail without Hyper-V Administrators membership (order 312)"
+            "no (standard user — control wire uses the wsl/socat stdio bridge, order 312)"
+        }
+    );
+    println!(
+        "WSL platform: {}",
+        match r.wsl_platform {
+            "ok" => "ok \u{2713}".to_string(),
+            other => format!(
+                "{other} — {}",
+                tillandsias_vm_layer::wsl::classify_remediation_for_token(other)
+                    .unwrap_or("see order 323")
+            ),
         }
     );
 
@@ -2356,8 +2376,24 @@ fn spawn_provisioning(hwnd: HWND) {
             }
             Err(err) => {
                 tracing::error!(%err, "WSL recipe provisioning failed");
-                update_status_text("\u{1F534} Provisioning failed — Retry", hwnd);
-                // Full error in the log; status chip shows the curated message.
+                // Order 323: a CLASSIFIED platform failure (WSL absent /
+                // reboot pending / virtualization off) names itself on the
+                // status chip and toasts the full remediation, instead of
+                // the generic chip that read as a crash on first-install
+                // hosts. Unclassified failures keep the curated message
+                // (full error in the log).
+                let err_text = err.to_string();
+                if let Some(short) = tillandsias_vm_layer::wsl::classified_short_status(&err_text) {
+                    update_status_text(&format!("\u{1F534} {short}"), hwnd);
+                    show_balloon(
+                        hwnd,
+                        "Tillandsias — provisioning failed",
+                        &err_text,
+                        BalloonSeverity::Error,
+                    );
+                } else {
+                    update_status_text("\u{1F534} Provisioning failed — Retry", hwnd);
+                }
                 // Re-enable Retry.
                 PROVISIONING_ACTIVE.store(false, SeqCst);
             }
@@ -3014,6 +3050,7 @@ mod tests {
             wsl_version: Some("WSL version: 2.7.3.0".to_string()),
             os_version: Some("Microsoft Windows [version 10.0.26200.8524]".to_string()),
             elevated: false,
+            wsl_platform: "ok",
             log_exists: false,
             wt_present: true,
             distro: "tillandsias",
@@ -3048,6 +3085,7 @@ mod tests {
             "wsl_version",
             "os_version",
             "elevated",
+            "wsl_platform",
             "wt_present",
             "distro",
             "distro_registered",
@@ -3139,8 +3177,8 @@ mod tests {
     /// Pin the EXACT top-level key count of `DiagnoseReport`.
     /// `diagnose_json_top_level_keys_pinned` above is a SUPERSET check
     /// (`contains_key` for each pinned name) — it asserts the schema has
-    /// AT LEAST the 16 documented keys. This complement test asserts it
-    /// has EXACTLY 16. Catches a future field addition that doesn't
+    /// AT LEAST the documented keys. This complement test asserts the
+    /// EXACT count. Catches a future field addition that doesn't
     /// update the cheatsheet schema block / tray-diagnose.ps1 / litmus
     /// pin step in lockstep — the "5-touchpoint drift-protection
     /// discipline" from `docs/CONTRIBUTING-WINDOWS.md` becomes
@@ -3153,8 +3191,8 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         assert_eq!(
             obj.len(),
-            18,
-            "DiagnoseReport should have exactly 18 top-level keys (order 312 added `elevated`); got {}: {:?}",
+            19,
+            "DiagnoseReport should have exactly 19 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`); got {}: {:?}",
             obj.len(),
             obj.keys().collect::<Vec<_>>()
         );

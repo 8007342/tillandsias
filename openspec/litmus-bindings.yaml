@@ -839,8 +839,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:wsl-runtime-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:wsl-platform-preflight-shape
+  coverage_ratio: 40
+  last_verified: '2026-07-15'
 - spec_id: zen-default-with-ollama-analysis-pool
   status: active
   litmus_tests:

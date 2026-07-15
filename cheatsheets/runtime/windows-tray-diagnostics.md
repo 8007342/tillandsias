@@ -52,7 +52,7 @@ suitable for scripting.
 | `--status-once`            | Connect to the live control wire, request `VmStatus`, print phase / `podman_ready` / `last_event` + a `Status: READY/REACHABLE-NOT-READY/UNREACHABLE (exit N)` self-summarizing footer. | `0` Ready / `2` reachable-not-Ready / `1` unreachable |
 | `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
 | `--diagnose`               | Bundled human-readable health report (~13 rows in 5 grouped sections: binary identity, logs, host software, WSL distro + rootfs, control wire — followed by recent log tail and a `Status: HEALTHY/DEGRADED (exit N)` self-summarizing footer). | `0` healthy / `2` degraded / `1` hard fail |
-| `--diagnose --json`        | Same report as a structured JSON object on stdout (17 top-level keys, see schema below).    | (same as `--diagnose`)  |
+| `--diagnose --json`        | Same report as a structured JSON object on stdout (19 top-level keys, see schema below).    | (same as `--diagnose`)  |
 | `--logs [--tail N] [--bak]` | Dump the tray log to stdout; `--tail N` for last N lines, `--bak` for the rotation backup `tray.log.bak`. | `0` readable / `1` missing |
 | `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note + ENVIRONMENT vars.  | `0`                     |
 | `--version` / `-V`         | Print `tillandsias-tray <workspace VERSION> (<build_commit>)` on one line.                  | `0`                     |
@@ -146,6 +146,8 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
   "log_size_bytes":         16384,         // u64 | null — size of the live tray.log (null if missing); pairs with TRAY_LOG_MAX_BYTES = 5 MiB rotation threshold
   "wsl_version":            "WSL version: 2.7.3.0", // string | null — first non-empty line of `wsl --version` stdout (locale-as-is); null if wsl.exe absent or command fails
   "os_version":             "Microsoft Windows [version 10.0.26200.8524]", // string | null — first line of `cmd /c ver`; null if cmd.exe absent or command fails
+  "elevated":               false,         // bool    — process runs with admin/Hyper-V-Admins membership (order 312); records the privilege context e2e evidence ran under
+  "wsl_platform":           "ok",          // string  — classified platform preflight (order 323): ok | absent | reboot-pending | virtualization-disabled
   "wt_present":             true,          // bool    — Windows Terminal on PATH (Open Shell prefers it)
   "distro":                 "tillandsias", // string  — wsl.exe -d <distro> target
   "distro_registered":      true,          // bool    — `wsl -l -q` listed `distro`

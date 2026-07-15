@@ -48,6 +48,160 @@ const FORGE_USER_SETUP_SCRIPT: &str = "set -eu\n\
     [ \"$(stat -c %U /home/forge/src)\" = forge ]\n\
     fi || { echo 'order-326 assertion: /home/forge/src is not writable by the forge user' >&2; exit 1; }\n";
 
+/// Classified WSL platform preflight verdict (order 323). First-install
+/// Windows hosts commonly sit in states where NO amount of VM-start
+/// retrying can succeed (WSL stub only, VirtualMachinePlatform enabled but
+/// reboot pending — DISM 3010, firmware virtualization off); today those
+/// burn the 5-poke retry storm and surface as a crash-like generic
+/// failure. Mirrors the order-312 membership-classified hcsdiag pattern:
+/// classify confidently, fail fast with the exact remediation, and leave
+/// UNKNOWN failures to the existing retry/recovery path.
+/// @trace plan/index.yaml wsl-platform-preflight-classification (order 323)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WslPlatformVerdict {
+    /// Healthy (S4), or an unclassified state the retry path owns.
+    #[default]
+    Ok,
+    /// S1: fresh Windows ships only the `wsl.exe` stub (locale-stable
+    /// `aka.ms/wslinstall` marker in `wsl --status` output).
+    WslPlatformAbsent,
+    /// S2: WSL app present but VirtualMachinePlatform needs the pending
+    /// restart (DISM 3010; CBS RebootPending key present).
+    RebootPending,
+    /// S3: hardware virtualization off in firmware (HypervisorPresent =
+    /// false AND VirtualizationFirmwareEnabled = false).
+    VirtualizationDisabled,
+}
+
+impl WslPlatformVerdict {
+    /// Stable machine-readable token for `--diagnose --json` (`wsl_platform`).
+    pub fn as_diagnose_str(&self) -> &'static str {
+        match self {
+            WslPlatformVerdict::Ok => "ok",
+            WslPlatformVerdict::WslPlatformAbsent => "absent",
+            WslPlatformVerdict::RebootPending => "reboot-pending",
+            WslPlatformVerdict::VirtualizationDisabled => "virtualization-disabled",
+        }
+    }
+
+    /// Operator-facing remediation for classified-fatal states; `None` when
+    /// starting the VM is worth attempting. These exact strings are the UX
+    /// contract from the 2026-07-13 operator directive — pinned by unit
+    /// test and litmus; change them only with the plan packet.
+    pub fn remediation(&self) -> Option<&'static str> {
+        match self {
+            WslPlatformVerdict::Ok => None,
+            WslPlatformVerdict::WslPlatformAbsent => Some(
+                "WSL is not installed — install it with `wsl --install --no-distribution`, \
+                 then relaunch Tillandsias.",
+            ),
+            WslPlatformVerdict::RebootPending => Some(
+                "WSL2 requires a restart to finish installing — please reboot Windows \
+                 and relaunch Tillandsias.",
+            ),
+            WslPlatformVerdict::VirtualizationDisabled => Some(
+                "hardware virtualization is disabled — enable VT-x/AMD-V in your \
+                 BIOS/UEFI settings, then relaunch Tillandsias.",
+            ),
+        }
+    }
+}
+
+/// Raw host probe results feeding [`classify_wsl_platform`]. Kept separate
+/// from probe COLLECTION so the S1-S4 signature mapping is a pure,
+/// cross-platform unit-testable function (the recipes were captured live on
+/// a fresh Win11 host — plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md).
+#[derive(Debug, Clone, Default)]
+pub struct WslPlatformProbes {
+    /// `wsl --status` exited 0.
+    pub wsl_status_ok: bool,
+    /// NUL-stripped combined stdout+stderr of `wsl --status` (UTF-16LE pipe
+    /// output arrives as interleaved NULs; same discipline as
+    /// `wsl_list_quiet`).
+    pub wsl_status_output: String,
+    /// `HKLM\...\Component Based Servicing\RebootPending` key present.
+    pub reboot_pending_key: bool,
+    /// `Win32_ComputerSystem.HypervisorPresent` (`None` = probe failed).
+    pub hypervisor_present: Option<bool>,
+    /// `Win32_Processor.VirtualizationFirmwareEnabled` (`None` = probe failed).
+    pub virtualization_firmware_enabled: Option<bool>,
+}
+
+/// Pure S1-S4 classifier. Deliberately conservative: only confident
+/// signatures short-circuit; anything else returns `Ok` so the existing
+/// retry/recovery machinery keeps owning unknown failures.
+pub fn classify_wsl_platform(p: &WslPlatformProbes) -> WslPlatformVerdict {
+    if p.wsl_status_ok {
+        // S4. Note: a healthy WSL with an UNRELATED pending Windows reboot
+        // lands here on purpose — the CBS key alone must never block a
+        // working install.
+        return WslPlatformVerdict::Ok;
+    }
+    // S1: match the locale-stable install URL, not the English prose.
+    if p.wsl_status_output.contains("aka.ms/wslinstall") {
+        return WslPlatformVerdict::WslPlatformAbsent;
+    }
+    // S3: both firmware signals must agree (half-known is not confident).
+    if p.hypervisor_present == Some(false) && p.virtualization_firmware_enabled == Some(false) {
+        return WslPlatformVerdict::VirtualizationDisabled;
+    }
+    // S2: WSL app present (status ran but unhealthy) + pending servicing
+    // reboot.
+    if p.reboot_pending_key {
+        return WslPlatformVerdict::RebootPending;
+    }
+    WslPlatformVerdict::Ok
+}
+
+/// Parse the two `True`/`False` lines the CIM probe prints (HypervisorPresent
+/// then VirtualizationFirmwareEnabled). Pure for unit-testing; tolerant of
+/// CRLF, NULs, and missing lines.
+pub fn parse_cim_bool_lines(s: &str) -> (Option<bool>, Option<bool>) {
+    let mut lines = s
+        .replace('\u{0}', "")
+        .lines()
+        .map(|l| l.trim().to_ascii_lowercase())
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .into_iter();
+    let mut next_bool = || match lines.next().as_deref() {
+        Some("true") => Some(true),
+        Some("false") => Some(false),
+        _ => None,
+    };
+    let hypervisor = next_bool();
+    let firmware = next_bool();
+    (hypervisor, firmware)
+}
+
+/// Reverse lookup: diagnose token → remediation, for surfaces that carry
+/// only the serialized token (e.g. the tray's human `--diagnose` print).
+/// Unknown tokens (incl. "ok") yield `None`.
+pub fn classify_remediation_for_token(token: &str) -> Option<&'static str> {
+    match token {
+        "absent" => WslPlatformVerdict::WslPlatformAbsent.remediation(),
+        "reboot-pending" => WslPlatformVerdict::RebootPending.remediation(),
+        "virtualization-disabled" => WslPlatformVerdict::VirtualizationDisabled.remediation(),
+        _ => None,
+    }
+}
+
+/// Scan a provisioning/start error string for the order-323 classified
+/// remediations and return the short status-chip text for the tray's
+/// length-limited menu status line (the toast carries the full string).
+/// `None` = not a classified failure; keep the generic chip.
+pub fn classified_short_status(err: &str) -> Option<&'static str> {
+    if err.contains("WSL2 requires a restart") {
+        Some("WSL2 requires a restart \u{2014} reboot Windows")
+    } else if err.contains("WSL is not installed") {
+        Some("WSL is not installed \u{2014} run `wsl --install`")
+    } else if err.contains("hardware virtualization is disabled") {
+        Some("Virtualization disabled \u{2014} enable in BIOS/UEFI")
+    } else {
+        None
+    }
+}
+
 /// WSL2-backed VM runtime.
 ///
 /// On Windows the methods invoke `wsl.exe` under the hood (Phase-2 skeleton:
@@ -144,6 +298,62 @@ fn wsl_cmd() -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new("wsl");
     crate::no_window_async(&mut cmd);
     cmd
+}
+
+/// Collect the order-323 platform probes (sync — callable from the tray's
+/// synchronous `--diagnose` path; async callers wrap in `spawn_blocking`).
+/// Every child is a background spawn from the GUI tray → `no_window_sync`.
+#[cfg(target_os = "windows")]
+pub fn collect_wsl_platform_probes() -> WslPlatformProbes {
+    let mut probes = WslPlatformProbes::default();
+
+    let mut status_cmd = std::process::Command::new("wsl");
+    status_cmd.arg("--status");
+    crate::no_window_sync(&mut status_cmd);
+    if let Ok(out) = status_cmd.output() {
+        probes.wsl_status_ok = out.status.success();
+        let mut text = String::from_utf8_lossy(&out.stdout).replace('\u{0}', "");
+        text.push_str(&String::from_utf8_lossy(&out.stderr).replace('\u{0}', ""));
+        probes.wsl_status_output = text;
+    }
+
+    // `reg query` exits 0 iff the key exists — no output parsing (locale-safe).
+    let mut reg_cmd = std::process::Command::new("reg");
+    reg_cmd.args([
+        "query",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
+    ]);
+    crate::no_window_sync(&mut reg_cmd);
+    probes.reboot_pending_key = reg_cmd
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    // One PowerShell round-trip for both CIM booleans (True/False lines are
+    // locale-invariant .NET Boolean formatting).
+    let mut ps_cmd = std::process::Command::new("powershell");
+    ps_cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "(Get-CimInstance Win32_ComputerSystem).HypervisorPresent; \
+         (Get-CimInstance Win32_Processor | Select-Object -First 1).VirtualizationFirmwareEnabled",
+    ]);
+    crate::no_window_sync(&mut ps_cmd);
+    if let Ok(out) = ps_cmd.output() {
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        let (hypervisor, firmware) = parse_cim_bool_lines(&text);
+        probes.hypervisor_present = hypervisor;
+        probes.virtualization_firmware_enabled = firmware;
+    }
+
+    probes
+}
+
+/// Probe + classify in one call (order 323).
+#[cfg(target_os = "windows")]
+pub fn wsl_platform_preflight() -> WslPlatformVerdict {
+    classify_wsl_platform(&collect_wsl_platform_probes())
 }
 
 #[cfg(target_os = "windows")]
@@ -612,6 +822,22 @@ impl VmRuntime for WslRuntime {
     }
 
     async fn start(&self) -> Result<(), VmError> {
+        // 0. Classified platform preflight (order 323): on states where no
+        // amount of poking can succeed (WSL stub only, reboot pending,
+        // firmware virtualization off) fail FAST with the exact remediation
+        // instead of burning the 5-poke retry storm. Unknown states pass
+        // through to the existing recovery machinery.
+        let verdict = tokio::task::spawn_blocking(wsl_platform_preflight)
+            .await
+            .unwrap_or_default();
+        if let Some(remediation) = verdict.remediation() {
+            tracing::warn!(
+                "WSL platform preflight classified fatal state '{}' — failing fast",
+                verdict.as_diagnose_str()
+            );
+            return Err(format!("WSL platform preflight: {remediation}"));
+        }
+
         // 1. Preflight check: is WSL service sane?
         if !Self::is_wsl_service_sane().await {
             tracing::warn!("WSL service preflight check failed. Attempting auto-recovery...");
@@ -676,6 +902,30 @@ impl VmRuntime for WslRuntime {
             }
         }
 
+        // Poke storm exhausted: re-classify before surfacing the generic
+        // error. S2 can present with a healthy-looking `wsl --status` while
+        // VM creates fail (HCS service unavailable), so the pre-check above
+        // may have passed — a post-failure probe still names the real cause
+        // for the operator instead of a crash-like generic failure.
+        let probes = tokio::task::spawn_blocking(collect_wsl_platform_probes)
+            .await
+            .unwrap_or_default();
+        let verdict = classify_wsl_platform(&probes);
+        if let Some(remediation) = verdict.remediation() {
+            return Err(format!(
+                "WSL start poke failed after 5 attempts. {remediation}"
+            ));
+        }
+        if probes.reboot_pending_key && probes.hypervisor_present == Some(true) {
+            // The S2 corner the recipes call out: WSL app healthy on paper,
+            // pending servicing reboot, VM starts failing anyway.
+            return Err(format!(
+                "WSL start poke failed after 5 attempts. {}",
+                WslPlatformVerdict::RebootPending
+                    .remediation()
+                    .unwrap_or_default()
+            ));
+        }
         Err("WSL start poke failed after 5 attempts".to_string())
     }
 
@@ -907,6 +1157,165 @@ mod tests {
             ensure_window.contains("wsl_root_sh_stdin(FORGE_USER_SETUP_SCRIPT)"),
             "forge-user setup must be stdin-delivered, not arg-delivered (order 326)"
         );
+    }
+
+    /// Order 323: the S1-S4 signature mapping, pinned against the recipes
+    /// captured live on the fresh yolanda host (2026-07-13). A regression
+    /// here re-introduces the crash-like retry storm on first-install
+    /// machines.
+    #[test]
+    fn wsl_platform_classifier_maps_captured_signatures() {
+        // S4 healthy: exit 0 wins regardless of other signals (an
+        // unrelated pending Windows reboot must never block a working WSL).
+        let s4 = WslPlatformProbes {
+            wsl_status_ok: true,
+            reboot_pending_key: true,
+            ..Default::default()
+        };
+        assert_eq!(classify_wsl_platform(&s4), WslPlatformVerdict::Ok);
+
+        // S1 stub-only: locale-stable aka.ms/wslinstall marker (captured:
+        // "You can install by running 'wsl.exe --install'", exit 50/1).
+        let s1 = WslPlatformProbes {
+            wsl_status_ok: false,
+            wsl_status_output: "W\u{0}S\u{0}L\u{0} … https://aka.ms/wslinstall".to_string(),
+            ..Default::default()
+        };
+        // NOTE: collect strips NULs before classify; classifier sees clean
+        // text in production — this asserts the marker match itself.
+        let s1_clean = WslPlatformProbes {
+            wsl_status_output: s1.wsl_status_output.replace('\u{0}', ""),
+            ..s1
+        };
+        assert_eq!(
+            classify_wsl_platform(&s1_clean),
+            WslPlatformVerdict::WslPlatformAbsent
+        );
+
+        // S2 reboot-pending: unhealthy status, no install marker, CBS key.
+        let s2 = WslPlatformProbes {
+            wsl_status_ok: false,
+            reboot_pending_key: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            classify_wsl_platform(&s2),
+            WslPlatformVerdict::RebootPending
+        );
+
+        // S3 virtualization off: BOTH firmware signals must agree…
+        let s3 = WslPlatformProbes {
+            wsl_status_ok: false,
+            hypervisor_present: Some(false),
+            virtualization_firmware_enabled: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(
+            classify_wsl_platform(&s3),
+            WslPlatformVerdict::VirtualizationDisabled
+        );
+        // …half-known is NOT confident (probe failure must not misclassify).
+        let s3_half = WslPlatformProbes {
+            wsl_status_ok: false,
+            hypervisor_present: Some(false),
+            virtualization_firmware_enabled: None,
+            ..Default::default()
+        };
+        assert_eq!(classify_wsl_platform(&s3_half), WslPlatformVerdict::Ok);
+
+        // S3 outranks S2 when both present (a firmware-off box may also
+        // have a pending reboot; the reboot won't fix VT-x).
+        let s3_and_key = WslPlatformProbes {
+            wsl_status_ok: false,
+            reboot_pending_key: true,
+            hypervisor_present: Some(false),
+            virtualization_firmware_enabled: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(
+            classify_wsl_platform(&s3_and_key),
+            WslPlatformVerdict::VirtualizationDisabled
+        );
+
+        // Unclassified failure: retry path keeps ownership.
+        let unknown = WslPlatformProbes {
+            wsl_status_ok: false,
+            wsl_status_output: "some transient service error".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(classify_wsl_platform(&unknown), WslPlatformVerdict::Ok);
+    }
+
+    /// Order 323: remediation strings are the operator-directed UX contract
+    /// ("WSL2 requires a restart…") + diagnose tokens are schema-stable.
+    #[test]
+    fn wsl_platform_verdict_remediation_and_tokens() {
+        assert_eq!(WslPlatformVerdict::Ok.remediation(), None);
+        let reboot = WslPlatformVerdict::RebootPending.remediation().unwrap();
+        assert!(
+            reboot.contains("WSL2 requires a restart") && reboot.contains("reboot Windows"),
+            "operator-directed S2 message drifted: {reboot}"
+        );
+        let absent = WslPlatformVerdict::WslPlatformAbsent.remediation().unwrap();
+        assert!(
+            absent.contains("wsl --install --no-distribution"),
+            "S1 must give the exact install command: {absent}"
+        );
+        let virt = WslPlatformVerdict::VirtualizationDisabled
+            .remediation()
+            .unwrap();
+        assert!(
+            virt.contains("BIOS/UEFI"),
+            "S3 must point at firmware settings: {virt}"
+        );
+        assert_eq!(WslPlatformVerdict::Ok.as_diagnose_str(), "ok");
+        assert_eq!(
+            WslPlatformVerdict::WslPlatformAbsent.as_diagnose_str(),
+            "absent"
+        );
+        assert_eq!(
+            WslPlatformVerdict::RebootPending.as_diagnose_str(),
+            "reboot-pending"
+        );
+        assert_eq!(
+            WslPlatformVerdict::VirtualizationDisabled.as_diagnose_str(),
+            "virtualization-disabled"
+        );
+    }
+
+    /// Order 323: the tray status chip's short-text lookup recognizes every
+    /// classified remediation string and nothing else.
+    #[test]
+    fn classified_short_status_matches_remediations() {
+        for verdict in [
+            WslPlatformVerdict::WslPlatformAbsent,
+            WslPlatformVerdict::RebootPending,
+            WslPlatformVerdict::VirtualizationDisabled,
+        ] {
+            let err = format!("WSL platform preflight: {}", verdict.remediation().unwrap());
+            assert!(
+                classified_short_status(&err).is_some(),
+                "short status must recognize the {verdict:?} remediation"
+            );
+        }
+        assert_eq!(classified_short_status("some generic poke failure"), None);
+    }
+
+    /// CIM probe output parse: True/False lines, CRLF + NUL tolerant,
+    /// missing lines degrade to None (never a guess).
+    #[test]
+    fn parse_cim_bool_lines_shapes() {
+        assert_eq!(
+            parse_cim_bool_lines("True\r\nFalse\r\n"),
+            (Some(true), Some(false))
+        );
+        assert_eq!(
+            parse_cim_bool_lines("T\u{0}r\u{0}u\u{0}e\u{0}\r\nTrue\r\n"),
+            (Some(true), Some(true))
+        );
+        assert_eq!(parse_cim_bool_lines("False\n"), (Some(false), None));
+        assert_eq!(parse_cim_bool_lines(""), (None, None));
+        assert_eq!(parse_cim_bool_lines("garbage\nTrue\n"), (None, Some(true)));
     }
 
     /// `df -Pk /` host-side parse: real WSL2 shape (the 2026-07-12 measured
