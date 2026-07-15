@@ -1,6 +1,40 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T00:45:00Z
+LastExecutionTime: 2026-07-15T01:10:00Z
+
+## Cycle 2026-07-15T00:46Z→01:10Z (linux_mutable macuahuitl — coordinator: BigPickle batch integrated, osx order-126 merged, provisional orders 346-351 assigned)
+
+- **Pulled 57 linux-next commits** (BigPickle + linux agents): order 318
+  DONE (relay-verified mirror acks — the stable-milestone data-loss
+  killer); Codex device-auth chain DONE (338 command+schema, 339 vault
+  restore/inject, 340 rotation harvest — Codex re-login on relaunch is
+  cured pending live verify); orders 343-345 DONE (local CI pre-build
+  gate: pinned image tags, python3 + base64-injection eliminated from
+  test scripts); vsock persistent listener (order 153 lineage) advanced
+  to phase: verification with funnel cleanup + bounded shutdown +
+  slow-client isolation; order 341 dirty-tree exit contract; orders
+  336/337 hygiene.
+- **Merged origin/osx-next**: order 126 COMPLETED — macOS vsock facade
+  conformance proven live (PASS n=5), order-128 shared conformance
+  harness delivered, with_input guest-Error hang P1 fixed (headline:
+  WINDOWS UNBLOCKED on the shared transport). Code-conflict mediation in
+  vsock_exec.rs tests: BOTH additive pins kept (idle-timeout policy +
+  guest-Error-instead-of-hang); 29/29 crate tests pass. --check green.
+- **Provisional-ID adoption works**: siblings filed 6 packets with
+  order: provisional per order_number_assignment — coordinator assigned
+  finals 346 (forge-standard-gitconfig-path, done), 347
+  (forge-runtime-ca-trust-convergence, done), 348 (cross-platform config
+  trust parity, pending), 349/350 (macos/windows live parity, ready),
+  351 (vsock-handshake-litmus-wire-v2-repair). Zero collisions this
+  round.
+- **Milestone burndown (stable-milestone-v1)**: 318 DONE; 320 pending
+  with 346/347 done + 348-350 live-parity remaining; 303/304 blocked_on
+  provider-device-auth-capability (Codex half landed via 338-340; Claude
+  half open), 306 blocked_on operator-attended-tray-visual-verification,
+  307 blocked_on antigravity-device-auth-capability; 312/323/324/326
+  (windows) and 331/332 (macos) still ready. Litmus: instant pre-build
+  133/134 (sole FAIL = host-local stale target-guest staging, restaged
+  this cycle).
 
 ## Cycle 2026-07-15T00:00Z→00:45Z (linux_mutable bigpickle — orders 344+345 DONE, pre-build gate python3/base64 blockers cleared)
 

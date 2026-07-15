@@ -10805,7 +10805,7 @@ plan_index:
           summary: "Order-315 migration ladder rung C."
 
     - packet_id: forge-standard-gitconfig-path
-      order: provisional
+      order: 346
       provisional_id: linux-260714-2
       release_target: stable-milestone-v1
       title: "Forge Git configuration: standard read-only ~/.gitconfig path, one generator, no GIT_CONFIG_GLOBAL"
@@ -10827,6 +10827,11 @@ plan_index:
         - "GIT_CONFIG_GLOBAL is absent from production forge launch args and default-image entrypoints"
         - "git config --global --show-origin inside the fixture resolves only the Tillandsias-owned standard path"
       events:
+        - type: order-assigned
+          ts: "2026-07-15T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
+          host: linux_mutable
+          summary: "Coordinator assigned final order 346 (filed provisional per order_number_assignment)."
         - type: completed
           ts: "2026-07-14T21:57:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -10860,7 +10865,7 @@ plan_index:
           summary: "Split from over-budget parent forge-gitconfig-single-injection."
 
     - packet_id: forge-runtime-ca-trust-convergence
-      order: provisional
+      order: 347
       provisional_id: linux-260714-3
       release_target: stable-milestone-v1
       title: "Forge dynamic CA trust: one rootless system-default path; delete duplicated SSL_CERT_FILE/GIT_SSL_CAINFO mesh"
@@ -10883,6 +10888,11 @@ plan_index:
         - "one lib-common trust initializer replaces per-entrypoint CA concatenation blocks"
         - "GIT_SSL_CAINFO and SSL_CERT_FILE are absent from default-image production entrypoints; TLS fixture covers Git + curl + Node/Python representative clients"
       events:
+        - type: order-assigned
+          ts: "2026-07-15T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
+          host: linux_mutable
+          summary: "Coordinator assigned final order 347 (filed provisional per order_number_assignment)."
         - type: completed
           ts: "2026-07-14T22:23:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -10919,7 +10929,7 @@ plan_index:
           summary: "Split from over-budget parent forge-gitconfig-single-injection."
 
     - packet_id: forge-config-trust-cross-platform-parity
-      order: provisional
+      order: 348
       provisional_id: linux-260714-4
       release_target: stable-milestone-v1
       title: "Forge Git/trust parity: Linux, macOS-guest, and Windows-guest fixtures converge on the same injection path"
@@ -10945,6 +10955,11 @@ plan_index:
         - "all three lanes complete representative TLS and mirror Git operations without host config edits"
         - "audit env inventory refresh records <=2 justified Git-flow rows; parent forge-gitconfig-single-injection closes"
       events:
+        - type: order-assigned
+          ts: "2026-07-15T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
+          host: linux_mutable
+          summary: "Coordinator assigned final order 348 (filed provisional per order_number_assignment)."
         - type: progress
           ts: "2026-07-14T22:30:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -10981,7 +10996,7 @@ plan_index:
           summary: "Split from over-budget parent forge-gitconfig-single-injection."
 
     - packet_id: macos-forge-config-trust-live-parity
-      order: provisional
+      order: 349
       provisional_id: linux-260714-5
       release_target: stable-milestone-v1
       title: "macOS current-build forge live config, mirror, and TLS parity gate"
@@ -11005,6 +11020,11 @@ plan_index:
         - "inside the public macOS forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: order-assigned
+          ts: "2026-07-15T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
+          host: linux_mutable
+          summary: "Coordinator assigned final order 349 (filed provisional per order_number_assignment)."
         - type: filed
           ts: "2026-07-14T22:30:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -11015,7 +11035,7 @@ plan_index:
             attended macOS mirror/TLS operation.
 
     - packet_id: windows-forge-config-trust-live-parity
-      order: provisional
+      order: 350
       provisional_id: linux-260714-6
       release_target: stable-milestone-v1
       title: "Windows current-build forge live config, mirror, and TLS parity gate"
@@ -11040,6 +11060,11 @@ plan_index:
         - "inside the public Windows forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: order-assigned
+          ts: "2026-07-15T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
+          host: linux_mutable
+          summary: "Coordinator assigned final order 350 (filed provisional per order_number_assignment)."
         - type: filed
           ts: "2026-07-14T22:30:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -11582,7 +11607,7 @@ plan_index:
             first use.
 
     - packet_id: vsock-handshake-litmus-wire-v2-repair
-      order: provisional
+      order: 351
       provisional_id: linux-260714-1
       title: "Repair stale vsock handshake contract/litmus: wire v1 assertion and nonexistent probe binary"
       status: done
@@ -11602,6 +11627,11 @@ plan_index:
         - "litmus invokes only binaries/examples that exist in the workspace"
         - "litmus:vsock-handshake passes on a provisioned/vsock-capable host or reports an explicit unsupported-host skip"
       events:
+        - type: order-assigned
+          ts: "2026-07-15T01:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
+          host: linux_mutable
+          summary: "Coordinator assigned final order 351 (filed provisional per order_number_assignment)."
         - type: completed
           ts: "2026-07-14T22:44:15Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
