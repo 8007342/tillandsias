@@ -12493,7 +12493,7 @@ plan_index:
     - packet_id: provider-login-live-verify
       order: 352
       title: "Live verify: --claude-login / --codex-login / --agy-login device flows into Vault + relaunch-without-reprompt (operator-attended)"
-      status: ready
+      status: claimed
       release_target: stable-milestone-v1
       kind: verification
       deliverable: plan/issues/provider-login-live-verify-2026-07-15.md
@@ -12521,6 +12521,12 @@ plan_index:
         - "agy auth surface findings recorded (command used, credential file confirmed/corrected)"
         - "a /meta-orchestration cycle completes inside a Codex forge AND an Antigravity forge"
       events:
+        - type: claim
+          ts: "2026-07-15T16:32:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1632Z"
+          host: linux
+          lease_id: "provider-login-live-verify"
+          expires_at: "2026-07-15T20:32:00Z"
         - type: progress
           ts: "2026-07-15T03:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0320Z"
