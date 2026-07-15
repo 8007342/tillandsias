@@ -77,6 +77,16 @@ grep -q "provider-oauth-vault restore" "$IMG/entrypoint-forge-claude.sh" \
     && ok "claude entrypoint restores from vault" || bad "claude restore not wired"
 grep -q "codex-oauth-session -- " "$IMG/entrypoint-forge-claude.sh" \
     && ok "claude rotation-harvest session wired" || bad "claude session wrapper missing"
+# The session wrapper must NOT background the interactive agent (backgrounding
+# detaches stdin from the tty -> "stdin is not a terminal"; operator repro
+# 2026-07-15). Foreground model: harvest via EXIT trap, agent runs in fg.
+if grep -vE '^\s*#' "$IMG/codex-oauth-session.sh" | grep -qE '"\$@"\s*&'; then
+    bad "session wrapper backgrounds the interactive agent (breaks tty)"
+else
+    ok "session wrapper runs agent in foreground (tty preserved)"
+fi
+grep -qE "trap [a-z_]+ EXIT" "$IMG/codex-oauth-session.sh" \
+    && ok "harvest on EXIT trap" || bad "harvest-on-exit trap missing"
 grep -q "provider-oauth-vault restore" "$IMG/entrypoint-forge-antigravity.sh" \
     && ok "antigravity entrypoint restores from vault" || bad "antigravity restore not wired"
 grep -q "agy-token.env" "$IMG/entrypoint-forge-antigravity.sh" \

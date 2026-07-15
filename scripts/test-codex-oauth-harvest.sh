@@ -54,6 +54,11 @@ finish() {
     exit 143
 }
 trap finish TERM INT
+# The agent runs in the FOREGROUND under the session wrapper (owns the tty),
+# so a real terminal signal (Ctrl-C / SIGHUP on close) reaches THIS process
+# directly, not the wrapper. Publish our pid so the test can signal the
+# foreground app the way a terminal does.
+echo "$$" >"$CHILD_PID_FILE"
 touch "$READY_FILE"
 while :; do sleep 1; done
 EOF
@@ -78,16 +83,20 @@ grep -Fq rotated-token "$TMP/final-normal.json"
 
 printf '{"access_token":"before-signal"}\n' >"$TILLANDSIAS_CODEX_AUTH_FILE"
 export READY_FILE="$TMP/signal-ready"
+export CHILD_PID_FILE="$TMP/signal-child-pid"
 set +e
 "$SESSION" -- "$TMP/bin/codex-signal" >"$TMP/session.log" 2>&1 &
 session_pid=$!
 set -e
 for _ in {1..50}; do
-    [[ -f "$READY_FILE" ]] && break
+    [[ -s "$CHILD_PID_FILE" ]] && break
     sleep 0.05
 done
 [[ -f "$READY_FILE" ]]
-kill -TERM "$session_pid"
+# Signal the FOREGROUND agent directly (what a terminal Ctrl-C/SIGHUP does),
+# not the wrapper: with a tty-correct foreground child the wrapper cannot
+# forward a wrapper-directed signal.
+kill -TERM "$(cat "$CHILD_PID_FILE")"
 set +e
 timeout 5 tail --pid="$session_pid" -f /dev/null
 wait "$session_pid"

@@ -8017,7 +8017,14 @@ fn build_forge_agent_run_args_with_vault(
         .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
-    if mode == ForgeAgentMode::Codex
+    // Every credentialed agent lane (Codex/Claude/Antigravity) mounts a
+    // scoped Vault token so its entrypoint can restore the opaque OAuth
+    // document from Vault. Gating this on Codex alone (the original
+    // orders-338/340 wiring) left Claude/Antigravity lanes with no token,
+    // so their `provider-oauth-vault restore` failed "no Vault token at
+    // /run/secrets/vault-token" and killed the launch (operator repro
+    // 2026-07-15). OpenCode/Maintenance are credential-free and get none.
+    if mode_provider_pair(mode).is_some()
         && let Some(secret_name) = vault_secret
     {
         spec = spec.secret(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
@@ -8233,10 +8240,13 @@ fn run_forge_agent_cli_mode(
     let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
     ensure_provider_auth(mode, debug)?;
 
+    // Mint a scoped Vault token lease for any credentialed lane so its
+    // entrypoint can restore the OAuth document. Was Codex-only; generalized
+    // to all provider lanes 2026-07-15 (see build_forge_agent_run_args_with_vault).
     #[cfg(feature = "vault")]
-    let codex_vault_lease = if mode == ForgeAgentMode::Codex {
+    let provider_vault_lease = if mode_provider_pair(mode).is_some() {
         Some(vault_bootstrap::mint_approle_secret_lease(
-            "codex-forge",
+            &format!("{}-forge", mode.slug()),
             &forge_container_name_for_mode(project_name, mode),
             debug,
         )?)
@@ -8244,9 +8254,11 @@ fn run_forge_agent_cli_mode(
         None
     };
     #[cfg(feature = "vault")]
-    let codex_vault_secret = codex_vault_lease.as_ref().map(|lease| lease.secret_name());
+    let provider_vault_secret = provider_vault_lease
+        .as_ref()
+        .map(|lease| lease.secret_name());
     #[cfg(not(feature = "vault"))]
-    let codex_vault_secret: Option<&str> = None;
+    let provider_vault_secret: Option<&str> = None;
 
     let forge_args = build_forge_agent_run_args_with_vault(
         &canonical,
@@ -8255,7 +8267,7 @@ fn run_forge_agent_cli_mode(
         version,
         mode,
         debug,
-        codex_vault_secret,
+        provider_vault_secret,
     );
 
     let rt = podman_runtime()?;
