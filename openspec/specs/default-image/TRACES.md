@@ -6,10 +6,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-forge.sh#L2](../../../build-forge.sh#L2)
-- [build.sh#L315](../../../build.sh#L315)
+- [build.sh#L322](../../../build.sh#L322)
 - [crates/tillandsias-core/src/container_profile.rs#L298](../../../crates/tillandsias-core/src/container_profile.rs#L298)
-- [crates/tillandsias-headless/src/main.rs#L3414](../../../crates/tillandsias-headless/src/main.rs#L3414)
-- [crates/tillandsias-headless/src/main.rs#L4620](../../../crates/tillandsias-headless/src/main.rs#L4620)
+- [crates/tillandsias-headless/src/main.rs#L3522](../../../crates/tillandsias-headless/src/main.rs#L3522)
+- [crates/tillandsias-headless/src/main.rs#L4728](../../../crates/tillandsias-headless/src/main.rs#L4728)
 - [crates/tillandsias-policy/src/main.rs#L1611](../../../crates/tillandsias-policy/src/main.rs#L1611)
 - [images/default/brew-shim-exec.sh#L2](../../../images/default/brew-shim-exec.sh#L2)
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)

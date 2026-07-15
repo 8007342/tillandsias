@@ -476,29 +476,6 @@ fn control_socket_path() -> PathBuf {
 /// Linux native (the tray running on the user's desktop, not in-VM)
 /// resolves projects from the host filesystem — convention is
 /// `$HOME/src` unless the user pins something else. See the in-VM
-/// sibling `vsock_server::IN_VM_PROJECT_ROOT_ENV` for the other half
-/// of the Q4 answer.
-///
-/// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
-
-/// Resolve the Linux-native host project root.
-///
-/// Priority: `TILLANDSIAS_HOST_PROJECT_ROOT` env var → `$HOME/src`
-/// (matches the user's typical workspace layout) → an unreadable
-/// fallback so `scan_project_root` returns an empty list without
-/// panicking.
-fn host_project_root() -> PathBuf {
-    if let Ok(v) = env::var(HOST_PROJECT_ROOT_ENV) {
-        return PathBuf::from(v);
-    }
-    if let Some(home) = env::var_os("HOME") {
-        return PathBuf::from(home).join("src");
-    }
-    // No HOME and no override → a path that will fail read_dir and
-    // produce an empty list. Better than panicking.
-    PathBuf::from("/nonexistent")
-}
 
 fn read_control_envelope(stream: &mut UnixStream) -> std::io::Result<ControlEnvelope> {
     let mut len = [0_u8; 4];
@@ -724,7 +701,9 @@ fn handle_control_connection(
                     //
                     // @trace spec:host-shell-architecture
                     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                    let entries = crate::local_projects::scan_project_root(&host_project_root());
+                    let entries = crate::local_projects::scan_project_root(
+                        &crate::local_projects::host_project_root(),
+                    );
                     let reply = ControlEnvelope {
                         wire_version: WIRE_VERSION,
                         seq: first.seq,
@@ -816,6 +795,143 @@ fn handle_control_connection(
                         drain_timeout_ms,
                         "VmShutdownRequest on unix socket; phase=Draining (drain wiring is follow-on)"
                     );
+                }
+                ControlMessage::McpFrame {
+                    session_id: in_session_id,
+                    payload,
+                } => {
+                    let mut project_label = "unknown".to_string();
+                    #[cfg(target_os = "linux")]
+                    if let Ok(cred) = stream.peer_cred() {
+                        if let Some(pid) = cred.pid() {
+                            if let Ok(env_str) =
+                                std::fs::read_to_string(format!("/proc/{}/environ", pid))
+                            {
+                                if let Some(proj) = env_str.split('\0').find_map(|kv| {
+                                    let mut parts = kv.splitn(2, '=');
+                                    if parts.next() == Some("TILLANDSIAS_PROJECT") {
+                                        parts.next().map(String::from)
+                                    } else {
+                                        None
+                                    }
+                                }) {
+                                    project_label = proj;
+                                }
+                            }
+                        }
+                    }
+
+                    if project_label == "unknown" {
+                        let err = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: first.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(first.seq),
+                                code: ErrorCode::Unsupported,
+                                message: "Missing or unresolvable TILLANDSIAS_PROJECT in peer environment".to_string(),
+                            },
+                        };
+                        let _ = write_control_envelope(&mut stream, &err);
+                        return;
+                    }
+
+                    let Ok(req_str) = std::str::from_utf8(&payload) else {
+                        return;
+                    };
+
+                    let Ok(req) = serde_json::from_str::<serde_json::Value>(req_str) else {
+                        return;
+                    };
+
+                    if req["method"].as_str() != Some("tools/call") {
+                        let err = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: first.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(first.seq),
+                                code: ErrorCode::Unsupported,
+                                message: "Only tools/call is supported in McpFrame".to_string(),
+                            },
+                        };
+                        let _ = write_control_envelope(&mut stream, &err);
+                        return;
+                    }
+
+                    let tool_name = req["params"]["name"].as_str().unwrap_or("");
+                    let args = req["params"]["arguments"].as_object();
+
+                    let debug = true; // Default to debug for now
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .unwrap();
+
+                    let result_json = match tool_name {
+                        "publish_local" => {
+                            let category = args
+                                .and_then(|a| a.get("category"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            match rt.block_on(crate::publish_local_service(
+                                &project_label,
+                                category,
+                                debug,
+                            )) {
+                                Ok(url) => serde_json::json!({
+                                    "result": { "url": url, "state": "running" }
+                                }),
+                                Err(e) => serde_json::json!({
+                                    "error": { "code": -32000, "message": e }
+                                }),
+                            }
+                        }
+                        "service_status" => {
+                            match rt.block_on(crate::service_status(&project_label)) {
+                                Ok(state) => serde_json::json!({
+                                    "result": { "state": state }
+                                }),
+                                Err(e) => serde_json::json!({
+                                    "error": { "code": -32000, "message": e }
+                                }),
+                            }
+                        }
+                        "service_stop" => {
+                            let category = args
+                                .and_then(|a| a.get("category"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            match rt.block_on(crate::service_stop(category, &project_label, debug))
+                            {
+                                Ok(_) => serde_json::json!({
+                                    "result": { "state": "stopped" }
+                                }),
+                                Err(e) => serde_json::json!({
+                                    "error": { "code": -32000, "message": e }
+                                }),
+                            }
+                        }
+                        _ => {
+                            serde_json::json!({
+                                "error": { "code": -32601, "message": "Method not found" }
+                            })
+                        }
+                    };
+
+                    let mut resp = result_json;
+                    resp["jsonrpc"] = serde_json::json!("2.0");
+                    if let Some(id) = req.get("id") {
+                        resp["id"] = id.clone();
+                    }
+
+                    let reply = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::McpFrame {
+                            session_id: in_session_id,
+                            payload: serde_json::to_vec(&resp).unwrap(),
+                        },
+                    };
+                    let _ = write_control_envelope(&mut stream, &reply);
                 }
                 other => {
                     // Matrix says Handle but no inner arm yet. Write a

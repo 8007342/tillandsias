@@ -9840,6 +9840,103 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "tray")]
+pub(crate) async fn publish_local_service(
+    project_name: &str,
+    category: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if category != "WEB" {
+        return Err(format!(
+            "Category {} is not supported for local publish",
+            category
+        ));
+    }
+
+    crate::container_deps::ensure_service_catalog(debug)?;
+
+    let image = "tillandsias-web";
+    let client = tillandsias_podman::PodmanClient::new();
+    let container_name = format!("tillandsias-{project_name}-web");
+    let worktree = crate::local_projects::host_project_root().join(project_name);
+
+    let _ = client.stop_container(&container_name, 1).await;
+    let _ = client.remove_container(&container_name).await;
+
+    let mut args = vec![
+        "--detach".into(),
+        "--rm".into(),
+        "--name".into(),
+        container_name.clone(),
+        "--hostname".into(),
+        format!("web-{project_name}"),
+        "--network".into(),
+        "tillandsias-enclave".into(),
+        "-v".into(),
+        format!("{}:/var/www:ro", worktree.display()),
+    ];
+    args.push(image.into());
+
+    client
+        .run_container_observed("web", &container_name, &args, debug)
+        .await
+        .map_err(|e| format!("Failed to start web container: {e}"))?;
+
+    let mut routes = read_router_routes(debug)?;
+    routes.retain(|r| r.subdomain != project_name);
+
+    let mut new_route = RouterRoute::new(project_name, &container_name, 8080);
+    new_route.public = true;
+    routes.push(new_route);
+
+    write_router_routes(&routes, debug)?;
+    caddy_reload_routes(debug).await?;
+
+    Ok(format!("https://www.{project_name}.localhost"))
+}
+
+#[cfg(feature = "tray")]
+pub(crate) async fn service_status(project_name: &str) -> Result<String, String> {
+    let client = tillandsias_podman::PodmanClient::new();
+    let container_name = format!("tillandsias-{project_name}-web");
+
+    if let Ok(inspect) = client.inspect_container(&container_name).await {
+        Ok(inspect.state.clone())
+    } else {
+        Ok("stopped".to_string())
+    }
+}
+
+#[cfg(feature = "tray")]
+pub(crate) async fn service_stop(
+    category: &str,
+    project_name: &str,
+    debug: bool,
+) -> Result<(), String> {
+    if category != "WEB" {
+        return Err(format!(
+            "Category {} is not supported for service_stop",
+            category
+        ));
+    }
+    let client = tillandsias_podman::PodmanClient::new();
+    let container_name = format!("tillandsias-{project_name}-web");
+
+    let _ = client.stop_container(&container_name, 1).await;
+    let _ = client.remove_container(&container_name).await;
+
+    let mut routes = read_router_routes(debug)?;
+    let initial_len = routes.len();
+    routes.retain(|r| r.subdomain != project_name);
+
+    if routes.len() < initial_len {
+        write_router_routes(&routes, debug)?;
+        caddy_reload_routes(debug).await?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

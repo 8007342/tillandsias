@@ -219,6 +219,14 @@ pub fn ensure_forge_launch(debug: bool) -> Result<Up<ForgeLaunchReady>, String> 
     Ok(Up::new(ForgeLaunchReady))
 }
 
+pub struct CatalogServiceReady;
+
+pub fn ensure_service_catalog(debug: bool) -> Result<Up<CatalogServiceReady>, String> {
+    // For now, service catalog depends on ForgeLaunch (networks, proxy, etc)
+    let _forge_launch = ensure_forge_launch(debug)?;
+    Ok(Up::new(CatalogServiceReady))
+}
+
 /// Brings a single [`Service`] up (idempotently). Implemented by the headless
 /// runtime in slice 3 (wrapping `ensure_enclave_network` / `ensure_vault_running`
 /// / `ensure_proxy_running` / `ensure_ca_bundle`); the driver below calls

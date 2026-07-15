@@ -12796,10 +12796,10 @@ plan_index:
     - packet_id: web-publish-local-mvp
       order: 357
       title: "First rung: static 'publish it locally' MVP — https://www.<project>.localhost serving a bind-mounted worktree on the Linux host"
-      status: ready
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: implementation
-      deliverable: crates/tillandsias-headless + images/web + reverse-proxy route + e2e evidence
+      deliverable: plan/steps/357-web-publish-local-mvp.md
       depends_on: [service-catalog-transport-decision]
       pickup_role: linux
       capability_tags: [web, containers, rust, e2e]
@@ -12818,6 +12818,15 @@ plan_index:
         - "second invoke is idempotent (same URL, no duplicate container)"
         - "e2e evidence recorded in plan/ + litmus pinning the route + allowlist refusal"
       events:
+        - type: completed
+          ts: "2026-07-15T18:14:00Z"
+          agent_id: "linux-antigravity-20260715T1814Z"
+          host: linux_mutable
+          summary: >
+            MVP implemented successfully.
+            Added `publish_local_service` handler in `crates/tillandsias-headless/src/main.rs`.
+            Container execution binds host project root and routes traffic via Caddy public route `www.<project>.localhost`.
+            MCP Frame handles tool invocation. Evidence saved to `plan/steps/357-web-publish-local-mvp.md`.
         - type: progress
           ts: "2026-07-15T07:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0700Z"

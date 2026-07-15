@@ -7,7 +7,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-control-wire/src/lib.rs#L169](../../../crates/tillandsias-control-wire/src/lib.rs#L169)
 - [crates/tillandsias-control-wire/src/lib.rs#L349](../../../crates/tillandsias-control-wire/src/lib.rs#L349)
-- [crates/tillandsias-headless/src/main.rs#L8469](../../../crates/tillandsias-headless/src/main.rs#L8469)
+- [crates/tillandsias-headless/src/main.rs#L8652](../../../crates/tillandsias-headless/src/main.rs#L8652)
 - [crates/tillandsias-headless/src/tray/mod.rs#L4](../../../crates/tillandsias-headless/src/tray/mod.rs#L4)
 - [crates/tillandsias-headless/src/tray/mod.rs#L560](../../../crates/tillandsias-headless/src/tray/mod.rs#L560)
 - [crates/tillandsias-headless/src/tray/mod.rs#L613](../../../crates/tillandsias-headless/src/tray/mod.rs#L613)
@@ -54,5 +54,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-vm-layer/src/vz.rs#L2019](../../../crates/tillandsias-vm-layer/src/vz.rs#L2019)
 - [crates/tillandsias-vm-layer/src/vz.rs#L2027](../../../crates/tillandsias-vm-layer/src/vz.rs#L2027)
 - [crates/tillandsias-vm-layer/src/vz.rs#L2371](../../../crates/tillandsias-vm-layer/src/vz.rs#L2371)
-- [crates/tillandsias-vm-layer/src/wsl.rs#L269](../../../crates/tillandsias-vm-layer/src/wsl.rs#L269)
+- [crates/tillandsias-vm-layer/src/wsl.rs#L591](../../../crates/tillandsias-vm-layer/src/wsl.rs#L591)
 - [crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L29](../../../crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L29)

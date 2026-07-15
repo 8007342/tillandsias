@@ -38,6 +38,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-vm-layer/src/vz.rs#L2282](../../../crates/tillandsias-vm-layer/src/vz.rs#L2282)
 - [crates/tillandsias-vm-layer/src/vz.rs#L2371](../../../crates/tillandsias-vm-layer/src/vz.rs#L2371)
 - [crates/tillandsias-vm-layer/src/wsl.rs#L9](../../../crates/tillandsias-vm-layer/src/wsl.rs#L9)
-- [crates/tillandsias-vm-layer/src/wsl.rs#L101](../../../crates/tillandsias-vm-layer/src/wsl.rs#L101)
-- [crates/tillandsias-vm-layer/src/wsl.rs#L312](../../../crates/tillandsias-vm-layer/src/wsl.rs#L312)
+- [crates/tillandsias-vm-layer/src/wsl.rs#L287](../../../crates/tillandsias-vm-layer/src/wsl.rs#L287)
+- [crates/tillandsias-vm-layer/src/wsl.rs#L637](../../../crates/tillandsias-vm-layer/src/wsl.rs#L637)
 - [crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L11](../../../crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L11)
