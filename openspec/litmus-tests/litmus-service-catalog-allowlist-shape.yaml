@@ -1,0 +1,43 @@
+name: litmus:service-catalog-allowlist-shape
+spec: enclave-service-catalog
+phase: pre-build
+description: >
+  Pin the service catalog allowlist enforcement schema and refusal grammar.
+  Ensure that forge requests cannot supply arbitrary image references and
+  must only use catalog names which resolve to pinned digests.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/catalog.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Catalog module defines the host-owned table"
+    command: "grep -F 'pub fn get_catalog' crates/tillandsias-headless/src/catalog.rs"
+    timeout_ms: 3000
+    expected_behavior: "pub fn get_catalog"
+
+  - step: "Catalog resolver enforces allowlist and returns one-line refusal"
+    command: "grep -E 'Catalog refusal: category/name .* is not in the allowlist' crates/tillandsias-headless/src/catalog.rs"
+    timeout_ms: 3000
+    expected_behavior: "Catalog refusal"
+
+  - step: "Catalog resolver uses ONLY pinned digest, no forge tag drift"
+    command: "grep -E 'docker.io/library/busybox@sha256:' crates/tillandsias-headless/src/catalog.rs"
+    timeout_ms: 3000
+    expected_behavior: "docker.io/library/busybox@sha256:"
+
+observability:
+  traces:
+    - "@trace spec:enclave-service-catalog"
+  expected_log: "Service catalog allowlist and refusal grammar pinned."
+  log_fields:
+    spec: "enclave-service-catalog"
+    test: "service-catalog-allowlist-shape"
+    artifact: "crates/tillandsias-headless/src/catalog.rs"
+
+rollback:
+  on_failure: >
+    Restore the catalog resolver in crates/tillandsias-headless/src/catalog.rs to enforce allowlist using pinned digests.
+  command: "cat crates/tillandsias-headless/src/catalog.rs"

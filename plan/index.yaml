@@ -12896,7 +12896,7 @@ plan_index:
     - packet_id: service-catalog-allowlist-enforcement
       order: 358
       title: "Catalog allowlist enforcement host-side — category names map to pinned digests; everything else refused loudly"
-      status: claimed
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless catalog module + fixture + litmus

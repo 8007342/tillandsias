@@ -81,6 +81,7 @@ mod vault_bootstrap;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
 // Process-global VmPhase mirror gating container mutations (order 234, R6).
+mod catalog;
 mod runtime_phase;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
@@ -2162,8 +2163,14 @@ fn web_service_url(project_name: &str) -> String {
 /// @trace spec:enclave-service-catalog, spec:web-image
 // PLEASE REVIEW: linux — order 363 wires the caller; remove with it.
 #[allow(dead_code)]
-fn build_web_service_run_args(project_name: &str, worktree: &Path, image: &str) -> Vec<String> {
-    vec![
+fn build_catalog_service_run_args(
+    project_name: &str,
+    worktree: &Path,
+    category: &str,
+    catalog_name: &str,
+) -> Result<Vec<String>, String> {
+    let entry = catalog::resolve_catalog_entry(category, catalog_name)?;
+    Ok(vec![
         "--detach".into(),
         "--rm".into(),
         "--name".into(),
@@ -2180,8 +2187,8 @@ fn build_web_service_run_args(project_name: &str, worktree: &Path, image: &str) 
         // Worktree served read-only (debug: live edits, no reload for static).
         "-v".into(),
         format!("{}:/var/www:ro", worktree.display()),
-        image.into(),
-    ]
+        entry.digest,
+    ])
 }
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
@@ -9985,11 +9992,13 @@ mod tests {
 
     #[test]
     fn build_web_service_run_args_bind_mounts_worktree_read_only() {
-        let args = build_web_service_run_args(
+        let args = build_catalog_service_run_args(
             "visual-chess",
             Path::new("/home/u/src/visual-chess"),
-            "tillandsias-web:v1",
-        );
+            "WEB",
+            "busybox",
+        )
+        .unwrap();
         // Worktree mounted RO at /var/www (debug: live static edits).
         assert!(
             args.iter()
