@@ -49,6 +49,7 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     -   `capability_tags` intersect with your capabilities.
     -   There is no active unexpired lease.
 3.  **Selection Priority (Top Wins)**:
+    -   **Release-targeted packets FIRST**: packets carrying `release_target: <milestone-packet-id>` outrank the general backlog (canonical: `methodology/distributed-work.yaml` → `release_aware_packets`). A host with no eligible targeted work falls back to the priorities below — targeting concentrates effort, it never idles a host. Never claim a `kind: milestone` packet for implementation — milestones hold criteria; claim their children (`ambitious_milestone_reduction.milestone_packet_semantics`).
     -   **If running on `forge` host**: Prioritize forge diagnostics, toolchain improvements, and onboarding tasks (e.g. `forge-improvements/proposals/` and `smoke-finding/forge-*` packets) to unblock other builders.
     -   **Diagnostics-driven container-start verification** (USER PRIORITY, linux runtime-host today): work that strengthens the `--diagnostics` → annex → distill → litmus chain. See `scripts/forge-diagnostics-annex.sh`, `scripts/distill-forge-diagnostics.sh`, `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml`, `methodology/forge-diagnostics.yaml` piggyback_protocol.
     -   **Spec gap fills**: `openspec/specs/<spec>/spec.md` requirements without implementation coverage. Focus on `headless-mode`, `podman-idiomatic-patterns`, `runtime-diagnostics-stream`, `logging-accountability`, `observability-metrics`.

@@ -299,6 +299,19 @@ Release with `scripts/claim-ledger-node.sh release <node-id>` after the closure
 is committed; expired leases (default TTL 4h) are auto-reclaimed. Pinned by
 `litmus:ledger-node-claim-shape`.
 
+### Release-Targeted and Milestone Packets
+
+Worker selection prefers packets carrying `release_target:
+<milestone-packet-id>` before the general backlog; a host with no eligible
+targeted work falls back normally (never idle). `kind: milestone` packets
+are criteria holders — never claim one for implementation; claim children
+and record burndown as progress events on the milestone. Large ambitious
+goals follow `methodology/distributed-work.yaml` →
+`ambitious_milestone_reduction` (fat-agent research → operator-signed
+decision record → smallest demonstrable rungs → verification): the
+coordinator mirrors the milestone's burndown in `plan/loop_status.md` each
+cycle.
+
 ### Long-Running (multi_cycle) Packets
 
 Packets marked `multi_cycle: true` in `plan/index.yaml` follow
