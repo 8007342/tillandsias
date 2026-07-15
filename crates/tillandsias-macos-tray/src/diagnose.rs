@@ -1122,10 +1122,16 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
 
         // Build the shell command for the guest: set required env vars and
         // exec the headless binary with --opencode and optional --prompt.
+        // TILLANDSIAS_FORGE_SRC_ISOLATION=clone (order 342): the macOS lane
+        // shares the operator's real checkout into the guest over virtiofs,
+        // so the forge MUST work on a guest-owned clone — a blocked in-forge
+        // cycle once git-cleaned sibling work through this share
+        // (plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md).
         let mut headless_cmd = format!(
             "export HOME=/root; \
              export XDG_RUNTIME_DIR=/run/user/0; \
              export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
+             export TILLANDSIAS_FORGE_SRC_ISOLATION=clone; \
              install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
              exec /usr/local/bin/tillandsias-headless --opencode {path}"
         );

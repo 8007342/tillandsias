@@ -635,7 +635,15 @@ run_litmus_test_file() {
     # fail FAST with the environmental cause named. fake-backend tests
     # (LITMUS_PODMAN_MODE=fake) never touch real podman — exempt.
     # Evidence: plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md
-    if grep -q 'podman' "$test_file" 2>/dev/null \
+    # Linux hosts ONLY: on macOS/Windows podman is VM-internal by design —
+    # a homebrew podman CLI with no machine is the NORMAL host state, and
+    # this preflight blanket-ENV-FAILed 35 source-shape checks on darwin
+    # (2026-07-15, instant suite 96%→72%). The trigger is also broader than
+    # the hazard: it greps the whole test FILE for 'podman', matching shape
+    # tests whose commands never invoke podman — tightening that is the
+    # owner's follow-up (see the issue file).
+    if [ "$(uname -s)" = "Linux" ] \
+        && grep -q 'podman' "$test_file" 2>/dev/null \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
         && command -v podman >/dev/null 2>&1 \
         && ! timeout 5 podman ps --format '{{.ID}}' >/dev/null 2>&1; then
