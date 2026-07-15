@@ -12984,7 +12984,7 @@ plan_index:
     - packet_id: transparent-https-localhost
       order: 360
       title: "Transparent HTTPS for www.<project>.localhost — Caddy internal CA + host trust so localhost services get real https with zero prompts"
-      status: ready
+      status: claimed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: images/router Caddyfile + host CA-trust install path + litmus
@@ -13007,6 +13007,12 @@ plan_index:
         - "a browser secure-context feature (e.g. service worker) works at the https origin"
         - "http path still serves (additive, not a breaking flip); litmus pins both"
       events:
+        - type: claim
+          ts: "2026-07-15T18:27:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1827Z"
+          host: linux
+          lease_id: "transparent-https-localhost"
+          expires_at: "2026-07-15T22:27:00Z"
         - type: filed
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
