@@ -10017,9 +10017,14 @@ mod tests {
         assert!(args.iter().any(|a| a == "--cap-drop=ALL"));
         assert!(args.iter().any(|a| a == "--security-opt=no-new-privileges"));
         assert!(args.iter().any(|a| a == "--rm"));
-        // Image is the LAST arg (podman positional), from the host — never
-        // a forge-supplied reference.
-        assert_eq!(args.last().unwrap(), "tillandsias-web:v1");
+        // Image is the LAST arg (podman positional), resolved HOST-SIDE from
+        // the catalog to a digest-pinned reference (order 358) — never a
+        // forge-supplied or tag-mutable reference.
+        let image = args.last().unwrap();
+        assert!(
+            image.contains("@sha256:"),
+            "catalog image must be digest-pinned, got: {image}"
+        );
     }
 
     #[test]

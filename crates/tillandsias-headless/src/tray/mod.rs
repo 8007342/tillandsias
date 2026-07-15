@@ -472,10 +472,11 @@ fn control_socket_path() -> PathBuf {
     runtime_dir.join("tillandsias/control.sock")
 }
 
-/// Env var that overrides the default Linux-native host project root.
-/// Linux native (the tray running on the user's desktop, not in-VM)
-/// resolves projects from the host filesystem — convention is
-/// `$HOME/src` unless the user pins something else. See the in-VM
+// Env var that overrides the default Linux-native host project root.
+// Linux native (the tray running on the user's desktop, not in-VM)
+// resolves projects from the host filesystem — convention is
+// `$HOME/src` unless the user pins something else. (Orphaned doc: the
+// const it documented moved; kept as prose for the next reader.)
 
 fn read_control_envelope(stream: &mut UnixStream) -> std::io::Result<ControlEnvelope> {
     let mut len = [0_u8; 4];
@@ -801,23 +802,28 @@ fn handle_control_connection(
                     payload,
                 } => {
                     let mut project_label = "unknown".to_string();
+                    // SO_PEERCRED via nix (std's UCred::pid() is behind the
+                    // unstable peer_credentials_unix_socket feature — broke
+                    // the all-features/tray builds on stable Rust).
                     #[cfg(target_os = "linux")]
-                    if let Ok(cred) = stream.peer_cred() {
-                        if let Some(pid) = cred.pid() {
-                            if let Ok(env_str) =
-                                std::fs::read_to_string(format!("/proc/{}/environ", pid))
-                            {
-                                if let Some(proj) = env_str.split('\0').find_map(|kv| {
-                                    let mut parts = kv.splitn(2, '=');
-                                    if parts.next() == Some("TILLANDSIAS_PROJECT") {
-                                        parts.next().map(String::from)
-                                    } else {
-                                        None
-                                    }
-                                }) {
-                                    project_label = proj;
+                    if let Ok(cred) = nix::sys::socket::getsockopt(
+                        &stream,
+                        nix::sys::socket::sockopt::PeerCredentials,
+                    ) {
+                        let pid = cred.pid();
+                        if pid > 0
+                            && let Ok(env_str) =
+                                std::fs::read_to_string(format!("/proc/{}/environ", pid as u32))
+                            && let Some(proj) = env_str.split('\0').find_map(|kv| {
+                                let mut parts = kv.splitn(2, '=');
+                                if parts.next() == Some("TILLANDSIAS_PROJECT") {
+                                    parts.next().map(String::from)
+                                } else {
+                                    None
                                 }
-                            }
+                            })
+                        {
+                            project_label = proj;
                         }
                     }
 
@@ -3737,9 +3743,14 @@ mod tests {
             } => {
                 assert_eq!(seq_in_reply_to, Some(42));
                 assert_eq!(code, ErrorCode::Unsupported);
+                // Order 363: McpFrame on the unix socket is now HANDLED, but
+                // gated on the peer's TILLANDSIAS_PROJECT (SO_PEERCRED →
+                // /proc/<pid>/environ). This test process has no project env,
+                // so the deny must name the project gate — a caller that
+                // cannot be attributed to a project gets refused, loudly.
                 assert!(
-                    message.contains("McpFrame"),
-                    "error message should name the rejected variant; got {message:?}"
+                    message.contains("TILLANDSIAS_PROJECT"),
+                    "McpFrame deny must name the project gate; got {message:?}"
                 );
             }
             other => panic!("expected Error variant, got {other:?}"),
