@@ -1,6 +1,30 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T18:55:00Z
+LastExecutionTime: 2026-07-15T20:20:00Z
+
+## Cycle 2026-07-15T19:42Z→20:20Z (windows — HYBRID: linux order 238 DONE from the windows lane via wsl2 wrappers; decision boundary codified in methodology)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T1942Z. Guard `ok:gh-keyring`; merged
+  origin/linux-next 2c575457 (19 commits) clean — wrapped ./build.sh
+  --check green on the merged tree (fmt + type-check + clippy strict ×2).
+- **Order 238 DONE (linux/any packet, drained from Windows)**: research
+  deliverable plan/issues/forge-git-mirror-credential-injection-2026-07-07.md.
+  Finding: the recommended mechanism is ALREADY BUILT (B-vault — push-time
+  vault-mediated token fetch, process-scoped, redacted, loud failure);
+  A and C rejected with rationale; residuals routed to orders 246 + 369.
+  Credential-unavailable path live-verified via the wrapped relay fixture
+  (3/3 PASS, 3s). Respected the live linux-tlatoani lease on 369; picked
+  238 after confirming 158's dependency (157) is unfinished.
+- **Hybrid-work experiment RESULT (operator question: is the overhead
+  worth it?)**: YES for compile/test/script-shaped work — measured: ~1-2s
+  per-invocation overhead, 3s shell fixture, 8s targeted crate test, 35s
+  warm full canonical gate (~5 min one-time bootstrap). NOT for
+  container/enclave/systemd/attended work (build distro deliberately
+  ships none of it). Decision boundary + measured costs codified as
+  methodology/multi-host-development.yaml `wsl2_hybrid_work` (do-locally
+  list, file-a-packet list, when-in-doubt heuristic).
+- **Host state at exit**: distros idled, tree clean at push.
 
 ## Cycle 2026-07-15T18:53Z→18:55Z (forge — meta-orchestration: order 365 DONE — cross-target cfg gate litmus)
 

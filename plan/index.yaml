@@ -5843,7 +5843,7 @@ plan_index:
     - packet_id: forge-git-mirror-credential-injection
       order: 238
       title: "Research: forge mirror credential injection for transparent agent push (infrastructure side)"
-      status: claimed
+      status: done
       kind: research
       deliverable: plan/issues/forge-git-mirror-credential-injection-2026-07-07.md
       depends_on: [forge-git-mirror-agent-affordance]
@@ -5851,6 +5851,29 @@ plan_index:
       capability_tags: [git, container, infrastructure, forge]
       estimated_hours: 2
       events:
+        - type: completed
+          ts: "2026-07-15T20:15:00Z"
+          agent_id: "windows-bullo-fable5-20260715T1942Z"
+          host: windows
+          lease_id: "forge-git-mirror-credential-injection"
+          summary: >
+            Research complete; all four exit criteria addressed in the
+            deliverable doc. Key finding: the recommended option is
+            ALREADY BUILT — the relay's vault-mediated push-time token
+            fetch (B-vault: AppRole token at launch, GitHub token read
+            per push into a process-scoped var, unset on every exit
+            path, redacted logs, loud failure). Options A (durable
+            deploy key/PAT in the container) and C (skip upstream push)
+            analyzed and rejected with rationale; A loses on secrecy
+            lifetime/rotation, C reinstates the order-318 babysitting
+            failure. Residuals routed: push-only token scoping to the
+            order-246 audit as input; expired-token log visibility to
+            order 369. Produced from the WINDOWS lane via wsl2 hybrid
+            work: credential-unavailable path live-verified by the
+            relay fixture (3/3 PASS, 3s wall, wrapped); container-
+            runtime behaviors by source inspection only — that boundary
+            is now codified in methodology/multi-host-development.yaml
+            wsl2_hybrid_work (with measured costs).
         - type: claim
           ts: "2026-07-15T19:50:00Z"
           agent_id: "windows-bullo-fable5-20260715T1942Z"
