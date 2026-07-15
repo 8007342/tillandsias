@@ -1,6 +1,14 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T06:45:00Z
+LastExecutionTime: 2026-07-15T07:00:00Z
+
+## ACTIVE PARALLELIZATION (2026-07-15) — operator started Linux + Windows + macOS workers
+
+See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.
+- **Linux coordinator (macuahuitl)** OWNS service-catalog rungs 357→358→360→361 (claimed). Other Linux workers: take 359 (github-token, grab first), 352/307 live-verify, audits 245-251/309/329/330/333, streams 148/150/153/156/157/158.
+- **Windows worker**: 312 (RELEASE-GATING) first, then 323/324/326/350.
+- **macOS worker**: 331 first, then 332/349/342.
+- Two milestones: stable-milestone-v1 (334, needs sibling criteria) + enclave-service-catalog (353, Linux-only).
 
 ## Cycle 2026-07-15T05:30Z→06:45Z (linux_mutable macuahuitl — P0 agent-launch fix + service-catalog decision signed + roadmap filed)
 
