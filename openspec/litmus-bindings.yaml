@@ -201,8 +201,9 @@ specs:
   - litmus:headless-init-status-check-source-built
   - litmus:podman-idiomatic-launch-routing
   - litmus:build-ci-dispatch-shape
+  - litmus:wsl2-builder-wrapper-shape
   coverage_ratio: 100
-  last_verified: '2026-06-04'
+  last_verified: '2026-07-15'
 - spec_id: direct-podman-calls
   status: obsolete
   litmus_tests: []

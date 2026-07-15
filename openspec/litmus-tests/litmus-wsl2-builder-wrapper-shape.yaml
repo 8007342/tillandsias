@@ -1,0 +1,58 @@
+# @trace spec:dev-build
+#
+# Pins the order windows-260715-3 transparent WSL2 build wrapper (operator
+# directive 2026-07-15): build entry points must be WSL2-aware on Windows the
+# same way they are toolbox-aware on Silverblue, and the wrapper must target a
+# DEDICATED build distro — never the runtime `tillandsias` distro that the
+# destructive smoke e2e unregisters on every run.
+name: litmus:wsl2-builder-wrapper-shape
+spec: dev-build
+phase: pre-build
+description: >
+  Pin scripts/with-wsl2-builder.sh's guard chain (platform trigger, skip env,
+  direct-vs-sourced duality), the dedicated-distro isolation, the
+  stdin-delivered init script, the distro-native CARGO_TARGET_DIR default,
+  and build.sh's sourcing of BOTH platform wrappers.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/with-wsl2-builder.sh
+  - workspace contains build.sh
+  - shell utilities (grep, awk, bash) are available in PATH
+
+critical_path:
+  - step: "wrapper exists, is executable, and parses"
+    command: "test -x scripts/with-wsl2-builder.sh && bash -n scripts/with-wsl2-builder.sh && echo 'ok: wrapper-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: wrapper-parses"
+
+  - step: "build.sh sources both platform wrappers (toolbox + wsl2)"
+    command: "grep -q 'with-tillandsias-builder.sh' build.sh && grep -q 'with-wsl2-builder.sh' build.sh && echo 'ok: both-wrappers-sourced'"
+    timeout_ms: 3000
+    expected_behavior: "ok: both-wrappers-sourced"
+
+  - step: "wrapper targets a dedicated build distro, defaulting to tillandsias-build (never the runtime distro)"
+    command: "grep -q 'TILLANDSIAS_BUILD_DISTRO:-tillandsias-build' scripts/with-wsl2-builder.sh && echo 'ok: dedicated-distro'"
+    timeout_ms: 3000
+    expected_behavior: "ok: dedicated-distro"
+
+  - step: "off-platform the wrapper is a pass-through: sourcing it on a non-Windows host must not exec or fail"
+    command: "bash -c 'set -euo pipefail; case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) echo \"ok: pass-through\" ;; *) source scripts/with-wsl2-builder.sh && echo \"ok: pass-through\" ;; esac'"
+    timeout_ms: 5000
+    expected_behavior: "ok: pass-through"
+
+  - step: "skip env honored (TILLANDSIAS_SKIP_WSL2=1 direct call runs the command bare on every platform)"
+    command: "out=$(TILLANDSIAS_SKIP_WSL2=1 bash scripts/with-wsl2-builder.sh echo bare-run); [ \"$out\" = 'bare-run' ] && echo 'ok: skip-honored'"
+    timeout_ms: 5000
+    expected_behavior: "ok: skip-honored"
+
+  - step: "init script is stdin-delivered (order-326 arg-shredding class) and marker-gated"
+    command: "grep -q 'WSL2_INIT' scripts/with-wsl2-builder.sh && grep -q 'wsl2-builder-initialized' scripts/with-wsl2-builder.sh && echo 'ok: stdin-init'"
+    timeout_ms: 3000
+    expected_behavior: "ok: stdin-init"
+
+  - step: "cargo target dir defaults distro-native with an in-tree opt-in"
+    command: "grep -q 'CARGO_TARGET_DIR' scripts/with-wsl2-builder.sh && grep -q 'TILLANDSIAS_WSL2_TARGET_IN_TREE' scripts/with-wsl2-builder.sh && echo 'ok: native-target-default'"
+    timeout_ms: 3000
+    expected_behavior: "ok: native-target-default"
