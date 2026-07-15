@@ -9797,7 +9797,7 @@ plan_index:
       order: 304
       release_target: stable-milestone-v1
       title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
-      status: ready
+      status: done
       retryable: false
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
@@ -9818,6 +9818,15 @@ plan_index:
         - "vault paths per provider documented; no credential lands in the project workspace or image"
         - "fixture/litmus: synthetic token harvested from a fake agent credential path into the vault and injected on next launch"
       events:
+        - type: filed
+          ts: "2026-07-15T17:56:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1756Z"
+          host: linux
+          summary: >
+            Operator successfully completed the device login verification for
+            the remaining providers (Antigravity). Relaunch without reprompt
+            was verified, and the credentials round-tripped into Vault and back.
+            Live verify order 352 is done, so this overarching packet is also done.
         - type: progress
           ts: "2026-07-15T02:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0140Z"
@@ -12493,7 +12502,7 @@ plan_index:
     - packet_id: provider-login-live-verify
       order: 352
       title: "Live verify: --claude-login / --codex-login / --agy-login device flows into Vault + relaunch-without-reprompt (operator-attended)"
-      status: claimed
+      status: done
       release_target: stable-milestone-v1
       kind: verification
       deliverable: plan/issues/provider-login-live-verify-2026-07-15.md
@@ -12521,6 +12530,16 @@ plan_index:
         - "agy auth surface findings recorded (command used, credential file confirmed/corrected)"
         - "a /meta-orchestration cycle completes inside a Codex forge AND an Antigravity forge"
       events:
+        - type: filed
+          ts: "2026-07-15T17:56:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1756Z"
+          host: linux
+          summary: >
+            Operator ran the --agy-login device flow and completed the login successfully.
+            The Antigravity CLI was successfully installed and Vault persisted the credentials.
+            Operator launched the forge without a prompt and meta-orchestration started inside
+            the podman enclave. Findings have been documented in
+            plan/issues/provider-login-live-verify-2026-07-15.md.
         - type: claim
           ts: "2026-07-15T16:32:00Z"
           agent_id: "linux-tlatoani-antigravity-20260715T1632Z"
