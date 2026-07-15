@@ -45,6 +45,51 @@ LastExecutionTime: 2026-07-15T07:05:00Z
   landed core.
 - Remaining coordinator lane: 363→364 (finish 357), then 358/360/361.
 
+## Cycle 2026-07-15T05:21Z→06:15Z (macos — operator-directed release-blocker drain: 331 DONE, 332 DONE (heartbeat gate observed live), 349 RUN→precisely BLOCKED; TWO new launch-killer P1s fixed en route)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260715T0521Z. Guard `ok:gh-keyring`.
+  Merged origin/linux-next f97ec125 at start (empty-lease wedge from
+  07-11 already cleared last cycle).
+- **Order 331 COMPLETED** (efde3ad1): pre-boot host→guest path translation
+  + unit pin; every gate run this cycle attached via the previously
+  failing host-form path.
+- **Order 332 COMPLETED** — the Linux heartbeat implementation passed its
+  macOS completion gate: cold-forge `--opencode` under a 60s idle override
+  built router+forge-base+forge through many silent minutes with
+  pty.heartbeat@v1 keeping the wire alive (order-270 build-start lines
+  printing per image), then a warm run reached the agent, executed the
+  prompt, and propagated exit 0. No VM teardown.
+- **NEW P1 #1 (5497e10a)**: OpenCode CLI lane was the ONE lane the
+  293/327 router-preflight fixes missed — ensured [proxy,git,inference,
+  forge] then ensure_router_running pulled a nonexistent localhost
+  registry. Router added + source pin.
+- **NEW P1 #2 (71b0c30b)**: merged order-341/342 gitdir facade is DOA on
+  macOS guests — guest OS ships NO git binary, so git_config_set/
+  write_forge_index/read_host_project_origin_url all silently fail; the
+  fail-closed .git mask tmpfs then tmpcopyup'd the operator's real
+  virtiofs .git (hundreds of MB) into 8m → deterministic
+  `crun: write: No space left on device` at every launch, zero
+  kernel/journal trace, 241G free. Mask now `notmpcopyup` (empty by
+  definition) + pin; the guest-git dependency filed for the facade owner
+  (macos-forge-gitdir-facade-guest-git-missing-2026-07-15.md).
+- **Order 349 RUN → BLOCKED with a precise split** (identity: 71b0c30b
+  staged guest, forge v0.3.260715.2, public lane): PASSING — global
+  gitconfig via /home/forge/.gitconfig (safe.directory, empty
+  credential.helper, hooksPath), full TLS parity (curl/node/python all
+  200 through the proxy, system-trust only, no per-client CA overrides).
+  FAILING — mirror insteadOf rewrite absent + repo fetch/push impossible;
+  BOTH are the guest-git facade gap above. Owner linux; gate reruns after
+  the fix. This is the concrete remaining release blocker for the macOS
+  column of stable-milestone-v1.
+- **Also filed**: pre-existing linux-next test regression
+  codex_forge_mounts_scoped_vault_lease_only_for_codex (Claude args now
+  carry --secret; 161/162 elsewhere green) — every host's --test gate is
+  red on it.
+- **Queue after drain**: no macOS-role release-targeted ready work
+  remains; residual ready set is 5-20h audits (147/151/155/225/245-251…)
+  and order 342, whose live closure rides the same guest-git/mirror chain.
+
 ## ACTIVE PARALLELIZATION (2026-07-15) — operator started Linux + Windows + macOS workers
 
 See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.

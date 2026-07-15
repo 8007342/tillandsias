@@ -11080,7 +11080,7 @@ plan_index:
       provisional_id: linux-260714-5
       release_target: stable-milestone-v1
       title: "macOS current-build forge live config, mirror, and TLS parity gate"
-      status: ready
+      status: blocked
       kind: verification
       deliverable: attended macOS VZ forge evidence packet
       depends_on:
@@ -11100,6 +11100,33 @@ plan_index:
         - "inside the public macOS forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: blocked
+          ts: "2026-07-15T06:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260715T0521Z"
+          host: macos
+          lease_id: "macos-forge-config-trust-live-parity-20260715"
+          blocker: plan/issues/macos-forge-gitdir-facade-guest-git-missing-2026-07-15.md
+          owner: linux
+          summary: >
+            Live gate RUN and split (identity recorded: checkout 71b0c30b
+            staged guest + forge image v0.3.260715.2, public --opencode
+            lane). PASSING today: /home/forge/.gitconfig resolves via git
+            config --global --show-origin (safe.directory, EMPTY
+            credential.helper, forge hooksPath); TLS parity clean — curl
+            200 via proxy CONNECT, node fetch 200 (NODE_USE_SYSTEM_CA=1
+            system-trust, no NODE_EXTRA_CA_CERTS), python urllib 200, no
+            SSL_CERT_FILE/REQUESTS_CA_BUNDLE overrides anywhere in the
+            lane env. FAILING and blocked on the linux facade fix: the
+            GitHub->mirror insteadOf rewrite is ABSENT (write_forge_
+            gitconfig omits it because read_host_project_origin_url
+            shells to git, which does not exist in the guest OS) and
+            repo-level mirror fetch/push is impossible (gitdir facade
+            unbuildable for the same reason; .git is fail-closed-masked —
+            correctly EMPTY after the notmpcopyup fix). Smallest next
+            action (owner linux): eliminate the guest-git dependency in
+            write_forge_gitconfig/write_forge_repo_gitdir (pure-Rust INI +
+            an index strategy) or ship git in the guest recipe; then this
+            gate reruns and the two failing criteria can pass.
         - type: order-assigned
           ts: "2026-07-15T01:05:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
@@ -11681,7 +11708,7 @@ plan_index:
       order: 331
       release_target: stable-milestone-v1
       title: "macOS --opencode/--lane project path: translate host ~/src paths to /home/forge/src, fail fast pre-boot otherwise"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/macos-opencode-host-path-not-translated-2026-07-13.md
       depends_on: []
@@ -11699,6 +11726,20 @@ plan_index:
         - "invalid path fails on host pre-boot with actionable message"
         - "translation function unit-pinned"
       events:
+        - type: completed
+          ts: "2026-07-15T06:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260715T0521Z"
+          host: macos
+          lease_id: "macos-opencode-host-path-translation-20260715"
+          summary: >
+            All three criteria evidenced (commit efde3ad1):
+            translate_project_path_for_guest (host ~/src/<n> -> guest form,
+            guest-absolute passthrough, actionable pre-boot rejection naming
+            both forms) wired into opencode_main before any VM work; pure
+            function unit-pinned (project_path_translation_rules). Live
+            criterion 1: every gate run this cycle used the 2026-07-13
+            failing host form /Users/tlatoani/src/tillandsias and attached
+            successfully (final run exit 0 with agent output).
         - type: filed
           ts: "2026-07-13T23:10:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
@@ -11713,7 +11754,7 @@ plan_index:
       order: 332
       release_target: stable-milestone-v1
       title: "P1: first-use macOS --opencode dies at 300s vsock idle timeout during silent forge image build (VM torn down mid-build)"
-      status: ready
+      status: completed
       kind: bugfix
       deliverable: plan/issues/macos-opencode-firstuse-silent-build-idle-timeout-2026-07-13.md
       depends_on: []
@@ -11733,6 +11774,27 @@ plan_index:
         - "wire-level liveness heartbeat or streamed build output pinned by litmus with a synthetic slow-build fixture"
         - "single IDLE_TIMEOUT_SECS constant, env-overridable"
       events:
+        - type: completed
+          ts: "2026-07-15T06:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260715T0521Z"
+          host: macos
+          lease_id: "macos-opencode-firstuse-silent-build-idle-timeout-20260715"
+          summary: >
+            The remaining macOS cold-substrate completion gate is DONE.
+            Cold run (no forge images, TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_
+            SECS=60): router+forge-base+forge all built on demand across
+            many SILENT minutes with the wire alive the whole time — the
+            negotiated pty.heartbeat@v1 (30s cadence) held a 60s idle
+            deadline through the entire buffered build; the order-270
+            build-start lines printed per image. Warm follow-up run reached
+            the OpenCode agent, executed the prompt, printed the
+            ORDER-332-GATE-OK marker, exited 0 — no VM teardown at any
+            point. NOTE the cold runs also exposed and fixed two separate
+            launch-killers on the way to the prompt: the OpenCode lane's
+            missing router preflight (order-327 class, commit 5497e10a) and
+            the .git-mask tmpcopyup ENOSPC bomb (commit 71b0c30b,
+            macos-forge-gitdir-facade-guest-git-missing-2026-07-15.md) —
+            without those this gate could never have been observed.
         - type: progress
           ts: "2026-07-14T21:44:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -12952,7 +13014,7 @@ plan_index:
 
     - packet_id: cross-target-unix-cfg-gate-check
       provisional_id: windows-260715-1
-      order: provisional
+      order: 365
       title: "linux-next un-gated unix-only APIs break every Windows checkout — add a cross-target cfg probe to the Linux authoring-side check"
       status: ready
       kind: enhancement
@@ -12978,6 +13040,11 @@ plan_index:
         - "the check fails loud on the three documented sites when the windows fix commit is reverted"
         - "linux pre-push path runs it (local-ci phase or litmus binding)"
       events:
+        - type: order-assigned
+          ts: "2026-07-15T06:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
+          host: linux_mutable
+          summary: "Coordinator assigned final order 365 (filed provisional per order_number_assignment)."
         - type: filed
           ts: "2026-07-15T06:10:00Z"
           agent_id: "windows-bullo-fable5-20260715T0523Z"
@@ -12990,7 +13057,7 @@ plan_index:
 
     - packet_id: wsl-root-sh-arg-delivery-audit
       provisional_id: windows-260715-2
-      order: provisional
+      order: 366
       title: "wsl_root_sh arg-delivered commands are re-parsed by the guest login shell — audit callers and migrate script-shaped payloads to stdin delivery"
       status: ready
       kind: enhancement
@@ -13017,6 +13084,11 @@ plan_index:
         - "every wsl_root_sh call site is classified (safe single-command vs migrated to stdin)"
         - "a guard (assert or test) rejects multi-line/expansion payloads on the arg-delivered path"
       events:
+        - type: order-assigned
+          ts: "2026-07-15T06:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
+          host: linux_mutable
+          summary: "Coordinator assigned final order 366 (filed provisional per order_number_assignment)."
         - type: filed
           ts: "2026-07-15T06:55:00Z"
           agent_id: "windows-bullo-fable5-20260715T0523Z"
@@ -13025,3 +13097,42 @@ plan_index:
             Filed from the in-run e2e finding after fixing the order-326
             delivery forward. Provisional order per
             order_number_assignment.
+
+    - packet_id: smoke-curl-install-channel-distinction
+      order: 367
+      title: "Curl-install smoke distinguishes dailies vs stable — routine smoke tracks the newest daily; one-shot stable smoke post-promotion"
+      status: done
+      release_target: stable-milestone-v1
+      kind: enhancement
+      deliverable: scripts/resolve-smoke-release.sh + install.sh override + smoke skill + litmus
+      depends_on: [stable-release-channel]
+      pickup_role: linux
+      capability_tags: [ci, release, e2e, smoke]
+      estimated_hours: 3
+      outcome: >
+        Operator directive 2026-07-15: since dailies are now prereleases
+        (order 305) and /releases/latest resolves the promoted STABLE,
+        routine curl-install smoke was silently testing stable, not the
+        bleeding edge. Fixed: scripts/resolve-smoke-release.sh resolves a
+        channel — daily (DEFAULT: newest well-formed prerelease, robust to
+        junk tags + API order) or stable (the promoted /releases/latest);
+        install.sh + install-macos.sh honor TILLANDSIAS_RELEASE_BASE
+        (default unchanged for real users) so smoke pins the resolved
+        release; the curl-install smoke skill picks the channel (daily
+        routine, stable one-shot right after promote-stable.sh, which now
+        prints the reminder). Pinned by litmus:smoke-release-channel-shape.
+      exit_criteria:
+        - "resolve-smoke-release.sh daily returns the newest v#.#.#.# prerelease; stable returns the promoted release (both verified live)"
+        - "installers honor TILLANDSIAS_RELEASE_BASE; default is stable /releases/latest (real users unaffected)"
+        - "litmus:smoke-release-channel-shape green in the ci-release suite"
+      events:
+        - type: completed
+          ts: "2026-07-15T07:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
+          host: linux_mutable
+          summary: >
+            Implemented + verified live: resolver returns daily
+            v0.3.260714.1 / stable v0.3.260712.1; ci-release litmus 5/5.
+            Bonus finding: a malformed vv0.3.260626.3 release tag exists
+            (optimization/malformed-release-tag-vv-2026-07-15.md) — the
+            resolver's grammar filter neutralizes it for smoke.

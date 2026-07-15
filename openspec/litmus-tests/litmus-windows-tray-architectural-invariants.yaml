@@ -65,11 +65,14 @@ critical_path:
     expected_behavior: "menu_state::build"
     timeout_ms: 3000
 
-  - step: "distro-name-pinned: DISTRO_NAME const is exactly 'tillandsias'"
+  - step: "distro-name-pinned: DISTRO_NAME resolves to exactly 'tillandsias'"
     # Pinning both the const name AND value catches a rename or a typo'd
     # bump. Provisioning + Open-Shell + the keepalive all depend on this
-    # being a single source of truth.
-    command: "grep -F 'pub const DISTRO_NAME: &str = \"tillandsias\"' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs"
+    # being a single source of truth. Order 312 made DISTRO_NAME indirect
+    # through tillandsias_vm_layer::wsl::DEFAULT_WSL_DISTRO (one source of
+    # truth shared with the stdio bridge) — assert the tray declares that
+    # alias AND the vm-layer const holds the literal value.
+    command: "grep -Fq 'pub const DISTRO_NAME: &str = tillandsias_vm_layer::wsl::DEFAULT_WSL_DISTRO' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs && grep -Fq 'pub const DEFAULT_WSL_DISTRO: &str = \"tillandsias\"' crates/tillandsias-vm-layer/src/wsl.rs && echo tillandsias"
     expected_behavior: "tillandsias"
     timeout_ms: 3000
 
