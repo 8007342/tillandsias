@@ -9,4 +9,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/install.sh#L4](../../../scripts/install.sh#L4)
 - [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
 - [scripts/local-ci.sh#L824](../../../scripts/local-ci.sh#L824)
+- [scripts/promote-stable.sh#L2](../../../scripts/promote-stable.sh#L2)
 - [scripts/release-preflight-local.sh#L3](../../../scripts/release-preflight-local.sh#L3)

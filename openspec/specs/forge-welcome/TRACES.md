@@ -5,11 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/default/entrypoint-forge-antigravity.sh#L81](../../../images/default/entrypoint-forge-antigravity.sh#L81)
-- [images/default/entrypoint-forge-claude.sh#L93](../../../images/default/entrypoint-forge-claude.sh#L93)
-- [images/default/entrypoint-forge-codex.sh#L89](../../../images/default/entrypoint-forge-codex.sh#L89)
-- [images/default/entrypoint-forge-opencode.sh#L91](../../../images/default/entrypoint-forge-opencode.sh#L91)
-- [images/default/entrypoint-terminal.sh#L72](../../../images/default/entrypoint-terminal.sh#L72)
+- [images/default/entrypoint-forge-antigravity.sh#L53](../../../images/default/entrypoint-forge-antigravity.sh#L53)
+- [images/default/entrypoint-forge-claude.sh#L60](../../../images/default/entrypoint-forge-claude.sh#L60)
+- [images/default/entrypoint-forge-codex.sh#L56](../../../images/default/entrypoint-forge-codex.sh#L56)
+- [images/default/entrypoint-forge-opencode.sh#L58](../../../images/default/entrypoint-forge-opencode.sh#L58)
+- [images/default/entrypoint-terminal.sh#L39](../../../images/default/entrypoint-terminal.sh#L39)
 - [images/default/forge-welcome.sh#L8](../../../images/default/forge-welcome.sh#L8)
 - [images/default/locales/ar.sh#L4](../../../images/default/locales/ar.sh#L4)
 - [images/default/locales/hi.sh#L4](../../../images/default/locales/hi.sh#L4)

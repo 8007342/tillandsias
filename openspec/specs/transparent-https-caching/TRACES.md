@@ -10,3 +10,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/inference/entrypoint.sh#L10](../../../images/inference/entrypoint.sh#L10)
 - [scripts/orchestrate-enclave.sh#L59](../../../scripts/orchestrate-enclave.sh#L59)
 - [scripts/run-forge-project.sh#L2](../../../scripts/run-forge-project.sh#L2)
+- [scripts/test-forge-runtime-ca-trust.sh#L2](../../../scripts/test-forge-runtime-ca-trust.sh#L2)

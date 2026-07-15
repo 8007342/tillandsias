@@ -5,7 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/git/Containerfile#L81](../../../images/git/Containerfile#L81)
-- [images/inference/Containerfile#L60](../../../images/inference/Containerfile#L60)
+- [images/git/Containerfile#L83](../../../images/git/Containerfile#L83)
+- [images/inference/Containerfile#L62](../../../images/inference/Containerfile#L62)
 - [images/proxy/Containerfile#L39](../../../images/proxy/Containerfile#L39)
 - [scripts/orchestrate-enclave.sh#L178](../../../scripts/orchestrate-enclave.sh#L178)

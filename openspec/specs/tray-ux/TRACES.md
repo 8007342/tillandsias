@@ -5,13 +5,12 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-headless/src/main.rs#L7259](../../../crates/tillandsias-headless/src/main.rs#L7259)
-- [crates/tillandsias-headless/src/main.rs#L7932](../../../crates/tillandsias-headless/src/main.rs#L7932)
-- [crates/tillandsias-headless/src/main.rs#L7960](../../../crates/tillandsias-headless/src/main.rs#L7960)
-- [crates/tillandsias-headless/src/main.rs#L7977](../../../crates/tillandsias-headless/src/main.rs#L7977)
-- [crates/tillandsias-headless/src/main.rs#L9518](../../../crates/tillandsias-headless/src/main.rs#L9518)
-- [crates/tillandsias-headless/src/main.rs#L9608](../../../crates/tillandsias-headless/src/main.rs#L9608)
-- [crates/tillandsias-headless/src/main.rs#L9809](../../../crates/tillandsias-headless/src/main.rs#L9809)
+- [crates/tillandsias-headless/src/main.rs#L7590](../../../crates/tillandsias-headless/src/main.rs#L7590)
+- [crates/tillandsias-headless/src/main.rs#L8402](../../../crates/tillandsias-headless/src/main.rs#L8402)
+- [crates/tillandsias-headless/src/main.rs#L8419](../../../crates/tillandsias-headless/src/main.rs#L8419)
+- [crates/tillandsias-headless/src/main.rs#L9969](../../../crates/tillandsias-headless/src/main.rs#L9969)
+- [crates/tillandsias-headless/src/main.rs#L10059](../../../crates/tillandsias-headless/src/main.rs#L10059)
+- [crates/tillandsias-headless/src/main.rs#L10282](../../../crates/tillandsias-headless/src/main.rs#L10282)
 - [crates/tillandsias-headless/src/remote_projects.rs#L24](../../../crates/tillandsias-headless/src/remote_projects.rs#L24)
 - [crates/tillandsias-headless/src/tray/cloud.rs#L1](../../../crates/tillandsias-headless/src/tray/cloud.rs#L1)
 - [crates/tillandsias-headless/src/tray/cloud.rs#L59](../../../crates/tillandsias-headless/src/tray/cloud.rs#L59)
@@ -49,5 +48,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/tray/mod.rs#L4280](../../../crates/tillandsias-headless/src/tray/mod.rs#L4280)
 - [crates/tillandsias-headless/src/tray/mod.rs#L4521](../../../crates/tillandsias-headless/src/tray/mod.rs#L4521)
 - [crates/tillandsias-headless/src/tray/mod.rs#L5152](../../../crates/tillandsias-headless/src/tray/mod.rs#L5152)
-- [crates/tillandsias-podman/src/container_spec.rs#L305](../../../crates/tillandsias-podman/src/container_spec.rs#L305)
+- [crates/tillandsias-podman/src/container_spec.rs#L312](../../../crates/tillandsias-podman/src/container_spec.rs#L312)
 - [scripts/local-ci.sh#L880](../../../scripts/local-ci.sh#L880)

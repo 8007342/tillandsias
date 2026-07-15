@@ -6,4 +6,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [scripts/build-image.sh#L28](../../../scripts/build-image.sh#L28)
-- [scripts/build-image.sh#L239](../../../scripts/build-image.sh#L239)
+- [scripts/hash-image-sources.sh#L4](../../../scripts/hash-image-sources.sh#L4)
