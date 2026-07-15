@@ -29,7 +29,7 @@ See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.
 - **macOS worker**: 331 first, then 332/349/342.
 - Two milestones: stable-milestone-v1 (334, needs sibling criteria) + enclave-service-catalog (353, Linux-only).
 
-## Cycle 2026-07-15T05:23Z→05:55Z (windows — order 312 CLOSED: slice 2 socat stdio bridge; standard-user wire live-verified)
+## Cycle 2026-07-15T05:23Z→06:45Z (windows — order 312 CLOSED (socat stdio bridge, standard-user wire live-verified); 326 implemented+live-healed; inherited linux-next Windows compile break repaired forward)
 
 - **Host**: Windows 11 Home 26200, `windows-next`, agent
   windows-bullo-fable5-20260715T0523Z. Guard `ok:gh-keyring`; merged
@@ -47,6 +47,22 @@ See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.
   precondition probed: /usr/sbin/socat present, loopback connect exit 0.
   vm-layer 39/39 (3 new pins), windows-tray 66/0, clippy clean. Commit
   7e491bd7 (windows-next; ledger merge-back rides the coordinator pass).
+- **Inherited breakage repaired forward (076d13eb)**: catalog slice b1404180
+  landed un-gated `std::os::unix::net::UnixStream` + `libc::getuid()` in
+  headless main.rs — linux `--check` compiles only the Linux cfg universe, so
+  every Windows workspace check broke (E0433/E0425 ×3). cfg-gated + two
+  `PLEASE REVIEW: linux` stubs; finding filed
+  (linux-next-ungated-unix-apis-break-windows-2026-07-15.md) + provisional
+  packet cross-target-unix-cfg-gate-check (windows-260715-1, linux pickup).
+  Process near-miss recorded in the finding: a piped compile gate reported
+  the pipe's exit, not cargo's — the broken tree was pushed, then repaired
+  ~15 min later. Use ${PIPESTATUS[0]} or unpiped checks.
+- **Order 326 implemented + live-healed (ea5b9e47)**: FORGE_USER_SETUP_SCRIPT
+  (useradd -u 1000 + subids + chown + forge-uid writability probe, loud
+  failure) on both provisioning paths; unit-pinned ×2; this host's guest was
+  in the exact filed state and is now healed (idempotent re-run verified).
+  in_progress: criterion 2 (cold cloud-attach clone) rides the next
+  destructive local-build e2e.
 - **Host state at exit**: distro terminated (registered, idle), keepalive
   killed, tree clean at push.
 

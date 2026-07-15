@@ -11378,7 +11378,7 @@ plan_index:
       order: 326
       release_target: stable-milestone-v1
       title: "WSL2 guest provisioning: no forge user + root-owned /home/forge/src — every containerized cloud clone fails EACCES"
-      status: ready
+      status: in_progress
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -11411,6 +11411,28 @@ plan_index:
         - "cold cloud attach clone succeeds on Windows without manual chmod"
         - "regression pinned: provisioning-time writability probe or unit test on the recipe config step"
       events:
+        - type: progress
+          ts: "2026-07-15T06:35:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0523Z"
+          host: windows
+          lease_id: "wsl-guest-forge-user-src-ownership"
+          commits: ["ea5b9e47"]
+          summary: >
+            IMPLEMENTATION COMPLETE (criteria 1+3). FORGE_USER_SETUP_SCRIPT
+            (set -eu; useradd -u 1000 + subordinate ranges; mkdir+chown
+            /home/forge; writability probe FROM the forge uid failing the
+            provision loudly) runs on BOTH provisioning paths via
+            ensure_forge_user_and_src(), order-297 assert pattern. Unit
+            pins: script contract + both-paths source window (vm-layer
+            41/41). LIVE-VERIFIED on this host's guest, which was in the
+            exact filed state (id: no such user; src root-owned with the
+            0777 session workaround): script healed it — uid=1000 forge,
+            forge:forge src, subids 524288+65536 (useradd auto-allocates
+            on Fedora; the usermod range is the fallback), probe green —
+            and the re-run was a clean idempotent no-op. RESIDUAL
+            (criterion 2): cold cloud-attach clone evidence rides the
+            next destructive local-build e2e; packet stays in_progress
+            until that run records it.
         - type: filed
           ts: "2026-07-13T22:50:00Z"
           agent_id: "windows-yolanda-fable5-20260713T2105Z"
