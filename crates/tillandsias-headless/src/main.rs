@@ -38,7 +38,8 @@
 use signal_hook::flag;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -129,9 +130,13 @@ fn main() {
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
     let github_login = user_args.iter().any(|a| a == "--github-login");
+    let with_token = user_args.iter().any(|a| a == "--with-token");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
     let codex_login = user_args.iter().any(|a| a == "--codex-login");
-    let antigravity_login = user_args.iter().any(|a| a == "--antigravity-login");
+    // --agy-login is the operator-facing alias (matches the `agy` binary name).
+    let antigravity_login = user_args
+        .iter()
+        .any(|a| a == "--antigravity-login" || a == "--agy-login");
     let list_cloud_projects = user_args.iter().any(|a| a == "--list-cloud-projects");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let codex = user_args.iter().any(|a| a == "--codex");
@@ -250,9 +255,11 @@ fn main() {
         "--init",
         "--status-check",
         "--github-login",
+        "--with-token",
         "--claude-login",
         "--codex-login",
         "--antigravity-login",
+        "--agy-login",
         "--list-cloud-projects",
         "--opencode",
         "--codex",
@@ -282,6 +289,11 @@ fn main() {
     {
         eprintln!("Unsupported option: {unsupported}");
         eprintln!("Run 'tillandsias --help' for supported options.");
+        std::process::exit(2);
+    }
+
+    if with_token && !github_login {
+        eprintln!("Error: --with-token is only valid with --github-login");
         std::process::exit(2);
     }
 
@@ -342,43 +354,66 @@ fn main() {
     });
 
     let login_provider = if github_login {
+        let input_mode = match select_github_login_input_mode(with_token, io::stdin().is_terminal())
+        {
+            Ok(mode) => mode,
+            Err(error) => {
+                eprintln!("Error: {error}");
+                std::process::exit(2);
+            }
+        };
+        let token_script = match input_mode {
+            LoginInputMode::Terminal => GH_LOGIN_TOKEN_SCRIPT.to_string(),
+            LoginInputMode::StdinToken => GH_LOGIN_STDIN_TOKEN_SCRIPT.to_string(),
+        };
         Some((
             ProviderId::GitHub,
             AuthModel::OAuthDevice,
             "git",
-            GH_LOGIN_TOKEN_SCRIPT.to_string(),
+            token_script,
+            input_mode,
         ))
     } else if claude_login {
+        let spec = provider_device_auth_spec(&ProviderId::Claude)
+            .expect("Claude device-auth provider spec must exist");
         Some((
             ProviderId::Claude,
             AuthModel::OAuthDevice,
-            "curl",
-            get_generic_login_token_script(&ProviderId::Claude),
+            spec.image_name,
+            spec.login_script(),
+            LoginInputMode::Terminal,
         ))
     } else if codex_login {
+        let spec = provider_device_auth_spec(&ProviderId::Codex)
+            .expect("Codex device-auth provider spec must exist");
         Some((
             ProviderId::Codex,
             AuthModel::OAuthDevice,
-            "curl",
-            get_generic_login_token_script(&ProviderId::Codex),
+            spec.image_name,
+            spec.login_script(),
+            LoginInputMode::Terminal,
         ))
     } else if antigravity_login {
+        let spec = provider_device_auth_spec(&ProviderId::Antigravity)
+            .expect("Antigravity device-auth provider spec must exist");
         Some((
             ProviderId::Antigravity,
             AuthModel::OAuthDevice,
-            "curl",
-            get_generic_login_token_script(&ProviderId::Antigravity),
+            spec.image_name,
+            spec.login_script(),
+            LoginInputMode::Terminal,
         ))
     } else {
         None
     };
 
-    if let Some((provider, auth_model, image_name, token_script)) = login_provider {
+    if let Some((provider, auth_model, image_name, token_script, input_mode)) = login_provider {
         let config = ProviderLoginConfig {
             provider,
             auth_model,
             image_name,
             token_script,
+            input_mode,
         };
         if let Err(e) = run_provider_login(&config, debug) {
             eprintln!("Error: {}", e);
@@ -674,7 +709,7 @@ fn print_usage(version: &str) {
     println!("Usage: tillandsias [--headless|--tray] [config_path]");
     println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
-    println!("       tillandsias --github-login [--debug]");
+    println!("       tillandsias --github-login [--with-token] [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
     println!("       tillandsias --antigravity-login [--debug]");
@@ -710,9 +745,15 @@ fn print_usage(version: &str) {
     println!("  --cache-clear  Clear the initialization cache and build state");
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and store the token in Vault");
-    println!("  --claude-login Authenticate Claude and store the token in Vault");
-    println!("  --codex-login Authenticate Codex and store the token in Vault");
-    println!("  --antigravity-login Authenticate Antigravity and store the token in Vault");
+    println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
+    println!(
+        "  --claude-login Authenticate Claude (device flow: claude auth login --claudeai) into Vault"
+    );
+    println!(
+        "  --codex-login Authenticate Codex (device flow: codex login --device-auth) into Vault"
+    );
+    println!("  --antigravity-login Authenticate Antigravity (agy device flow) into Vault");
+    println!("  --agy-login    Alias for --antigravity-login");
     println!(
         "  --list-cloud-projects  List remote GitHub repos via the saved Vault token (diagnostic)"
     );
@@ -1618,6 +1659,10 @@ fn ensure_image_exists(
             return Ok(());
         }
 
+        eprintln!(
+            "[tillandsias] building missing image {image_name} ({image_tag}); this may take several minutes"
+        );
+
         client
             .build_image(
                 containerfile
@@ -1630,7 +1675,7 @@ fn ensure_image_exists(
                 &build_args,
             )
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format_on_demand_image_build_error(image_tag, &e.to_string()))?;
 
         if debug {
             eprintln!("[tillandsias] built image {image_name}: {image_tag}");
@@ -1638,6 +1683,13 @@ fn ensure_image_exists(
 
         Ok(())
     })
+}
+
+fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
+    format!(
+        "Required image '{image_tag}' is absent and failed to build on demand: {error}.\n\
+         Build it explicitly with: tillandsias --init"
+    )
 }
 
 fn ensure_versioned_images(
@@ -2058,24 +2110,8 @@ fn build_stack_common_args(
             "{}:/home/forge/src/{project_name}:rw",
             project_path.display()
         ),
-        "--mount".into(),
-        format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
-        // NODE_EXTRA_CA_CERTS (order 241): tell Node.js to trust the
-        // Tillandsias intermediate CA so opencode (which uses undici under
-        // the hood) can validate the proxy-issued TLS certificate during
-        // SSL bump. Without this, `opencode run --diagnostics` fails with
-        // a TLS validation error when connecting to models.dev through the
-        // MITM proxy, causing the diagnostics annex to record state=failed.
-        "--env".into(),
-        "NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt".into(),
-        // Mount the same CA cert at the path lib-common.sh's entrypoint
-        // expects ($CA_CHAIN) so the forge container builds a combined
-        // bundle that includes both the system CAs and the Tillandsias CA,
-        // exported as SSL_CERT_FILE / REQUESTS_CA_BUNDLE for non-Node
-        // tools (curl, pip, git, etc.).
+        // One runtime trust input feeds lib-common.sh's rootless initializer.
+        // Git, curl, Node, and Python then use the image's system-default path.
         "--mount".into(),
         format!(
             "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
@@ -2084,6 +2120,57 @@ fn build_stack_common_args(
     ]);
     append_git_identity_env_args(&mut args);
     args
+}
+
+/// The single WEB catalog entry for the first "publish it locally" rung
+/// (order 357). The full hand-curated catalog (categories → pinned digests,
+/// mounts, ports, debug semantics) is order 358/361; this constant is the
+/// interim single-entry allowlist so the MVP demonstrates end-to-end while
+/// the schema is designed. A forge may request category `"WEB"` and NOTHING
+/// else until 358 generalizes this host-side.
+/// @trace spec:enclave-service-catalog
+const CATALOG_WEB_CATEGORY: &str = "WEB";
+/// Port the WEB image's busybox httpd listens on (images/web/Containerfile).
+const CATALOG_WEB_PORT: u16 = 8080;
+
+/// Container name for a project's published WEB service. Stable per project
+/// so re-publish is idempotent (ensure semantics).
+fn web_service_container_name(project_name: &str) -> String {
+    format!("tillandsias-{project_name}-web")
+}
+
+/// The published URL for a project's WEB service. Friendly name only, never
+/// an IP (operator invariant). http today; order 360 adds transparent https.
+fn web_service_url(project_name: &str) -> String {
+    format!("http://www.{project_name}.localhost:8080")
+}
+
+/// `podman run` args for a project's static WEB catalog service: the alpine
+/// busybox-httpd image (images/web) with the project worktree bind-mounted
+/// READ-ONLY at `/var/www` (debug mode — the container serves live edits; RO
+/// is the WEB entry's fixed share rule, not agent-choosable). On the enclave
+/// network as `tillandsias-<project>-web` so the router reaches it by name.
+/// @trace spec:enclave-service-catalog, spec:web-image
+fn build_web_service_run_args(project_name: &str, worktree: &Path, image: &str) -> Vec<String> {
+    vec![
+        "--detach".into(),
+        "--rm".into(),
+        "--name".into(),
+        web_service_container_name(project_name),
+        "--hostname".into(),
+        web_service_container_name(project_name),
+        "--network".into(),
+        ENCLAVE_NET.into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        "--security-opt=label=disable".into(),
+        "--userns=keep-id".into(),
+        "--pids-limit=32".into(),
+        // Worktree served read-only (debug: live edits, no reload for static).
+        "-v".into(),
+        format!("{}:/var/www:ro", worktree.display()),
+        image.into(),
+    ]
 }
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
@@ -2429,7 +2516,17 @@ fn control_socket_host_dir() -> PathBuf {
     let base = if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
         PathBuf::from(runtime_dir)
     } else {
-        PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() }))
+        // PLEASE REVIEW: linux — non-unix fallback added to keep the
+        // workspace compiling on Windows (libc::getuid is unix-only);
+        // mirrors router_dynamic_caddyfile_host_path's temp_dir fallback.
+        #[cfg(unix)]
+        {
+            PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() }))
+        }
+        #[cfg(not(unix))]
+        {
+            std::env::temp_dir().join("tillandsias-embedded")
+        }
     };
     base.join("tillandsias")
 }
@@ -2676,6 +2773,14 @@ struct RouterRoute {
     /// `/`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     root_redirect: Option<String>,
+    /// Public route: skip the OTP `forward_auth` gate. Used by
+    /// "publish it locally" catalog web services — a user's own localhost dev
+    /// server is served directly, not behind the private-view session gate
+    /// (which fronts Observatorium / OpenCode Web). Defaults to `false` so
+    /// every existing route keeps its auth chain.
+    /// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-service-catalog
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    public: bool,
 }
 
 impl RouterRoute {
@@ -2685,12 +2790,25 @@ impl RouterRoute {
             upstream_host: upstream_host.into(),
             port,
             root_redirect: None,
+            public: false,
         }
     }
 
     fn with_root_redirect(mut self, path: impl Into<String>) -> Self {
         self.root_redirect = Some(path.into());
         self
+    }
+
+    /// A public (no-auth) route for a "publish it locally" catalog service.
+    fn public_service(
+        subdomain: impl Into<String>,
+        upstream_host: impl Into<String>,
+        port: u16,
+    ) -> Self {
+        Self {
+            public: true,
+            ..Self::new(subdomain, upstream_host, port)
+        }
     }
 }
 
@@ -2801,6 +2919,18 @@ fn generate_dynamic_caddyfile(routes_to_render: &[RouterRoute]) -> String {
             .root_redirect
             .as_deref()
             .filter(|path| path.starts_with('/'));
+
+        // Public catalog service (publish-it-locally): a bare reverse_proxy
+        // with NO forward_auth gate — the user's own localhost dev server.
+        // @trace spec:enclave-service-catalog
+        if route.public {
+            routes.push_str(&format!(
+                "http://{subdomain}.localhost:8080 {{\n    \
+reverse_proxy {upstream_host}:{port}\n\
+}}\n\n"
+            ));
+            continue;
+        }
 
         // Force HTTP-only (`http://...`) on :8080. Caddy enables HTTP/2 and
         // HTTP/3 by default, both of which require TLS — so a bare
@@ -3305,19 +3435,13 @@ fn build_opencode_forge_args(
         ),
         "--mount".into(),
         format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
-        "--env".into(),
-        "NODE_EXTRA_CA_CERTS=/etc/tillandsias/ca.crt".into(),
-        "--mount".into(),
-        format!(
             "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
+    append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
     // Forge gitconfig injection (order 224): pre-populate global git config
-    // with mirror redirect, safe.directory, and CA cert path, bind-mounted
+    // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
     // Tillandsias, written before container start, and never writable inside
     // the forge. lib-common.sh's rewrite_origin_for_enclave_push detects the
@@ -3327,11 +3451,9 @@ fn build_opencode_forge_args(
         args.extend([
             "--mount".into(),
             format!(
-                "type=bind,source={},target=/home/forge/.config/git/config,readonly=true",
+                "type=bind,source={},target=/home/forge/.gitconfig,readonly=true",
                 gitconfig_path.display()
             ),
-            "--env".into(),
-            "GIT_CONFIG_GLOBAL=/home/forge/.config/git/config".into(),
         ]);
     }
     append_git_identity_env_args(&mut args);
@@ -4814,6 +4936,21 @@ fi
 printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token
 "#;
 
+/// Non-interactive token entry for `--github-login --with-token`.
+///
+/// Podman inherits the caller's stdin directly, so the Rust process never
+/// reads or stores the token. This mode deliberately avoids `/dev/tty` and a
+/// pseudo-terminal, which makes a one-line token pipe deterministic in CI and
+/// automation.
+const GH_LOGIN_STDIN_TOKEN_SCRIPT: &str = r#"
+IFS= read -r TOKEN
+if [ -z "$TOKEN" ]; then
+  printf 'No token received on stdin; aborting GitHub login.\n' >&2
+  exit 1
+fi
+printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token
+"#;
+
 /// Container-side bridge for the retired Tauri `--github-login` path.
 ///
 /// The host runtime only assumes Podman. GitHub CLI runs inside the git service
@@ -4893,9 +5030,9 @@ impl ProviderId {
     pub fn secret_field(&self) -> &'static str {
         match self {
             ProviderId::GitHub => "token",
-            ProviderId::Claude => "access_token",
-            ProviderId::Codex => "access_token",
-            ProviderId::Antigravity => "access_token",
+            ProviderId::Claude => CLAUDE_DEVICE_AUTH_SPEC.vault_field,
+            ProviderId::Codex => CODEX_DEVICE_AUTH_SPEC.vault_field,
+            ProviderId::Antigravity => ANTIGRAVITY_DEVICE_AUTH_SPEC.vault_field,
         }
     }
 }
@@ -4905,11 +5042,114 @@ pub enum AuthModel {
     OAuthDevice,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct ProviderDeviceAuthSpec {
+    image_name: &'static str,
+    login_program: &'static str,
+    login_args: &'static [&'static str],
+    credential_path: &'static str,
+    vault_path: &'static str,
+    vault_field: &'static str,
+}
+
+impl ProviderDeviceAuthSpec {
+    fn login_script(&self) -> String {
+        let mut command = vec![self.login_program];
+        command.extend_from_slice(self.login_args);
+        format!("exec {}", command.join(" "))
+    }
+}
+
+const CODEX_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
+    image_name: "forge",
+    login_program: "/usr/local/bin/codex-device-auth",
+    login_args: &[],
+    credential_path: "~/.codex/auth.json",
+    vault_path: "secret/codex/oauth",
+    vault_field: "credentials_b64",
+};
+
+// Claude device flow (operator-prescribed command 2026-07-15:
+// `claude auth login --claudeai`). The script probes the capability and
+// refuses browser/paste fallbacks; the full opaque credential document is
+// what Vault stores — extracting a single token would break refresh.
+const CLAUDE_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
+    image_name: "forge",
+    login_program: "/usr/local/bin/provider-device-auth",
+    login_args: &["claude"],
+    credential_path: "~/.claude/.credentials.json",
+    vault_path: "secret/claude/oauth",
+    vault_field: "credentials_b64",
+};
+
+// Antigravity: agy auto-detects headless sessions and prints a device URL +
+// code (no browser). Linux-container credential file per upstream docs; the
+// forge restore additionally materializes ANTIGRAVITY_TOKEN because the file
+// store is write-only for fresh headless processes (upstream issue #479).
+const ANTIGRAVITY_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
+    image_name: "forge",
+    login_program: "/usr/local/bin/provider-device-auth",
+    login_args: &["antigravity"],
+    credential_path: "~/.gemini/antigravity-cli/antigravity-oauth-token",
+    vault_path: "secret/antigravity/oauth",
+    vault_field: "credentials_b64",
+};
+
+fn provider_device_auth_spec(provider: &ProviderId) -> Option<&'static ProviderDeviceAuthSpec> {
+    match provider {
+        ProviderId::Codex => Some(&CODEX_DEVICE_AUTH_SPEC),
+        ProviderId::Claude => Some(&CLAUDE_DEVICE_AUTH_SPEC),
+        ProviderId::Antigravity => Some(&ANTIGRAVITY_DEVICE_AUTH_SPEC),
+        ProviderId::GitHub => None,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LoginInputMode {
+    Terminal,
+    StdinToken,
+}
+
+fn select_github_login_input_mode(
+    with_token: bool,
+    stdin_is_terminal: bool,
+) -> Result<LoginInputMode, String> {
+    if with_token {
+        return Ok(LoginInputMode::StdinToken);
+    }
+    if stdin_is_terminal {
+        return Ok(LoginInputMode::Terminal);
+    }
+    Err(
+        "--github-login requires a terminal; for automation, configure git user.name and user.email, then pipe one token line to `tillandsias --github-login --with-token`"
+            .to_string(),
+    )
+}
+
+fn provider_login_exec_args(
+    container: &str,
+    token_script: &str,
+    input_mode: LoginInputMode,
+) -> Vec<String> {
+    let mut args = vec!["exec".to_string(), "--interactive".to_string()];
+    if matches!(input_mode, LoginInputMode::Terminal) {
+        args.push("--tty".to_string());
+    }
+    args.extend([
+        container.to_string(),
+        "/bin/bash".to_string(),
+        "-c".to_string(),
+        token_script.to_string(),
+    ]);
+    args
+}
+
 pub struct ProviderLoginConfig {
     pub provider: ProviderId,
     pub auth_model: AuthModel,
     pub image_name: &'static str,
     pub token_script: String,
+    pub input_mode: LoginInputMode,
 }
 
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
@@ -5033,19 +5273,18 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     check_auth_required_services(&required, debug)?;
 
     if matches!(config.provider, ProviderId::GitHub) {
-        prompt_and_store_git_identity()?;
+        match config.input_mode {
+            LoginInputMode::Terminal => prompt_and_store_git_identity()?,
+            LoginInputMode::StdinToken => store_existing_git_identity()?,
+        }
     }
 
     let mut login = podman_command();
-    login.args([
-        "exec",
-        "--interactive",
-        "--tty",
+    login.args(provider_login_exec_args(
         &container,
-        "/bin/bash",
-        "-c",
         &config.token_script,
-    ]);
+        config.input_mode,
+    ));
     run_command(login, debug)?;
 
     if matches!(config.provider, ProviderId::GitHub) {
@@ -5246,6 +5485,24 @@ fn prompt_and_store_git_identity() -> Result<(), String> {
     let name = prompt_with_default("Git author name", current.name.as_deref())?;
     let email = prompt_with_default("Git author email", current.email.as_deref())?;
 
+    store_git_identity(&name, &email)
+}
+
+fn store_existing_git_identity() -> Result<(), String> {
+    let current = read_git_identity_defaults();
+    let name = current.name.ok_or_else(|| {
+        "non-interactive GitHub login requires an existing git user.name; configure it before using --with-token"
+            .to_string()
+    })?;
+    let email = current.email.ok_or_else(|| {
+        "non-interactive GitHub login requires an existing git user.email; configure it before using --with-token"
+            .to_string()
+    })?;
+
+    store_git_identity(&name, &email)
+}
+
+fn store_git_identity(name: &str, email: &str) -> Result<(), String> {
     if name.trim().is_empty() {
         return Err("Git author name cannot be empty".to_string());
     }
@@ -5375,11 +5632,11 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 
 /// Write a forge-owned `.gitconfig` to disk for injection into forge containers.
 ///
-/// The generated config prepopulates the mirror redirect (`url.insteadOf`),
-/// `safe.directory`, and `http.sslCAInfo` so the forge entrypoint's
+/// The generated config prepopulates the mirror redirect (`url.insteadOf`)
+/// and `safe.directory` so the forge entrypoint's
 /// `rewrite_origin_for_enclave_push` can skip redundant writes on a read-only
-/// mount. The caller bind-mounts this file into the container at
-/// `$GIT_CONFIG_GLOBAL`.
+/// mount. The caller bind-mounts this file into the container at Git's
+/// standard global path, `/home/forge/.gitconfig`.
 ///
 /// Returns `Some(path)` on success, `None` on any I/O error.
 /// @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
@@ -5395,14 +5652,13 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
 
     // Read the host origin URL for mirror redirect.
-    let origin_url = read_host_project_origin_url(project_path);
+    let origin_url = read_host_project_origin_url(project_path)
+        .as_deref()
+        .and_then(sanitize_forge_origin_url);
 
     let mut config = String::new();
     config.push_str("[safe]\n");
     config.push_str("\tdirectory = /home/forge/src/*\n");
-    config.push('\n');
-    config.push_str("[http]\n");
-    config.push_str("\tsslCAInfo = /etc/tillandsias/ca.crt\n");
     config.push('\n');
     config.push_str("[credential]\n");
     config.push_str("\thelper =\n");
@@ -5430,7 +5686,7 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
 
     // Preserve existing git identity if the file exists (e.g., from a prior
     // `managed_gitconfig_path` write by the identity prompt). We only inject
-    // structural config (redirect, safe.directory, CA) — identity comes from
+    // structural config (redirect and safe.directory) — identity comes from
     // launch env vars.
     if let Ok(existing) = std::fs::read_to_string(&config_path)
         && let Some(user_section) = extract_gitconfig_section(&existing, "user")
@@ -5441,6 +5697,184 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
 
     std::fs::write(&config_path, config.as_bytes()).ok()?;
     Some(config_path)
+}
+
+#[derive(Debug)]
+struct ForgeRepoGitDir {
+    root: PathBuf,
+    objects: PathBuf,
+    refs: PathBuf,
+}
+
+fn git_config_set(config_path: &Path, key: &str, value: &str) -> Option<()> {
+    let status = Command::new("git")
+        .args(["config", "--file"])
+        .arg(config_path)
+        .args([key, value])
+        .status()
+        .ok()?;
+    status.success().then_some(())
+}
+
+fn write_forge_index(root: &Path, project_path: &Path, host_gitdir: &Path) -> Option<()> {
+    let tree = Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args(["rev-parse", "--verify", "HEAD^{tree}"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|tree| tree.trim().to_string());
+
+    let mut command = Command::new("git");
+    command
+        .arg("--git-dir")
+        .arg(root)
+        .arg("read-tree")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_OBJECT_DIRECTORY", host_gitdir.join("objects"));
+    if let Some(tree) = tree.filter(|tree| !tree.is_empty()) {
+        command.arg(tree);
+    } else {
+        command.arg("--empty");
+    }
+    command.status().ok()?.success().then_some(())
+}
+
+fn sanitize_forge_origin_url(origin: &str) -> Option<String> {
+    let origin = origin.trim();
+    if origin.is_empty() || origin.chars().any(char::is_control) {
+        return None;
+    }
+
+    for scheme in ["https://", "http://"] {
+        let Some(rest) = origin.strip_prefix(scheme) else {
+            continue;
+        };
+        let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+        let (authority, suffix) = rest.split_at(authority_end);
+        let host = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, host)| host);
+        if host.is_empty() {
+            return None;
+        }
+        return Some(format!("{scheme}{host}{suffix}"));
+    }
+
+    Some(origin.to_string())
+}
+
+/// Materialize a writable, forge-owned repository metadata directory.
+///
+/// The project bind mount remains read-write, but this directory is mounted
+/// over `<project>/.git`. Host `objects` and `refs` are then nested beneath it,
+/// preserving commit/ref sharing without exposing host config, hooks, or index.
+///
+/// Only ordinary checkouts with a `.git` directory are supported. Worktree
+/// gitfiles are already unusable in the forge because their referenced gitdir
+/// is outside the project bind mount; returning `None` preserves that behavior
+/// without exposing the referenced host metadata.
+/// @trace spec:git-mirror-service
+fn write_forge_repo_gitdir(project_name: &str, project_path: &Path) -> Option<ForgeRepoGitDir> {
+    let host_gitdir = project_path.join(".git");
+    if !host_gitdir.is_dir() {
+        return None;
+    }
+
+    let home = std::env::var("HOME").ok()?;
+    let root = PathBuf::from(home)
+        .join(".cache")
+        .join("tillandsias")
+        .join("forge-repo-gitdir")
+        .join(project_name);
+    std::fs::create_dir_all(root.join("objects")).ok()?;
+    std::fs::create_dir_all(root.join("refs")).ok()?;
+    std::fs::create_dir_all(root.join("logs")).ok()?;
+
+    for filename in ["HEAD", "packed-refs", "shallow"] {
+        let source = host_gitdir.join(filename);
+        let target = root.join(filename);
+        if source.is_file() {
+            std::fs::copy(source, target).ok()?;
+        } else if target.exists() {
+            std::fs::remove_file(target).ok()?;
+        }
+    }
+
+    let config_path = root.join("config");
+    std::fs::write(&config_path, []).ok()?;
+    git_config_set(&config_path, "core.repositoryformatversion", "0")?;
+    git_config_set(&config_path, "core.bare", "false")?;
+    git_config_set(&config_path, "core.logallrefupdates", "true")?;
+    git_config_set(&config_path, "gc.auto", "0")?;
+    git_config_set(&config_path, "maintenance.auto", "false")?;
+    git_config_set(&config_path, "push.autoSetupRemote", "true")?;
+    git_config_set(&config_path, "push.default", "current")?;
+    git_config_set(
+        &config_path,
+        "core.hooksPath",
+        "/home/forge/.cache/tillandsias/git-hooks",
+    )?;
+
+    if let Some(origin) = read_host_project_origin_url(project_path)
+        .as_deref()
+        .and_then(sanitize_forge_origin_url)
+    {
+        git_config_set(&config_path, "remote.origin.url", &origin)?;
+        git_config_set(
+            &config_path,
+            "remote.origin.fetch",
+            "+refs/heads/*:refs/remotes/origin/*",
+        )?;
+    }
+    write_forge_index(&root, project_path, &host_gitdir)?;
+
+    Some(ForgeRepoGitDir {
+        root,
+        objects: host_gitdir.join("objects"),
+        refs: host_gitdir.join("refs"),
+    })
+}
+
+fn append_forge_repo_gitdir_mount_args(
+    args: &mut Vec<String>,
+    project_name: &str,
+    project_path: &Path,
+) {
+    let target = format!("/home/forge/src/{project_name}/.git");
+    let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) else {
+        // A standard checkout must never fall back to the host `.git` tree.
+        // Mask it even if facade materialization failed; Git will fail closed.
+        // notmpcopyup is LOAD-BEARING: podman's default tmpcopyup copies the
+        // underlying image/bind content into the fresh tmpfs — over a real
+        // host checkout (macOS virtiofs) that means cramming a multi-hundred-
+        // MB .git into 8m, which dies at container start with
+        // `crun: write: No space left on device` (live repro 2026-07-15).
+        // A fail-closed mask must be EMPTY by definition.
+        if project_path.join(".git").is_dir() {
+            args.extend([
+                "--tmpfs".into(),
+                format!("{target}:size=8m,mode=0700,notmpcopyup"),
+            ]);
+        }
+        return;
+    };
+    for (source, mount_target) in [
+        (&gitdir.root, target.clone()),
+        (&gitdir.objects, format!("{target}/objects")),
+        (&gitdir.refs, format!("{target}/refs")),
+    ] {
+        args.extend([
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target={mount_target}",
+                source.display()
+            ),
+        ]);
+    }
 }
 
 /// Extract a named `[section]` (including its key=value lines) from a gitconfig string.
@@ -5628,6 +6062,7 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
 /// stale socket file left over from a crashed tray.
 ///
 /// @trace spec:tray-host-control-socket
+#[cfg(unix)]
 fn control_socket_is_listening(socket_path: &Path) -> bool {
     if !socket_path.exists() {
         return false;
@@ -5637,6 +6072,15 @@ fn control_socket_is_listening(socket_path: &Path) -> bool {
     // exists() check and connect — collapses to "not listening" and lets the
     // caller decide whether to spawn or give up.
     UnixStream::connect(socket_path).is_ok()
+}
+
+// PLEASE REVIEW: linux — minimal stub to keep the workspace compiling on
+// Windows (std::os::unix::net::UnixStream is unix-only; the host control
+// socket is a Linux-host feature today). "Not listening" is the safe
+// answer: callers take their existing spawn-or-give-up path.
+#[cfg(not(unix))]
+fn control_socket_is_listening(_socket_path: &Path) -> bool {
+    false
 }
 
 /// Phase 3, Task 12 & Phase 4: Launch in tray mode with headless subprocess.
@@ -6002,7 +6446,12 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = ["proxy", "git", "inference", "forge"];
+    // Router MUST be in this preflight list: run_opencode_mode later calls
+    // ensure_router_running, and podman-running an absent versioned image
+    // dies pulling localhost/tillandsias-router from a nonexistent registry
+    // (order-327 class; the OpenCode CLI lane was the one lane the 293/327
+    // fixes missed — reproduced live on macOS cold-forge 2026-07-15).
+    let images = ["proxy", "router", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
     ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
 
@@ -6736,6 +7185,7 @@ fn build_project_browser_spec(
 /// transient one.
 ///
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+#[cfg(unix)]
 fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Result<(), String> {
     // Get control socket path from XDG_RUNTIME_DIR or default.
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
@@ -6817,6 +7267,19 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
             other
         )),
     }
+}
+
+// PLEASE REVIEW: linux — minimal stub to keep the workspace compiling on
+// Windows (UnixStream + libc::getuid are unix-only; the tray host control
+// socket is a Linux-host feature today). Callers already treat Err as
+// "refuse to open the browser", which is the correct behavior on a
+// platform with no control socket.
+#[cfg(not(unix))]
+fn send_issue_web_session(_project_label: &str, _cookie_value: &[u8; 32]) -> Result<(), String> {
+    Err(
+        "host control socket (web-session OTP handoff) is not available on this platform"
+            .to_string(),
+    )
 }
 
 fn launch_opencode_web_browser(
@@ -7591,7 +8054,7 @@ pub(crate) fn ensure_enclave_for_project(
 ///
 /// Every option flows through the policy-validated `build_run_argv()` path —
 /// no raw `--unsafe` flags, no host home mounts. Project workspace lands at
-/// `/home/forge/src/<project>/`, CA cert at `/etc/tillandsias/ca.crt`.
+/// `/home/forge/src/<project>/`, CA cert at `/run/tillandsias/ca-chain.crt`.
 /// @trace spec:forge-as-only-runtime
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 /// Name of the podman named volume backing a project's persistent forge tool/
@@ -7614,6 +8077,26 @@ pub(crate) fn build_forge_agent_run_args(
     version: &str,
     mode: ForgeAgentMode,
     debug: bool,
+) -> Vec<String> {
+    build_forge_agent_run_args_with_vault(
+        project_path,
+        project_name,
+        certs_dir,
+        version,
+        mode,
+        debug,
+        None,
+    )
+}
+
+fn build_forge_agent_run_args_with_vault(
+    project_path: &Path,
+    project_name: &str,
+    certs_dir: &Path,
+    version: &str,
+    mode: ForgeAgentMode,
+    debug: bool,
+    vault_secret: Option<&str>,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
     let spec = ContainerSpec::new(image)
@@ -7655,8 +8138,8 @@ pub(crate) fn build_forge_agent_run_args(
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
         // Credential quarantine (order 170): empty tmpfs overlays at
-        // credential-surface paths prevent host ~/.ssh, ~/.config/gh,
-        // and ~/.config/git from leaking into the forge even when the
+        // credential-surface paths prevent host ~/.ssh and ~/.config/gh
+        // from leaking into the forge even when the
         // host checkout IS the source mount. These are FORGE-OWNED empty
         // directories that mask any host material Podman would otherwise
         // resolve from the host filesystem (Podman does NOT auto-bind
@@ -7665,9 +8148,20 @@ pub(crate) fn build_forge_agent_run_args(
         // .ssh/.config would be visible). The tmpfs prevents that.
         .tmpfs("/home/forge/.ssh:size=1m,mode=0700")
         .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
-        .env("GIT_CONFIG_GLOBAL", "/home/forge/.config/git/config")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
+    // Every credentialed agent lane (Codex/Claude/Antigravity) mounts a
+    // scoped Vault token so its entrypoint can restore the opaque OAuth
+    // document from Vault. Gating this on Codex alone (the original
+    // orders-338/340 wiring) left Claude/Antigravity lanes with no token,
+    // so their `provider-oauth-vault restore` failed "no Vault token at
+    // /run/secrets/vault-token" and killed the launch (operator repro
+    // 2026-07-15). OpenCode/Maintenance are credential-free and get none.
+    if mode_provider_pair(mode).is_some()
+        && let Some(secret_name) = vault_secret
+    {
+        spec = spec.secret(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
+    }
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");
     }
@@ -7676,16 +8170,34 @@ pub(crate) fn build_forge_agent_run_args(
         spec = spec.env(name, value);
     }
 
-    let ca_cert = certs_dir.join("intermediate.crt");
-    if ca_cert.exists() {
-        spec = spec.bind_mount(
-            ca_cert.display().to_string(),
-            "/etc/tillandsias/ca.crt",
-            true,
-        );
+    let repo_gitdir_target = format!("/home/forge/src/{project_name}/.git");
+    if let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) {
+        spec = spec
+            .bind_mount(
+                gitdir.root.display().to_string(),
+                &repo_gitdir_target,
+                false,
+            )
+            .bind_mount(
+                gitdir.objects.display().to_string(),
+                format!("{repo_gitdir_target}/objects"),
+                false,
+            )
+            .bind_mount(
+                gitdir.refs.display().to_string(),
+                format!("{repo_gitdir_target}/refs"),
+                false,
+            );
+    } else if project_path.join(".git").is_dir() {
+        // Match the raw OpenCode path's fail-closed fallback. notmpcopyup is
+        // load-bearing — see append_forge_repo_gitdir_mount_args (tmpcopyup
+        // over a real host .git = crun ENOSPC at launch, 2026-07-15).
+        spec = spec.tmpfs(format!(
+            "{repo_gitdir_target}:size=8m,mode=0700,notmpcopyup"
+        ));
     }
-    // NODE_EXTRA_CA_CERTS (order 241): Node.js TLS trust for proxy SSL bump.
-    spec = spec.env("NODE_EXTRA_CA_CERTS", "/etc/tillandsias/ca.crt");
+
+    let ca_cert = certs_dir.join("intermediate.crt");
     if ca_cert.exists() {
         spec = spec.bind_mount(
             ca_cert.display().to_string(),
@@ -7694,8 +8206,8 @@ pub(crate) fn build_forge_agent_run_args(
         );
     }
 
-    // Forge gitconfig injection (order 224): pre-populate $GIT_CONFIG_GLOBAL
-    // with mirror redirect, safe.directory, and CA cert path so the
+    // Forge gitconfig injection (order 224): pre-populate Git's standard
+    // global config with mirror redirect and safe.directory so the
     // entrypoint's rewrite_origin_for_enclave_push can skip redundant writes
     // on a read-only mount. Replaces the empty tmpfs formerly used at
     // /home/forge/.config/git — the file is owned by Tillandsias, stored
@@ -7704,7 +8216,7 @@ pub(crate) fn build_forge_agent_run_args(
     if let Some(gitconfig_path) = write_forge_gitconfig(project_name, project_path) {
         spec = spec.bind_mount(
             gitconfig_path.display().to_string(),
-            "/home/forge/.config/git/config",
+            "/home/forge/.gitconfig",
             true,
         );
     }
@@ -7754,36 +8266,54 @@ pub(crate) fn build_forge_agent_run_argv(
     argv
 }
 
-fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
-    let (oauth_prov, api_prov) = match mode {
-        ForgeAgentMode::Claude => (
-            Some(ProviderId::Claude),
-            Some(crate::vault_bootstrap::ProviderId::Anthropic),
-        ),
-        ForgeAgentMode::Codex => (
-            Some(ProviderId::Codex),
-            Some(crate::vault_bootstrap::ProviderId::Openai),
-        ),
-        ForgeAgentMode::Antigravity => (
-            Some(ProviderId::Antigravity),
-            Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => (None, None),
+/// Map an agent mode to its (OAuth provider, API-key provider) pair.
+/// OpenCode/Maintenance lanes are credential-free by design.
+fn mode_provider_pair(
+    mode: ForgeAgentMode,
+) -> Option<(ProviderId, crate::vault_bootstrap::ProviderId)> {
+    match mode {
+        ForgeAgentMode::Claude => Some((
+            ProviderId::Claude,
+            crate::vault_bootstrap::ProviderId::Anthropic,
+        )),
+        ForgeAgentMode::Codex => Some((
+            ProviderId::Codex,
+            crate::vault_bootstrap::ProviderId::Openai,
+        )),
+        ForgeAgentMode::Antigravity => Some((
+            ProviderId::Antigravity,
+            crate::vault_bootstrap::ProviderId::Gemini,
+        )),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => None,
+    }
+}
+
+/// Check-only half of the provider auth ladder: true when the vault already
+/// holds a usable credential (API key or opaque OAuth document) for this
+/// mode, or the mode needs none. Never launches a login flow — the TRAY
+/// calls this to decide whether the popup terminal must run the login-
+/// capable CLI lane (the tray process itself has no TTY for a device code).
+fn provider_auth_satisfied(mode: ForgeAgentMode, debug: bool) -> bool {
+    let Some((op, ap)) = mode_provider_pair(mode) else {
+        return true;
     };
+    let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    if api_key_exists {
+        return true;
+    }
+    crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.secret_field(), debug)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+}
 
-    if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
-        let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
-            .map(|v| !v.is_empty())
-            .unwrap_or(false);
-        if api_key_exists {
-            return Ok(());
-        }
-
-        let is_oauth_logged_in =
-            crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.id_str(), debug)
-                .map(|v| !v.is_empty())
-                .unwrap_or(false);
-        if is_oauth_logged_in {
+fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
+    let Some((op, _ap)) = mode_provider_pair(mode) else {
+        return Ok(());
+    };
+    {
+        if provider_auth_satisfied(mode, debug) {
             return Ok(());
         }
 
@@ -7793,12 +8323,16 @@ fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String>
                 op.name()
             );
         }
-        let token_script = get_generic_login_token_script(&op);
+        let (image_name, token_script) = match provider_device_auth_spec(&op) {
+            Some(spec) => (spec.image_name, spec.login_script()),
+            None => ("forge", get_generic_login_token_script(&op)),
+        };
         let config = ProviderLoginConfig {
             provider: op,
             auth_model: AuthModel::OAuthDevice,
-            image_name: "forge",
+            image_name,
             token_script,
+            input_mode: LoginInputMode::Terminal,
         };
         run_provider_login(&config, debug)?;
     }
@@ -7842,8 +8376,36 @@ fn run_forge_agent_cli_mode(
     let version = VERSION.trim();
     let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
     ensure_provider_auth(mode, debug)?;
-    let forge_args =
-        build_forge_agent_run_args(&canonical, project_name, &certs_dir, version, mode, debug);
+
+    // Mint a scoped Vault token lease for any credentialed lane so its
+    // entrypoint can restore the OAuth document. Was Codex-only; generalized
+    // to all provider lanes 2026-07-15 (see build_forge_agent_run_args_with_vault).
+    #[cfg(feature = "vault")]
+    let provider_vault_lease = if mode_provider_pair(mode).is_some() {
+        Some(vault_bootstrap::mint_approle_secret_lease(
+            &format!("{}-forge", mode.slug()),
+            &forge_container_name_for_mode(project_name, mode),
+            debug,
+        )?)
+    } else {
+        None
+    };
+    #[cfg(feature = "vault")]
+    let provider_vault_secret = provider_vault_lease
+        .as_ref()
+        .map(|lease| lease.secret_name());
+    #[cfg(not(feature = "vault"))]
+    let provider_vault_secret: Option<&str> = None;
+
+    let forge_args = build_forge_agent_run_args_with_vault(
+        &canonical,
+        project_name,
+        &certs_dir,
+        version,
+        mode,
+        debug,
+        provider_vault_secret,
+    );
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -7894,10 +8456,10 @@ fn run_forge_agent_cli_mode(
 ///
 /// Flow:
 /// 1. Resolve project name + canonical path.
-/// 2. Bring up enclave (proxy + git + inference) via the shared idiomatic
-///    podman layer.
-/// 3. Build the forge `podman run` argv via `ContainerSpec`.
-/// 4. Detect host terminal, spawn it detached with the argv appended.
+/// 2. For Codex, re-exec the CLI lane in the terminal so its scoped Vault
+///    lease lives for the attached session. Other modes build the forge
+///    `podman run` argv via `ContainerSpec` after bringing up the enclave.
+/// 3. Detect host terminal, spawn it detached with the argv appended.
 ///
 /// The terminal window is the user-facing surface. When the user closes it,
 /// `podman run --rm` tears the container down.
@@ -7916,7 +8478,6 @@ pub(crate) fn launch_forge_agent(
     let canonical = project_path
         .canonicalize()
         .unwrap_or_else(|_| project_path.to_path_buf());
-    let version = VERSION.trim();
 
     if debug {
         eprintln!(
@@ -7926,20 +8487,49 @@ pub(crate) fn launch_forge_agent(
         );
     }
 
-    // Unconditional progress receipt: bringing the enclave online can take
-    // several seconds (and minutes on the very first run if the proxy/git/
-    // inference/forge images still need building). Without this line a menu
-    // click looks like it did nothing until the terminal window finally opens.
-    // @trace spec:tray-ux
-    eprintln!(
-        "[tillandsias] launch_forge_agent: preparing enclave for '{project_name}' ({} agent); the terminal opens once it's ready…",
-        mode.slug()
-    );
-
-    let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
-
-    let argv =
-        build_forge_agent_run_argv(&canonical, project_name, &certs_dir, version, mode, debug);
+    // Credentialed agents (Claude/Codex/Antigravity) delegate to the CLI
+    // lane inside the popup terminal: the tray process has no TTY, so the
+    // ensure_provider_auth ladder (vault check -> device-code login in an
+    // ephemeral container -> vault write -> forge launch with injection)
+    // must run where the user can read the device code and copy the URL.
+    // Flow specified by The Tlatoāni 2026-07-15 (order 303 lineage).
+    let argv = if matches!(
+        mode,
+        ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity
+    ) {
+        eprintln!(
+            "[tillandsias] launch_forge_agent: opening the {} terminal for '{project_name}'; the CLI lane prepares the enclave and scoped credential lease",
+            mode.slug()
+        );
+        let current_exe = std::env::current_exe()
+            .map_err(|e| format!("failed to resolve Tillandsias executable: {e}"))?;
+        let mut argv = vec![
+            current_exe.display().to_string(),
+            format!("--{}", mode.slug()),
+            canonical.display().to_string(),
+        ];
+        if debug {
+            argv.push("--debug".to_string());
+        }
+        argv
+    } else {
+        // Unconditional progress receipt: bringing the enclave online can take
+        // several seconds (and minutes on the first run). Without this line a
+        // menu click looks idle until the terminal opens.
+        eprintln!(
+            "[tillandsias] launch_forge_agent: preparing enclave for '{project_name}' ({} agent); the terminal opens once it's ready…",
+            mode.slug()
+        );
+        let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
+        build_forge_agent_run_argv(
+            &canonical,
+            project_name,
+            &certs_dir,
+            VERSION.trim(),
+            mode,
+            debug,
+        )
+    };
 
     let mut term = detect_host_terminal()?;
     if debug {
@@ -9221,6 +9811,100 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    // ── enclave service catalog: publish-it-locally MVP (order 357) ──
+
+    #[test]
+    fn web_service_names_and_url_are_friendly_and_project_scoped() {
+        assert_eq!(
+            web_service_container_name("visual-chess"),
+            "tillandsias-visual-chess-web"
+        );
+        // Friendly name only — NEVER an IP (operator invariant).
+        assert_eq!(
+            web_service_url("visual-chess"),
+            "http://www.visual-chess.localhost:8080"
+        );
+        assert!(
+            !web_service_url("lakanoa").contains(char::is_numeric)
+                || web_service_url("lakanoa").contains("8080")
+        );
+    }
+
+    #[test]
+    fn build_web_service_run_args_bind_mounts_worktree_read_only() {
+        let args = build_web_service_run_args(
+            "visual-chess",
+            Path::new("/home/u/src/visual-chess"),
+            "tillandsias-web:v1",
+        );
+        // Worktree mounted RO at /var/www (debug: live static edits).
+        assert!(
+            args.iter()
+                .any(|a| a == "/home/u/src/visual-chess:/var/www:ro")
+        );
+        // Named + on the enclave net so the router resolves it by name.
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--name" && w[1] == "tillandsias-visual-chess-web")
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--network" && w[1] == ENCLAVE_NET)
+        );
+        // Locked down like every other enclave service.
+        assert!(args.iter().any(|a| a == "--cap-drop=ALL"));
+        assert!(args.iter().any(|a| a == "--security-opt=no-new-privileges"));
+        assert!(args.iter().any(|a| a == "--rm"));
+        // Image is the LAST arg (podman positional), from the host — never
+        // a forge-supplied reference.
+        assert_eq!(args.last().unwrap(), "tillandsias-web:v1");
+    }
+
+    #[test]
+    fn public_catalog_route_has_no_forward_auth_gate() {
+        let route = RouterRoute::public_service(
+            "www.visual-chess",
+            "tillandsias-visual-chess-web",
+            CATALOG_WEB_PORT,
+        );
+        let caddy = generate_dynamic_caddyfile(&[route]);
+        assert!(caddy.contains("http://www.visual-chess.localhost:8080"));
+        assert!(caddy.contains("reverse_proxy tillandsias-visual-chess-web:8080"));
+        // The whole point: a published static site is PUBLIC — no OTP gate.
+        assert!(
+            !caddy.contains("forward_auth"),
+            "public catalog route must not be behind the session gate:\n{caddy}"
+        );
+    }
+
+    #[test]
+    fn private_routes_keep_their_auth_gate() {
+        // Regression guard: adding the public branch must not drop auth from
+        // ordinary (Observatorium / OpenCode Web) routes.
+        let route = RouterRoute::new("observatorium.proj", "tillandsias-proj-forge", 7000);
+        let caddy = generate_dynamic_caddyfile(&[route]);
+        assert!(
+            caddy.contains("forward_auth"),
+            "private routes must stay gated:\n{caddy}"
+        );
+    }
+
+    #[test]
+    fn public_flag_defaults_false_and_round_trips_json() {
+        // Existing route registries on disk have no `public` field — it must
+        // default to false (every legacy route stays gated).
+        let legacy: RouterRoute =
+            serde_json::from_str(r#"{"subdomain":"a.b","upstream_host":"h","port":80}"#).unwrap();
+        assert!(!legacy.public);
+        let pubroute = RouterRoute::public_service("www.p", "h", 8080);
+        let json = serde_json::to_string(&pubroute).unwrap();
+        assert!(json.contains("\"public\":true"));
+        assert_eq!(
+            serde_json::from_str::<RouterRoute>(&json).unwrap(),
+            pubroute
+        );
+    }
+
     /// 2026-07-12 (windows attended smoke): a lane flag missing from
     /// `is_cli_mode` makes that lane's invocation acquire the "launcher"
     /// singleton, which SIGTERM+SIGKILLs the RUNNING headless service — a
@@ -9303,21 +9987,33 @@ mod tests {
             .find("ensure_provider_auth(mode, debug)")
             .expect("forge launch must gate on ensure_provider_auth (login-first)");
         let build_at = window
-            .find("build_forge_agent_run_args(")
-            .expect("forge launch must build run args");
+            .find("build_forge_agent_run_args_with_vault(")
+            .expect("forge launch must build Vault-aware run args");
         assert!(
             gate_at < build_at,
-            "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args"
+            "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args_with_vault"
         );
-        // The gate itself must implement token-presence-then-login, not blind login.
+        // The gate itself must implement token-presence-then-login, not blind
+        // login. The presence check lives in provider_auth_satisfied (shared
+        // with the tray's no-TTY routing decision); the gate must consult it
+        // before running the login flow.
         let gate = source
             .split("fn ensure_provider_auth(")
             .nth(1)
             .and_then(|s| s.split("\nfn ").next())
             .expect("ensure_provider_auth source");
         assert!(
-            gate.contains("read_provider_api_key") && gate.contains("run_provider_login"),
+            gate.contains("provider_auth_satisfied") && gate.contains("run_provider_login"),
             "ensure_provider_auth must check a stored token before running the login flow"
+        );
+        let check = source
+            .split("fn provider_auth_satisfied(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("provider_auth_satisfied source");
+        assert!(
+            check.contains("read_provider_api_key") && check.contains("vault_kv_get_via_exec"),
+            "provider_auth_satisfied must check API key then OAuth document"
         );
     }
 
@@ -9394,7 +10090,10 @@ mod tests {
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+        ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     #[test]
@@ -9721,15 +10420,18 @@ mod tests {
         // Verify the credential quarantine tmpfs overlays (order 170/224) are
         // present in the forge agent mount args. These mask host credential
         // surfaces when the source mount overlaps the host checkout.
-        // ~/.ssh and ~/.config/gh remain empty tmpfs dirs; ~/.config/git/config
-        // is replaced by a read-only bind-mount of a Tillandsias-owned pre-populated
-        // .gitconfig (order 224) so the mirror redirect is available at launch.
+        // ~/.ssh and ~/.config/gh remain empty tmpfs dirs; ~/.gitconfig is a
+        // read-only bind-mount of a Tillandsias-owned pre-populated config
+        // (order 224) so the mirror redirect is available at launch.
         // @trace plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
         // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
+        let certs = tempfile::tempdir().expect("cert directory");
+        std::fs::write(certs.path().join("intermediate.crt"), "fixture CA")
+            .expect("write fixture CA");
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
-            &PathBuf::from("/tmp/ca"),
+            certs.path(),
             "1.2.3",
             ForgeAgentMode::Claude,
             false,
@@ -9745,10 +10447,10 @@ mod tests {
             if arg.contains("/home/forge/.config/gh") && arg.contains("size=1m") {
                 found_gh_config = true;
             }
-            // The .git/config is now a read-only bind mount of a pre-populated
+            // The global config is a read-only bind mount of a pre-populated
             // forge-owned config (order 224), not an empty tmpfs.
             if arg.contains("forge-gitconfig")
-                && arg.contains("/home/forge/.config/git/config")
+                && arg.contains("/home/forge/.gitconfig")
                 && arg.contains("readonly=true")
             {
                 found_git_config_ro = true;
@@ -9764,16 +10466,35 @@ mod tests {
         );
         assert!(
             found_git_config_ro,
-            "must mount forge-owned gitconfig at /home/forge/.config/git/config (order 224)"
+            "must mount forge-owned gitconfig at /home/forge/.gitconfig (order 224)"
         );
 
-        // Verify GIT_CONFIG_GLOBAL redirects to the injected config.
-        let has_git_config_global = argv.iter().any(|a| {
-            a.starts_with("GIT_CONFIG_GLOBAL=") && a.contains("/home/forge/.config/git/config")
-        });
         assert!(
-            has_git_config_global,
-            "must set GIT_CONFIG_GLOBAL to forge gitconfig path"
+            !argv.iter().any(|a| a.starts_with("GIT_CONFIG_GLOBAL=")),
+            "standard ~/.gitconfig mount must not require GIT_CONFIG_GLOBAL"
+        );
+        assert!(
+            argv.iter().any(|a| {
+                a.contains("target=/run/tillandsias/ca-chain.crt") && a.contains("readonly=true")
+            }),
+            "typed forge launcher must mount the single runtime CA input"
+        );
+        for forbidden in [
+            "GIT_SSL_CAINFO=",
+            "SSL_CERT_FILE=",
+            "REQUESTS_CA_BUNDLE=",
+            "NODE_EXTRA_CA_CERTS=",
+        ] {
+            assert!(
+                !argv.iter().any(|a| a.starts_with(forbidden)),
+                "typed forge launcher must not inject {forbidden}"
+            );
+        }
+        assert!(
+            !argv
+                .iter()
+                .any(|a| a.contains("target=/etc/tillandsias/ca.crt")),
+            "typed forge launcher must not duplicate the runtime CA mount"
         );
     }
 
@@ -9914,6 +10635,158 @@ mod tests {
             login_window.contains("ensure_git_login(debug)?"),
             "run_provider_login must ensure enclave+egress+ca+vault+proxy via the dependency model: {login_window}"
         );
+    }
+
+    #[test]
+    fn github_login_non_tty_requires_explicit_stdin_mode() {
+        assert_eq!(
+            select_github_login_input_mode(false, true),
+            Ok(LoginInputMode::Terminal)
+        );
+        assert_eq!(
+            select_github_login_input_mode(true, false),
+            Ok(LoginInputMode::StdinToken)
+        );
+
+        let error = select_github_login_input_mode(false, false)
+            .expect_err("non-TTY login without --with-token must fail before Podman startup");
+        assert!(error.contains("--github-login requires a terminal"));
+        assert!(error.contains("--with-token"));
+    }
+
+    #[test]
+    fn github_login_stdin_mode_never_reads_from_dev_tty() {
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("IFS= read -r TOKEN"));
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("gh auth login"));
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("--with-token"));
+        assert!(!GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("/dev/tty"));
+
+        let args = provider_login_exec_args(
+            "login-helper",
+            GH_LOGIN_STDIN_TOKEN_SCRIPT,
+            LoginInputMode::StdinToken,
+        );
+        assert!(args.iter().any(|arg| arg == "--interactive"));
+        assert!(!args.iter().any(|arg| arg == "--tty"));
+    }
+
+    #[test]
+    fn github_login_terminal_mode_keeps_tty_allocation() {
+        let args = provider_login_exec_args(
+            "login-helper",
+            GH_LOGIN_TOKEN_SCRIPT,
+            LoginInputMode::Terminal,
+        );
+        assert!(args.iter().any(|arg| arg == "--interactive"));
+        assert!(args.iter().any(|arg| arg == "--tty"));
+    }
+
+    #[test]
+    fn codex_device_auth_spec_pins_command_and_opaque_schema() {
+        let spec = provider_device_auth_spec(&ProviderId::Codex)
+            .expect("Codex must expose the supported device-auth spec");
+        assert_eq!(spec.image_name, "forge");
+        assert_eq!(spec.login_program, "/usr/local/bin/codex-device-auth");
+        assert!(spec.login_args.is_empty());
+        assert_eq!(spec.credential_path, "~/.codex/auth.json");
+        assert_eq!(spec.vault_path, "secret/codex/oauth");
+        assert_eq!(spec.vault_field, "credentials_b64");
+        assert_eq!(spec.login_script(), "exec /usr/local/bin/codex-device-auth");
+        assert_eq!(ProviderId::Codex.secret_field(), "credentials_b64");
+    }
+
+    #[test]
+    fn codex_login_never_uses_generic_paste_token_script() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("} else if codex_login {")
+            .expect("Codex login dispatch must exist");
+        let end = source[start..]
+            .find("} else if antigravity_login {")
+            .map(|offset| start + offset)
+            .expect("Antigravity branch must follow Codex");
+        let branch = &source[start..end];
+        assert!(branch.contains("provider_device_auth_spec(&ProviderId::Codex)"));
+        assert!(!branch.contains("get_generic_login_token_script"));
+        assert!(!branch.contains("read -r -s"));
+    }
+
+    #[test]
+    fn claude_login_never_uses_generic_paste_token_script() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("} else if claude_login {")
+            .expect("Claude login dispatch must exist");
+        let end = source[start..]
+            .find("} else if codex_login {")
+            .map(|offset| start + offset)
+            .expect("Codex branch must follow Claude");
+        let branch = &source[start..end];
+        assert!(branch.contains("provider_device_auth_spec(&ProviderId::Claude)"));
+        assert!(!branch.contains("get_generic_login_token_script"));
+        assert!(!branch.contains("read -r -s"));
+    }
+
+    #[test]
+    fn antigravity_login_never_uses_generic_paste_token_script() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("} else if antigravity_login {")
+            .expect("Antigravity login dispatch must exist");
+        let end = source[start..]
+            .find("} else {")
+            .map(|offset| start + offset)
+            .expect("fallback branch must follow Antigravity");
+        let branch = &source[start..end];
+        assert!(branch.contains("provider_device_auth_spec(&ProviderId::Antigravity)"));
+        assert!(!branch.contains("get_generic_login_token_script"));
+        assert!(!branch.contains("read -r -s"));
+    }
+
+    #[test]
+    fn claude_device_auth_spec_pins_command_and_opaque_schema() {
+        let spec = provider_device_auth_spec(&ProviderId::Claude)
+            .expect("Claude device-auth spec must exist");
+        assert_eq!(spec.login_program, "/usr/local/bin/provider-device-auth");
+        assert_eq!(spec.login_args, &["claude"]);
+        assert_eq!(spec.credential_path, "~/.claude/.credentials.json");
+        assert_eq!(spec.vault_path, "secret/claude/oauth");
+        assert_eq!(spec.vault_field, "credentials_b64");
+        assert_eq!(ProviderId::Claude.secret_field(), "credentials_b64");
+        assert_eq!(
+            spec.login_script(),
+            "exec /usr/local/bin/provider-device-auth claude"
+        );
+    }
+
+    #[test]
+    fn antigravity_device_auth_spec_pins_command_and_opaque_schema() {
+        let spec = provider_device_auth_spec(&ProviderId::Antigravity)
+            .expect("Antigravity device-auth spec must exist");
+        assert_eq!(spec.login_program, "/usr/local/bin/provider-device-auth");
+        assert_eq!(spec.login_args, &["antigravity"]);
+        assert_eq!(
+            spec.credential_path,
+            "~/.gemini/antigravity-cli/antigravity-oauth-token"
+        );
+        assert_eq!(spec.vault_path, "secret/antigravity/oauth");
+        assert_eq!(spec.vault_field, "credentials_b64");
+        assert_eq!(ProviderId::Antigravity.secret_field(), "credentials_b64");
+    }
+
+    #[test]
+    fn tray_credentialed_agents_delegate_to_cli_lane_for_tty_login() {
+        // The tray process has no TTY; Claude/Codex/Antigravity clicks must
+        // route through the CLI lane (ensure_provider_auth ladder) inside
+        // the popup terminal instead of a bare podman argv.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("pub(crate) fn launch_forge_agent(")
+            .expect("launch_forge_agent must exist");
+        let window = &source[start..start + 3000];
+        assert!(window.contains(
+            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity"
+        ));
     }
 
     #[test]
@@ -10437,9 +11310,8 @@ mod tests {
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
         );
         // Credential quarantine (order 224): .ssh and .config/gh must be
-        // empty tmpfs overlays, GIT_CONFIG_GLOBAL must be set to the
-        // forge-injected gitconfig path (may or may not be present depending
-        // on whether HOME is set in the test environment).
+        // empty tmpfs overlays. The standard ~/.gitconfig mount may or may
+        // not be present depending on whether HOME is set in the test environment.
         assert!(has_arg(&args, "--tmpfs"));
         assert!(
             args.iter()
@@ -10450,6 +11322,41 @@ mod tests {
             args.iter()
                 .any(|arg| arg == "/home/forge/.config/gh:size=1m,mode=0700"),
             "opencode forge args must quarantine .config/gh via tmpfs; got {args:?}"
+        );
+        assert!(
+            !args.iter().any(|arg| arg.starts_with("GIT_CONFIG_GLOBAL=")),
+            "opencode forge args must use Git's standard global config path; got {args:?}"
+        );
+        if args.iter().any(|arg| arg.contains("forge-gitconfig")) {
+            assert!(
+                args.iter()
+                    .any(|arg| arg.contains("target=/home/forge/.gitconfig,readonly=true")),
+                "opencode forge args must mount generated config at ~/.gitconfig; got {args:?}"
+            );
+        }
+        assert!(
+            args.iter().any(|arg| {
+                arg.contains("target=/run/tillandsias/ca-chain.crt")
+                    && arg.contains("readonly=true")
+            }),
+            "opencode forge args must mount the single runtime CA input; got {args:?}"
+        );
+        for forbidden in [
+            "GIT_SSL_CAINFO=",
+            "SSL_CERT_FILE=",
+            "REQUESTS_CA_BUNDLE=",
+            "NODE_EXTRA_CA_CERTS=",
+        ] {
+            assert!(
+                !args.iter().any(|arg| arg.starts_with(forbidden)),
+                "opencode forge args must not inject {forbidden}; got {args:?}"
+            );
+        }
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.contains("target=/etc/tillandsias/ca.crt")),
+            "opencode forge args must not duplicate the runtime CA mount; got {args:?}"
         );
     }
 
@@ -10542,6 +11449,70 @@ mod tests {
     }
 
     #[test]
+    fn forge_mounts_scoped_vault_lease_for_every_credentialed_mode() {
+        // 2026-07-15: the scoped vault-token lease was Codex-only, so
+        // Claude/Antigravity lanes had no token and their OAuth restore died
+        // "no Vault token" → fatal launch. Now EVERY credentialed mode
+        // (Codex/Claude/Antigravity) mounts its lease; OpenCode/Maintenance
+        // (credential-free) mount none.
+        for mode in [
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Antigravity,
+        ] {
+            let args = build_forge_agent_run_args_with_vault(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+                Some("provider-forge-lease"),
+            );
+            assert!(
+                has_arg(&args, "--secret"),
+                "{mode:?} must mount the vault lease"
+            );
+            assert!(has_arg(
+                &args,
+                &format!("provider-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
+            ));
+        }
+
+        // Credential-free lanes never mount a provider lease.
+        for mode in [ForgeAgentMode::OpenCode, ForgeAgentMode::Maintenance] {
+            let args = build_forge_agent_run_args_with_vault(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+                Some("must-not-mount"),
+            );
+            assert!(
+                !args.iter().any(|arg| arg.contains("must-not-mount")),
+                "{mode:?} must not mount a provider lease"
+            );
+        }
+    }
+
+    #[test]
+    fn tray_codex_launch_reexecs_cli_for_lease_lifetime() {
+        // Extended 2026-07-15: the CLI-lane delegation now covers ALL
+        // credentialed agents (Claude/Codex/Antigravity), same reasoning —
+        // the tray has no TTY for the device-code login.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source_window(source, "pub(crate) fn launch_forge_agent(");
+        assert!(body.contains(
+            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity"
+        ));
+        assert!(body.contains("std::env::current_exe()"));
+        assert!(body.contains("format!(\"--{}\", mode.slug())"));
+        assert!(body.contains("canonical.display().to_string()"));
+    }
+
+    #[test]
     fn forge_agent_run_args_export_debug_when_requested() {
         let args = build_forge_agent_run_args(
             &PathBuf::from("/tmp/project"),
@@ -10615,8 +11586,8 @@ mod tests {
             "config must contain safe.directory"
         );
         assert!(
-            contents.contains("sslCAInfo = /etc/tillandsias/ca.crt"),
-            "config must contain CA cert path"
+            !contents.contains("sslCAInfo"),
+            "config must rely on the image's system-default CA path"
         );
         assert!(
             contents.contains(&format!("insteadOf = {}", origin_url)),
@@ -10703,6 +11674,176 @@ mod tests {
         // SAFETY: single-threaded test, no concurrent env reads.
         match orig_home {
             Some(h) => unsafe { std::env::set_var("HOME", h) },
+            None => unsafe { std::env::remove_var("HOME") },
+        }
+    }
+
+    #[test]
+    fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
+        let _guard = env_lock();
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("project");
+        std::fs::create_dir_all(&project_path).expect("create project");
+
+        let git = |args: &[&str]| {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(&project_path)
+                .args(args)
+                .output()
+                .expect("run git");
+            assert!(
+                output.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init"]);
+        git(&[
+            "config",
+            "remote.origin.url",
+            "https://host-user:host-secret@github.com/example/repo.git",
+        ]);
+        git(&["config", "credential.helper", "host-secret-helper"]);
+        git(&[
+            "config",
+            "url.ssh://host-only/.insteadOf",
+            "https://github.com/",
+        ]);
+        git(&["config", "include.path", "/host/secret.gitconfig"]);
+        git(&["config", "core.hooksPath", "/host/hooks"]);
+        std::fs::write(project_path.join("tracked.txt"), "tracked\n").expect("write worktree");
+        git(&["add", "tracked.txt"]);
+
+        let original_home = std::env::var_os("HOME");
+        // SAFETY: serialized with all other environment-mutating tests.
+        unsafe { std::env::set_var("HOME", tmp.path()) };
+
+        let host_config = project_path.join(".git/config");
+        let host_config_before = std::fs::read(&host_config).expect("read host config");
+        let gitdir = write_forge_repo_gitdir("alpha", &project_path).expect("forge gitdir");
+        let config =
+            std::fs::read_to_string(gitdir.root.join("config")).expect("read forge local config");
+
+        assert!(config.contains("https://github.com/example/repo.git"));
+        assert!(config.contains("fetch = +refs/heads/*:refs/remotes/origin/*"));
+        assert!(config.contains("auto = 0"));
+        for forbidden in [
+            "host-secret",
+            "credential",
+            "insteadOf",
+            "include",
+            "/host/hooks",
+        ] {
+            assert!(
+                !config.contains(forbidden),
+                "forge local config leaked host key/value {forbidden:?}: {config}"
+            );
+        }
+        assert!(gitdir.root.join("HEAD").is_file());
+        assert!(gitdir.root.join("index").is_file());
+        let forge_index = Command::new("git")
+            .arg("--git-dir")
+            .arg(&gitdir.root)
+            .arg("ls-files")
+            .output()
+            .expect("read forge index");
+        assert!(forge_index.status.success());
+        assert!(
+            forge_index.stdout.is_empty(),
+            "host-only staged state must not enter the forge index"
+        );
+
+        let agent_args = build_forge_agent_run_args(
+            &project_path,
+            "alpha",
+            &tmp.path().join("ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+        let raw_args = build_opencode_forge_args(
+            &project_path,
+            "alpha",
+            None,
+            &tmp.path().join("ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            false,
+            false,
+        );
+        for args in [&agent_args, &raw_args] {
+            let workspace = args
+                .iter()
+                .position(|arg| arg.contains(":/home/forge/src/alpha:rw"))
+                .expect("workspace mount");
+            let facade = args
+                .iter()
+                .position(|arg| {
+                    arg.contains("forge-repo-gitdir")
+                        && arg.contains("target=/home/forge/src/alpha/.git")
+                        && !arg.contains("target=/home/forge/src/alpha/.git/")
+                })
+                .expect("gitdir facade mount");
+            let objects = args
+                .iter()
+                .position(|arg| arg.contains("target=/home/forge/src/alpha/.git/objects"))
+                .expect("objects mount");
+            let refs = args
+                .iter()
+                .position(|arg| arg.contains("target=/home/forge/src/alpha/.git/refs"))
+                .expect("refs mount");
+            assert!(workspace < facade && facade < objects && objects < refs);
+            assert!(!args[facade].contains("readonly=true"));
+        }
+
+        let status = Command::new("git")
+            .args(["config", "--file"])
+            .arg(gitdir.root.join("config"))
+            .args(["user.x", "forge-only"])
+            .status()
+            .expect("write forge-local config");
+        assert!(status.success());
+        assert_eq!(
+            std::fs::read(&host_config).expect("re-read host config"),
+            host_config_before,
+            "forge-local config writes must not alter host .git/config"
+        );
+
+        // SAFETY: serialized with all other environment-mutating tests.
+        unsafe { std::env::remove_var("HOME") };
+        let fail_closed_agent = build_forge_agent_run_args(
+            &project_path,
+            "alpha",
+            &tmp.path().join("ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+        let fail_closed_raw = build_opencode_forge_args(
+            &project_path,
+            "alpha",
+            None,
+            &tmp.path().join("ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            false,
+            false,
+        );
+        for args in [&fail_closed_agent, &fail_closed_raw] {
+            assert!(
+                args.iter().any(|arg| {
+                    arg == "/home/forge/src/alpha/.git:size=8m,mode=0700,notmpcopyup"
+                }),
+                "facade errors must mask host .git with a fail-closed EMPTY tmpfs — \
+                 notmpcopyup is load-bearing (tmpcopyup over a real host .git = \
+                 crun ENOSPC at launch, macOS live repro 2026-07-15)"
+            );
+        }
+
+        // SAFETY: serialized with all other environment-mutating tests.
+        match original_home {
+            Some(home) => unsafe { std::env::set_var("HOME", home) },
             None => unsafe { std::env::remove_var("HOME") },
         }
     }
@@ -11006,6 +12147,58 @@ mod tests {
             window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
             "observatorium mode must ensure the web image exists before launch"
         );
+    }
+
+    #[test]
+    fn opencode_mode_preflights_router_image_before_start() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_opencode_mode(");
+        assert!(
+            window.contains(
+                "let images = [\"proxy\", \"router\", \"git\", \"inference\", \"forge\"];"
+            ) && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            "OpenCode CLI lane must build the router image before ensure_router_running \
+             (order-327 class; macOS cold-forge live repro 2026-07-15)"
+        );
+    }
+
+    #[test]
+    fn forge_launch_preflights_router_image_before_start() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "pub(crate) fn ensure_enclave_for_project(");
+
+        assert!(
+            window.contains("let images = [\"router\", \"git\", \"inference\", \"forge\"];")
+                && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            "cold forge launch must build the router image before starting its container"
+        );
+    }
+
+    #[test]
+    fn on_demand_image_build_error_names_image_and_recovery_command() {
+        let message = format_on_demand_image_build_error(
+            "localhost/tillandsias-router:v1.2.3",
+            "fixture build failure",
+        );
+
+        assert!(message.contains("localhost/tillandsias-router:v1.2.3"));
+        assert!(message.contains("fixture build failure"));
+        assert!(message.contains("tillandsias --init"));
+    }
+
+    #[test]
+    fn on_demand_image_build_announces_slow_work_before_buffered_build() {
+        let source = source_window(
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
+            "fn ensure_image_exists(",
+        );
+        let announce = source
+            .find("[tillandsias] building missing image")
+            .expect("missing-image build must announce slow work");
+        let build = source
+            .find(".build_image(")
+            .expect("image build call must remain present");
+        assert!(announce < build, "announcement must precede buffered build");
     }
 
     #[test]

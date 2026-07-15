@@ -94,28 +94,30 @@ as named constants.
 - **ID**: vsock-transport.framing.protocol-unchanged@v1
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [vsock-transport.invariant.framing-shared-with-unix, vsock-transport.invariant.wire-version-1]
+- **Invariants**: [vsock-transport.invariant.framing-shared-with-unix, vsock-transport.invariant.wire-version-2]
 
 The vsock transport SHALL reuse the existing
 `tillandsias-control-wire` framing without modification: 4-byte big-endian
 `u32` length prefix followed by a `postcard`-serialised `ControlEnvelope`.
 `WIRE_VERSION`, `MAX_MESSAGE_BYTES`, and `MAX_MCP_FRAME_BYTES` SHALL retain
-their current values. The `Hello`/`HelloAck` handshake (client sends
-`Hello { wire_version, client_kind }`; server replies `HelloAck { wire_version,
-server_kind }`; mismatched versions abort the connection) SHALL be byte-for-byte
-identical to the Unix-socket variant.
+their current values. The `Hello`/`HelloAck` handshake uses a
+`ControlEnvelope { wire_version, ... }`: the client body is
+`Hello { from, capabilities }` and the server body is
+`HelloAck { wire_version, server_caps }`. Mismatched versions abort the
+connection. Framing and message shapes SHALL be byte-for-byte identical to the
+Unix-socket variant.
 
 @trace spec:vsock-transport
 
 #### Scenario: Same encoder/decoder serves both transports
 - **WHEN** the encoder code path is inspected
-- **THEN** the same `encode_envelope` and `decode_envelope` functions SHALL serve both Unix and vsock streams
+- **THEN** the same `encode` and `decode` functions SHALL serve both Unix and vsock streams
 - **AND** the transport difference SHALL be isolated to `connect()` / `bind()` only
 
 #### Scenario: Handshake version mismatch aborts cleanly
-- **WHEN** a client with `wire_version = 2` connects to a server with `wire_version = 1`
-- **THEN** the server SHALL reply with `HelloAck { wire_version: 1, … }`
-- **AND** the client SHALL detect the mismatch, close the connection with a structured `VersionMismatch` error, and surface the error in `MenuStructure.status_text`
+- **WHEN** a legacy client with envelope `wire_version = 1` connects to the current version-2 server
+- **THEN** the server SHALL log the mismatch and close before sending `HelloAck`
+- **AND** the client SHALL observe a failed/EOF handshake instead of treating the connection as ready
 
 #### Scenario: Message size enforcement
 - **WHEN** a peer sends a framed message larger than `MAX_MESSAGE_BYTES`
@@ -184,6 +186,36 @@ emitted as a structured log event with `spec = "vsock-transport"`.
 - **THEN** the receiver SHALL emit `Err(TransportError::DecodeFailed)` and close the connection
 - **AND** SHALL log `spec = "vsock-transport"` with the byte offset where decoding failed
 
+### Requirement: Silent guest work remains live through capability-gated heartbeats
+- **ID**: vsock-transport.exec.heartbeat-liveness@v1
+- **Modality**: MUST
+- **Measurable**: true
+
+Long-running PTY exec clients SHALL advertise `pty.heartbeat@v1`. While a
+child is alive and produces no terminal bytes, the guest SHALL send an empty
+`PtyData{ToHost}` frame every 30 seconds only to clients that advertised that
+capability. The frame SHALL reset the shared exec idle deadline and SHALL NOT
+be delivered to terminal output callbacks or mark an interactive terminal
+attached. All exec readers SHALL use one default 300-second deadline,
+overridable with `TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS`; invalid values and
+values below 60 seconds SHALL fail loudly.
+
+@trace spec:vsock-transport
+
+#### Scenario: A silent cold image build outlives the idle deadline
+- **WHEN** a guest image build emits no terminal bytes for longer than the
+  configured exec idle deadline
+- **AND** both peers negotiated `pty.heartbeat@v1`
+- **THEN** empty heartbeat frames SHALL keep the exec connection live
+- **AND** the eventual build output and `PtyClose` SHALL reach the host
+- **AND** a peer that sends neither data nor heartbeat SHALL still time out
+
+#### Scenario: Mixed-version interactive clients receive no heartbeat frames
+- **WHEN** a PTY client advertises `pty.attach@v1` without
+  `pty.heartbeat@v1`
+- **THEN** the guest SHALL NOT emit empty heartbeat frames on that connection
+- **AND** defensive host routing SHALL ignore any empty `PtyData{ToHost}` frame
+
 ## Invariants
 
 ### Invariant: Host CID is 2
@@ -203,12 +235,12 @@ emitted as a structured log event with `spec = "vsock-transport"`.
 
 ### Invariant: Framing shared with Unix transport
 - **ID**: vsock-transport.invariant.framing-shared-with-unix
-- **Expression**: `encode_envelope AND decode_envelope ARE_SHARED_FNS BETWEEN unix AND vsock paths`
+- **Expression**: `encode AND decode ARE_SHARED_FNS BETWEEN unix AND vsock paths`
 - **Measurable**: true
 
-### Invariant: Wire version is 1
-- **ID**: vsock-transport.invariant.wire-version-1
-- **Expression**: `WIRE_VERSION == 1`
+### Invariant: Wire version is 2
+- **ID**: vsock-transport.invariant.wire-version-2
+- **Expression**: `WIRE_VERSION == 2`
 - **Measurable**: true
 
 ### Invariant: New variants are postcard-stable
@@ -236,6 +268,7 @@ emitted as a structured log event with `spec = "vsock-transport"`.
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:vsock-handshake` — primary handshake verification.
 - `litmus:vm-shutdown-drains-forges` — exercises `VmShutdownRequest` semantics.
+- `litmus:vsock-exec-heartbeat` — pins capability-gated silent-work liveness, the unified timeout policy, and empty-frame suppression.
 
 ## Litmus Chain
 

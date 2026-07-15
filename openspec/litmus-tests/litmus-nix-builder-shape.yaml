@@ -9,6 +9,7 @@ phase: pre-build
 preconditions:
   - workspace contains flake.nix
   - workspace contains scripts/build-image.sh
+  - workspace contains scripts/hash-image-sources.sh
   - workspace contains openspec/specs/nix-builder/spec.md
 
 critical_path:
@@ -18,7 +19,7 @@ critical_path:
     expected_behavior: "nix builder copyToRoot present"
 
   - step: "assert build-image uses git ls-files for tracked source hashing"
-    command: "grep -Fq 'ls-files --others --exclude-standard' scripts/build-image.sh && grep -Fq 'ls-files -z --' scripts/build-image.sh && grep -Fq 'Untracked files detected under' scripts/build-image.sh && echo 'nix builder git-tracked hash present'"
+    command: "grep -Fq 'hash-image-sources.sh' scripts/build-image.sh && grep -Fq 'ls-files --others --exclude-standard' scripts/hash-image-sources.sh && grep -Fq 'ls-files -z --' scripts/hash-image-sources.sh && echo 'nix builder git-tracked hash present'"
     timeout_ms: 10000
     expected_behavior: "nix builder git-tracked hash present"
 

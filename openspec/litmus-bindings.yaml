@@ -141,8 +141,9 @@ specs:
   - litmus:ci-release-toolchain-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
+  - litmus:smoke-release-channel-shape
   coverage_ratio: 75
-  last_verified: '2026-07-14'
+  last_verified: '2026-07-15'
 - spec_id: codex-tray-launcher
   status: active
   litmus_tests:
@@ -189,8 +190,9 @@ specs:
   - litmus:forge-firstrun-prebuilt-tools-arch-shape
   - litmus:brew-ondemand-tools-shape
   - litmus:harness-rollback-shape
+  - litmus:forge-validation-profile
   coverage_ratio: 80
-  last_verified: '2026-07-05'
+  last_verified: '2026-07-14'
 - spec_id: dev-build
   status: active
   litmus_tests:
@@ -376,8 +378,12 @@ specs:
   - litmus:git-mirror-safe-refspec-push
   - litmus:git-mirror-ref-convergence
   - litmus:git-mirror-yaml-gate-shape
-  coverage_ratio: 75
-  last_verified: '2026-07-12'
+  - litmus:git-mirror-relay-verified-ack
+  - litmus:forge-gitconfig-bidirectional-quarantine
+  - litmus:forge-standard-gitconfig-path
+  - litmus:forge-config-trust-cross-platform-parity
+  coverage_ratio: 80
+  last_verified: '2026-07-14'
 - spec_id: github-credential-health
   status: active
   litmus_tests:
@@ -498,8 +504,9 @@ specs:
   - litmus:forge-liveness-probe-shape
   - litmus:forge-e2e-rate-limit-shape
   - litmus:smoke-lock-fd-isolation-shape
+  - litmus:meta-orchestration-dirty-tree-safety
   coverage_ratio: 100
-  last_verified: '2026-07-11'
+  last_verified: '2026-07-14'
 - spec_id: logging-levels
   status: obsolete
   litmus_tests: []
@@ -628,6 +635,12 @@ specs:
   - litmus:agent-egress-allowlist-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
+- spec_id: transparent-https-caching
+  status: active
+  litmus_tests:
+  - litmus:forge-runtime-ca-trust
+  coverage_ratio: 100
+  last_verified: '2026-07-14'
 - spec_id: remote-projects
   status: active
   litmus_tests:
@@ -885,6 +898,8 @@ specs:
   - litmus:vault-policy-forge-cannot-read-github-token
   - litmus:git-mirror-safe-refspec-push
   - litmus:vault-github-token-capture-shape
+  - litmus:codex-device-auth-shape
+  - litmus:provider-device-auth-shape
   - litmus:vault-https-shape
   - litmus:vault-entrypoint-hardened-shape
   - litmus:vault-recreate-mutex
@@ -922,3 +937,10 @@ specs:
   - litmus:host-guest-no-cfg-transport-selection
   coverage_ratio: 67
   last_verified: '2026-07-06'
+- spec_id: vsock-transport
+  status: active
+  litmus_tests:
+  - litmus:vsock-handshake
+  - litmus:vsock-exec-heartbeat
+  coverage_ratio: 100
+  last_verified: '2026-07-14'

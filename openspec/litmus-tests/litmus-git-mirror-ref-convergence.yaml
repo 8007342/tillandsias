@@ -2,8 +2,8 @@
 # Order 301 regression pin: the mirror's reconciliation fetch must land in
 # remote-tracking refs only, never clobber a just-received exported branch.
 # A stale-upstream reconcile fetch under the old "+refs/*:refs/*" refspec
-# force-overwrote the mirror's freshly received head before the post-receive
-# hook relayed it, so GitHub advanced while the mirror stayed behind until an
+# force-overwrote the mirror's freshly received head before the legacy
+# post-receive relay, so GitHub advanced while the mirror stayed behind until an
 # identical second push (also stranded startup-retry commits).
 name: litmus:git-mirror-ref-convergence
 spec: git-mirror-service
@@ -22,7 +22,7 @@ phase: pre-build
 preconditions:
   - workspace contains scripts/test-git-mirror-ref-convergence.sh
   - workspace contains images/git/entrypoint.sh
-  - workspace contains images/git/post-receive-hook.sh
+  - workspace contains images/git/relay-refs.sh
 
 critical_path:
   - step: "ref-convergence fixture passes all three cases (safe converges, unsafe controls reproduce the bug)"

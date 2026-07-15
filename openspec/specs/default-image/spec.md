@@ -511,6 +511,42 @@ theater without weakening security.
 - **THEN** the answer SHALL reference the nine containment boundaries listed
   above, not assumptions about agent behavior
 
+### Requirement: Forge validation profile is non-destructive and machine-readable
+
+The repository SHALL provide `scripts/forge-validate.sh` as the maximal safe
+validation profile for agents running inside a forge. It SHALL check the push
+credential prerequisites, a client-to-origin dry-run push route, the workspace build,
+the complete headless forge test target, forge service health, and local-build
+e2e eligibility without performing a destructive reset. Each check SHALL emit
+exactly one stable `PASS`, `SKIP`, or `FAIL` row, followed by a `SUMMARY` row.
+The command SHALL exit non-zero if and only if at least one check fails. Service
+health SHALL cover the enclave proxy, Git mirror, inference service, Vault, and
+outbound HTTPS when executed in a forge; non-forge hosts SHALL report that check
+as an explicit skip.
+
+#### Scenario: Forge without Podman remains a valid validation host
+
+- **WHEN** credential validation and the headless forge test target pass
+- **AND** `scripts/e2e-preflight.sh eligibility` emits a valid `skip:<reason>`
+- **THEN** the profile SHALL report e2e eligibility as `SKIP`
+- **AND** SHALL exit successfully with zero failures in its summary
+
+#### Scenario: Invalid or failed checks fail the profile
+
+- **WHEN** a check exits unsuccessfully or emits a verdict outside its defined
+  grammar
+- **THEN** the profile SHALL emit a stable `FAIL` row for that check
+- **AND** SHALL exit non-zero after emitting its summary
+
+#### Scenario: Credential prerequisites do not substitute for push-route validation
+
+- **WHEN** the credential guard reports an available channel
+- **THEN** the profile SHALL also run `git push --dry-run`
+  against the current branch
+- **AND** SHALL fail if the client cannot negotiate the configured origin route
+- **AND** SHALL NOT represent the dry-run as proof that a mirror's upstream
+  relay credentials are valid, because dry-run does not invoke pre-receive
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
@@ -521,6 +557,7 @@ theater without weakening security.
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:ephemeral-guarantee`
 - `litmus:claude-launch-stability-shape` — Claude TUI runtime and credential-free launch boundary
+- `litmus:forge-validation-profile` — non-destructive stable forge validation report
 
 Gating points:
 - Default forge image is pulled fresh; cached images are cleared on container stop

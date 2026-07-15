@@ -1,0 +1,45 @@
+# @trace spec:tillandsias-vault
+name: litmus:provider-device-auth-shape
+spec: tillandsias-vault
+phase: pre-build
+description: Pin the Claude/Antigravity device login commands, opaque stdin-to-Vault schema, restore/rotation wiring, and the tray no-TTY CLI-lane delegation
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains images/default/provider-device-auth.sh
+  - workspace contains images/default/provider-oauth-vault.sh
+  - workspace contains scripts/test-provider-device-auth.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+
+critical_path:
+  - step: "exercise the offline provider device-auth + oauth-vault fixture (stubbed vault round-trip)"
+    command: "scripts/test-provider-device-auth.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: provider device-auth + oauth-vault contract shape"
+
+  - step: "pin the Rust provider schemas (claude + antigravity) and the --agy-login alias"
+    command: "grep -Fq 'login_args: &[\"claude\"]' crates/tillandsias-headless/src/main.rs && grep -Fq 'login_args: &[\"antigravity\"]' crates/tillandsias-headless/src/main.rs && grep -Fq '\"--agy-login\"' crates/tillandsias-headless/src/main.rs && echo 'ok: provider device schemas + alias'"
+    timeout_ms: 3000
+    expected_behavior: "ok: provider device schemas + alias"
+
+  - step: "tray credentialed-agent clicks delegate to the TTY-capable CLI lane"
+    command: "grep -Fq 'ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity' crates/tillandsias-headless/src/main.rs && echo 'ok: tray cli-lane delegation'"
+    timeout_ms: 3000
+    expected_behavior: "ok: tray cli-lane delegation"
+
+  - step: "image bakes the generic helpers"
+    command: "grep -Fq 'COPY provider-device-auth.sh /usr/local/bin/provider-device-auth' images/default/Containerfile && grep -Fq 'COPY provider-oauth-vault.sh /usr/local/bin/provider-oauth-vault' images/default/Containerfile && echo 'ok: helpers baked'"
+    timeout_ms: 3000
+    expected_behavior: "ok: helpers baked"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "Claude/Antigravity device login, vault round-trip, and tray delegation invariants hold"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "provider-device-auth-shape"
+
+rollback:
+  on_failure: "restore images/default/provider-device-auth.sh + provider-oauth-vault.sh and the launch_forge_agent CLI-lane delegation from git history"

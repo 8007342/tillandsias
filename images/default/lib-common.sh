@@ -10,30 +10,52 @@ set -euo pipefail
 
 # ── Certificate Authority injection ──────────────────────────
 # @trace spec:transparent-https-caching
-# If the enclave CA cert is mounted at /etc/tillandsias/ca.crt (from orchestrate-enclave.sh),
-# build a combined CA bundle in /tmp and point trust-aware tools at it. Forge
-# containers run rootless, so they cannot write system trust stores.
-if [ -f /etc/tillandsias/ca.crt ]; then
-    SYSTEM_CA=""
-    if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
-        SYSTEM_CA=/etc/pki/tls/certs/ca-bundle.crt
-    elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-        SYSTEM_CA=/etc/ssl/certs/ca-certificates.crt
+# The image preserves Fedora's vendor roots at an immutable path and points
+# Fedora's standard extracted bundle symlink at this forge-owned /run target.
+# Compose the per-install CA into that target atomically, before any network
+# client starts. The forge remains rootless and can only alter its own
+# ephemeral trust bundle; no environment-specific CA path is required.
+init_runtime_ca_trust() {
+    local vendor_bundle="/usr/local/share/tillandsias/vendor-ca-bundle.crt"
+    local runtime_ca="/run/tillandsias/ca-chain.crt"
+    local trust_bundle="/run/tillandsias/ca-bundle.crt"
+    local temporary_bundle
+
+    if [ ! -r "$vendor_bundle" ]; then
+        echo "[trust] ERROR: image vendor CA bundle is missing: $vendor_bundle" >&2
+        return 1
     fi
-    if [ -n "$SYSTEM_CA" ]; then
-        COMBINED_CA="/tmp/tillandsias-combined-ca.crt"
-        cat "$SYSTEM_CA" /etc/tillandsias/ca.crt > "$COMBINED_CA" 2>/dev/null || true
-        export SSL_CERT_FILE="$COMBINED_CA"
-        export REQUESTS_CA_BUNDLE="$COMBINED_CA"
-        # git uses libcurl, which ignores SSL_CERT_FILE, and the injected
-        # gitconfig pins http.sslCAInfo to the enclave-CA-only file — so a
-        # git HTTPS fetch to a non-MITMed remote (real GitHub cert chain)
-        # fails "unable to get local issuer certificate" (operator repro
-        # 2026-07-12: Homebrew install clone). GIT_SSL_CAINFO wins over
-        # http.sslCAInfo; point git at the combined bundle.
-        export GIT_SSL_CAINFO="$COMBINED_CA"
+    if [ ! -w "$(dirname "$trust_bundle")" ]; then
+        echo "[trust] ERROR: runtime trust boundary is not writable: $(dirname "$trust_bundle")" >&2
+        return 1
     fi
-fi
+
+    temporary_bundle="$(mktemp "${trust_bundle}.XXXXXX")"
+    if [ -r "$runtime_ca" ]; then
+        if ! grep -q '^-----BEGIN CERTIFICATE-----$' "$runtime_ca" || \
+            ! grep -q '^-----END CERTIFICATE-----$' "$runtime_ca"; then
+            rm -f "$temporary_bundle"
+            echo "[trust] ERROR: runtime proxy CA is not a PEM certificate" >&2
+            return 1
+        fi
+        if ! cat "$vendor_bundle" "$runtime_ca" >"$temporary_bundle"; then
+            rm -f "$temporary_bundle"
+            echo "[trust] ERROR: could not compose runtime CA bundle" >&2
+            return 1
+        fi
+    else
+        echo "[trust] WARNING: runtime proxy CA is not mounted; using vendor roots only" >&2
+        if ! cp "$vendor_bundle" "$temporary_bundle"; then
+            rm -f "$temporary_bundle"
+            echo "[trust] ERROR: could not initialize vendor CA bundle" >&2
+            return 1
+        fi
+    fi
+    chmod 0444 "$temporary_bundle"
+    mv -f "$temporary_bundle" "$trust_bundle"
+}
+init_runtime_ca_trust
+unset -f init_runtime_ca_trust
 
 # Ensure all files created by this script and any process it execs are
 # user-writable. Without this, tools running inside the container may
@@ -119,7 +141,7 @@ fi
 
 # Avoid git "dubious ownership" on host-mounted repos with different UID.
 # Pre-injected by the launcher (order 224) — skip if already present so the
-# command does not fail against a read-only $GIT_CONFIG_GLOBAL.
+# command does not fail against the read-only injected global config.
 if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "/home/forge/src/*"; then
     git config --global --add safe.directory /home/forge/src/\* 2>/dev/null || true
 fi
@@ -345,7 +367,7 @@ rewrite_origin_for_enclave_push() {
 
     # Check whether the redirect is already installed (pre-injected by the
     # launcher's write_forge_gitconfig in order 224). If so, skip redundant
-    # writes that would fail on a read-only $GIT_CONFIG_GLOBAL mount.
+    # writes that would fail on the read-only injected global config mount.
     if git config --global --get-all "url.${mirror_url}.insteadOf" 2>/dev/null | grep -Fxq "$original"; then
         trace_lifecycle "git-mirror" "redirect already installed for ${original}; skipping"
         return 0
@@ -1144,6 +1166,36 @@ require_openspec() {
 require_codex() {
     CX_BIN="$(_require_harness codex "@openai/codex" codex)"
     return 0
+}
+
+# require_antigravity: install the Antigravity CLI (agy) if absent. Unlike the
+# npm harnesses, agy ships via the official installer script — download WITH A
+# TIMEOUT then run it (never `curl | bash`), retrying 3x with backoff
+# (order 307: one-shot curl was fragile against transient proxy/network
+# issues). Shared by the forge entrypoint AND the ephemeral login container
+# (`tillandsias --agy-login` failed exit-2 when the login container assumed
+# agy was pre-installed — operator repro 2026-07-15).
+require_antigravity() {
+    command -v agy >/dev/null 2>&1 && return 0
+
+    local _agy_installer _agy_url="https://antigravity.google/cli/install.sh"
+    local _attempt _max_attempts=3 _delay=2
+
+    for _attempt in 1 2 3; do
+        trace_lifecycle "tools" "agy install attempt $_attempt/$_max_attempts"
+        _agy_installer="$(mktemp 2>/dev/null)"
+        if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 "$_agy_url" -o "$_agy_installer" 2>/dev/null; then
+            if ANTIGRAVITY_BIN="/usr/local/bin/agy" bash "$_agy_installer" 2>/dev/null; then
+                rm -f "$_agy_installer" 2>/dev/null || true
+                command -v agy >/dev/null 2>&1 && return 0
+            fi
+        fi
+        rm -f "$_agy_installer" 2>/dev/null || true
+        trace_lifecycle "tools" "agy install attempt $_attempt failed (retry in ${_delay}s)"
+        sleep "$_delay" 2>/dev/null || true
+        _delay=$(( _delay * 2 ))
+    done
+    return 1
 }
 
 # ── On-demand userspace tools (Homebrew, attested formulae only) ──

@@ -45,13 +45,17 @@ as a safety net for other failures.
 
 ## Remaining work (split packets)
 
-- **Proxy egress allowlist**: add `antigravity-cli-auto-updater-*.us-central1.run.app`
-  to the Squid proxy egress rules. Operator action required (proxy config
-  is outside the forge container's write scope). File as
-  `plan/issues/forge-proxy-egress-antigravity-2026-07-12.md` or include in
-  order 303/304 login-flow work.
 - **Gemini credential in vault**: requires Antigravity OAuth login flow
   (orders 303/304, deferred per operator directive until stable ships).
+
+## Proxy egress closure (Linux 2026-07-14)
+
+The strict proxy now allows the exact observed updater service
+`antigravity-cli-auto-updater-974169037036.us-central1.run.app` and classifies
+it no-bump. The broader `.us-central1.run.app` suffix remains denied. The
+`agent-egress-allowlist-shape` litmus now pins both the exact allow and the
+absence of the wildcard; the `proxy-container` instant pre-build suite passes
+2/2. Proxy egress is no longer an order-307 blocker.
 
 ## Structural improvements (forge 2026-07-13)
 
@@ -74,4 +78,4 @@ as a safety net for other failures.
 - [x] Root cause identified and either fixed or split into the owning packet
   (proxy egress → operator action; login flows → order 303/304).
 - [ ] Antigravity lane launches to a usable TUI on a host with a valid Gemini
-  credential in the vault. **Blocked on proxy egress allowlist + vault credential.**
+  credential in the vault. **Blocked on the vault credential path.**

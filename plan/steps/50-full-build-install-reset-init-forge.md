@@ -35,4 +35,4 @@ Completed 2026-06-16 on integrated `linux-next` head.
 - pristine init: pass; `init_exit=0`
 - prompted forge: pass; `forge_exit=0`
 - follow-up: forge diagnostics filed proposal backlog; critical/high proposal
-  triage is tracked separately in `plan/issues/ACTIVE.md`
+  triage is tracked separately in `plan/index.yaml`

@@ -257,6 +257,203 @@ pub async fn open_hvsocket_stream(port: u32) -> io::Result<tokio::net::TcpStream
     tokio::net::TcpStream::from_std(std_stream)
 }
 
+// ─── Non-elevated fallback: WSL stdio ↔ vsock bridge (order 312) ─────────────
+
+/// Which control-wire path this process gets. Decided by HCS queryability
+/// alone: the direct `AF_HYPERV` connect needs the WSL utility-VM GUID from
+/// `hcsdiag list`, which hard-fails without Administrator / Hyper-V
+/// Administrators membership — so a standard-user process must bridge
+/// through WSL interop instead (`wsl.exe` needs no elevation).
+/// @trace plan/index.yaml windows-tray-requires-elevation-hcsdiag (order 312)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WirePath {
+    /// Direct `AF_HYPERV` socket to the utility VM (elevated path).
+    Hvsocket,
+    /// `wsl.exe -d <distro> -- socat STDIO VSOCK-CONNECT:1:<port>` child
+    /// whose stdio is the wire (standard-user path).
+    WslStdioBridge,
+}
+
+/// Pure dispatch predicate — pinned by unit test so the standard-user
+/// routing can never silently regress to the hcsdiag-only path.
+pub fn wire_path(can_query_hcs: bool) -> WirePath {
+    if can_query_hcs {
+        WirePath::Hvsocket
+    } else {
+        WirePath::WslStdioBridge
+    }
+}
+
+/// Distro the stdio bridge targets. `TILLANDSIAS_WSL_DISTRO` overrides the
+/// canonical [`crate::wsl::DEFAULT_WSL_DISTRO`] for tests/ops.
+pub fn wsl_distro_name() -> String {
+    std::env::var("TILLANDSIAS_WSL_DISTRO")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| crate::wsl::DEFAULT_WSL_DISTRO.to_string())
+}
+
+/// argv handed to `wsl.exe` for the bridge. Pure so the exact shape is
+/// drift-pinned by test: socat is provisioned in the guest for vsock
+/// loopback, and `VSOCK-CONNECT:1:<port>` (CID 1 = local) reaches the
+/// guest listener from inside the same VM.
+pub fn socat_bridge_argv(distro: &str, port: u32) -> Vec<String> {
+    vec![
+        "-d".to_string(),
+        distro.to_string(),
+        "--".to_string(),
+        "socat".to_string(),
+        "STDIO".to_string(),
+        format!("VSOCK-CONNECT:1:{port}"),
+    ]
+}
+
+/// A control-wire byte stream carried over a `wsl.exe … socat` child's
+/// stdio. Dropping the bridge kills the child (`kill_on_drop`), which
+/// tears the guest-side socat down with it.
+pub struct WslStdioBridge {
+    child: tokio::process::Child,
+    stdin: tokio::process::ChildStdin,
+    stdout: tokio::process::ChildStdout,
+}
+
+impl tokio::io::AsyncRead for WslStdioBridge {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        std::pin::Pin::new(&mut self.stdout).poll_read(cx, buf)
+    }
+}
+
+impl tokio::io::AsyncWrite for WslStdioBridge {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        std::pin::Pin::new(&mut self.stdin).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        std::pin::Pin::new(&mut self.stdin).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        std::pin::Pin::new(&mut self.stdin).poll_shutdown(cx)
+    }
+}
+
+/// How long to watch a just-spawned bridge for instant death. A socat that
+/// cannot connect (guest listener down, socat absent, distro stopped) exits
+/// within milliseconds — catching it here surfaces socat's actual stderr
+/// instead of the handshake's bare "early eof". Only the non-elevated path
+/// pays this latency.
+const BRIDGE_STARTUP_GRACE: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// Spawn the `wsl.exe … socat` stdio bridge to the guest vsock `port`.
+///
+/// No elevation required: WSL interop is available to standard users, which
+/// is the entire point — this is the order-312 fallback that makes a
+/// standard-user tray able to reach the control wire at all.
+pub async fn open_wsl_stdio_bridge(port: u32) -> io::Result<WslStdioBridge> {
+    use std::process::Stdio;
+
+    let distro = wsl_distro_name();
+    let mut cmd = tokio::process::Command::new("wsl.exe");
+    cmd.args(socat_bridge_argv(&distro, port));
+    // no_window: spawned from the GUI tray on every connect attempt — same
+    // console-flicker discipline as the hcsdiag path (order 311).
+    crate::no_window_async(&mut cmd);
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| io::Error::other(format!("wsl.exe spawn for stdio bridge failed: {e}")))?;
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| io::Error::other("stdio bridge: child stdin missing"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("stdio bridge: child stdout missing"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| io::Error::other("stdio bridge: child stderr missing"))?;
+
+    // Drain stderr into a capped buffer for the whole child lifetime (a full
+    // pipe would block socat; discarding it would swallow the one diagnostic
+    // that explains a dead wire — order-291 class).
+    let stderr_buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+    let buf_writer = std::sync::Arc::clone(&stderr_buf);
+    tokio::spawn(async move {
+        use tokio::io::AsyncReadExt;
+        let mut stderr = stderr;
+        let mut chunk = [0u8; 1024];
+        while let Ok(n) = stderr.read(&mut chunk).await {
+            if n == 0 {
+                break;
+            }
+            if let Ok(mut buf) = buf_writer.lock()
+                && buf.len() < 8 * 1024
+            {
+                buf.extend_from_slice(&chunk[..n]);
+            }
+        }
+    });
+
+    tokio::time::sleep(BRIDGE_STARTUP_GRACE).await;
+    if let Some(status) = child.try_wait()? {
+        let captured = stderr_buf
+            .lock()
+            .map(|b| {
+                String::from_utf8_lossy(&b)
+                    .replace('\u{0}', "")
+                    .trim()
+                    .to_string()
+            })
+            .unwrap_or_default();
+        return Err(io::Error::other(format!(
+            "wsl stdio bridge (`wsl.exe -d {distro} -- socat STDIO VSOCK-CONNECT:1:{port}`) \
+             exited at startup ({status}): {captured}. This is the non-elevated transport \
+             fallback (order 312) — check that the distro is started and socat is \
+             provisioned in the guest; the direct hvsocket path needs Administrator or \
+             'Hyper-V Administrators' membership (https://aka.ms/hcsadmin)."
+        )));
+    }
+
+    Ok(WslStdioBridge {
+        child,
+        stdin,
+        stdout,
+    })
+}
+
+/// Open the control-wire byte stream to the WSL guest, routing by privilege:
+/// elevated/Hyper-V-admin processes take the direct `AF_HYPERV` connect;
+/// standard-user processes take the `wsl.exe … socat` stdio bridge. This is
+/// the one entry point every host-side consumer (tray, GuestTransport) goes
+/// through, so a standard-user install gets a working wire end-to-end.
+/// @trace plan/index.yaml windows-tray-requires-elevation-hcsdiag (order 312)
+pub async fn open_wsl_wire_stream(port: u32) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
+    match wire_path(process_can_query_hcs()) {
+        WirePath::Hvsocket => Ok(Box::new(open_hvsocket_stream(port).await?)),
+        WirePath::WslStdioBridge => Ok(Box::new(open_wsl_stdio_bridge(port).await?)),
+    }
+}
+
 // ─── GuestTransport implementation ───────────────────────────────────────────
 
 /// Windows WSL2/HvSocket backend for the [`GuestTransport`] facade.
@@ -271,8 +468,7 @@ impl GuestTransport for WslGuestTransport {
         ep: &GuestEndpoint,
     ) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
         let port = wsl_port(ep)?;
-        let stream = open_hvsocket_stream(port).await?;
-        Ok(Box::new(stream))
+        open_wsl_wire_stream(port).await
     }
 
     async fn exec(&self, ep: &GuestEndpoint, req: ExecRequest) -> io::Result<ExecOutput> {
@@ -280,7 +476,7 @@ impl GuestTransport for WslGuestTransport {
         let argv_refs: Vec<&str> = req.argv.iter().map(String::as_str).collect();
         let stdin = req.stdin.unwrap_or_default();
 
-        let stream = open_hvsocket_stream(port).await?;
+        let stream = open_wsl_wire_stream(port).await?;
         let out = crate::vsock_exec::exec_over_stream_with_input(stream, &argv_refs, &stdin)
             .await
             .map_err(io::Error::other)?;
@@ -302,7 +498,7 @@ impl GuestTransport for WslGuestTransport {
         let argv_refs: Vec<&str> = req.argv.iter().map(String::as_str).collect();
         let stdin = req.stdin.unwrap_or_default();
 
-        let stream = open_hvsocket_stream(port).await?;
+        let stream = open_wsl_wire_stream(port).await?;
         let out = crate::vsock_exec::exec_over_stream_with_input_streaming(
             stream,
             &argv_refs,
@@ -397,6 +593,46 @@ mod tests {
             parse_wsl_vm_id(&interleaved).as_deref(),
             Some("A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA")
         );
+    }
+
+    /// Order 312 slice 2: a process that cannot query HCS MUST be routed to
+    /// the stdio bridge — regressing this pin re-strands every standard-user
+    /// install on the admin-only hcsdiag path.
+    #[test]
+    fn wire_path_routes_non_elevated_to_stdio_bridge() {
+        assert_eq!(wire_path(false), WirePath::WslStdioBridge);
+        assert_eq!(wire_path(true), WirePath::Hvsocket);
+    }
+
+    /// The exact `wsl.exe` argv is a contract with the guest provisioning
+    /// (socat present, vsock loopback enabled): pin it so drift fails loud.
+    #[test]
+    fn socat_bridge_argv_shape() {
+        assert_eq!(
+            socat_bridge_argv("tillandsias", 42420),
+            [
+                "-d",
+                "tillandsias",
+                "--",
+                "socat",
+                "STDIO",
+                "VSOCK-CONNECT:1:42420"
+            ]
+        );
+    }
+
+    /// Default distro resolves to the canonical const; the env seam wins
+    /// when set. One test for both directions so parallel test threads
+    /// never race on the process-global env var.
+    #[test]
+    fn wsl_distro_name_default_and_env_override() {
+        // Default (var unset in the test environment).
+        unsafe { std::env::remove_var("TILLANDSIAS_WSL_DISTRO") };
+        assert_eq!(wsl_distro_name(), crate::wsl::DEFAULT_WSL_DISTRO);
+        // Env seam overrides.
+        unsafe { std::env::set_var("TILLANDSIAS_WSL_DISTRO", "tillandsias-test") };
+        assert_eq!(wsl_distro_name(), "tillandsias-test");
+        unsafe { std::env::remove_var("TILLANDSIAS_WSL_DISTRO") };
     }
 
     #[test]

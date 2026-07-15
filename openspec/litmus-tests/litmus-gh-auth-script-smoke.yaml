@@ -1,6 +1,6 @@
 name: litmus:gh-auth-script-smoke
 spec: gh-auth-script
-description: Verify the GitHub login flow still exercises the fake ephemeral Podman harness
+description: Verify interactive and stdin-token GitHub login paths exercise the fake ephemeral Podman harness and write Vault
 severity: medium
 size: quick
 phase: pre-build
@@ -20,7 +20,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:gh-auth-script"
-  expected_log: "GitHub login smoke remains observable through the fake Podman harness"
+  expected_log: "Interactive and stdin-token GitHub login remain observable through the fake Podman harness, including the Vault write"
   log_fields:
     spec: "gh-auth-script"
     test: "gh-auth-script-smoke"

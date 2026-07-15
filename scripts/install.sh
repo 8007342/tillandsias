@@ -6,7 +6,11 @@ set -euo pipefail
 
 REPO="8007342/tillandsias"
 ASSET="tillandsias-linux-x86_64"
-RELEASE_BASE="https://github.com/${REPO}/releases/latest/download"
+# Default: the stable channel (/releases/latest resolves the newest promoted,
+# non-prerelease release — plan order 305). The curl-install SMOKE overrides
+# this via TILLANDSIAS_RELEASE_BASE to pin a specific release (e.g. the latest
+# daily prerelease) without changing what real users get.
+RELEASE_BASE="${TILLANDSIAS_RELEASE_BASE:-https://github.com/${REPO}/releases/latest/download}"
 PATH_MARKER_BEGIN="# >>> tillandsias PATH >>>"
 PATH_MARKER_END="# <<< tillandsias PATH <<<"
 

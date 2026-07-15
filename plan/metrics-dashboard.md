@@ -7,9 +7,9 @@ Auto-generated metrics tracking the build performance and size of the forge imag
 ```mermaid
 xychart-beta
     title "Forge Build Duration (seconds)"
-    x-axis "Builds" 1 -> 4
+    x-axis "Builds" 1 -> 1
     y-axis "Seconds"
-    line [10,12,93,105]
+    line []
 ```
 
 ## Image Size Over Time
@@ -17,9 +17,9 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "Forge Image Size (MB)"
-    x-axis "Builds" 1 -> 4
+    x-axis "Builds" 1 -> 1
     y-axis "MB"
-    bar [6053,2960,2960,2955]
+    bar [0]
 ```
 
 ## Download Size Over Time
@@ -27,19 +27,19 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "Forge Build Download Size (MB)"
-    x-axis "Builds" 1 -> 4
+    x-axis "Builds" 1 -> 1
     y-axis "MB"
-    bar [0,0,0,0]
+    bar [0]
 ```
 
 ## Latest Build Summary
 
 | Metric | Value |
 |---|---|
-| Duration | 105s |
-| Image Size | 2955 MB |
+| Duration | s |
+| Image Size | 0 MB |
 | Bytes Downloaded | 0 MB |
-| Cache Hits (steps) | 0 |
+| Cache Hits (steps) |  |
 
 *Metrics are extracted from the build metrics input via semantic distillation. \
 New in this version: download-size tracking, cache-hit tracking, and canonical ImageBuildEvent sink (`$XDG_STATE_HOME/tillandsias/image-build-events.jsonl`).*

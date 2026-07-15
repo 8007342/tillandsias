@@ -57,39 +57,6 @@ ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log &
 # EVERY_LAUNCH agent harness update; backgrounded, fail-soft.
 ensure_forge_harnesses >>/tmp/forge-lifecycle.log &
 
-# @trace spec:proxy-container
-# Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
-# System trust store updates require root (denied under --cap-drop=ALL).
-# Instead, create a combined CA bundle (system CAs + proxy CA) in /tmp
-# and export SSL_CERT_FILE / REQUESTS_CA_BUNDLE so curl, pip, and other
-# OpenSSL-based tools trust the MITM proxy. Node.js uses NODE_EXTRA_CA_CERTS
-# (set by podman env) which adds to its built-in trust store separately.
-CA_CHAIN="/run/tillandsias/ca-chain.crt"
-if [ -f "$CA_CHAIN" ]; then
-    # @trace spec:environment-runtime
-    # CA trust: Fedora uses pki, Alpine uses ca-certificates
-    # DISTRO: Fedora path checked first (/etc/pki/), Alpine/Debian fallback (/etc/ssl/)
-    SYSTEM_CA=""
-    if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
-        SYSTEM_CA=/etc/pki/tls/certs/ca-bundle.crt
-    elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-        SYSTEM_CA=/etc/ssl/certs/ca-certificates.crt
-    fi
-    if [ -n "$SYSTEM_CA" ]; then
-        COMBINED="/tmp/tillandsias-combined-ca.crt"
-        cat "$SYSTEM_CA" "$CA_CHAIN" > "$COMBINED" 2>/dev/null
-        export SSL_CERT_FILE="$COMBINED"
-        export REQUESTS_CA_BUNDLE="$COMBINED"
-        # git uses libcurl, which ignores SSL_CERT_FILE, and the injected
-        # gitconfig pins http.sslCAInfo to the enclave-CA-only file — so a
-        # git HTTPS fetch to a non-MITMed remote (real GitHub cert chain)
-        # fails "unable to get local issuer certificate" (operator repro
-        # 2026-07-12: Homebrew install clone). GIT_SSL_CAINFO wins over
-        # http.sslCAInfo; point git at the combined bundle.
-        export GIT_SSL_CAINFO="$COMBINED"
-    fi
-fi
-
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "claude-code starting"
 
@@ -104,10 +71,17 @@ require_claude
 [ -x "$CC_BIN" ] || harness_missing_fatal claude-code
 require_openspec
 
-# @trace spec:forge-offline, spec:podman-secrets-integration
-# Claude starts credential-free. Authentication may happen interactively for
-# this ephemeral session, but host credentials and API keys never enter forge.
-trace_lifecycle "credentials" "claude: credential-free session"
+# @trace spec:forge-offline, spec:podman-secrets-integration, spec:tillandsias-vault
+# API-key launches need no OAuth state. Otherwise restore the complete opaque
+# Claude credential document (harvested by `tillandsias --claude-login`,
+# device flow) from Vault — Codex order-339 pattern; failure is loud before
+# the TUI starts and names the login command.
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+    TILLANDSIAS_OAUTH_PROVIDER=claude /usr/local/bin/provider-oauth-vault restore
+    trace_lifecycle "credentials" "claude: OAuth document restored from vault"
+else
+    trace_lifecycle "credentials" "claude: API-key session (no OAuth restore)"
+fi
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
@@ -146,4 +120,9 @@ show_banner "claude"
 # ── Launch Claude Code ──────────────────────────────────────
 trace_lifecycle "entrypoint" "claude launching"
 trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
-exec "$CC_BIN" "$@"
+# Rotation harvest (Codex order-340 pattern): the session wrapper watches the
+# credential file and persists refresh-token rotations back to Vault before
+# --rm teardown, so the NEXT launch does not re-prompt.
+export TILLANDSIAS_OAUTH_PROVIDER=claude
+export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
+exec /usr/local/bin/codex-oauth-session -- "$CC_BIN" "$@"

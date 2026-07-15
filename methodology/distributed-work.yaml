@@ -407,11 +407,15 @@ distributed_work:
           independent fallback_when_blocked packet.
       - id: 4_pick_one
         action: >
-          Prefer (a) packets that unblock another host, (b) blocked items
-          where the blocker is now resolved, (c) failed-retryable items with a
-          narrow diagnostic chain, (d) the largest coherent ready packet that
-          fits the host capability and lease window. Tie-break by dependency
-          depth, then stable-ID lexicographic order.
+          FIRST prefer packets carrying a `release_target` matching the
+          active milestone (see release_aware_packets below) — release-
+          targeted work outranks everything except unblocking another
+          host. Within the same targeting tier, prefer (a) packets that
+          unblock another host, (b) blocked items where the blocker is
+          now resolved, (c) failed-retryable items with a narrow
+          diagnostic chain, (d) the largest coherent ready packet that
+          fits the host capability and lease window. Tie-break by
+          dependency depth, then stable-ID lexicographic order.
       - id: 5_claim
         action: >
           Mint lease_id, write a `claim` event to the work item's events
@@ -473,6 +477,86 @@ distributed_work:
       - "The integration loop ledger
         (plan/issues/multi-host-integration-loop-2026-05-24.md) records
         every conflict resolution it performs."
+
+  ambitious_milestone_reduction:
+    decided_by: "The Tlatoāni, 2026-07-15 (enclave service catalog as the proving case)"
+    purpose: >
+      Large, ambitious goals (multi-month capability milestones) must flow
+      through the same monotonic reduction engine as small fixes — never a
+      big-bang branch. This codifies the pattern already exercised by the
+      order-315 git-mirror audit and stable-milestone-v1 so it is
+      repeatable, not emergent.
+    milestone_packet_semantics: >
+      A `kind: milestone` packet is the criteria holder, never the work:
+      multi_cycle: true, estimated_hours: 0, holds milestone_criteria (one
+      row per must-land), and accepts only progress/reconcile/waiver
+      events. Implementation NEVER claims a milestone packet — it claims
+      children. A milestone is done when every criteria row maps to a done
+      child or an operator-approved waiver recorded on the milestone.
+      Children MAY carry `release_target: <milestone-packet-id>` so worker
+      selection concentrates on it (see release_aware_packets).
+    reduction_ladder:
+      - "1 RESEARCH: fat-agent packets (heaviest models) produce
+         provenance-cited current-state maps + external best-practice
+         baselines as cheatsheets/plan-issue docs. Research deliverables
+         are facts with citations, never decisions."
+      - "2 DECISION: a decision-record packet distills research into ONE
+         recommended design with alternatives and risks. The Tlatoāni
+         signs off EVERY decision record before implementation starts
+         (same governance class as bar_raise_governance — architecture
+         choices are operator-owned scope)."
+      - "3 IMPLEMENTATION RUNGS: the decided design splits into the
+         smallest demonstrable slices, each with a named verifiable
+         closure (litmus/fixture/e2e evidence) and staged adoption where
+         risky (flag -> soak -> default -> remove, per migration
+         discipline). First rung is ALWAYS the thinnest end-to-end
+         demonstrable path, not a foundation layer."
+      - "4 VERIFICATION: milestone criteria close only on evidence events;
+         operator-attended criteria are explicit packets, not footnotes."
+    invariants:
+      - "Every cycle touching the milestone must reduce residual
+         uncertainty: a filed research doc, a signed decision, a passed
+         closure, or a split that lowers ambiguity. No cycle may only
+         reorganize."
+      - "Uncertainty ordering: decide transport/protocol/security
+         boundaries BEFORE building on them; anything buildable either
+         way is deferred to a later rung."
+      - "The milestone packet's progress events form the burndown record;
+         plan/loop_status.md mirrors it at each coordinator cycle."
+
+  release_aware_packets:
+    decided_by: "The Tlatoāni, 2026-07-14"
+    purpose: >
+      Make the work queue release-aware so distributed agents converge on
+      the same shipping goal instead of each locally optimizing an
+      unrelated corner of the backlog.
+    marker: >
+      A packet MAY carry `release_target: <milestone-packet-id>` (e.g.
+      `release_target: stable-milestone-v1`). The named milestone is a
+      `kind: milestone` packet in plan/index.yaml whose milestone_criteria
+      enumerate the must-land set; the marker and the criteria list must
+      agree (the coordinator reconciles drift during integration).
+    selection_effect: >
+      Worker step 4_pick_one prefers release-targeted packets first. A
+      host with NO eligible release-targeted work falls back to the
+      normal backlog — release targeting concentrates effort, it never
+      idles a host.
+    lifecycle: >
+      The linux coordinator sets and clears markers: applied when a
+      milestone is declared, removed (or re-pointed) when the milestone
+      ships or a criterion is waived. Only the coordinator or The
+      Tlatoāni changes a marker; workers treat it as read-only input.
+    known_limits_and_next: >
+      This is deliberately the SIMPLEST slice: one flat marker + a
+      selection preference. It does not yet solve triage depth,
+      cross-host scheduling, queueing fairness, or anti-starvation —
+      agents can still contend for the same packet or idle when their
+      platform's targeted set is blocked. That evolution is tracked as a
+      research packet (collaborative-work-scheduling-research): candidate
+      mechanisms include dependency-aware dispatch waves, per-host work
+      reservations, priority lanes with aging, and blocked-set
+      auto-fallback. Do not grow this section ad hoc — reduce through
+      that packet.
 
   order_number_assignment:
     decided_by: "The Tlatoāni, 2026-07-14"

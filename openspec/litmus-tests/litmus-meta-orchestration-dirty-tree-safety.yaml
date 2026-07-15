@@ -1,0 +1,54 @@
+# @trace spec:meta-orchestration
+name: litmus:meta-orchestration-dirty-tree-safety
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin the order-341 startup worktree boundary: pre-existing tracked edits and
+  status-visible untracked files are immutable operator state. A dirty-start
+  blocked cycle writes disposable diagnostics only under its unique external
+  boundary directory and never deletes or restores a worktree path.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains skills/meta-orchestration/SKILL.md
+  - workspace contains scripts/build-image.sh
+  - workspace contains scripts/hash-image-sources.sh
+  - workspace contains scripts/meta-orchestration-worktree-guard.sh
+  - workspace contains scripts/test-meta-orchestration-dirty-tree-safety.sh
+
+critical_path:
+  - step: "worktree boundary guard and fixture are executable"
+    command: "test -x scripts/meta-orchestration-worktree-guard.sh && test -x scripts/test-meta-orchestration-dirty-tree-safety.sh && echo 'ok: executable'"
+    timeout_ms: 1000
+    expected_behavior: "ok: executable"
+
+  - step: "guard scripts parse under bash"
+    command: "bash -n scripts/meta-orchestration-worktree-guard.sh scripts/test-meta-orchestration-dirty-tree-safety.sh && echo 'ok: syntax'"
+    timeout_ms: 1000
+    expected_behavior: "ok: syntax"
+
+  - step: "blocked dirty-tree fixture preserves startup bytes"
+    command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
+    timeout_ms: 10000
+    expected_behavior: "PASS: blocked cycle preserved startup tracked and untracked bytes"
+
+  - step: "canonical skills invalidate the forge image cache key"
+    command: "scripts/test-hash-image-sources.sh"
+    timeout_ms: 10000
+    expected_behavior: "PASS: canonical skills participate in forge image cache key"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "blocked cycle preserved startup tracked and untracked bytes"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "meta-orchestration-dirty-tree-safety"
+    artifact: "skills/meta-orchestration/SKILL.md + worktree guard + default-image skill copy path"
+
+rollback:
+  on_failure: >
+    Restore the startup status and content-hash boundary, keep disposable
+    artifacts outside the worktree, and prohibit automated worktree cleanup.
+  command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"

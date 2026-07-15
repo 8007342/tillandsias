@@ -69,6 +69,12 @@ pub const MAX_PTY_FRAME_BYTES: usize = 64_000;
 /// @trace openspec/changes/control-wire-pty-attach/proposal.md, spec:vsock-transport
 pub const CAP_PTY_ATTACH_V1: &str = "pty.attach@v1";
 
+/// Capability advertised by exec clients that understand empty
+/// `PtyData{ToHost}` frames as liveness heartbeats rather than terminal data.
+/// The server emits heartbeats only when the client advertises this token,
+/// keeping mixed-version interactive attach clients unchanged.
+pub const CAP_PTY_HEARTBEAT_V1: &str = "pty.heartbeat@v1";
+
 /// Maximum permitted MCP frame payload size (for McpFrame variant only).
 /// Screenshots and large tool responses may require multi-MB capacity.
 ///
@@ -486,28 +492,43 @@ mod tests {
         assert_eq!(envelope, &decoded);
     }
 
+    fn assert_no_credential_markers(envelope: &ControlEnvelope) {
+        let encoded = encode(envelope).expect("encode succeeds");
+        for marker in [b"ghp_".as_slice(), b"gho_", b"hvs.", b"s."] {
+            assert!(
+                !encoded.windows(marker.len()).any(|window| window == marker),
+                "Hello handshake payload must not contain credential marker {:?}",
+                String::from_utf8_lossy(marker)
+            );
+        }
+    }
+
     #[test]
     fn hello_roundtrip() {
-        roundtrip(&ControlEnvelope {
+        let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq: 1,
             body: ControlMessage::Hello {
                 from: "router".to_string(),
                 capabilities: vec!["IssueWebSession".to_string()],
             },
-        });
+        };
+        roundtrip(&envelope);
+        assert_no_credential_markers(&envelope);
     }
 
     #[test]
     fn hello_ack_roundtrip() {
-        roundtrip(&ControlEnvelope {
+        let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq: 2,
             body: ControlMessage::HelloAck {
                 wire_version: WIRE_VERSION,
                 server_caps: vec!["v1".to_string()],
             },
-        });
+        };
+        roundtrip(&envelope);
+        assert_no_credential_markers(&envelope);
     }
 
     #[test]

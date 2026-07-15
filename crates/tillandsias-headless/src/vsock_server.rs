@@ -15,7 +15,7 @@
 //! @trace spec:vsock-transport, spec:host-shell-architecture
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::RwLock;
@@ -26,18 +26,24 @@ use tillandsias_control_wire::transport::{
     AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
 };
 use tillandsias_control_wire::{
-    CAP_PTY_ATTACH_V1, CloudProjectEntry, ControlEnvelope, ControlMessage, ErrorCode,
-    LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
+    CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CloudProjectEntry, ControlEnvelope, ControlMessage,
+    ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, watch};
 use tracing::{debug, info, warn};
 
 #[cfg(unix)]
 use crate::pty_handler::PtySessionStore;
 
 const SERVER_NAME: &str = "tillandsias-in-vm";
+
+fn client_supports_pty_heartbeat(capabilities: &[String]) -> bool {
+    capabilities
+        .iter()
+        .any(|capability| capability == CAP_PTY_HEARTBEAT_V1)
+}
 
 /// Guard so vault bootstrap runs at most once per process even if multiple
 /// tray connections deliver credentials concurrently.
@@ -175,6 +181,11 @@ const CLOUD_PROJECTS_PUSH_CAPACITY: usize = 8;
 /// full replacement list, so a lagged receiver skipping to latest loses
 /// nothing durable.
 const LOCAL_PROJECTS_PUSH_CAPACITY: usize = 8;
+/// Per-connection PTY frames waiting for the wire writer. Backpressure at
+/// this boundary pauses the PTY pump instead of allowing an unbounded queue to
+/// consume guest memory when a host stops reading (order 153 bounded-channel
+/// exit criterion).
+const PTY_OUTBOUND_CAPACITY: usize = 64;
 
 impl VmStateHandle {
     /// Construct with default `Starting` phase and the conventional podman
@@ -535,8 +546,10 @@ fn vmaddr_cid_any() -> u32 {
 }
 
 async fn serve_listener(listener: &mut Listener, shutdown: Arc<AtomicBool>, state: VmStateHandle) {
+    let (connection_shutdown_tx, connection_shutdown_rx) = watch::channel(false);
     loop {
         if shutdown.load(Ordering::SeqCst) {
+            let _ = connection_shutdown_tx.send(true);
             info!(
                 spec = "vsock-transport",
                 "vsock listener exiting (shutdown signalled)"
@@ -548,7 +561,11 @@ async fn serve_listener(listener: &mut Listener, shutdown: Arc<AtomicBool>, stat
         let accept = tokio::time::timeout(Duration::from_millis(250), listener.accept()).await;
         match accept {
             Ok(Ok(stream)) => {
-                tokio::spawn(handle_connection(stream, state.clone()));
+                tokio::spawn(handle_connection(
+                    stream,
+                    state.clone(),
+                    connection_shutdown_rx.clone(),
+                ));
             }
             Ok(Err(err)) => {
                 warn!(spec = "vsock-transport", error = %err, "vsock accept failed");
@@ -562,24 +579,31 @@ async fn serve_listener(listener: &mut Listener, shutdown: Arc<AtomicBool>, stat
 }
 
 async fn handle_connection(
-    mut stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+    stream: Box<dyn AsyncReadWrite + Unpin + Send>,
     state: VmStateHandle,
+    mut shutdown: watch::Receiver<bool>,
 ) {
-    match maybe_secure_stream(stream).await {
+    let mut stream = match tokio::select! {
+        result = maybe_secure_stream(stream) => result,
+        _ = connection_shutdown(&mut shutdown) => return,
+    } {
         Ok(secured) => {
             info!(
                 spec = "vsock-transport",
                 "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
             );
-            stream = secured;
+            secured
         }
         Err(err) => {
             warn!(spec = "vsock-transport", error = %err, "secure control wire handshake failed");
             return;
         }
-    }
+    };
 
-    let first = match read_envelope(&mut stream).await {
+    let first = match tokio::select! {
+        result = read_envelope(&mut stream) => result,
+        _ = connection_shutdown(&mut shutdown) => return,
+    } {
         Ok(env) => env,
         Err(err) => {
             debug!(spec = "vsock-transport", error = %err, "vsock connection closed before Hello");
@@ -596,8 +620,8 @@ async fn handle_connection(
         return;
     }
 
-    let hello_from = match &first.body {
-        ControlMessage::Hello { from, .. } => from.clone(),
+    let (hello_from, client_capabilities) = match &first.body {
+        ControlMessage::Hello { from, capabilities } => (from.clone(), capabilities.clone()),
         other => {
             warn!(
                 spec = "vsock-transport",
@@ -621,10 +645,11 @@ async fn handle_connection(
                 "VmShutdownRequest".into(),
                 "GithubLoginStatusRequest".into(),
                 CAP_PTY_ATTACH_V1.into(),
+                CAP_PTY_HEARTBEAT_V1.into(),
             ],
         },
     };
-    if let Err(err) = write_envelope(&mut stream, &ack).await {
+    if let Err(err) = write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await {
         warn!(spec = "vsock-transport", error = %err, "failed to write HelloAck");
         return;
     }
@@ -635,9 +660,13 @@ async fn handle_connection(
     // traffic via tokio::select!. When this function returns, dropping
     // `pty_store` cascades into `shutdown_all` so children are reaped on
     // disconnect.
-    let (pty_tx, mut pty_rx) = mpsc::unbounded_channel::<ControlEnvelope>();
+    let (pty_tx, mut pty_rx) = mpsc::channel::<ControlEnvelope>(PTY_OUTBOUND_CAPACITY);
     #[cfg(unix)]
-    let mut pty_store = PtySessionStore::new(pty_tx.clone());
+    let mut pty_store = if client_supports_pty_heartbeat(&client_capabilities) {
+        PtySessionStore::new_with_heartbeat(pty_tx.clone())
+    } else {
+        PtySessionStore::new(pty_tx.clone())
+    };
     // Hold a tx clone so the sender side stays open for the lifetime of
     // the connection even if `pty_store` empties (which would otherwise
     // close pty_rx).
@@ -654,16 +683,17 @@ async fn handle_connection(
     // Order 260: LocalProjects topic, same contract.
     let mut local_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
 
-    loop {
+    'connection: loop {
         tokio::select! {
+            _ = connection_shutdown(&mut shutdown) => {
+                break 'connection;
+            }
             // Outbound PTY frame (PtyData{ToHost} from a pump or PtyClose
             // from child reap).
             Some(env) = pty_rx.recv() => {
-                if write_envelope(&mut stream, &env).await.is_err() {
+                if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                     debug!(spec = "vsock-transport", "vsock write failed during PTY outbound; closing connection");
-                    #[cfg(unix)]
-                    pty_store.shutdown_all().await;
-                    return;
+                    break 'connection;
                 }
                 continue;
             }
@@ -689,11 +719,9 @@ async fn handle_connection(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope(&mut stream, &env).await.is_err() {
+                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during VmStatusPush; closing connection");
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                     }
                     None => {
@@ -721,11 +749,9 @@ async fn handle_connection(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope(&mut stream, &env).await.is_err() {
+                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during LoginStatePush; closing connection");
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                     }
                     None => {
@@ -752,11 +778,9 @@ async fn handle_connection(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope(&mut stream, &env).await.is_err() {
+                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during CloudProjectsPush; closing connection");
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                     }
                     None => {
@@ -783,11 +807,9 @@ async fn handle_connection(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope(&mut stream, &env).await.is_err() {
+                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during LocalProjectsPush; closing connection");
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                            break 'connection;
                         }
                     }
                     None => {
@@ -802,9 +824,7 @@ async fn handle_connection(
                     Ok(env) => env,
                     Err(err) => {
                         debug!(spec = "vsock-transport", error = %err, "vsock connection closed");
-                        #[cfg(unix)]
-                        pty_store.shutdown_all().await;
-                        return;
+                        break 'connection;
                     }
                 };
 
@@ -840,10 +860,8 @@ async fn handle_connection(
                                 ),
                             },
                         };
-                        if write_envelope(&mut stream, &err).await.is_err() {
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                        if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                            break 'connection;
                         }
                         continue;
                     }
@@ -865,10 +883,8 @@ async fn handle_connection(
                                 ),
                             },
                         };
-                        if write_envelope(&mut stream, &err).await.is_err() {
-                            #[cfg(unix)]
-                            pty_store.shutdown_all().await;
-                            return;
+                        if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                            break 'connection;
                         }
                         continue;
                     }
@@ -890,8 +906,8 @@ async fn handle_connection(
                         last_event: state.last_event(),
                     },
                 };
-                if write_envelope(&mut stream, &reply).await.is_err() {
-                    return;
+                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
                 }
             }
             // Order 153 slice 1 wired VmStatus; orders 230/231 wire the
@@ -915,8 +931,8 @@ async fn handle_connection(
                     seq: env.seq,
                     body: ControlMessage::SubscribeAck,
                 };
-                if write_envelope(&mut stream, &ack).await.is_err() {
-                    return;
+                if write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await.is_err() {
+                    break 'connection;
                 }
             }
             ControlMessage::EnumerateLocalProjects { seq } => {
@@ -935,8 +951,8 @@ async fn handle_connection(
                         entries,
                     },
                 };
-                if write_envelope(&mut stream, &reply).await.is_err() {
-                    return;
+                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
                 }
             }
             ControlMessage::CloudRefreshRequest { seq } => {
@@ -966,8 +982,8 @@ async fn handle_connection(
                         projects,
                     },
                 };
-                if write_envelope(&mut stream, &reply).await.is_err() {
-                    return;
+                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
                 }
             }
             ControlMessage::GithubLoginStatusRequest { seq } => {
@@ -996,8 +1012,8 @@ async fn handle_connection(
                         handle,
                     },
                 };
-                if write_envelope(&mut stream, &reply).await.is_err() {
-                    return;
+                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
                 }
             }
             ControlMessage::VmShutdownRequest { .. } => {
@@ -1009,9 +1025,7 @@ async fn handle_connection(
                     spec = "vsock-transport",
                     "VmShutdownRequest received; phase=Draining; closing connection (drain happens via signal path)"
                 );
-                #[cfg(unix)]
-                pty_store.shutdown_all().await;
-                return;
+                break 'connection;
             }
             // l3: PTY-attach variants (control-wire-pty-attach Tasks 4.x).
             // The handler module owns the PtySessionStore lifecycle; this
@@ -1040,9 +1054,8 @@ async fn handle_connection(
                             message: format!("PtyOpen rejected: {err}"),
                         },
                     };
-                    if write_envelope(&mut stream, &err_env).await.is_err() {
-                        pty_store.shutdown_all().await;
-                        return;
+                    if write_envelope_with_shutdown(&mut stream, &err_env, &mut shutdown).await.is_err() {
+                        break 'connection;
                     }
                 }
             }
@@ -1112,8 +1125,8 @@ async fn handle_connection(
                         success: true,
                     },
                 };
-                if write_envelope(&mut stream, &reply).await.is_err() {
-                    return;
+                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
                 }
             }
             ControlMessage::GetVaultHandover { seq } => {
@@ -1146,8 +1159,8 @@ async fn handle_connection(
                         root_token,
                     },
                 };
-                if write_envelope(&mut stream, &reply).await.is_err() {
-                    return;
+                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
                 }
             }
             // Convergence-packet pre-filter caught Unsupported and
@@ -1174,16 +1187,20 @@ async fn handle_connection(
                         ),
                     },
                 };
-                if write_envelope(&mut stream, &err).await.is_err() {
-                    #[cfg(unix)]
-                    pty_store.shutdown_all().await;
-                    return;
+                if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                    break 'connection;
                 }
             }
                 }
             }
         }
     }
+
+    // Every exit after the per-connection PTY store exists converges here.
+    // This prevents shutdown/write failures from detaching pump tasks and
+    // leaving their child processes alive.
+    #[cfg(unix)]
+    pty_store.shutdown_all().await;
 }
 
 async fn read_envelope<R>(stream: &mut R) -> io::Result<ControlEnvelope>
@@ -1216,6 +1233,34 @@ where
     stream.flush().await
 }
 
+async fn connection_shutdown(shutdown: &mut watch::Receiver<bool>) {
+    if *shutdown.borrow() {
+        return;
+    }
+    loop {
+        if shutdown.changed().await.is_err() || *shutdown.borrow() {
+            return;
+        }
+    }
+}
+
+async fn write_envelope_with_shutdown<W>(
+    stream: &mut W,
+    env: &ControlEnvelope,
+    shutdown: &mut watch::Receiver<bool>,
+) -> io::Result<()>
+where
+    W: AsyncWriteExt + Unpin,
+{
+    tokio::select! {
+        result = write_envelope(stream, env) => result,
+        _ = connection_shutdown(shutdown) => Err(io::Error::new(
+            io::ErrorKind::Interrupted,
+            "connection shutdown requested",
+        )),
+    }
+}
+
 /// Resolve the in-VM project bind-mount root from the environment.
 fn in_vm_project_root() -> PathBuf {
     PathBuf::from(
@@ -1232,7 +1277,11 @@ fn in_vm_project_root() -> PathBuf {
 /// @trace spec:host-shell-architecture, plan/issues/multi-host-integration-loop-2026-05-24.md l4
 pub(crate) fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
     let root = in_vm_project_root();
-    let out = crate::local_projects::scan_project_root(&root);
+    enumerate_local_projects_at(&root)
+}
+
+fn enumerate_local_projects_at(root: &Path) -> Vec<LocalProjectEntry> {
+    let out = crate::local_projects::scan_project_root(root);
     if out.is_empty() {
         debug!(
             spec = "host-shell-architecture",
@@ -1295,6 +1344,16 @@ pub(crate) fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pty_heartbeat_requires_explicit_client_capability() {
+        assert!(!client_supports_pty_heartbeat(&[]));
+        assert!(!client_supports_pty_heartbeat(&[CAP_PTY_ATTACH_V1.into()]));
+        assert!(client_supports_pty_heartbeat(&[
+            CAP_PTY_ATTACH_V1.into(),
+            CAP_PTY_HEARTBEAT_V1.into(),
+        ]));
+    }
 
     // (parse_gh_repo_list tests moved to crate::cloud_projects with the
     // function itself. The vsock-side fetch_cloud_projects wrapper is
@@ -1421,6 +1480,198 @@ mod tests {
             Err(broadcast::error::TryRecvError::Lagged(_)) => {}
             other => panic!("expected Lagged, got {other:?}"),
         }
+    }
+
+    async fn subscribed_vm_status_test_client(
+        state: &VmStateHandle,
+        socket_capacity: usize,
+        from: &str,
+    ) -> (
+        tokio::io::DuplexStream,
+        tokio::task::JoinHandle<()>,
+        watch::Sender<bool>,
+    ) {
+        let (mut client, server) = tokio::io::duplex(socket_capacity);
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let server_task = tokio::spawn(handle_connection(
+            Box::new(server),
+            state.clone(),
+            shutdown_rx,
+        ));
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::Hello {
+                    from: from.to_string(),
+                    capabilities: Vec::new(),
+                },
+            },
+        )
+        .await
+        .expect("test client writes Hello");
+        assert!(matches!(
+            read_envelope(&mut client).await.expect("HelloAck"),
+            ControlEnvelope {
+                body: ControlMessage::HelloAck { .. },
+                ..
+            }
+        ));
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::Subscribe {
+                    topics: vec![tillandsias_control_wire::SubscriptionTopic::VmStatus],
+                },
+            },
+        )
+        .await
+        .expect("test client writes Subscribe");
+        assert!(matches!(
+            read_envelope(&mut client).await.expect("SubscribeAck"),
+            ControlEnvelope {
+                body: ControlMessage::SubscribeAck,
+                ..
+            }
+        ));
+
+        (client, server_task, shutdown_tx)
+    }
+
+    /// Order 153 shutdown criterion: a live subscribed connection must not
+    /// outlive listener shutdown merely because its peer keeps the socket
+    /// open and sends no more frames.
+    #[tokio::test]
+    async fn subscribed_connection_exits_on_shutdown_signal() {
+        let state = VmStateHandle::new();
+        let (_client, server_task, shutdown) = tokio::time::timeout(
+            Duration::from_secs(2),
+            subscribed_vm_status_test_client(&state, 4096, "shutdown-client"),
+        )
+        .await
+        .expect("client handshake and subscription must not hang");
+
+        shutdown.send(true).expect("connection observes shutdown");
+        tokio::time::timeout(Duration::from_millis(500), server_task)
+            .await
+            .expect("connection handler must exit after shutdown")
+            .expect("connection handler must not panic");
+    }
+
+    #[test]
+    fn post_store_connection_exits_share_pty_cleanup() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
+        let post_store = source
+            .split("let (pty_tx, mut pty_rx)")
+            .nth(1)
+            .and_then(|tail| tail.split("\nasync fn read_envelope").next())
+            .expect("post-store handle_connection source");
+        assert!(
+            !post_store.contains("return;"),
+            "post-store connection exits must break to shared PTY cleanup"
+        );
+        assert_eq!(
+            post_store
+                .matches("pty_store.shutdown_all().await;")
+                .count(),
+            1,
+            "handle_connection must have exactly one post-store PTY cleanup funnel"
+        );
+    }
+
+    /// Order 153 SC-10 timed criterion at the real connection-handler
+    /// boundary. A subscribed wire client stops reading for 1000ms and its
+    /// one-byte duplex buffer blocks `write_envelope`; a second handler must
+    /// still deliver every frame in an over-capacity burst within SC-09's
+    /// 500ms bound.
+    #[tokio::test]
+    async fn slow_client_1000ms_lag_does_not_delay_fast_client() {
+        let state = VmStateHandle::new();
+        let (mut slow_client, slow_server, _slow_shutdown) = tokio::time::timeout(
+            Duration::from_secs(2),
+            subscribed_vm_status_test_client(&state, 1, "slow-client"),
+        )
+        .await
+        .expect("slow client handshake and subscription must not hang");
+        let (mut fast_client, fast_server, _fast_shutdown) = tokio::time::timeout(
+            Duration::from_secs(2),
+            subscribed_vm_status_test_client(&state, 4096, "fast-client"),
+        )
+        .await
+        .expect("fast client handshake and subscription must not hang");
+
+        let (slow_started_tx, slow_started_rx) = tokio::sync::oneshot::channel();
+        let slow_reader = tokio::spawn(async move {
+            let _ = slow_started_tx.send(());
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            read_envelope(&mut slow_client)
+                .await
+                .expect("slow wire client eventually receives a push")
+        });
+
+        let burst_len = VM_STATUS_PUSH_CAPACITY + 4;
+        let (fast_started_tx, fast_started_rx) = tokio::sync::oneshot::channel();
+        let fast_reader = tokio::spawn(async move {
+            let _ = fast_started_tx.send(());
+            let mut sequences = Vec::with_capacity(burst_len);
+            for _ in 0..burst_len {
+                let envelope = read_envelope(&mut fast_client)
+                    .await
+                    .expect("fast wire client receives every push");
+                match envelope.body {
+                    ControlMessage::VmStatusPush { seq, .. } => sequences.push(seq),
+                    other => panic!("expected VmStatusPush, got {other:?}"),
+                }
+            }
+            sequences
+        });
+
+        slow_started_rx.await.expect("slow reader started");
+        fast_started_rx.await.expect("fast reader started");
+        let started = std::time::Instant::now();
+        for index in 0..burst_len {
+            let phase = if index % 2 == 0 {
+                VmPhase::Ready
+            } else {
+                VmPhase::Starting
+            };
+            state.set_phase(phase);
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+
+        let fast_sequences = tokio::time::timeout(Duration::from_millis(500), fast_reader)
+            .await
+            .expect("fast wire client must not wait for the slow client")
+            .expect("fast wire client task must not panic");
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "fast wire client exceeded the 500ms push bound"
+        );
+        assert_eq!(
+            fast_sequences,
+            (1..=burst_len as u64).collect::<Vec<_>>(),
+            "fast wire client must receive every sequence despite slow-peer backpressure"
+        );
+
+        let slow_message = tokio::time::timeout(Duration::from_secs(2), slow_reader)
+            .await
+            .expect("slow client task must finish after its simulated lag")
+            .expect("slow client task must not panic");
+        assert!(matches!(
+            slow_message.body,
+            ControlMessage::VmStatusPush {
+                phase: VmPhase::Ready,
+                ..
+            }
+        ));
+
+        slow_server.abort();
+        fast_server.abort();
     }
 
     // ── LoginState / CloudProjects push sources (orders 230/231) ────────────
@@ -1746,16 +1997,7 @@ mod tests {
         fs::write(tmp.path().join("loose-file"), b"not a project").unwrap();
         fs::create_dir(tmp.path().join(".hidden")).unwrap();
 
-        // SAFETY: tests in this binary may run concurrently; this env var is
-        // owned by `enumerate_local_projects` only, no other test reads or
-        // writes it.
-        unsafe {
-            std::env::set_var(IN_VM_PROJECT_ROOT_ENV, tmp.path());
-        }
-        let entries = enumerate_local_projects();
-        unsafe {
-            std::env::remove_var(IN_VM_PROJECT_ROOT_ENV);
-        }
+        let entries = enumerate_local_projects_at(tmp.path());
 
         let labels: Vec<&str> = entries.iter().map(|e| e.label.as_str()).collect();
         assert_eq!(labels, vec!["alpha", "beta"]);
@@ -1763,16 +2005,9 @@ mod tests {
 
     #[test]
     fn enumerate_local_projects_returns_empty_when_root_missing() {
-        unsafe {
-            std::env::set_var(
-                IN_VM_PROJECT_ROOT_ENV,
-                "/this/dir/intentionally/does/not/exist/under/tillandsias",
-            );
-        }
-        let entries = enumerate_local_projects();
-        unsafe {
-            std::env::remove_var(IN_VM_PROJECT_ROOT_ENV);
-        }
+        let entries = enumerate_local_projects_at(Path::new(
+            "/this/dir/intentionally/does/not/exist/under/tillandsias",
+        ));
         assert!(entries.is_empty());
     }
 }

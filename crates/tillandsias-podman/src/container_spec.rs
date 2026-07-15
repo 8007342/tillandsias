@@ -91,6 +91,7 @@ pub struct ContainerSpec {
     pids_limit: Option<u32>,
     network: Option<String>,
     env: Vec<(String, String)>,
+    secrets: Vec<String>,
     mounts: Vec<MountSpec>,
     tmpfs: Vec<String>,
     devices: Vec<String>,
@@ -121,6 +122,7 @@ impl ContainerSpec {
             pids_limit: None,
             network: None,
             env: Vec::new(),
+            secrets: Vec::new(),
             mounts: Vec::new(),
             tmpfs: Vec::new(),
             devices: Vec::new(),
@@ -183,6 +185,11 @@ impl ContainerSpec {
 
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn secret(mut self, spec: impl Into<String>) -> Self {
+        self.secrets.push(spec.into());
         self
     }
 
@@ -323,6 +330,11 @@ impl ContainerSpec {
         for (key, value) in &self.env {
             args.push("--env".to_string());
             args.push(format!("{key}={value}"));
+        }
+
+        for secret in &self.secrets {
+            args.push("--secret".to_string());
+            args.push(secret.clone());
         }
 
         if let Some(network) = &self.network {
@@ -501,6 +513,21 @@ mod tests {
         assert!(args.contains(&"--mount".to_string()));
         assert!(args.iter().any(|arg| arg
             == "type=bind,source=/tmp/ca.crt,target=/etc/ca.crt,relabel=shared,readonly=true"));
+    }
+
+    #[test]
+    fn scoped_secret_mounts_are_serialized_by_the_typed_spec() {
+        let spec = ContainerSpec::new("example:v1")
+            .secret("codex-lease,target=vault-token,uid=1000,gid=1000,mode=0400");
+        let args = spec.build_run_args();
+        let secret_flag = args
+            .iter()
+            .position(|arg| arg == "--secret")
+            .expect("typed secret flag");
+        assert_eq!(
+            args.get(secret_flag + 1).map(String::as_str),
+            Some("codex-lease,target=vault-token,uid=1000,gid=1000,mode=0400")
+        );
     }
 
     #[test]

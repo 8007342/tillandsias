@@ -50,34 +50,6 @@ populate_hot_paths
 # so it never blocks the agent launch, and fail-soft.
 ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log &
 
-# @trace spec:proxy-container
-# Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
-CA_CHAIN="/run/tillandsias/ca-chain.crt"
-if [ -f "$CA_CHAIN" ]; then
-    # @trace spec:environment-runtime
-    # CA trust: Fedora uses pki, Alpine uses ca-certificates
-    # DISTRO: Fedora path checked first (/etc/pki/), Alpine/Debian fallback (/etc/ssl/)
-    SYSTEM_CA=""
-    if [ -f /etc/pki/tls/certs/ca-bundle.crt ]; then
-        SYSTEM_CA=/etc/pki/tls/certs/ca-bundle.crt
-    elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-        SYSTEM_CA=/etc/ssl/certs/ca-certificates.crt
-    fi
-    if [ -n "$SYSTEM_CA" ]; then
-        COMBINED="/tmp/tillandsias-combined-ca.crt"
-        cat "$SYSTEM_CA" "$CA_CHAIN" > "$COMBINED" 2>/dev/null
-        export SSL_CERT_FILE="$COMBINED"
-        export REQUESTS_CA_BUNDLE="$COMBINED"
-        # git uses libcurl, which ignores SSL_CERT_FILE, and the injected
-        # gitconfig pins http.sslCAInfo to the enclave-CA-only file — so a
-        # git HTTPS fetch to a non-MITMed remote (real GitHub cert chain)
-        # fails "unable to get local issuer certificate" (operator repro
-        # 2026-07-12: Homebrew install clone). GIT_SSL_CAINFO wins over
-        # http.sslCAInfo; point git at the combined bundle.
-        export GIT_SSL_CAINFO="$COMBINED"
-    fi
-fi
-
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "antigravity starting"
 
@@ -109,33 +81,8 @@ show_banner "antigravity"
 
 # ── Ensure the Antigravity CLI (agy) — EVERY_LAUNCH, latest ─────
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
-# Installed at launch (not baked): download the official installer WITH A TIMEOUT
-# then run it (NOT a `curl | bash` pipe — that pipes an unbounded fetch straight to
-# a shell). Retries up to 3 times with backoff (order 307: one-shot curl was
-# fragile against transient proxy/network issues).
-require_antigravity() {
-    command -v agy >/dev/null 2>&1 && return 0
-
-    local _agy_installer _agy_url="https://antigravity.google/cli/install.sh"
-    local _attempt _max_attempts=3 _delay=2
-
-    for _attempt in 1 2 3; do
-        trace_lifecycle "tools" "agy install attempt $_attempt/$_max_attempts"
-        _agy_installer="$(mktemp 2>/dev/null)"
-        if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 "$_agy_url" -o "$_agy_installer" 2>/dev/null; then
-            if ANTIGRAVITY_BIN="/usr/local/bin/agy" bash "$_agy_installer" 2>/dev/null; then
-                rm -f "$_agy_installer" 2>/dev/null || true
-                command -v agy >/dev/null 2>&1 && return 0
-            fi
-        fi
-        rm -f "$_agy_installer" 2>/dev/null || true
-        trace_lifecycle "tools" "agy install attempt $_attempt failed (retry in ${_delay}s)"
-        sleep "$_delay" 2>/dev/null || true
-        _delay=$(( _delay * 2 ))
-    done
-    return 1
-}
-
+# require_antigravity lives in lib-common.sh (shared with the --agy-login
+# ephemeral login container; operator repro 2026-07-15).
 if ! require_antigravity; then
     trace_lifecycle "error" "agy not found on PATH after 3 install attempts"
     echo ""
@@ -165,7 +112,26 @@ if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
     agy_forge_args+=(--dangerously-skip-permissions)
 fi
 
+# ── Credentials ─────────────────────────────────────────────
+# @trace spec:tillandsias-vault
+# API-key launches need no OAuth state. Otherwise restore the opaque agy
+# credential from Vault (harvested by `tillandsias --agy-login`). Upstream
+# antigravity-cli issue #479: the FILE token store can be write-only for
+# fresh headless processes, so the restore also materializes an
+# ANTIGRAVITY_TOKEN env file (the sanctioned headless channel) which we
+# source before exec — both channels populated.
+if [ -z "${GEMINI_API_KEY:-}" ]; then
+    TILLANDSIAS_OAUTH_PROVIDER=antigravity /usr/local/bin/provider-oauth-vault restore
+    # shellcheck disable=SC1091
+    [ -f /tmp/agy-token.env ] && . /tmp/agy-token.env
+    trace_lifecycle "credentials" "antigravity: OAuth restored (file + ANTIGRAVITY_TOKEN env)"
+else
+    trace_lifecycle "credentials" "antigravity: API-key session (no OAuth restore)"
+fi
+
 # ── Launch Antigravity ──────────────────────────────────────
 trace_lifecycle "entrypoint" "antigravity launching"
 trace_lifecycle "exec" "launching agy"
-exec agy "${agy_forge_args[@]}" "$@"
+export TILLANDSIAS_OAUTH_PROVIDER=antigravity
+export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
+exec /usr/local/bin/codex-oauth-session -- agy "${agy_forge_args[@]}" "$@"

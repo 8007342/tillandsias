@@ -65,14 +65,33 @@ Hard rules:
 Local state is volatile. Before a successful exit, every meaningful result must
 be committed and pushed to the correct remote branch.
 
-- No uncommitted tracked changes.
-- All temporary local artifacts are considered disposable and MUST be discarded. You must leave a completely clean work state.
+- Exit cleanliness is relative to the startup worktree boundary. No
+  uncommitted change created by this cycle may remain.
+- Pre-existing tracked changes and status-visible untracked files are
+  sibling/operator work, not temporary artifacts. Every path recorded by the
+  startup boundary MUST remain byte-identical on every exit, including blocked
+  exits. Never run broad `git clean`, `git checkout --`, `git restore`, or
+  `git reset` against a worktree that was dirty at startup. Ignored trees are
+  not hashed because they may contain an arbitrarily large build cache; they
+  are not thereby cycle-owned and must not be overwritten.
+- Automated finalization must never delete or restore worktree paths. Put every
+  disposable diagnostic or scratch artifact under the unique external
+  `$boundary_dir/tmp/` directory. Files created in the worktree are meaningful
+  cycle output: commit and push them, or stop with a blocker and leave them for
+  explicit operator disposition.
 - Ensure any `tillandsias` background binaries or test processes are fully terminated.
 - No local-only commits.
 - No completed work without a `plan/` event or finding.
 - No e2e pass/fail without a dated plan report.
 - No blocked state without a blocker, owner if known, and smallest next action.
 - Explicitly log things that make you slower (e.g., repeated steps, invalidated caches, uncoordinated scripts) into `plan/issues/`.
+
+A dirty-start preflight refusal is not a work cycle and is the sole exception
+to in-checkout blocker filing: touching `plan/` would itself violate the
+startup boundary. Report `blocked: dirty-start-worktree`, owner, the exact
+status paths, and the smallest next action in the final handoff so the clean
+host/orchestrator can file it durably. Do not create then delete a blocker file
+inside either the shared checkout or `$boundary_dir`.
 
 If a push fails after three fetch/rebase retries, mark the active plan item
 `blocked` or `failed-retryable`, include the failed push output, and stop.
@@ -101,10 +120,18 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `lin
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
 2. `git fetch origin --prune`, then run the Credential Channel Guard below
    before any committable work.
-3. If the worktree is dirty at startup, classify it:
-   - tracked changes: you have a one-off chance to commit a checkpoint or clean up before doing new work. Start clean.
-   - untracked generated artifacts: discard them if not covered by `.gitignore` (update `.gitignore` if necessary). Ensure you start with a clean state.
-   - unknown user work: do not overwrite it; record a blocker.
+3. Snapshot the startup boundary before classifying or changing any path:
+   ```bash
+   boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
+   scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
+   ```
+   The guard records `git status --porcelain=v1 -z --untracked-files=all`
+   plus content hashes for every status-visible dirty path. If the worktree is
+   dirty, treat every recorded path as immutable sibling/operator work unless
+   the operator explicitly identifies it as disposable in the current prompt.
+   Refuse the cycle and do not begin committable work. Report the dirty-start
+   blocker through the final handoff as defined above. Do not commit, discard,
+   restore, reset, or clean unknown startup dirt.
 4. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
 
@@ -272,6 +299,19 @@ Release with `scripts/claim-ledger-node.sh release <node-id>` after the closure
 is committed; expired leases (default TTL 4h) are auto-reclaimed. Pinned by
 `litmus:ledger-node-claim-shape`.
 
+### Release-Targeted and Milestone Packets
+
+Worker selection prefers packets carrying `release_target:
+<milestone-packet-id>` before the general backlog; a host with no eligible
+targeted work falls back normally (never idle). `kind: milestone` packets
+are criteria holders — never claim one for implementation; claim children
+and record burndown as progress events on the milestone. Large ambitious
+goals follow `methodology/distributed-work.yaml` →
+`ambitious_milestone_reduction` (fat-agent research → operator-signed
+decision record → smallest demonstrable rungs → verification): the
+coordinator mirrors the milestone's burndown in `plan/loop_status.md` each
+cycle.
+
 ### Long-Running (multi_cycle) Packets
 
 Packets marked `multi_cycle: true` in `plan/index.yaml` follow
@@ -345,7 +385,9 @@ Before exit:
 1. Reduction-engine capture check: confirm every "this isn't great" observation
    from this cycle is filed in `plan/issues/` (classified `research/`,
    `exploration/`, `enhancement/`, or `optimization/`) and, where reduced,
-   promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit.
+   promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit. A
+   dirty-start preflight refusal performs no reduction cycle; it uses the final
+   handoff exception above and exits without touching the checkout.
 2. Refresh `plan/index.yaml` and `plan/loop_status.md` if this cycle
    changed active work, blockers, tested release, or host assignments.
 3. Validate touched YAML with a parser. The approved validator is
@@ -355,4 +397,10 @@ Before exit:
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
 4. Commit targeted files only.
 5. Push the relevant branch.
-6. Confirm `git status --short --branch` is clean and not ahead of upstream.
+6. If a startup boundary was recorded, run the guard's `verify` mode. A guard
+   failure is a blocker: do not attempt destructive Git cleanup. After a
+   successful verification, remove only the unique external `$boundary_dir`;
+   finalization never deletes, restores, or resets a worktree path.
+7. Confirm there are no uncommitted changes created by this cycle and the
+   branch is not ahead of upstream. Pre-existing dirty paths may remain only
+   when the boundary guard verifies they are byte-identical to startup.

@@ -9,7 +9,7 @@ is updated to the archived path.
 Current active frontier:
 
 - No active step deliverable currently lives in this directory.
-- Immediate work is tracked in `plan/issues/ACTIVE.md`; the completed
+- Immediate work is tracked in `plan/index.yaml`; the completed
   destructive Linux smoke deliverable remains here as
   `50-full-build-install-reset-init-forge.md` until the next archive pass.
 

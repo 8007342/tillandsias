@@ -1,0 +1,41 @@
+# @trace spec:transparent-https-caching
+name: litmus:forge-runtime-ca-trust
+spec: transparent-https-caching
+phase: pre-build
+description: >
+  Prove one rootless initializer feeds the system-default trust path used by
+  Git, curl, Node, and Python without per-client CA environment overrides.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-forge-runtime-ca-trust.sh
+  - localhost/tillandsias-forge:latest exists
+
+critical_path:
+  - step: "representative clients trust one runtime CA through system defaults"
+    command: "scripts/test-forge-runtime-ca-trust.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: rootless forge runtime CA trust uses system defaults"
+
+  - step: "production default-image entrypoints contain no per-client CA mesh"
+    command: "! grep -R -E 'GIT_SSL_CAINFO|SSL_CERT_FILE|REQUESTS_CA_BUNDLE|NODE_EXTRA_CA_CERTS' images/default/entrypoint-*.sh && echo 'ok: no entrypoint CA override mesh'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no entrypoint CA override mesh"
+
+  - step: "raw and typed forge launchers share one runtime CA mount"
+    command: "cargo test -p tillandsias-headless forge_credential_quarantine_mounts_present && cargo test -p tillandsias-headless opencode_args_mount_workspace_and_prompt && echo 'ok: raw and typed launchers share one CA mount'"
+    timeout_ms: 120000
+    expected_behavior: "ok: raw and typed launchers share one CA mount"
+
+observability:
+  traces:
+    - "@trace spec:transparent-https-caching"
+  expected_log: "all representative clients validate the local CA without override variables"
+  log_fields:
+    spec: transparent-https-caching
+    test: forge-runtime-ca-trust
+
+rollback:
+  on_failure: "inspect the image system-bundle symlink, /run ownership, and lib-common initializer"
+  command: "scripts/test-forge-runtime-ca-trust.sh"

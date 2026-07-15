@@ -8,7 +8,8 @@ FROM ${BASE_IMAGE}
 # ── Environment exports for diagnostics and agent discovery ─────
 ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
     DART_ROOT=/opt/dart-sdk \
-    FLUTTER_ROOT=/opt/flutter
+    FLUTTER_ROOT=/opt/flutter \
+    NODE_USE_SYSTEM_CA=1
 
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
@@ -25,6 +26,18 @@ RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.config/opencode \
     && mkdir -p /home/linuxbrew && chown forge:forge /home/linuxbrew \
     && mkdir -p /opt/cheatsheets /opt/cheatsheets-image /opt/cheatsheet-sources \
+    && mkdir -p /usr/local/share/tillandsias /run/tillandsias \
+    && cp -L /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+        /usr/local/share/tillandsias/vendor-ca-bundle.crt \
+    && rm /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    && ln -s /run/tillandsias/ca-bundle.crt \
+        /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    && ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+        /etc/pki/tls/cert.pem \
+    && cp /usr/local/share/tillandsias/vendor-ca-bundle.crt \
+        /run/tillandsias/ca-bundle.crt \
+    && chmod 0444 /run/tillandsias/ca-bundle.crt \
+    && chown forge:forge /run/tillandsias \
     && mkdir -p /tmp && chmod 1777 /tmp
 
 # ── Cheatsheets ────────────────────────────────────────────────
@@ -36,6 +49,12 @@ RUN mkdir -p /usr/local/lib/tillandsias
 COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
 COPY brew-tools-allowlist.txt /usr/local/lib/tillandsias/brew-tools-allowlist.txt
 COPY brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec
+COPY vault-cli.sh /usr/local/bin/vault-cli.sh
+COPY codex-device-auth.sh /usr/local/bin/codex-device-auth
+COPY codex-oauth-vault.sh /usr/local/bin/codex-oauth-vault
+COPY codex-oauth-session.sh /usr/local/bin/codex-oauth-session
+COPY provider-device-auth.sh /usr/local/bin/provider-device-auth
+COPY provider-oauth-vault.sh /usr/local/bin/provider-oauth-vault
 # @trace spec:error-message-localization
 COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 
@@ -56,6 +75,12 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-antigravity.sh \
              /usr/local/bin/entrypoint-terminal.sh \
              /usr/local/bin/tillandsias-brew-shim-exec \
+             /usr/local/bin/vault-cli.sh \
+             /usr/local/bin/codex-device-auth \
+             /usr/local/bin/codex-oauth-vault \
+             /usr/local/bin/codex-oauth-session \
+             /usr/local/bin/provider-device-auth \
+             /usr/local/bin/provider-oauth-vault \
              /usr/local/bin/sse-keepalive-proxy.js
 
 # ── Locale ──────────────────────────────────────────────────────

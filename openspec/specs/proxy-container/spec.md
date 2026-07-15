@@ -106,21 +106,21 @@ Container image builds (via `build-image.sh`) SHALL NOT route through the proxy.
 - **AND** the tray SHALL notify the user of degraded mode
 
 ### Requirement: CA chain injection into forge containers
-Runtime containers (forge, terminal) SHALL have the ephemeral CA chain bind-mounted and trust environment variables set. This enables these containers to trust the proxy's dynamically generated server certificates if ssl-bump is activated in the future.
+Runtime containers (forge, terminal) SHALL have the ephemeral CA chain bind-mounted once. The shared rootless initializer SHALL incorporate it into the image's system-default bundle before clients start. This enables these containers to trust the proxy's dynamically generated server certificates without per-client CA path overrides.
 
 @trace spec:proxy-container
 
 #### Injection mechanism
-| Mount/Env | Value | Consumer |
-|-----------|-------|----------|
-| Bind mount | `ca-chain.crt` -> `/run/tillandsias/ca-chain.crt:ro` | All tools |
-| `NODE_EXTRA_CA_CERTS` | `/run/tillandsias/ca-chain.crt` | Node.js (npm, yarn, pnpm) |
-| `SSL_CERT_FILE` | `/etc/ssl/certs/ca-certificates.crt` | OpenSSL, Go, rustls |
-| `REQUESTS_CA_BUNDLE` | `/etc/ssl/certs/ca-certificates.crt` | Python requests, pip |
+| Mount/Image path | Value | Consumer |
+|------------------|-------|----------|
+| Bind mount | `ca-chain.crt` -> `/run/tillandsias/ca-chain.crt:ro` | Shared initializer |
+| Immutable image path | `/usr/local/share/tillandsias/vendor-ca-bundle.crt` | Shared initializer |
+| Fedora system-default bundle | `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem` -> `/run/tillandsias/ca-bundle.crt` | Git, curl, Node system-CA mode, Python/Requests |
 
 #### Scenario: Forge container trusts proxy CA
 - **WHEN** a forge container is launched
-- **THEN** `inject_ca_chain_mounts()` SHALL add the CA chain bind-mount and trust env vars
+- **THEN** the launcher SHALL add only the CA chain bind-mount
+- **AND** `lib-common.sh` SHALL initialize the system-default bundle atomically
 - **AND** tools inside the container SHALL be able to verify certificates signed by the ephemeral intermediate CA
 
 ### Requirement: Generous developer-focused domain allowlist
@@ -188,9 +188,9 @@ The ssl-bump infrastructure SHALL be fully deployed but dormant by default. The 
 
 #### Current activation status: NEVER
 Active ssl-bump interception is not enabled. The splice-all policy is hardcoded in `images/proxy/squid.conf`. Enabling selective bumping requires:
-1. Solving non-root CA trust injection (forge containers run under `--cap-drop=ALL` so `update-ca-trust` fails)
+1. Rootless CA trust injection is implemented by the image-baked system-path indirection and shared runtime initializer
 2. Changing `ssl_bump splice all` to domain-selective bump rules in `squid.conf`
-3. Verifying that `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` env vars provide sufficient trust for all package managers
+3. Verifying the system-default bundle with representative package managers
 
 #### Scenario: Current mode (splice-all)
 - **WHEN** any HTTPS request passes through the proxy

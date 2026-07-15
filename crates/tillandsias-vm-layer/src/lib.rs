@@ -62,6 +62,7 @@ pub mod wsl;
 /// Self-contained control-wire client for non-interactive guest exec (the wire
 /// half of `VmRuntime::exec` on vsock backends). Cross-platform / unit-testable
 /// — see `vsock_exec::exec_over_stream`.
+pub mod transport_conformance;
 pub mod vsock_exec;
 
 // macOS host-side vsock connector. Declared at this level so callers can

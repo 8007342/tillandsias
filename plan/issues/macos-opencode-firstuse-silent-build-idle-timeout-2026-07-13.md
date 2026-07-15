@@ -67,3 +67,24 @@ tillandsias-tray --opencode /home/forge/src/tillandsias --prompt "…"
   `localhost/tillandsias-forge*` images reaches the agent prompt without
   tripping the idle timeout (or fails loud with an actionable pre-build
   instruction), pinned on Linux CI with a synthetic slow-build fixture.
+
+## Implementation checkpoint (2026-07-14, Linux)
+
+- `vsock_exec.rs` now owns one `IDLE_TIMEOUT_SECS = 300` policy and the
+  `TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS` override. Invalid values and
+  values below 60 seconds fail loudly.
+- Exec clients advertise `pty.heartbeat@v1`; the guest emits empty
+  `PtyData{ToHost}` frames every 30 seconds only after that capability is
+  negotiated. Interactive clients therefore receive no new frames during a
+  mixed-version rollout, and host terminal routing defensively ignores empty
+  data.
+- `litmus:vsock-exec-heartbeat` passes 4/4. Its synthetic guest remains silent
+  beyond multiple injected idle windows, stays live on heartbeats, delivers
+  the eventual output/close, and still times out when no frame arrives.
+- Missing on-demand images now print an unconditional build-start line before
+  the currently buffered Podman build call, giving the operator immediate
+  progress evidence and partially serving order 270.
+
+The remaining completion gate is the original cold-substrate macOS run: remove
+all forge images, launch `--opencode`, observe at least one negotiated
+heartbeat interval, and confirm the agent prompt is reached without VM teardown.

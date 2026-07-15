@@ -556,6 +556,125 @@ fn prompt_line(label: &str, hidden: bool) -> String {
     line.trim().to_string()
 }
 
+/// `--transport-conformance`: run the shared GuestTransport conformance
+/// fixtures (order 128) against the live VZ backend (order 126 exit
+/// criterion 3, "both primitives pass the shared conformance fixtures on
+/// Darwin").
+///
+/// Threading: the fixtures call the REAL trait methods
+/// (`GuestTransport::{open_stream, exec, exec_streaming}`), whose VZ connect
+/// completions land on the main dispatch queue. A headless caller that parks
+/// the main thread in `block_on` would deadlock them (see
+/// `open_vsock_stream_current_thread` docs) — so boot + readiness run on the
+/// main thread (their helpers pump internally), the fixture set runs on a
+/// worker-thread runtime, and the main thread pumps the CFRunLoop until the
+/// worker finishes. That is the same division of labor as the AppKit tray,
+/// so the run proves the exact code path production uses.
+///
+/// Verdict grammar (greppable, falsifiable):
+/// `transport-conformance: PASS n=<N>` or
+/// `transport-conformance: FAIL <fixture>: <reason>`.
+pub fn transport_conformance_main() -> i32 {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+    use tillandsias_vm_layer::VmRuntime;
+    use tillandsias_vm_layer::transport_conformance::{
+        all_passed, render_report, run_all_with_progress,
+    };
+
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
+    let vz = Arc::new(tillandsias_vm_layer::vz::VzRuntime::new(3, image_root()));
+    vz.set_serial_to_log(true);
+    if !vz.is_provisioned() {
+        eprintln!(
+            "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
+        );
+        return 1;
+    }
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    // Boot + readiness on the main thread (helpers pump the runloop).
+    let booted = rt.block_on(async {
+        eprintln!("[transport-conformance] starting VM…");
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return false;
+        }
+        eprintln!("[transport-conformance] waiting for VM phase Ready…");
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
+            return false;
+        }
+        true
+    });
+    if !booted {
+        let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
+        return 1;
+    }
+
+    // Fixtures on a worker runtime; main thread pumps the CFRunLoop so the
+    // trait-level VZ connects (spawn_blocking + main-queue completion) fire.
+    eprintln!("[transport-conformance] running shared fixtures over GuestEndpoint::MacVz…");
+    let worker_vz = Arc::clone(&vz);
+    let worker = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| format!("worker tokio runtime: {e}"))?;
+        let ep = GuestEndpoint::MacVz {
+            port: CONTROL_WIRE_VSOCK_PORT,
+        };
+        Ok::<_, String>(rt.block_on(async {
+            let t: &dyn tillandsias_control_wire::guest_transport::GuestTransport = &*worker_vz;
+            // Stream each verdict as it lands (loud floor; a buffered
+            // report hides which fixture is hanging).
+            run_all_with_progress(t, &ep, &mut |r| match &r.outcome {
+                Ok(()) => eprintln!("[transport-conformance] fixture {} ok", r.name),
+                Err(e) => eprintln!("[transport-conformance] fixture {} FAIL: {e}", r.name),
+            })
+            .await
+        }))
+    });
+    while !worker.is_finished() {
+        tillandsias_vm_layer::vz::boot::pump_cf_loop_for(Duration::from_millis(50));
+    }
+    let results = match worker.join() {
+        Ok(Ok(results)) => results,
+        Ok(Err(e)) => {
+            eprintln!("{{\"error\":\"{e}\"}}");
+            let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
+            return 1;
+        }
+        Err(_) => {
+            eprintln!("{{\"error\":\"conformance worker panicked\"}}");
+            let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
+            return 1;
+        }
+    };
+
+    print!("{}", render_report(&results));
+    let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
+    if all_passed(&results) { 0 } else { 1 }
+}
+
 /// `--github-login`: boot the VM and drive the *released* guest
 /// `tillandsias-headless --github-login` over the control wire. Each end user is
 /// **prompted on the host terminal for their OWN** git author name, git author
@@ -875,8 +994,73 @@ pub fn list_cloud_projects_main() -> i32 {
 /// open-ended until the user exits.
 ///
 /// @trace plan/issues/smoke-curl-install-e2e-macos-v0.3.260626.4-2026-06-26.md
+/// Guest-side root where the host's `~/src` arrives via the `home-src`
+/// virtiofs share (vz.rs cloud-init fstab entry).
+const GUEST_SRC_ROOT: &str = "/home/forge/src";
+
+/// Order 331: translate an operator-supplied project path into the
+/// guest-visible form, BEFORE booting the VM.
+///
+/// Pure over already-absolute host paths so it is unit-pinnable:
+/// - a path already under `/home/forge/src` passes through verbatim
+///   (the operator supplied the guest form);
+/// - a path under `<host_home>/src/…` rewrites to `/home/forge/src/…`
+///   (only `~/src` is shared into the guest, so only it can translate);
+/// - anything else is rejected with a message naming both accepted forms —
+///   failing on the host in milliseconds instead of after a ~60s boot with
+///   the guest's opaque "Project not found" (live repro 2026-07-13).
+pub fn translate_project_path_for_guest(abs_path: &str, host_home: &str) -> Result<String, String> {
+    let guest_root = std::path::Path::new(GUEST_SRC_ROOT);
+    let p = std::path::Path::new(abs_path);
+    if p.starts_with(guest_root) {
+        return Ok(abs_path.to_string());
+    }
+    let host_src = std::path::Path::new(host_home).join("src");
+    if let Ok(rest) = p.strip_prefix(&host_src) {
+        if rest.as_os_str().is_empty() {
+            return Err(format!(
+                "--opencode needs a project INSIDE {}, not the src root itself",
+                host_src.display()
+            ));
+        }
+        return Ok(guest_root.join(rest).to_string_lossy().into_owned());
+    }
+    Err(format!(
+        "--opencode project path must be under {} (host form) or {} (guest form); got: {}. \
+         Only ~/src is shared into the guest, so projects elsewhere are not visible to the forge.",
+        host_src.display(),
+        GUEST_SRC_ROOT,
+        abs_path
+    ))
+}
+
+/// Host-side wrapper for [`translate_project_path_for_guest`]: resolves
+/// relative paths (including the bare-`.` default) against the current
+/// directory via `canonicalize` when the path exists on the host, then
+/// applies the pure translation.
+fn resolve_project_path_pre_boot(raw: &str) -> Result<String, String> {
+    let host_home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    // Guest-absolute paths don't exist on the host; skip canonicalize.
+    if raw.starts_with(GUEST_SRC_ROOT) {
+        return translate_project_path_for_guest(raw, &host_home);
+    }
+    let abs = std::fs::canonicalize(raw)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| raw.to_string());
+    translate_project_path_for_guest(&abs, &host_home)
+}
+
 pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
     use tillandsias_vm_layer::VmRuntime;
+
+    // Order 331: translate/validate on the host BEFORE any VM work.
+    let path = match resolve_project_path_pre_boot(&path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{{\"error\":\"{e}\"}}");
+            return 2;
+        }
+    };
 
     if let Err(err) = stage_embedded_guest_binary() {
         eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
@@ -1007,6 +1191,7 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::parse_aarch64_qcow2_sha;
+    use super::translate_project_path_for_guest;
 
     /// `parse_aarch64_qcow2_sha` reads the actual manifest.toml format
     /// the Fedora pivot emits (`"aarch64.qcow2" = "<sha>"` inside
@@ -1278,5 +1463,34 @@ mod tests {
         assert_eq!(exit_code_from(&report), 0);
         report.provisioned = false;
         assert_eq!(exit_code_from(&report), 2);
+    }
+
+    /// Order 331 pin: the pure host→guest project-path translation.
+    #[test]
+    fn project_path_translation_rules() {
+        let t = |p: &str| translate_project_path_for_guest(p, "/Users/op");
+        // host ~/src/<name> → guest path (the 2026-07-13 live repro shape)
+        assert_eq!(
+            t("/Users/op/src/tillandsias").unwrap(),
+            "/home/forge/src/tillandsias"
+        );
+        // nested subpath translates too
+        assert_eq!(
+            t("/Users/op/src/tillandsias/crates").unwrap(),
+            "/home/forge/src/tillandsias/crates"
+        );
+        // guest-absolute passes through verbatim
+        assert_eq!(
+            t("/home/forge/src/tillandsias").unwrap(),
+            "/home/forge/src/tillandsias"
+        );
+        // the src root itself is not a project
+        assert!(t("/Users/op/src").unwrap_err().contains("INSIDE"));
+        // outside ~/src fails fast with both accepted forms named
+        let err = t("/tmp/elsewhere").unwrap_err();
+        assert!(
+            err.contains("/Users/op/src") && err.contains("/home/forge/src"),
+            "{err}"
+        );
     }
 }

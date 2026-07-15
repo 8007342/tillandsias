@@ -79,18 +79,36 @@ no-bump/bump classification for each. Feeds the impl packet.
 
 ## Research Findings
 
-The research has been successfully completed by deploying the diagnostic proxy and launching the agents in interactive isolation.
+Interactive isolation evidence was captured in `plan/localwork/proxy13.log`
+(disposable source SHA-256
+`a9c526c2e1550a04652036e32d49ce880b0cd68da7085224f43052bebdf280ed`).
+The exact denied FQDNs were:
 
-**Exact denied domains per agent from proxy logs:**
-- **Codex:** `chatgpt.com`, `github.com`, `api.github.com`
-- **Claude:** `platform.claude.com`, `raw.githubusercontent.com`
-- **Antigravity:** Not wired as an agent (no `entrypoint-forge-antigravity.sh` exists).
+- **Codex:** `ab.chatgpt.com`, `chatgpt.com`
+- **Claude:** `platform.claude.com`
+- **Antigravity:** not launchable at research time because the forge entrypoint
+  did not yet exist; that historical wiring gap satisfied this research
+  packet's documentation criterion and was later resolved by `6f3ad337`,
+  `35ba3d3f`, and `d8b597dc`.
 
-**Minimal Allowlist Delta (No duplicate subdomains):**
-- `.chatgpt.com` (no-bump)
-- `.github.com` (no-bump)
-- `.githubusercontent.com` (no-bump)
-- `.claude.com` (no-bump)
+Representative raw Squid records:
+
+```text
+1782690354.846 0 10.0.42.19 TCP_DENIED/200 0 CONNECT ab.chatgpt.com:443 - HIER_NONE/- -
+1782690408.536 3 10.0.42.23 TCP_DENIED/200 0 CONNECT chatgpt.com:443 - HIER_NONE/- -
+1782690409.417 11 10.0.42.24 TCP_DENIED/200 0 CONNECT platform.claude.com:443 - HIER_NONE/- -
+1782690448.553 39994 10.0.42.23 NONE_NONE_ABORTED/200 0 CONNECT github.com:443 - HIER_NONE/- -
+1782690448.556 39177 10.0.42.24 NONE_NONE_ABORTED/200 0 CONNECT raw.githubusercontent.com:443 - HIER_NONE/- -
+```
+
+The GitHub records were aborted allowed requests, not denials. `.github.com`
+and `.githubusercontent.com` were already allowlisted and no-bump before this
+research, so they are not part of its delta.
+
+**Minimal allowlist delta (no duplicate subdomains):**
+
+- `.chatgpt.com` — no-bump
+- `.claude.com` — no-bump
 
 ### Events
 - type: claim

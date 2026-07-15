@@ -361,6 +361,11 @@ impl PtyRouter {
                 direction: PtyDirection::ToHost,
                 bytes,
             } => {
+                // Capability-gated exec heartbeats reuse empty ToHost frames.
+                // They are liveness signals, not terminal attachment/data.
+                if bytes.is_empty() {
+                    return Ok(());
+                }
                 if bytes.len() > MAX_PTY_FRAME_BYTES {
                     return Err(format!(
                         "inbound PtyData frame {} exceeds MAX_PTY_FRAME_BYTES {}",
@@ -651,6 +656,16 @@ mod tests {
         assert_eq!(s.session_id, 1);
         s.write_to_guest(b"echo hi\n").unwrap();
         s.resize(30, 100).unwrap();
+
+        // Exec liveness heartbeats never become terminal data or mark an
+        // interactive terminal attached.
+        r.route(&ControlMessage::PtyData {
+            session_id: 1,
+            direction: PtyDirection::ToHost,
+            bytes: vec![],
+        })
+        .unwrap();
+        assert!(s.inbound.try_recv().is_err());
 
         // Guest output is routed to the session.
         r.route(&ControlMessage::PtyData {

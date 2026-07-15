@@ -459,19 +459,21 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                 let root_token = read_and_handover_root_token(debug)?;
                 let client = vault_client(&base_url, &root_token, debug)?;
                 // Sentinel must be the NEWEST provisioned role, not the oldest:
-                // probing 'git-mirror' let vaults provisioned before a Policy
-                // addition skip provisioning forever, so newly added roles
-                // (the provider-login set, orphaned since 2026-06-30) were
+                // probing an older role lets vaults provisioned before a Policy
+                // addition skip provisioning forever, so newly added roles were
                 // never created on existing vault volumes and every token
                 // mint 404'd. load_policies/create_approle_role are
-                // idempotent overwrites, so re-provisioning is safe.
+                // idempotent overwrites, so re-provisioning is safe. Bump this
+                // to the newest role EVERY time a Policy is added — 2026-07-15
+                // added claude-forge + antigravity-forge (provider forge-lane
+                // OAuth restore), so the sentinel moved to 'antigravity-forge'.
                 if rt
-                    .block_on(client.approle_role_exists("antigravity-login"))
+                    .block_on(client.approle_role_exists("antigravity-forge"))
                     .unwrap_or(false)
                 {
                     if debug {
                         eprintln!(
-                            "[tillandsias-vault] AppRole 'antigravity-login' (newest sentinel) already exists; skipping policy and role provisioning"
+                            "[tillandsias-vault] AppRole 'antigravity-forge' (newest sentinel) already exists; skipping policy and role provisioning"
                         );
                     }
                 } else {
@@ -2266,6 +2268,9 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
         Policy::GithubLogin => "github-login",
         Policy::ClaudeLogin => "claude-login",
         Policy::CodexLogin => "codex-login",
+        Policy::CodexForge => "codex-forge",
+        Policy::ClaudeForge => "claude-forge",
+        Policy::AntigravityForge => "antigravity-forge",
         Policy::AntigravityLogin => "antigravity-login",
     }
 }
@@ -2285,6 +2290,7 @@ mod tests {
         assert_eq!(policy_role_name(&Policy::GithubLogin), "github-login");
         assert_eq!(policy_role_name(&Policy::ClaudeLogin), "claude-login");
         assert_eq!(policy_role_name(&Policy::CodexLogin), "codex-login");
+        assert_eq!(policy_role_name(&Policy::CodexForge), "codex-forge");
         assert_eq!(
             policy_role_name(&Policy::AntigravityLogin),
             "antigravity-login"

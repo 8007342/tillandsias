@@ -13,6 +13,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode.sh#L26](../../../images/default/entrypoint-forge-opencode.sh#L26)
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
 - [images/default/entrypoint-forge-opencode-web.sh#L30](../../../images/default/entrypoint-forge-opencode-web.sh#L30)
-- [images/default/entrypoint-forge-opencode-web.sh#L100](../../../images/default/entrypoint-forge-opencode-web.sh#L100)
+- [images/default/entrypoint-forge-opencode-web.sh#L68](../../../images/default/entrypoint-forge-opencode-web.sh#L68)
 - [images/default/entrypoint-terminal.sh#L18](../../../images/default/entrypoint-terminal.sh#L18)
 - [scripts/test-git-mirror.sh#L2](../../../scripts/test-git-mirror.sh#L2)

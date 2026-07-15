@@ -3,7 +3,7 @@ set -e
 # @trace spec:git-mirror-service
 # Entrypoint for the Tillandsias git service container.
 # Runs git daemon in foreground, serving all repositories under /srv/git.
-# Forge containers push here; post-receive hooks mirror to configured remotes.
+# Forge containers push here; pre-receive relays to configured upstreams.
 # DISTRO: Alpine 3.20 — bash installed explicitly via apk add bash.
 #         Uses POSIX-compatible constructs only (no [[ ]], no arrays).
 
@@ -22,7 +22,7 @@ echo "========================================"
 # GitHub token credential discovery.
 # @trace spec:tillandsias-vault, spec:podman-secrets-integration, spec:git-mirror-service
 # The launcher mints a short-lived AppRole token scoped to `git-mirror-policy`
-# and mounts it at /run/secrets/vault-token. The post-receive hook calls
+# and mounts it at /run/secrets/vault-token. The relay helper calls
 # `vault-cli read -field=token secret/github/token` at push time to fetch the
 # real GitHub token. The token never lives on disk; it is read into a
 # process-scoped variable, consumed by `git push`, and unset.
@@ -43,7 +43,7 @@ if [ -f /run/secrets/tillandsias-ca-cert ]; then
 fi
 
 # @trace spec:git-mirror-service
-# Seed the project's bare repo + install the post-receive hook.
+# Seed the project's bare repo + install the receive hooks.
 #
 # The forge pushes via `git://git-service/<project>` (see
 # `rewrite_origin_for_enclave_push` in images/default/lib-common.sh). The bare
@@ -62,8 +62,8 @@ if [ -n "$PROJECT" ]; then
         git init --bare "$PROJECT_REPO"
         # Accept whatever the forge pushes — initial syncs from a host clone
         # often look like force-pushes from the bare repo's perspective. The
-        # post-receive hook forwards only the changed refs upstream; locally we
-        # just accept the forge's update into the sparse mirror.
+        # pre-receive hook atomically forwards only the changed refs upstream
+        # before this sparse mirror accepts the same transaction.
         git -C "$PROJECT_REPO" config receive.denyNonFastforwards false
         git -C "$PROJECT_REPO" config receive.denyDeletes false
     fi
@@ -88,23 +88,23 @@ if [ -n "$PROJECT" ]; then
         git -C "$PROJECT_REPO" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
         git -C "$PROJECT_REPO" config remote.origin.tagOpt "--no-tags"
     else
-        echo "[git-service] no TILLANDSIAS_PROJECT_REMOTE_URL set; post-receive hook will log and skip"
+        echo "[git-service] no TILLANDSIAS_PROJECT_REMOTE_URL set; pushes remain durable in the local-only mirror"
     fi
-    if [ ! -e "$PROJECT_REPO/hooks/post-receive" ]; then
-        cp /usr/local/share/git-service/post-receive-hook.sh "$PROJECT_REPO/hooks/post-receive"
-        chmod +x "$PROJECT_REPO/hooks/post-receive"
-        echo "[git-service] installed post-receive hook at $PROJECT_REPO/hooks/post-receive"
-    fi
-    if [ ! -e "$PROJECT_REPO/hooks/pre-receive" ]; then
-        cp /usr/local/share/git-service/pre-receive-hook.sh "$PROJECT_REPO/hooks/pre-receive"
-        chmod +x "$PROJECT_REPO/hooks/pre-receive"
-        echo "[git-service] installed pre-receive hook at $PROJECT_REPO/hooks/pre-receive"
-    fi
+    # Hooks are Tillandsias-owned runtime code. Refresh them on every start so
+    # existing named volumes cannot retain obsolete ack semantics after an
+    # image upgrade.
+    cp /usr/local/share/git-service/post-receive-hook.sh "$PROJECT_REPO/hooks/post-receive"
+    cp /usr/local/share/git-service/pre-receive-hook.sh "$PROJECT_REPO/hooks/pre-receive"
+    cp /usr/local/share/git-service/relay-refs.sh "$PROJECT_REPO/hooks/tillandsias-relay-refs"
+    chmod +x "$PROJECT_REPO/hooks/post-receive" \
+        "$PROJECT_REPO/hooks/pre-receive" \
+        "$PROJECT_REPO/hooks/tillandsias-relay-refs"
+    echo "[git-service] refreshed relay-verified receive hooks at $PROJECT_REPO/hooks"
 fi
 
 # @trace spec:git-mirror-service
 # Retry-on-startup: re-push refs that may have been stranded from a previous
-# session (e.g. GitHub was transiently down when the post-receive hook ran).
+# session created by an older image with post-receive relay semantics.
 #
 # CRITICAL: We push EACH LOCAL BRANCH and EACH LOCAL TAG by name, NOT with
 # `git push --mirror`. The mirror is a sparse cache holding only refs the
@@ -113,7 +113,8 @@ fi
 # before wave 24. Always use the explicit per-ref form here.
 #
 # Errors are logged but don't block the daemon; the next forge commit will
-# trigger the post-receive hook which re-attempts the upstream push.
+# trigger the pre-receive relay, which fails the client push if upstream is
+# still unavailable.
 # Pick a writable log path. Under --read-only the bind-mounted /var/log/...
 # isn't always available; fall through to /tmp (the image's tmpfs) or skip.
 GIT_RETRY_LOG=""
@@ -158,13 +159,18 @@ for mirror in /srv/git/*; do
         continue
     fi
 
-    # Build refspecs: "refs/heads/<name>:refs/heads/<name>" for each branch,
-    # "refs/tags/<name>:refs/tags/<name>" for each tag.
-    REFSPECS=""
+    # Build synthetic receive records so startup recovery uses the exact same
+    # Vault-backed, atomic relay helper as live pushes.
+    UPDATE_RECORDS=""
+    REF_COUNT=0
+    ZERO_SHA="0000000000000000000000000000000000000000"
     for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
-        REFSPECS="$REFSPECS $ref:$ref"
+        NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
+        UPDATE_RECORDS="${UPDATE_RECORDS}${ZERO_SHA} ${NEWSHA} ${ref}
+"
+        REF_COUNT=$((REF_COUNT + 1))
     done
-    if [ -z "$REFSPECS" ]; then
+    if [ "$REF_COUNT" -eq 0 ]; then
         continue
     fi
 
@@ -178,9 +184,8 @@ for mirror in /srv/git/*; do
         retry_msg "[git-mirror] Startup retry-push fetch output: $FETCH_OUTPUT"
     fi
 
-    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refspecs=$(echo "$REFSPECS" | wc -w))"
-    # shellcheck disable=SC2086
-    if OUTPUT="$(git -C "$mirror" push origin $REFSPECS 2>&1)"; then
+    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refs=$REF_COUNT)"
+    if OUTPUT="$(printf '%s' "$UPDATE_RECORDS" | (cd "$mirror" && hooks/tillandsias-relay-refs) 2>&1)"; then
         retry_msg "[git-mirror] Startup retry-push OK"
     else
         retry_msg "[git-mirror] Startup retry-push FAILED: $OUTPUT"

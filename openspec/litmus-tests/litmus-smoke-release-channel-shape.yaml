@@ -1,0 +1,49 @@
+# @trace spec:ci-release
+name: litmus:smoke-release-channel-shape
+spec: ci-release
+phase: pre-build
+description: Curl-install smoke distinguishes daily (newest prerelease) from stable (promoted); installer honors a release-base override
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/resolve-smoke-release.sh
+  - workspace contains scripts/install.sh
+  - workspace contains scripts/install-macos.sh
+
+critical_path:
+  - step: "resolver exists, executable, defaults to the daily channel"
+    command: "test -x scripts/resolve-smoke-release.sh && grep -Fq 'CHANNEL=\"${1:-daily}\"' scripts/resolve-smoke-release.sh && echo 'ok: resolver defaults daily'"
+    timeout_ms: 3000
+    expected_behavior: "ok: resolver defaults daily"
+
+  - step: "daily filters to well-formed tags and picks the highest (robust to junk + API order)"
+    command: "grep -Fq 'grep -E \"$TAG_RE\" | sort -V | tail -1' scripts/resolve-smoke-release.sh && echo 'ok: daily robust'"
+    timeout_ms: 3000
+    expected_behavior: "ok: daily robust"
+
+  - step: "stable resolves the non-prerelease /releases/latest"
+    command: "grep -Fq 'releases/latest' scripts/resolve-smoke-release.sh && grep -Fq 'refused:bad-channel' scripts/resolve-smoke-release.sh && echo 'ok: stable + grammar'"
+    timeout_ms: 3000
+    expected_behavior: "ok: stable + grammar"
+
+  - step: "installers honor TILLANDSIAS_RELEASE_BASE, defaulting to stable /releases/latest"
+    command: "grep -Fq 'TILLANDSIAS_RELEASE_BASE:-https://github.com/${REPO}/releases/latest/download' scripts/install.sh && grep -Fq 'TILLANDSIAS_RELEASE_BASE:-https://github.com/${REPO}/releases/latest/download' scripts/install-macos.sh && echo 'ok: installer override'"
+    timeout_ms: 3000
+    expected_behavior: "ok: installer override"
+
+  - step: "promotion prompts the one-shot stable smoke"
+    command: "grep -Fq 'SMOKE_CHANNEL=stable' scripts/promote-stable.sh && echo 'ok: promotion smoke hint'"
+    timeout_ms: 3000
+    expected_behavior: "ok: promotion smoke hint"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "Smoke release-channel resolution: daily default, stable one-shot post-promotion, installer base override"
+  log_fields:
+    spec: "ci-release"
+    test: "smoke-release-channel-shape"
+
+rollback:
+  on_failure: "restore scripts/resolve-smoke-release.sh and the TILLANDSIAS_RELEASE_BASE override in the installers from git history"

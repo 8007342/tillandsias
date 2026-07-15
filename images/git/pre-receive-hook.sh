@@ -3,18 +3,18 @@
 # Pre-receive hook for git mirrors managed by Tillandsias.
 # Installed into each mirror's hooks/pre-receive directory.
 #
-# Validates YAML files in plan/ and openspec/ paths before accepting a push.
-# Rejects the push if any touched YAML file fails to parse. This prevents
-# broken plan/index.yaml or openspec spec files from propagating to GitHub.
+# Validates ledger YAML, then synchronously relays the proposed ref transaction
+# upstream before accepting it locally. A client success therefore means the
+# configured upstream has durably accepted the same atomic ref set.
 #
 # Validator fallback order:
 #   1. tillandsias-policy validate-yaml (if available)
 #   2. ruby -ryaml (Alpine package)
-#   3. skip validation with warning (if neither is available)
+#   3. reject ledger-YAML updates (if neither is available)
 #
 # Exit codes:
-#   0 - push accepted (all YAML valid or no YAML touched)
-#   1 - push rejected (YAML validation failed)
+#   0 - push accepted (policy valid and upstream relay verified)
+#   1 - push rejected (policy or upstream relay failed)
 
 # --- Logging (shared with post-receive hook pattern) ---
 LOG_CANDIDATES="/var/log/tillandsias/git-push.log $HOME/.cache/tillandsias/git-push.log /tmp/git-push.log"
@@ -44,8 +44,8 @@ if command -v tillandsias-policy >/dev/null 2>&1; then
 elif command -v ruby >/dev/null 2>&1; then
     VALIDATOR="ruby"
 else
-    log_msg "WARNING: no YAML validator found (tillandsias-policy or ruby); skipping validation"
-    exit 0
+    VALIDATOR="none"
+    log_msg "WARNING: no YAML validator found (tillandsias-policy or ruby)"
 fi
 
 # --- Validate a single YAML file content ---
@@ -77,6 +77,10 @@ validate_yaml_file() {
                 return 1
             fi
             ;;
+        none)
+            log_msg "REJECT: $label cannot be validated because no YAML validator is installed"
+            return 1
+            ;;
     esac
 }
 
@@ -96,6 +100,12 @@ is_ledger_yaml() {
 # --- Temp directory for extracted blobs ---
 TMPDIR_WORK="$(mktemp -d 2>/dev/null || mktemp -d -t 'git-pre-receive')"
 trap 'rm -rf "$TMPDIR_WORK"' EXIT
+UPDATES_FILE="$TMPDIR_WORK/updates"
+REJECT_MARKER="$TMPDIR_WORK/rejected"
+
+# Preserve stdin because both policy validation and the relay helper need the
+# exact receive-pack transaction.
+cat > "$UPDATES_FILE"
 
 REJECTED=0
 
@@ -137,14 +147,31 @@ while read -r OLDSHA NEWSHA REFNAME; do
         printf '%s\n' "$CONTENT" > "$TMPFILE"
 
         if ! validate_yaml_file "$FILEPATH" "$TMPFILE"; then
-            REJECTED=1
+            : > "$REJECT_MARKER"
         fi
-    done < <(echo "$FILES")
-done
+    done <<EOF
+$FILES
+EOF
+done < "$UPDATES_FILE"
+
+[ -e "$REJECT_MARKER" ] && REJECTED=1
 
 if [ "$REJECTED" -eq 1 ]; then
     log_msg "Push rejected: YAML validation failed for ledger files"
     exit 1
 fi
+
+RELAY_HELPER="$(dirname "$0")/tillandsias-relay-refs"
+if [ ! -x "$RELAY_HELPER" ]; then
+    log_msg "Push rejected: relay helper is missing or not executable at $RELAY_HELPER"
+    exit 1
+fi
+
+if ! "$RELAY_HELPER" < "$UPDATES_FILE"; then
+    log_msg "Push rejected: configured upstream did not durably accept the ref transaction"
+    exit 1
+fi
+
+log_msg "Relay verified: upstream durably accepted the ref transaction"
 
 exit 0

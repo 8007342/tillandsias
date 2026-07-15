@@ -1,6 +1,405 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-14T00:20:00Z
+LastExecutionTime: 2026-07-15T07:00:00Z
+
+## Cycle 2026-07-15T07:00Z→07:45Z (linux_mutable macuahuitl — service-catalog build STARTED: order 357 I3-core shipped)
+
+- **Coordination laid down**: plan/issues/parallel-workstreams-2026-07-15.md
+  + loop_status lane map so the operator's concurrent Linux/Windows/macOS
+  workers don't collide. Coordinator claimed 357/358/360/361.
+- **Order 357 I3-CORE shipped (b1404180)**: host-side publish-it-locally
+  building blocks — RouterRoute `public` (no-auth) route + public Caddyfile
+  branch; build_web_service_run_args (worktree RO bind-mount at /var/www,
+  enclave net, cap-drop=ALL, --rm, host-supplied image); interim
+  CATALOG_WEB_CATEGORY single-entry allowlist; friendly-name-only URL. 5
+  unit tests (RO mount, no-auth public route, private routes stay gated,
+  public flag defaults false + JSON round-trip). Also fixed the
+  vault-lease test to the generalized all-credentialed-modes invariant.
+- **357 split into ready children**: 363 (McpFrame publish_local tool +
+  host handler + orchestration), 364 (e2e curl litmus). Either a
+  concurrent Linux worker or the next coordinator cycle continues from the
+  landed core.
+- Remaining coordinator lane: 363→364 (finish 357), then 358/360/361.
+
+## Cycle 2026-07-15T05:21Z→06:15Z (macos — operator-directed release-blocker drain: 331 DONE, 332 DONE (heartbeat gate observed live), 349 RUN→precisely BLOCKED; TWO new launch-killer P1s fixed en route)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260715T0521Z. Guard `ok:gh-keyring`.
+  Merged origin/linux-next f97ec125 at start (empty-lease wedge from
+  07-11 already cleared last cycle).
+- **Order 331 COMPLETED** (efde3ad1): pre-boot host→guest path translation
+  + unit pin; every gate run this cycle attached via the previously
+  failing host-form path.
+- **Order 332 COMPLETED** — the Linux heartbeat implementation passed its
+  macOS completion gate: cold-forge `--opencode` under a 60s idle override
+  built router+forge-base+forge through many silent minutes with
+  pty.heartbeat@v1 keeping the wire alive (order-270 build-start lines
+  printing per image), then a warm run reached the agent, executed the
+  prompt, and propagated exit 0. No VM teardown.
+- **NEW P1 #1 (5497e10a)**: OpenCode CLI lane was the ONE lane the
+  293/327 router-preflight fixes missed — ensured [proxy,git,inference,
+  forge] then ensure_router_running pulled a nonexistent localhost
+  registry. Router added + source pin.
+- **NEW P1 #2 (71b0c30b)**: merged order-341/342 gitdir facade is DOA on
+  macOS guests — guest OS ships NO git binary, so git_config_set/
+  write_forge_index/read_host_project_origin_url all silently fail; the
+  fail-closed .git mask tmpfs then tmpcopyup'd the operator's real
+  virtiofs .git (hundreds of MB) into 8m → deterministic
+  `crun: write: No space left on device` at every launch, zero
+  kernel/journal trace, 241G free. Mask now `notmpcopyup` (empty by
+  definition) + pin; the guest-git dependency filed for the facade owner
+  (macos-forge-gitdir-facade-guest-git-missing-2026-07-15.md).
+- **Order 349 RUN → BLOCKED with a precise split** (identity: 71b0c30b
+  staged guest, forge v0.3.260715.2, public lane): PASSING — global
+  gitconfig via /home/forge/.gitconfig (safe.directory, empty
+  credential.helper, hooksPath), full TLS parity (curl/node/python all
+  200 through the proxy, system-trust only, no per-client CA overrides).
+  FAILING — mirror insteadOf rewrite absent + repo fetch/push impossible;
+  BOTH are the guest-git facade gap above. Owner linux; gate reruns after
+  the fix. This is the concrete remaining release blocker for the macOS
+  column of stable-milestone-v1.
+- **Also filed**: pre-existing linux-next test regression
+  codex_forge_mounts_scoped_vault_lease_only_for_codex (Claude args now
+  carry --secret; 161/162 elsewhere green) — every host's --test gate is
+  red on it.
+- **Queue after drain**: no macOS-role release-targeted ready work
+  remains; residual ready set is 5-20h audits (147/151/155/225/245-251…)
+  and order 342, whose live closure rides the same guest-git/mirror chain.
+
+## ACTIVE PARALLELIZATION (2026-07-15) — operator started Linux + Windows + macOS workers
+
+See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.
+- **Linux coordinator (macuahuitl)** OWNS service-catalog rungs 357→358→360→361 (claimed). Other Linux workers: take 359 (github-token, grab first), 352/307 live-verify, audits 245-251/309/329/330/333, streams 148/150/153/156/157/158.
+- **Windows worker**: ~~312~~ **DONE 2026-07-15 (7e491bd7, windows-next)** — next: 323/324/326/350.
+- **macOS worker**: 331 first, then 332/349/342.
+- Two milestones: stable-milestone-v1 (334, needs sibling criteria) + enclave-service-catalog (353, Linux-only).
+
+## Cycle 2026-07-15T05:23Z→07:10Z (windows — order 312 CLOSED (socat stdio bridge, standard-user wire live-verified incl. on pristine cold provision); 326 criterion-1 e2e-proven; destructive e2e PASS attempt 2; inherited linux-next Windows compile break repaired forward)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T0523Z. Guard `ok:gh-keyring`; merged
+  origin/linux-next f97ec125 (81 commits) clean — markers/YAML/cargo-check
+  gate green (ruby absent on this host; used `tillandsias-policy
+  validate-yaml`, the approved primary).
+- **Order 312 DONE (release gate for stable-milestone-v1 Windows)**: slice 2
+  privilege-routed transport — `wire_path()` sends standard users through a
+  new `WslStdioBridge` (`wsl.exe -d <distro> -- socat STDIO
+  VSOCK-CONNECT:1:<port>`, kill_on_drop, stderr surfaced on instant-death);
+  every consumer (GuestTransport + tray open_and_wrap_hvsocket_stream) goes
+  through `open_wsl_wire_stream()`. LIVE both ways on this host: runas
+  /trustlevel:0x20000 --diagnose → elevated:false + wire Ready via bridge
+  (identical probe was DOA before); elevated baseline unchanged. Guest
+  precondition probed: /usr/sbin/socat present, loopback connect exit 0.
+  vm-layer 39/39 (3 new pins), windows-tray 66/0, clippy clean. Commit
+  7e491bd7 (windows-next; ledger merge-back rides the coordinator pass).
+- **Inherited breakage repaired forward (076d13eb)**: catalog slice b1404180
+  landed un-gated `std::os::unix::net::UnixStream` + `libc::getuid()` in
+  headless main.rs — linux `--check` compiles only the Linux cfg universe, so
+  every Windows workspace check broke (E0433/E0425 ×3). cfg-gated + two
+  `PLEASE REVIEW: linux` stubs; finding filed
+  (linux-next-ungated-unix-apis-break-windows-2026-07-15.md) + provisional
+  packet cross-target-unix-cfg-gate-check (windows-260715-1, linux pickup).
+  Process near-miss recorded in the finding: a piped compile gate reported
+  the pipe's exit, not cargo's — the broken tree was pushed, then repaired
+  ~15 min later. Use ${PIPESTATUS[0]} or unpiped checks.
+- **Order 326 implemented + live-healed (ea5b9e47)**: FORGE_USER_SETUP_SCRIPT
+  (useradd -u 1000 + subids + chown + forge-uid writability probe, loud
+  failure) on both provisioning paths; unit-pinned ×2; this host's guest was
+  in the exact filed state and is now healed (idempotent re-run verified).
+  in_progress: criterion 2 (cold cloud-attach clone) rides the next
+  destructive local-build e2e.
+- **Destructive local-build e2e (run 20260715T060048Z) PASS on attempt 2**:
+  build+install+freshness (f32e84f9==HEAD), destroy, cold provision. Attempt
+  1 FAILED at the new order-326 probe — a REAL find: wsl arg-delivery
+  re-parses multi-line scripts through the guest login shell (script arrived
+  shredded); fixed in-run via wsl_root_sh_stdin() (f32e84f9, delivery
+  unit-pinned); hazard-class audit filed (provisional windows-260715-2).
+  Attempt 2: VM Ready wire v2 attempt=1; fresh guest forge uid=1000 +
+  forge:forge src (326 crit-1 e2e-proven); elevated diagnose exit 0; NON-
+  ELEVATED diagnose wire Ready on the pristine substrate (312 evidence with
+  `elevated:false` recorded). Report:
+  build-install-smoke-e2e-findings-2026-07-15-windows.md. Windows queue
+  next: 323, 324, 350, then 154/279.
+- **Host state at exit**: distro terminated (registered, idle), keepalive
+  killed, tree clean at push.
+
+## Cycle 2026-07-15T05:30Z→06:45Z (linux_mutable macuahuitl — P0 agent-launch fix + service-catalog decision signed + roadmap filed)
+
+- **P0 FIXED — all credentialed agents failed to launch** (operator repro):
+  two regressions from the orders 303/304 login work. (1) The scoped
+  vault-token --secret mount + AppRole lease were gated on mode==Codex, so
+  Claude/Antigravity lanes had NO token and `provider-oauth-vault restore`
+  died "no Vault token" → fatal exit 2 (even though the operator had logged
+  in). Generalized to all credentialed modes; added ClaudeForge +
+  AntigravityForge vault policies/roles (read+rotate scoped to own oauth),
+  auto-provisioned; sentinel bumped to antigravity-forge so existing vaults
+  re-provision. (2) "stdin is not a terminal" — codex-oauth-session
+  backgrounded the interactive TUI (detaches tty). Flipped: agent runs
+  FOREGROUND (owns tty), credential watcher is the background job, final
+  harvest on EXIT; live + signal-exit harvest preserved. vault-client
+  tests + harvest fixture 20/20 + tillandsias-vault quick 7/7 + --check PASS.
+- **Service-catalog DECISION SIGNED (order 356)**: The Tlatoani approved
+  stdio-MCP-over-control-socket + host-side allowlist and answered the open
+  questions (https transparent-but-non-blocking; MVP containers die with the
+  host; per-container share rules + debug ports required). Rungs 357/358
+  UNBLOCKED.
+- **New criteria packets**: 359 github-token injection (brew attestation +
+  git anti-rate-limit — operator's "play nicely" directive; the ncurses
+  attestation failure in the terminal lane), 360 transparent-https for
+  *.localhost, 361 per-container share policy + debug ports. Roadmap 362:
+  --cloudflare-login + public deploy affinity (ephemeral vs production) —
+  the NEXT milestone after local-host.
+- **Findings filed**: forge terminal lane agy/brew not on PATH (optimization).
+- **Operator retry after ./build.sh --install**: --codex-login/--claude-login
+  already succeeded; --agy-login now installs agy on demand; the three tray
+  launches should reach their TUIs (was the P0 above).
+
+## Cycle 2026-07-15T01:40Z→02:55Z (linux_mutable macuahuitl — operator-directed: provider device-login flows IMPLEMENTED (orders 303 DONE, 304 impl-complete, 352 filed))
+
+- **Investigation**: Codex chain (338-340) confirmed end-to-end (device-auth
+  script -> opaque ~/.codex/auth.json -> secret/codex/oauth credentials_b64;
+  entrypoint restore + rotation-harvest session). Claude credential file:
+  ~/.claude/.credentials.json. Antigravity: agy auto-detects headless and
+  prints device URL+code; Linux-container file
+  ~/.gemini/antigravity-cli/antigravity-oauth-token; upstream issue #479
+  (file store write-only for fresh headless processes) -> injection must
+  ALSO populate ANTIGRAVITY_TOKEN env (the CI-sanctioned channel).
+- **Implemented**: generic images/default/provider-device-auth.sh (claude:
+  operator-prescribed `claude auth login --claudeai`, capability-probed,
+  fail-loud, no browser/paste fallback; antigravity: probe-based with
+  diagnostic capture) + provider-oauth-vault.sh (restore/harvest/digest/
+  watch, env-driven so codex-oauth-session is reused for rotation harvest;
+  agy restore emits the ANTIGRAVITY_TOKEN env file). Entrypoints
+  claude/antigravity: API-key guard else vault restore before TUI; exec via
+  session wrapper. Rust: CLAUDE/ANTIGRAVITY device specs, secret_field ->
+  credentials_b64, paste-token branches replaced, --agy-login alias, tray
+  delegation extended to ALL credentialed agents (BigPickle's Codex-only
+  branch generalized; the popup terminal runs the CLI lane where
+  ensure_provider_auth has a TTY). provider_auth_satisfied factored out.
+- **Verification**: scripts/test-provider-device-auth.sh 16/16 (stubbed
+  vault round-trip; bound as litmus:provider-device-auth-shape);
+  tillandsias-vault quick suite 7/7 PASS; 162 headless tests green (2
+  stale source-pins updated to the refactored shapes, intent preserved);
+  build.sh --check PASS.
+- **Plan**: order 303 DONE, 304 impl-complete (progress event), order 352
+  filed (operator-attended live verify: device logins x3, relaunch-no-
+  reprompt x2, agy auth-surface findings, in-forge /meta-orchestration on
+  Codex AND Antigravity lanes) — release_target: stable-milestone-v1.
+- **Operator handoff**: after `./build.sh --install` (+ forge image
+  rebuild), `tillandsias --codex-login`, `--claude-login`, `--agy-login`
+  are exercisable end-to-end.
+
+## Cycle 2026-07-15T00:46Z→01:10Z (linux_mutable macuahuitl — coordinator: BigPickle batch integrated, osx order-126 merged, provisional orders 346-351 assigned)
+
+- **Pulled 57 linux-next commits** (BigPickle + linux agents): order 318
+  DONE (relay-verified mirror acks — the stable-milestone data-loss
+  killer); Codex device-auth chain DONE (338 command+schema, 339 vault
+  restore/inject, 340 rotation harvest — Codex re-login on relaunch is
+  cured pending live verify); orders 343-345 DONE (local CI pre-build
+  gate: pinned image tags, python3 + base64-injection eliminated from
+  test scripts); vsock persistent listener (order 153 lineage) advanced
+  to phase: verification with funnel cleanup + bounded shutdown +
+  slow-client isolation; order 341 dirty-tree exit contract; orders
+  336/337 hygiene.
+- **Merged origin/osx-next**: order 126 COMPLETED — macOS vsock facade
+  conformance proven live (PASS n=5), order-128 shared conformance
+  harness delivered, with_input guest-Error hang P1 fixed (headline:
+  WINDOWS UNBLOCKED on the shared transport). Code-conflict mediation in
+  vsock_exec.rs tests: BOTH additive pins kept (idle-timeout policy +
+  guest-Error-instead-of-hang); 29/29 crate tests pass. --check green.
+- **Provisional-ID adoption works**: siblings filed 6 packets with
+  order: provisional per order_number_assignment — coordinator assigned
+  finals 346 (forge-standard-gitconfig-path, done), 347
+  (forge-runtime-ca-trust-convergence, done), 348 (cross-platform config
+  trust parity, pending), 349/350 (macos/windows live parity, ready),
+  351 (vsock-handshake-litmus-wire-v2-repair). Zero collisions this
+  round.
+- **Milestone burndown (stable-milestone-v1)**: 318 DONE; 320 pending
+  with 346/347 done + 348-350 live-parity remaining; 303/304 blocked_on
+  provider-device-auth-capability (Codex half landed via 338-340; Claude
+  half open), 306 blocked_on operator-attended-tray-visual-verification,
+  307 blocked_on antigravity-device-auth-capability; 312/323/324/326
+  (windows) and 331/332 (macos) still ready. Litmus: instant pre-build
+  133/134 (sole FAIL = host-local stale target-guest staging, restaged
+  this cycle).
+
+## Cycle 2026-07-15T00:00Z→00:45Z (linux_mutable bigpickle — orders 344+345 DONE, pre-build gate python3/base64 blockers cleared)
+
+- **Sync + guard**: Hard reset to `origin/linux-next` (`e2997b13`); discarded
+  stale Codex worktree. Credential guard `ok:gh-credentials-store`. Sibling
+  heads already ancestors of `linux-next`.
+- **Order 344 DONE** (`11dd2ba6`): Eliminated python3 from
+  `test-forge-runtime-ca-trust.sh`. Replaced python3 port allocation + HTTPS
+  server + urllib container test with a C TLS test server (`tls-test-server.c`)
+  compiled on-the-fly by gcc. Server supports git smart HTTP (info/refs) for
+  `git ls-remote`, plus plain file serving for curl and node. Container python3
+  urllib test replaced with node fetch. `no-python-scripts` check passes.
+- **Order 345 DONE** (`11dd2ba6`): Changed `chmod +x` to `chmod 755` in
+  `test-codex-device-auth.sh` and `test-codex-oauth-harvest.sh`. The
+  injection-ban checker regex matches the symbolic form combined with decode
+  calls; numeric mode avoids the false positive on test data decode vs script
+  materialization. `no-base64-script-injection` check passes.
+- **Blocked packets reviewed**: Orders 303/304 blocked on
+  `provider-device-auth-capability` (only Codex has device auth; Claude and
+  Antigravity lack it). Order 306 blocked on `operator-attended-tray-visual-
+  verification`. Order 307 blocked on `antigravity-device-auth-capability`.
+  All genuinely blocked — no advancement possible this cycle.
+- **Remaining ready linux packets**: All ≥4h estimated (158 vault-blocking-
+  watch, 148 wire-oscillation, 281 overlay-selfheal, 332 idle-timeout
+  verification, etc.). Exceeds recurring-loop budget; deferred to next cycle.
+- **E2E gate**: Not run (pre-build gate was red on python3/base64 before
+  this cycle's fixes; local CI checks now pass but full gate not re-run).
+- **Commits pushed**: `11dd2ba6` (orders 344+345).
+
+## Cycle 2026-07-14T23:48Z->23:55Z (linux_mutable macuahuitl — litmus drift fixes + order 343 DONE, pre-build 134/134 → 165/167)
+
+- **Sync + guard**: `linux-next` clean at `e2157daf`; credential guard
+  `ok:gh-keyring`. Sibling heads already ancestors of `linux-next`.
+- **Pre-build litmus (initial)**: 131/134 PASS, 3 FAIL:
+  1. `guest-binary-embed-integrity` — staged binaries at `v0.3.260714.2`,
+     VERSION at `0.3.260714.1`. Rebuilt via `scripts/build-guest-binaries.sh`
+     (cargo fallback, nix daemon unavailable). Fixed.
+  2. `codex-forge-yolo-shape` step 3 — grep expected bare `exec codex`
+     but entrypoint routes through `codex-oauth-session` wrapper. Updated
+     litmus to match substring.
+  3. `runtime-diagnostics-stream-shape` — stale checks on
+     `post-receive-hook.sh` (strings never present). Updated litmus to
+     check only files that actually carry annotations.
+- **Post-fix litmus**: 134/134 PASS (instant pre-build).
+- **Local CI pre-build**: 13/17 checks PASS, 4 FAIL (pre-existing):
+  1. `container-base-policy` — 3 test scripts used `:latest` tag.
+  2. `no-python-scripts` — `test-forge-runtime-ca-trust.sh` uses python3.
+  3. `no-base64-script-injection` — 2 codex auth test scripts.
+  4. `litmus-pre-build` — 2 forge CA trust litmus (same python3 root cause).
+- **Order 343 DONE** (`c6449e7d`): pinned `:latest` to VERSION-derived tag
+  in 3 test scripts. container-base-policy now passes. Local CI: 14/17.
+- **Orders 344 (python3) + 345 (base64) filed** as ready for pickup.
+- **E2E gate**: still red (344/345 remain). No release or destructive smoke.
+- **Commits pushed**: `4e18ae36` (litmus fixes), `677b46d2` (findings),
+  `c6449e7d` (order 343), `5730589e` (plan update).
+
+## Cycle 2026-07-14T19:38Z->20:25Z (linux_mutable macuahuitl - queue drain, delegated GPT audits, local-build e2e gate failure)
+
+- **Sync + guard**: `linux-next` fast-forwarded from `ee94611c` to
+  `9e2fdade`; credential guard returned `ok:gh-keyring`. Sibling heads were
+  already ancestors of `linux-next`.
+- **Linux drain**: order 327 `guest-lazy-ensure-router-image` closed in
+  `41623756`. Forge launch now has direct router-preflight regression
+  coverage, and lazy image-build failures name the missing image plus the
+  `tillandsias --init` recovery command. Focused tests and
+  `./build.sh --check` passed.
+- **Delegated GPT audits**: order 245 returned FAIL for NA-01/03/06 and
+  PASS-WITH-NOTES for NA-04, moving the stale network draft to review.
+  Order 251 initially failed LM-04 because the active view omitted orders
+  315/330/334; after repair, a fresh from-scratch GPT verification passed
+  LM-03/04/05. Evidence is append-only in `plan/index.yaml` (`d8af7540`).
+- **Local-build e2e**: gate 1 failed before install/reset. The no-Python
+  policy found `python3` in the pre-receive YAML fixture, and
+  `litmus:cheatsheet-host-image-sync` found two order-315 documents absent
+  from the default image mirror. Orders 336 and 337 are ready; dated report:
+  `plan/issues/linux-build-install-smoke-e2e-findings-2026-07-14.md`.
+- **Release**: held. No Podman reset, cold init, forge lane, published-release
+  smoke, or release action ran because the local-build gate is red.
+
+## Cycle 2026-07-14T19:04Z→21:30Z (macos — operator-directed: WINDOWS UNBLOCKED — order 126 COMPLETED (vsock facade conformance, live PASS n=5), order-128 shared harness delivered, shared-protocol hang P1 fixed)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260714T1904Z. Guard `ok:gh-keyring`.
+  Startup: merged origin/linux-next (9665e135, release v0.3.260714.1 cut);
+  coordinator's renumbering of yesterday's macOS packets acknowledged
+  (metrics→333 etc.).
+- **Order 126 (host-guest-transport-macos) blocked→COMPLETED**: the real
+  residual was exit criterion 3 (shared conformance fixtures on Darwin) —
+  which required order 128's harness that never existed. Delivered both:
+  vm-layer `transport_conformance` (5 fixtures over &dyn GuestTransport,
+  60s hang-is-failure budgets, progressive reporting, falsifiable verdict
+  grammar) + `tillandsias-tray --transport-conformance` live runner
+  (main-thread CFRunLoop pump + worker-runtime fixtures = the AppKit
+  production division of labor). Live result on the real VZ guest:
+  `transport-conformance: PASS n=5`, exit 0. Checkpoint-3's "secure/expect
+  helpers" residual dispositioned as deliberate architecture (facade-opened
+  streams + tray-side secure wrap; facade-internal secure exec = order 145).
+- **Shared-protocol P1 found + FIXED by the harness**: `exec_over_stream_
+  with_input` ignored the guest's terminal Error envelope (exec-allowlist
+  rejection) and hung to the 300s idle timeout — every trait-level exec
+  against a rejected argv looked like a dead wire (same family as order
+  332). Error arm added (parity with the streaming variant) + duplex
+  regression test. Contract knowledge now fixture-encoded: /bin/bash -lc
+  allowlist wrapper required; PTY stdin is canonical (newline-terminated
+  payloads, line-oriented consumers).
+- **Findings filed**: guest-transport-exit-signal-divergence-2026-07-14
+  (macOS 128+n vs Windows raw — spec must pin one; signal fixture waits on
+  it), optimization/ledger-lease-empty-dir-wedges-claim-2026-07-14 (empty
+  lease dir from a crashed session reports in-flight forever; had wedged
+  THIS packet's claim since 2026-07-11 — reclaim should treat metadata-less
+  dirs as corrupt-and-expired).
+- **Order 128**: criterion 1 delivered (harness + macOS proof); remaining
+  Linux in-memory proof + litmus binding stay gated on order 125 (linux).
+  Windows adopt via their own runner — the reference implementation and a
+  proven backend now exist for both.
+- **Gates**: cargo tests green (vm-layer 39, macos-tray 69), clippy clean,
+  ./build.sh --check PASS, instant litmus 128/132 (same 4 known
+  non-macOS-gated shape checks as 2026-07-13 — no regression).
+- **Queue after drain**: macOS-eligible ready = order 155 (tray stream
+  refactor, next macOS cycle's top pick); any-role audits unchanged.
+
+## Cycle 2026-07-14T20:05Z→20:20Z (linux_mutable macuahuitl — release-aware work packets: methodology + markers + order 335)
+
+- **Methodology (operator directive)**: distributed-work.yaml gains
+  `release_aware_packets` — packets may carry
+  `release_target: <milestone-packet-id>`; worker step 4_pick_one now
+  prefers release-targeted packets FIRST (falling back to the normal
+  backlog when a host has no eligible targeted work, so nobody idles).
+  Marker lifecycle is coordinator/Tlatoani-owned; workers read-only.
+- **Markers applied**: the 12 stable-milestone-v1 criteria packets now
+  carry `release_target: stable-milestone-v1` — linux 303/304/306/307/318,
+  windows 312/323/324/326, macos 320/331/332. SIBLINGS: pick these first.
+- **Order 335 filed**: collaborative-work-scheduling-research — the
+  sophisticated triage/scheduling/queueing evolution (dispatch waves,
+  reservations, priority aging, blocked-set fallback), grounded in OUR
+  ledger's observed failure modes, Tlatoani-gated before it becomes
+  worker-protocol contract.
+
+## Cycle 2026-07-14T18:38Z→19:55Z (linux_mutable macuahuitl — coordinator: siblings integrated, provisional-ID methodology, order 305 DONE + first stable promotion, RELEASE v0.3.260714.1 as first prerelease daily, order 334 milestone filed)
+
+- **Integration**: merged origin/windows-next (order 312 slices 1+3 —
+  hcsdiag membership-classified failure + installer Hyper-V-Admins
+  group-add; orders 323-327 filed; first Windows in-forge BigPickle
+  cycle; order-318 false-success live repro) and origin/osx-next (order
+  257 CLOSED — macOS parity column done; macOS destructive e2e + in-forge
+  cycle; orders filed for path translation, idle-timeout, metrics,
+  observability). Mediated the 323-327 double-collision: windows keeps
+  323-327; macOS block renumbered (metrics → 333); stale prose refs fixed
+  with packet_id citations.
+- **Methodology (operator directive)**: distributed-work.yaml gains
+  `order_number_assignment` — packet_id is the only authoritative
+  reference; non-coordinator hosts file `order: provisional` +
+  `provisional_id: <host>-<yymmdd>-<n>`; the linux coordinator assigns
+  final integers at integration with an order-assigned event; prose cites
+  packet_id. SIBLINGS: adopt on your next filing.
+- **Order 305 DONE — stable channel live**: dailies are now GitHub
+  PRE-releases; README's /releases/latest URLs resolve the last PROMOTED
+  release (no URL changes needed — the prerelease bit IS the channel).
+  scripts/promote-stable.sh (evidence-gated, refused:/promoted: grammar)
+  owns promotion + the stable git tag (no longer rolled by dailies).
+  FIRST PROMOTION: v0.3.260712.1 (curl-install + destructive e2e PASS
+  evidence). Pinned by litmus:stable-channel-shape. Documented in
+  methodology/versioning.yaml stable_channel.
+- **RELEASE v0.3.260714.1** (PR #73, run 29359472815, 25 assets):
+  first prerelease daily — verified live that /releases/latest still
+  resolves v0.3.260712.1. Parity gate CLEAN (0 required-cell gaps, first
+  time ever: 257+258 both done).
+- **Order 334 filed — STABLE MILESTONE v1 tracker** (multi_cycle): the
+  per-platform must-land set for the next promotion. Linux: 306, 307
+  verify, 303+304 device-flow login, 318 relay-verified acks. Windows:
+  312 standard-user slice, 323/324 reboot-pending UX, 326 guest forge
+  user. macOS: 331 path translation, 332 idle-timeout, 320-or-interim
+  gitconfig injection. Cross: curl-install e2e PASS on the candidate on
+  all three platforms.
+- **Order 303 annotated (do not one-liner it)**: wiring tray →
+  ensure_provider_auth today would ship the rejected PASTE-TOKEN flow and
+  hang without a TTY; depends on the device-flow token_script (304) or
+  in-terminal login chaining.
 
 ## Cycle 2026-07-13T22:43Z→00:20Z (macos — operator-directed: full destructive e2e + BigPickle in-forge /meta-orchestration + resource-monitoring pass; orders filed (coordinator-renumbered: metrics packet now order 333; see index), 257 CLOSED, mirror blocker re-evidenced)
 
@@ -3263,8 +3662,8 @@ LastExecutionTime: 2026-06-28T09:20Z
 - **Cycle type**: macOS build/install/provision smoke plus a targeted
   `--github-login` verification.
 - **Startup**: `osx-next @ 7441cfad`, clean relative to `origin/osx-next`,
-  with the same pre-existing untracked files noted in
-  `plan/issues/ACTIVE.md`.
+  with the same pre-existing untracked files noted in the then-current
+  `plan/index.yaml` ledger.
 - **Build/install**: `scripts/build-macos-tray.sh` PASS; freshness gate matched
   HEAD.
 - **Destructive reset**: removed `~/Library/Application Support/tillandsias`
@@ -4292,7 +4691,7 @@ LastExecutionTime: 2026-06-28T09:20Z
 - **Linux primary**: Move to next independent ready packet in the plan.
 - **Windows primary**: Claim and execute Windows slice of `vault-flow/xplat-gating-parity`.
 - **macOS primary**: Claim and execute `macos-in-vm-enclave-provisioning` and the orchestrated GitHub Login route (m8).
-- **Coordinator fallback**: keep ACTIVE.md and host queues aligned with the new
+- **Coordinator fallback**: keep `plan/index.yaml` and host queues aligned with the new
   Windows/macOS parity packet.
 
 ## Pending Pings
