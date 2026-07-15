@@ -13067,3 +13067,42 @@ plan_index:
             Filed from the in-run e2e finding after fixing the order-326
             delivery forward. Provisional order per
             order_number_assignment.
+
+    - packet_id: smoke-curl-install-channel-distinction
+      order: 367
+      title: "Curl-install smoke distinguishes dailies vs stable — routine smoke tracks the newest daily; one-shot stable smoke post-promotion"
+      status: done
+      release_target: stable-milestone-v1
+      kind: enhancement
+      deliverable: scripts/resolve-smoke-release.sh + install.sh override + smoke skill + litmus
+      depends_on: [stable-release-channel]
+      pickup_role: linux
+      capability_tags: [ci, release, e2e, smoke]
+      estimated_hours: 3
+      outcome: >
+        Operator directive 2026-07-15: since dailies are now prereleases
+        (order 305) and /releases/latest resolves the promoted STABLE,
+        routine curl-install smoke was silently testing stable, not the
+        bleeding edge. Fixed: scripts/resolve-smoke-release.sh resolves a
+        channel — daily (DEFAULT: newest well-formed prerelease, robust to
+        junk tags + API order) or stable (the promoted /releases/latest);
+        install.sh + install-macos.sh honor TILLANDSIAS_RELEASE_BASE
+        (default unchanged for real users) so smoke pins the resolved
+        release; the curl-install smoke skill picks the channel (daily
+        routine, stable one-shot right after promote-stable.sh, which now
+        prints the reminder). Pinned by litmus:smoke-release-channel-shape.
+      exit_criteria:
+        - "resolve-smoke-release.sh daily returns the newest v#.#.#.# prerelease; stable returns the promoted release (both verified live)"
+        - "installers honor TILLANDSIAS_RELEASE_BASE; default is stable /releases/latest (real users unaffected)"
+        - "litmus:smoke-release-channel-shape green in the ci-release suite"
+      events:
+        - type: completed
+          ts: "2026-07-15T07:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
+          host: linux_mutable
+          summary: >
+            Implemented + verified live: resolver returns daily
+            v0.3.260714.1 / stable v0.3.260712.1; ci-release litmus 5/5.
+            Bonus finding: a malformed vv0.3.260626.3 release tag exists
+            (optimization/malformed-release-tag-vv-2026-07-15.md) — the
+            resolver's grammar filter neutralizes it for smoke.

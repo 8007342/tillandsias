@@ -20,7 +20,9 @@ set -euo pipefail
 REPO="8007342/tillandsias"
 ASSET_PREFIX="tillandsias-tray-"
 ASSET_SUFFIX="-macos-arm64.tar.gz"
-RELEASE_BASE_LATEST="https://github.com/${REPO}/releases/latest/download"
+# Default: stable channel (/releases/latest). Smoke overrides via
+# TILLANDSIAS_RELEASE_BASE to pin a specific daily prerelease (order 305).
+RELEASE_BASE_LATEST="${TILLANDSIAS_RELEASE_BASE:-https://github.com/${REPO}/releases/latest/download}"
 
 say() { printf '  %s\n' "$*"; }
 die() { printf '  ERROR: %s\n' "$*" >&2; exit 1; }

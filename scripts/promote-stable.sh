@@ -60,4 +60,7 @@ git -C "$REPO_ROOT" tag -f -a stable -m "Stable channel: promoted $TAG" "$COMMIT
 git -C "$REPO_ROOT" push origin refs/tags/stable --force
 
 echo "Stable channel now serves $TAG (README /releases/latest URLs resolve to it)." >&2
+echo "NEXT: run a ONE-SHOT stable curl-install smoke to prove the promoted" >&2
+echo "artifact installs — SMOKE_CHANNEL=stable /smoke-curl-install-and-test-e2e —" >&2
+echo "then routine smoke goes back to the daily channel (default)." >&2
 echo "promoted:$TAG"

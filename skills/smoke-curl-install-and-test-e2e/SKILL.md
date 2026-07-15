@@ -64,12 +64,24 @@ download cache.
 
 1. **Identify host + branch** (Linux → `linux-next`, macOS → `osx-next`,
    Windows → `windows-next`). The `--opencode` forge lane is Linux/Podman today.
-2. **Record the release under test:**
+2. **Choose the channel and resolve the release under test.** Two channels
+   (plan order 305 + operator directive 2026-07-15):
+   - **`daily` (DEFAULT for routine smoke)** — the newest release *including
+     prereleases* (the latest daily). Routine curl-install smoke tracks the
+     bleeding edge because that is the next promotion candidate.
+   - **`stable` (one-shot after a promotion)** — the newest non-prerelease
+     (what `/releases/latest` and the README serve). Run this ONCE right
+     after `scripts/promote-stable.sh` promotes a release, to prove the
+     promoted artifact installs; then routine runs go back to `daily`.
    ```bash
-   gh release view --json tagName,publishedAt -q '.tagName + "  " + .publishedAt'
+   CHANNEL="${SMOKE_CHANNEL:-daily}"
+   read -r RES < <(scripts/resolve-smoke-release.sh "$CHANNEL")
+   echo "$RES"   # channel:<c> tag:<vX> base:<url>
+   SMOKE_TAG="$(printf '%s' "$RES" | sed -E 's/.* tag:([^ ]+) .*/\1/')"
+   SMOKE_BASE="$(printf '%s' "$RES" | sed -E 's/.* base:(\S+)$/\1/')"
    ```
    Note the tag — every filed finding cites it so issues are attributable to a
-   specific published artifact.
+   specific published artifact AND channel.
 3. **Record sibling heads** (`main`, `linux-next`, `windows-next`, `osx-next`)
    per multi-host discipline.
 4. **Create a findings log dir** the smoke will append to:
@@ -86,19 +98,25 @@ locally built `target/` binary; the whole point is to test the *download*.
 
 Linux:
 
+The installer honors `TILLANDSIAS_RELEASE_BASE` so the smoke pins the exact
+resolved release (`$SMOKE_BASE`) instead of the hard-coded
+`/releases/latest/download` (which is stable-only by GitHub semantics — it
+would ignore the daily prerelease). Real users are unaffected: with the env
+unset the installer defaults to the stable channel.
+
 ```bash
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
-  bash -c 'curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash' 2>&1 \
+  bash -c "curl -fsSL '${SMOKE_BASE}/install.sh' | TILLANDSIAS_RELEASE_BASE='${SMOKE_BASE}' bash" 2>&1 \
   | tee target/smoke-e2e/01-install.log
 hash -r
-tillandsias --version | tee target/smoke-e2e/01-version.txt
+tillandsias --version | tee target/smoke-e2e/01-version.txt   # must equal $SMOKE_TAG
 ```
 
 macOS:
 
 ```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash 2>&1 \
+curl -fsSL "${SMOKE_BASE}/install-macos.sh" | TILLANDSIAS_RELEASE_BASE="${SMOKE_BASE}" bash 2>&1 \
   | tee target/smoke-e2e/01-install-macos.log
 "$HOME/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --version 2>&1 \
   | tee target/smoke-e2e/01-version.txt || true
