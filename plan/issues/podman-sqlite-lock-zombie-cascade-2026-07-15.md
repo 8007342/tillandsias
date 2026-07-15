@@ -49,13 +49,38 @@ environmental FAILs indistinguishable from real regressions — the whole
 run's verdicts are tainted and the gate must be rerun. Cost today: one full
 ci-full pre-build pass + diagnosis time.
 
+## Addendum (same cycle, rerun): two more signatures of the same class
+
+The ci-full rerun (healthy podman at start) reproduced the *family* twice
+more, without the sqlite lock:
+
+5. **Runner hang via inherited stdout pipe**: the parity fixture
+   (`litmus:forge-config-trust-cross-platform-parity`) backgrounds a
+   compiled `tls-server`; the step hit its 300s budget, `timeout` SIGTERMed
+   the direct child, but `tls-server` IGNORES SIGTERM (verified live: kill
+   needed SIGKILL) and inherited the step-output pipe write-end. The
+   runner's command-substitution read (`$(timeout … bash -c cmd 2>&1)`)
+   blocked in `anon_pipe_read` for 10+ minutes PAST its own step budget —
+   the whole gate hung until the stray was hand-killed (pid 112364 held
+   `pipe:[241334]`, runner fd 3). A step timeout must bound the RUNNER's
+   wait, not just the child's lifetime.
+6. **Cargo target-lock contention inside the gate**:
+   `litmus:headless-init-status-check-source-built` (fake backend, no real
+   podman) timed out at 180s with a 0-byte log, then passed standalone in
+   0.22s — its `cargo test` sat on the target-dir lock behind another
+   gate-spawned cargo. Same class: budgets assume uncontended resources.
+   (Observatorium step 1: 120s FAIL in-gate, 0.47s standalone — same run.)
+
 ## Shaped reductions (verifiable, smallest-first)
 
-1. **Graceful-kill ladder in the litmus runner** (`scripts/run-litmus-test.sh`):
-   send SIGTERM, grace 5–10s, then SIGKILL (`timeout --kill-after` pattern)
-   so podman can roll back its sqlite transaction. Verifiable: fixture kills
-   a podman writer via the runner's timeout path and asserts no
-   `db.sql-journal` survives + next `podman ps` returns < 2s.
+1. **Runner step-capture + kill-ladder hardening**
+   (`scripts/run-litmus-test.sh` `execute_test_command`): (a) capture step
+   output to a FILE and `cat` it after `timeout` returns — a surviving
+   grandchild holding a pipe write-end can no longer block the runner
+   (addendum item 5); (b) `timeout --kill-after=10s` so TERM-ignoring
+   fixtures still die (addendum item 5) and podman writers get a rollback
+   window before KILL. Verifiable: fixture backgrounds a TERM-ignoring
+   sleeper inheriting stdout; the step must return within budget+grace.
 2. **Podman-responsiveness preflight for podman litmus tests**: a cheap
    `timeout 5 podman ps` probe emitting `eligible|skip:podman-stalled`
    (same falsifiable-verdict grammar as `scripts/e2e-preflight.sh`); on

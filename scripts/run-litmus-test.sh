@@ -412,9 +412,25 @@ execute_test_command() {
     # Ensure minimum timeout
     [[ $timeout_sec -lt 1 ]] && timeout_sec=1
 
-    # Run command with timeout and progress reporting
+    # Capture step output to a FILE, never a pipe: a fixture grandchild that
+    # survives the step (daemonized test server, detached container) inherits
+    # a pipe write-end and blocks the caller's command-substitution read
+    # FOREVER — the 2026-07-15 gate hang (a TERM-ignoring tls-server held the
+    # runner's fd for 40+ minutes, twice). A file read EOFs at whatever was
+    # written; survivors keep writing harmlessly after the step is scored.
+    # --kill-after: TERM first (podman writers get a rollback window — the
+    # sqlite hot-journal lock-stall cascade), then KILL for TERM-immune
+    # fixtures. Both signatures + evidence:
+    # plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md
     # @trace spec:spec-traceability
-    (timeout "${timeout_sec}s" bash -c "$command" 2>&1) || true
+    local capture
+    capture="$(mktemp "${TMPDIR:-/tmp}/litmus-step-capture.XXXXXX")" || {
+        (timeout --kill-after=10s "${timeout_sec}s" bash -c "$command" 2>&1) || true
+        return 0
+    }
+    (timeout --kill-after=10s "${timeout_sec}s" bash -c "$command" >"$capture" 2>&1) || true
+    cat "$capture"
+    rm -f "$capture"
 }
 
 # Check if output matches success/failure criteria
@@ -609,6 +625,21 @@ run_litmus_test_file() {
     local spec_id="${2:-}"
 
     if [[ ! -f "$test_file" ]]; then
+        return 1
+    fi
+
+    # Environmental preflight: when a test needs REAL podman but podman is
+    # stalled (a hard-killed writer's surviving threads hold the sqlite
+    # storage lock; every call blocks ~100s in busy-retry), each podman test
+    # burns its full step budget and FAILs as a fake regression. Probe once,
+    # fail FAST with the environmental cause named. fake-backend tests
+    # (LITMUS_PODMAN_MODE=fake) never touch real podman — exempt.
+    # Evidence: plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md
+    if grep -q 'podman' "$test_file" 2>/dev/null \
+        && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
+        && command -v podman >/dev/null 2>&1 \
+        && ! timeout 5 podman ps --format '{{.ID}}' >/dev/null 2>&1; then
+        echo -e "  ${RED}[ENV-FAIL]${NC} podman unresponsive (>5s): stalled storage lock or dead runtime — environmental, not a code regression (plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md)"
         return 1
     fi
 
