@@ -8,6 +8,11 @@
 //! 4. Graceful shutdown with SIGTERM
 //!
 //! The test runs only if TILLANDSIAS_ENABLE_E2E_TESTS=1 to avoid long build times in CI.
+//!
+//! Unix-only: SIGTERM/libc process semantics + podman lifecycle.
+//! PLEASE REVIEW: linux — cfg gate added by the windows lane so
+//! `cargo test -p tillandsias-headless` compiles on Windows targets.
+#![cfg(unix)]
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
