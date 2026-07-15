@@ -398,3 +398,43 @@ multi_host_development:
       back to published port loopback routing (https://127.0.0.1:<port>) on host runs. All
       enclave containers and toolboxes must configure working public resolvers (like 1.1.1.1) in
       ~/.config/containers/containers.conf to bypass broken system-resolved defaults.
+
+  wsl2_hybrid_work:
+    trace: "plan/index.yaml wsl2-transparent-build-wrappers; operator directive 2026-07-15"
+    rule: >
+      Windows hosts carry a DEDICATED `tillandsias-build` WSL2 distro (the
+      toolbox sibling; never the runtime `tillandsias` distro, which
+      destructive e2e unregisters). `scripts/with-wsl2-builder.sh` re-execs
+      build entry points into it transparently, so a Windows worker can run
+      the REAL canonical gates and advance Linux-shaped work. Whether to do
+      a QUICK LOCAL WSL2 unblock or FILE a plan packet for a Linux-native
+      host is a cost boundary, measured 2026-07-15 on a stock Windows 11
+      host (order 238 hybrid experiment).
+    measured_costs:
+      one_time_bootstrap: "~5 min (rootfs import 15s + dnf toolchain ~3min + rustup ~2min); persists across e2e runs"
+      per_invocation_overhead: "~1-2s (re-exec + stdin marker probe)"
+      shell_or_git_fixture_test: "~3s wall (e.g. test-git-mirror-relay-verified-ack.sh, 3 cases)"
+      targeted_warm_cargo_test: "~8s wall (38-test crate)"
+      full_workspace_check_warm: "~35s (fmt + check + clippy strict x2); first cold run ~10 min"
+    do_locally_via_wsl2:
+      - "the canonical gate itself: ./build.sh --check before EVERY push (now mandatory-cheap on Windows; a cargo-only substitute already let one broken merge through, 2026-07-15)"
+      - "linux-universe compile/clippy/test verification of any crate (targeted `with-wsl2-builder.sh cargo test -p <crate>`)"
+      - "shell/git-shaped scripts and fixture tests (scripts/test-*.sh, litmus command steps, hook/relay fixtures)"
+      - "ruby YAML validation + shellcheck (the sanctioned validators, absent from stock Windows)"
+      - "unblock-with-NOOP class repairs in sibling scope (cfg gates, dead-code allows) — verify with the wrapped gate, mark PLEASE REVIEW: <sibling>"
+      - "research packets whose probes are plain git/bash mechanics (order 238 precedent)"
+    file_a_linux_packet_instead:
+      - "anything needing podman/containers, the enclave network, systemd services, or live Vault — the build distro deliberately ships none of these; the runtime distro is not a dev substrate"
+      - "destructive or long-lived runtime verification (e2e gates, lane launches, curl-install smokes) — these belong to the host-native gates"
+      - "work whose exit criteria demand linux-HOST evidence (device integration, immutable-host paths, toolbox behavior)"
+      - "multi-hour linux implementation slices when a Linux worker is active — the wrapper makes you CAPABLE, not the cheapest owner; check plan/loop_status.md lane assignments first"
+    decision_heuristic: >
+      If the verification a change needs is 'compile, unit/fixture tests, or
+      script runs against the repo tree', do it locally through the wrapper
+      and cite the wrapped-gate evidence in the plan event. If it needs a
+      container runtime, a live enclave, host-native hardware/OS surfaces,
+      or an attended operator, file (or leave) the packet for a Linux-native
+      host and say exactly which evidence is missing. When in doubt: run the
+      wrapped gate locally (35s) AND leave the packet's live criteria to the
+      owning host — partial local evidence plus an honest residual note
+      beats both silence and false completion.
