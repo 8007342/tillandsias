@@ -1,6 +1,38 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T07:25:00Z
+LastExecutionTime: 2026-07-15T08:25:00Z
+
+## Cycle 2026-07-15T07:10Z→08:25Z (windows — orders 324 + wsl2-wrappers DONE; wrapped ./build.sh --check catches linux-next clippy-strict RED and fixes it forward)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T0710Z. Guard `ok:gh-keyring`; boundary
+  snapshot clean. Goal directive (The Tlatoāni): drain the windows queue
+  to empty-or-blocked; make build scripts WSL2-aware (toolbox parity).
+- **Order 324 DONE (5a16aab6)**: install-windows.ps1 Get-WslPlatformState
+  mirrors the 323 classifier (cmd /c stderr relay for PS 5.1 EAP=Stop;
+  locale-stable marker; CBS key; both-CIM-signals rule); S2/S3 print the
+  exact next step + force -NoLaunch + completion reminder. AST
+  parse-clean; live 'ok' on this host; litmus:installer-wsl-preflight-
+  shape bound under windows-native-tray (suite 7/7 PASS).
+- **wsl2-transparent-build-wrappers DONE (a8cd4149; operator-directed,
+  provisional windows-260715-3)**: scripts/with-wsl2-builder.sh —
+  toolbox-parity transparent re-exec into a DEDICATED tillandsias-build
+  distro (imported from the tray's cached rootfs; runtime distro never
+  targeted). ./build.sh --check now runs the REAL canonical gate on
+  Windows; ruby + shellcheck exist here for the first time.
+  litmus:wsl2-builder-wrapper-shape bound under dev-build.
+- **Wrapped gate's FIRST run caught real trunk breakage (e234748e)**:
+  linux-next is clippy-strict RED on every branch — b1404180's order-357
+  helpers unwired until 363 (6 dead_code errors; order-363-tagged allows
+  filed) — plus an un-gated unix-only test (E0433, Windows test target;
+  cfg(unix) gate; the two stub-contract tests now pin the not-unix stub).
+  dev-build litmus back to 3/3; wrapped --check exit 0.
+- **Windows queue after this cycle**: 326 (in_progress, clone-ride
+  residual), 350 (needs attended/live forge), 365/366 (final numbers for
+  the earlier provisionals), 154 (multi_cycle), 279 (multi-hour).
+- **Host state at exit**: build distro tillandsias-build registered
+  (persistent build substrate, by design); runtime distro untouched;
+  tree clean at push.
 
 ## Cycle 2026-07-15T06:27Z→07:25Z (linux_mutable macuahuitl — full coordinator: Windows-312 integrated, dailies release, smoke-channel split, aggressive drain)
 

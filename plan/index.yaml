@@ -11362,7 +11362,7 @@ plan_index:
       order: 324
       release_target: stable-milestone-v1
       title: "install-windows.ps1: detect WSL-absent / reboot-pending / virtualization-off at install time and instruct the restart before first launch"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: scripts/install-windows.ps1
       depends_on: []
@@ -11385,6 +11385,27 @@ plan_index:
         - "when reboot-pending, installer does not auto-launch the tray and says exactly what to do next"
         - "detection logic covered by a Pester or litmus-style check runnable on CI (no live VM needed)"
       events:
+        - type: completed
+          ts: "2026-07-15T07:30:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0710Z"
+          host: windows
+          lease_id: "installer-wsl-absent-reboot-affordance"
+          commits: ["5a16aab6"]
+          summary: >
+            All three criteria shipped. Get-WslPlatformState mirrors the
+            order-323 classifier (S1 locale-stable aka.ms/wslinstall via
+            a cmd /c stderr relay — PS 5.1-safe under EAP=Stop; S2 CBS
+            RebootPending key; S3 both CIM signals; healthy exit-0
+            short-circuits; unknown defers to the tray preflight). S2/S3
+            print the exact next step, force -NoLaunch semantics, and
+            repeat the reminder at completion — the tray's first
+            impression is never a dead VM create. ASCII-only strings
+            (ANSI smart-quote trap). Verified: AST parse clean; live
+            classifier returns 'ok' on this healthy host; grep-shape
+            litmus:installer-wsl-preflight-shape bound under
+            windows-native-tray, suite PASS 7/7 (CI-runnable, no VM —
+            criterion 3). Real S1/S2/S3 installs ride the next
+            fresh-host bootstrap, same caveat as 323.
         - type: filed
           ts: "2026-07-13T21:55:00Z"
           agent_id: "windows-yolanda-fable5-20260713T2105Z"
@@ -13150,3 +13171,79 @@ plan_index:
             Bonus finding: a malformed vv0.3.260626.3 release tag exists
             (optimization/malformed-release-tag-vv-2026-07-15.md) — the
             resolver's grammar filter neutralizes it for smoke.
+
+    - packet_id: wsl2-transparent-build-wrappers
+      provisional_id: windows-260715-3
+      order: provisional
+      title: "Build scripts WSL2-aware on Windows: transparent tillandsias-build distro re-exec (toolbox parity) so Linux-shaped build/CI work runs on Windows hosts"
+      status: done
+      kind: enhancement
+      deliverable: scripts/with-wsl2-builder.sh
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, build, ci, cross-host]
+      estimated_hours: 4
+      outcome: >
+        Operator directive (The Tlatoani, live 2026-07-15): just as build
+        scripts are toolbox-aware on Silverblue, they must be WSL2-aware
+        on Windows — transparent wrappers so a Windows worker can run
+        ./build.sh --check, local-ci phases, ruby YAML validation,
+        shellcheck, and other Linux-shaped work to stay unblocked (this
+        host had NO ./build.sh gate and no ruby until now; the compile
+        gate was hand-substituted with cargo and once mis-measured a
+        pipe exit, letting a broken merge push — see
+        linux-next-ungated-unix-apis-break-windows-2026-07-15.md).
+        Design mirrors with-tillandsias-builder.sh: sourced guard chain
+        (platform trigger, TILLANDSIAS_SKIP_WSL2, direct-vs-sourced),
+        idempotent substrate ensure (wsl --import of the tray's cached
+        Fedora rootfs.tar into a DEDICATED tillandsias-build distro —
+        never the runtime distro, which destructive e2e unregisters),
+        marker-gated toolchain init (toolbox package set + rustup + musl
+        targets; stdin-delivered script per the order-326 arg-shredding
+        repro), then re-exec via `wsl --cd <winpath>` with a
+        distro-native CARGO_TARGET_DIR (cargo metadata I/O over 9p is
+        unusably slow; TILLANDSIAS_WSL2_TARGET_IN_TREE=1 opts back).
+      exit_criteria:
+        - "./build.sh --check on a Windows Git-Bash host transparently runs inside the tillandsias-build distro and returns the real gate verdict"
+        - "ruby YAML validation and shellcheck run through the wrapper (the meta-orchestration finalization validators exist on Windows)"
+        - "runtime distro isolation: the wrapper never targets the tillandsias runtime distro; destructive e2e cannot wipe the build toolchain"
+        - "shape litmus pins the wrapper guards + build.sh hook (both platforms' wrappers stay no-ops off-platform)"
+      events:
+        - type: completed
+          ts: "2026-07-15T08:20:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0710Z"
+          host: windows
+          lease_id: "wsl2-transparent-build-wrappers"
+          commits: ["a8cd4149", "e234748e"]
+          summary: >
+            All four criteria live on this host. (1) ./build.sh --check
+            runs transparently inside tillandsias-build and returns the
+            REAL gate verdict — its FIRST run caught linux-next being
+            clippy-strict RED (6 dead_code errors from b1404180's
+            order-357 helpers, unwired until 363) plus an un-gated
+            unix-only test (E0433 on the Windows test target); both
+            fixed forward in e234748e with order-363-tagged allows +
+            cfg(unix) test gate; wrapped gate now exit 0 (fmt +
+            type-check + clippy strict + clippy listen-vsock). (2) ruby
+            YAML validation + shellcheck run through the wrapper — the
+            meta-orchestration sanctioned validators exist on Windows
+            for the first time. (3) Dedicated-distro isolation by
+            construction (tray's cached rootfs imported as
+            tillandsias-build; runtime distro never targeted) —
+            destructive e2e cannot wipe the toolchain. (4)
+            litmus:wsl2-builder-wrapper-shape bound under dev-build;
+            dev-build suite 3/3 PASS. Windows-lane traps codified in
+            the wrapper: stdin-delivered init (order-326 arg-shredding)
+            AND stdin marker probe (MSYS rewrites leading-slash args);
+            distro-native CARGO_TARGET_DIR (9p cargo I/O unusable).
+        - type: claim
+          ts: "2026-07-15T07:45:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0710Z"
+          host: windows
+          lease_id: "wsl2-transparent-build-wrappers"
+          expires_at: "2026-07-15T11:45:00Z"
+          summary: >
+            Filed + claimed in one motion per the operator's live
+            directive. Wrapper + build.sh hook written; first-run
+            substrate bootstrap (import + dnf + rustup) in flight on
+            this host. Provisional order per order_number_assignment.
