@@ -828,8 +828,9 @@ specs:
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:windows-tray-architectural-invariants
   - litmus:pty-attach-project-threading-symmetric
+  - litmus:installer-wsl-preflight-shape
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-07-15'
 - spec_id: wsl-daemon-orchestration
   status: active
   litmus_tests:
