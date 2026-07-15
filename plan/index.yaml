@@ -12049,7 +12049,7 @@ plan_index:
     - packet_id: test-scripts-mutable-image-tag
       order: 343
       title: "Pin mutable :latest image tags in three test scripts to satisfy container-base-policy"
-      status: ready
+      status: done
       kind: bugfix
       deliverable: plan/issues/local-ci-prebuild-gate-blockers-2026-07-14.md
       depends_on: []
@@ -12061,9 +12061,19 @@ plan_index:
         test-forge-standard-gitconfig-path.sh, test-forge-runtime-ca-trust.sh)
         use mutable :latest image tags. Pin them to VERSION or a fixed digest
         so container-base-policy passes.
+      events:
+        - type: completed
+          ts: "2026-07-14T23:55:00Z"
+          agent_id: "linux-bigpickle-opencode-20260714T2348Z"
+          host: linux_mutable
+          commits: ["c6449e7d"]
+          summary: >
+            All three scripts now read VERSION and use
+            localhost/tillandsias-forge:v${_DEFAULT_VERSION} as the default
+            image tag. container-base-policy check passes (9/9 Containerfiles).
       exit_criteria:
-        - "all three scripts use a version-pinned or VERSION-derived image tag"
-        - "scripts/local-ci.sh --phase pre-build container-base-policy check passes"
+        - "all three scripts use a version-pinned or VERSION-derived image tag — DONE"
+        - "scripts/local-ci.sh --phase pre-build container-base-policy check passes — DONE"
 
     - packet_id: test-scripts-python3-elimination
       order: 344
