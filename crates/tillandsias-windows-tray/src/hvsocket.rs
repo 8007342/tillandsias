@@ -14,15 +14,18 @@
 // These are public API consumed by tests (via `super::*`) and future callers.
 #[allow(unused_imports)]
 pub use tillandsias_vm_layer::transport_windows::{
-    connect_control_wire, open_hvsocket_stream, parse_guid, parse_wsl_vm_id, vsock_service_guid,
-    wsa_startup, wsl_utility_vm_id,
+    WirePath, connect_control_wire, open_hvsocket_stream, open_wsl_stdio_bridge,
+    open_wsl_wire_stream, parse_guid, parse_wsl_vm_id, vsock_service_guid, wire_path, wsa_startup,
+    wsl_utility_vm_id,
 };
 
 #[cfg(target_os = "windows")]
 pub async fn open_and_wrap_hvsocket_stream(
     port: u32,
 ) -> std::io::Result<Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>> {
-    let stream = open_hvsocket_stream(port).await?;
+    // Privilege-routed (order 312): elevated → direct AF_HYPERV; standard
+    // user → wsl.exe/socat stdio bridge. Same wire either way.
+    let stream = open_wsl_wire_stream(port).await?;
     if std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE").as_deref() == Ok("on") {
         let psk = tillandsias_secure_channel::channel_psk(
             env!("WORKSPACE_VERSION"),

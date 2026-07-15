@@ -16,7 +16,7 @@ path = "src/bin/materialize-cli.rs"
 required-features = ["materialize"]
 
 [dependencies]
-tokio = { workspace = true, features = ["process", "io-util", "rt"] }
+tokio = { workspace = true, features = ["process", "io-util", "rt", "time"] }
 serde = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }

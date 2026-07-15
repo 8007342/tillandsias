@@ -16,6 +16,14 @@ use std::time::Duration;
 
 use crate::{ProvisionManifest, VmError, VmRuntime};
 
+/// Canonical name of the Tillandsias WSL distro. Single source of truth:
+/// the tray's `wsl_lifecycle::DISTRO_NAME` and the order-312 stdio-bridge
+/// transport both resolve to this const (an env seam,
+/// `TILLANDSIAS_WSL_DISTRO`, overrides it at runtime for tests/ops).
+/// Lives here (not in `transport_windows`) so non-Windows targets can
+/// still link against it.
+pub const DEFAULT_WSL_DISTRO: &str = "tillandsias";
+
 /// WSL2-backed VM runtime.
 ///
 /// On Windows the methods invoke `wsl.exe` under the hood (Phase-2 skeleton:

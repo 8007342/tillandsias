@@ -66,8 +66,9 @@ const EMBEDDED_HEADLESS_AARCH64: &[u8] =
 
 /// The single WSL2 distro the tray manages (see `tillandsias-vm-layer::wsl`,
 /// "one distro per host"). Also the `wsl.exe -d <name>` target the Open-Shell
-/// terminal attaches to.
-pub const DISTRO_NAME: &str = "tillandsias";
+/// terminal attaches to. Aliases the vm-layer const so the order-312 stdio
+/// bridge and the tray can never drift to different distros.
+pub const DISTRO_NAME: &str = tillandsias_vm_layer::wsl::DEFAULT_WSL_DISTRO;
 
 /// A guard that aborts the supervised keepalive task when dropped.
 /// Build a background `wsl.exe` command with CREATE_NO_WINDOW applied.
