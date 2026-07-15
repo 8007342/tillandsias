@@ -29,7 +29,7 @@ See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.
 - **macOS worker**: 331 first, then 332/349/342.
 - Two milestones: stable-milestone-v1 (334, needs sibling criteria) + enclave-service-catalog (353, Linux-only).
 
-## Cycle 2026-07-15T05:23Z→06:45Z (windows — order 312 CLOSED (socat stdio bridge, standard-user wire live-verified); 326 implemented+live-healed; inherited linux-next Windows compile break repaired forward)
+## Cycle 2026-07-15T05:23Z→07:10Z (windows — order 312 CLOSED (socat stdio bridge, standard-user wire live-verified incl. on pristine cold provision); 326 criterion-1 e2e-proven; destructive e2e PASS attempt 2; inherited linux-next Windows compile break repaired forward)
 
 - **Host**: Windows 11 Home 26200, `windows-next`, agent
   windows-bullo-fable5-20260715T0523Z. Guard `ok:gh-keyring`; merged
@@ -63,6 +63,18 @@ See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.
   in the exact filed state and is now healed (idempotent re-run verified).
   in_progress: criterion 2 (cold cloud-attach clone) rides the next
   destructive local-build e2e.
+- **Destructive local-build e2e (run 20260715T060048Z) PASS on attempt 2**:
+  build+install+freshness (f32e84f9==HEAD), destroy, cold provision. Attempt
+  1 FAILED at the new order-326 probe — a REAL find: wsl arg-delivery
+  re-parses multi-line scripts through the guest login shell (script arrived
+  shredded); fixed in-run via wsl_root_sh_stdin() (f32e84f9, delivery
+  unit-pinned); hazard-class audit filed (provisional windows-260715-2).
+  Attempt 2: VM Ready wire v2 attempt=1; fresh guest forge uid=1000 +
+  forge:forge src (326 crit-1 e2e-proven); elevated diagnose exit 0; NON-
+  ELEVATED diagnose wire Ready on the pristine substrate (312 evidence with
+  `elevated:false` recorded). Report:
+  build-install-smoke-e2e-findings-2026-07-15-windows.md. Windows queue
+  next: 323, 324, 350, then 154/279.
 - **Host state at exit**: distro terminated (registered, idle), keepalive
   killed, tree clean at push.
 

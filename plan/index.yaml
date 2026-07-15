@@ -11412,6 +11412,27 @@ plan_index:
         - "regression pinned: provisioning-time writability probe or unit test on the recipe config step"
       events:
         - type: progress
+          ts: "2026-07-15T07:00:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0523Z"
+          host: windows
+          lease_id: "wsl-guest-forge-user-src-ownership"
+          commits: ["f32e84f9"]
+          summary: >
+            CRITERION 1 PROVEN ON A FRESH PROVISION (destructive e2e run
+            20260715T060048Z): cold provision attempt 1 FAILED loudly at
+            the new probe — wsl arg-delivery re-parses multi-line scripts
+            through the guest login shell (script arrived shredded).
+            Fixed forward: wsl_root_sh_stdin() delivers bytes verbatim;
+            ensure pinned to stdin delivery by source-window test.
+            Attempt 2: VM Ready wire v2 attempt=1; fresh guest has forge
+            uid=1000, /home/forge/src forge:forge 755, subids allocated —
+            zero manual intervention; tray log records the ensure.
+            Hazard-class audit filed as provisional windows-260715-2.
+            Remaining: criterion 2 (cold cloud-attach clone) needs a
+            lane-running session; ownership precondition now proven.
+            Report:
+            plan/issues/build-install-smoke-e2e-findings-2026-07-15-windows.md.
+        - type: progress
           ts: "2026-07-15T06:35:00Z"
           agent_id: "windows-bullo-fable5-20260715T0523Z"
           host: windows
@@ -12920,3 +12941,41 @@ plan_index:
             breakage forward (see the fix commit on windows-next).
             Provisional order per order_number_assignment; coordinator
             to assign the integer at integration.
+
+    - packet_id: wsl-root-sh-arg-delivery-audit
+      provisional_id: windows-260715-2
+      order: provisional
+      title: "wsl_root_sh arg-delivered commands are re-parsed by the guest login shell — audit callers and migrate script-shaped payloads to stdin delivery"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, vm-layer, hardening]
+      estimated_hours: 2
+      outcome: >
+        Live cold-provision repro 2026-07-15 (run 20260715T060048Z):
+        wsl without --exec re-joins trailing args and re-parses them
+        through the guest login shell; the order-326 multi-line setup
+        script arrived line-shredded ($probe empty, mkdir never ran) and
+        only the new provision-time probe caught it. wsl_root_sh_stdin()
+        now exists (f32e84f9) and the 326 ensure is pinned to it, but the
+        remaining wsl_root_sh callers (wsl.conf heredocs, unit installs,
+        df probes) survive the re-parse BY ACCIDENT today. Audit each
+        call site: single-command payloads may stay arg-delivered;
+        anything with quotes, $, or multiple lines migrates to stdin.
+        Consider a debug_assert or clippy-style lint rejecting newline
+        payloads in wsl_root_sh. Evidence:
+        plan/issues/build-install-smoke-e2e-findings-2026-07-15-windows.md.
+      exit_criteria:
+        - "every wsl_root_sh call site is classified (safe single-command vs migrated to stdin)"
+        - "a guard (assert or test) rejects multi-line/expansion payloads on the arg-delivered path"
+      events:
+        - type: filed
+          ts: "2026-07-15T06:55:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0523Z"
+          host: windows
+          summary: >
+            Filed from the in-run e2e finding after fixing the order-326
+            delivery forward. Provisional order per
+            order_number_assignment.
