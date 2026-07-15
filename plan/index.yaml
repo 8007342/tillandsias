@@ -13158,6 +13158,23 @@ plan_index:
         - "service_status lists the project's services; service_stop removes container + route"
         - "unit/fixture coverage on the handler dispatch (no podman needed for the deny path)"
       events:
+        - type: progress
+          ts: "2026-07-15T21:38:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            Implementation complete (commit 483c3472). Gap closed: the tool
+            family was dispatchable host-side but unreachable from agents
+            (no socket in the forge; socat bridge speaks NDJSON, control.sock
+            speaks postcard). Shipped a dedicated NDJSON mcp.sock (dir
+            bind-mounted ro into the forge, TILLANDSIAS_CONTROL_SOCKET set),
+            shared handle_mcp_jsonrpc for both transports, MCP handshake
+            (initialize/tools/list/notifications), SO_PEERCRED project gate
+            preserved. Transport decision recorded in the commit: control.sock
+            deliberately NOT exposed to the forge (repo checkout includes the
+            wire format; would hand agents the full control plane). Exit
+            criteria 2-4 evidenced by no-podman fixtures; criterion 1 (live
+            publish e2e) rides this cycle's local-build gate.
         - type: claim
           ts: "2026-07-15T21:16:00Z"
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
