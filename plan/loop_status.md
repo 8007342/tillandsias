@@ -6,9 +6,30 @@ LastExecutionTime: 2026-07-15T07:00:00Z
 
 See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.
 - **Linux coordinator (macuahuitl)** OWNS service-catalog rungs 357→358→360→361 (claimed). Other Linux workers: take 359 (github-token, grab first), 352/307 live-verify, audits 245-251/309/329/330/333, streams 148/150/153/156/157/158.
-- **Windows worker**: 312 (RELEASE-GATING) first, then 323/324/326/350.
+- **Windows worker**: ~~312~~ **DONE 2026-07-15 (7e491bd7, windows-next)** — next: 323/324/326/350.
 - **macOS worker**: 331 first, then 332/349/342.
 - Two milestones: stable-milestone-v1 (334, needs sibling criteria) + enclave-service-catalog (353, Linux-only).
+
+## Cycle 2026-07-15T05:23Z→05:55Z (windows — order 312 CLOSED: slice 2 socat stdio bridge; standard-user wire live-verified)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T0523Z. Guard `ok:gh-keyring`; merged
+  origin/linux-next f97ec125 (81 commits) clean — markers/YAML/cargo-check
+  gate green (ruby absent on this host; used `tillandsias-policy
+  validate-yaml`, the approved primary).
+- **Order 312 DONE (release gate for stable-milestone-v1 Windows)**: slice 2
+  privilege-routed transport — `wire_path()` sends standard users through a
+  new `WslStdioBridge` (`wsl.exe -d <distro> -- socat STDIO
+  VSOCK-CONNECT:1:<port>`, kill_on_drop, stderr surfaced on instant-death);
+  every consumer (GuestTransport + tray open_and_wrap_hvsocket_stream) goes
+  through `open_wsl_wire_stream()`. LIVE both ways on this host: runas
+  /trustlevel:0x20000 --diagnose → elevated:false + wire Ready via bridge
+  (identical probe was DOA before); elevated baseline unchanged. Guest
+  precondition probed: /usr/sbin/socat present, loopback connect exit 0.
+  vm-layer 39/39 (3 new pins), windows-tray 66/0, clippy clean. Commit
+  7e491bd7 (windows-next; ledger merge-back rides the coordinator pass).
+- **Host state at exit**: distro terminated (registered, idle), keepalive
+  killed, tree clean at push.
 
 ## Cycle 2026-07-15T05:30Z→06:45Z (linux_mutable macuahuitl — P0 agent-launch fix + service-catalog decision signed + roadmap filed)
 

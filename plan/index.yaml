@@ -10239,7 +10239,7 @@ plan_index:
       order: 312
       release_target: stable-milestone-v1
       title: "P1: non-elevated Windows tray can NEVER connect — hcsdiag VM-ID lookup is admin/Hyper-V-Administrators-only; every standard-user install is dead on arrival"
-      status: claimed
+      status: done
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/transport_windows.rs
       depends_on: []
@@ -10277,6 +10277,41 @@ plan_index:
         - "a standard-user (non-elevated) tray launch reaches a working control wire end-to-end on a stock host"
         - "windows e2e records the elevation context it ran under, so elevated agent runs can never again mask the standard-user path"
       events:
+        - type: completed
+          ts: "2026-07-15T05:50:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0523Z"
+          host: windows
+          lease_id: "windows-tray-requires-elevation-hcsdiag"
+          commits: ["7e491bd7"]
+          summary: >
+            Slice 2 DONE — all three fix-ladder rungs now shipped.
+            Privilege-routed dispatch in vm-layer transport_windows:
+            wire_path() (unit-pinned) sends HCS-queryable processes down
+            the direct AF_HYPERV path and standard users through a new
+            WslStdioBridge — `wsl.exe -d <distro> -- socat STDIO
+            VSOCK-CONNECT:1:<port>` child whose stdio is the wire
+            (kill_on_drop teardown; capped stderr surfaced on
+            instant-death after a 250ms startup grace so a dead bridge
+            explains itself instead of a bare handshake early-eof).
+            Every consumer routes through open_wsl_wire_stream():
+            GuestTransport open_stream/exec/exec_streaming and the
+            tray's open_and_wrap_hvsocket_stream. DEFAULT_WSL_DISTRO
+            hoisted to vm-layer wsl.rs; tray DISTRO_NAME aliases it;
+            TILLANDSIAS_WSL_DISTRO env seam. LIVE-VERIFIED both wire
+            paths on this host (WSL 2.7.10, Win11 Home 26200):
+            runas /trustlevel:0x20000 --diagnose --json returned
+            elevated:false + wire.reachable:true + phase:Ready via the
+            bridge (the identical probe was dead-on-arrival before);
+            elevated baseline unchanged via hvsocket. Guest-side
+            precondition probed directly: socat present at
+            /usr/sbin/socat, `echo | socat STDIO VSOCK-CONNECT:1:42420`
+            exit 0 against the running tillandsias-headless.service.
+            Criterion 1 shipped in slice 1; criterion 2 satisfied by
+            the live standard-user wire-up above (next windows e2e
+            carries it as durable evidence via the diagnose `elevated`
+            field = criterion 3). vm-layer 39/39 (3 new pins:
+            wire_path routing, socat argv shape, distro env seam);
+            windows-tray 66 pass / 0 fail; clippy clean.
         - type: claim
           ts: "2026-07-15T05:35:00Z"
           agent_id: "windows-bullo-fable5-20260715T0523Z"
