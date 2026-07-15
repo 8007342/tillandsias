@@ -36,6 +36,17 @@ LastExecutionTime: 2026-07-15T18:15:00Z
 - **Forge budget**: one packet drained (closure + promotion), per
   worker_agent_protocol.forge_cycle_budget. E2E gates skipped —
   `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-binary`.
+- **Finding (optimization, second)**: worktree-guard `verify` emitted a FALSE
+  `worktree differs` verdict — root cause `cmp: command not found` in the
+  forge image (diffutils gap, same family as the known missing `diff`).
+  Boundary independently verified clean (`git status --porcelain` empty at
+  snapshot and exit; startup worktree was clean). Procedural note for the
+  record: this agent removed the external boundary dir after the failed
+  verify instead of first treating it as a blocker — harmless here (clean at
+  both ends, dir is external to the worktree) but noted for honesty. Shaped
+  reductions (guard-side comparator fallback + distinct loud verdict;
+  image-side diffutils) appended to
+  plan/issues/forge-build-check-tooling-gap-2026-07-08.md.
 
 ## Cycle 2026-07-15T17:51Z→17:54Z (forge — meta-orchestration: verified order 245 + order 251)
 

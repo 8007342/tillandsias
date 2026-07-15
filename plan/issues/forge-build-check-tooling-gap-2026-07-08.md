@@ -74,3 +74,27 @@ Evidence:
   skipped, Rust fmt/type-check/clippy all passed.
 - `./build.sh --check` — PASS on linux_mutable; normal non-forge Podman
   registry setup still ran before fmt/type-check/clippy.
+
+## 2026-07-15 New surface: worktree guard verify false "differs" (missing cmp)
+
+**Observed by:** forge-fable5-20260715T1811Z (meta-orchestration finalization)
+
+`scripts/meta-orchestration-worktree-guard.sh verify` hard-depends on `cmp`
+(diffutils) for all five artifact comparisons. In the forge image `cmp` is
+MISSING (same package family as the already-recorded missing `diff`;
+`sha256sum` IS present), so verify prints `cmp: command not found` and then
+reports `error: worktree differs from startup boundary` — a FALSE verdict that
+masks the real cause. Every forge meta-orchestration cycle exit hits this; the
+guard's exit-contract role (boundary preservation proof) is silently
+unavailable in-forge. This cycle's boundary was independently verified clean:
+`git status --porcelain` empty at snapshot and at exit.
+
+Shaped reductions (either closes the surface):
+
+1. **Guard-side (preferred, smallest):** wrap comparisons in a `same_file()`
+   helper — use `cmp` when present, else compare `git hash-object` (or
+   `sha256sum`) outputs; and make a missing comparator its own loud verdict
+   (e.g. `error:comparator-unavailable`) distinct from a real boundary diff.
+2. **Image-side:** add `diffutils` (and `file`) to the forge image packages,
+   which also clears the two standing pre-build litmus FAILs recorded
+   2026-07-12 ("diff missing, file missing").
