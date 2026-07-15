@@ -556,6 +556,125 @@ fn prompt_line(label: &str, hidden: bool) -> String {
     line.trim().to_string()
 }
 
+/// `--transport-conformance`: run the shared GuestTransport conformance
+/// fixtures (order 128) against the live VZ backend (order 126 exit
+/// criterion 3, "both primitives pass the shared conformance fixtures on
+/// Darwin").
+///
+/// Threading: the fixtures call the REAL trait methods
+/// (`GuestTransport::{open_stream, exec, exec_streaming}`), whose VZ connect
+/// completions land on the main dispatch queue. A headless caller that parks
+/// the main thread in `block_on` would deadlock them (see
+/// `open_vsock_stream_current_thread` docs) — so boot + readiness run on the
+/// main thread (their helpers pump internally), the fixture set runs on a
+/// worker-thread runtime, and the main thread pumps the CFRunLoop until the
+/// worker finishes. That is the same division of labor as the AppKit tray,
+/// so the run proves the exact code path production uses.
+///
+/// Verdict grammar (greppable, falsifiable):
+/// `transport-conformance: PASS n=<N>` or
+/// `transport-conformance: FAIL <fixture>: <reason>`.
+pub fn transport_conformance_main() -> i32 {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+    use tillandsias_vm_layer::VmRuntime;
+    use tillandsias_vm_layer::transport_conformance::{
+        all_passed, render_report, run_all_with_progress,
+    };
+
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
+    let vz = Arc::new(tillandsias_vm_layer::vz::VzRuntime::new(3, image_root()));
+    vz.set_serial_to_log(true);
+    if !vz.is_provisioned() {
+        eprintln!(
+            "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
+        );
+        return 1;
+    }
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    // Boot + readiness on the main thread (helpers pump the runloop).
+    let booted = rt.block_on(async {
+        eprintln!("[transport-conformance] starting VM…");
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return false;
+        }
+        eprintln!("[transport-conformance] waiting for VM phase Ready…");
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                probe_phase_secure_or_plain(&vz, t)
+            })
+            .await
+        {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
+            return false;
+        }
+        true
+    });
+    if !booted {
+        let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
+        return 1;
+    }
+
+    // Fixtures on a worker runtime; main thread pumps the CFRunLoop so the
+    // trait-level VZ connects (spawn_blocking + main-queue completion) fire.
+    eprintln!("[transport-conformance] running shared fixtures over GuestEndpoint::MacVz…");
+    let worker_vz = Arc::clone(&vz);
+    let worker = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| format!("worker tokio runtime: {e}"))?;
+        let ep = GuestEndpoint::MacVz {
+            port: CONTROL_WIRE_VSOCK_PORT,
+        };
+        Ok::<_, String>(rt.block_on(async {
+            let t: &dyn tillandsias_control_wire::guest_transport::GuestTransport = &*worker_vz;
+            // Stream each verdict as it lands (loud floor; a buffered
+            // report hides which fixture is hanging).
+            run_all_with_progress(t, &ep, &mut |r| match &r.outcome {
+                Ok(()) => eprintln!("[transport-conformance] fixture {} ok", r.name),
+                Err(e) => eprintln!("[transport-conformance] fixture {} FAIL: {e}", r.name),
+            })
+            .await
+        }))
+    });
+    while !worker.is_finished() {
+        tillandsias_vm_layer::vz::boot::pump_cf_loop_for(Duration::from_millis(50));
+    }
+    let results = match worker.join() {
+        Ok(Ok(results)) => results,
+        Ok(Err(e)) => {
+            eprintln!("{{\"error\":\"{e}\"}}");
+            let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
+            return 1;
+        }
+        Err(_) => {
+            eprintln!("{{\"error\":\"conformance worker panicked\"}}");
+            let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
+            return 1;
+        }
+    };
+
+    print!("{}", render_report(&results));
+    let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
+    if all_passed(&results) { 0 } else { 1 }
+}
+
 /// `--github-login`: boot the VM and drive the *released* guest
 /// `tillandsias-headless --github-login` over the control wire. Each end user is
 /// **prompted on the host terminal for their OWN** git author name, git author

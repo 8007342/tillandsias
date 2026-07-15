@@ -138,6 +138,16 @@ fn main() {
         let guest_argv = vec!["/bin/bash".to_string(), "-lc".to_string(), shell_cmd];
         std::process::exit(diagnose::exec_guest_main(guest_argv));
     }
+    // Shared GuestTransport conformance fixtures (order 128) against the live
+    // VZ backend (order 126 exit criterion 3). Boots the provisioned VM, runs
+    // vm-layer::transport_conformance::run_all over GuestEndpoint::MacVz, and
+    // prints the falsifiable verdict line `transport-conformance: PASS n=<N>`
+    // (or `FAIL <fixture>: <reason>`), then stops the VM. Main-thread rule as
+    // for --exec-guest.
+    if args.iter().any(|a| a == "--transport-conformance") {
+        require_no_live_tray("--transport-conformance");
+        std::process::exit(diagnose::transport_conformance_main());
+    }
     // Headless GitHub login: boot the VM and drive the guest --github-login over
     // the control wire. Prompts the user on the host terminal for THEIR own git
     // name, email, and PAT (token echo suppressed) and feeds the guest prompts
@@ -243,6 +253,10 @@ mod tests {
                 "diagnose::list_cloud_projects_main()",
             ),
             ("--opencode", "diagnose::opencode_main"),
+            (
+                "--transport-conformance",
+                "diagnose::transport_conformance_main()",
+            ),
         ] {
             let guard_call = format!("require_no_live_tray(\"{mode}\")");
             let g = source

@@ -373,6 +373,35 @@ plan_index:
         - "the Linux AF_VSOCK backend (order 125) passes the fixtures via an in-memory/loopback harness, no live VM required"
         - "litmus:host-guest-transport-conformance pinned and green for at least the Linux backend"
         - "./build.sh --check and --test pass"
+      events:
+        - type: progress
+          ts: "2026-07-14T21:15:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260714T1904Z"
+          host: macos
+          lease_id: "host-guest-transport-conformance-harness-20260714"
+          summary: >
+            Exit criterion 1 DELIVERED ahead of the blocked_reason's
+            expectation — validated against a REAL landed backend instead of
+            waiting for order 125: crates/tillandsias-vm-layer/src/
+            transport_conformance.rs ships 5 shared fixtures parameterized
+            over &dyn GuestTransport + &GuestEndpoint (open_stream exec-
+            protocol round-trip, echo, exit-code, stdin passthrough,
+            streaming incremental chunks), each with a 60s hang-is-failure
+            budget, progressive per-fixture reporting, and the falsifiable
+            verdict grammar `transport-conformance: (PASS n=N|FAIL <fixture>:
+            <reason>)`. Placement is vm-layer (not control-wire as sketched):
+            the open_stream fixture drives the shared vsock_exec protocol,
+            which control-wire cannot depend on. Proven live on Darwin via
+            `tillandsias-tray --transport-conformance` (VZ backend, PASS
+            n=5) — order 126's criterion-3 evidence. Fixture-encoded contract
+            knowledge: guest exec allowlist requires the /bin/bash -lc
+            wrapper; PTY stdin is canonical/line-buffered (payloads newline-
+            terminated, consumers line-oriented); signal-exit mapping
+            divergence macOS-vs-Windows deliberately unpinned pending
+            guest-transport-exit-signal-divergence-2026-07-14.md. Remaining
+            (still gated on order 125): Linux backend passes fixtures via
+            in-memory harness + litmus:host-guest-transport-conformance
+            binding; Windows runner adoption is Windows' follow-on.
 
     - packet_id: host-guest-transport-linux
       order: 125
@@ -397,7 +426,7 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: blocked
+      status: completed
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
@@ -412,6 +441,36 @@ plan_index:
       owner_host: macos
       estimated_hours: 8
       events:
+        - type: completed
+          ts: "2026-07-14T21:15:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260714T1904Z"
+          host: macos
+          lease_id: "host-guest-transport-macos (reclaimed after empty-dir lease wedge, see plan/issues/optimization/ledger-lease-empty-dir-wedges-claim-2026-07-14.md)"
+          summary: >
+            All four exit criteria now evidenced. (1) VZ backend over
+            VZVirtioSocketDevice: landed in slices 0e49d480/e9d55c97/8e9f586d.
+            (2) no cfg-selected transport: litmus:host-guest-no-cfg-transport-
+            selection green in the instant suite on this host. (3) BOTH
+            primitives pass the SHARED conformance fixtures on Darwin —
+            order-128 harness (vm-layer transport_conformance, 5 fixtures)
+            run live via the new `tillandsias-tray --transport-conformance`
+            runner against the real VZ guest: `transport-conformance: PASS
+            n=5`, exit 0 (open_stream protocol round-trip, echo, exit-42,
+            stdin passthrough, streaming incremental chunks). (4) parity
+            rows: order 257 closed 2026-07-13. Residual checkpoint-3 note
+            (secure/expect exec helpers atop facade-opened streams) is
+            DELIBERATE architecture, not non-conformance: streams open via
+            the endpoint-shaped facade opener; the tray applies the secure-
+            channel wrap vm-layer cannot depend on; protocol helpers are the
+            shared layer all backends use. Facade-internal secure exec is
+            order-145 (encrypted cutover) scope. Conformance work also
+            root-caused and FIXED a shared-protocol P1: exec_over_stream_
+            with_input ignored the guest Error envelope (allowlist
+            rejection) and hung to the idle timeout — Error arm added +
+            duplex regression test (exec_with_input_surfaces_guest_error_
+            instead_of_hanging); trait-level exec against rejected argv no
+            longer masquerades as a dead wire. Windows unblocked: the shared
+            fixtures + a proven reference runner now exist for their column.
         - type: claim
           ts: "2026-07-05T00:52:56Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-codex-2026-07-05T00:52Z"

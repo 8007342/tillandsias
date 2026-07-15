@@ -80,6 +80,48 @@ LastExecutionTime: 2026-07-15T00:45:00Z
 - **Release**: held. No Podman reset, cold init, forge lane, published-release
   smoke, or release action ran because the local-build gate is red.
 
+## Cycle 2026-07-14T19:04Z→21:30Z (macos — operator-directed: WINDOWS UNBLOCKED — order 126 COMPLETED (vsock facade conformance, live PASS n=5), order-128 shared harness delivered, shared-protocol hang P1 fixed)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260714T1904Z. Guard `ok:gh-keyring`.
+  Startup: merged origin/linux-next (9665e135, release v0.3.260714.1 cut);
+  coordinator's renumbering of yesterday's macOS packets acknowledged
+  (metrics→333 etc.).
+- **Order 126 (host-guest-transport-macos) blocked→COMPLETED**: the real
+  residual was exit criterion 3 (shared conformance fixtures on Darwin) —
+  which required order 128's harness that never existed. Delivered both:
+  vm-layer `transport_conformance` (5 fixtures over &dyn GuestTransport,
+  60s hang-is-failure budgets, progressive reporting, falsifiable verdict
+  grammar) + `tillandsias-tray --transport-conformance` live runner
+  (main-thread CFRunLoop pump + worker-runtime fixtures = the AppKit
+  production division of labor). Live result on the real VZ guest:
+  `transport-conformance: PASS n=5`, exit 0. Checkpoint-3's "secure/expect
+  helpers" residual dispositioned as deliberate architecture (facade-opened
+  streams + tray-side secure wrap; facade-internal secure exec = order 145).
+- **Shared-protocol P1 found + FIXED by the harness**: `exec_over_stream_
+  with_input` ignored the guest's terminal Error envelope (exec-allowlist
+  rejection) and hung to the 300s idle timeout — every trait-level exec
+  against a rejected argv looked like a dead wire (same family as order
+  332). Error arm added (parity with the streaming variant) + duplex
+  regression test. Contract knowledge now fixture-encoded: /bin/bash -lc
+  allowlist wrapper required; PTY stdin is canonical (newline-terminated
+  payloads, line-oriented consumers).
+- **Findings filed**: guest-transport-exit-signal-divergence-2026-07-14
+  (macOS 128+n vs Windows raw — spec must pin one; signal fixture waits on
+  it), optimization/ledger-lease-empty-dir-wedges-claim-2026-07-14 (empty
+  lease dir from a crashed session reports in-flight forever; had wedged
+  THIS packet's claim since 2026-07-11 — reclaim should treat metadata-less
+  dirs as corrupt-and-expired).
+- **Order 128**: criterion 1 delivered (harness + macOS proof); remaining
+  Linux in-memory proof + litmus binding stay gated on order 125 (linux).
+  Windows adopt via their own runner — the reference implementation and a
+  proven backend now exist for both.
+- **Gates**: cargo tests green (vm-layer 39, macos-tray 69), clippy clean,
+  ./build.sh --check PASS, instant litmus 128/132 (same 4 known
+  non-macOS-gated shape checks as 2026-07-13 — no regression).
+- **Queue after drain**: macOS-eligible ready = order 155 (tray stream
+  refactor, next macOS cycle's top pick); any-role audits unchanged.
+
 ## Cycle 2026-07-14T20:05Z→20:20Z (linux_mutable macuahuitl — release-aware work packets: methodology + markers + order 335)
 
 - **Methodology (operator directive)**: distributed-work.yaml gains
