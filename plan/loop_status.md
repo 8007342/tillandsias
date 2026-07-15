@@ -12,9 +12,12 @@ LastExecutionTime: 2026-07-15T07:25:00Z
   ENOSPC .git-mask fix, macOS lane was DOA). Assigned final orders 365/366
   to windows provisional filings. Fixed litmus:windows-tray distro-name
   pin to follow the order-312 DISTRO_NAME→DEFAULT_WSL_DISTRO indirection.
-- **RELEASE v0.3.260715.2** (PR #74, run 29394773010 — BUILDING at cycle
-  record; prerelease under the stable channel): ships Windows 312 +
-  macOS 331/332 + the integration. Parity gate CLEAN.
+- **RELEASE v0.3.260715.2 PUBLISHED** (PR #74, run 29394773010 SUCCESS, 25
+  assets, prerelease under the stable channel): ships Windows 312 +
+  macOS 331/332 + the integration. Parity gate CLEAN. Channel verified
+  LIVE: /releases/latest still resolves promoted stable v0.3.260712.1;
+  resolver daily now = v0.3.260715.2. Routine curl-install smoke tracks
+  this daily; a stable one-shot only after the next promotion.
 - **Order 367 DONE — curl-install smoke daily/stable split**: dailies are
   prereleases so /releases/latest served the promoted STABLE, not the
   bleeding edge. scripts/resolve-smoke-release.sh resolves a channel
