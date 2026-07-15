@@ -2121,6 +2121,57 @@ fn build_stack_common_args(
     args
 }
 
+/// The single WEB catalog entry for the first "publish it locally" rung
+/// (order 357). The full hand-curated catalog (categories → pinned digests,
+/// mounts, ports, debug semantics) is order 358/361; this constant is the
+/// interim single-entry allowlist so the MVP demonstrates end-to-end while
+/// the schema is designed. A forge may request category `"WEB"` and NOTHING
+/// else until 358 generalizes this host-side.
+/// @trace spec:enclave-service-catalog
+const CATALOG_WEB_CATEGORY: &str = "WEB";
+/// Port the WEB image's busybox httpd listens on (images/web/Containerfile).
+const CATALOG_WEB_PORT: u16 = 8080;
+
+/// Container name for a project's published WEB service. Stable per project
+/// so re-publish is idempotent (ensure semantics).
+fn web_service_container_name(project_name: &str) -> String {
+    format!("tillandsias-{project_name}-web")
+}
+
+/// The published URL for a project's WEB service. Friendly name only, never
+/// an IP (operator invariant). http today; order 360 adds transparent https.
+fn web_service_url(project_name: &str) -> String {
+    format!("http://www.{project_name}.localhost:8080")
+}
+
+/// `podman run` args for a project's static WEB catalog service: the alpine
+/// busybox-httpd image (images/web) with the project worktree bind-mounted
+/// READ-ONLY at `/var/www` (debug mode — the container serves live edits; RO
+/// is the WEB entry's fixed share rule, not agent-choosable). On the enclave
+/// network as `tillandsias-<project>-web` so the router reaches it by name.
+/// @trace spec:enclave-service-catalog, spec:web-image
+fn build_web_service_run_args(project_name: &str, worktree: &Path, image: &str) -> Vec<String> {
+    vec![
+        "--detach".into(),
+        "--rm".into(),
+        "--name".into(),
+        web_service_container_name(project_name),
+        "--hostname".into(),
+        web_service_container_name(project_name),
+        "--network".into(),
+        ENCLAVE_NET.into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        "--security-opt=label=disable".into(),
+        "--userns=keep-id".into(),
+        "--pids-limit=32".into(),
+        // Worktree served read-only (debug: live edits, no reload for static).
+        "-v".into(),
+        format!("{}:/var/www:ro", worktree.display()),
+        image.into(),
+    ]
+}
+
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     vec![
         "--detach".into(),
@@ -2711,6 +2762,14 @@ struct RouterRoute {
     /// `/`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     root_redirect: Option<String>,
+    /// Public route: skip the OTP `forward_auth` gate. Used by
+    /// "publish it locally" catalog web services — a user's own localhost dev
+    /// server is served directly, not behind the private-view session gate
+    /// (which fronts Observatorium / OpenCode Web). Defaults to `false` so
+    /// every existing route keeps its auth chain.
+    /// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-service-catalog
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    public: bool,
 }
 
 impl RouterRoute {
@@ -2720,12 +2779,25 @@ impl RouterRoute {
             upstream_host: upstream_host.into(),
             port,
             root_redirect: None,
+            public: false,
         }
     }
 
     fn with_root_redirect(mut self, path: impl Into<String>) -> Self {
         self.root_redirect = Some(path.into());
         self
+    }
+
+    /// A public (no-auth) route for a "publish it locally" catalog service.
+    fn public_service(
+        subdomain: impl Into<String>,
+        upstream_host: impl Into<String>,
+        port: u16,
+    ) -> Self {
+        Self {
+            public: true,
+            ..Self::new(subdomain, upstream_host, port)
+        }
     }
 }
 
@@ -2836,6 +2908,18 @@ fn generate_dynamic_caddyfile(routes_to_render: &[RouterRoute]) -> String {
             .root_redirect
             .as_deref()
             .filter(|path| path.starts_with('/'));
+
+        // Public catalog service (publish-it-locally): a bare reverse_proxy
+        // with NO forward_auth gate — the user's own localhost dev server.
+        // @trace spec:enclave-service-catalog
+        if route.public {
+            routes.push_str(&format!(
+                "http://{subdomain}.localhost:8080 {{\n    \
+reverse_proxy {upstream_host}:{port}\n\
+}}\n\n"
+            ));
+            continue;
+        }
 
         // Force HTTP-only (`http://...`) on :8080. Caddy enables HTTP/2 and
         // HTTP/3 by default, both of which require TLS — so a bare
@@ -9692,6 +9776,100 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    // ── enclave service catalog: publish-it-locally MVP (order 357) ──
+
+    #[test]
+    fn web_service_names_and_url_are_friendly_and_project_scoped() {
+        assert_eq!(
+            web_service_container_name("visual-chess"),
+            "tillandsias-visual-chess-web"
+        );
+        // Friendly name only — NEVER an IP (operator invariant).
+        assert_eq!(
+            web_service_url("visual-chess"),
+            "http://www.visual-chess.localhost:8080"
+        );
+        assert!(
+            !web_service_url("lakanoa").contains(char::is_numeric)
+                || web_service_url("lakanoa").contains("8080")
+        );
+    }
+
+    #[test]
+    fn build_web_service_run_args_bind_mounts_worktree_read_only() {
+        let args = build_web_service_run_args(
+            "visual-chess",
+            Path::new("/home/u/src/visual-chess"),
+            "tillandsias-web:v1",
+        );
+        // Worktree mounted RO at /var/www (debug: live static edits).
+        assert!(
+            args.iter()
+                .any(|a| a == "/home/u/src/visual-chess:/var/www:ro")
+        );
+        // Named + on the enclave net so the router resolves it by name.
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--name" && w[1] == "tillandsias-visual-chess-web")
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--network" && w[1] == ENCLAVE_NET)
+        );
+        // Locked down like every other enclave service.
+        assert!(args.iter().any(|a| a == "--cap-drop=ALL"));
+        assert!(args.iter().any(|a| a == "--security-opt=no-new-privileges"));
+        assert!(args.iter().any(|a| a == "--rm"));
+        // Image is the LAST arg (podman positional), from the host — never
+        // a forge-supplied reference.
+        assert_eq!(args.last().unwrap(), "tillandsias-web:v1");
+    }
+
+    #[test]
+    fn public_catalog_route_has_no_forward_auth_gate() {
+        let route = RouterRoute::public_service(
+            "www.visual-chess",
+            "tillandsias-visual-chess-web",
+            CATALOG_WEB_PORT,
+        );
+        let caddy = generate_dynamic_caddyfile(&[route]);
+        assert!(caddy.contains("http://www.visual-chess.localhost:8080"));
+        assert!(caddy.contains("reverse_proxy tillandsias-visual-chess-web:8080"));
+        // The whole point: a published static site is PUBLIC — no OTP gate.
+        assert!(
+            !caddy.contains("forward_auth"),
+            "public catalog route must not be behind the session gate:\n{caddy}"
+        );
+    }
+
+    #[test]
+    fn private_routes_keep_their_auth_gate() {
+        // Regression guard: adding the public branch must not drop auth from
+        // ordinary (Observatorium / OpenCode Web) routes.
+        let route = RouterRoute::new("observatorium.proj", "tillandsias-proj-forge", 7000);
+        let caddy = generate_dynamic_caddyfile(&[route]);
+        assert!(
+            caddy.contains("forward_auth"),
+            "private routes must stay gated:\n{caddy}"
+        );
+    }
+
+    #[test]
+    fn public_flag_defaults_false_and_round_trips_json() {
+        // Existing route registries on disk have no `public` field — it must
+        // default to false (every legacy route stays gated).
+        let legacy: RouterRoute =
+            serde_json::from_str(r#"{"subdomain":"a.b","upstream_host":"h","port":80}"#).unwrap();
+        assert!(!legacy.public);
+        let pubroute = RouterRoute::public_service("www.p", "h", 8080);
+        let json = serde_json::to_string(&pubroute).unwrap();
+        assert!(json.contains("\"public\":true"));
+        assert_eq!(
+            serde_json::from_str::<RouterRoute>(&json).unwrap(),
+            pubroute
+        );
+    }
+
     /// 2026-07-12 (windows attended smoke): a lane flag missing from
     /// `is_cli_mode` makes that lane's invocation acquire the "launcher"
     /// singleton, which SIGTERM+SIGKILLs the RUNNING headless service — a
@@ -11236,33 +11414,52 @@ mod tests {
     }
 
     #[test]
-    fn codex_forge_mounts_scoped_vault_lease_only_for_codex() {
-        let codex_args = build_forge_agent_run_args_with_vault(
-            &PathBuf::from("/tmp/project"),
-            "alpha",
-            &PathBuf::from("/tmp/ca"),
-            "1.2.3",
+    fn forge_mounts_scoped_vault_lease_for_every_credentialed_mode() {
+        // 2026-07-15: the scoped vault-token lease was Codex-only, so
+        // Claude/Antigravity lanes had no token and their OAuth restore died
+        // "no Vault token" → fatal launch. Now EVERY credentialed mode
+        // (Codex/Claude/Antigravity) mounts its lease; OpenCode/Maintenance
+        // (credential-free) mount none.
+        for mode in [
             ForgeAgentMode::Codex,
-            false,
-            Some("codex-forge-lease"),
-        );
-        assert!(has_arg(&codex_args, "--secret"));
-        assert!(has_arg(
-            &codex_args,
-            &format!("codex-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
-        ));
-
-        let claude_args = build_forge_agent_run_args_with_vault(
-            &PathBuf::from("/tmp/project"),
-            "alpha",
-            &PathBuf::from("/tmp/ca"),
-            "1.2.3",
             ForgeAgentMode::Claude,
-            false,
-            Some("must-not-mount"),
-        );
-        assert!(!has_arg(&claude_args, "--secret"));
-        assert!(!claude_args.iter().any(|arg| arg.contains("must-not-mount")));
+            ForgeAgentMode::Antigravity,
+        ] {
+            let args = build_forge_agent_run_args_with_vault(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+                Some("provider-forge-lease"),
+            );
+            assert!(
+                has_arg(&args, "--secret"),
+                "{mode:?} must mount the vault lease"
+            );
+            assert!(has_arg(
+                &args,
+                &format!("provider-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
+            ));
+        }
+
+        // Credential-free lanes never mount a provider lease.
+        for mode in [ForgeAgentMode::OpenCode, ForgeAgentMode::Maintenance] {
+            let args = build_forge_agent_run_args_with_vault(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+                Some("must-not-mount"),
+            );
+            assert!(
+                !args.iter().any(|arg| arg.contains("must-not-mount")),
+                "{mode:?} must not mount a provider lease"
+            );
+        }
     }
 
     #[test]
