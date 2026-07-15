@@ -2549,6 +2549,19 @@ fn control_socket_host_dir() -> PathBuf {
     base.join("tillandsias")
 }
 
+/// Host directory holding the NDJSON MCP tool socket (`mcp.sock`) the tray
+/// serves for in-forge agents (order 363). The DIRECTORY — not the socket
+/// file — is bind-mounted into forge containers so a tray restart's
+/// re-bind stays visible inside an already-running forge. Deliberately a
+/// sibling of `control.sock`, never the control socket itself: the postcard
+/// control plane (VmShutdownRequest, IssueWebSession, …) must not be
+/// reachable from agent code.
+///
+/// @trace spec:host-browser-mcp
+fn mcp_socket_host_dir() -> PathBuf {
+    control_socket_host_dir().join("mcp")
+}
+
 /// Build `podman run` args for the Caddy reverse-proxy router container.
 ///
 /// The router runs on the enclave network with DNS alias `router` so Squid's
@@ -8224,6 +8237,27 @@ fn build_forge_agent_run_args_with_vault(
             "/run/tillandsias/ca-chain.crt",
             true,
         );
+    }
+
+    // Order 363: mount the host MCP tool socket directory so the in-forge
+    // socat bridge (config-overlay/mcp/host-browser.sh) can reach the
+    // tray's NDJSON tool surface (publish_local / service_status /
+    // service_stop). Read-only — connect() needs no filesystem write —
+    // and the tray attributes the project from SO_PEERCRED, so a forge
+    // can only ever publish its own project. The postcard control socket
+    // is deliberately NOT mounted (full control plane).
+    let mcp_dir = mcp_socket_host_dir();
+    if std::fs::create_dir_all(&mcp_dir).is_ok() {
+        spec = spec
+            .bind_mount(
+                mcp_dir.display().to_string(),
+                "/run/host/tillandsias-mcp",
+                true,
+            )
+            .env(
+                "TILLANDSIAS_CONTROL_SOCKET",
+                "/run/host/tillandsias-mcp/mcp.sock",
+            );
     }
 
     // Forge gitconfig injection (order 224): pre-populate Git's standard
