@@ -13408,7 +13408,7 @@ plan_index:
       order: 369
       release_target: stable-milestone-v1
       title: "Implement: git mirror fetch-before-push reconciliation hooks"
-      status: pending
+      status: claimed
       kind: implementation
       deliverable: images/git hook scripts and config
       depends_on: [git-mirror-pre-reconcile-research]
@@ -13422,3 +13422,10 @@ plan_index:
       exit_criteria:
         - "in-forge agent can push to a stale mirror, and the mirror auto-reconciles without rejection"
         - "litmus test proving auto-reconciliation works"
+      events:
+        - type: claim
+          ts: "2026-07-15T18:35:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1835Z"
+          host: linux
+          lease_id: "git-mirror-pre-reconcile-impl"
+          expires_at: "2026-07-15T22:35:00Z"
