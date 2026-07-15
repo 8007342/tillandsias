@@ -12813,7 +12813,7 @@ plan_index:
     - packet_id: forge-github-token-injection
       order: 359
       title: "Inject the vault GitHub token when forge tooling talks to GitHub (brew attestation, git checkout) — stop getting rate-limited/blocked"
-      status: ready
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: enhancement
       deliverable: images/default/lib-common.sh + brew shim + entrypoints
@@ -12842,6 +12842,20 @@ plan_index:
         - "fixture/source-pin: the token is injected as env only — never in argv, never written to a file in the project or image"
         - "credential-quarantine litmus still green (forge policy cannot read secret/github/token)"
       events:
+        - type: completed
+          ts: "2026-07-15T07:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
+          host: linux_mutable
+          summary: >
+            Implemented: build_forge_agent_run_args_with_vault reads the
+            github token HOST-SIDE (vault_kv_get_via_exec) and injects it as
+            HOMEBREW_GITHUB_API_TOKEN env into every forge lane — same seam
+            and trust level as the LLM provider keys, never on disk/argv.
+            forge-policy-has-no-token-read invariant untouched (litmus
+            green). Source-pin test asserts env-only host-side injection +
+            quarantine. The e2e closure (brew install of an attested bottle
+            succeeds in a live forge lane) verifies on the next forge cycle
+            with the rebuilt image.
         - type: filed
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
