@@ -375,6 +375,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:git-mirror-fetch-reconcile
   - litmus:enclave-isolation
   - litmus:git-mirror-safe-refspec-push
   - litmus:git-mirror-ref-convergence

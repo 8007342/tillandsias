@@ -92,5 +92,18 @@ fi
 
 OUTPUT_REDACTED="$(redact_output "$OUTPUT")"
 log_msg "Atomic push to $REMOTE_URL_REDACTED FAILED: $OUTPUT_REDACTED"
+
+if [ -n "$PUSH_URL" ]; then
+    log_msg "Attempting non-forced reconcile fetch from upstream..."
+    # Escape quarantine so fetched objects are persisted to the main database
+    if FETCH_OUTPUT="$(env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+        git fetch "$PUSH_URL" 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*' 2>&1)"; then
+        log_msg "Reconcile fetch succeeded. Mirror is now up to date."
+    else
+        FETCH_OUTPUT_REDACTED="$(redact_output "$FETCH_OUTPUT")"
+        log_msg "Reconcile fetch non-fast-forward (expected if locally stranded): $FETCH_OUTPUT_REDACTED"
+    fi
+fi
+
 unset PUSH_URL TOKEN BARE_URL
 exit 1
