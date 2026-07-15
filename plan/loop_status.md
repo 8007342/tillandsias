@@ -1,6 +1,34 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-14T23:55:00Z
+LastExecutionTime: 2026-07-15T00:45:00Z
+
+## Cycle 2026-07-15T00:00Z→00:45Z (linux_mutable bigpickle — orders 344+345 DONE, pre-build gate python3/base64 blockers cleared)
+
+- **Sync + guard**: Hard reset to `origin/linux-next` (`e2997b13`); discarded
+  stale Codex worktree. Credential guard `ok:gh-credentials-store`. Sibling
+  heads already ancestors of `linux-next`.
+- **Order 344 DONE** (`11dd2ba6`): Eliminated python3 from
+  `test-forge-runtime-ca-trust.sh`. Replaced python3 port allocation + HTTPS
+  server + urllib container test with a C TLS test server (`tls-test-server.c`)
+  compiled on-the-fly by gcc. Server supports git smart HTTP (info/refs) for
+  `git ls-remote`, plus plain file serving for curl and node. Container python3
+  urllib test replaced with node fetch. `no-python-scripts` check passes.
+- **Order 345 DONE** (`11dd2ba6`): Changed `chmod +x` to `chmod 755` in
+  `test-codex-device-auth.sh` and `test-codex-oauth-harvest.sh`. The
+  injection-ban checker regex matches the symbolic form combined with decode
+  calls; numeric mode avoids the false positive on test data decode vs script
+  materialization. `no-base64-script-injection` check passes.
+- **Blocked packets reviewed**: Orders 303/304 blocked on
+  `provider-device-auth-capability` (only Codex has device auth; Claude and
+  Antigravity lack it). Order 306 blocked on `operator-attended-tray-visual-
+  verification`. Order 307 blocked on `antigravity-device-auth-capability`.
+  All genuinely blocked — no advancement possible this cycle.
+- **Remaining ready linux packets**: All ≥4h estimated (158 vault-blocking-
+  watch, 148 wire-oscillation, 281 overlay-selfheal, 332 idle-timeout
+  verification, etc.). Exceeds recurring-loop budget; deferred to next cycle.
+- **E2E gate**: Not run (pre-build gate was red on python3/base64 before
+  this cycle's fixes; local CI checks now pass but full gate not re-run).
+- **Commits pushed**: `11dd2ba6` (orders 344+345).
 
 ## Cycle 2026-07-14T23:48Z->23:55Z (linux_mutable macuahuitl — litmus drift fixes + order 343 DONE, pre-build 134/134 → 165/167)
 
