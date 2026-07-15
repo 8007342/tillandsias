@@ -5848,8 +5848,17 @@ fn append_forge_repo_gitdir_mount_args(
     let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) else {
         // A standard checkout must never fall back to the host `.git` tree.
         // Mask it even if facade materialization failed; Git will fail closed.
+        // notmpcopyup is LOAD-BEARING: podman's default tmpcopyup copies the
+        // underlying image/bind content into the fresh tmpfs — over a real
+        // host checkout (macOS virtiofs) that means cramming a multi-hundred-
+        // MB .git into 8m, which dies at container start with
+        // `crun: write: No space left on device` (live repro 2026-07-15).
+        // A fail-closed mask must be EMPTY by definition.
         if project_path.join(".git").is_dir() {
-            args.extend(["--tmpfs".into(), format!("{target}:size=8m,mode=0700")]);
+            args.extend([
+                "--tmpfs".into(),
+                format!("{target}:size=8m,mode=0700,notmpcopyup"),
+            ]);
         }
         return;
     };
@@ -6437,7 +6446,12 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    let images = ["proxy", "git", "inference", "forge"];
+    // Router MUST be in this preflight list: run_opencode_mode later calls
+    // ensure_router_running, and podman-running an absent versioned image
+    // dies pulling localhost/tillandsias-router from a nonexistent registry
+    // (order-327 class; the OpenCode CLI lane was the one lane the 293/327
+    // fixes missed — reproduced live on macOS cold-forge 2026-07-15).
+    let images = ["proxy", "router", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
     ensure_provider_auth(ForgeAgentMode::OpenCode, debug)?;
 
@@ -8175,8 +8189,12 @@ fn build_forge_agent_run_args_with_vault(
                 false,
             );
     } else if project_path.join(".git").is_dir() {
-        // Match the raw OpenCode path's fail-closed fallback.
-        spec = spec.tmpfs(format!("{repo_gitdir_target}:size=8m,mode=0700"));
+        // Match the raw OpenCode path's fail-closed fallback. notmpcopyup is
+        // load-bearing — see append_forge_repo_gitdir_mount_args (tmpcopyup
+        // over a real host .git = crun ENOSPC at launch, 2026-07-15).
+        spec = spec.tmpfs(format!(
+            "{repo_gitdir_target}:size=8m,mode=0700,notmpcopyup"
+        ));
     }
 
     let ca_cert = certs_dir.join("intermediate.crt");
@@ -11814,9 +11832,12 @@ mod tests {
         );
         for args in [&fail_closed_agent, &fail_closed_raw] {
             assert!(
-                args.iter()
-                    .any(|arg| { arg == "/home/forge/src/alpha/.git:size=8m,mode=0700" }),
-                "facade errors must mask host .git with a fail-closed tmpfs"
+                args.iter().any(|arg| {
+                    arg == "/home/forge/src/alpha/.git:size=8m,mode=0700,notmpcopyup"
+                }),
+                "facade errors must mask host .git with a fail-closed EMPTY tmpfs — \
+                 notmpcopyup is load-bearing (tmpcopyup over a real host .git = \
+                 crun ENOSPC at launch, macOS live repro 2026-07-15)"
             );
         }
 
@@ -12125,6 +12146,19 @@ mod tests {
         assert!(
             window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
             "observatorium mode must ensure the web image exists before launch"
+        );
+    }
+
+    #[test]
+    fn opencode_mode_preflights_router_image_before_start() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_opencode_mode(");
+        assert!(
+            window.contains(
+                "let images = [\"proxy\", \"router\", \"git\", \"inference\", \"forge\"];"
+            ) && window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
+            "OpenCode CLI lane must build the router image before ensure_router_running \
+             (order-327 class; macOS cold-forge live repro 2026-07-15)"
         );
     }
 

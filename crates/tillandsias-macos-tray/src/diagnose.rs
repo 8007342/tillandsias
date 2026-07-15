@@ -994,8 +994,73 @@ pub fn list_cloud_projects_main() -> i32 {
 /// open-ended until the user exits.
 ///
 /// @trace plan/issues/smoke-curl-install-e2e-macos-v0.3.260626.4-2026-06-26.md
+/// Guest-side root where the host's `~/src` arrives via the `home-src`
+/// virtiofs share (vz.rs cloud-init fstab entry).
+const GUEST_SRC_ROOT: &str = "/home/forge/src";
+
+/// Order 331: translate an operator-supplied project path into the
+/// guest-visible form, BEFORE booting the VM.
+///
+/// Pure over already-absolute host paths so it is unit-pinnable:
+/// - a path already under `/home/forge/src` passes through verbatim
+///   (the operator supplied the guest form);
+/// - a path under `<host_home>/src/…` rewrites to `/home/forge/src/…`
+///   (only `~/src` is shared into the guest, so only it can translate);
+/// - anything else is rejected with a message naming both accepted forms —
+///   failing on the host in milliseconds instead of after a ~60s boot with
+///   the guest's opaque "Project not found" (live repro 2026-07-13).
+pub fn translate_project_path_for_guest(abs_path: &str, host_home: &str) -> Result<String, String> {
+    let guest_root = std::path::Path::new(GUEST_SRC_ROOT);
+    let p = std::path::Path::new(abs_path);
+    if p.starts_with(guest_root) {
+        return Ok(abs_path.to_string());
+    }
+    let host_src = std::path::Path::new(host_home).join("src");
+    if let Ok(rest) = p.strip_prefix(&host_src) {
+        if rest.as_os_str().is_empty() {
+            return Err(format!(
+                "--opencode needs a project INSIDE {}, not the src root itself",
+                host_src.display()
+            ));
+        }
+        return Ok(guest_root.join(rest).to_string_lossy().into_owned());
+    }
+    Err(format!(
+        "--opencode project path must be under {} (host form) or {} (guest form); got: {}. \
+         Only ~/src is shared into the guest, so projects elsewhere are not visible to the forge.",
+        host_src.display(),
+        GUEST_SRC_ROOT,
+        abs_path
+    ))
+}
+
+/// Host-side wrapper for [`translate_project_path_for_guest`]: resolves
+/// relative paths (including the bare-`.` default) against the current
+/// directory via `canonicalize` when the path exists on the host, then
+/// applies the pure translation.
+fn resolve_project_path_pre_boot(raw: &str) -> Result<String, String> {
+    let host_home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    // Guest-absolute paths don't exist on the host; skip canonicalize.
+    if raw.starts_with(GUEST_SRC_ROOT) {
+        return translate_project_path_for_guest(raw, &host_home);
+    }
+    let abs = std::fs::canonicalize(raw)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| raw.to_string());
+    translate_project_path_for_guest(&abs, &host_home)
+}
+
 pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
     use tillandsias_vm_layer::VmRuntime;
+
+    // Order 331: translate/validate on the host BEFORE any VM work.
+    let path = match resolve_project_path_pre_boot(&path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{{\"error\":\"{e}\"}}");
+            return 2;
+        }
+    };
 
     if let Err(err) = stage_embedded_guest_binary() {
         eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
@@ -1126,6 +1191,7 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::parse_aarch64_qcow2_sha;
+    use super::translate_project_path_for_guest;
 
     /// `parse_aarch64_qcow2_sha` reads the actual manifest.toml format
     /// the Fedora pivot emits (`"aarch64.qcow2" = "<sha>"` inside
@@ -1397,5 +1463,34 @@ mod tests {
         assert_eq!(exit_code_from(&report), 0);
         report.provisioned = false;
         assert_eq!(exit_code_from(&report), 2);
+    }
+
+    /// Order 331 pin: the pure host→guest project-path translation.
+    #[test]
+    fn project_path_translation_rules() {
+        let t = |p: &str| translate_project_path_for_guest(p, "/Users/op");
+        // host ~/src/<name> → guest path (the 2026-07-13 live repro shape)
+        assert_eq!(
+            t("/Users/op/src/tillandsias").unwrap(),
+            "/home/forge/src/tillandsias"
+        );
+        // nested subpath translates too
+        assert_eq!(
+            t("/Users/op/src/tillandsias/crates").unwrap(),
+            "/home/forge/src/tillandsias/crates"
+        );
+        // guest-absolute passes through verbatim
+        assert_eq!(
+            t("/home/forge/src/tillandsias").unwrap(),
+            "/home/forge/src/tillandsias"
+        );
+        // the src root itself is not a project
+        assert!(t("/Users/op/src").unwrap_err().contains("INSIDE"));
+        // outside ~/src fails fast with both accepted forms named
+        let err = t("/tmp/elsewhere").unwrap_err();
+        assert!(
+            err.contains("/Users/op/src") && err.contains("/home/forge/src"),
+            "{err}"
+        );
     }
 }
