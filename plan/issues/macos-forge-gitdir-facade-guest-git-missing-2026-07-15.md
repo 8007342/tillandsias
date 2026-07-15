@@ -53,3 +53,17 @@
 Any `--opencode` on a macOS VZ guest with the merged facade code and a
 real host checkout: pre-fix crashes ENOSPC; post-fix launches with a
 masked `.git`.
+
+## Additional evidence (same cycle, order-349 gate run)
+
+`read_host_project_origin_url` is a third guest-`git` shell-out casualty:
+with no origin URL readable, `write_forge_gitconfig` omits the
+`[url "git://tillandsias-git/…"] insteadOf` section entirely — the live
+order-349 gate shows `/home/forge/.gitconfig` mounted and honored
+(safe.directory, empty credential.helper, hooksPath all present via
+`git config --global --show-origin --list`) but NO mirror rewrite. So the
+single missing guest binary silently disables: the mirror redirect, the
+repo gitdir facade, and (pre-notmpcopyup) the whole lane. TLS parity is
+healthy on the same run (curl/node/python all 200 through the proxy with
+no per-client CA override variables; NODE_USE_SYSTEM_CA=1 is the
+system-trust design). Order 349 is blocked on exactly this packet.
