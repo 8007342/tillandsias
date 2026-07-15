@@ -39,6 +39,7 @@ use signal_hook::flag;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -2515,7 +2516,17 @@ fn control_socket_host_dir() -> PathBuf {
     let base = if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
         PathBuf::from(runtime_dir)
     } else {
-        PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() }))
+        // PLEASE REVIEW: linux — non-unix fallback added to keep the
+        // workspace compiling on Windows (libc::getuid is unix-only);
+        // mirrors router_dynamic_caddyfile_host_path's temp_dir fallback.
+        #[cfg(unix)]
+        {
+            PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() }))
+        }
+        #[cfg(not(unix))]
+        {
+            std::env::temp_dir().join("tillandsias-embedded")
+        }
     };
     base.join("tillandsias")
 }
@@ -6042,6 +6053,7 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
 /// stale socket file left over from a crashed tray.
 ///
 /// @trace spec:tray-host-control-socket
+#[cfg(unix)]
 fn control_socket_is_listening(socket_path: &Path) -> bool {
     if !socket_path.exists() {
         return false;
@@ -6051,6 +6063,15 @@ fn control_socket_is_listening(socket_path: &Path) -> bool {
     // exists() check and connect — collapses to "not listening" and lets the
     // caller decide whether to spawn or give up.
     UnixStream::connect(socket_path).is_ok()
+}
+
+// PLEASE REVIEW: linux — minimal stub to keep the workspace compiling on
+// Windows (std::os::unix::net::UnixStream is unix-only; the host control
+// socket is a Linux-host feature today). "Not listening" is the safe
+// answer: callers take their existing spawn-or-give-up path.
+#[cfg(not(unix))]
+fn control_socket_is_listening(_socket_path: &Path) -> bool {
+    false
 }
 
 /// Phase 3, Task 12 & Phase 4: Launch in tray mode with headless subprocess.
@@ -7150,6 +7171,7 @@ fn build_project_browser_spec(
 /// transient one.
 ///
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+#[cfg(unix)]
 fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Result<(), String> {
     // Get control socket path from XDG_RUNTIME_DIR or default.
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
@@ -7231,6 +7253,19 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
             other
         )),
     }
+}
+
+// PLEASE REVIEW: linux — minimal stub to keep the workspace compiling on
+// Windows (UnixStream + libc::getuid are unix-only; the tray host control
+// socket is a Linux-host feature today). Callers already treat Err as
+// "refuse to open the browser", which is the correct behavior on a
+// platform with no control socket.
+#[cfg(not(unix))]
+fn send_issue_web_session(_project_label: &str, _cookie_value: &[u8; 32]) -> Result<(), String> {
+    Err(
+        "host control socket (web-session OTP handoff) is not available on this platform"
+            .to_string(),
+    )
 }
 
 fn launch_opencode_web_browser(

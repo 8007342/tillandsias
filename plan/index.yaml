@@ -12860,3 +12860,41 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
           host: linux_mutable
           summary: "357 sub-rung I3c (e2e closure), filed after the host-side core."
+
+    - packet_id: cross-target-unix-cfg-gate-check
+      provisional_id: windows-260715-1
+      order: provisional
+      title: "linux-next un-gated unix-only APIs break every Windows checkout — add a cross-target cfg probe to the Linux authoring-side check"
+      status: ready
+      kind: enhancement
+      deliverable: scripts/local-ci.sh or openspec/litmus-tests (cross-target cfg probe)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [ci, cross-host, rust, litmus]
+      estimated_hours: 2
+      outcome: >
+        Order 357's catalog slice (b1404180) landed un-gated
+        std::os::unix::net::UnixStream + libc::getuid() in
+        tillandsias-headless main.rs; linux ./build.sh --check only
+        compiles the Linux cfg universe, so linux-next stayed green while
+        every Windows workspace check broke (E0433/E0425 x3). Windows
+        repaired forward on windows-next (cfg gates + PLEASE REVIEW:
+        linux stubs). Wanted: authoring-side detection — cargo check
+        --workspace --target x86_64-pc-windows-gnu (rustup std target,
+        no linker needed) in the Linux pre-push path, or a litmus that
+        fails on un-gated std::os::unix / libc::getuid|geteuid|fork
+        outside cfg(unix) items. Full context:
+        plan/issues/linux-next-ungated-unix-apis-break-windows-2026-07-15.md.
+      exit_criteria:
+        - "the check fails loud on the three documented sites when the windows fix commit is reverted"
+        - "linux pre-push path runs it (local-ci phase or litmus binding)"
+      events:
+        - type: filed
+          ts: "2026-07-15T06:10:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0523Z"
+          host: windows
+          summary: >
+            Filed from the windows lane after repairing the inherited
+            breakage forward (see the fix commit on windows-next).
+            Provisional order per order_number_assignment; coordinator
+            to assign the integer at integration.
