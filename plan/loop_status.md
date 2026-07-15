@@ -1,6 +1,40 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T07:00:00Z
+LastExecutionTime: 2026-07-15T07:25:00Z
+
+## Cycle 2026-07-15T06:27Z→07:25Z (linux_mutable macuahuitl — full coordinator: Windows-312 integrated, dailies release, smoke-channel split, aggressive drain)
+
+- **Integration ×2**: merged origin/windows-next (order **312 DONE** —
+  standard-user control wire via wsl.exe/socat stdio bridge, THE
+  release-gating blocker; order 326 guest forge user; a compile-fix for
+  b1404180's un-gated unix APIs) + origin/osx-next (orders **331/332 DONE**
+  — host-path translation + first-use idle-timeout heartbeat; P1 crun
+  ENOSPC .git-mask fix, macOS lane was DOA). Assigned final orders 365/366
+  to windows provisional filings. Fixed litmus:windows-tray distro-name
+  pin to follow the order-312 DISTRO_NAME→DEFAULT_WSL_DISTRO indirection.
+- **RELEASE v0.3.260715.2** (PR #74, run 29394773010 — BUILDING at cycle
+  record; prerelease under the stable channel): ships Windows 312 +
+  macOS 331/332 + the integration. Parity gate CLEAN.
+- **Order 367 DONE — curl-install smoke daily/stable split**: dailies are
+  prereleases so /releases/latest served the promoted STABLE, not the
+  bleeding edge. scripts/resolve-smoke-release.sh resolves a channel
+  (daily=newest well-formed prerelease, grammar-filtered against a stray
+  vv-junk tag; stable=/releases/latest); installers honor
+  TILLANDSIAS_RELEASE_BASE (default unchanged); smoke skill picks the
+  channel (daily routine, stable one-shot post-promotion). Pinned by
+  litmus:smoke-release-channel-shape. Verified live (daily v0.3.260714.1,
+  stable v0.3.260712.1).
+- **Order 359 DONE — github-token injection** (catalog release_target):
+  HOMEBREW_GITHUB_API_TOKEN injected host-side into every forge lane so
+  brew attestation + git stop hitting anonymous rate-limits (operator
+  ncurses repro). Same seam/trust as LLM keys; forge-policy still can't
+  read github/token (invariant + litmus green). E2e brew closure runs
+  next forge lane.
+- **Findings**: malformed vv0.3.260626.3 release tag (optimization).
+- **Catalog critical path status**: 357 core DONE (b1404180); 359 DONE;
+  363 (MCP publish_local tool) + 364 (e2e litmus) remain ready — the big
+  MCP-wiring rung (363) is the next coordinator/worker pickup. 358/360/361
+  ready after 363.
 
 ## Cycle 2026-07-15T07:00Z→07:45Z (linux_mutable macuahuitl — service-catalog build STARTED: order 357 I3-core shipped)
 
