@@ -12850,7 +12850,7 @@ plan_index:
     - packet_id: service-catalog-allowlist-enforcement
       order: 358
       title: "Catalog allowlist enforcement host-side — category names map to pinned digests; everything else refused loudly"
-      status: ready
+      status: claimed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless catalog module + fixture + litmus
@@ -12871,6 +12871,12 @@ plan_index:
         - "litmus pinning the catalog schema + refusal grammar"
         - "no forge-supplied image reference ever reaches podman argv (source pin)"
       events:
+        - type: claim
+          ts: "2026-07-15T18:16:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1816Z"
+          host: linux
+          lease_id: "service-catalog-allowlist-enforcement"
+          expires_at: "2026-07-15T22:16:00Z"
         - type: filed
           ts: "2026-07-15T04:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
