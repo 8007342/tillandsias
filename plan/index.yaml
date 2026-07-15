@@ -12367,6 +12367,20 @@ plan_index:
         - "every milestone_criteria row maps to a done child packet or an operator-approved waiver recorded here"
         - "the three reference projects each publish locally with https, friendly names, zero IPs"
       events:
+        - type: progress
+          ts: "2026-07-15T05:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
+          host: linux_mutable
+          summary: >
+            Ladder step 1 (research) COMPLETE: orders 354 (architecture
+            map) + 355 (external baseline) delivered with provenance.
+            Convergent recommendation from both: stdio MCP over the
+            existing control socket, host-side allowlist, https via Caddy
+            tls-internal as a discrete rung. Order 356 (decision record)
+            is next and BLOCKED on The Tlatoani's sign-off before any
+            implementation rung (357/358) starts — ambitious_milestone_
+            reduction step 2. Open questions for the operator are in both
+            deliverables.
         - type: filed
           ts: "2026-07-15T04:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
@@ -12380,7 +12394,7 @@ plan_index:
     - packet_id: service-catalog-architecture-research
       order: 354
       title: "Research (fat agent): publish-locally architecture — current-state map, transport candidates, request/grant sketch, packet-tree proposal"
-      status: ready
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: research
       deliverable: plan/issues/enclave-service-catalog-architecture-2026-07-15.md
@@ -12402,6 +12416,12 @@ plan_index:
         - "all four transport candidates analyzed against the forge security boundary (no podman socket in forge, host-side allowlist)"
         - "packet-tree proposal with verifiable closure per packet"
       events:
+        - type: completed
+          ts: "2026-07-15T05:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
+          host: linux_mutable
+          summary: >
+            Fable architecture map delivered (plan/issues/enclave-service-catalog-architecture-2026-07-15.md, file:line provenance @ 5628ee28). Recommendation: stdio MCP proxied over the EXISTING control socket (host-browser-mcp's proven pattern; control_dispatch.rs already UnixSocket-gates it) — zero new transports, host decides all spawns. Biggest risk: https (router runs auto_https off on :8080). First rung: static publish for visual-chess/lakanoa. 5 open questions for Tlatoani.
         - type: filed
           ts: "2026-07-15T04:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
@@ -12411,7 +12431,7 @@ plan_index:
     - packet_id: service-catalog-external-research
       order: 355
       title: "Research (fat agent): MCP server practice, https for *.localhost, curated catalog candidates, allowlist prior art"
-      status: ready
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: research
       deliverable: cheatsheets/architecture/enclave-service-catalog-research.md
@@ -12435,6 +12455,12 @@ plan_index:
         - "per-category primary + alternate recommendations with rationale"
         - "smallest enforceable name->pinned-digest allowlist mechanism identified"
       events:
+        - type: completed
+          ts: "2026-07-15T05:15:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
+          host: linux_mutable
+          summary: >
+            Opus external baseline delivered (cheatsheets/architecture/enclave-service-catalog-research.md, URL+date provenance). MCP: build against spec 2025-11-25, stdio server, host-side allowlist, no token passthrough; per-runtime config matrix for opencode/claude/codex/agy (agy uses serverUrl — flagged). *.localhost is a secure context on plain http (Chrome always, Firefox 84+) validating auto_https off; Caddy tls-internal opt-in for OAuth/mixed-content. Catalog picks per category with size/maintenance/license + primary/alternate. Enforcement: host-owned name->@sha256 digest lockfile + reject-by-default containers-policy.json + Sigstore where signed — extends the repo's existing Cosign/attestation posture.
         - type: filed
           ts: "2026-07-15T04:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
