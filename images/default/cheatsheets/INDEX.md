@@ -26,9 +26,10 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## architecture
 
-- event-driven-basics.md             — Your system has multiple components that react to state changes happening elsew… [pull-on-demand: stub]
-- event-driven-ui-updates.md [DRAFT] — Implementing event-driven architectures for responsive UIs. [bundled, partial-verify]
-- reactive-streams-spec.md           — You have a **stream** of asynchronous events whose producer might outpace its c… [pull-on-demand: stub]
+- enclave-service-catalog-research.md — designing or reviewing the enclave service catalog milestone — [bundled, partial-verify]
+- event-driven-basics.md              — Your system has multiple components that react to state changes happening elsew… [pull-on-demand: stub]
+- event-driven-ui-updates.md [DRAFT]  — Implementing event-driven architectures for responsive UIs. [bundled, partial-verify]
+- reactive-streams-spec.md            — You have a **stream** of asynchronous events whose producer might outpace its c… [pull-on-demand: stub]
 
 ## build
 
@@ -65,7 +66,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - agent-handoff.md                   — you're an agent picking up work from `plan/`, you need to claim something, chec… [bundled, partial-verify]
 - branches.md                        — starting any work session on any platform host, or any time you're unsure which… [bundled, partial-verify]
 - commit-attribution.md              — deciding how AI-agent / LLM-authored commits are attributed in git [bundled, partial-verify]
-- git-mirror-architecture-audit.md   — claim below was verified in the tree during this audit; claims sourced from [bundled, partial-verify]
+- git-mirror-architecture-audit.md   — (2026-07-14). Every [bundled, partial-verify]
 - git-mirror-enterprise-practices.md — designing or debugging the local bare-mirror hop between forge [bundled, partial-verify]
 - plan-discipline.md                 — you're writing or updating anything under `plan/`, `methodology/`, `openspec/`,… [bundled, partial-verify]
 

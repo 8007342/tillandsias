@@ -11,7 +11,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode.sh#L124](../../../images/default/entrypoint-forge-opencode.sh#L124)
 - [images/default/entrypoint-forge-opencode.sh#L131](../../../images/default/entrypoint-forge-opencode.sh#L131)
 - [images/default/entrypoint-forge-opencode-web.sh#L115](../../../images/default/entrypoint-forge-opencode-web.sh#L115)
-- [images/default/lib-common.sh#L1849](../../../images/default/lib-common.sh#L1849)
+- [images/default/lib-common.sh#L1879](../../../images/default/lib-common.sh#L1879)
 - [scripts/check-readme-discipline.sh#L2](../../../scripts/check-readme-discipline.sh#L2)
 - [scripts/install-readme-pre-push-hook.sh#L2](../../../scripts/install-readme-pre-push-hook.sh#L2)
 - [scripts/install-readme-pre-push-hook.sh#L27](../../../scripts/install-readme-pre-push-hook.sh#L27)

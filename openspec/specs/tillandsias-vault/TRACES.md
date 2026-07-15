@@ -56,7 +56,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/codex-device-auth.sh#L2](../../../images/default/codex-device-auth.sh#L2)
 - [images/default/codex-oauth-session.sh#L2](../../../images/default/codex-oauth-session.sh#L2)
 - [images/default/codex-oauth-vault.sh#L2](../../../images/default/codex-oauth-vault.sh#L2)
-- [images/default/entrypoint-forge-antigravity.sh#L141](../../../images/default/entrypoint-forge-antigravity.sh#L141)
+- [images/default/entrypoint-forge-antigravity.sh#L116](../../../images/default/entrypoint-forge-antigravity.sh#L116)
 - [images/default/entrypoint-forge-claude.sh#L74](../../../images/default/entrypoint-forge-claude.sh#L74)
 - [images/default/provider-device-auth.sh#L2](../../../images/default/provider-device-auth.sh#L2)
 - [images/default/provider-oauth-vault.sh#L2](../../../images/default/provider-oauth-vault.sh#L2)

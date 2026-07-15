@@ -35,5 +35,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode-web.sh#L98](../../../images/default/entrypoint-forge-opencode-web.sh#L98)
 - [images/default/entrypoint-terminal.sh#L76](../../../images/default/entrypoint-terminal.sh#L76)
 - [images/default/forge-welcome.sh#L167](../../../images/default/forge-welcome.sh#L167)
-- [images/default/lib-common.sh#L1635](../../../images/default/lib-common.sh#L1635)
-- [images/default/lib-common.sh#L1849](../../../images/default/lib-common.sh#L1849)
+- [images/default/lib-common.sh#L1665](../../../images/default/lib-common.sh#L1665)
+- [images/default/lib-common.sh#L1879](../../../images/default/lib-common.sh#L1879)

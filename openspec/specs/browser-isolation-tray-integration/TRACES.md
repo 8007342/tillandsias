@@ -91,6 +91,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
 - [images/default/entrypoint-forge-opencode-web.sh#L119](../../../images/default/entrypoint-forge-opencode-web.sh#L119)
 - [images/default/entrypoint.sh#L15](../../../images/default/entrypoint.sh#L15)
-- [images/default/lib-common.sh#L1210](../../../images/default/lib-common.sh#L1210)
+- [images/default/lib-common.sh#L1240](../../../images/default/lib-common.sh#L1240)
 - [scripts/run-forge-project.sh#L2](../../../scripts/run-forge-project.sh#L2)
 - [scripts/run-safe-browser.sh#L2](../../../scripts/run-safe-browser.sh#L2)

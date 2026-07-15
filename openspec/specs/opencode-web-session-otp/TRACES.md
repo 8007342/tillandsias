@@ -99,7 +99,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/mcp/project-info.sh#L245](../../../images/default/config-overlay/mcp/project-info.sh#L245)
 - [images/default/config-overlay/mcp/project-info.sh#L260](../../../images/default/config-overlay/mcp/project-info.sh#L260)
 - [images/default/Containerfile#L99](../../../images/default/Containerfile#L99)
-- [images/default/lib-common.sh#L1210](../../../images/default/lib-common.sh#L1210)
+- [images/default/lib-common.sh#L1240](../../../images/default/lib-common.sh#L1240)
 - [images/router/Containerfile#L1](../../../images/router/Containerfile#L1)
 - [images/router/Containerfile#L75](../../../images/router/Containerfile#L75)
 - [images/router/Containerfile#L94](../../../images/router/Containerfile#L94)
