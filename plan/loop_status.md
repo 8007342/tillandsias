@@ -1,6 +1,30 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T07:00:00Z
+LastExecutionTime: 2026-07-15T07:05:00Z
+
+## Cycle 2026-07-15T06:24Z→07:05Z (windows — order 323 DONE: classified WSL platform preflight; first-install states fail fast with remediation)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T0624Z. Guard `ok:gh-keyring`; startup
+  boundary snapshot clean; linux-next unmoved since last cycle's merge
+  (973774df).
+- **Order 323 DONE (08d4aa72, stable-milestone-v1 criterion)**: pure
+  S1-S4 classifier from the yolanda-captured recipes (absent via
+  locale-stable aka.ms/wslinstall; reboot-pending via CBS key;
+  virtualization-disabled only when both CIM signals agree; unknown →
+  existing retry machinery). start() fails fast pre-poke with the
+  operator-directed remediations ("WSL2 requires a restart to finish
+  installing — please reboot Windows…") + poke-exhaustion re-classify.
+  --diagnose --json wsl_platform (schema 18→19; cheatsheet backfilled the
+  missed 312 elevated touchpoint); classified failures name themselves on
+  the tray chip + toast the remediation. vm-layer 45/45, tray 66/0,
+  litmus:wsl-platform-preflight-shape PASS (bound: wsl-runtime). Live:
+  healthy-host diagnose reports wsl_platform:ok through the real probes.
+  Toast display on real S1/S2/S3 hosts rides the next fresh-host
+  provision (states not re-enterable non-destructively here).
+- **Windows queue next**: 324 (installer affordance — shares 323's
+  classification recipes), 326 criterion-2 clone ride, 350, then 154/279.
+- **Host state at exit**: distro registered/idle, tree clean at push.
 
 ## Cycle 2026-07-15T07:00Z→07:45Z (linux_mutable macuahuitl — service-catalog build STARTED: order 357 I3-core shipped)
 

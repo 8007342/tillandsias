@@ -11248,7 +11248,7 @@ plan_index:
       order: 323
       release_target: stable-milestone-v1
       title: "Windows tray: classify wsl-platform-absent / reboot-pending / virtualization-disabled preflight states — 'WSL2 requires a restart' instead of generic VM-create failure"
-      status: ready
+      status: done
       kind: enhancement+bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -11276,6 +11276,36 @@ plan_index:
         - "provision/start on a classified-fatal state fails fast with the remediation string (no 5-poke retry storm); pinned by a string litmus"
         - "--diagnose --json exposes wsl_platform; tray toast + status line show the classified message"
       events:
+        - type: completed
+          ts: "2026-07-15T07:35:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0624Z"
+          host: windows
+          lease_id: "wsl-platform-preflight-classification"
+          commits: ["08d4aa72"]
+          summary: >
+            All three criteria shipped. (1) Pure classify_wsl_platform
+            maps the live-captured S1-S4 signatures (S1 locale-stable
+            aka.ms/wslinstall marker; S2 CBS RebootPending key; S3 only
+            when BOTH CIM firmware signals agree; healthy status
+            short-circuits Ok so unrelated pending reboots never block;
+            unknown failures stay with the retry machinery) — unit-pinned
+            incl. precedence and half-known-probe cases, vm-layer 45/45.
+            (2) start() fails FAST pre-poke with the operator-directed
+            remediations + re-classifies on poke exhaustion (the S2
+            corner with healthy-looking status); strings pinned by
+            litmus:wsl-platform-preflight-shape (bound under wsl-runtime,
+            PASS 2/2). (3) --diagnose --json wsl_platform field (schema
+            18->19, cheatsheet updated — also backfilled the missed
+            order-312 elevated touchpoint); classified failures name
+            themselves on the tray status chip + toast the remediation
+            via show_balloon. LIVE: healthy-host diagnose reports
+            wsl_platform:ok through the real probe chain (wsl --status +
+            reg query + CIM). Honest note: the S1/S2/S3 TOAST display
+            was not exercised live — entering those states requires
+            destructive OS feature toggling on this host; the detection
+            recipes were captured live on yolanda 2026-07-13 and the
+            classifier is signature-pinned against them. Next fresh-host
+            provision carries the live proof.
         - type: claim
           ts: "2026-07-15T06:30:00Z"
           agent_id: "windows-bullo-fable5-20260715T0624Z"
