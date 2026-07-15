@@ -247,6 +247,52 @@ impl WslRuntime {
         Ok(())
     }
 
+    /// Run a multi-line root shell SCRIPT inside the distro, delivered via
+    /// STDIN. `wsl` without `--exec` re-joins its trailing args and re-parses
+    /// them through the guest login shell, which mangles any script carrying
+    /// quotes, `$` expansions, or multi-line control flow (live repro
+    /// 2026-07-15: the order-326 setup script arrived line-shredded through
+    /// [`Self::wsl_root_sh`] — `$probe` expanded empty, `mkdir` never ran;
+    /// the single-command/heredoc uses of `wsl_root_sh` survive that
+    /// re-parse, scripts do not). Stdin has no such round-trip: the guest
+    /// `/bin/sh` reads the bytes verbatim.
+    async fn wsl_root_sh_stdin(&self, script: &str) -> Result<(), VmError> {
+        use tokio::io::AsyncWriteExt;
+        let mut child = wsl_cmd()
+            .arg("--distribution")
+            .arg(&self.distro_name)
+            .arg("--user")
+            .arg("root")
+            .arg("--")
+            .arg("/bin/sh")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("wsl root sh (stdin) failed to spawn: {e}"))?;
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "wsl root sh (stdin): stdin missing".to_string())?;
+        stdin
+            .write_all(script.as_bytes())
+            .await
+            .map_err(|e| format!("wsl root sh (stdin): write failed: {e}"))?;
+        drop(stdin); // EOF so the guest sh runs the script and exits.
+        let output = child
+            .wait_with_output()
+            .await
+            .map_err(|e| format!("wsl root sh (stdin) failed: {e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "wsl root sh (stdin) exited {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).replace('\u{0}', "")
+            ));
+        }
+        Ok(())
+    }
+
     /// Measure available KiB on the guest root filesystem via `df -Pk /`.
     async fn guest_root_avail_kib(&self) -> Result<u64, VmError> {
         let output = wsl_cmd()
@@ -302,7 +348,10 @@ impl WslRuntime {
     /// instead of at first clone, minutes later, with a misleading error.
     /// @trace plan/index.yaml wsl-guest-forge-user-src-ownership (order 326)
     async fn ensure_forge_user_and_src(&self) -> Result<(), VmError> {
-        self.wsl_root_sh(FORGE_USER_SETUP_SCRIPT).await?;
+        // MUST be the stdin variant: arg-delivered scripts get re-parsed by
+        // the guest login shell and this one arrives shredded (2026-07-15
+        // cold-provision repro — the probe caught it, as designed).
+        self.wsl_root_sh_stdin(FORGE_USER_SETUP_SCRIPT).await?;
         tracing::info!("forge user + /home/forge/src ownership ensured (order 326)");
         Ok(())
     }
@@ -845,6 +894,18 @@ mod tests {
         assert!(
             provision_window.contains("self.ensure_forge_user_and_src().await?"),
             "legacy provision path must ensure the forge user (order 326)"
+        );
+        // Delivery pin: the setup script MUST go via stdin. Arg-delivered
+        // scripts are re-joined and re-parsed by the guest login shell and
+        // arrive shredded (2026-07-15 cold-provision repro).
+        let ensure_window = source
+            .split("async fn ensure_forge_user_and_src")
+            .nth(1)
+            .and_then(|tail| tail.split("pub async fn configure_recipe_distro").next())
+            .expect("ensure_forge_user_and_src window");
+        assert!(
+            ensure_window.contains("wsl_root_sh_stdin(FORGE_USER_SETUP_SCRIPT)"),
+            "forge-user setup must be stdin-delivered, not arg-delivered (order 326)"
         );
     }
 
