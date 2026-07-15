@@ -2129,18 +2129,27 @@ fn build_stack_common_args(
 /// the schema is designed. A forge may request category `"WEB"` and NOTHING
 /// else until 358 generalizes this host-side.
 /// @trace spec:enclave-service-catalog
+// PLEASE REVIEW: linux — dead_code allows on the order-357 I3-core helpers:
+// order 363 (MCP publish_local tool + handler) wires the production callers;
+// remove these allows with it. Until then the bin target fails clippy-strict
+// (-D warnings) on every branch — caught 2026-07-15 by the Windows lane's
+// first wrapped ./build.sh --check (wsl2-transparent-build-wrappers).
+#[allow(dead_code)]
 const CATALOG_WEB_CATEGORY: &str = "WEB";
 /// Port the WEB image's busybox httpd listens on (images/web/Containerfile).
+#[allow(dead_code)]
 const CATALOG_WEB_PORT: u16 = 8080;
 
 /// Container name for a project's published WEB service. Stable per project
 /// so re-publish is idempotent (ensure semantics).
+#[allow(dead_code)]
 fn web_service_container_name(project_name: &str) -> String {
     format!("tillandsias-{project_name}-web")
 }
 
 /// The published URL for a project's WEB service. Friendly name only, never
 /// an IP (operator invariant). http today; order 360 adds transparent https.
+#[allow(dead_code)]
 fn web_service_url(project_name: &str) -> String {
     format!("http://www.{project_name}.localhost:8080")
 }
@@ -2151,6 +2160,8 @@ fn web_service_url(project_name: &str) -> String {
 /// is the WEB entry's fixed share rule, not agent-choosable). On the enclave
 /// network as `tillandsias-<project>-web` so the router reaches it by name.
 /// @trace spec:enclave-service-catalog, spec:web-image
+// PLEASE REVIEW: linux — order 363 wires the caller; remove with it.
+#[allow(dead_code)]
 fn build_web_service_run_args(project_name: &str, worktree: &Path, image: &str) -> Vec<String> {
     vec![
         "--detach".into(),
@@ -2800,6 +2811,8 @@ impl RouterRoute {
     }
 
     /// A public (no-auth) route for a "publish it locally" catalog service.
+    // PLEASE REVIEW: linux — order 363 wires the caller; remove with it.
+    #[allow(dead_code)]
     fn public_service(
         subdomain: impl Into<String>,
         upstream_host: impl Into<String>,
@@ -12977,6 +12990,11 @@ mod tests {
         );
     }
 
+    // PLEASE REVIEW: linux — cfg-gated by the windows lane: binding a real
+    // UnixListener is unix-only (std::os::unix). The two stub-contract tests
+    // above stay cross-platform on purpose — on Windows they pin the
+    // cfg(not(unix)) "not listening" stub.
+    #[cfg(unix)]
     #[test]
     fn control_socket_is_listening_returns_true_for_live_listener() {
         use std::os::unix::net::UnixListener;
