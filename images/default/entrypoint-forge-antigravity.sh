@@ -137,7 +137,26 @@ if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
     agy_forge_args+=(--dangerously-skip-permissions)
 fi
 
+# ── Credentials ─────────────────────────────────────────────
+# @trace spec:tillandsias-vault
+# API-key launches need no OAuth state. Otherwise restore the opaque agy
+# credential from Vault (harvested by `tillandsias --agy-login`). Upstream
+# antigravity-cli issue #479: the FILE token store can be write-only for
+# fresh headless processes, so the restore also materializes an
+# ANTIGRAVITY_TOKEN env file (the sanctioned headless channel) which we
+# source before exec — both channels populated.
+if [ -z "${GEMINI_API_KEY:-}" ]; then
+    TILLANDSIAS_OAUTH_PROVIDER=antigravity /usr/local/bin/provider-oauth-vault restore
+    # shellcheck disable=SC1091
+    [ -f /tmp/agy-token.env ] && . /tmp/agy-token.env
+    trace_lifecycle "credentials" "antigravity: OAuth restored (file + ANTIGRAVITY_TOKEN env)"
+else
+    trace_lifecycle "credentials" "antigravity: API-key session (no OAuth restore)"
+fi
+
 # ── Launch Antigravity ──────────────────────────────────────
 trace_lifecycle "entrypoint" "antigravity launching"
 trace_lifecycle "exec" "launching agy"
-exec agy "${agy_forge_args[@]}" "$@"
+export TILLANDSIAS_OAUTH_PROVIDER=antigravity
+export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
+exec /usr/local/bin/codex-oauth-session -- agy "${agy_forge_args[@]}" "$@"

@@ -132,7 +132,10 @@ fn main() {
     let with_token = user_args.iter().any(|a| a == "--with-token");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
     let codex_login = user_args.iter().any(|a| a == "--codex-login");
-    let antigravity_login = user_args.iter().any(|a| a == "--antigravity-login");
+    // --agy-login is the operator-facing alias (matches the `agy` binary name).
+    let antigravity_login = user_args
+        .iter()
+        .any(|a| a == "--antigravity-login" || a == "--agy-login");
     let list_cloud_projects = user_args.iter().any(|a| a == "--list-cloud-projects");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let codex = user_args.iter().any(|a| a == "--codex");
@@ -255,6 +258,7 @@ fn main() {
         "--claude-login",
         "--codex-login",
         "--antigravity-login",
+        "--agy-login",
         "--list-cloud-projects",
         "--opencode",
         "--codex",
@@ -369,11 +373,13 @@ fn main() {
             input_mode,
         ))
     } else if claude_login {
+        let spec = provider_device_auth_spec(&ProviderId::Claude)
+            .expect("Claude device-auth provider spec must exist");
         Some((
             ProviderId::Claude,
             AuthModel::OAuthDevice,
-            "curl",
-            get_generic_login_token_script(&ProviderId::Claude),
+            spec.image_name,
+            spec.login_script(),
             LoginInputMode::Terminal,
         ))
     } else if codex_login {
@@ -387,11 +393,13 @@ fn main() {
             LoginInputMode::Terminal,
         ))
     } else if antigravity_login {
+        let spec = provider_device_auth_spec(&ProviderId::Antigravity)
+            .expect("Antigravity device-auth provider spec must exist");
         Some((
             ProviderId::Antigravity,
             AuthModel::OAuthDevice,
-            "curl",
-            get_generic_login_token_script(&ProviderId::Antigravity),
+            spec.image_name,
+            spec.login_script(),
             LoginInputMode::Terminal,
         ))
     } else {
@@ -737,9 +745,14 @@ fn print_usage(version: &str) {
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
-    println!("  --claude-login Authenticate Claude and store the token in Vault");
-    println!("  --codex-login Authenticate Codex and store the token in Vault");
-    println!("  --antigravity-login Authenticate Antigravity and store the token in Vault");
+    println!(
+        "  --claude-login Authenticate Claude (device flow: claude auth login --claudeai) into Vault"
+    );
+    println!(
+        "  --codex-login Authenticate Codex (device flow: codex login --device-auth) into Vault"
+    );
+    println!("  --antigravity-login Authenticate Antigravity (agy device flow) into Vault");
+    println!("  --agy-login    Alias for --antigravity-login");
     println!(
         "  --list-cloud-projects  List remote GitHub repos via the saved Vault token (diagnostic)"
     );
@@ -4922,9 +4935,9 @@ impl ProviderId {
     pub fn secret_field(&self) -> &'static str {
         match self {
             ProviderId::GitHub => "token",
-            ProviderId::Claude => "access_token",
+            ProviderId::Claude => CLAUDE_DEVICE_AUTH_SPEC.vault_field,
             ProviderId::Codex => CODEX_DEVICE_AUTH_SPEC.vault_field,
-            ProviderId::Antigravity => "access_token",
+            ProviderId::Antigravity => ANTIGRAVITY_DEVICE_AUTH_SPEC.vault_field,
         }
     }
 }
@@ -4961,10 +4974,38 @@ const CODEX_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
     vault_field: "credentials_b64",
 };
 
+// Claude device flow (operator-prescribed command 2026-07-15:
+// `claude auth login --claudeai`). The script probes the capability and
+// refuses browser/paste fallbacks; the full opaque credential document is
+// what Vault stores — extracting a single token would break refresh.
+const CLAUDE_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
+    image_name: "forge",
+    login_program: "/usr/local/bin/provider-device-auth",
+    login_args: &["claude"],
+    credential_path: "~/.claude/.credentials.json",
+    vault_path: "secret/claude/oauth",
+    vault_field: "credentials_b64",
+};
+
+// Antigravity: agy auto-detects headless sessions and prints a device URL +
+// code (no browser). Linux-container credential file per upstream docs; the
+// forge restore additionally materializes ANTIGRAVITY_TOKEN because the file
+// store is write-only for fresh headless processes (upstream issue #479).
+const ANTIGRAVITY_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
+    image_name: "forge",
+    login_program: "/usr/local/bin/provider-device-auth",
+    login_args: &["antigravity"],
+    credential_path: "~/.gemini/antigravity-cli/antigravity-oauth-token",
+    vault_path: "secret/antigravity/oauth",
+    vault_field: "credentials_b64",
+};
+
 fn provider_device_auth_spec(provider: &ProviderId) -> Option<&'static ProviderDeviceAuthSpec> {
     match provider {
         ProviderId::Codex => Some(&CODEX_DEVICE_AUTH_SPEC),
-        ProviderId::GitHub | ProviderId::Claude | ProviderId::Antigravity => None,
+        ProviderId::Claude => Some(&CLAUDE_DEVICE_AUTH_SPEC),
+        ProviderId::Antigravity => Some(&ANTIGRAVITY_DEVICE_AUTH_SPEC),
+        ProviderId::GitHub => None,
     }
 }
 
@@ -8081,39 +8122,54 @@ pub(crate) fn build_forge_agent_run_argv(
     argv
 }
 
-fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
-    let (oauth_prov, api_prov) = match mode {
-        ForgeAgentMode::Claude => (
-            Some(ProviderId::Claude),
-            Some(crate::vault_bootstrap::ProviderId::Anthropic),
-        ),
-        ForgeAgentMode::Codex => (
-            Some(ProviderId::Codex),
-            Some(crate::vault_bootstrap::ProviderId::Openai),
-        ),
-        ForgeAgentMode::Antigravity => (
-            Some(ProviderId::Antigravity),
-            Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => (None, None),
+/// Map an agent mode to its (OAuth provider, API-key provider) pair.
+/// OpenCode/Maintenance lanes are credential-free by design.
+fn mode_provider_pair(
+    mode: ForgeAgentMode,
+) -> Option<(ProviderId, crate::vault_bootstrap::ProviderId)> {
+    match mode {
+        ForgeAgentMode::Claude => Some((
+            ProviderId::Claude,
+            crate::vault_bootstrap::ProviderId::Anthropic,
+        )),
+        ForgeAgentMode::Codex => Some((
+            ProviderId::Codex,
+            crate::vault_bootstrap::ProviderId::Openai,
+        )),
+        ForgeAgentMode::Antigravity => Some((
+            ProviderId::Antigravity,
+            crate::vault_bootstrap::ProviderId::Gemini,
+        )),
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => None,
+    }
+}
+
+/// Check-only half of the provider auth ladder: true when the vault already
+/// holds a usable credential (API key or opaque OAuth document) for this
+/// mode, or the mode needs none. Never launches a login flow — the TRAY
+/// calls this to decide whether the popup terminal must run the login-
+/// capable CLI lane (the tray process itself has no TTY for a device code).
+fn provider_auth_satisfied(mode: ForgeAgentMode, debug: bool) -> bool {
+    let Some((op, ap)) = mode_provider_pair(mode) else {
+        return true;
     };
-
-    if let (Some(op), Some(ap)) = (oauth_prov, api_prov) {
-        let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
-            .map(|v| !v.is_empty())
-            .unwrap_or(false);
-        if api_key_exists {
-            return Ok(());
-        }
-
-        let is_oauth_logged_in = crate::vault_bootstrap::vault_kv_get_via_exec(
-            op.vault_path(),
-            op.secret_field(),
-            debug,
-        )
+    let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
         .map(|v| !v.is_empty())
         .unwrap_or(false);
-        if is_oauth_logged_in {
+    if api_key_exists {
+        return true;
+    }
+    crate::vault_bootstrap::vault_kv_get_via_exec(op.vault_path(), op.secret_field(), debug)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+}
+
+fn ensure_provider_auth(mode: ForgeAgentMode, debug: bool) -> Result<(), String> {
+    let Some((op, _ap)) = mode_provider_pair(mode) else {
+        return Ok(());
+    };
+    {
+        if provider_auth_satisfied(mode, debug) {
             return Ok(());
         }
 
@@ -8282,15 +8338,25 @@ pub(crate) fn launch_forge_agent(
         );
     }
 
-    let argv = if mode == ForgeAgentMode::Codex {
+    // Credentialed agents (Claude/Codex/Antigravity) delegate to the CLI
+    // lane inside the popup terminal: the tray process has no TTY, so the
+    // ensure_provider_auth ladder (vault check -> device-code login in an
+    // ephemeral container -> vault write -> forge launch with injection)
+    // must run where the user can read the device code and copy the URL.
+    // Flow specified by The Tlatoāni 2026-07-15 (order 303 lineage).
+    let argv = if matches!(
+        mode,
+        ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity
+    ) {
         eprintln!(
-            "[tillandsias] launch_forge_agent: opening the Codex terminal for '{project_name}'; the CLI lane prepares the enclave and scoped credential lease"
+            "[tillandsias] launch_forge_agent: opening the {} terminal for '{project_name}'; the CLI lane prepares the enclave and scoped credential lease",
+            mode.slug()
         );
         let current_exe = std::env::current_exe()
             .map_err(|e| format!("failed to resolve Tillandsias executable: {e}"))?;
         let mut argv = vec![
             current_exe.display().to_string(),
-            "--codex".to_string(),
+            format!("--{}", mode.slug()),
             canonical.display().to_string(),
         ];
         if debug {
@@ -9684,15 +9750,27 @@ mod tests {
             gate_at < build_at,
             "ensure_provider_auth (login-first gate) must run BEFORE build_forge_agent_run_args_with_vault"
         );
-        // The gate itself must implement token-presence-then-login, not blind login.
+        // The gate itself must implement token-presence-then-login, not blind
+        // login. The presence check lives in provider_auth_satisfied (shared
+        // with the tray's no-TTY routing decision); the gate must consult it
+        // before running the login flow.
         let gate = source
             .split("fn ensure_provider_auth(")
             .nth(1)
             .and_then(|s| s.split("\nfn ").next())
             .expect("ensure_provider_auth source");
         assert!(
-            gate.contains("read_provider_api_key") && gate.contains("run_provider_login"),
+            gate.contains("provider_auth_satisfied") && gate.contains("run_provider_login"),
             "ensure_provider_auth must check a stored token before running the login flow"
+        );
+        let check = source
+            .split("fn provider_auth_satisfied(")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("provider_auth_satisfied source");
+        assert!(
+            check.contains("read_provider_api_key") && check.contains("vault_kv_get_via_exec"),
+            "provider_auth_satisfied must check API key then OAuth document"
         );
     }
 
@@ -10391,6 +10469,84 @@ mod tests {
     }
 
     #[test]
+    fn claude_login_never_uses_generic_paste_token_script() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("} else if claude_login {")
+            .expect("Claude login dispatch must exist");
+        let end = source[start..]
+            .find("} else if codex_login {")
+            .map(|offset| start + offset)
+            .expect("Codex branch must follow Claude");
+        let branch = &source[start..end];
+        assert!(branch.contains("provider_device_auth_spec(&ProviderId::Claude)"));
+        assert!(!branch.contains("get_generic_login_token_script"));
+        assert!(!branch.contains("read -r -s"));
+    }
+
+    #[test]
+    fn antigravity_login_never_uses_generic_paste_token_script() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("} else if antigravity_login {")
+            .expect("Antigravity login dispatch must exist");
+        let end = source[start..]
+            .find("} else {")
+            .map(|offset| start + offset)
+            .expect("fallback branch must follow Antigravity");
+        let branch = &source[start..end];
+        assert!(branch.contains("provider_device_auth_spec(&ProviderId::Antigravity)"));
+        assert!(!branch.contains("get_generic_login_token_script"));
+        assert!(!branch.contains("read -r -s"));
+    }
+
+    #[test]
+    fn claude_device_auth_spec_pins_command_and_opaque_schema() {
+        let spec = provider_device_auth_spec(&ProviderId::Claude)
+            .expect("Claude device-auth spec must exist");
+        assert_eq!(spec.login_program, "/usr/local/bin/provider-device-auth");
+        assert_eq!(spec.login_args, &["claude"]);
+        assert_eq!(spec.credential_path, "~/.claude/.credentials.json");
+        assert_eq!(spec.vault_path, "secret/claude/oauth");
+        assert_eq!(spec.vault_field, "credentials_b64");
+        assert_eq!(ProviderId::Claude.secret_field(), "credentials_b64");
+        assert_eq!(
+            spec.login_script(),
+            "exec /usr/local/bin/provider-device-auth claude"
+        );
+    }
+
+    #[test]
+    fn antigravity_device_auth_spec_pins_command_and_opaque_schema() {
+        let spec = provider_device_auth_spec(&ProviderId::Antigravity)
+            .expect("Antigravity device-auth spec must exist");
+        assert_eq!(spec.login_program, "/usr/local/bin/provider-device-auth");
+        assert_eq!(spec.login_args, &["antigravity"]);
+        assert_eq!(
+            spec.credential_path,
+            "~/.gemini/antigravity-cli/antigravity-oauth-token"
+        );
+        assert_eq!(spec.vault_path, "secret/antigravity/oauth");
+        assert_eq!(spec.vault_field, "credentials_b64");
+        assert_eq!(ProviderId::Antigravity.secret_field(), "credentials_b64");
+    }
+
+    #[test]
+    fn tray_credentialed_agents_delegate_to_cli_lane_for_tty_login() {
+        // The tray process has no TTY; Claude/Codex/Antigravity clicks must
+        // route through the CLI lane (ensure_provider_auth ladder) inside
+        // the popup terminal instead of a bare podman argv.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("pub(crate) fn launch_forge_agent(")
+            .expect("launch_forge_agent must exist");
+        let window = &source[start..start + 3000];
+        assert!(window.contains(
+            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity"
+        ));
+    }
+
+    #[test]
     fn github_login_prompts_after_infrastructure_preflight() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let login_window = source_window(
@@ -11081,11 +11237,16 @@ mod tests {
 
     #[test]
     fn tray_codex_launch_reexecs_cli_for_lease_lifetime() {
+        // Extended 2026-07-15: the CLI-lane delegation now covers ALL
+        // credentialed agents (Claude/Codex/Antigravity), same reasoning —
+        // the tray has no TTY for the device-code login.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let body = source_window(source, "pub(crate) fn launch_forge_agent(");
-        assert!(body.contains("mode == ForgeAgentMode::Codex"));
+        assert!(body.contains(
+            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity"
+        ));
         assert!(body.contains("std::env::current_exe()"));
-        assert!(body.contains("\"--codex\".to_string()"));
+        assert!(body.contains("format!(\"--{}\", mode.slug())"));
         assert!(body.contains("canonical.display().to_string()"));
     }
 

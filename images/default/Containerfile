@@ -53,6 +53,8 @@ COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 COPY codex-device-auth.sh /usr/local/bin/codex-device-auth
 COPY codex-oauth-vault.sh /usr/local/bin/codex-oauth-vault
 COPY codex-oauth-session.sh /usr/local/bin/codex-oauth-session
+COPY provider-device-auth.sh /usr/local/bin/provider-device-auth
+COPY provider-oauth-vault.sh /usr/local/bin/provider-oauth-vault
 # @trace spec:error-message-localization
 COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 
@@ -77,6 +79,8 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/codex-device-auth \
              /usr/local/bin/codex-oauth-vault \
              /usr/local/bin/codex-oauth-session \
+             /usr/local/bin/provider-device-auth \
+             /usr/local/bin/provider-oauth-vault \
              /usr/local/bin/sse-keepalive-proxy.js
 
 # ── Locale ──────────────────────────────────────────────────────

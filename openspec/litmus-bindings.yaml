@@ -898,6 +898,7 @@ specs:
   - litmus:git-mirror-safe-refspec-push
   - litmus:vault-github-token-capture-shape
   - litmus:codex-device-auth-shape
+  - litmus:provider-device-auth-shape
   - litmus:vault-https-shape
   - litmus:vault-entrypoint-hardened-shape
   - litmus:vault-recreate-mutex

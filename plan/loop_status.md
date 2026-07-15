@@ -1,6 +1,41 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T01:10:00Z
+LastExecutionTime: 2026-07-15T02:55:00Z
+
+## Cycle 2026-07-15T01:40Z→02:55Z (linux_mutable macuahuitl — operator-directed: provider device-login flows IMPLEMENTED (orders 303 DONE, 304 impl-complete, 352 filed))
+
+- **Investigation**: Codex chain (338-340) confirmed end-to-end (device-auth
+  script -> opaque ~/.codex/auth.json -> secret/codex/oauth credentials_b64;
+  entrypoint restore + rotation-harvest session). Claude credential file:
+  ~/.claude/.credentials.json. Antigravity: agy auto-detects headless and
+  prints device URL+code; Linux-container file
+  ~/.gemini/antigravity-cli/antigravity-oauth-token; upstream issue #479
+  (file store write-only for fresh headless processes) -> injection must
+  ALSO populate ANTIGRAVITY_TOKEN env (the CI-sanctioned channel).
+- **Implemented**: generic images/default/provider-device-auth.sh (claude:
+  operator-prescribed `claude auth login --claudeai`, capability-probed,
+  fail-loud, no browser/paste fallback; antigravity: probe-based with
+  diagnostic capture) + provider-oauth-vault.sh (restore/harvest/digest/
+  watch, env-driven so codex-oauth-session is reused for rotation harvest;
+  agy restore emits the ANTIGRAVITY_TOKEN env file). Entrypoints
+  claude/antigravity: API-key guard else vault restore before TUI; exec via
+  session wrapper. Rust: CLAUDE/ANTIGRAVITY device specs, secret_field ->
+  credentials_b64, paste-token branches replaced, --agy-login alias, tray
+  delegation extended to ALL credentialed agents (BigPickle's Codex-only
+  branch generalized; the popup terminal runs the CLI lane where
+  ensure_provider_auth has a TTY). provider_auth_satisfied factored out.
+- **Verification**: scripts/test-provider-device-auth.sh 16/16 (stubbed
+  vault round-trip; bound as litmus:provider-device-auth-shape);
+  tillandsias-vault quick suite 7/7 PASS; 162 headless tests green (2
+  stale source-pins updated to the refactored shapes, intent preserved);
+  build.sh --check PASS.
+- **Plan**: order 303 DONE, 304 impl-complete (progress event), order 352
+  filed (operator-attended live verify: device logins x3, relaunch-no-
+  reprompt x2, agy auth-surface findings, in-forge /meta-orchestration on
+  Codex AND Antigravity lanes) — release_target: stable-milestone-v1.
+- **Operator handoff**: after `./build.sh --install` (+ forge image
+  rebuild), `tillandsias --codex-login`, `--claude-login`, `--agy-login`
+  are exercisable end-to-end.
 
 ## Cycle 2026-07-15T00:46Z→01:10Z (linux_mutable macuahuitl — coordinator: BigPickle batch integrated, osx order-126 merged, provisional orders 346-351 assigned)
 

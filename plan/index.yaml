@@ -9711,9 +9711,8 @@ plan_index:
       order: 303
       release_target: stable-milestone-v1
       title: "Tray forge launches run the same ensure_provider_auth vault ladder as the CLI lane"
-      status: blocked
+      status: done
       retryable: false
-      blocked_on: provider-device-auth-capability
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
       depends_on: []
@@ -9731,6 +9730,22 @@ plan_index:
         - "tray Claude/Codex/Antigravity launches call the ensure_provider_auth ladder before spawning the terminal"
         - "vault-present credential launches with no login prompt"
       events:
+        - type: completed
+          ts: "2026-07-15T02:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0140Z"
+          host: linux_mutable
+          summary: >
+            Tray credentialed-agent clicks (Claude/Codex/Antigravity) now
+            delegate to the TTY-capable CLI lane in the popup terminal
+            (extending BigPickle's Codex-only delegation), where
+            ensure_provider_auth runs the vault check -> device login ->
+            forge launch ladder. Presence check factored into
+            provider_auth_satisfied (API key OR opaque OAuth document).
+            Device specs added for Claude (claude auth login --claudeai,
+            operator-prescribed) and Antigravity (agy headless device flow);
+            --agy-login alias added. Pinned by
+            litmus:provider-device-auth-shape + source-pin tests (162
+            headless tests green). Live verify rides order 352.
         - type: progress
           ts: "2026-07-14T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260714T1838Z"
@@ -9782,9 +9797,8 @@ plan_index:
       order: 304
       release_target: stable-milestone-v1
       title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
-      status: blocked
+      status: ready
       retryable: false
-      blocked_on: provider-device-auth-capability
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
       depends_on: [agent-login-tray-lane-vault-parity]
@@ -9804,6 +9818,23 @@ plan_index:
         - "vault paths per provider documented; no credential lands in the project workspace or image"
         - "fixture/litmus: synthetic token harvested from a fake agent credential path into the vault and injected on next launch"
       events:
+        - type: progress
+          ts: "2026-07-15T02:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0140Z"
+          host: linux_mutable
+          summary: >
+            Implementation complete for all three providers: Codex (orders
+            338-340, verified), Claude and Antigravity (this cycle:
+            provider-device-auth + provider-oauth-vault generic helpers,
+            entrypoint restore + codex-oauth-session rotation harvest,
+            opaque credentials_b64 schema at secret/{claude,antigravity}/oauth;
+            agy additionally materializes the ANTIGRAVITY_TOKEN env channel
+            per upstream issue #479 write-only file store). Offline fixture
+            scripts/test-provider-device-auth.sh 16/16 PASS
+            (litmus:provider-device-auth-shape). REMAINING for done: live
+            operator device logins (tillandsias --claude-login /
+            --codex-login / --agy-login) proving relaunch-without-reprompt —
+            order 352.
         - type: amended
           ts: "2026-07-13T00:08:00Z"
           agent_id: "linux-macuahuitl-fable5-20260712T2354Z"
@@ -11842,6 +11873,17 @@ plan_index:
         - "scripts/promote-stable.sh run on the candidate with the evidence gate passing un-forced"
       events:
         - type: progress
+          ts: "2026-07-15T02:50:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0140Z"
+          host: linux_mutable
+          summary: >
+            Login-flow criteria advanced: 303 DONE (tray CLI-lane
+            delegation, all three credentialed agents), 304
+            implementation-complete for Claude+Antigravity (Codex was
+            338-340); remaining live verification consolidated in order
+            352 (operator-attended device logins + relaunch-no-reprompt +
+            in-forge meta-orchestration on Codex and Antigravity lanes).
+        - type: progress
           ts: "2026-07-14T21:44:00Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
           host: linux_mutable
@@ -12226,3 +12268,42 @@ plan_index:
             with decode calls; numeric mode still makes files executable but
             avoids the false positive on test data decode vs script
             materialization. Policy check now passes.
+
+    - packet_id: provider-login-live-verify
+      order: 352
+      title: "Live verify: --claude-login / --codex-login / --agy-login device flows into Vault + relaunch-without-reprompt (operator-attended)"
+      status: ready
+      release_target: stable-milestone-v1
+      kind: verification
+      deliverable: plan/issues/provider-login-live-verify-2026-07-15.md
+      depends_on: [agent-login-vault-roundtrip]
+      pickup_role: linux
+      capability_tags: [vault, auth, tray, operator-attended]
+      estimated_hours: 1
+      outcome: >
+        Implementation is fixture-verified offline; the device flows need ONE
+        attended pass each (only the operator can enter device codes).
+        Claude: `tillandsias --claude-login` (claude auth login --claudeai,
+        operator-prescribed command; the capability probe fails loud with
+        the CLI's help text if the flag drifted). Codex: already
+        operator-verified once; re-verify post-integration. Antigravity:
+        `tillandsias --agy-login` doubles as the LIVE INVESTIGATION of agy's
+        auth surface — on failure the script dumps the captured help output
+        and candidate credential paths (record into the deliverable; the
+        expected file is ~/.gemini/antigravity-cli/antigravity-oauth-token,
+        with ANTIGRAVITY_TOKEN env injection compensating for upstream
+        issue #479 write-only file store). Then: tray click on each agent
+        must reach the TUI with NO login prompt, twice in a row.
+      exit_criteria:
+        - "vault holds secret/{claude,codex,antigravity}/oauth credentials_b64 after one device login each"
+        - "tray relaunch of each agent reaches the TUI without re-prompting (x2)"
+        - "agy auth surface findings recorded (command used, credential file confirmed/corrected)"
+        - "a /meta-orchestration cycle completes inside a Codex forge AND an Antigravity forge"
+      events:
+        - type: filed
+          ts: "2026-07-15T02:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0140Z"
+          host: linux_mutable
+          summary: >
+            Filed with the order-303/304 implementation; operator-attended
+            because device codes require a human at the browser.
