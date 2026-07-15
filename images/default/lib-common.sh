@@ -1168,6 +1168,36 @@ require_codex() {
     return 0
 }
 
+# require_antigravity: install the Antigravity CLI (agy) if absent. Unlike the
+# npm harnesses, agy ships via the official installer script — download WITH A
+# TIMEOUT then run it (never `curl | bash`), retrying 3x with backoff
+# (order 307: one-shot curl was fragile against transient proxy/network
+# issues). Shared by the forge entrypoint AND the ephemeral login container
+# (`tillandsias --agy-login` failed exit-2 when the login container assumed
+# agy was pre-installed — operator repro 2026-07-15).
+require_antigravity() {
+    command -v agy >/dev/null 2>&1 && return 0
+
+    local _agy_installer _agy_url="https://antigravity.google/cli/install.sh"
+    local _attempt _max_attempts=3 _delay=2
+
+    for _attempt in 1 2 3; do
+        trace_lifecycle "tools" "agy install attempt $_attempt/$_max_attempts"
+        _agy_installer="$(mktemp 2>/dev/null)"
+        if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 "$_agy_url" -o "$_agy_installer" 2>/dev/null; then
+            if ANTIGRAVITY_BIN="/usr/local/bin/agy" bash "$_agy_installer" 2>/dev/null; then
+                rm -f "$_agy_installer" 2>/dev/null || true
+                command -v agy >/dev/null 2>&1 && return 0
+            fi
+        fi
+        rm -f "$_agy_installer" 2>/dev/null || true
+        trace_lifecycle "tools" "agy install attempt $_attempt failed (retry in ${_delay}s)"
+        sleep "$_delay" 2>/dev/null || true
+        _delay=$(( _delay * 2 ))
+    done
+    return 1
+}
+
 # ── On-demand userspace tools (Homebrew, attested formulae only) ──
 # @trace spec:default-image
 # Plan order 294 (operator-approved 2026-07-11): every command in

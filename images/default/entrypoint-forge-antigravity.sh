@@ -81,33 +81,8 @@ show_banner "antigravity"
 
 # ── Ensure the Antigravity CLI (agy) — EVERY_LAUNCH, latest ─────
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
-# Installed at launch (not baked): download the official installer WITH A TIMEOUT
-# then run it (NOT a `curl | bash` pipe — that pipes an unbounded fetch straight to
-# a shell). Retries up to 3 times with backoff (order 307: one-shot curl was
-# fragile against transient proxy/network issues).
-require_antigravity() {
-    command -v agy >/dev/null 2>&1 && return 0
-
-    local _agy_installer _agy_url="https://antigravity.google/cli/install.sh"
-    local _attempt _max_attempts=3 _delay=2
-
-    for _attempt in 1 2 3; do
-        trace_lifecycle "tools" "agy install attempt $_attempt/$_max_attempts"
-        _agy_installer="$(mktemp 2>/dev/null)"
-        if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 "$_agy_url" -o "$_agy_installer" 2>/dev/null; then
-            if ANTIGRAVITY_BIN="/usr/local/bin/agy" bash "$_agy_installer" 2>/dev/null; then
-                rm -f "$_agy_installer" 2>/dev/null || true
-                command -v agy >/dev/null 2>&1 && return 0
-            fi
-        fi
-        rm -f "$_agy_installer" 2>/dev/null || true
-        trace_lifecycle "tools" "agy install attempt $_attempt failed (retry in ${_delay}s)"
-        sleep "$_delay" 2>/dev/null || true
-        _delay=$(( _delay * 2 ))
-    done
-    return 1
-}
-
+# require_antigravity lives in lib-common.sh (shared with the --agy-login
+# ephemeral login container; operator repro 2026-07-15).
 if ! require_antigravity; then
     trace_lifecycle "error" "agy not found on PATH after 3 install attempts"
     echo ""

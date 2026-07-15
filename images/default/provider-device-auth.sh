@@ -41,8 +41,13 @@ case "$PROVIDER" in
         # ANTIGRAVITY_TOKEN env channel (see provider-oauth-vault restore).
         AUTH_FILE="${TILLANDSIAS_AGY_AUTH_FILE:-$HOME/.gemini/antigravity-cli/antigravity-oauth-token}"
         VAULT_PATH="secret/antigravity/oauth"
-        if ! command -v agy >/dev/null 2>&1; then
-            echo "ERROR: agy is not installed in the login container (install runs at forge launch)." >&2
+        # The login container starts without agy (installed at forge launch,
+        # not baked) — install it here with the shared retried installer.
+        # Operator repro 2026-07-15: assuming pre-installed agy made
+        # --agy-login exit 2 unconditionally.
+        if ! require_antigravity; then
+            echo "ERROR: agy could not be installed in the login container after 3 attempts" >&2
+            echo "(check proxy egress for antigravity.google / antigravity-cli-auto-updater-*.us-central1.run.app)." >&2
             exit 2
         fi
         BIN="$(command -v agy)"

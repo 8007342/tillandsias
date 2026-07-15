@@ -31,6 +31,12 @@ else
 fi
 grep -q "ANTIGRAVITY_TOKEN" "$IMG/provider-oauth-vault.sh" \
     && ok "agy env channel present (upstream #479)" || bad "ANTIGRAVITY_TOKEN channel missing"
+# Operator repro 2026-07-15: the login container starts WITHOUT agy — the
+# script must install it (shared lib-common installer), never assume it.
+grep -q "require_antigravity" "$IMG/provider-device-auth.sh" \
+    && ok "agy login installs agy on demand" || bad "agy login assumes pre-installed agy"
+grep -q "^require_antigravity()" "$IMG/lib-common.sh" \
+    && ok "require_antigravity shared in lib-common" || bad "require_antigravity not in lib-common"
 
 echo "[2] stubbed restore round-trip (claude)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT

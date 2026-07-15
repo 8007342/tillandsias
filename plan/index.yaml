@@ -12300,6 +12300,24 @@ plan_index:
         - "agy auth surface findings recorded (command used, credential file confirmed/corrected)"
         - "a /meta-orchestration cycle completes inside a Codex forge AND an Antigravity forge"
       events:
+        - type: progress
+          ts: "2026-07-15T03:30:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0320Z"
+          host: linux_mutable
+          summary: >
+            OPERATOR LIVE RESULTS: --codex-login and --claude-login
+            SUCCEEDED (device flows into Vault, exit criteria 1 partially
+            met). --agy-login FAILED exit 2: the login container assumed a
+            pre-installed agy, but agy installs at forge launch. FIXED
+            same cycle: require_antigravity moved to lib-common.sh (shared
+            retried installer), provider-device-auth installs agy on
+            demand; fixture grown to 18/18
+            (litmus:provider-device-auth-shape). Also captured:
+            login container lacks the proxy CA mount (warning noise;
+            optimization/login-container-proxy-ca-not-mounted-2026-07-15.md).
+            Retry --agy-login after ./build.sh --install; remaining:
+            relaunch-no-reprompt x2 + in-forge meta-orchestration on
+            Codex/Antigravity lanes.
         - type: filed
           ts: "2026-07-15T02:45:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0140Z"
