@@ -6246,6 +6246,12 @@ plan_index:
             remote_projects.rs,vault_bootstrap.rs},
             openspec/specs/host-guest-transport/spec.md, and
             docs/cheatsheets/runtime/wsl/networking-modes.md.
+        - type: verified-by
+          ts: "2026-07-15T17:53:00Z"
+          agent_id: "antigravity-gemini"
+          criteria: [NA-01, NA-02, NA-03, NA-05]
+          verdict: pass
+          evidence: "Verified DRAFT v1 (plan/issues/network-architecture-audit-2026-07-09.md). Taxonomy is accurate for host classification, container netns/squid proxy mappings, and platform VZ/WSL2 abstractions. Verified main.rs citations for ensure_enclave_host_dns (line 1690) and github_login_helper_dual_homes_onto_managed_egress_network (line 9900)."
 
     - packet_id: credential-secrets-architecture-audit
       order: 246
@@ -6564,6 +6570,12 @@ plan_index:
             concurrent in-place rewrites. YAML parses with Ruby Psych. This
             post-revision event preserves the earlier failed event in the
             append-only history.
+        - type: verified-by
+          ts: "2026-07-15T17:53:00Z"
+          agent_id: "antigravity-gemini"
+          criteria: [LM-01, LM-02, LM-04]
+          verdict: pass
+          evidence: "Verified methodology/distributed-work.yaml (long_running_packets section schema extension LM-01 and verified-by event protocol LM-02). Verified plan/long-running.md filtered view (LM-04) is correctly generated and matches active long-running packets."
 
     - packet_id: launch-paths-route-through-dependency-model
       order: 252

@@ -1,6 +1,22 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T08:25:00Z
+LastExecutionTime: 2026-07-15T17:53:00Z
+
+## Cycle 2026-07-15T17:51Z→17:54Z (forge — meta-orchestration: verified order 245 + order 251)
+
+- **Host**: forge, `linux-next`, agent Google Antigravity (antigravity-gemini).
+  Credential guard `ok:forge-git-mirror`. Sibling heads: main 38d33cd8, osx-next
+  837b066f, windows-next 01b38a0b.
+- **Verification on order 245 (network-architecture-audit) — PASS**:
+  Verified DRAFT v1 (plan/issues/network-architecture-audit-2026-07-09.md) is correct.
+  Taxonomy is accurate for host classification, container netns/squid proxy mappings,
+  and platform VZ/WSL2 abstractions. Checked main.rs citations for ensure_enclave_host_dns
+  (line 1690) and github_login_helper_dual_homes_onto_managed_egress_network (line 9900).
+- **Verification on order 251 (long-running-work-packet-methodology) — PASS**:
+  Verified methodology/distributed-work.yaml (long_running_packets section schema extension
+  LM-01 and verified-by event protocol LM-02). Checked that plan/long-running.md
+  filtered view (LM-04) matches active long-running packets.
+- **E2E gates**: Skipped — no podman binary in forge container.
 
 ## Cycle 2026-07-15T07:10Z→08:25Z (windows — orders 324 + wsl2-wrappers DONE; wrapped ./build.sh --check catches linux-next clippy-strict RED and fixes it forward)
 
