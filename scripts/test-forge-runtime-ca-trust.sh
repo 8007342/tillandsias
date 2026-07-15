@@ -2,7 +2,9 @@
 # @trace spec:transparent-https-caching
 set -euo pipefail
 
-IMAGE="${TILLANDSIAS_FORGE_IMAGE:-localhost/tillandsias-forge:latest}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_DEFAULT_VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/../VERSION")"
+IMAGE="${TILLANDSIAS_FORGE_IMAGE:-localhost/tillandsias-forge:v${_DEFAULT_VERSION}}"
 podman image exists "$IMAGE" || {
     echo "FAIL: required forge image is absent: $IMAGE" >&2
     exit 1
