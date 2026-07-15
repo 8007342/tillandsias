@@ -11248,7 +11248,7 @@ plan_index:
       provisional_id: linux-260714-6
       release_target: stable-milestone-v1
       title: "Windows current-build forge live config, mirror, and TLS parity gate"
-      status: ready
+      status: claimed
       kind: verification
       deliverable: attended Windows WSL forge evidence packet
       depends_on:
@@ -11269,6 +11269,22 @@ plan_index:
         - "inside the public Windows forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: claim
+          ts: "2026-07-15T23:40:00Z"
+          agent_id: "windows-bullo-fable5-20260715T2315Z"
+          host: windows
+          lease_id: "windows-forge-config-trust-live-parity"
+          expires_at: "2026-07-16T03:40:00Z"
+          summary: >
+            Claimed per Linux coordinator remote-control directive (get
+            evidence pushed tonight). Staged: source+unit parity half
+            PASS through the wsl2 wrapper (podman-bound sub-scripts ride
+            the in-guest stage); CURRENT-checkout guest binaries built
+            on this Windows host via the wrapper (musl x86_64+aarch64,
+            v0.3.260715.6, verified) and embedded into the tray
+            (a283f8ce == HEAD); runtime unregistered for the refreshed
+            cold provision. Next: provision, then the public lane
+            (--cloud tillandsias --bash) with config/mirror/TLS probes.
         - type: order-assigned
           ts: "2026-07-15T01:05:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
