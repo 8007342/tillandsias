@@ -1,6 +1,33 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-14T20:25:00Z
+LastExecutionTime: 2026-07-14T23:55:00Z
+
+## Cycle 2026-07-14T23:48Z->23:55Z (linux_mutable macuahuitl — litmus drift fixes + order 343 DONE, pre-build 134/134 → 165/167)
+
+- **Sync + guard**: `linux-next` clean at `e2157daf`; credential guard
+  `ok:gh-keyring`. Sibling heads already ancestors of `linux-next`.
+- **Pre-build litmus (initial)**: 131/134 PASS, 3 FAIL:
+  1. `guest-binary-embed-integrity` — staged binaries at `v0.3.260714.2`,
+     VERSION at `0.3.260714.1`. Rebuilt via `scripts/build-guest-binaries.sh`
+     (cargo fallback, nix daemon unavailable). Fixed.
+  2. `codex-forge-yolo-shape` step 3 — grep expected bare `exec codex`
+     but entrypoint routes through `codex-oauth-session` wrapper. Updated
+     litmus to match substring.
+  3. `runtime-diagnostics-stream-shape` — stale checks on
+     `post-receive-hook.sh` (strings never present). Updated litmus to
+     check only files that actually carry annotations.
+- **Post-fix litmus**: 134/134 PASS (instant pre-build).
+- **Local CI pre-build**: 13/17 checks PASS, 4 FAIL (pre-existing):
+  1. `container-base-policy` — 3 test scripts used `:latest` tag.
+  2. `no-python-scripts` — `test-forge-runtime-ca-trust.sh` uses python3.
+  3. `no-base64-script-injection` — 2 codex auth test scripts.
+  4. `litmus-pre-build` — 2 forge CA trust litmus (same python3 root cause).
+- **Order 343 DONE** (`c6449e7d`): pinned `:latest` to VERSION-derived tag
+  in 3 test scripts. container-base-policy now passes. Local CI: 14/17.
+- **Orders 344 (python3) + 345 (base64) filed** as ready for pickup.
+- **E2E gate**: still red (344/345 remain). No release or destructive smoke.
+- **Commits pushed**: `4e18ae36` (litmus fixes), `677b46d2` (findings),
+  `c6449e7d` (order 343), `5730589e` (plan update).
 
 ## Cycle 2026-07-14T19:38Z->20:25Z (linux_mutable macuahuitl - queue drain, delegated GPT audits, local-build e2e gate failure)
 
