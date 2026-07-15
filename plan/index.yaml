@@ -13094,7 +13094,7 @@ plan_index:
       provisional_id: windows-260715-2
       order: 366
       title: "wsl_root_sh arg-delivered commands are re-parsed by the guest login shell — audit callers and migrate script-shaped payloads to stdin delivery"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -13119,6 +13119,23 @@ plan_index:
         - "every wsl_root_sh call site is classified (safe single-command vs migrated to stdin)"
         - "a guard (assert or test) rejects multi-line/expansion payloads on the arg-delivered path"
       events:
+        - type: completed
+          ts: "2026-07-15T08:45:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0710Z"
+          host: windows
+          lease_id: "wsl-root-sh-arg-delivery-audit"
+          commits: ["f8f0c4d1"]
+          summary: >
+            Both criteria shipped. Audit: all three arg-delivered call
+            sites (two wsl.conf heredocs + the systemd unit writer) were
+            script-shaped, surviving the login-shell re-parse by
+            accident — migrated to wsl_root_sh_stdin. Guard: the arg
+            path rejects multi-line payloads pre-spawn, naming the
+            stdin alternative. Pins: no-spawn rejection test +
+            source-scan test with runtime-assembled needles (the naive
+            literal needle counted the test's own strings — worth
+            knowing for future source-scan pins). vm-layer 47/47;
+            wrapped ./build.sh --check exit 0.
         - type: order-assigned
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
