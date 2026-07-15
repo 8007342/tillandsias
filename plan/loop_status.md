@@ -2,6 +2,25 @@
 
 LastExecutionTime: 2026-07-15T07:00:00Z
 
+## Cycle 2026-07-15T07:00Z→07:45Z (linux_mutable macuahuitl — service-catalog build STARTED: order 357 I3-core shipped)
+
+- **Coordination laid down**: plan/issues/parallel-workstreams-2026-07-15.md
+  + loop_status lane map so the operator's concurrent Linux/Windows/macOS
+  workers don't collide. Coordinator claimed 357/358/360/361.
+- **Order 357 I3-CORE shipped (b1404180)**: host-side publish-it-locally
+  building blocks — RouterRoute `public` (no-auth) route + public Caddyfile
+  branch; build_web_service_run_args (worktree RO bind-mount at /var/www,
+  enclave net, cap-drop=ALL, --rm, host-supplied image); interim
+  CATALOG_WEB_CATEGORY single-entry allowlist; friendly-name-only URL. 5
+  unit tests (RO mount, no-auth public route, private routes stay gated,
+  public flag defaults false + JSON round-trip). Also fixed the
+  vault-lease test to the generalized all-credentialed-modes invariant.
+- **357 split into ready children**: 363 (McpFrame publish_local tool +
+  host handler + orchestration), 364 (e2e curl litmus). Either a
+  concurrent Linux worker or the next coordinator cycle continues from the
+  landed core.
+- Remaining coordinator lane: 363→364 (finish 357), then 358/360/361.
+
 ## ACTIVE PARALLELIZATION (2026-07-15) — operator started Linux + Windows + macOS workers
 
 See plan/issues/parallel-workstreams-2026-07-15.md for the full lane map.

@@ -12609,6 +12609,20 @@ plan_index:
         - "second invoke is idempotent (same URL, no duplicate container)"
         - "e2e evidence recorded in plan/ + litmus pinning the route + allowlist refusal"
       events:
+        - type: progress
+          ts: "2026-07-15T07:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
+          host: linux_mutable
+          summary: >
+            I3 CORE SHIPPED (commit b1404180): host-side publish building
+            blocks — RouterRoute public (no-auth) route + WEB service
+            run-args builder (worktree RO bind-mount at /var/www, enclave
+            net, locked down, host-supplied image), interim
+            CATALOG_WEB_CATEGORY allowlist, friendly-name URL. 5 unit tests
+            green; --check PASS. Split remaining into ready children: 363
+            (McpFrame publish_local tool + host handler + orchestration),
+            364 (e2e curl litmus). This packet stays phase: implementation
+            until 363+364 land the agent-invocable end-to-end path.
         - type: filed
           ts: "2026-07-15T04:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
@@ -12783,3 +12797,66 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
           host: linux_mutable
           summary: "Operator's magical prompt: 'Add and implement --cloudflare-login' + the ephemeral/production public-hosting vision. Filed as the next-milestone roadmap."
+
+    - packet_id: publish-local-mcp-tool-and-handler
+      order: 363
+      title: "357 rung I3b: McpFrame publish_local/service_status/service_stop tools + host-side handler + ensure_catalog_service orchestration"
+      status: ready
+      release_target: enclave-service-catalog-milestone
+      kind: implementation
+      deliverable: crates/tillandsias-headless (McpFrame dispatch) + crates/tillandsias-browser-mcp (tool family) + config-overlay MCP entry
+      depends_on: [web-publish-local-mvp]
+      pickup_role: linux
+      capability_tags: [mcp, containers, rust, web]
+      estimated_hours: 6
+      outcome: >
+        Wire the host-side publish core (order 357 core, commit b1404180:
+        build_web_service_run_args + RouterRoute::public_service) to the
+        agent. Add publish_local {category:"WEB"} / service_status /
+        service_stop as McpFrame tools dispatched host-side (the proven
+        control_dispatch.rs McpFrame UnixSocket arm; project label comes
+        from the SESSION not the request — browser-mcp server.rs:56
+        pattern). Handler: category -> CATALOG_WEB_CATEGORY allowlist
+        (deny anything else, loud), ensure enclave + run the web container,
+        upsert the public route, reload caddy, respond {url, state}.
+        Idempotent re-publish (ensure semantics). Lifecycle: --rm,
+        project-scoped, reaped by cleanup_shared_stack_if_no_running_forge.
+      exit_criteria:
+        - "a publish_local McpFrame call starts tillandsias-<project>-web and returns http://www.<project>.localhost:8080"
+        - "a non-WEB category is refused host-side with an actionable JSON-RPC error (fixture sends a forged frame)"
+        - "service_status lists the project's services; service_stop removes container + route"
+        - "unit/fixture coverage on the handler dispatch (no podman needed for the deny path)"
+      events:
+        - type: filed
+          ts: "2026-07-15T07:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
+          host: linux_mutable
+          summary: "357 sub-rung I3b, filed after shipping the host-side core (b1404180)."
+
+    - packet_id: publish-local-e2e-litmus
+      order: 364
+      title: "357 rung I3c: e2e litmus — curl http://www.<project>.localhost returns a fixture project's index"
+      status: ready
+      release_target: enclave-service-catalog-milestone
+      kind: verification
+      deliverable: openspec/litmus-tests + scripts fixture project
+      depends_on: [publish-local-mcp-tool-and-handler]
+      pickup_role: linux
+      capability_tags: [web, e2e, litmus, podman]
+      estimated_hours: 3
+      outcome: >
+        The milestone's I3 closure: publish a fixture static project (or
+        ../visual-chess / ../lakanoa) and assert curl http://www.<project>.localhost
+        returns its index.html through the router. Runs in the local-build
+        e2e gate (needs podman + the enclave up). http today; the https
+        version is order 360's closure.
+      exit_criteria:
+        - "curl -fsS http://www.<project>.localhost:8080 returns the worktree index for a fixture project"
+        - "re-publish is idempotent (same URL, one container)"
+        - "litmus bound under enclave-service-catalog / subdomain-routing"
+      events:
+        - type: filed
+          ts: "2026-07-15T07:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
+          host: linux_mutable
+          summary: "357 sub-rung I3c (e2e closure), filed after the host-side core."
