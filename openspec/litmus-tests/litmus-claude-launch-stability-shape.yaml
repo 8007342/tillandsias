@@ -28,10 +28,10 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: no API key injection"
 
-  - step: "Claude launch reports the credential-free session boundary"
-    command: "grep -F 'claude: credential-free session' images/default/entrypoint-forge-claude.sh"
+  - step: "Claude launch reports its credential boundary (vault OAuth restore or API-key session, per orders 303/304)"
+    command: "grep -Fq 'claude: OAuth document restored from vault' images/default/entrypoint-forge-claude.sh && grep -Fq 'claude: API-key session (no OAuth restore)' images/default/entrypoint-forge-claude.sh && echo 'ok: claude credential boundary reported'"
     timeout_ms: 3000
-    expected_behavior: "claude: credential-free session"
+    expected_behavior: "ok: claude credential boundary reported"
 
   - step: "interactive forge launch keeps host home and Claude config unmounted"
     command: "BLOCK=$(sed -n '/pub(crate) fn build_forge_agent_run_args(/,/spec.build_run_args()/p' crates/tillandsias-headless/src/main.rs); if printf '%s' \"$BLOCK\" | grep -qE '\\.claude|ANTHROPIC_API_KEY'; then exit 1; else echo 'ok: no host Claude credentials mounted'; fi"
