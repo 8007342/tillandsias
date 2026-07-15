@@ -11276,6 +11276,22 @@ plan_index:
         - "provision/start on a classified-fatal state fails fast with the remediation string (no 5-poke retry storm); pinned by a string litmus"
         - "--diagnose --json exposes wsl_platform; tray toast + status line show the classified message"
       events:
+        - type: claim
+          ts: "2026-07-15T06:30:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0624Z"
+          host: windows
+          lease_id: "wsl-platform-preflight-classification"
+          expires_at: "2026-07-15T10:30:00Z"
+          summary: >
+            Claiming per parallel-workstreams Windows lane order (312 done
+            last cycle; 323 next). Slice: pure classifier (S1-S4 signature
+            mapping, unit-tested) + sync probes (wsl --status NUL-stripped
+            + aka.ms/wslinstall marker, CBS RebootPending via reg query,
+            HypervisorPresent/VirtualizationFirmwareEnabled CIM) +
+            fail-fast in start/provision before the poke loop + --diagnose
+            --json wsl_platform field (schema pin 18->19) + string litmus.
+            Toast/status-line ride the existing error-text surfacing;
+            verified by reading that path.
         - type: filed
           ts: "2026-07-13T21:55:00Z"
           agent_id: "windows-yolanda-fable5-20260713T2105Z"
