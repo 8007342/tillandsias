@@ -13368,3 +13368,42 @@ plan_index:
             directive. Wrapper + build.sh hook written; first-run
             substrate bootstrap (import + dnf + rustup) in flight on
             this host. Provisional order per order_number_assignment.
+
+    - packet_id: git-mirror-pre-reconcile-research
+      order: 368
+      release_target: stable-milestone-v1
+      title: "Research: git mirror fetch-before-push reconciliation hooks and standard practices"
+      status: ready
+      kind: research
+      deliverable: plan/issues/git-mirror-pre-reconcile-research-2026-07-15.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git, research, git-mirror]
+      estimated_hours: 2
+      outcome: >
+        Investigate standard config, pre-receive/pre-reconcile hooks, and
+        fetch-before-push mechanisms to address transient mirror staleness
+        observed by in-forge agents (e.g. fatal: Needed a single revision, or
+        push rejection due to fetch first). Determine the best practice for
+        automatic fetching/reconciliation without clobbering refs.
+      exit_criteria:
+        - "Research document with recommended configuration or hook design"
+
+    - packet_id: git-mirror-pre-reconcile-impl
+      order: 369
+      release_target: stable-milestone-v1
+      title: "Implement: git mirror fetch-before-push reconciliation hooks"
+      status: pending
+      kind: implementation
+      deliverable: images/git hook scripts and config
+      depends_on: [git-mirror-pre-reconcile-research]
+      pickup_role: linux
+      capability_tags: [git, script, git-mirror]
+      estimated_hours: 3
+      outcome: >
+        Implement the chosen fetch-before-push or hook mechanism to ensure
+        the git mirror automatically fetches the latest upstream state when
+        agents attempt a push, resolving transient fetch-first rejection states.
+      exit_criteria:
+        - "in-forge agent can push to a stale mirror, and the mirror auto-reconciles without rejection"
+        - "litmus test proving auto-reconciliation works"
