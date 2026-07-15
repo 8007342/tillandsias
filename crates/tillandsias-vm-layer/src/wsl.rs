@@ -431,10 +431,25 @@ impl WslRuntime {
 
 #[cfg(target_os = "windows")]
 impl WslRuntime {
-    /// Run a shell command inside the distro as root. Used for the
-    /// post-import wiring (wsl.conf, systemd unit install). Captures
+    /// Run a SINGLE shell command inside the distro as root. Captures
     /// stderr for error messages.
+    ///
+    /// Order 366: `wsl` without `--exec` re-joins its trailing args and
+    /// re-parses them through the guest login shell, so anything beyond a
+    /// single simple command arrives shredded (order-326 live repro:
+    /// `$probe` empty, `mkdir` never ran). Every script-shaped payload
+    /// (wsl.conf heredocs, the systemd unit writer, the forge-user setup)
+    /// was migrated to [`Self::wsl_root_sh_stdin`]; the guard below fails
+    /// loud before spawning if a multi-line payload ever lands here again.
     async fn wsl_root_sh(&self, script: &str) -> Result<(), VmError> {
+        if script.contains('\n') {
+            return Err(format!(
+                "wsl_root_sh: multi-line script rejected — the guest login shell \
+                 re-parses arg-delivered payloads (use wsl_root_sh_stdin; order 366). \
+                 First line: {:?}",
+                script.lines().next().unwrap_or_default()
+            ));
+        }
         let output = wsl_cmd()
             .arg("--distribution")
             .arg(&self.distro_name)
@@ -586,7 +601,7 @@ impl WslRuntime {
         // 2026-05-26), so defaulting to it would break `wsl -d tillandsias` login.
         // Default user stays root; "Open Shell" enters the forge *podman
         // container* via `podman exec`, not a forge Linux login.
-        self.wsl_root_sh(
+        self.wsl_root_sh_stdin(
             "cat > /etc/wsl.conf << 'EOF'\n\
              [boot]\n\
              systemd = true\n\
@@ -709,7 +724,7 @@ impl VmRuntime for WslRuntime {
         self.ensure_forge_user_and_src().await?;
 
         // Step 2: write /etc/wsl.conf with systemd + automount=false.
-        self.wsl_root_sh(
+        self.wsl_root_sh_stdin(
             "cat > /etc/wsl.conf << 'EOF'\n\
              [boot]\n\
              systemd = true\n\
@@ -808,7 +823,7 @@ impl VmRuntime for WslRuntime {
              systemctl enable tillandsias-headless.service",
             port = manifest.vsock_port
         );
-        self.wsl_root_sh(&unit).await?;
+        self.wsl_root_sh_stdin(&unit).await?;
 
         // Step 5: terminate so the next start picks up the new wsl.conf
         // and systemd.
@@ -1299,6 +1314,48 @@ mod tests {
             );
         }
         assert_eq!(classified_short_status("some generic poke failure"), None);
+    }
+
+    /// Order 366: the arg-delivered root-shell path REJECTS multi-line
+    /// payloads before spawning anything (the guest login shell re-parses
+    /// arg-delivered scripts — order-326 live repro), and every
+    /// script-shaped provisioning writer goes via stdin delivery.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn wsl_root_sh_rejects_multiline_payloads() {
+        let rt = WslRuntime::new("no-such-distro", std::path::PathBuf::new());
+        let err = rt
+            .wsl_root_sh("line one\nline two")
+            .await
+            .expect_err("multi-line payload must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("wsl_root_sh_stdin") && msg.contains("order 366"),
+            "rejection must name the stdin alternative: {msg}"
+        );
+    }
+
+    /// Order 366: the three script-shaped provisioning writers (both
+    /// wsl.conf heredocs + the systemd unit) are pinned to stdin delivery;
+    /// no arg-delivered root-shell call sites remain in the source.
+    #[test]
+    fn provisioning_writers_use_stdin_delivery() {
+        let source = include_str!("wsl.rs");
+        // Needles assembled at runtime so this test's own literals don't
+        // count themselves in the source scan.
+        let arg_needle = format!("self.wsl_root_sh{}", "(");
+        let stdin_needle = format!("self.wsl_root_sh_stdin{}", "(");
+        assert_eq!(
+            source.matches(&arg_needle).count(),
+            0,
+            "arg-delivered wsl_root_sh call sites must stay at zero — \
+             script payloads arrive shredded (order 366); use the _stdin variant"
+        );
+        assert!(
+            source.matches(&stdin_needle).count() >= 4,
+            "expected the forge-user ensure + two wsl.conf writers + unit \
+             installer on stdin delivery"
+        );
     }
 
     /// CIM probe output parse: True/False lines, CRLF + NUL tolerant,
