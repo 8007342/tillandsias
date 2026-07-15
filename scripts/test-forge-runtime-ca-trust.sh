@@ -10,7 +10,7 @@ podman image exists "$IMAGE" || {
     exit 1
 }
 
-for command in openssl python3 git curl; do
+for command in openssl gcc git curl node; do
     command -v "$command" >/dev/null || {
         echo "FAIL: required host command is absent: $command" >&2
         exit 1
@@ -48,21 +48,19 @@ git -C "$tmp/seed" commit --quiet -m initial
 git clone --quiet --bare "$tmp/seed" "$tmp/web/upstream.git"
 git --git-dir="$tmp/web/upstream.git" update-server-info
 
-port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
-python3 - "$tmp/web" "$tmp/server.crt" "$tmp/server.key" "$port" <<'PY' &
-import http.server
-import os
-import ssl
-import sys
+# Find a free port
+port=0
+for p in $(seq 49152 65535); do
+    if ! ss -tlnH "sport = :$p" >/dev/null 2>&1; then
+        port=$p
+        break
+    fi
+done
+[ "$port" -gt 0 ] || { echo "FAIL: could not find a free port" >&2; exit 1; }
 
-root, cert, key, port = sys.argv[1:]
-os.chdir(root)
-server = http.server.ThreadingHTTPServer(("127.0.0.1", int(port)), http.server.SimpleHTTPRequestHandler)
-context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-context.load_cert_chain(cert, key)
-server.socket = context.wrap_socket(server.socket, server_side=True)
-server.serve_forever()
-PY
+# Compile and start the C TLS test server (no python3 dependency)
+gcc -O2 -o "$tmp/tls-server" "$SCRIPT_DIR/tls-test-server.c" -lssl -lcrypto
+"$tmp/tls-server" "$tmp/web" "$tmp/server.crt" "$tmp/server.key" "$port" &
 server_pid=$!
 
 ready=""
@@ -99,8 +97,7 @@ podman run --rm \
         url="https://127.0.0.1:'"$port"'"
         curl -fsS "$url/upstream.git/HEAD" >/dev/null
         git ls-remote "$url/upstream.git" HEAD >/dev/null
-        python3 -c "import urllib.request; urllib.request.urlopen(\"$url/upstream.git/HEAD\", timeout=5).read()"
-        node -e "fetch(process.argv[1]).then(r => { if (!r.ok) throw Error(String(r.status)); }).catch(e => { console.error(e); process.exit(1); })" "$url/upstream.git/HEAD"
+        node -e "fetch(process.argv[1]).then(r => { if (!r.ok) throw Error(String(r.status)); return r.text(); }).then(t => process.stdout.write(t)).catch(e => { console.error(e); process.exit(1); })" "$url/upstream.git/HEAD"
     '
 
 printf 'not a certificate\n' >"$tmp/malformed-ca.crt"

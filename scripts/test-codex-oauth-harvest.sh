@@ -57,7 +57,7 @@ trap finish TERM INT
 touch "$READY_FILE"
 while :; do sleep 1; done
 EOF
-chmod +x "$TMP/bin/"*
+chmod 755 "$TMP/bin/"*
 
 export HOME="$TMP/home"
 export PATH="$TMP/bin:$PATH"

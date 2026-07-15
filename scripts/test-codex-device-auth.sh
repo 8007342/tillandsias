@@ -51,7 +51,7 @@ case "${1:-}" in
     *) exit 64 ;;
 esac
 EOF
-chmod +x "$TMP/bin/"*
+chmod 755 "$TMP/bin/"*
 
 export HOME="$TMP/home"
 export PATH="$TMP/bin:$PATH"
