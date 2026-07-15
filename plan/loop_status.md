@@ -1,6 +1,37 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T02:55:00Z
+LastExecutionTime: 2026-07-15T06:45:00Z
+
+## Cycle 2026-07-15T05:30Z→06:45Z (linux_mutable macuahuitl — P0 agent-launch fix + service-catalog decision signed + roadmap filed)
+
+- **P0 FIXED — all credentialed agents failed to launch** (operator repro):
+  two regressions from the orders 303/304 login work. (1) The scoped
+  vault-token --secret mount + AppRole lease were gated on mode==Codex, so
+  Claude/Antigravity lanes had NO token and `provider-oauth-vault restore`
+  died "no Vault token" → fatal exit 2 (even though the operator had logged
+  in). Generalized to all credentialed modes; added ClaudeForge +
+  AntigravityForge vault policies/roles (read+rotate scoped to own oauth),
+  auto-provisioned; sentinel bumped to antigravity-forge so existing vaults
+  re-provision. (2) "stdin is not a terminal" — codex-oauth-session
+  backgrounded the interactive TUI (detaches tty). Flipped: agent runs
+  FOREGROUND (owns tty), credential watcher is the background job, final
+  harvest on EXIT; live + signal-exit harvest preserved. vault-client
+  tests + harvest fixture 20/20 + tillandsias-vault quick 7/7 + --check PASS.
+- **Service-catalog DECISION SIGNED (order 356)**: The Tlatoani approved
+  stdio-MCP-over-control-socket + host-side allowlist and answered the open
+  questions (https transparent-but-non-blocking; MVP containers die with the
+  host; per-container share rules + debug ports required). Rungs 357/358
+  UNBLOCKED.
+- **New criteria packets**: 359 github-token injection (brew attestation +
+  git anti-rate-limit — operator's "play nicely" directive; the ncurses
+  attestation failure in the terminal lane), 360 transparent-https for
+  *.localhost, 361 per-container share policy + debug ports. Roadmap 362:
+  --cloudflare-login + public deploy affinity (ephemeral vs production) —
+  the NEXT milestone after local-host.
+- **Findings filed**: forge terminal lane agy/brew not on PATH (optimization).
+- **Operator retry after ./build.sh --install**: --codex-login/--claude-login
+  already succeeded; --agy-login now installs agy on demand; the three tray
+  launches should reach their TUIs (was the P0 above).
 
 ## Cycle 2026-07-15T01:40Z→02:55Z (linux_mutable macuahuitl — operator-directed: provider device-login flows IMPLEMENTED (orders 303 DONE, 304 impl-complete, 352 filed))
 

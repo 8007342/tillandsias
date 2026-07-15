@@ -12368,6 +12368,21 @@ plan_index:
         - "the three reference projects each publish locally with https, friendly names, zero IPs"
       events:
         - type: progress
+          ts: "2026-07-15T06:40:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
+          host: linux_mutable
+          summary: >
+            DECISION SIGNED (order 356): stdio-MCP-over-control-socket
+            transport, host-side allowlist. Rungs 357 (static MVP) + 358
+            (allowlist) UNBLOCKED. New criteria packets filed from the
+            operator's answers: 359 github-token injection (brew
+            attestation + git anti-rate-limit), 360 transparent-https for
+            *.localhost (do it right, non-blocking for MVP), 361
+            per-container share policy (ro/rw source or published artifact)
+            + debug ports. Next-milestone roadmap 362 filed:
+            --cloudflare-login + public deploy affinity (ephemeral vs
+            production), the operator's magical prompt.
+        - type: progress
           ts: "2026-07-15T05:15:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
           host: linux_mutable
@@ -12470,8 +12485,7 @@ plan_index:
     - packet_id: service-catalog-transport-decision
       order: 356
       title: "DECISION RECORD (Tlatoani-signed): publish-locally transport + request/grant protocol + allowlist enforcement point"
-      status: blocked
-      blocked_on: "orders 354+355 deliverables, then The Tlatoani's sign-off"
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: decision
       deliverable: plan/issues/service-catalog-transport-decision-2026-07.md
@@ -12492,6 +12506,29 @@ plan_index:
         - "decision record with one recommendation, alternatives, risks"
         - "explicit Tlatoani sign-off event (who/when/scope) on this packet"
       events:
+        - type: signed-off
+          ts: "2026-07-15T06:30:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
+          host: linux_mutable
+          summary: >
+            THE TLATOANI SIGNED OFF (2026-07-15) and answered the open
+            questions. APPROVED: (1) transport = stdio MCP over the existing
+            control socket, host-side allowlist, agent sends catalog names
+            only (both research agents' convergent recommendation).
+            (2) HTTPS: prefer it, non-blocking / good-to-have for the MVP,
+            BUT implement it TRANSPARENTLY even for localhost — do it right
+            all the way (apps/plugins/on-device JS need https and don't know
+            they are on localhost). (3) MVP service lifetime: containers die
+            when the host process dies. (4) Per-container customization is
+            REQUIRED and flexible: rules on what is shared (ro or rw access
+            to the checked-out source, OR mount a "published" artifact from
+            the project), plus exposed debug ports for local web dev (logs,
+            telemetry, health, content reload). LONG-TERM vision recorded as
+            separate packets: multiple tillandsias each running a Cloudflare
+            WARP client with service/environment affinity; --cloudflare-login;
+            "host in www.<domain-i-own>.com" (production, DNS + tunnel) vs
+            "test.<project>.localhost" (ephemeral). Implementation rungs
+            357/358 are UNBLOCKED.
         - type: filed
           ts: "2026-07-15T04:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
@@ -12501,8 +12538,7 @@ plan_index:
     - packet_id: web-publish-local-mvp
       order: 357
       title: "First rung: static 'publish it locally' MVP — https://www.<project>.localhost serving a bind-mounted worktree on the Linux host"
-      status: blocked
-      blocked_on: "order 356 decision record signed"
+      status: ready
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless + images/web + reverse-proxy route + e2e evidence
@@ -12533,8 +12569,7 @@ plan_index:
     - packet_id: service-catalog-allowlist-enforcement
       order: 358
       title: "Catalog allowlist enforcement host-side — category names map to pinned digests; everything else refused loudly"
-      status: blocked
-      blocked_on: "order 356 decision record signed"
+      status: ready
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless catalog module + fixture + litmus
@@ -12560,3 +12595,142 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
           host: linux_mutable
           summary: "Ladder step 3 second rung; catalog contents come from order 355."
+
+    - packet_id: forge-github-token-injection
+      order: 359
+      title: "Inject the vault GitHub token when forge tooling talks to GitHub (brew attestation, git checkout) — stop getting rate-limited/blocked"
+      status: ready
+      release_target: enclave-service-catalog-milestone
+      kind: enhancement
+      deliverable: images/default/lib-common.sh + brew shim + entrypoints
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, vault, github, brew, security]
+      estimated_hours: 4
+      outcome: >
+        Operator repro 2026-07-15 (terminal lane): brew attestation for
+        ncurses failed "The bottle for ncurses could not be verified... a
+        missing GitHub API token... run gh auth login", so direnv (and any
+        brew tool) won't install; the forge also does anonymous git fetches
+        that risk GitHub rate-limits/abuse blocks. We control the credential
+        — inject it. Export HOMEBREW_GITHUB_API_TOKEN (and/or seed a
+        git credential helper / GH_TOKEN) from the vault GitHub token for
+        forge tooling that touches github.com, so brew attestation
+        verification and git checkouts authenticate as us. Keep the token
+        OFF disk and out of argv/logs (env only, from the scoped vault
+        lease); the forge still cannot READ the raw token via its policy —
+        the tray injects it as env at launch, same as the provider keys.
+        Must NOT weaken the credential-quarantine invariant (no host creds,
+        forge policy still can't read secret/github/token directly).
+      exit_criteria:
+        - "brew install of an attested bottle (e.g. direnv->ncurses) succeeds in a forge lane"
+        - "git fetch/clone from github in the forge authenticates (no anonymous rate-limit path)"
+        - "fixture/source-pin: the token is injected as env only — never in argv, never written to a file in the project or image"
+        - "credential-quarantine litmus still green (forge policy cannot read secret/github/token)"
+      events:
+        - type: filed
+          ts: "2026-07-15T06:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
+          host: linux_mutable
+          summary: "Operator directive: play nicely, inject our github token when interacting with github (brew attestation + git checkouts)."
+
+    - packet_id: transparent-https-localhost
+      order: 360
+      title: "Transparent HTTPS for www.<project>.localhost — Caddy internal CA + host trust so localhost services get real https with zero prompts"
+      status: ready
+      release_target: enclave-service-catalog-milestone
+      kind: implementation
+      deliverable: images/router Caddyfile + host CA-trust install path + litmus
+      depends_on: [service-catalog-transport-decision]
+      pickup_role: linux
+      capability_tags: [web, tls, caddy, security]
+      estimated_hours: 6
+      outcome: >
+        Operator decision 2026-07-15: prefer https, non-blocking for the MVP
+        but implement it TRANSPARENTLY even for localhost — do it right all
+        the way (some apps/plugins/on-device JS require https and don't know
+        they are on localhost). The router currently runs auto_https off on
+        :8080. Add Caddy `tls internal` for *.localhost with the router root
+        CA installed into the host trust store (reuse the existing enclave
+        CA-install flow where possible), so www.<project>.localhost serves
+        https the host browser trusts without prompts. HTTP stays working;
+        https is additive. VM boundaries out of scope.
+      exit_criteria:
+        - "curl -fsS https://www.<project>.localhost verifies against the trusted chain (no -k)"
+        - "a browser secure-context feature (e.g. service worker) works at the https origin"
+        - "http path still serves (additive, not a breaking flip); litmus pins both"
+      events:
+        - type: filed
+          ts: "2026-07-15T06:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
+          host: linux_mutable
+          summary: "Operator elevated https from later-rung to a committed transparent-localhost implementation (non-blocking for the static MVP)."
+
+    - packet_id: container-share-policy-and-debug-ports
+      order: 361
+      title: "Per-container share policy (ro/rw source or published-artifact mount) + exposed debug ports for local web dev"
+      status: ready
+      release_target: enclave-service-catalog-milestone
+      kind: implementation
+      deliverable: catalog manifest schema (mounts/ports/env contract) + enforcement + fixture
+      depends_on: [service-catalog-transport-decision, service-catalog-allowlist-enforcement]
+      pickup_role: linux
+      capability_tags: [containers, catalog, security, web]
+      estimated_hours: 6
+      outcome: >
+        Operator decision 2026-07-15: catalog containers need per-entry
+        customization (like WordPress needs its wp-content mount + db). Each
+        catalog manifest entry declares its SHARE RULE — read-only or
+        read/write access to the checked-out project source, OR mount a
+        declared "published" artifact directory from the project instead of
+        the raw source — plus which DEBUG PORTS the reverse proxy exposes so
+        agents can read logs/telemetry/health and trigger content reload for
+        local web dev. Enforced host-side from the manifest (the forge cannot
+        widen its own share/ports). Extends order 358's catalog schema.
+      exit_criteria:
+        - "manifest schema expresses: source share mode (ro|rw|none), published-artifact mount, exposed debug ports"
+        - "fixture: a manifest's declared share/ports are exactly what the container gets; a forge cannot request more"
+        - "WEB debug entry exposes a logs/health port routed by the proxy"
+      events:
+        - type: filed
+          ts: "2026-07-15T06:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
+          host: linux_mutable
+          summary: "Operator directive: flexible per-container share rules + debug ports for local web dev."
+
+    - packet_id: cloudflare-login-and-public-deploy
+      order: 362
+      title: "ROADMAP: --cloudflare-login + 'host in www.<domain-i-own>.com' — public deploys via Cloudflare tunnel/DNS; service+environment affinity across tillandsias"
+      status: ready
+      kind: research
+      multi_cycle: true
+      deliverable: plan/issues/cloudflare-deploy-affinity-roadmap-2026-07-15.md
+      depends_on: [web-publish-local-mvp]
+      pickup_role: linux
+      capability_tags: [research, cloudflare, deployment, networking, vault]
+      estimated_hours: 6
+      outcome: >
+        Operator vision 2026-07-15: after the local-host MVP, add a
+        `--cloudflare-login` command-line flag (same shape as the provider
+        logins: device/API login, credential to vault). Then a forge agent
+        prompt like "host in www.<domain-i-own>.com" serves the local web
+        container publicly via a Cloudflare tunnel with DNS updates every
+        ~45 min at a short TTL (WARP client per tillandsias). Long-term:
+        multiple tillandsias with service/environment AFFINITY — "deploy to
+        www.<domain-they-own>.com" routes to the right tillandsia
+        (production: distributed mesh, storage, load balancing), while
+        "deploy to test.<project>.localhost" stays ephemeral. Goal: any
+        cheap laptop + cheap Cloudflare domain can self-host, ephemeral or
+        production-grade. Research-first; break into rungs; Tlatoani signs
+        the design before implementation. NOT for the local-host milestone
+        — this is the next milestone after it.
+      exit_criteria:
+        - "roadmap doc: --cloudflare-login credential flow, tunnel+DNS mechanics, ephemeral vs production affinity model, security boundary"
+        - "packet tree with rungs (first: --cloudflare-login into vault; then ephemeral public serve of one local container)"
+        - "Tlatoani sign-off before any implementation rung"
+      events:
+        - type: filed
+          ts: "2026-07-15T06:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
+          host: linux_mutable
+          summary: "Operator's magical prompt: 'Add and implement --cloudflare-login' + the ephemeral/production public-hosting vision. Filed as the next-milestone roadmap."
