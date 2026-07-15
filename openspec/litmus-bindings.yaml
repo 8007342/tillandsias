@@ -202,6 +202,7 @@ specs:
   - litmus:podman-idiomatic-launch-routing
   - litmus:build-ci-dispatch-shape
   - litmus:wsl2-builder-wrapper-shape
+  - litmus:cross-target-cfg-gate-check
   coverage_ratio: 100
   last_verified: '2026-07-15'
 - spec_id: direct-podman-calls

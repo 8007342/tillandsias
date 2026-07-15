@@ -1,6 +1,29 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T18:15:00Z
+LastExecutionTime: 2026-07-15T18:55:00Z
+
+## Cycle 2026-07-15T18:53Z→18:55Z (forge — meta-orchestration: order 365 DONE — cross-target cfg gate litmus)
+
+- **Host**: forge, `linux-next`, agent forge-fable5-20260715T1853Z (Claude
+  Fable 5). Credential guard `ok:forge-git-mirror`; boundary snapshot clean.
+  Sibling heads: main 38d33cd8, linux-next d9c281b0, windows-next 01b38a0b,
+  osx-next 837b066f.
+- **Order 365 DONE (cross-target-unix-cfg-gate-check)**: grep-based litmus
+  test `litmus:cross-target-cfg-gate-check` registered under `dev-build` spec
+  in `litmus-bindings.yaml`. 3 steps: (1) top-level `use std::os::unix`
+  imports in headless/main.rs preceded by `#[cfg(unix)]`; (2)
+  `libc::getuid/geteuid/fork` calls inside `cfg(unix)` blocks (comment-excluded);
+  (3) broader sweep of core/control-wire/host-shell/podman excluding known
+  unix sub-modules. Falsifiability verified: removing one `#[cfg(unix)]` gate
+  triggers step 1 FAIL; restoring it returns to green. No cargo check
+  cross-target needed (forge has no rustup); grep catches the exact
+  regression class from the issue.
+- **Forge budget**: one packet drained (365 complete), per
+  worker_agent_protocol.forge_cycle_budget. E2E gates skipped —
+  `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-binary`.
+- **Push**: commit `313ed025` is local on `linux-next`. Mirror relay
+  rejected push (non-fast-forward, known stale-relay issue); operator
+  confirmed the mirror has been fixed in a later build.
 
 ## Cycle 2026-07-15T18:11Z→18:20Z (forge — meta-orchestration: order 237 CLOSED with live default-on evidence; 238 promoted)
 

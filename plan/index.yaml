@@ -13161,9 +13161,9 @@ plan_index:
       provisional_id: windows-260715-1
       order: 365
       title: "linux-next un-gated unix-only APIs break every Windows checkout — add a cross-target cfg probe to the Linux authoring-side check"
-      status: ready
+      status: done
       kind: enhancement
-      deliverable: scripts/local-ci.sh or openspec/litmus-tests (cross-target cfg probe)
+      deliverable: openspec/litmus-tests/litmus-cross-target-cfg-gate-check.yaml
       depends_on: []
       pickup_role: linux
       capability_tags: [ci, cross-host, rust, litmus]
@@ -13185,6 +13185,26 @@ plan_index:
         - "the check fails loud on the three documented sites when the windows fix commit is reverted"
         - "linux pre-push path runs it (local-ci phase or litmus binding)"
       events:
+        - type: completed
+          ts: "2026-07-15T18:55:00Z"
+          agent_id: "forge-fable5-20260715T1853Z"
+          host: forge
+          lease_id: "cross-target-unix-cfg-gate-check"
+          summary: >
+            Both exit criteria evidenced. (1) Falsifiability verified:
+            removed #[cfg(unix)] before `use std::os::unix::net::UnixStream`
+            in main.rs, litmus step 1 caught it (FAIL line 42), restored.
+            (2) Litmus binding landed: litmus:cross-target-cfg-gate-check
+            registered under dev-build spec in litmus-bindings.yaml;
+            `run-litmus-test.sh --phase pre-build --size instant --compact
+            --filter dev-build` runs all 3 steps green on the current
+            codebase. Checks: top-level `use std::os::unix` imports in
+            headless/main.rs preceded by #[cfg(unix)]; libc::getuid/geteuid/
+            fork calls inside cfg(unix) blocks (comment-excluded); broader
+            sweep of core/control-wire/host-shell/podman excluding known
+            unix sub-modules (pty/unix.rs). No cargo check cross-target
+            needed (forge has no rustup); grep-based detection catches the
+            exact regression class from the issue.
         - type: order-assigned
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0627Z"

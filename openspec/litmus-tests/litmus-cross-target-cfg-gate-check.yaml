@@ -1,0 +1,60 @@
+# @trace spec:cross-platform-compilation
+#
+# Order 365's exit criterion: prevent un-gated unix-only APIs from breaking
+# Windows (and other non-unix) workspace compiles. linux ./build.sh --check
+# only compiles the Linux cfg universe, so an un-gated `use std::os::unix`
+# or bare `libc::getuid()` in a cross-platform crate silently breaks every
+# Windows checkout. This litmus catches the regression class documented in
+# plan/issues/linux-next-ungated-unix-apis-break-windows-2026-07-15.md.
+#
+# Scope: crates that must compile on all targets. The tray module
+# (tray/mod.rs) is linux-only by design and excluded.
+name: litmus:cross-target-cfg-gate-check
+spec: cross-platform-compilation
+phase: pre-build
+description: >
+  Detect un-gated unix-only APIs in cross-platform crates that would break
+  Windows workspace compilation. Top-level `use std::os::unix` imports must
+  be preceded by #[cfg(unix)]; libc::getuid/geteuid/fork calls must be inside
+  cfg(unix) blocks.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - shell utilities (grep, sed) are available in PATH
+
+critical_path:
+  - step: "no un-gated top-level use std::os::unix imports in headless/main.rs"
+    command: "VIOLATIONS=0; while IFS= read -r line; do lineno=$(echo \"$line\" | cut -d: -f1); prev=$((lineno - 1)); prevline=$(sed -n \"${prev}p\" crates/tillandsias-headless/src/main.rs 2>/dev/null || true); if ! echo \"$prevline\" | grep -qF '#[cfg(unix)]'; then echo \"FAIL: line $lineno has un-gated top-level use std::os::unix: $line\"; VIOLATIONS=$((VIOLATIONS + 1)); fi; done < <(grep -n '^use std::os::unix' crates/tillandsias-headless/src/main.rs 2>/dev/null || true); if [ \"$VIOLATIONS\" -gt 0 ]; then exit 1; fi; echo 'ok: all top-level use std::os::unix imports are cfg(unix)-gated'"
+    timeout_ms: 5000
+    expected_behavior: "ok: all top-level use std::os::unix imports are cfg(unix)-gated"
+
+  - step: "no bare libc::getuid/geteuid/fork calls in headless/main.rs without nearby cfg(unix)"
+    command: "VIOLATIONS=0; while IFS= read -r line; do lineno=$(echo \"$line\" | cut -d: -f1); start=$((lineno - 5)); [ \"$start\" -lt 1 ] && start=1; window=$(sed -n \"${start},${lineno}p\" crates/tillandsias-headless/src/main.rs 2>/dev/null || true); if ! echo \"$window\" | grep -qF '#[cfg(unix)]'; then echo \"FAIL: line $lineno has bare libc unix call without cfg(unix): $line\"; VIOLATIONS=$((VIOLATIONS + 1)); fi; done < <(grep -nE 'libc::(getuid|geteuid|fork)\\b' crates/tillandsias-headless/src/main.rs 2>/dev/null | grep -v '//' || true); if [ \"$VIOLATIONS\" -gt 0 ]; then exit 1; fi; echo 'ok: all libc::getuid/geteuid/fork calls are inside cfg(unix) blocks'"
+    timeout_ms: 5000
+    expected_behavior: "ok: all libc::getuid/geteuid/fork calls are inside cfg(unix) blocks"
+
+  - step: "no un-gated top-level use std::os::unix imports in core, control-wire, host-shell, podman crates"
+    command: "VIOLATIONS=0; for crate_dir in crates/tillandsias-core/src crates/tillandsias-control-wire/src crates/tillandsias-host-shell/src crates/tillandsias-podman/src; do [ -d \"$crate_dir\" ] || continue; while IFS= read -r hit; do file=$(echo \"$hit\" | cut -d: -f1); lineno=$(echo \"$hit\" | cut -d: -f2); echo \"$file\" | grep -qE '(^|/)unix\\.rs$|/pty/unix\\.rs$' && continue; prev=$((lineno - 1)); prevline=$(sed -n \"${prev}p\" \"$file\" 2>/dev/null || true); if ! echo \"$prevline\" | grep -qF '#[cfg(unix)]'; then echo \"FAIL: $file:$lineno has un-gated top-level use std::os::unix: $hit\"; VIOLATIONS=$((VIOLATIONS + 1)); fi; done < <(grep -rn '^use std::os::unix' \"$crate_dir\" --include='*.rs' 2>/dev/null || true); done; if [ \"$VIOLATIONS\" -gt 0 ]; then exit 1; fi; echo 'ok: no un-gated top-level use std::os::unix in cross-platform crates'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no un-gated top-level use std::os::unix in cross-platform crates"
+
+observability:
+  traces:
+    - "@trace spec:cross-platform-compilation"
+  expected_log: "cross-target cfg gate check passed"
+  log_fields:
+    spec: "cross-platform-compilation"
+    test: "cross-target-cfg-gate-check"
+    artifact: "crates/tillandsias-headless/src/main.rs, crates/tillandsias-{core,control-wire,host-shell,podman}/src/**/*.rs"
+
+rollback:
+  on_failure: >
+    An un-gated unix-only API was added to a cross-platform crate. Add
+    #[cfg(unix)] / #[cfg(not(unix))] gates around the unix-specific code,
+    providing a safe stub (e.g. false for connection checks, temp_dir
+    fallback for uid paths) for non-unix targets. See
+    plan/issues/linux-next-ungated-unix-apis-break-windows-2026-07-15.md
+    for the canonical fix pattern.
+  command: "grep -rn '^use std::os::unix' crates/tillandsias-headless/src/main.rs crates/tillandsias-core/src crates/tillandsias-control-wire/src crates/tillandsias-host-shell/src crates/tillandsias-podman/src --include='*.rs' 2>/dev/null"
