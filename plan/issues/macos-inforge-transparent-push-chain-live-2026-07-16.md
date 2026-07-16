@@ -49,3 +49,20 @@
   v0.3.260715.6, git v0.3.260715.2, and on-demand-built v0.3.260716.5
   copies — three generations of entrypoint behavior coexisting. The
   on-demand ensure rebuilds MISSING tags but never retires stale ones.
+
+## Operator handoff (loop window closed 2026-07-16 ~05:30 PDT / 12:30Z)
+
+Token was still 404 at every recheck through 12:27Z; the 5-hour macOS
+loop window closed without the credential. Everything else is DONE and
+SHIPPED (v0.3.260716.7 proved from a wiped substrate). To finish the
+goal, in order:
+
+1. Operator: `/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray --github-login`
+   (interactive device-code; stores the token in the guest vault).
+2. Any macOS cycle then runs the closing gate:
+   `--opencode /home/forge/src/tillandsias --prompt "Use the /meta-orchestration skill"`
+   — a FULL cycle: the in-forge agent's commit pushes through
+   git://tillandsias-git (rewrite verified live), the mirror relays with
+   the vault token (order 318 verified-ack), and order 349's last
+   criterion (real mirror push) + the operator goal both close with that
+   one run. Record the evidence on order 349 and this file.
