@@ -13528,3 +13528,72 @@ plan_index:
           host: linux
           lease_id: "git-mirror-pre-reconcile-impl"
           expires_at: "2026-07-15T22:35:00Z"
+
+    - packet_id: freshness-inventory-and-stamps
+      order: 370
+      title: "FRESHNESS rung 2: component inventory + first freshness stamps + coverage report"
+      status: ready
+      kind: implementation
+      deliverable: scripts/freshness-inventory.sh + first stamped components
+      depends_on: []
+      pickup_role: any
+      capability_tags: [methodology, tooling, script, freshness]
+      estimated_hours: 3
+      outcome: >
+        Operator directive 2026-07-15 (methodology.yaml component_freshness;
+        plan/issues/component-freshness-lifecycle-2026-07-15.md). Inventory
+        auditable components (scripts/*, images/default/*, cheatsheets,
+        litmus tests, methodology docs) and report freshness coverage:
+        stamped vs unstamped, age distribution. Machine-greppable record
+        grammar per the methodology section; exit-code contract so CI can
+        consume the report.
+      exit_criteria:
+        - "inventory script emits the report with a pinned grammar and exit-code contract"
+        - "litmus pins the report grammar (instant, pre-build)"
+        - "at least the 2026-07-15 incident components carry first stamps"
+
+    - packet_id: freshness-ci-reflag
+      order: 371
+      title: "FRESHNESS rung 3: CI RE-FRESH flagging (advisory first, per migration ladder)"
+      status: ready
+      kind: implementation
+      deliverable: scripts/local-ci.sh advisory phase + threshold config
+      depends_on: [freshness-inventory-and-stamps]
+      pickup_role: linux
+      capability_tags: [ci, methodology, freshness]
+      estimated_hours: 3
+      outcome: >
+        local-ci lists the N oldest/most-stale components each run
+        (advisory; flag -> soak -> default per migration_discipline).
+        meta-orchestration treats the top flagged item as a claimable
+        audit-packet source.
+      exit_criteria:
+        - "ci output names the top-N stalest components with ages"
+        - "advisory only until The Tlatoani approves gating (bar_raise_governance)"
+
+    - packet_id: freshness-skill-audit-class
+      order: 372
+      title: "FRESHNESS rung 4: standing freshness-audit work class in the recurring skills"
+      status: ready
+      kind: enhancement
+      deliverable: skills/advance-work-from-plan + skills/meta-orchestration sections
+      depends_on: [freshness-inventory-and-stamps]
+      pickup_role: any
+      capability_tags: [skills, methodology, freshness]
+      estimated_hours: 2
+      outcome: >
+        The worker and orchestration skills gain the standing audit class:
+        pick one flagged component; re-validate meaningful/useful/efficient/
+        sound/complete; disposition refreshed|updated|obsoleted with the
+        discard-over-repair bias stated; tombstone pattern for obsoleted
+        components (run-litmus-test.sh execute_test_command tombstone is the
+        exemplar).
+      exit_criteria:
+        - "both skills document the audit class and its three dispositions"
+        - "one full audit performed through the new class as live evidence"
+      events:
+        - type: filed
+          ts: "2026-07-16T01:05:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: "Operator directive: never-ending component-freshness loop; rungs shaped from the 2026-07-15 dead-code/stale-allowlist incidents."
