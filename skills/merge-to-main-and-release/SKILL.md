@@ -203,6 +203,22 @@ Append a one-line entry to `plan/issues/linux-next-work-queue-2026-05-25.md`:
 - <UTC>  `<merge_sha>`  Release ${new_tag} — merged PR #${existing_pr} to main, tagged, workflow_dispatch triggered. Linux build: <nix_build_duration> (Nix cache: <hit|miss>), total run: <total_run_time>. Linux artifact: <browser_download_url>.
 ```
 
+**Also append a row to the README release ledger** (operator directive
+2026-07-16; order 380). The collapsible table under `## RELEASE LEDGER` in
+README.md gets one new row at the TOP of the table body:
+
+- `RELEASE`: `${new_tag} (daily)` — or `(**STABLE**)` when this release is a
+  stable-channel promotion.
+- `INTENDED FEATURES`: the planned work this release set out to ship
+  (orders/features from the merged range), stated whether or not complete —
+  incomplete intentions stay listed with their follow-on order.
+- `BUGFIXES`: unplanned maintenance — regressions from previous milestones or
+  breakage discovered during the day's development.
+
+Keep rows honest and compact (the evidence trail lives in `plan/`); when the
+table exceeds ~10 rows, distill the oldest rows into the `*Older releases*`
+line per the semantic-distillation policy.
+
 Push the ledger update to `linux-next` so other hosts and the next work-loop see the release happened.
 
 Before success, confirm the release ledger update was pushed and the local

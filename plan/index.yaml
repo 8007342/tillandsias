@@ -13597,3 +13597,235 @@ plan_index:
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
           host: linux
           summary: "Operator directive: never-ending component-freshness loop; rungs shaped from the 2026-07-15 dead-code/stale-allowlist incidents."
+
+    - packet_id: web-share-release-milestone
+      order: 373
+      title: "MILESTONE: harnesses launch web containers (../visual-chess) — through public one-prompt share"
+      status: ready
+      kind: milestone
+      multi_cycle: true
+      deliverable: plan/index.yaml (criteria holder; children carry the work)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [milestone, coordination, web, mcp, containers, cloudflare]
+      estimated_hours: 0
+      outcome: >
+        Operator vision 2026-07-16 (The Tlatoani, verbatim session directive).
+        CORE: an agent in the forge launches a web container serving
+        ../visual-chess and returns a clickable local URL — with the MCP tool
+        surface discoverable NATURALLY AND ORGANICALLY (no out-of-band
+        instructions). CHERRY: ../inat-observations-wp runs as a WordPress
+        container WITH its database — multi-service, compose-like, launched
+        transparently into the enclave. FULL VISION: --cloudflare-login +
+        WARP tunnel + DNS so 'share this project with <person>' publishes an
+        immediately clickable https://www.<clearly-ephemeral-ns>.<mydomain>
+        URL through our proxy without exposing the host. Builds on
+        enclave-service-catalog-milestone (orders 357-364) — that milestone
+        remains the local-host foundation; this one is the harness-facing +
+        public-share layer.
+      exit_criteria:
+        - "CORE: in-forge harness agent publishes ../visual-chess and curl fetches its index via the returned URL (live e2e evidence)"
+        - "CORE: agent discovers publish tools organically (tools/list via the standard MCP entry; no manual socket/env setup)"
+        - "CHERRY: ../inat-observations-wp serves from a WordPress+DB multi-service catalog entry in the enclave"
+        - "VISION: one-prompt public share produces a working ephemeral-namespaced https URL on the operator domain"
+      events:
+        - type: filed
+          ts: "2026-07-16T01:20:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: "Operator directive: next-release north star; children 374-381."
+
+    - packet_id: forge-mcp-tools-organic-discoverability
+      order: 374
+      release_target: web-share-release-milestone
+      title: "Forge MCP tool surface is organically discoverable (publish family reachable + advertised, zero out-of-band setup)"
+      status: ready
+      kind: implementation
+      deliverable: images/default/config-overlay (mcp entry + instructions + forge-welcome) + tray mcp.sock e2e
+      depends_on: [publish-local-mcp-tool-and-handler]
+      pickup_role: linux
+      capability_tags: [mcp, forge, ux, discoverability, web]
+      estimated_hours: 4
+      outcome: >
+        Order 363 built the transport (NDJSON mcp.sock, ro-mounted into the
+        forge, TILLANDSIAS_CONTROL_SOCKET set) and the MCP handshake. This
+        packet makes it ORGANIC: the MCP entry name/description reflect the
+        tool surface (host services, not just 'host-browser'), tools/list
+        works end-to-end from a real in-forge opencode session,
+        forge-welcome + web-services instructions + cheatsheets mention the
+        publish family exactly once each (discoverable, not spammy), and
+        spec:forge-environment-discoverability gains the tool-surface
+        requirement. Includes order 363's outstanding exit criterion 1 (live
+        publish through the tunnel) as its first evidence step.
+      exit_criteria:
+        - "fresh forge session: agent asked 'what tools do you have?' lists publish_local/service_status/service_stop without hints"
+        - "live publish_local via the mcp.sock tunnel returns the URL and the container serves (closes order 363 criterion 1)"
+        - "discoverability litmus: config-overlay MCP entry + instructions reference the tool family (instant, pre-build)"
+
+    - packet_id: visual-chess-harness-publish-e2e
+      order: 375
+      release_target: web-share-release-milestone
+      title: "E2E: in-forge harness agent publishes ../visual-chess to a clickable local URL"
+      status: ready
+      kind: verification
+      deliverable: openspec/litmus-tests e2e + plan evidence report
+      depends_on: [forge-mcp-tools-organic-discoverability, publish-local-e2e-litmus]
+      pickup_role: linux
+      capability_tags: [web, e2e, forge, harness, podman]
+      estimated_hours: 3
+      outcome: >
+        The milestone's CORE closure: a real harness agent (opencode lane)
+        prompted only with project intent ('serve/publish this project')
+        publishes ../visual-chess; curl fetches the index through the router.
+        Extends order 364's fixture litmus to the harness-driven path;
+        evidence lands as a dated plan report.
+      exit_criteria:
+        - "agent-driven publish of ../visual-chess passes in the local-build e2e gate"
+        - "re-publish idempotent; service_stop removes container + route"
+
+    - packet_id: catalog-multi-service-compose
+      order: 376
+      release_target: web-share-release-milestone
+      title: "Catalog multi-service entries: WordPress+DB for ../inat-observations-wp (podman-pod compose-like, transparent into the enclave)"
+      status: ready
+      kind: implementation
+      deliverable: catalog manifest schema extension + pod orchestration + wordpress fixture
+      depends_on: [container-share-policy-and-debug-ports]
+      pickup_role: linux
+      capability_tags: [containers, catalog, podman, web, compose]
+      estimated_hours: 8
+      outcome: >
+        Cherry-on-top of the milestone. A catalog entry may declare MULTIPLE
+        services (web + db) with intra-entry networking, startup order,
+        secrets (db credentials via vault/podman secrets — no plaintext),
+        and per-service share rules (extends order 361's schema). Launch is
+        a podman POD (or equivalent) placed transparently on the enclave
+        network; the reverse proxy routes only the web service; the db stays
+        enclave-internal. Idiomatic layer only — no docker-compose
+        dependency; 'podman-compose-like magic' lives in our PodmanClient.
+        Fixture: ../inat-observations-wp (WordPress + mariadb) serves its
+        front page locally.
+      exit_criteria:
+        - "manifest expresses multi-service entries (services, order, internal net, secrets, share rules)"
+        - "publish of a wordpress entry launches web+db as one pod; only web is routed; db unreachable from outside the enclave"
+        - "../inat-observations-wp front page served locally (e2e evidence)"
+
+    - packet_id: cloudflare-login-implementation
+      order: 377
+      release_target: web-share-release-milestone
+      title: "--cloudflare-login: device/API login to vault (same shape as provider logins)"
+      status: ready
+      kind: implementation
+      deliverable: crates/tillandsias-headless login flow + vault policy
+      depends_on: [cloudflare-login-and-public-deploy]
+      pickup_role: linux
+      capability_tags: [cloudflare, login, vault, credentials]
+      estimated_hours: 4
+      outcome: >
+        First implementation rung of order 362 (roadmap doc + Tlatoani
+        sign-off gate it). Operator 2026-07-16: 'we already have all the
+        infra and example login flows, adding --cloudflare-login should be
+        easy.' Same ProviderLoginConfig shape: TTY flow, token to vault
+        under its own policy, --with-token automation path, preflights its
+        container image on demand (the --init-on-demand seam verified
+        2026-07-16). No tunnel yet — credential only.
+      exit_criteria:
+        - "tillandsias --cloudflare-login stores a scoped credential in vault (login container flow, image ensured on demand)"
+        - "unit pin on the login preflight seam; litmus on the flag surface"
+        - "roadmap sign-off recorded before merge (order 362 gate)"
+
+    - packet_id: warp-tunnel-ephemeral-public-serve
+      order: 378
+      release_target: web-share-release-milestone
+      title: "Cloudflare tunnel + DNS: serve a published container at https://www.<ephemeral-ns>.<operator-domain> without exposing the host"
+      status: ready
+      kind: implementation
+      deliverable: tunnel container/sidecar + DNS updater + router integration
+      depends_on: [cloudflare-login-implementation, visual-chess-harness-publish-e2e]
+      pickup_role: linux
+      capability_tags: [cloudflare, tunnel, dns, network, security, web]
+      estimated_hours: 8
+      outcome: >
+        WARP/cloudflared tunnel terminates in an enclave sidecar and
+        forwards through OUR proxy/router to the published web container;
+        DNS record (short TTL) points
+        www.<namespace-that-clearly-implies-ephemeral>.<operator-domain> at
+        the tunnel. Namespace grammar must scream ephemeral to end users
+        (e.g. a dated/temp prefix — design decision recorded with operator).
+        Host never exposed: only the tunnel egresses; enclave proxy
+        exemption pattern applies (every direct-to-enclave path explicitly
+        exempts the proxy — the 3-P0 lesson).
+      exit_criteria:
+        - "published container reachable at the ephemeral https URL from outside the LAN"
+        - "host exposes no new listening ports; tunnel dies with the stack (reaped like the rest of the enclave)"
+        - "DNS + route torn down on service_stop (no dangling public names)"
+
+    - packet_id: one-prompt-public-share-flow
+      order: 379
+      release_target: web-share-release-milestone
+      title: "'Share this project with <person>' — one prompt to a clickable public URL (publish_public MCP tool)"
+      status: ready
+      kind: implementation
+      deliverable: publish_public tool in the mcp.sock family + share UX
+      depends_on: [warp-tunnel-ephemeral-public-serve, forge-mcp-tools-organic-discoverability]
+      pickup_role: linux
+      capability_tags: [mcp, ux, web, cloudflare, share]
+      estimated_hours: 4
+      outcome: >
+        The milestone's headline UX: an average user tells their agent
+        'share this project I'm working on with <person/email/text>' and
+        gets back an immediately clickable public URL. publish_public rides
+        the same session-attributed mcp.sock surface (project from
+        SO_PEERCRED, never the request); the share TARGET is initially just
+        rendered into the agent's reply (mail/text delivery is a later
+        rung). Ephemeral by default; explicit TTL; service_stop or TTL
+        expiry unpublishes.
+      exit_criteria:
+        - "one-prompt flow returns a working public URL in a live forge session (e2e evidence)"
+        - "unpublish path verified (TTL or explicit stop removes DNS + route + tunnel)"
+
+    - packet_id: readme-release-ledger-wiring
+      order: 380
+      title: "README release ledger: skill wiring + distillation policy (ledger itself lands 2026-07-16)"
+      status: ready
+      kind: enhancement
+      deliverable: skills/merge-to-main-and-release + skills/smoke-curl-install-and-test-e2e + README.md policy note
+      depends_on: []
+      pickup_role: any
+      capability_tags: [documentation, release, methodology, ledger]
+      estimated_hours: 2
+      outcome: >
+        Operator 2026-07-16: README.md carries a collapsible RELEASE /
+        INTENDED FEATURES / BUGFIXES table — for humans AND agents (smoke
+        curl installs read it to validate and jumpstart). Initial ledger +
+        release-skill append hook land with this filing; this packet tracks
+        the rest: smoke-curl skill reads the ledger before testing; stable
+        promotions mark the RELEASE column; semantic distillation policy for
+        aging rows (detail on recent, distilled on old) wired into the
+        distillation inventory.
+      exit_criteria:
+        - "merge-to-main-and-release appends a row every release (verified by the next two releases)"
+        - "smoke-curl skill consults the ledger and cites it in its report"
+        - "distillation policy documented; oldest rows distilled once >10 rows"
+
+    - packet_id: loop-status-direction-ledger
+      order: 381
+      title: "loop_status 'Direction' ledger: thematic what-are-we-all-doing-today for multi-host agents"
+      status: ready
+      kind: enhancement
+      deliverable: plan/loop_status.md section + skill references
+      depends_on: []
+      pickup_role: any
+      capability_tags: [coordination, plan, methodology, multi-host]
+      estimated_hours: 2
+      outcome: >
+        Operator 2026-07-16: keep what works in loop_status; add a standing
+        THEMATIC direction ('we're supporting web containers') that gives
+        agents direction WITHOUT naming packet ids — agents reduce the theme
+        against ./plan using ./methodology. Section lands with this filing;
+        packet tracks: meta-orchestration + advance-work-from-plan +
+        coordinate-multihost-work read the direction during selection and
+        record their reduction of it; direction changes are operator-owned.
+      exit_criteria:
+        - "worker skills document reading the Direction section during packet selection"
+        - "two cycles from different hosts cite the direction in their ledger entries"

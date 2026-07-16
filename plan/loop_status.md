@@ -2,6 +2,22 @@
 
 LastExecutionTime: 2026-07-16T01:05:00Z
 
+## Direction — what are we all doing today
+
+<!-- Operator-owned thematic direction (The Tlatoāni, 2026-07-16). One theme,
+     no packet ids: agents REDUCE the theme against ./plan using ./methodology
+     (selection policy still applies — release-targeted first). Cycles cite
+     the direction in their ledger entries. Order 381 tracks skill wiring. -->
+
+**We're supporting web containers.** Every host works toward: a harness agent
+in the forge launches a web container for a real project (../visual-chess),
+discovers the publish tools organically, and — as rungs land — multi-service
+entries (WordPress+DB), then one-prompt public share over a Cloudflare tunnel
+at a clearly-ephemeral URL. Use iterations on this theme to also clean up
+remaining work on YOUR active packets: major feature iterations double as
+test/refinement runs for what's already in flight. Milestone:
+web-share-release-milestone (order 373).
+
 ## Cycle 2026-07-15T21:07Z→2026-07-16T01:05Z (linux — full meta-orchestration: recovery, order 363, gate-wedge root-cause saga, FRESHNESS directive, RELEASE v0.3.260716.1)
 
 - **Host**: linux_mutable (macuahuitl, fresh restart), `linux-next`, agent
