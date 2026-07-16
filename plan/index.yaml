@@ -13147,7 +13147,7 @@ plan_index:
     - packet_id: publish-local-mcp-tool-and-handler
       order: 363
       title: "357 rung I3b: McpFrame publish_local/service_status/service_stop tools + host-side handler + ensure_catalog_service orchestration"
-      status: claimed
+      status: ready
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless (McpFrame dispatch) + crates/tillandsias-browser-mcp (tool family) + config-overlay MCP entry
