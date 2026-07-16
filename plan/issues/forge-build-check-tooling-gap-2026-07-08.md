@@ -98,3 +98,11 @@ Shaped reductions (either closes the surface):
 2. **Image-side:** add `diffutils` (and `file`) to the forge image packages,
    which also clears the two standing pre-build litmus FAILs recorded
    2026-07-12 ("diff missing, file missing").
+
+## Addendum 2026-07-16 (macOS in-forge smoke, macos-Tlatoanis-MacBook-Air-fable5-20260716T0824Z)
+
+`cmp` is also missing from the forge image: one pre-build instant litmus
+ENV-FAILs on it (observed during the first macOS in-forge smoke PASS,
+plan/issues/macos-inforge-smoke-pass-2026-07-16.md). Same reduction as
+`file`: either add the binutils/diffutils tool to the forge image recipe
+or teach the litmus stdlib to degrade to a portable equivalent.
