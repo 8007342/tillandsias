@@ -18,7 +18,7 @@ remaining work on YOUR active packets: major feature iterations double as
 test/refinement runs for what's already in flight. Milestone:
 web-share-release-milestone (order 373).
 
-## Cycle 2026-07-16T18:07Z→18:26Z (linux_immutable — operator-directed reduction: straggler + robustness packets, methodology, tooling)
+## Cycle 2026-07-16T18:07Z→19:00Z (linux_immutable — operator-directed reduction + web-container drain: order 362 sign-off closed)
 
 - **Host**: linux_immutable, `linux-next`, agent
   linux-tlatoani-claude-20260716T0725Z. Interactive operator (The Tlatoāni)
@@ -48,11 +48,24 @@ web-share-release-milestone (order 373).
   - **Tooling**: installed `ruby` into the `tools` toolbox to run the
     sanctioned `ruby -ryaml` validator (absent from the bare immutable host —
     now understood as toolbox-solvable, not a gap).
-- **Next action**: drain host-eligible ready work via `/advance-work-from-plan`
-  through the toolbox-aware builder; run curl-install e2e (`v0.3.260716.7` is
-  newer than the last tested release). Web-container theme
-  (web-share-release-milestone, order 373) resumes after these operator
-  straggler/robustness directives land.
+- **Worker drain (web-container direction, operator drain-selection)**: pushed
+  the reduction batch (`45377dd6` + `36875da4`), then drained **order 362**
+  `cloudflare-login-and-public-deploy` (research roadmap, `multi_cycle`, no
+  verification gate). Strengthened the roadmap's security-boundary section,
+  mapped the rung tree to ledger orders 377/378/379, and obtained the
+  **Tlatoāni sign-off** (exit-criterion #3) → order 362 **done**; rung 1
+  (order 377 `--cloudflare-login`) unblocked. The sign-off spun out three
+  research packets per operator direction: **388** (tunnel/WARP/TLS in the
+  proxy/router), **389** (evidence-gated deploy-lifecycle ladder, `multi_cycle`),
+  **390** (GitHub App for fine-grained interactions + temporary elevated
+  tokens). Scope for now: ephemeral `dev`/`test`.<domain-we-own> via tunnel,
+  ~1h TTL + refresh-while-live.
+- **Next action**: order 377 (`--cloudflare-login` → vault) is ready for a
+  build-capable host (this immutable host can't run the cold full build
+  cheaply); research 388/389/390 are docs-eligible for any host. Curl-install
+  e2e (`v0.3.260716.7`) deferred — host is interactively in use, a destructive
+  podman reset would wipe the operator's live stack; run it on a dedicated
+  smoke host.
 
 ## Cycle 2026-07-16T17:55Z (forge — worker defer no-op)
 

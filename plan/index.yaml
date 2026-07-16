@@ -13272,7 +13272,7 @@ plan_index:
     - packet_id: cloudflare-login-and-public-deploy
       order: 362
       title: "ROADMAP: --cloudflare-login + 'host in www.<domain-i-own>.com' — public deploys via Cloudflare tunnel/DNS; service+environment affinity across tillandsias"
-      status: claimed
+      status: done
       kind: research
       multi_cycle: true
       deliverable: plan/issues/cloudflare-deploy-affinity-roadmap-2026-07-15.md
@@ -13318,6 +13318,23 @@ plan_index:
             record the Tlatoani sign-off — unblocking the first implementation
             rung (order 377 --cloudflare-login). Immutable-host-appropriate:
             research/docs, no build, no local-build e2e.
+        - type: completed
+          ts: "2026-07-16T18:55:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: >
+            All exit criteria met: roadmap doc covers credential flow,
+            tunnel+DNS mechanics, ephemeral-vs-production affinity, AND the
+            security boundary (forge-zero-credential invariant, scoped-AppRole
+            restore, per-domain tunnel token, ephemeral teardown); rung tree
+            shaped as ledger orders 377/378/379; Tlatoani sign-off recorded
+            2026-07-16, unblocking rung 1 (order 377). Design decisions D1/D3
+            spun out as research orders 388 (tunnel/WARP/TLS-in-proxy-router),
+            389 (deploy-lifecycle evidence-gating), 390 (GitHub App). This
+            research packet has no verification_required gate, so the operator
+            sign-off IS the completion authority (multi_cycle self-flip is only
+            barred when a verification_required gate exists). Evidence:
+            plan/issues/cloudflare-deploy-affinity-roadmap-2026-07-15.md.
 
     - packet_id: publish-local-mcp-tool-and-handler
       order: 363
@@ -14566,3 +14583,102 @@ plan_index:
           agent_id: "linux-tlatoani-claude-20260716T0725Z"
           host: linux
           summary: "Operator directive (message 1, 2026-07-16 --replace / always-restart). inference already has --replace via order 314; this generalizes the pattern to the sibling stack containers that still lack it."
+
+    - packet_id: cloudflare-tunnel-tls-in-proxy-router-research
+      order: 388
+      release_target: web-share-release-milestone
+      title: "Research: co-locate Cloudflare tunnel + WARP + transparent HTTPS/TLS termination in the proxy/router container"
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on: [cloudflare-login-and-public-deploy]
+      pickup_role: linux
+      capability_tags: [research, cloudflare, proxy, router, tls, tunnel, networking]
+      estimated_hours: 5
+      outcome: >
+        D1 from the order-362 sign-off (The Tlatoani 2026-07-16): rather than a
+        blind decision, research placing the Cloudflare tunnel + per-tillandsias
+        WARP client + transparent HTTPS/TLS termination in the PROXY/ROUTER
+        container. Operator rationale: published web containers live in the
+        enclave and are routed from the reverse proxy; if that proxy holds the
+        outbound tunnel it also handles incoming traffic; terminating TLS in ONE
+        place keeps web containers cert-free; free/self-signed cert issuance
+        (ACME / Let's Encrypt) lives next to the proxy; it must host+route
+        MULTIPLE https hosts. Validate this placement vs alternatives; do not
+        commit blind. Informs rung 2 (order 378 warp-tunnel-ephemeral-public-serve).
+      exit_criteria:
+        - "research doc: tunnel+WARP+TLS-termination in the proxy/router vs alternatives (separate tunnel container, host daemon); trade-offs recorded"
+        - "multi-host HTTPS routing model: how N enclave web containers are fronted by one proxy/router with per-host TLS"
+        - "cert strategy decided: ACME / Let's Encrypt vs self-signed, and where issuance/renewal runs"
+        - "decision record for The Tlatoani feeding order 378"
+      events:
+        - type: filed
+          ts: "2026-07-16T18:55:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: "D1 spun out of order 362 sign-off. Operator steer: tunnel+WARP+TLS in the proxy/router; research the placement + multi-host HTTPS + cert strategy rather than deciding blind."
+
+    - packet_id: deploy-lifecycle-evidence-gating-research
+      order: 389
+      release_target: web-share-release-milestone
+      title: "Research: evidence-gated deploy lifecycle ladder (local dev -> daily -> staging -> prod -> canary)"
+      status: ready
+      kind: research
+      multi_cycle: true
+      deliverable: plan/issues/ research doc + gate model
+      depends_on: [cloudflare-login-and-public-deploy]
+      pickup_role: linux
+      capability_tags: [research, deployment, lifecycle, gating, security, ux]
+      estimated_hours: 6
+      outcome: >
+        D3 from the order-362 sign-off (The Tlatoani 2026-07-16). Assume the
+        user does not know what they are doing: unlock advanced deploy stages by
+        EVIDENCE of the prior stage, mirroring how remote projects gate on a
+        github login and agents gate on their logins today. Ladder: stable local
+        dev -> daily builds -> staging -> prod -> (maybe canary), each gated on
+        recorded evidence (e.g. publish-to-prod requires successful-staging
+        evidence; builds on scripts/promote-stable.sh's existing evidence gate).
+        SCOPE NOW is only ephemeral dev/test.<domain-we-own>; this packet defines
+        the requirements for the further stages, it does not build them.
+      exit_criteria:
+        - "research doc: per-stage evidence artifacts + gates + how each is recorded/verified"
+        - "the progression model (what unlocks the next stage) and where it is enforced"
+        - "relationship to scripts/promote-stable.sh evidence gate and provider-login gating; first-step = ephemeral dev/test only"
+      events:
+        - type: filed
+          ts: "2026-07-16T18:55:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: "D3 spun out of order 362 sign-off. Long-running research on the evidence-gating lifecycle ladder; for now only ephemeral dev/test.<domain>, further stages defined by this research."
+
+    - packet_id: github-app-fine-grained-interaction-research
+      order: 390
+      release_target: web-share-release-milestone
+      title: "Research: GitHub App for fine-grained user<->GitHub interactions + temporary elevated tokens for promotions/releases"
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [research, github, github-app, credentials, security, ci]
+      estimated_hours: 5
+      outcome: >
+        D3-future from the order-362 sign-off (The Tlatoani 2026-07-16, "file
+        ./plan research for it!!"). Further deploy lifecycles will need github
+        hooks / actions / workflows; a GitHub App gives fine-grained control
+        over what a user can do in GitHub and can issue TEMPORARY elevated
+        tokens for specific actions (promotions, releases). Research the App
+        model (permissions, short-TTL installation tokens, webhook events) and
+        how it integrates with the vault + the order-389 evidence-gating ladder.
+        Relates to but is broader than order 319's git-mirror installation-token
+        evaluation (that packet scopes the push credential only).
+      exit_criteria:
+        - "research doc: GitHub App permission model + short-TTL installation tokens vs PAT; webhook events for hooks/actions/workflows"
+        - "temporary-elevated-token flow for promotions/releases, integrated with vault policy (forge-zero-credential invariant preserved)"
+        - "decision record; cross-reference order 319 (mirror credential) to avoid overlap"
+      events:
+        - type: filed
+          ts: "2026-07-16T18:55:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: "D3-future spun out of order 362 sign-off. Operator explicitly requested a GitHub App research packet for fine-grained interactions + temporary elevated promotion/release tokens."
