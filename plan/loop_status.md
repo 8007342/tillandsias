@@ -138,7 +138,47 @@ web-share-release-milestone (order 373).
   Commit `5dda534f`, pushed to `linux-next`.
 - **Worker drain**: one packet drained (364), per recurrent-loop budget.
 
-## Cycle 2026-07-15T23:15Z→00:15Z (windows — coordinator-directed: order 350 LIVE parity evidence produced (partial parity; blocked on the wire-lane mirror-injection gap); merged-tree Windows breakage repaired; first Windows-built guest binaries)
+## Cycle 2026-07-16T07:31Z→08:15Z (macos — meta-orchestration: week-stale install root-caused + fresh 0.3.260716.5 installed; vault backoff panic FIXED; vault crash-skew wedge recovered; chain live to the credential prompt)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0731Z
+  (operator /loop, goal: BigPickle/Hy3 in-forge /meta-orchestration on macOS).
+  Guard `ok:gh-keyring`; boundary snapshot clean; merged origin/linux-next
+  dd34cd8a (fast-forward — osx-next was already contained).
+- **Goal-frontier root cause**: installed tray was WEEK-STALE (Jul-8
+  ed769a1c-dirty) — and because the tray bundles+stages the guest headless
+  at every boot, the stale app silently pinned the GUEST a week back too
+  (orders 342/382 not live on this host despite being merged).
+  /build-macos-tray run: green (findings file
+  plan/issues/macos-build-findings-2026-07-16.md, commit 1db61fac); fresh
+  tray+guest 0.3.260716.5 installed to ~/Applications AND /Applications.
+- **Found+FIXED live (c40db47a)**: order-235 R7 vault health-retry backoff
+  constructed `tokio::time::sleep` as a `block_on` argument (off-runtime
+  thread) → guest headless panicked "no reactor running" on the first
+  recreate-window hit. Single occurrence in crates/ (swept).
+- **Found+recovered: vault crash-skew wedge**: the panic-interrupted
+  bootstrap left `tillandsias-vault-unseal` rotated against 2-day-old
+  `tillandsias-vault-data` → deterministic unseal 400, container stopped,
+  permanent. Lossless reset (vault stored nothing yet) + re-bootstrap
+  verified: 11 policies, proxy+git images ensured on-demand at
+  v0.3.260716.5. Crash-ordering reduction filed:
+  plan/issues/vault-unseal-secret-storage-crash-skew-2026-07-16.md.
+- **Order 349 progress event recorded** (claim taken+released this cycle):
+  identity criterion now satisfiable; gate rerun still blocked on the linux
+  guest-git facade fix PLUS a second macOS-lane blocker found by source
+  analysis: the order-342 clone lane's remote alignment does
+  `GIT_DIR=<non-bare checkout root> git config` → empty → push URL falls
+  back to the RO staged path (one-line shaped fix: `git -C`), filed at
+  plan/issues/macos-clone-lane-push-remote-misalignment-2026-07-16.md.
+- **In-forge goal status (for the operator + coordinator)**: macOS chain is
+  now live end-to-end up to the credential prompt — remaining blockers are
+  (1) operator `--github-login` (vault github token 404), (2) linux-owned
+  guest-git facade dependency (order 349 blocker), (3) the clone-lane push
+  remote misalignment above. Linux/WSL2 sibling evidence: order 382.
+- **Worker drain**: one packet drained (/build-macos-tray + regression
+  fix), per recurrent-loop budget. E2E gates: destructive macOS substrate
+  reset deliberately NOT run this cycle — it would wipe the freshly
+  re-initialized vault right before the operator's github-login.
+
 
 - **Host**: Windows 11 Home 26200, `windows-next`, agent
   windows-bullo-fable5-20260715T2315Z. Guard `ok:gh-keyring`; merged

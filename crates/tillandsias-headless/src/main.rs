@@ -6002,6 +6002,44 @@ fn sanitize_forge_origin_url(origin: &str) -> Option<String> {
 /// is outside the project bind mount; returning `None` preserves that behavior
 /// without exposing the referenced host metadata.
 /// @trace spec:git-mirror-service
+/// Order 382: hand root-staged git trees to the forge uid.
+///
+/// The guest headless (WSL2/VZ) runs as root (order 309's least-privilege
+/// split is still open), so everything `write_forge_repo_gitdir` stages —
+/// and the host gitdir trees bind-mounted into the forge — lands
+/// root-owned. The forge user (uid 1000, no sudo) then cannot read `.git`,
+/// `git rev-parse` fails, and the credential-channel guard fail-closes
+/// every in-forge cycle (Windows curl-install live repro 2026-07-16:
+/// MO-SMOKE FAIL, root-owned mode-700 .git). When — and only when —
+/// running as root, chown the staged trees to the forge uid. Linux native
+/// runs as the desktop user and `--userns=keep-id` maps that uid onto the
+/// forge's, so the chown is skipped there (euid != 0). `lchown` + no
+/// recursion through symlinks so a crafted link inside a worktree cannot
+/// redirect ownership changes outside the staged tree.
+#[cfg(unix)]
+fn chown_tree_to_forge_uid(path: &Path) {
+    // The forge image's only interactive account; fixed at 1000 everywhere
+    // (keep-id mapping, tmpfs modes, /home/forge ownership).
+    const FORGE_UID: u32 = 1000;
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+    // Explicit stack, not recursion: objects trees can be tens of
+    // thousands of entries deep-ish and wide.
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(p) = stack.pop() {
+        let _ = std::os::unix::fs::lchown(&p, Some(FORGE_UID), Some(FORGE_UID));
+        if p.is_dir()
+            && !p.is_symlink()
+            && let Ok(entries) = std::fs::read_dir(&p)
+        {
+            for entry in entries.flatten() {
+                stack.push(entry.path());
+            }
+        }
+    }
+}
+
 fn write_forge_repo_gitdir(project_name: &str, project_path: &Path) -> Option<ForgeRepoGitDir> {
     let host_gitdir = project_path.join(".git");
     if !host_gitdir.is_dir() {
@@ -6054,43 +6092,23 @@ fn write_forge_repo_gitdir(project_name: &str, project_path: &Path) -> Option<Fo
     std::fs::write(&config_path, local_config.as_bytes()).ok()?;
     write_forge_index(&root, project_path, &host_gitdir)?;
 
-    // Under --userns=keep-id the container's forge user is host uid 1000.
-    // When the launcher runs as root (the WSL2/VZ guest headless), a
-    // root-owned facade is unwritable in-container: `git read-tree`
-    // (index materialization) and reflog writes fail EACCES — order 382's
-    // observed class. Hand the staged facade to the forge uid; no-op when
-    // the launcher already runs as uid 1000 (Linux desktop).
+    // Order 382: the facade AND the bind-mounted host trees must be
+    // readable by the forge uid. No-op unless running as root (guest lane).
+    // Also load-bearing for the git-less staging path above: an unwritable
+    // root-owned facade makes the in-container index materialization
+    // (`git read-tree HEAD`) fail EACCES.
     #[cfg(unix)]
-    chown_facade_to_forge_uid(&root);
+    {
+        chown_tree_to_forge_uid(&root);
+        chown_tree_to_forge_uid(&host_gitdir.join("objects"));
+        chown_tree_to_forge_uid(&host_gitdir.join("refs"));
+    }
 
     Some(ForgeRepoGitDir {
         root,
         objects: host_gitdir.join("objects"),
         refs: host_gitdir.join("refs"),
     })
-}
-
-/// In-container uid of the `forge` (and git-image `git`) user — see
-/// `images/*/Containerfile` and the `uid=1000` secret mounts above.
-#[cfg(unix)]
-const FORGE_CONTAINER_UID: u32 = 1000;
-
-#[cfg(unix)]
-fn chown_facade_to_forge_uid(path: &Path) {
-    // Best-effort: a failed chown leaves the pre-existing behavior
-    // (read-only facade) rather than aborting staging.
-    let _ = std::os::unix::fs::lchown(
-        path,
-        Some(FORGE_CONTAINER_UID),
-        Some(FORGE_CONTAINER_UID),
-    );
-    if path.is_dir()
-        && let Ok(entries) = std::fs::read_dir(path)
-    {
-        for entry in entries.flatten() {
-            chown_facade_to_forge_uid(&entry.path());
-        }
-    }
 }
 
 fn append_forge_repo_gitdir_mount_args(
@@ -10221,6 +10239,36 @@ pub(crate) async fn service_stop(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn forge_gitdir_staging_hands_root_staged_trees_to_forge_uid() {
+        // Order 382: the guest headless (WSL2/VZ) runs as root, so staged
+        // git trees land root-owned and the forge user cannot read .git —
+        // the credential-channel guard then fail-closes every in-forge
+        // cycle (Windows curl-install live repro 2026-07-16). The staging
+        // path must hand the facade AND the bind-mounted host trees to the
+        // forge uid, gated on euid==0 so Linux native (keep-id) is a no-op.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn write_forge_repo_gitdir(");
+        assert!(
+            window.contains("chown_tree_to_forge_uid(&root)"),
+            "staged facade gitdir must be handed to the forge uid"
+        );
+        assert!(
+            window.contains("chown_tree_to_forge_uid(&host_gitdir.join(\"objects\"))")
+                && window.contains("chown_tree_to_forge_uid(&host_gitdir.join(\"refs\"))"),
+            "bind-mounted host objects/refs trees must be handed to the forge uid"
+        );
+        let helper = source_window(source, "fn chown_tree_to_forge_uid(");
+        assert!(
+            helper.contains("geteuid() } != 0"),
+            "chown must be gated on running as root (guest lane only)"
+        );
+        assert!(
+            helper.contains("lchown"),
+            "must not follow symlinks while re-owning staged trees"
+        );
+    }
 
     #[test]
     fn github_token_injected_as_env_host_side_never_argv() {

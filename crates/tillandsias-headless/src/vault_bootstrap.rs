@@ -1866,7 +1866,12 @@ fn wait_for_vault_ready(
                 // vault_ready_wait_uses_podman_health pin forbids local
                 // readiness sleep-POLLING; this bounded backoff between
                 // wait_healthy attempts is not a readiness poll).
-                rt.block_on(tokio::time::sleep(Duration::from_secs(2)));
+                //
+                // The Sleep must be constructed inside block_on: creating it
+                // as the argument runs on this (non-runtime) thread and
+                // panics with "there is no reactor running" (live repro,
+                // macOS guest list-cloud-projects 2026-07-16).
+                rt.block_on(async { tokio::time::sleep(Duration::from_secs(2)).await });
             }
         }
     }
