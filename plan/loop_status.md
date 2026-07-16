@@ -161,6 +161,33 @@ web-share-release-milestone (order 373).
   Commit `5dda534f`, pushed to `linux-next`.
 - **Worker drain**: one packet drained (364), per recurrent-loop budget.
 
+## Cycle 2026-07-16T08:24Z→08:50Z (macos — meta-orchestration: GOAL SMOKE RUNG DONE — first in-forge /meta-orchestration smoke PASS on macOS (big-pickle); clone-lane origin fix landed)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0824Z
+  (operator /loop iteration 2). Guard `ok:gh-keyring`; boundary clean; merged
+  origin/linux-next 2f8d53f1 (coordinator had already merged our P1s).
+- **GOAL EVIDENCE**: `--opencode /home/forge/src/tillandsias --prompt "…smoke
+  mode (verify-only)"` on the fresh 0.3.260716.5 stack → the in-forge
+  **opencode/big-pickle** agent ran the full smoke runbook (host classify,
+  plan parse, credential guard, 131-PASS litmus sweep, e2e-preflight) and
+  emitted `MO-SMOKE: PASS`, exit 0, clean lane teardown. Report:
+  plan/issues/macos-inforge-smoke-pass-2026-07-16.md.
+- **Live confirmation**: the in-forge credential guard refused with
+  `origin does not resolve to the enclave git mirror (effective origin:
+  /home/forge/src-host/tillandsias)` — exactly the clone-lane misalignment
+  filed last cycle. Fix landed (559190c3): `git -C` origin resolution +
+  insteadOf routing gated on bare mirrors; git-mirror-service litmus 5/5.
+  NOTE: version-tagged forge images won't pick this up until a rebuild
+  (FRESHNESS class, orders 370-372) — the smoke ran the pre-fix entrypoint.
+- **Full-cycle residual** (macOS in-forge): (1) operator `--github-login`
+  (token still 404 at 08:25Z), (2) real mirror push route for the clone
+  lane (linux seam, issue filed), (3) forge-image freshness for entrypoint
+  fixes. Small captures: forge lane self-dirties .opencode/package-lock.json
+  (plan/issues/forge-lane-selfdirty-opencode-lockfile-2026-07-16.md); `cmp`
+  missing in forge image (addendum on forge-build-check-tooling-gap-2026-07-08).
+- **Worker drain**: one packet (order 349 progress: smoke gate + entrypoint
+  fix), per recurrent-loop budget.
+
 ## Cycle 2026-07-16T07:31Z→08:15Z (macos — meta-orchestration: week-stale install root-caused + fresh 0.3.260716.5 installed; vault backoff panic FIXED; vault crash-skew wedge recovered; chain live to the credential prompt)
 
 - **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0731Z

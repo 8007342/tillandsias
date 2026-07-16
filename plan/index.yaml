@@ -11218,6 +11218,23 @@ plan_index:
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
         - type: progress
+          ts: "2026-07-16T08:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T0824Z"
+          host: macos
+          lease_id: "macos-forge-config-trust-live-parity-20260716b"
+          commits: [559190c3]
+          validation:
+            - "FIRST macOS in-forge /meta-orchestration smoke PASS: opencode/big-pickle in the VZ forge emitted MO-SMOKE: PASS, exit 0, clean teardown (plan/issues/macos-inforge-smoke-pass-2026-07-16.md)"
+            - "in-forge credential guard live-confirms the clone-lane push-remote misalignment (effective origin = RO src-host path); lib-common fix 559190c3 (git -C + bare-gated insteadOf), git-mirror-service litmus 5/5 PASS"
+            - "vault github token rechecked: still 404 (operator --github-login pending); vault healthy across VM restart"
+          summary: >
+            Goal smoke rung DONE. Full push-capable in-forge cycle remains
+            blocked on (1) operator github-login and (2) a real mirror push
+            route for the clone lane (linux seam; 559190c3 makes origin
+            honest but routes nothing) — plus forge-image freshness so the
+            entrypoint fix actually enters the lane (FRESHNESS orders
+            370-372 class).
+        - type: progress
           ts: "2026-07-16T08:05:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T0731Z"
           host: macos
