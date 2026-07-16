@@ -382,6 +382,32 @@ multi_host_development:
       while waiting for central unblocking.
 
   fedora_silverblue_immutable_builders:
+    trace: "operator directive 2026-07-16 (The Tlatoāni, 'Toolboxes baby!!'): immutable != restricted"
+    immutable_is_actually_flexible: >
+      "Immutable" here describes ONLY the host's read-only /usr (rpm-ostree)
+      layer — it is NOT a restriction on available tooling and is NOT a reason
+      to declare a missing tool a blocker. Standing pre-authorization: any
+      agent MAY (and SHOULD) run `sudo dnf install` — and `dnf copr enable`,
+      etc. — for ANY package it needs inside ANY toolbox (`tools`,
+      `tillandsias-builder`, or a fresh `toolbox create`) WITHOUT asking the
+      operator. The sanctioned validators and build deps (ruby for the
+      `ruby -ryaml` YAML fallback, shellcheck, gcc/cmake/make, cross
+      toolchains, …) are all one toolbox `dnf install` away. Net effect: an
+      immutable Linux host is effectively MORE flexible than a mutable one —
+      it gets a clean, disposable, per-need build/validate sandbox without
+      ever mutating /usr. Do not surface "tool X absent on the bare host" as a
+      gap; install it in a toolbox and proceed.
+    idempotency_expectation: >
+      We like toolboxes AND idempotency. Prefer ENSURING over assuming:
+      builder / CI / validation entry points should idempotently install their
+      required packages inside the toolbox (see
+      scripts/with-tillandsias-builder.sh) so tools are guaranteed present on
+      every run, not merely on first init. When adding a tool to a builder's
+      ensured set, make the ensure re-run for already-created toolboxes —
+      gating the whole install on a single sentinel (e.g. `rustup` presence)
+      means existing toolboxes silently miss the newly-added tool. An ensure
+      that only fires on a pristine toolbox is not idempotent over a changing
+      tool list.
     rule: >
       On Fedora Silverblue (and other immutable Linux hosts), native cross-compilation
       to target guest architectures (like aarch64 musl) requires standard C library headers
