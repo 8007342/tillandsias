@@ -13222,7 +13222,7 @@ plan_index:
     - packet_id: publish-local-e2e-litmus
       order: 364
       title: "357 rung I3c: e2e litmus — curl http://www.<project>.localhost returns a fixture project's index"
-      status: ready
+      status: claimed
       release_target: enclave-service-catalog-milestone
       kind: verification
       deliverable: openspec/litmus-tests + scripts fixture project
@@ -13246,6 +13246,12 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
           host: linux_mutable
           summary: "357 sub-rung I3c (e2e closure), filed after the host-side core."
+        - type: claim
+          ts: "2026-07-16T02:11:14Z"
+          agent_id: "linux-tlatoani-opencode-20260716T0211Z"
+          host: linux
+          lease_id: "publish-local-e2e-litmus-v1"
+          expires_at: "2026-07-16T06:11:14Z"
 
     - packet_id: cross-target-unix-cfg-gate-check
       provisional_id: windows-260715-1
