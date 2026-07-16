@@ -13147,7 +13147,7 @@ plan_index:
     - packet_id: publish-local-mcp-tool-and-handler
       order: 363
       title: "357 rung I3b: McpFrame publish_local/service_status/service_stop tools + host-side handler + ensure_catalog_service orchestration"
-      status: ready
+      status: claimed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless (McpFrame dispatch) + crates/tillandsias-browser-mcp (tool family) + config-overlay MCP entry
@@ -13201,6 +13201,12 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
           host: linux_mutable
           summary: "357 sub-rung I3b, filed after shipping the host-side core (b1404180)."
+        - type: claim
+          ts: "2026-07-16T01:34:23Z"
+          agent_id: "linux-tlatoani-opencode-20260716T0134Z"
+          host: linux
+          lease_id: "publish-local-mcp-tool-and-handler-v2"
+          expires_at: "2026-07-16T05:34:23Z"
 
     - packet_id: publish-local-e2e-litmus
       order: 364
