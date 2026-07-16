@@ -2351,29 +2351,87 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
 /// project's GitHub upstream. The mirror's post-receive hook uses this URL
 /// (combined with the podman secret token) to push outbound to GitHub.
 ///
-/// Returns `None` for projects that aren't git repos, have no `origin`
-/// configured, or where the git invocation fails for any reason. A missing
-/// origin is benign — the mirror still serves the bare repo, and the
-/// post-receive hook logs "no remote configured, skipping push".
+/// Returns `None` for projects that aren't git repos or have no `origin`
+/// configured. A missing origin is benign — the mirror still serves the
+/// bare repo, and the post-receive hook logs "no remote configured,
+/// skipping push".
+///
+/// The `git` binary is preferred (it honors includes and multi-valued
+/// keys), but hosts without one — the WSL2/VZ guest OS ships no git; it
+/// exists only inside the forge containers — fall back to parsing the
+/// repository's `.git/config` directly. Without the fallback the launcher
+/// silently omitted the GitHub→mirror `insteadOf` rewrite on every wire
+/// lane, severing the forge push channel (order 350 root cause).
 ///
 /// @trace spec:git-mirror-service, spec:enclave-network
 fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
-    let output = std::process::Command::new("git")
+    if let Ok(output) = std::process::Command::new("git")
         .arg("-C")
         .arg(project_path)
         .args(["config", "--get", "remote.origin.url"])
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+        && output.status.success()
+        && let Ok(url) = String::from_utf8(output.stdout)
+    {
+        let trimmed = url.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
     }
-    let url = String::from_utf8(output.stdout).ok()?;
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        None
+    parse_gitdir_origin_url(project_path)
+}
+
+/// Minimal `.git/config` reader for `remote.origin.url`, used when no
+/// `git` binary is available on the launching host. Follows a `gitdir:`
+/// pointer file one hop (linked worktrees / staged gitdir facades).
+/// Understands only the canonical `[remote "origin"]` (and legacy dotted
+/// `[remote.origin]`) section with a plain `url = …` line — includes,
+/// quoting, and inline comments are out of scope; the git-binary path
+/// handles those hosts.
+fn parse_gitdir_origin_url(project_path: &Path) -> Option<String> {
+    let dot_git = project_path.join(".git");
+    let config_path = if dot_git.is_dir() {
+        dot_git.join("config")
     } else {
-        Some(trimmed.to_string())
+        // `.git` file form: `gitdir: <path>` (absolute, or relative to the
+        // project root).
+        let pointer = std::fs::read_to_string(&dot_git).ok()?;
+        let target = pointer.strip_prefix("gitdir:")?.trim();
+        let gitdir = if Path::new(target).is_absolute() {
+            PathBuf::from(target)
+        } else {
+            project_path.join(target)
+        };
+        gitdir.join("config")
+    };
+    let contents = std::fs::read_to_string(config_path).ok()?;
+    let mut in_origin = false;
+    for raw in contents.lines() {
+        let line = raw.trim();
+        if line.starts_with('[') {
+            // Section keyword is case-insensitive; the "origin" subsection
+            // name is case-sensitive per git-config(1). The legacy dotted
+            // form lowercases the subsection, so a lowercase compare is
+            // exactly right there.
+            let lowered = line.to_ascii_lowercase();
+            in_origin = (lowered.starts_with("[remote ") && line.contains("\"origin\""))
+                || lowered == "[remote.origin]";
+            continue;
+        }
+        if !in_origin {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim().eq_ignore_ascii_case("url") {
+            let url = value.trim();
+            if !url.is_empty() {
+                return Some(url.to_string());
+            }
+        }
     }
+    None
 }
 
 /// Best-effort mint of a Vault AppRole token for a git-mirror container.
@@ -5863,26 +5921,31 @@ struct ForgeRepoGitDir {
     refs: PathBuf,
 }
 
-fn git_config_set(config_path: &Path, key: &str, value: &str) -> Option<()> {
-    let status = Command::new("git")
-        .args(["config", "--file"])
-        .arg(config_path)
-        .args([key, value])
-        .status()
-        .ok()?;
-    status.success().then_some(())
-}
-
 fn write_forge_index(root: &Path, project_path: &Path, host_gitdir: &Path) -> Option<()> {
-    let tree = Command::new("git")
+    let tree = match Command::new("git")
         .arg("-C")
         .arg(project_path)
         .args(["rev-parse", "--verify", "HEAD^{tree}"])
         .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|tree| tree.trim().to_string());
+    {
+        Ok(output) if output.status.success() => String::from_utf8(output.stdout)
+            .ok()
+            .map(|tree| tree.trim().to_string()),
+        // No `git` binary on the launching host (the WSL2/VZ guest OS ships
+        // none). Leave the index absent for in-container materialization —
+        // every forge image carries git and can `read-tree HEAD` against
+        // the nested objects/refs mounts. Aborting here instead collapses
+        // the whole facade into the empty fail-closed 0700 .git mask that
+        // order 382 observed in the field.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!(
+                "[tillandsias] forge gitdir facade: no `git` on this host; \
+                 index left for in-container materialization"
+            );
+            return Some(());
+        }
+        _ => None,
+    };
 
     let mut command = Command::new("git");
     command
@@ -5897,7 +5960,11 @@ fn write_forge_index(root: &Path, project_path: &Path, host_gitdir: &Path) -> Op
     } else {
         command.arg("--empty");
     }
-    command.status().ok()?.success().then_some(())
+    match command.status() {
+        Ok(status) => status.success().then_some(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(()),
+        Err(_) => None,
+    }
 }
 
 fn sanitize_forge_origin_url(origin: &str) -> Option<String> {
@@ -5999,36 +6066,37 @@ fn write_forge_repo_gitdir(project_name: &str, project_path: &Path) -> Option<Fo
         }
     }
 
+    // Written directly (not via `git config`) so facade staging works on
+    // hosts without a git binary — the same git-less-guest constraint as
+    // read_host_project_origin_url. Values are fixed strings plus the
+    // sanitized origin (control characters already rejected), so no
+    // escaping is needed.
     let config_path = root.join("config");
-    std::fs::write(&config_path, []).ok()?;
-    git_config_set(&config_path, "core.repositoryformatversion", "0")?;
-    git_config_set(&config_path, "core.bare", "false")?;
-    git_config_set(&config_path, "core.logallrefupdates", "true")?;
-    git_config_set(&config_path, "gc.auto", "0")?;
-    git_config_set(&config_path, "maintenance.auto", "false")?;
-    git_config_set(&config_path, "push.autoSetupRemote", "true")?;
-    git_config_set(&config_path, "push.default", "current")?;
-    git_config_set(
-        &config_path,
-        "core.hooksPath",
-        "/home/forge/.cache/tillandsias/git-hooks",
-    )?;
-
+    let mut local_config = String::new();
+    local_config.push_str("[core]\n");
+    local_config.push_str("\trepositoryformatversion = 0\n");
+    local_config.push_str("\tbare = false\n");
+    local_config.push_str("\tlogallrefupdates = true\n");
+    local_config.push_str("\thooksPath = /home/forge/.cache/tillandsias/git-hooks\n");
+    local_config.push_str("[gc]\n\tauto = 0\n");
+    local_config.push_str("[maintenance]\n\tauto = false\n");
+    local_config.push_str("[push]\n\tautoSetupRemote = true\n\tdefault = current\n");
     if let Some(origin) = read_host_project_origin_url(project_path)
         .as_deref()
         .and_then(sanitize_forge_origin_url)
     {
-        git_config_set(&config_path, "remote.origin.url", &origin)?;
-        git_config_set(
-            &config_path,
-            "remote.origin.fetch",
-            "+refs/heads/*:refs/remotes/origin/*",
-        )?;
+        local_config.push_str("[remote \"origin\"]\n");
+        local_config.push_str(&format!("\turl = {origin}\n"));
+        local_config.push_str("\tfetch = +refs/heads/*:refs/remotes/origin/*\n");
     }
+    std::fs::write(&config_path, local_config.as_bytes()).ok()?;
     write_forge_index(&root, project_path, &host_gitdir)?;
 
     // Order 382: the facade AND the bind-mounted host trees must be
     // readable by the forge uid. No-op unless running as root (guest lane).
+    // Also load-bearing for the git-less staging path above: an unwritable
+    // root-owned facade makes the in-container index materialization
+    // (`git read-tree HEAD`) fail EACCES.
     #[cfg(unix)]
     {
         chown_tree_to_forge_uid(&root);
@@ -12096,6 +12164,73 @@ mod tests {
             Some(h) => unsafe { std::env::set_var("HOME", h) },
             None => unsafe { std::env::remove_var("HOME") },
         }
+    }
+
+    // Pins the git-less-host fallback for the mirror insteadOf injection
+    // (order 350 root cause: the WSL2/VZ guest OS has no `git` binary, so
+    // the Command::new("git") path returns None and the wire lane lost its
+    // push channel). The parser must read a plain clone's config without
+    // shelling out.
+    #[test]
+    fn parse_gitdir_origin_url_reads_plain_clone_config() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("cloned");
+        let git_dir = project_path.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("create .git");
+        std::fs::write(
+            git_dir.join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\
+             [remote \"origin\"]\n\turl = https://github.com/8007342/tillandsias.git\n\
+             \tfetch = +refs/heads/*:refs/remotes/origin/*\n\
+             [branch \"main\"]\n\tremote = origin\n",
+        )
+        .expect("write config");
+
+        assert_eq!(
+            parse_gitdir_origin_url(&project_path).as_deref(),
+            Some("https://github.com/8007342/tillandsias.git")
+        );
+    }
+
+    #[test]
+    fn parse_gitdir_origin_url_follows_gitdir_pointer_file() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("worktree");
+        std::fs::create_dir_all(&project_path).expect("create worktree");
+        let real_gitdir = tmp.path().join("gitdirs").join("worktree");
+        std::fs::create_dir_all(&real_gitdir).expect("create real gitdir");
+        std::fs::write(
+            project_path.join(".git"),
+            format!("gitdir: {}\n", real_gitdir.display()),
+        )
+        .expect("write pointer");
+        std::fs::write(
+            real_gitdir.join("config"),
+            "[remote \"origin\"]\n\turl = git@github.com:org/repo.git\n",
+        )
+        .expect("write config");
+
+        assert_eq!(
+            parse_gitdir_origin_url(&project_path).as_deref(),
+            Some("git@github.com:org/repo.git")
+        );
+    }
+
+    #[test]
+    fn parse_gitdir_origin_url_ignores_other_remotes_and_missing_origin() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("no-origin");
+        let git_dir = project_path.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("create .git");
+        std::fs::write(
+            git_dir.join("config"),
+            "[core]\n\tbare = false\n\
+             [remote \"upstream\"]\n\turl = https://github.com/other/repo.git\n",
+        )
+        .expect("write config");
+
+        assert_eq!(parse_gitdir_origin_url(&project_path), None);
+        assert_eq!(parse_gitdir_origin_url(&tmp.path().join("absent")), None);
     }
 
     #[test]
