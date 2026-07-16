@@ -18,6 +18,29 @@ remaining work on YOUR active packets: major feature iterations double as
 test/refinement runs for what's already in flight. Milestone:
 web-share-release-milestone (order 373).
 
+## Cycle 2026-07-16T08:24Z→08:30Z (forge — meta-orchestration: order 374 DONE — MCP discoverability litmus + spec tool-surface requirement)
+
+- **Host**: forge, `linux-next`, agent linux-bigpickle-opencode-20260716T0824Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.Pa1w6s` — 3 pre-existing dirty paths
+  (package-lock.json, two plan issues; all sibling/operator work, preserved).
+- **Sibling heads**: main 9b217958, linux-next e37711f0, osx-next 8c806811,
+  windows-next 92311850. Already up to date.
+- **Order 374 DONE**: all three exit criteria satisfied. Criterion 1 (organic
+  tools/list discovery) demonstrated by Hy3 session (2026-07-16T05:05Z).
+  Criterion 2 (live publish_local through mcp.sock tunnel) verified
+  (2026-07-16T03:20Z). Criterion 3 (discoverability litmus) closed:
+  created `litmus-mcp-discoverability-shape.yaml` (instant, pre-build, 8
+  steps: config-overlay MCP entry, web-services.md tool documentation,
+  tray handler tools/list surface, server name). Added tool-surface
+  requirement to `spec:forge-environment-discoverability` (3 scenarios:
+  agent discovers publish tools via tools/list, config-overlay MCP entry
+  points to bridge, web-services instruction documents tool family).
+- **Worker drain**: one packet drained (374), per recurrent-loop budget.
+  Order 375 (visual-chess-harness-publish-e2e) now unblocked — deps 374
+  and 364 both done.
+- **E2E gates**: skipped — forge host, no podman needed for this packet.
+
 ## Cycle 2026-07-16T07:31Z→09:2xZ (windows — GOAL cycle: in-forge meta-orchestration + transparent mirror push; order 350 root cause FOUND+FIXED)
 
 - **Host**: windows (Yolanda), `windows-next`, agent
