@@ -14057,3 +14057,52 @@ plan_index:
             Filed from the order-350 live evidence run; unblocked in-run
             by removing the stale container (fixture cleanup, recorded).
             Provisional order per order_number_assignment.
+
+    - packet_id: guest-staged-gitdir-root-owned
+      order: 382
+      release_target: stable-milestone-v1
+      title: "P1: guest-staged forge gitdir is root-owned/700 on WSL2 — forge user cannot read git metadata; credential guard fail-closes every in-forge cycle"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs (write_forge_repo_gitdir + guest materialization ownership)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, git, wsl, windows, forge, permissions]
+      estimated_hours: 4
+      outcome: >
+        Live repro 2026-07-16, operator's Windows curl-install of
+        v0.3.260716.1 (github login OK, OpenCode launch OK): the in-forge
+        agent (Hy3) ran the meta-orchestration smoke and correctly
+        diagnosed 'MO-SMOKE: FAIL — /home/forge/src/tillandsias/.git is
+        root-owned mode 700; forge (uid 1000, no sudo) cannot read it; git
+        rev-parse fails; check-credential-channel.sh reports
+        missing:no-credential-channel; entire cycle halts per the exit
+        contract.' Mechanism: write_forge_repo_gitdir stages the facade
+        gitdir as the invoking process uid — Linux native desktop = uid
+        1000 + keep-id (readable); WSL2 guest headless runs as ROOT
+        (systemd unit; order 309's least-privilege split is still open) so
+        the staged gitdir + materialized checkout land root-owned. The 700
+        mode source needs guest-side confirmation (umask/clone path).
+        Shaped fix: when the guest stages for a forge whose in-container
+        uid is 1000, chown the staged gitdir + checkout to 1000 (or create
+        via a dropped-privilege helper); pin with a guest-lane litmus
+        asserting the forge user can `git rev-parse` in a fresh
+        curl-install launch. Interim operator workaround (verified path by
+        Hy3): from the guest as root — chown -R forge:forge
+        /home/forge/src/tillandsias/.git && chmod -R u+rwX,go+rX
+        /home/forge/src/tillandsias/.git.
+      exit_criteria:
+        - "fresh Windows curl-install launch: in-forge `git rev-parse HEAD` and check-credential-channel.sh pass without manual chown"
+        - "guest-lane litmus pins staged-gitdir readability for the forge uid"
+        - "macOS VZ lane spot-checked for the same class (same shared guest binary)"
+      events:
+        - type: filed
+          ts: "2026-07-16T06:35:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            Filed from the operator's Windows curl-install session; Hy3's
+            in-forge smoke report is the primary evidence (correct
+            MO-SMOKE grammar + smallest-next-action). Related: order 309
+            (guest least-privilege — running the headless as non-root
+            would dissolve this class), order 350 (windows parity gate).
