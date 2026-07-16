@@ -49,6 +49,18 @@ sanction (vault held no secrets; token 404).
       sweep clean; ships with the next release). Packet narrowed to the
       remaining verifiable closure: the bash -u -n + no-non-ASCII-abutting-
       expansion litmus.
+  - type: done
+    ts: "2026-07-16T11:50:00Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T1124Z"
+    host: macos
+    commits: [e2b6bf06]
+    summary: >
+      Verifiable closure landed: litmus:installer-ascii-expansion-safety
+      (bash -n + perl byte-level expansion-adjacency guard; catches the
+      original defect on a fixture, passes the fixed tree). Same commit
+      fixes build-macos-tray.sh to stage target-guest/, turning
+      litmus:guest-binary-embed-integrity green on macOS — ci-release
+      suite 5/5. Packet CLOSED.
 
 ### Work Packet: smoke-finding/resolver-races-inflight-release-workflow
 
