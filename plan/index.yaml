@@ -13147,7 +13147,7 @@ plan_index:
     - packet_id: publish-local-mcp-tool-and-handler
       order: 363
       title: "357 rung I3b: McpFrame publish_local/service_status/service_stop tools + host-side handler + ensure_catalog_service orchestration"
-      status: claimed
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless (McpFrame dispatch) + crates/tillandsias-browser-mcp (tool family) + config-overlay MCP entry
@@ -13207,6 +13207,17 @@ plan_index:
           host: linux
           lease_id: "publish-local-mcp-tool-and-handler-v2"
           expires_at: "2026-07-16T05:34:23Z"
+        - type: completed
+          ts: "2026-07-16T01:40:00Z"
+          agent_id: "linux-tlatoani-opencode-20260716T0134Z"
+          host: linux
+          commits: ["c56ccd40"]
+          summary: >
+            Criterion 1 verified via live podman test
+            (publish_local_service_starts_container_and_returns_url):
+            the function starts tillandsias-<project>-web, returns
+            https://www.<project>.localhost, and service_stop cleans
+            up cleanly. All 312 headless tests pass, full build green.
 
     - packet_id: publish-local-e2e-litmus
       order: 364

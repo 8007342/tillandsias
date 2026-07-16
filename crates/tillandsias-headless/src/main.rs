@@ -13244,4 +13244,31 @@ mod tests {
             "timestamp= must end with Z; got {ts_field}"
         );
     }
+
+    #[cfg(feature = "tray")]
+    #[test]
+    fn publish_local_service_starts_container_and_returns_url() {
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            let _ = std::fs::create_dir_all(
+                crate::local_projects::host_project_root().join("test-publish-e2e"),
+            );
+            std::fs::write(
+                crate::local_projects::host_project_root().join("test-publish-e2e/index.html"),
+                b"<html><body>e2e</body></html>",
+            )
+            .ok();
+        });
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let url = rt
+            .block_on(publish_local_service("test-publish-e2e", "WEB", false))
+            .expect("publish_local_service should succeed");
+
+        assert_eq!(url, "https://www.test-publish-e2e.localhost");
+
+        rt.block_on(service_stop("WEB", "test-publish-e2e", false))
+            .expect("service_stop should succeed");
+    }
 }

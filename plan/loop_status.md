@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-16T01:05:00Z
+LastExecutionTime: 2026-07-16T01:41:00Z
 
 ## Direction — what are we all doing today
 
@@ -95,6 +95,19 @@ web-share-release-milestone (order 373).
 - **Worker drain**: one packet drained (225), per recurrent-loop budget.
   E2E gates skipped — not linux_immutable host, and no podman session
   needed for this packet.
+
+## Cycle 2026-07-16T01:34Z→01:40Z (linux — meta-orchestration: order 363 DONE — live publish e2e verified)
+
+- **Host**: linux_mutable, `linux-next`, agent linux-tlatoani-opencode-20260716T0134Z.
+  Credential guard `ok:gh-keyring`; boundary snapshot clean (dirty-start preflight
+  passed); merged origin/linux-next already up to date.
+- **Order 363 DONE**: all 4 exit criteria met. Criterion 1 verified via live
+  podman test: `publish_local_service` starts `tillandsias-<project>-web`,
+  returns `https://www.<project>.localhost`, and `service_stop` cleans up.
+  Added `publish_local_service_starts_container_and_returns_url` as a
+  `#[cfg(feature = "tray")]` fixture test. 312/312 headless tests pass,
+  `./build.sh --check` green.
+- **Worker drain**: one packet drained (363), per recurrent-loop budget.
 
 ## Cycle 2026-07-15T19:42Z→20:20Z (windows — HYBRID: linux order 238 DONE from the windows lane via wsl2 wrappers; decision boundary codified in methodology)
 
