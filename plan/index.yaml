@@ -14238,3 +14238,70 @@ plan_index:
             rewrite injected on the wire lane and the
             tillandsias-git-tillandsias mirror container up for the
             first time on Windows (both were the order-350 RED).
+        - type: progress
+          ts: "2026-07-16T09:05:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          summary: >
+            DEMONSTRATION RAN END-TO-END minus one bug: BigPickle full
+            in-forge cycle on the fixed lane — pulled linux-next through
+            the mirror transparently, drained an order-374 slice (spec
+            tool-surface requirement + litmus-mcp-discoverability-shape,
+            8/8 in-lane), committed e8b29bac. Push REJECTED LOUDLY by
+            the order-318 verified-ack relay: mirror container had no
+            /run/secrets/vault-token mount (silent mint/mount failure at
+            ensure — filed windows-260716-2, the LAST transparency
+            blocker). Commit recovered from the guest checkout and
+            host-relayed to linux-next (rebased onto 2f8d53f1). Exit
+            criteria 1 remains open on windows-260716-2; criterion 2
+            (zero manual git config in-forge) PROVEN this run.
+
+    - packet_id: git-mirror-container-created-without-relay-credential
+      provisional_id: windows-260716-2
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "P1: per-project mirror container created WITHOUT the vault-token secret — relay fail-closes every in-forge push; mint/mount failure is silent"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs (mint_git_mirror_vault_token + ensure/recreate path) + images/git evidence
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, vault, containers, rust, forge]
+      estimated_hours: 3
+      outcome: >
+        Live Windows repro 2026-07-16 ~08:38Z (goal cycle, guest headless
+        v0.3.260716.5, images v0.3.260715.6): BigPickle's in-forge push
+        was rejected by relay-refs.sh with "HTTPS upstream credential is
+        unavailable" because the running tillandsias-git-tillandsias
+        container had NO /run/secrets/vault-token mount — podman inspect
+        showed only the repo volume + CA cert. Three
+        tillandsias-vault-token-git-mirror-tillandsias-* podman secrets
+        exist from earlier bring-ups the same morning, so minting works;
+        the failing bring-up created the container without the secret
+        arg and NOTHING surfaced the degradation
+        (mint_git_mirror_vault_token returns None best-effort → caller
+        silently builds a credential-less mirror; same silent-None class
+        as the order-350 facade abort). Fix direction: fail loud or
+        fail-closed at ensure when the mint returns None (the mirror
+        should not come up push-incapable while vault holds a GitHub
+        token), surface the mint error, and pin with a litmus that a
+        freshly ensured mirror has the vault-token mount whenever vault
+        is initialized. Note lane teardown ("cleaning project + shared
+        stack") recreates the mirror per lane — every recreate re-rolls
+        the dice. Related: order 319 (credential-helper broker) is the
+        durable ladder rung; this packet is the sharp regression slice.
+      exit_criteria:
+        - "freshly ensured per-project mirror has /run/secrets/vault-token mounted whenever vault is up + initialized (litmus-pinned)"
+        - "mint/mount failure is loud: ensure logs an actionable error and the lane launch surfaces it (no silent credential-less mirror)"
+        - "in-forge push relays to GitHub with zero manual credential steps (windows-260716-1 criterion 1 flips)"
+      events:
+        - type: filed
+          ts: "2026-07-16T09:10:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          summary: >
+            Filed from the goal-cycle live rejection; full evidence in
+            plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md
+            §4. Linux builder window active — highest-value pickup: this
+            is the LAST blocker between BigPickle/Hy3 and transparent
+            in-forge pushes on Windows.
