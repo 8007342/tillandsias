@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-16T08:30:00Z
+LastExecutionTime: 2026-07-16T09:15:00Z
 
 ## Direction — what are we all doing today
 
@@ -40,6 +40,59 @@ web-share-release-milestone (order 373).
   Order 375 (visual-chess-harness-publish-e2e) now unblocked — deps 374
   and 364 both done.
 - **E2E gates**: skipped — forge host, no podman needed for this packet.
+
+## Cycle 2026-07-16T07:31Z→09:2xZ (windows — GOAL cycle: in-forge meta-orchestration + transparent mirror push; order 350 root cause FOUND+FIXED)
+
+- **Host**: windows (Yolanda), `windows-next`, agent
+  windows-bullo-fable5-20260716T0731Z (operator-directed goal session).
+  Guard `ok:gh-keyring`; boundary `/tmp/meta-orchestration-boundary.7ZM7YB`
+  clean. Operator directive: successful /meta-orchestration INSIDE the
+  forge with transparent push; linux builder active ~07:30→12:30Z on
+  45-min cycles for linux-owned pickups.
+- **Coordination**: merged origin/linux-next twice (0b16fa02 fast-forward
+  at cycle start; 2f8d53f1 mid-cycle with an order-382 DOUBLE-FIX
+  reconciliation — linux dd34cd8a chown_tree_to_forge_uid kept, my
+  duplicate helper dropped, both progress events preserved; all pins pass
+  post-merge). Wrapped ./build.sh --check green pre- and post-merge.
+- **Order 350 ROOT CAUSE (one bug, three symptoms)**: the WSL2/VZ guest OS
+  ships NO git binary; read_host_project_origin_url + facade staging shell
+  out to it → (a) insteadOf rewrite silently omitted, (b) mirror container
+  never told its upstream (absent from every prior Windows lane),
+  (c) facade abort → fail-closed empty 0700 .git mask = Hy3's "root-owned
+  mode 700" (order 382, same root cause). The 2026-07-15 "linux-owned
+  lane-launch injection gap" verdict was wrong in mechanism; additionally
+  masked by the no-origin parity fixture.
+- **Fixes (windows-next)**: parse_gitdir_origin_url fallback (3 pins),
+  git-less facade staging (direct config write; index ENOENT-soft,
+  in-container materialization; chown reconciled to linux's helper).
+  Hot-swapped current-checkout guest headless v0.3.260716.5 into the
+  registered runtime (musl via wsl2 wrapper; NO re-provision — vault +
+  operator GitHub auth preserved deliberately).
+- **Live wire-lane probes (project WITH origin)**: insteadOf injected ✓,
+  tillandsias-git-tillandsias mirror container UP (first time on
+  Windows) ✓, in-forge `git rev-parse` ✓, guard `ok:forge-git-mirror` ✓,
+  fetch through mirror serving live upstream deltas ✓, push dry-run
+  accepted ✓. Full table: order-350 evidence doc 2026-07-16 addendum.
+- **E2E gates**: `e2e-preflight eligibility` = `eligible`; destructive
+  local-build gate DEFERRED this cycle with recorded reason — re-provision
+  wipes the vault (operator re-login is attended) and the goal needed the
+  provisioned substrate. Yesterday's destructive PASS stands (f32e84f9).
+- **Filed**: goal packet windows-260716-1 (in-forge transparent push),
+  optimization/build-guest-binaries-stale-staging (CARGO_TARGET_DIR
+  redirect stages stale binaries; masked-exit near-miss recurrence),
+  goal evidence doc inforge-meta-orchestration-transparent-push-2026-07-16.
+- **BigPickle in-forge cycle (the goal demonstration)**: launched
+  `--cloud tillandsias --opencode --prompt "Use the /meta-orchestration
+  skill"` on the fixed lane; agent pulled linux-next THROUGH THE MIRROR
+  transparently (zero manual git config), drained an order-374 slice
+  (spec tool-surface requirement + litmus-mcp-discoverability-shape,
+  8/8 in-lane), committed e8b29bac. Push REJECTED LOUDLY by the 318
+  verified-ack relay — the mirror container had NO vault-token secret
+  mounted (silent mint/mount failure at ensure; NEW P1
+  windows-260716-2, the LAST transparency blocker, linux pickup).
+  Commit recovered from the guest checkout and host-relayed to
+  linux-next (rebased onto 2f8d53f1). Honest-failure architecture
+  verified end-to-end; no silent loss anywhere.
 
 ## Cycle 2026-07-15T21:07Z→2026-07-16T01:05Z (linux — full meta-orchestration: recovery, order 363, gate-wedge root-cause saga, FRESHNESS directive, RELEASE v0.3.260716.1)
 

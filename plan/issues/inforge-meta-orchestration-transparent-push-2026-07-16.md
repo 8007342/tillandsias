@@ -67,4 +67,47 @@
 
 ## Live evidence (2026-07-16, this cycle)
 
-(appended as produced — see order-350 evidence doc for the probe protocol)
+Probe protocol + full table: order-350 evidence doc, 2026-07-16 addendum.
+Guest headless hot-swapped to current-checkout v0.3.260716.5; registered
+runtime preserved (no re-provision; vault + operator GitHub auth intact).
+
+1. **Wire-lane probes GREEN** (project `tillandsias`, HAS origin):
+   insteadOf injected; `tillandsias-git-tillandsias` mirror container UP
+   with DNS (first time on Windows); in-forge `git rev-parse` works;
+   credential guard `ok:forge-git-mirror`; fetch through the mirror
+   served live upstream deltas; push dry-run accepted.
+2. **BigPickle full in-forge /meta-orchestration cycle ran**
+   (`--cloud tillandsias --opencode --prompt "Use the /meta-orchestration
+   skill"`): took its boundary snapshot, pulled linux-next THROUGH THE
+   MIRROR transparently (zero manual git config), selected order-374
+   discoverability work, added a spec tool-surface requirement + NEW
+   `litmus-mcp-discoverability-shape.yaml` (8/8 steps PASS in-lane),
+   updated plan ledger files, committed `e8b29bac
+   checkpoint(order-374)`.
+3. **Push: REJECTED LOUDLY — the order-318 verified-ack mirror working
+   as designed.** `[relay] HTTPS upstream credential is unavailable` →
+   `[pre-receive] Push rejected: configured upstream did not durably
+   accept the ref transaction` → `! [remote rejected]`. No false
+   success, no silent loss (contrast: the 07-12/07-13 P1 incidents).
+   The commit stayed durable in the guest checkout refs (the facade
+   bind-mount design), where the host tier recovered it.
+4. **NEW P1 (the LAST blocker, filed windows-260716-2)**: the mirror
+   container was created with NO `/run/secrets/vault-token` mount —
+   `mint_git_mirror_vault_token` mints AppRole tokens (3 secrets exist
+   from earlier bring-ups: …-6385, …-23077, …-18365) but the ensure
+   created the final container without any secret arg, and the failure
+   is SILENT (mint returns None → fail-open credential-less mirror).
+   relay-refs.sh then has no token for `secret/github/token` and
+   correctly fail-closes. Same silent-None disease class as the facade
+   abort this cycle fixed.
+5. **Host-tier recovery**: `e8b29bac` fetched from the guest checkout
+   over UNC, rebased onto the meanwhile-advanced linux-next
+   (`2f8d53f1`, coordinator heartbeat), relayed to GitHub by the host
+   session. Work preserved; transparency criterion stays OPEN on
+   windows-260716-2.
+
+**Goal status**: in-forge cycle ✓, mirror-transparent fetch ✓, honest
+verified-ack push channel ✓, commit durability ✓, ZERO manual git
+config in-forge ✓; transparent RELAY blocked by exactly one
+linux-owned bug (windows-260716-2). Recurring cadence additionally
+needs windows-260715-4 (collision) + order-382 index materialization.
