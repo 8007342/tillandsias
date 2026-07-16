@@ -4,8 +4,11 @@ spec: git-mirror-service
 phase: pre-build
 description: >
   Offline receive-pack fixture proving a configured upstream failure rejects
-  the forge push, a verified relay converges both repositories, and multi-ref
-  relay is atomic with explicit non-force refspecs.
+  the forge push, a verified relay converges both repositories, multi-ref
+  relay is atomic with explicit non-force refspecs, and a rejected stale push
+  auto-reconciles the mirror's exported heads from upstream (order 369) while
+  preserving locally stranded heads. The fixture is hermetic against forge
+  global git config (GIT_CONFIG_GLOBAL core.hooksPath redirection).
 severity: critical
 size: instant
 
@@ -14,10 +17,15 @@ preconditions:
   - workspace contains scripts/test-git-mirror-relay-verified-ack.sh
 
 critical_path:
-  - step: "missing credential fails the client ack; success converges; multi-ref rejection is atomic"
+  - step: "missing credential fails the client ack; success converges; multi-ref rejection is atomic; stale-push rejection auto-reconciles the mirror"
     command: "scripts/test-git-mirror-relay-verified-ack.sh"
     timeout_ms: 60000
-    expected_behavior: "PASS: git mirror relay-verified acknowledgement fixture (order 318)"
+    expected_behavior: "PASS: git mirror relay-verified acknowledgement fixture (orders 318+369)"
+
+  - step: "failed relay reconciles exported heads via a non-forced fetch outside quarantine"
+    command: "grep -Fq \"env -u GIT_QUARANTINE_PATH\" images/git/relay-refs.sh && grep -Fq \"'refs/heads/*:refs/heads/*'\" images/git/relay-refs.sh && ! grep -Fq \"'+refs/heads/*:refs/heads/*'\" images/git/relay-refs.sh && echo 'ok: non-forced reconcile shape'"
+    timeout_ms: 5000
+    expected_behavior: "ok: non-forced reconcile shape"
 
   - step: "must-succeed relay is pre-receive, atomic, and explicit-ref only"
     command: "grep -Fq 'tillandsias-relay-refs' images/git/pre-receive-hook.sh && grep -Fq 'git push --atomic \"$PUSH_URL\" $REFSPECS' images/git/relay-refs.sh && ! grep -Eq 'git push (--mirror|--all)' images/git/relay-refs.sh && echo 'ok: relay ack shape'"
