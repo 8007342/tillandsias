@@ -214,6 +214,40 @@ web-share-release-milestone (order 373).
   Commit `5dda534f`, pushed to `linux-next`.
 - **Worker drain**: one packet drained (364), per recurrent-loop budget.
 
+## Cycle 2026-07-16T10:24Z→11:30Z (macos — meta-orchestration: v0.3.260716.7 curl-install e2e — release carries the goal chain from a WIPED substrate; installer bash-3.2 bug hot-fixed; in-forge litmus grading triaged)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T1024Z
+  (operator /loop iteration 4). Guard `ok:gh-keyring`; boundary clean; merged
+  origin/linux-next d25c4598 (coordinator merged our chain evidence; release
+  v0.3.260716.7 cut, containing 35253356 + 559190c3 + windows fixes).
+- **Curl-install e2e (channel daily, tag v0.3.260716.7)** — report:
+  plan/issues/smoke-e2e-findings-v0.3.260716.7-2026-07-16.md.
+  - Step 1 install: PASS to /Applications (sha256 ok, release build
+    2d3c9095) with TWO findings: installer died post-install on a
+    bash-3.2 multibyte-ellipsis unbound variable (HOT-FIXED e15d34fe,
+    ships next release) and the smoke skill verified ~/Applications while
+    the installer targets /Applications (skill fixed same commit). Plus a
+    resolver race: the release workflow was still in_progress — macOS
+    assets landed ~9 min after Linux published the tag (packet filed).
+  - Steps 2-3: destructive reset (17G) + pristine --provision: PASS.
+  - Step 4: **harness PASS — the published release carries the full goal
+    chain from nothing, unattended**: five images built from release
+    assets, lane launched with no vault refusal (shipped ForgeLaunch
+    ensure), big-pickle ran the smoke runbook, well-formed verdict, clean
+    teardown exit 0. The verdict content was FAIL (10 litmus: cheatsheet
+    trio, guest-binary-embed, default-image-shape, onboarding,
+    standalone-runtime, dirty-tree-safety, diagnostics-stream,
+    podman-path) — triaged as mostly forge-context-INELIGIBLE tests +
+    known debt; packet
+    smoke-finding/inforge-litmus-context-eligibility-and-verdict-grammar
+    files the two-slice fix (host-kind gates; verdict grammar must define
+    known-failure handling — same state graded PASS at 08:27Z and FAIL at
+    11:15Z).
+- **Goal state**: unchanged residual — operator `--github-login` (token
+  404 rechecked 10:28Z). Everything else now ships in the public release.
+- **Worker drain**: curl-install e2e gate + two hot fixes (installer,
+  skill doc), per recurrent-loop budget.
+
 ## Cycle 2026-07-16T09:24Z→10:30Z (macos — meta-orchestration: TRANSPARENT-PUSH CHAIN LIVE on the macOS forge lane — push --dry-run clean through the mirror; only the operator credential remains)
 
 - **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0924Z
