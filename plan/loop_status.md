@@ -214,6 +214,37 @@ web-share-release-milestone (order 373).
   Commit `5dda534f`, pushed to `linux-next`.
 - **Worker drain**: one packet drained (364), per recurrent-loop budget.
 
+## Cycle 2026-07-16T09:24Z→10:30Z (macos — meta-orchestration: TRANSPARENT-PUSH CHAIN LIVE on the macOS forge lane — push --dry-run clean through the mirror; only the operator credential remains)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0924Z
+  (operator /loop iteration 3). Guard `ok:gh-keyring`; boundary clean; merged
+  origin/linux-next 4383ea9b (FF; brings windows-260716-2 mint-fails-loud +
+  parse_gitdir_origin_url + the Linux GOAL-cycle close).
+- **Fixed (35253356)**: (a) ForgeLaunch lacked a Vault edge in the order-227
+  dependency graph and run_opencode_mode (ad-hoc, pre-model) never ensured
+  vault — windows-260716-2's fail-loud correctly refused the fresh-boot lane
+  with "Vault container is not running"; graph edge added + lane ensures
+  vault via spawn_blocking. (b) quiet-PTY heartbeat test sourced the
+  operator's ~/.profile through the allowlisted -lc shell (flaked on macOS);
+  hermetic empty HOME via the test's controlled env. 227/227 bin tests.
+- **Probe series (unattended one-shot --opencode)**: refusal → vault
+  self-bootstrap + mirror rewrite LIVE (parse_gitdir_origin_url works on the
+  VZ guest) → after purging stale guest images (three coexisting tag
+  generations!) and on-demand rebuild from fresh embedded assets:
+  `remote.origin.url` = clean GitHub HTTPS, insteadOf resolves fetch+push to
+  `git://tillandsias-git/tillandsias`, and **`git push --dry-run` is CLEAN
+  through the mirror**. Report:
+  plan/issues/macos-inforge-transparent-push-chain-live-2026-07-16.md.
+- **Order 349**: criteria 1+2 PASS live, 3 partial (dry-run clean; real push
+  token-gated) — packet blocked→ready; clone-lane misalignment issue
+  RESOLVED (addendum in file). FRESHNESS datum: on-demand ensure rebuilds
+  missing tags but never retires stale ones (fed to 334/370-372 burndown).
+- **Goal state (operator)**: macOS lane has NO remaining code gaps as
+  measured — a full in-forge /meta-orchestration with real push needs only
+  `--github-login` (token 404 rechecked 09:25Z).
+- **Worker drain**: one packet (order 349 + the two lane fixes), per
+  recurrent-loop budget.
+
 ## Cycle 2026-07-16T08:24Z→08:50Z (macos — meta-orchestration: GOAL SMOKE RUNG DONE — first in-forge /meta-orchestration smoke PASS on macOS (big-pickle); clone-lane origin fix landed)
 
 - **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0824Z

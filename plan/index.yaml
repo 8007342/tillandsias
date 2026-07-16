@@ -11197,7 +11197,10 @@ plan_index:
       provisional_id: linux-260714-5
       release_target: stable-milestone-v1
       title: "macOS current-build forge live config, mirror, and TLS parity gate"
-      status: blocked
+      # 2026-07-16: back to ready — both blockers cleared live (mirror
+      # rewrite via parse_gitdir_origin_url; clone-lane push remote
+      # resolved). Closing run needs the operator vault github token.
+      status: ready
       kind: verification
       deliverable: attended macOS VZ forge evidence packet
       depends_on:
@@ -11217,6 +11220,26 @@ plan_index:
         - "inside the public macOS forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: progress
+          ts: "2026-07-16T10:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T0924Z"
+          host: macos
+          lease_id: "macos-forge-config-trust-live-parity-20260716c"
+          commits: [35253356]
+          validation:
+            - "criterion 1 PASS live: current checkout, staged guest 0.3.260716.5 (git 35253356), forge images rebuilt on-demand from its embedded assets"
+            - "criterion 2 PASS live: /home/forge/.gitconfig resolves via --show-origin AND the GitHub->mirror insteadOf rewrite is present and effective (git remote -v resolves fetch+push to git://tillandsias-git/tillandsias)"
+            - "criterion 3 partial: in-forge git push --dry-run through the mirror is CLEAN; real push + TLS parity sweep remain (real push is token-gated: operator --github-login pending)"
+            - "fixed en route (35253356): ForgeLaunch gained the Vault dependency edge (order 227 graph) + opencode lane ensures vault — windows-260716-2's fail-loud had correctly refused the credential-less lane on fresh boot"
+          summary: >
+            Both prior blockers cleared on this lane: guest-git facade
+            dependency bypassed by windows' parse_gitdir_origin_url fallback
+            (mirror rewrite live), and the clone-lane push-remote
+            misalignment RESOLVED (559190c3 + image refresh; issue updated).
+            Full report: plan/issues/
+            macos-inforge-transparent-push-chain-live-2026-07-16.md. Packet
+            back to ready: the closing evidence (real mirror push + TLS
+            parity rerun) is one attended run away once the operator logs in.
         - type: progress
           ts: "2026-07-16T08:40:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T0824Z"
