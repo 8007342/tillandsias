@@ -33,7 +33,7 @@ critical_path:
   # tillandsias containers.conf. An explicit key allowlist is strictly
   # stronger than any count band — anything unexpected fails loud by name.
   - step: "every forge env key is on the explicit allowlist (no unexpected vars)"
-    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1)}\"; unexpected=$(podman run --rm --entrypoint /usr/bin/env \"$FORGE_IMAGE\" | cut -d= -f1 | grep -vxE 'CARGO_HOME|container|DART_ROOT|FLUTTER_ROOT|HOME|LANG|PATH|TILLANDSIAS_CHEATSHEETS|USER|HOSTNAME|https?_proxy|HTTPS?_PROXY|no_proxy|NO_PROXY' || true); [ -z \"$unexpected\" ] && echo 'ok: forge env keys all allowlisted' || { echo \"FAIL: unexpected forge env keys: $unexpected\"; exit 1; }"
+    command: "FORGE_IMAGE=\"${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1)}\"; unexpected=$(podman run --rm --entrypoint /usr/bin/env \"$FORGE_IMAGE\" | cut -d= -f1 | grep -vxE 'CARGO_HOME|container|DART_ROOT|FLUTTER_ROOT|HOME|LANG|NODE_USE_SYSTEM_CA|PATH|TILLANDSIAS_CHEATSHEETS|USER|HOSTNAME|https?_proxy|HTTPS?_PROXY|no_proxy|NO_PROXY' || true); [ -z \"$unexpected\" ] && echo 'ok: forge env keys all allowlisted' || { echo \"FAIL: unexpected forge env keys: $unexpected\"; exit 1; }"
     timeout_ms: 30000
     expected_behavior: "ok: forge env keys all allowlisted"
 
