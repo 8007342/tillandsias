@@ -13792,6 +13792,26 @@ plan_index:
         - "discoverability litmus: config-overlay MCP entry + instructions reference the tool family (instant, pre-build)"
       events:
         - type: progress
+          ts: "2026-07-16T03:20:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            LIVE tray-tunnel publish evidence (exit criterion 2 satisfied):
+            v0.3.260716.3 tray (systemd user unit) serving mcp.sock;
+            unattributed peer denied loudly; attributed session
+            (TILLANDSIAS_PROJECT=visual-chess) got initialize + tools/list
+            (3 tools) + publish_local -> http://www.visual-chess.localhost:8080
+            -> HTTP 200 for /html/www/ (Mnemonicarp index) through
+            router+enclave. Two live bugs found+fixed en route: tools/call
+            needed a multi-thread runtime (39afc15c, block_in_place panic);
+            router/web images lacked on-demand ensure (filed,
+            router-web-images-ondemand-ensure-gap-2026-07-16.md; unblocked
+            via --init). Root-path nuance: raw-source mounts 404 at / when
+            the project has no root index.html (visual-chess serves from
+            /html/www/) — the order 361/376 share-rule/docroot work is the
+            fix, noted there. Remaining for done: fresh-forge-session
+            organic tools/list + discoverability litmus.
+        - type: progress
           ts: "2026-07-16T02:05:00Z"
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
           host: linux
