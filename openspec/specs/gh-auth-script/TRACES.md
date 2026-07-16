@@ -12,7 +12,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/remote_projects.rs#L1](../../../crates/tillandsias-headless/src/remote_projects.rs#L1)
 - [crates/tillandsias-headless/src/tray/cloud.rs#L1](../../../crates/tillandsias-headless/src/tray/cloud.rs#L1)
 - [crates/tillandsias-headless/src/tray/mod.rs#L374](../../../crates/tillandsias-headless/src/tray/mod.rs#L374)
-- [crates/tillandsias-headless/src/tray/mod.rs#L2267](../../../crates/tillandsias-headless/src/tray/mod.rs#L2267)
+- [crates/tillandsias-headless/src/tray/mod.rs#L2334](../../../crates/tillandsias-headless/src/tray/mod.rs#L2334)
 - [crates/tillandsias-macos-tray/src/diagnose.rs#L691](../../../crates/tillandsias-macos-tray/src/diagnose.rs#L691)
 - [scripts/generate-repo-key.sh#L39](../../../scripts/generate-repo-key.sh#L39)
 - [scripts/generate-repo-key.sh#L241](../../../scripts/generate-repo-key.sh#L241)
