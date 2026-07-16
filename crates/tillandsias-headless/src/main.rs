@@ -2444,27 +2444,37 @@ fn parse_gitdir_origin_url(project_path: &Path) -> Option<String> {
 ///
 /// @trace spec:tillandsias-vault
 #[allow(unused_variables)]
-async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<String> {
+/// Mint the per-project git-mirror relay credential (vault AppRole token,
+/// delivered to the container as a podman secret).
+///
+/// windows-260716-2 (P1, live repro on the WSL2 lane 2026-07-16): this
+/// used to return `Option<String>` and swallow mint failures behind a
+/// debug-gated message about a "legacy keyring" fallback that no longer
+/// exists post-Phase 6 — the ensure then created the mirror container
+/// WITHOUT any secret mount, and the broken push channel surfaced only
+/// when relay-refs.sh correctly fail-closed at push time, blocking the
+/// whole in-forge cycle. A mirror without a relay credential is a broken
+/// push channel by construction: fail LOUD at create time instead.
+async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Result<String, String> {
     #[cfg(feature = "vault")]
     {
         let instance = format!("{project_name}-{}", std::process::id());
-        match vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug)
+        vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug)
             .await
-        {
-            Ok((_token, secret_name)) => Some(secret_name),
-            Err(e) => {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] vault AppRole mint failed ({e}); falling back to legacy keyring secret"
-                    );
-                }
-                None
-            }
-        }
+            .map(|(_token, secret_name)| secret_name)
+            .map_err(|e| {
+                format!(
+                    "vault AppRole mint for the git-mirror relay credential failed: {e}. \
+                     Refusing to launch a credential-less mirror — every in-forge push \
+                     would fail-close at relay time (windows-260716-2). Check vault \
+                     health (tillandsias-vault container, unseal state) and retry."
+                )
+            })
     }
     #[cfg(not(feature = "vault"))]
     {
-        None
+        let _ = (project_name, debug);
+        Err("built without the vault feature: no git-mirror relay credential backend".to_string())
     }
 }
 
@@ -4970,7 +4980,17 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
+        let git_vault_secret = match mint_git_mirror_vault_token(project_name, debug).await {
+            Ok(secret) => Some(secret),
+            Err(e) => {
+                // Status-check mirror is a throwaway bare repo (no pushes) —
+                // tolerate, but LOUD (not debug-gated; windows-260716-2).
+                eprintln!(
+                    "[tillandsias] WARNING: status-check mirror launching credential-less: {e}"
+                );
+                None
+            }
+        };
         client
             .run_container_observed(
                 "status-git",
@@ -6809,7 +6829,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                 .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
         }
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
+        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(
                 "opencode-git",
@@ -7863,7 +7883,7 @@ pub(crate) fn run_opencode_web_mode(
             Some(&versioned_image_tag("proxy", version)),
         )?;
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
+        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(
                 "opencode-web-git",
@@ -8282,7 +8302,7 @@ pub(crate) fn ensure_enclave_for_project(
         // @trace plan/issues/launch-paths-route-through-dependency-model
 
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
+        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(
                 "forge-launch-git",
@@ -10239,6 +10259,41 @@ pub(crate) async fn service_stop(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn git_mirror_relay_credential_mint_fails_loud_not_silent() {
+        // windows-260716-2: a mint failure used to return None behind a
+        // debug-gated message, and the ensure launched the mirror WITHOUT
+        // its relay credential — every in-forge push then fail-closed at
+        // relay time. The mint is Result now; real lanes propagate (`?`),
+        // only the throwaway status-check mirror tolerates, loudly.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let mint = source_window(source, "async fn mint_git_mirror_vault_token(");
+        assert!(
+            mint.contains("Result<String, String>"),
+            "mint must be Result — silent Option was the fail-open vector"
+        );
+        assert!(
+            mint.contains("Refusing to launch a credential-less mirror"),
+            "mint error must name the refusal and the packet"
+        );
+        assert!(
+            !mint.contains("legacy keyring"),
+            "the phantom post-Phase-6 fallback message must stay dead"
+        );
+        for lane in ["fn run_opencode_mode(", "fn ensure_enclave_for_project("] {
+            let window = source_window(source, lane);
+            assert!(
+                window.contains("mint_git_mirror_vault_token(project_name, debug).await?"),
+                "{lane} must hard-fail on a missing relay credential"
+            );
+        }
+        let status = source_window(source, "fn run_status_check(");
+        assert!(
+            status.contains("WARNING: status-check mirror launching credential-less"),
+            "status-check tolerance must be loud, not debug-gated"
+        );
+    }
 
     #[test]
     fn forge_gitdir_staging_hands_root_staged_trees_to_forge_uid() {
