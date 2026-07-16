@@ -6829,6 +6829,17 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                 .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
         }
         let git_container_name = format!("tillandsias-git-{project_name}");
+        // windows-260716-2 made the git-mirror relay credential mandatory
+        // (mint fails loud), so the vault is a hard prerequisite of this
+        // lane. This ad-hoc bring-up chain predates the dependency model
+        // (order 227) and never ensured it — a fresh VM boot then refused
+        // the lane with "Vault container is not running" (macOS one-shot
+        // --opencode, live 2026-07-16). spawn_blocking because
+        // ensure_vault_running drives its own runtime.
+        #[cfg(feature = "vault")]
+        tokio::task::spawn_blocking(move || vault_bootstrap::ensure_vault_running(debug))
+            .await
+            .map_err(|e| format!("[OpenCode] vault ensure task panicked: {e}"))??;
         let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(

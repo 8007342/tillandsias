@@ -88,6 +88,12 @@ const DEPS: &[(Service, &[Service])] = &[
             Service::EgressNetwork,
             Service::CaBundle,
             Service::Proxy,
+            // windows-260716-2 made the git-mirror relay credential a hard
+            // launch requirement (mint fails loud), so the vault is now a
+            // structural prerequisite of every forge lane. Without this edge
+            // a fresh boot refuses the lane with "Vault container is not
+            // running" (live: macOS one-shot --opencode, 2026-07-16).
+            Service::Vault,
         ],
     ),
 ];

@@ -661,6 +661,11 @@ mod tests {
 
     #[tokio::test]
     async fn quiet_pty_pump_emits_empty_to_host_heartbeat() {
+        let hermetic_home = std::env::temp_dir()
+            .join(format!("tillandsias-quiet-pty-{}", std::process::id()))
+            .to_string_lossy()
+            .into_owned();
+        std::fs::create_dir_all(&hermetic_home).expect("hermetic HOME creates");
         let (tx, mut rx) = mpsc::channel(64);
         let mut store = PtySessionStore {
             sessions: HashMap::new(),
@@ -677,7 +682,12 @@ mod tests {
                     "-lc".to_string(),
                     "sleep 1".to_string(),
                 ],
-                vec![],
+                // Hermetic HOME: `-lc` (the allowlisted shape) is a login
+                // shell, so it sources $HOME/.profile — on a dev host the
+                // OPERATOR's profile output beats the heartbeat to the
+                // channel (flaked on macOS printing a missing-file warning,
+                // 2026-07-16). An empty HOME has nothing to source.
+                vec![("HOME".to_string(), hermetic_home)],
                 None,
             )
             .await
