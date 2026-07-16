@@ -14096,6 +14096,23 @@ plan_index:
         - "guest-lane litmus pins staged-gitdir readability for the forge uid"
         - "macOS VZ lane spot-checked for the same class (same shared guest binary)"
       events:
+        - type: progress
+          ts: "2026-07-16T07:45:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: >
+            Implementation complete: chown_tree_to_forge_uid in
+            write_forge_repo_gitdir hands the staged facade + bind-mounted
+            host objects/refs trees to uid 1000, gated on euid==0 (guest
+            lane only; Linux native keep-id path untouched), lchown +
+            no-symlink-recursion so a crafted worktree link cannot redirect
+            re-owning. Pinned by
+            forge_gitdir_staging_hands_root_staged_trees_to_forge_uid.
+            ./build.sh --check green. Remaining: criterion 1 needs a fresh
+            Windows curl-install of a release carrying this (tonight's
+            daily); criterion 2 guest-lane litmus; criterion 3 macOS spot
+            check. Windows lane: your current install still needs the
+            manual chown workaround until you pick up the next daily.
         - type: filed
           ts: "2026-07-16T06:35:00Z"
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
