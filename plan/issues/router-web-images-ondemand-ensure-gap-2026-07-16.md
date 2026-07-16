@@ -43,3 +43,20 @@ every version handover.
 2. `--replace` (or stop+wait+rm) on shared-stack ensure runs — fold into
    the existing forge-maintenance-session-name-collision packet as
    extended scope with this repro.
+
+## Addendum: embedded-assets staleness on image rebuilds (same night)
+
+`--init --force` rebuilt all 10 images but from the BINARY's embedded
+runtime assets — which predate any checkout edits made after the binary
+was installed. Fix flow for overlay/entrypoint changes is therefore:
+(a) `./build.sh --install` (re-embeds assets, bumps VERSION, needs new
+images anyway), or (b) developer override `TILLANDSIAS_ROOT=<checkout>
+tillandsias --init --force` (used tonight to deliver the Claude
+bypass-permissions gate + cross-harness web awareness without another
+VERSION hop). Also confirmed: the digest sentinel skips rebuilds on
+overlay content changes entirely (`SKIP forge (digest present)`), so
+without --force NOTHING invalidates — the containerfile-staleness spec
+covers Containerfile mtime and (order 341) skills, but not
+entrypoint/lib-common/config-overlay content. Shaped reduction: content
+digest over the build CONTEXT (not just Containerfile) as the sentinel
+input.
