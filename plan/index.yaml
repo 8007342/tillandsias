@@ -11217,6 +11217,26 @@ plan_index:
         - "inside the public macOS forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: progress
+          ts: "2026-07-16T08:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T0731Z"
+          host: macos
+          lease_id: "macos-forge-config-trust-live-parity-20260716"
+          commits: [1db61fac, c40db47a]
+          validation:
+            - "fresh tray+guest 0.3.260716.5 (git c40db47a) built, smoked, installed — identity criterion now satisfiable (was week-stale Jul-8 ed769a1c-dirty)"
+            - "vault chain live-proven to the credential prompt: bootstrap complete (11 policies), proxy+git images ensured on-demand at v0.3.260716.5, clean 404 on secret/data/github/token (operator --github-login pending)"
+            - "found+fixed live: order-235 R7 backoff panic off-runtime (c40db47a); found+recovered: unseal-secret/storage crash skew (plan/issues/vault-unseal-secret-storage-crash-skew-2026-07-16.md)"
+          summary: >
+            Precondition work for the gate rerun: current build installed and
+            the vault/git-image chain re-proven live after fixing a bootstrap
+            panic and recovering a wedged vault. Gate itself still blocked on
+            the linux guest-git facade fix, and source analysis found a second
+            macOS-lane blocker: the clone lane's push remote falls back to the
+            RO staged path (plan/issues/
+            macos-clone-lane-push-remote-misalignment-2026-07-16.md). In-forge
+            meta-orchestration on macOS additionally needs the operator
+            github-login before pushes can transit the mirror.
         - type: blocked
           ts: "2026-07-15T06:05:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260715T0521Z"
