@@ -60,3 +60,18 @@ covers Containerfile mtime and (order 341) skills, but not
 entrypoint/lib-common/config-overlay content. Shaped reduction: content
 digest over the build CONTEXT (not just Containerfile) as the sentinel
 input.
+
+## Addendum 2: TILLANDSIAS_ROOT override is unusable with --init (spec-vs-code contradiction)
+
+`TILLANDSIAS_ROOT=<checkout> tillandsias --init --force` fails
+`require_desktop_user_session` because `current_runtime_lane()`
+(crates/tillandsias-podman/src/lib.rs) classifies ANY process with
+TILLANDSIAS_ROOT set as RuntimeLane::HeadlessServiceAccount — while
+spec:init-command explicitly promises "TILLANDSIAS_ROOT SHALL remain
+available as an explicit developer override" for exactly this command.
+One of them must change; shaped fix: the service-account lane needs its
+own dedicated marker (e.g. TILLANDSIAS_SERVICE_LANE=1) instead of
+overloading the developer override; the spec's litmus should pin that a
+desktop `TILLANDSIAS_ROOT=… --init` run reaches the build phase.
+Workaround tonight: full ./build.sh --install to re-embed assets (one
+more VERSION hop).
