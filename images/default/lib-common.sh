@@ -1925,6 +1925,24 @@ Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-pla
 
 Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).
 Key skills: \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
+
+## Web servers — you are in a FORGE container (read before starting one)
+
+Two flows; pick by intent:
+
+1. **Dev server (iterating)**: run it in here, but bind \`0.0.0.0\` on the
+   framework's conventional port — NEVER \`localhost\`/\`127.0.0.1\` (that is
+   this container's own loopback; the router cannot reach it and the
+   enclave blocks direct ingress — the server will look dead). Hand the
+   user \`http://${project_name}.<service>.localhost/\` (no port). Full
+   conventions: the web-services instruction / \`tellme about web\`.
+2. **Hosting/publishing** ("host/serve/publish this project"): do NOT run
+   a server in here. Delegate to the host over the MCP tools
+   (\`host-browser\` server): \`publish_local {"category":"WEB"}\` returns
+   \`http://www.${project_name}.localhost:8080\` served by a SIBLING
+   container; \`service_status\` / \`service_stop\` manage it. The host
+   attributes the project from your session — publishing is local-only
+   today (public Cloudflare share is a planned rung).
 CONTEXT_EOF
 
     # Ensure the file is gitignored (idempotent append).

@@ -125,4 +125,15 @@ trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
 # --rm teardown, so the NEXT launch does not re-prompt.
 export TILLANDSIAS_OAUTH_PROVIDER=claude
 export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
-exec /usr/local/bin/codex-oauth-session -- "$CC_BIN" "$@"
+# Mirror of the codex full-auto gate (order 358 family; operator repro
+# 2026-07-16: interactive Claude prompted for every tool call inside the
+# forge — 'regular mode is too slow'). The forge IS the external sandbox
+# (--cap-drop=ALL, enclave egress, credential quarantine order 170), so
+# per-action permission prompts add no security and stall both attended
+# and unattended sessions. Gated on TILLANDSIAS_HOST_KIND=forge so a
+# non-forge invocation keeps Claude's normal permission posture.
+claude_forge_args=()
+if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+    claude_forge_args+=(--dangerously-skip-permissions)
+fi
+exec /usr/local/bin/codex-oauth-session -- "$CC_BIN" "${claude_forge_args[@]}" "$@"
