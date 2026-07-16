@@ -3441,7 +3441,6 @@ enum ForgeMode {
     Web,
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Order 342: guest-owned checkout isolation for host-shared (virtiofs)
 /// project trees. When the launcher exports
 /// `TILLANDSIAS_FORGE_SRC_ISOLATION=clone`, the operator's checkout is
@@ -3457,6 +3456,7 @@ fn forge_src_isolation_requested() -> bool {
     std::env::var("TILLANDSIAS_FORGE_SRC_ISOLATION").is_ok_and(|v| v == "clone")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
     project_name: &str,
