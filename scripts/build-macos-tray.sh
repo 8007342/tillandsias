@@ -107,7 +107,14 @@ build_guest_binary() {
     [[ -x "$bin_path" ]] || die "expected guest binary at $bin_path after zigbuild"
     cp "$bin_path" "$GUEST_DIR/$asset_name"
     chmod 0755 "$GUEST_DIR/$asset_name"
+    # Mirror into the canonical target-guest/ staging so the
+    # litmus:guest-binary-embed-integrity contract (scripts/
+    # build-guest-binaries.sh --verify) holds on macOS-built checkouts too
+    # — this script bypasses build-guest-binaries.sh, and an empty
+    # target-guest/ failed that litmus on every macOS host sweep.
+    install -m 0755 "$bin_path" "$ROOT/target-guest/$asset_name"
 }
+mkdir -p "$ROOT/target-guest"
 
 build_guest_binary "aarch64-unknown-linux-musl" "tillandsias-headless-aarch64-unknown-linux-musl"
 build_guest_binary "x86_64-unknown-linux-musl" "tillandsias-headless-x86_64-unknown-linux-musl"
