@@ -28,6 +28,11 @@ web-share-release-milestone (order 373).
 - **Next action**: resume normal release-targeted selection after the settle
   window expires; current direction remains web-container support under the
   web-share-release-milestone (order 373).
+- **Finalization blocker**: boundary guard `verify` could not run because the
+  forge image lacks `cmp`; it emitted a false worktree-difference verdict after
+  the pushed checkout was clean. Recurrence appended to
+  `plan/issues/forge-build-check-tooling-gap-2026-07-08.md`; owner Linux
+  image/guard tooling, smallest action: add and test the comparator fallback.
 
 ## Cycle 2026-07-16T17:26Z→17:5xZ (forge — meta-orchestration: order 369 CLOSED — auto-reconcile litmus, hermetic fixture fix; order 384 deploy residual filed)
 

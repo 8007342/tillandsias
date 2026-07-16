@@ -106,3 +106,14 @@ ENV-FAILs on it (observed during the first macOS in-forge smoke PASS,
 plan/issues/macos-inforge-smoke-pass-2026-07-16.md). Same reduction as
 `file`: either add the binutils/diffutils tool to the forge image recipe
 or teach the litmus stdlib to degrade to a portable equivalent.
+
+## Addendum 2026-07-16T17:57Z (forge meta-orchestration recurrence)
+
+The failure recurred after commit `8731960a` had been pushed and the checkout
+was clean: `verify` exited 1 at line 88 because `cmp` was absent, then emitted
+the misleading `error: worktree differs from startup boundary`. The external
+snapshot remains at `/tmp/meta-orchestration-boundary.UTVk0l`; it was not
+deleted after the guard failure. Owner: Linux image/guard tooling. Smallest next
+action remains the guard-side `same_file()` fallback described above, pinned by
+a test that runs `verify` with `cmp` absent from `PATH` and expects a truthful
+verdict.
