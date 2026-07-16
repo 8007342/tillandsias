@@ -13774,6 +13774,27 @@ plan_index:
         - "fresh forge session: agent asked 'what tools do you have?' lists publish_local/service_status/service_stop without hints"
         - "live publish_local via the mcp.sock tunnel returns the URL and the container serves (closes order 363 criterion 1)"
         - "discoverability litmus: config-overlay MCP entry + instructions reference the tool family (instant, pre-build)"
+      events:
+        - type: progress
+          ts: "2026-07-16T02:05:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            Bootstrap-awareness slice: web-services.md instruction now opens
+            with forge self-awareness (you are in a forge; two web flows:
+            in-forge dev server vs sibling-container publish via
+            publish_local/service_status/service_stop; session-attributed
+            safety model; local-by-default, cloudflare later) and
+            forge-welcome gained a Publish hint line. Note: order 363
+            criterion 1 was independently closed live by the BigPickle lane
+            (951975f3) — remaining here: fresh-session organic tools/list
+            evidence + the discoverability litmus.
+        - type: claim
+          ts: "2026-07-16T02:00:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          lease_id: "forge-mcp-tools-organic-discoverability"
+          expires_at: "2026-07-16T06:00:00Z"
 
     - packet_id: visual-chess-harness-publish-e2e
       order: 375

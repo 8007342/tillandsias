@@ -1,6 +1,37 @@
 # Web servers inside the Tillandsias forge
 
-When the user asks you to run a web server (Flutter web, Vite, Next.js,
+You are running inside a **Tillandsias forge container**
+(`TILLANDSIAS_HOST_KIND=forge`; your project is `$TILLANDSIAS_PROJECT`).
+Two distinct web flows exist — pick by the user's intent:
+
+1. **Iterating on a dev server** ("run my app", hot reload, debugging) —
+   run the framework's dev server *inside the forge*, following the strict
+   conventions below.
+2. **Hosting/publishing the project** ("host this project", "serve this
+   locally", "publish this") — do **NOT** run a server in the forge.
+   A web service lives in a **sibling container** on the enclave, managed
+   by the host. Delegate through the Tillandsias MCP tools (the
+   `host-browser` MCP server carries them):
+
+   - `publish_local {"category": "WEB"}` — the host launches
+     `tillandsias-<project>-web` serving your project's worktree and
+     returns `https://www.<project>.localhost` for the user. Idempotent:
+     re-publishing replaces the container, same URL.
+   - `service_status {}` — the published service's state.
+   - `service_stop {"category": "WEB"}` — stop it and remove its route.
+
+   Safety model: the host attributes the project from **your session**
+   (never from the request), so you can only ever publish the project you
+   are working in. You cannot widen mounts, ports, or categories from in
+   here — that is by design; don't try to work around it with raw podman
+   (there is no podman in the forge) or port publishing.
+
+   Publishing is **local-only by default** (`*.localhost`, loopback).
+   Public sharing via Cloudflare tunnels is a planned capability — when a
+   user asks to share publicly today, publish locally and tell them the
+   public-share flow is coming.
+
+When the user asks you to run a dev server (Flutter web, Vite, Next.js,
 Storybook, Jupyter, an HTTP API, etc.) the convention is **strict**.
 Follow it exactly. Don't improvise hostnames or port numbers.
 
