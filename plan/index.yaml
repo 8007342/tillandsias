@@ -11263,7 +11263,7 @@ plan_index:
       provisional_id: linux-260714-6
       release_target: stable-milestone-v1
       title: "Windows current-build forge live config, mirror, and TLS parity gate"
-      status: ready
+      status: blocked
       kind: verification
       deliverable: attended Windows WSL forge evidence packet
       depends_on:
@@ -11284,6 +11284,49 @@ plan_index:
         - "inside the public Windows forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: blocked
+          ts: "2026-07-16T00:10:00Z"
+          agent_id: "windows-bullo-fable5-20260715T2315Z"
+          host: windows
+          lease_id: "windows-forge-config-trust-live-parity"
+          summary: >
+            LIVE EVIDENCE PRODUCED (the packet's deliverable) — verdict
+            PARTIAL PARITY, packet blocked on a linux-owned gap.
+            Identity: tray+guest BOTH current checkout a283f8ce /
+            v0.3.260715.6 (guest musl-built ON this Windows host via the
+            wsl2 wrapper, embedded-injected — no release skew); refreshed
+            cold provision, wire v2 attempt=1; PUBLIC lane argv
+            (launch_spec --cloud parity-fixture --bash). GREEN: gitconfig
+            resolves file:/home/forge/.gitconfig; mirror FETCH through
+            the enclave; TLS parity FULL PASS (curl+node+python, zero
+            per-client CA overrides). RED (the blocker): GitHub->mirror
+            insteadOf rewrite ABSENT in the wire lane (rewrite-config
+            empty; ls-remote --get-url resolves github.com) — the
+            already-filed push-channel wire-lane injection gap, now
+            current-build-confirmed via the public path. OWNER: linux
+            (headless lane-launch gitconfig injection). NEXT ACTION: land
+            the injection, then re-run the staged probe set (~5 min warm;
+            harness notes in the evidence doc). Bonus: NEW order-314-class
+            bug filed (maintenance-session name collision 125, provisional
+            windows-260715-4); order-359 ncurses attestation corroborated
+            (tokenless fresh vault). Evidence:
+            plan/issues/windows-forge-config-trust-live-parity-2026-07-15.md.
+        - type: claim
+          ts: "2026-07-15T23:40:00Z"
+          agent_id: "windows-bullo-fable5-20260715T2315Z"
+          host: windows
+          lease_id: "windows-forge-config-trust-live-parity"
+          expires_at: "2026-07-16T03:40:00Z"
+          summary: >
+            Claimed per Linux coordinator remote-control directive (get
+            evidence pushed tonight). Staged: source+unit parity half
+            PASS through the wsl2 wrapper (podman-bound sub-scripts ride
+            the in-guest stage); CURRENT-checkout guest binaries built
+            on this Windows host via the wrapper (musl x86_64+aarch64,
+            v0.3.260715.6, verified) and embedded into the tray
+            (a283f8ce == HEAD); runtime unregistered for the refreshed
+            cold provision. Next: provision, then the public lane
+            (--cloud tillandsias --bash) with config/mirror/TLS probes.
         - type: order-assigned
           ts: "2026-07-15T01:05:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
@@ -13866,3 +13909,39 @@ plan_index:
       exit_criteria:
         - "worker skills document reading the Direction section during packet selection"
         - "two cycles from different hosts cite the direction in their ledger entries"
+    - packet_id: forge-maintenance-session-name-collision
+      provisional_id: windows-260715-4
+      order: provisional
+      title: "P2: forge maintenance-session relaunch dies 125 — bare podman run --name without --replace (order-314 class, maintenance surface)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, containers, rust, cross-host]
+      estimated_hours: 2
+      outcome: >
+        Live repro 2026-07-15 (Windows public lane, order-350 evidence run,
+        a283f8ce): the SECOND `tillandsias-headless --cloud <p> --bash`
+        lane fails at "creating container storage: the container name
+        'tillandsias-<p>-forge-maintenance' is already in use ... or use
+        --replace" -> stage 'maintenance' attached command exited 125.
+        Order 314 fixed exactly this for DEPENDENCY-container ensure
+        (podman run --replace, decided by The Tlatoani 2026-07-12) but the
+        maintenance-session launcher still does a bare run --name. Same
+        remedy: --replace on the maintenance run (or rm-on-exit), plus a
+        decision-table pin mirroring order 314's. Evidence:
+        plan/issues/windows-forge-config-trust-live-parity-2026-07-15.md
+        finding 2 (350-lane2.log).
+      exit_criteria:
+        - "relaunching a --bash maintenance lane on the same project succeeds with the prior exited container present"
+        - "regression pinned (unit/litmus on the maintenance launch args or decision table)"
+      events:
+        - type: filed
+          ts: "2026-07-16T00:05:00Z"
+          agent_id: "windows-bullo-fable5-20260715T2315Z"
+          host: windows
+          summary: >
+            Filed from the order-350 live evidence run; unblocked in-run
+            by removing the stale container (fixture cleanup, recorded).
+            Provisional order per order_number_assignment.

@@ -138,6 +138,39 @@ web-share-release-milestone (order 373).
   Commit `5dda534f`, pushed to `linux-next`.
 - **Worker drain**: one packet drained (364), per recurrent-loop budget.
 
+## Cycle 2026-07-15T23:15Z→00:15Z (windows — coordinator-directed: order 350 LIVE parity evidence produced (partial parity; blocked on the wire-lane mirror-injection gap); merged-tree Windows breakage repaired; first Windows-built guest binaries)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T2315Z. Guard `ok:gh-keyring`; merged
+  origin/linux-next 1380a4e1 (73 files) clean; wrapped ./build.sh --check
+  green.
+- **Merged-tree repairs (pre-350)**: (a) 16 Windows-test-target E0425s —
+  unix-only libc in headless integration tests → #![cfg(unix)] on
+  signal_handling.rs + e2e_user_flow.rs; (b) hardened litmus runner's
+  podman ENV-FAIL preflight fired on any test MENTIONING podman (Windows
+  common.sh shim exists-but-fails) → trigger tightened to real podman
+  invocations; dev-build suite 4/4 incl. litmus:cross-target-cfg-gate-check.
+- **Order 350 (coordinator top priority): LIVE EVIDENCE PRODUCED, verdict
+  PARTIAL PARITY, packet → blocked on the linux-owned wire-lane gitconfig
+  mirror-injection gap.** Full chain executed unattended: parity source+
+  unit half via wrapper; CURRENT-checkout guest binaries musl-built ON
+  WINDOWS via the wsl2 wrapper (first ever; musl-gcc+clang added to build
+  distro); tray rebuilt with embed (a283f8ce==HEAD); refreshed cold
+  provision (embedded inject confirmed — no release skew); PUBLIC lane
+  (launch_spec argv) on a local fixture; staged-probe file capture. GREEN:
+  gitconfig file:/home/forge/.gitconfig, mirror fetch, TLS full parity
+  (curl/node/python, zero CA overrides). RED: GitHub→mirror insteadOf
+  rewrite ABSENT (push-channel gap, current-build-confirmed). Evidence:
+  windows-forge-config-trust-live-parity-2026-07-15.md.
+- **New packet**: forge-maintenance-session-name-collision (provisional
+  windows-260715-4, linux pickup) — order-314 class on the maintenance
+  surface (bare run --name, 125 on relaunch; live repro in the 350 run).
+- **Corroborated**: order-359 ncurses attestation failure on a tokenless
+  fresh vault; order-325 non-interactive github-login gap kept 326-crit-2
+  unattemptable (noted, no new packet).
+- **Host state at exit**: lane containers stopped, distro terminated
+  (registered, idle), keepalive killed, tree clean at push.
+
 ## Cycle 2026-07-15T19:42Z→20:20Z (windows — HYBRID: linux order 238 DONE from the windows lane via wsl2 wrappers; decision boundary codified in methodology)
 
 - **Host**: Windows 11 Home 26200, `windows-next`, agent
