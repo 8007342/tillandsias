@@ -13792,6 +13792,28 @@ plan_index:
         - "discoverability litmus: config-overlay MCP entry + instructions reference the tool family (instant, pre-build)"
       events:
         - type: progress
+          ts: "2026-07-16T05:05:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            ORGANIC DISCOVERABILITY EVIDENCE (exit criterion 1): a
+            third-party harness agent (Hy3, in-forge, operator-driven
+            session) unprompted about the mechanism reported 'I launched it
+            through the Tillandsias host-services MCP (publish_local,
+            category WEB) ... No podman/docker binary exists here —
+            container orchestration is handled by the control plane over
+            /run/host/tillandsias-mcp/mcp.sock' and its publish served
+            (HTTP 200 at /html/dev/ and /html/www/). Root-path / 404s on
+            raw-source mounts without index.html — docroot share-rule
+            (orders 361/376) is the fix. Session also surfaced: Claude
+            lane lacked forge bypass-permissions and Antigravity lacked
+            web awareness — both fixed in e7914aa2 (entrypoint gate +
+            startup-context web section, the seam all five entrypoints
+            write). NOTE: --init digest sentinel SKIPped the forge rebuild
+            after overlay content edits (containerfile-staleness gap,
+            order-341 family — skills invalidate, entrypoints/lib do not);
+            worked around with --init --force this session.
+        - type: progress
           ts: "2026-07-16T03:20:00Z"
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
           host: linux
