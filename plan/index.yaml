@@ -13272,7 +13272,7 @@ plan_index:
     - packet_id: cloudflare-login-and-public-deploy
       order: 362
       title: "ROADMAP: --cloudflare-login + 'host in www.<domain-i-own>.com' — public deploys via Cloudflare tunnel/DNS; service+environment affinity across tillandsias"
-      status: ready
+      status: claimed
       kind: research
       multi_cycle: true
       deliverable: plan/issues/cloudflare-deploy-affinity-roadmap-2026-07-15.md
@@ -13305,6 +13305,19 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
           host: linux_mutable
           summary: "Operator's magical prompt: 'Add and implement --cloudflare-login' + the ephemeral/production public-hosting vision. Filed as the next-milestone roadmap."
+        - type: claim
+          ts: "2026-07-16T18:45:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          lease_id: "f12ab0613077"
+          expires_at: "2026-07-16T22:45:00Z"
+          summary: >
+            Claimed on immutable Linux under the operator's web-container
+            drain-selection (2026-07-16). Cycle goal: close the two open exit
+            criteria — strengthen the roadmap's security-boundary section and
+            record the Tlatoani sign-off — unblocking the first implementation
+            rung (order 377 --cloudflare-login). Immutable-host-appropriate:
+            research/docs, no build, no local-build e2e.
 
     - packet_id: publish-local-mcp-tool-and-handler
       order: 363
