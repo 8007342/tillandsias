@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-16T17:55:00Z
+LastExecutionTime: 2026-07-16T18:26:00Z
 
 ## Direction — what are we all doing today
 
@@ -17,6 +17,42 @@ at a clearly-ephemeral URL. Use iterations on this theme to also clean up
 remaining work on YOUR active packets: major feature iterations double as
 test/refinement runs for what's already in flight. Milestone:
 web-share-release-milestone (order 373).
+
+## Cycle 2026-07-16T18:07Z→18:26Z (linux_immutable — operator-directed reduction: straggler + robustness packets, methodology, tooling)
+
+- **Host**: linux_immutable, `linux-next`, agent
+  linux-tlatoani-claude-20260716T0725Z. Interactive operator (The Tlatoāni)
+  session. Startup boundary clean; branch current with `origin/linux-next`
+  (c82c22a6, 0/0).
+- **Credential guard**: started `missing:no-credential-channel` — `gh` keyring
+  token was invalid; Claude Code `/login` authenticates Anthropic, NOT
+  git→GitHub, so it did not restore push. Operator ran `gh auth login`;
+  re-check → `ok:gh-keyring` (scopes repo, workflow). All committable work was
+  deferred until the channel was restored (no local-only commits).
+- **Reduction (operator-directed, off the web-container theme by explicit
+  directive)**:
+  - Orders **385/386** filed: tray leaks `[ptyxis] <defunct>` zombies —
+    unreaped terminal-launcher `Child` at two spawn sites (`launch_in_terminal`
+    tray/mod.rs:1862, `launch_forge_agent` main.rs:8955); Rust `Child` does not
+    reap on `Drop` and Ptyxis's GApplication client exits in ms. Fix = shared
+    spawn-and-reap helper + behavioral test; 386 = teardown-straggler probe.
+    Issue: `plan/issues/optimization/tray-terminal-spawn-zombie-ptyxis-stragglers-2026-07-16.md`.
+  - Order **387** filed: extend order-314 `--replace` idempotency to the
+    sibling stack containers (proxy/git/router/vault) — inference already has
+    it; the siblings' `build_*_run_args` do not, which is the real
+    "crashes-and-fails-to-restart" durable fix.
+  - **Methodology**: `fedora_silverblue_immutable_builders` now documents
+    immutable-is-flexible (standing toolbox `dnf install` pre-authorization,
+    no operator permission needed) + an idempotency expectation (don't gate a
+    whole tool-install on a single sentinel like rustup).
+  - **Tooling**: installed `ruby` into the `tools` toolbox to run the
+    sanctioned `ruby -ryaml` validator (absent from the bare immutable host —
+    now understood as toolbox-solvable, not a gap).
+- **Next action**: drain host-eligible ready work via `/advance-work-from-plan`
+  through the toolbox-aware builder; run curl-install e2e (`v0.3.260716.7` is
+  newer than the last tested release). Web-container theme
+  (web-share-release-milestone, order 373) resumes after these operator
+  straggler/robustness directives land.
 
 ## Cycle 2026-07-16T17:55Z (forge — worker defer no-op)
 

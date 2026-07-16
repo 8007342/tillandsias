@@ -14452,3 +14452,104 @@ plan_index:
           agent_id: "linux-tlatoani-claude-20260716T0725Z"
           host: linux
           summary: "Promoted from the crash-skew filing after the linux real-secret repro env-failed the release-evidence ci-full (16/17)."
+
+    - packet_id: tray-terminal-spawn-child-reaping
+      order: 385
+      title: "Reap tray-spawned terminal children so Ptyxis GApplication clients stop accumulating as [ptyxis] <defunct> zombies"
+      status: ready
+      kind: optimization
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs + crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [tray, process-lifecycle, rust, ptyxis]
+      estimated_hours: 3
+      outcome: >
+        Live repro 2026-07-16 (operator Silverblue host): six [ptyxis]
+        <defunct> zombies all parented to `tillandsias --tray --debug`
+        (PID 30010), one per terminal launch, accumulating across the
+        session. Root cause: both terminal-launch sites spawn a child and
+        never wait() on the std::process::Child, which does not reap on
+        Drop; Ptyxis's GApplication client exits in milliseconds after
+        delegating the window to the resident --gapplication-service, so
+        every launch leaks a zombie. Sites: launch_in_terminal
+        (tray/mod.rs:1862) and launch_forge_agent (main.rs:8955). Fix:
+        one shared spawn-and-reap helper that moves the Child into a
+        detached thread calling wait(); route both sites through it.
+        Evidence in
+        plan/issues/optimization/tray-terminal-spawn-zombie-ptyxis-stragglers-2026-07-16.md.
+      exit_criteria:
+        - "both launch_in_terminal (tray/mod.rs) and launch_forge_agent (main.rs) route their terminal spawn through one reaping helper; no bare .spawn()-and-drop of a terminal Child remains (source-shape guard)"
+        - "behavioral test: a fast-exiting child (`/bin/true`) spawned via the helper is reaped — exit status observed, no lingering zombie — mirroring the inference_run_args_use_replace_for_idempotency house style"
+        - "manual repro: after N tray terminal launch+close cycles, `pgrep -P <tray-pid> --state Z` reports 0 (was 6/session)"
+      events:
+        - type: filed
+          ts: "2026-07-16T18:15:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: "Operator directive 2026-07-16 (ptyxis stragglers). Root-caused to unreaped terminal-launcher Child handles at two spawn sites; smallest verifiable slice is the shared reaping helper + behavioral test."
+
+    - packet_id: container-teardown-straggler-probe
+      order: 386
+      title: "Executable probe: stack/container teardown leaves zero tray-parented zombies and zero orphaned terminal-launcher processes"
+      status: ready
+      kind: optimization
+      deliverable: scripts/ (teardown straggler probe) + crates/tillandsias-headless lane-close reaping
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [tray, process-lifecycle, teardown, verification]
+      estimated_hours: 4
+      outcome: >
+        Generalizes order 385 to the operator's actual invariant — "tearing
+        down containers leaves no straggling host processes." Order 385 fixes
+        the spawn-time zombie class; this packet adds a falsifiable regression
+        probe so the straggler class fails loud instead of relying on manual
+        `ps` inspection. Also covers terminals opened INTO a container via
+        `podman exec … ptyxis` (e.g. the live `podman exec … tools … btop`
+        session observed this cycle), whose host-side launcher child can
+        straggle when the container is stopped/removed and which order 385
+        does not address.
+      exit_criteria:
+        - "executable probe (scripts/) runs a full stack teardown then asserts zero tray-parented Z-state processes AND zero orphaned host-side terminal-launcher processes; exits nonzero on any straggler"
+        - "probe wired into the smoke/e2e teardown lane so the straggler class is guarded automatically"
+        - "podman-exec-into-container terminal windows are reaped or explicitly documented as service-owned at lane close"
+      events:
+        - type: filed
+          ts: "2026-07-16T18:15:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: "Operator directive 2026-07-16. Broader teardown-straggler audit complementing order 385; verifiable closure is an executable teardown probe wired into the smoke lane."
+
+    - packet_id: stack-containers-replace-idempotent-relaunch
+      order: 387
+      title: "Extend order-314 --replace idempotency to the sibling stack containers (proxy, git, router, vault) so a crashed container always relaunches"
+      status: ready
+      kind: optimization
+      deliverable: crates/tillandsias-headless/src/main.rs + vault launch path
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [podman, enclave, robustness, rust]
+      estimated_hours: 3
+      outcome: >
+        Order 314 gave build_inference_run_args a --replace flag (podman run
+        atomically removes an EXITED container holding the name instead of
+        failing with a Permanent exit-125), pinned by
+        inference_run_args_use_replace_for_idempotency. The sibling stack
+        builders do NOT have it: build_proxy_run_args (main.rs:2256),
+        build_git_run_args (main.rs:2508), and build_router_run_args
+        (main.rs:2704) all use --detach --name with no --replace, so a dead
+        container holding the name blocks the next launch — the "crashes and
+        fails to restart" symptom the operator hit (attributed to inference,
+        but the whole enclave stack shares the fragility). Vault's launch path
+        (not build_vault_run_args; likely vault_bootstrap.rs) must be located
+        and checked too. Operator intent (2026-07-16, "ephemeralest of
+        Tillandsias"): the whole stack is safe to aggressively relaunch.
+      exit_criteria:
+        - "build_proxy_run_args, build_git_run_args, build_router_run_args, and the vault launch path all include --replace"
+        - "per-service tests assert has_arg(args, --replace) for each builder, mirroring inference_run_args_use_replace_for_idempotency, so a regression fails loud"
+        - "manual repro: kill a stack container, trigger the ensure_*_running path, confirm it relaunches without a Permanent exit-125"
+      events:
+        - type: filed
+          ts: "2026-07-16T18:25:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: "Operator directive (message 1, 2026-07-16 --replace / always-restart). inference already has --replace via order 314; this generalizes the pattern to the sibling stack containers that still lack it."
