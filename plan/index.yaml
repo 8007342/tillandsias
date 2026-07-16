@@ -13742,6 +13742,22 @@ plan_index:
         - "CHERRY: ../inat-observations-wp serves from a WordPress+DB multi-service catalog entry in the enclave"
         - "VISION: one-prompt public share produces a working ephemeral-namespaced https URL on the operator domain"
       events:
+        - type: decision
+          ts: "2026-07-16T02:10:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            Operator roadmap context (The Tlatoani, verbatim session,
+            2026-07-16): tillandsias.org is OWNED in Cloudflare — the
+            eventual public-share domain. The tillandsias project itself
+            will be the FIRST CLIENT of web-container hosting (a ./var/www
+            in this repo, hosted locally first). Long-term substrate:
+            Raspberry Pi 5 devices running Fedora + tillandsias headless on
+            bare metal host durable 24/7 services behind the public URLs.
+            --cloudflare-login (order 377) is operator-wanted SOON.
+            Default remains local-only; design public rungs with the pi5
+            durable-host target in mind (arm64! see order 317
+            brew-aarch64-harness-strategy for the existing aarch64 track).
         - type: filed
           ts: "2026-07-16T01:20:00Z"
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
