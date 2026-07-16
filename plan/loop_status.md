@@ -109,6 +109,35 @@ web-share-release-milestone (order 373).
   `./build.sh --check` green.
 - **Worker drain**: one packet drained (363), per recurrent-loop budget.
 
+## Cycle 2026-07-16T02:11Z→02:45Z (linux — meta-orchestration: order 364 DONE — publish-local e2e curl closure + router proxy-bypass)
+
+- **Host**: linux_mutable, `linux-next`, agent linux-tlatoani-opencode-20260716T0211Z.
+  Credential guard `ok:gh-keyring`; boundary snapshot `/tmp/meta-orchestration-boundary.6Z0lSH`.
+- **Order 364 DONE** (lease `publish-local-e2e-litmus-v1` released). The 357
+  milestone I3c closure: `curl` against the published URL returns the fixture
+  project's index.html through the router. Verified live:
+  `tillandsias --publish-local e2e-fixture-project` brings up the router +
+  web container, writes the `www.e2e-fixture-project.localhost` route, and
+  serves `E2E Fixture` HTML. Re-publish is idempotent; `--service-stop` removes
+  the route (404 through proxy). Litmus at
+  `openspec/litmus-tests/litmus-publish-local-e2e.yaml`.
+- **Correction to 363 entry**: `publish_local_service` does NOT return
+  `https://www.<project>.localhost`. The router publishes its listener on
+  loopback `:8080` over plain HTTP (no TLS on the loopback ingress), so the
+  real URL is `http://www.<project>.localhost:<router_host_port>` — fixed in
+  `publish_local_service` and the fixture test assertion.
+- **Root-cause fix discovered mid-cycle**: the router container inherited
+  `http_proxy=http://proxy:3128` from the enclave env, and Caddy's
+  `reverse_proxy` forward-ed upstream connects to the web container through the
+  egress proxy (Go's `NO_PROXY` CIDR matching does not apply to resolved IPs,
+  and `tillandsias-*-web` is not in `ENCLAVE_NO_PROXY_BASE`). Result: 502 on
+  every published route. Fixed by clearing the proxy env on the router
+  container (`build_router_run_args`) so Caddy reaches enclave containers
+  directly. This was a pre-existing bug affecting ALL published web services.
+- **Build**: `./build.sh --check` green; 249+ headless tests pass (0 failures).
+  Commit `5dda534f`, pushed to `linux-next`.
+- **Worker drain**: one packet drained (364), per recurrent-loop budget.
+
 ## Cycle 2026-07-15T19:42Z→20:20Z (windows — HYBRID: linux order 238 DONE from the windows lane via wsl2 wrappers; decision boundary codified in methodology)
 
 - **Host**: Windows 11 Home 26200, `windows-next`, agent

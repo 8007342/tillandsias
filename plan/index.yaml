@@ -13222,7 +13222,7 @@ plan_index:
     - packet_id: publish-local-e2e-litmus
       order: 364
       title: "357 rung I3c: e2e litmus — curl http://www.<project>.localhost returns a fixture project's index"
-      status: claimed
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: verification
       deliverable: openspec/litmus-tests + scripts fixture project
@@ -13252,6 +13252,20 @@ plan_index:
           host: linux
           lease_id: "publish-local-e2e-litmus-v1"
           expires_at: "2026-07-16T06:11:14Z"
+        - type: completed
+          ts: "2026-07-16T02:45:00Z"
+          agent_id: "linux-tlatoani-opencode-20260716T0211Z"
+          host: linux
+          lease_id: "publish-local-e2e-litmus-v1"
+          summary: >
+            e2e closure verified live on linux-next. Added --publish-local /
+            --service-stop CLI flags; publish_local_service ensures the router,
+            uses www.<project> subdomain, :Z relabel, returns the real loopback
+            HTTP URL (http://www.<project>.localhost:<port>). Fixed router 502 by
+            clearing the egress proxy env on the router container so Caddy
+            reverse-proxies to enclave web containers directly. Litmus written at
+            openspec/litmus-tests/litmus-publish-local-e2e.yaml. Build green,
+            249+ headless tests pass. Commit 5dda534f.
 
     - packet_id: cross-target-unix-cfg-gate-check
       provisional_id: windows-260715-1
