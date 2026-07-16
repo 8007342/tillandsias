@@ -736,7 +736,15 @@ fn handle_mcp_jsonrpc(project_label: &str, req: &serde_json::Value) -> Option<se
             let tool_name = req["params"]["name"].as_str().unwrap_or("");
             let args = req["params"]["arguments"].as_object();
 
-            let rt = tokio::runtime::Builder::new_current_thread()
+            // MULTI-thread runtime is load-bearing: the publish path re-enters
+            // podman_runtime()'s RuntimeOrHandle::block_on, which uses
+            // tokio::task::block_in_place — a PANIC on current-thread runtimes
+            // ("can call blocking only when running on the multi-threaded
+            // runtime"; live repro 2026-07-16, first tray publish_local killed
+            // its connection thread). The deny/handshake paths never hit it,
+            // so only a live publish exposes a regression here.
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
                 .enable_all()
                 .build()
                 .unwrap();
