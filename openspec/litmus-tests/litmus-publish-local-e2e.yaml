@@ -1,0 +1,56 @@
+name: litmus:publish-local-e2e
+spec: enclave-service-catalog
+description: Validate that `tillandsias --publish-local <project>` brings up the router, starts the web container, writes a www.<project>.localhost route, and serves the project's index.html through the reverse proxy without the egress proxy intercepting upstream connects.
+severity: critical
+size: e2e
+
+preconditions:
+  - Tillandsias binary built and available on PATH (or via target/debug/tillandsias)
+  - podman is available and running
+  - images/tillandsias-web and images/tillandsias-router are built
+  - TILLANDSIAS_HOST_PROJECT_ROOT points at a directory containing a fixture project with index.html
+
+critical_path:
+  - step: "setup: create fixture project with an index.html"
+    command: "export TILLANDSIAS_HOST_PROJECT_ROOT=/tmp/tillandsias-e2e-src && mkdir -p /tmp/tillandsias-e2e-src/e2e-fixture-project && printf '<html><body>E2E Fixture</body></html>' > /tmp/tillandsias-e2e-src/e2e-fixture-project/index.html && echo SETUP_OK"
+    timeout_ms: 5000
+    expected_behavior: "SETUP_OK"
+
+  - step: "clean any prior containers from a previous run"
+    command: "podman rm -f tillandsias-e2e-fixture-project-web tillandsias-router >/dev/null 2>&1; echo CLEANED"
+    timeout_ms: 8000
+    expected_behavior: "CLEANED"
+
+  - step: "publish the local service and capture the returned URL"
+    command: "export TILLANDSIAS_HOST_PROJECT_ROOT=/tmp/tillandsias-e2e-src && URL=$(target/debug/tillandsias --publish-local e2e-fixture-project 2>/dev/null) && echo \"URL=$URL\" && echo \"$URL\" | grep -Eq '^http://www\\.e2e-fixture-project\\.localhost:[0-9]+$'"
+    timeout_ms: 60000
+    expected_behavior: "URL=http://www.e2e-fixture-project.localhost:<port>"
+
+  - step: "web container is running after publish"
+    command: "podman ps --filter 'name=tillandsias-e2e-fixture-project-web' --format '{{.Status}}' | grep -q 'Up' && echo WEB_UP"
+    timeout_ms: 5000
+    expected_behavior: "WEB_UP"
+
+  - step: "router container is running after publish"
+    command: "podman ps --filter 'name=tillandsias-router' --format '{{.Status}}' | grep -q 'Up' && echo ROUTER_UP"
+    timeout_ms: 5000
+    expected_behavior: "ROUTER_UP"
+
+  - step: "curl the published URL and receive the fixture HTML"
+    command: "export TILLANDSIAS_HOST_PROJECT_ROOT=/tmp/tillandsias-e2e-src && URL=$(target/debug/tillandsias --publish-local e2e-fixture-project 2>/dev/null) && curl -fsS --max-time 5 \"$URL\" | grep -q 'E2E Fixture' && echo SERVED_OK"
+    timeout_ms: 30000
+    expected_behavior: "SERVED_OK"
+
+  - step: "re-publish is idempotent (no duplicate route, still serves)"
+    command: "export TILLANDSIAS_HOST_PROJECT_ROOT=/tmp/tillandsias-e2e-src && target/debug/tillandsias --publish-local e2e-fixture-project >/dev/null 2>&1 && URL=$(target/debug/tillandsias --publish-local e2e-fixture-project 2>/dev/null) && curl -fsS --max-time 5 \"$URL\" | grep -q 'E2E Fixture' && echo IDEMPOTENT_OK"
+    timeout_ms: 60000
+    expected_behavior: "IDEMPOTENT_OK"
+
+  - step: "stop the service and confirm the route is removed (404 through proxy)"
+    command: "export TILLANDSIAS_HOST_PROJECT_ROOT=/tmp/tillandsias-e2e-src && target/debug/tillandsias --service-stop e2e-fixture-project >/dev/null 2>&1 && URL=$(target/debug/tillandsias --publish-local e2e-fixture-project 2>/dev/null) && sleep 2 && (curl -fsS --max-time 5 \"$URL\" >/dev/null 2>&1 && echo STILL_SERVING || echo STOPPED_OK)"
+    timeout_ms: 60000
+    expected_behavior: "STOPPED_OK"
+
+postconditions:
+  - "Service containers are cleaned up via --service-stop"
+  - "No route for www.e2e-fixture-project.localhost remains in the dynamic Caddyfile after stop"

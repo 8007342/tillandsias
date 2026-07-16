@@ -150,6 +150,36 @@ fn main() {
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
 
+    // @trace spec:enclave-service-catalog
+    // `--publish-local <project>` — order 364 e2e closure: bring up the
+    // service catalog and publish a local project's WEB container, returning
+    // the friendly https URL. Same path the MCP publish_local tool uses; the
+    // flag is the operator/agent CLI surface for the same call.
+    #[cfg(feature = "tray")]
+    let publish_local: Option<String> = match user_args.iter().position(|a| a == "--publish-local")
+    {
+        Some(i) => match user_args.get(i + 1) {
+            Some(v) if !v.starts_with('-') && !v.is_empty() => Some(v.to_string()),
+            _ => {
+                eprintln!("Error: --publish-local requires a <project> value");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
+    // `--service-stop <project>` — order 364 idempotency/cleanup closure.
+    #[cfg(feature = "tray")]
+    let service_stop: Option<String> = match user_args.iter().position(|a| a == "--service-stop") {
+        Some(i) => match user_args.get(i + 1) {
+            Some(v) if !v.starts_with('-') && !v.is_empty() => Some(v.to_string()),
+            _ => {
+                eprintln!("Error: --service-stop requires a <project> value");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
+
     // @trace spec:remote-projects, spec:host-shell-architecture
     // `--cloud <owner/repo | name>` — project-attach companion to the agent
     // mode flags (`--opencode` / `--claude` / `--codex` / `--bash`). Resolves
@@ -275,6 +305,8 @@ fn main() {
         "--cache-verify",
         "--listen-vsock",
         "--cloud",
+        "--publish-local",
+        "--service-stop",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -587,6 +619,36 @@ fn main() {
             eprintln!("Error: --observatorium requires project path");
             std::process::exit(2);
         }
+    }
+
+    // @trace spec:enclave-service-catalog, spec:subdomain-routing-via-reverse-proxy
+    // order 364 e2e closure: publish a local project's WEB container and
+    // return the friendly URL, or stop a published service. This is the
+    // operator-facing CLI for the same call the MCP publish_local tool makes.
+    #[cfg(feature = "tray")]
+    if let Some(project) = publish_local {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        match rt.block_on(crate::publish_local_service(&project, "WEB", debug)) {
+            Ok(url) => {
+                println!("{}", url);
+                return;
+            }
+            Err(e) => {
+                eprintln!("Error publishing {}: {}", project, e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    #[cfg(feature = "tray")]
+    if let Some(project) = service_stop {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        if let Err(e) = rt.block_on(crate::service_stop("WEB", &project, debug)) {
+            eprintln!("Error stopping {}: {}", project, e);
+            std::process::exit(1);
+        }
+        println!("stopped");
+        return;
     }
 
     // Phase 3, Task 12: Auto-detection (transparent mode)
@@ -2605,6 +2667,27 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         "/tmp:size=64m".into(),
         "--tmpfs".into(),
         "/run/router:size=8m".into(),
+        // @trace spec:subdomain-routing-via-reverse-proxy
+        // The router reverse-proxies to enclave containers by hostname
+        // (e.g. tillandsias-<project>-web). Those hostnames are NOT in
+        // ENCLAVE_NO_PROXY_BASE, and Go's NO_PROXY CIDR matching does not
+        // apply to resolved IPs — so Caddy would forward upstream connects
+        // through the egress proxy and 502. The router is the internal
+        // ingress; it must reach enclave containers directly, never via the
+        // egress proxy. Clear the proxy env so Caddy connects straight to
+        // the upstream container.
+        "--env".into(),
+        "http_proxy=".into(),
+        "--env".into(),
+        "https_proxy=".into(),
+        "--env".into(),
+        "HTTP_PROXY=".into(),
+        "--env".into(),
+        "HTTPS_PROXY=".into(),
+        "--env".into(),
+        "no_proxy=*".into(),
+        "--env".into(),
+        "NO_PROXY=*".into(),
         // @trace spec:subdomain-routing-via-reverse-proxy
         // Host publish on loopback ONLY. The container listener stays on
         // :8080; the host port is selected from the 80 -> 8080 -> --port
@@ -9914,7 +9997,7 @@ pub(crate) async fn publish_local_service(
         "--network".into(),
         "tillandsias-enclave".into(),
         "-v".into(),
-        format!("{}:/var/www:ro", worktree.display()),
+        format!("{}:/var/www:ro,Z", worktree.display()),
     ];
     args.push(image.into());
 
@@ -9923,17 +10006,35 @@ pub(crate) async fn publish_local_service(
         .await
         .map_err(|e| format!("Failed to start web container: {e}"))?;
 
-    let mut routes = read_router_routes(debug)?;
-    routes.retain(|r| r.subdomain != project_name);
+    // Order 364: the router is what actually serves the friendly URL. The
+    // publish path assumes it is up (the tray's forge-launch brings it up),
+    // but the standalone CLI path must ensure it explicitly so curl reaches
+    // the container through the reverse proxy.
+    let certs_dir = crate::ensure_ca_bundle(debug)?;
+    let router_image = crate::versioned_image_tag("router", VERSION.trim());
+    let router_host_port = match crate::existing_router_host_port(&client, debug).await? {
+        Some(port) => port,
+        None => crate::select_router_host_port(None, debug)?,
+    };
+    crate::ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug)
+        .await?;
 
-    let mut new_route = RouterRoute::new(project_name, &container_name, 8080);
+    let mut routes = read_router_routes(debug)?;
+    routes.retain(|r| r.subdomain != format!("www.{project_name}"));
+
+    let mut new_route = RouterRoute::new(format!("www.{project_name}"), &container_name, 8080);
     new_route.public = true;
     routes.push(new_route);
 
     write_router_routes(&routes, debug)?;
     caddy_reload_routes(debug).await?;
 
-    Ok(format!("https://www.{project_name}.localhost"))
+    // The router publishes its listener on loopback :8080 over plain HTTP
+    // (no TLS termination on the loopback ingress), so the locally-served
+    // URL is http on the router's host port.
+    Ok(format!(
+        "http://www.{project_name}.localhost:{router_host_port}"
+    ))
 }
 
 #[cfg(feature = "tray")]
@@ -9968,7 +10069,7 @@ pub(crate) async fn service_stop(
 
     let mut routes = read_router_routes(debug)?;
     let initial_len = routes.len();
-    routes.retain(|r| r.subdomain != project_name);
+    routes.retain(|r| r.subdomain != format!("www.{project_name}"));
 
     if routes.len() < initial_len {
         write_router_routes(&routes, debug)?;
@@ -13266,7 +13367,7 @@ mod tests {
             .block_on(publish_local_service("test-publish-e2e", "WEB", false))
             .expect("publish_local_service should succeed");
 
-        assert_eq!(url, "https://www.test-publish-e2e.localhost");
+        assert!(url.starts_with("http://www.test-publish-e2e.localhost:"));
 
         rt.block_on(service_stop("WEB", "test-publish-e2e", false))
             .expect("service_stop should succeed");
