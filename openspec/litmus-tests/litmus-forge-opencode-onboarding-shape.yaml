@@ -16,17 +16,17 @@ preconditions:
 
 critical_path:
   - step: "verify the bundled instruction list keeps the onboarding files first"
-    command: "grep -Fq /home/forge/.config-overlay/opencode/instructions/methodology.md images/default/config-overlay/opencode/config.json && grep -Fq /home/forge/.config-overlay/opencode/instructions/forge-discovery.md images/default/config-overlay/opencode/config.json && grep -Fq /home/forge/.config-overlay/opencode/instructions/cache-discipline.md images/default/config-overlay/opencode/config.json && grep -Fq /home/forge/.config-overlay/opencode/instructions/nix-first.md images/default/config-overlay/opencode/config.json && grep -Fq /home/forge/.config-overlay/opencode/instructions/openspec-workflow.md images/default/config-overlay/opencode/config.json && echo 'opencode onboarding instruction bundle present'"
+    command: "mf_literal images/default/config-overlay/opencode/config.json /home/forge/.config-overlay/opencode/instructions/methodology.md && mf_literal images/default/config-overlay/opencode/config.json /home/forge/.config-overlay/opencode/instructions/forge-discovery.md && mf_literal images/default/config-overlay/opencode/config.json /home/forge/.config-overlay/opencode/instructions/cache-discipline.md && mf_literal images/default/config-overlay/opencode/config.json /home/forge/.config-overlay/opencode/instructions/nix-first.md && mf_literal images/default/config-overlay/opencode/config.json /home/forge/.config-overlay/opencode/instructions/openspec-workflow.md && echo 'opencode onboarding instruction bundle present'"
     timeout_ms: 10000
     expected_behavior: "opencode onboarding instruction bundle present"
 
   - step: "verify methodology.md remains the index file"
-    command: "grep -Fq 'forge-discovery.md' images/default/config-overlay/opencode/instructions/methodology.md && grep -Fq 'cache-discipline.md' images/default/config-overlay/opencode/instructions/methodology.md && grep -Fq 'nix-first.md' images/default/config-overlay/opencode/instructions/methodology.md && grep -Fq 'openspec-workflow.md' images/default/config-overlay/opencode/instructions/methodology.md && echo 'methodology index present'"
+    command: "mf_literal images/default/config-overlay/opencode/instructions/methodology.md forge-discovery.md && mf_literal images/default/config-overlay/opencode/instructions/methodology.md cache-discipline.md && mf_literal images/default/config-overlay/opencode/instructions/methodology.md nix-first.md && mf_literal images/default/config-overlay/opencode/instructions/methodology.md openspec-workflow.md && echo 'methodology index present'"
     timeout_ms: 10000
     expected_behavior: "methodology index present"
 
   - step: "verify the launcher still bootstraps OpenSpec and /startup"
-    command: "grep -Fq apply_opencode_config_overlay images/default/entrypoint-forge-opencode.sh && grep -Fq 'init --tools opencode' images/default/entrypoint-forge-opencode.sh && grep -Fq 'run /startup' images/default/entrypoint-forge-opencode.sh && echo 'opencode bootstrap present'"
+    command: "mf_literal images/default/entrypoint-forge-opencode.sh apply_opencode_config_overlay && mf_literal images/default/entrypoint-forge-opencode.sh 'init --tools opencode' && mf_literal images/default/entrypoint-forge-opencode.sh 'run /startup' && echo 'opencode bootstrap present'"
     timeout_ms: 10000
     expected_behavior: "opencode bootstrap present"
 
@@ -45,4 +45,4 @@ observability:
 
 rollback:
   on_failure: "inspect images/default/config-overlay/opencode/config.json, images/default/config-overlay/opencode/instructions/methodology.md, and images/default/entrypoint-forge-opencode.sh for onboarding drift"
-  command: "grep -Fq instructions/methodology.md images/default/config-overlay/opencode/config.json && grep -Fq 'run /startup' images/default/entrypoint-forge-opencode.sh && grep -Fq 'launching prompted opencode run' images/default/entrypoint-forge-opencode.sh"
+  command: "mf_literal images/default/config-overlay/opencode/config.json instructions/methodology.md && mf_literal images/default/entrypoint-forge-opencode.sh 'run /startup' && mf_literal images/default/entrypoint-forge-opencode.sh 'launching prompted opencode run'"

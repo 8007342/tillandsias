@@ -1,0 +1,47 @@
+name: litmus:litmus-stdlib-portability-shape
+spec: spec-traceability
+description: >
+  Pin that scripts/litmus-stdlib.sh exists, defines the 8 core mf_*
+  primitives, exports LITMUS_STDLIB for child bash -c shells, and the
+  runner sources it before each step command.
+severity: medium
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/litmus-stdlib.sh
+  - workspace contains scripts/run-litmus-test.sh
+
+critical_path:
+  - step: "Req: litmus-stdlib.sh exists and is non-empty"
+    command: "mf_file_exists scripts/litmus-stdlib.sh && echo 'ok: stdlib file exists'"
+    timeout_ms: 3000
+    expected_behavior: "ok: stdlib file exists"
+
+  - step: "Req: all 8 mf_* primitives defined"
+    command: "for fn in mf_literal mf_literal_count mf_regex mf_regex_count mf_absent mf_threshold mf_file_exists mf_assert_count; do grep -q \"^${fn}()\" scripts/litmus-stdlib.sh || { echo \"FAIL: $fn not defined\"; exit 1; }; done && echo 'ok: 8 mf_* primitives defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: 8 mf_* primitives defined"
+
+  - step: "Req: runner exports LITMUS_STDLIB and sources it per step"
+    command: "grep -q 'export LITMUS_STDLIB' scripts/run-litmus-test.sh && grep -q 'source.*LITMUS_STDLIB' scripts/run-litmus-test.sh && echo 'ok: runner wires stdlib'"
+    timeout_ms: 3000
+    expected_behavior: "ok: runner wires stdlib"
+
+  - step: "Req: LITMUS_STDLIB_LOADED guard prevents double-source"
+    command: "grep -q 'LITMUS_STDLIB_LOADED' scripts/litmus-stdlib.sh && echo 'ok: double-source guard present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: double-source guard present"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "litmus-stdlib.sh primitives and runner wiring remain intact"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-stdlib-portability-shape"
+    artifact: "scripts/litmus-stdlib.sh + scripts/run-litmus-test.sh"
+
+rollback:
+  on_failure: "inspect scripts/litmus-stdlib.sh for mf_* function definitions and scripts/run-litmus-test.sh for LITMUS_STDLIB export + source"
+  command: "grep -c 'mf_.*()' scripts/litmus-stdlib.sh | head -1"

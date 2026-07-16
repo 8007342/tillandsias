@@ -59,7 +59,7 @@ critical_path:
     # earlier build.rs) made the VERSION file actually fire at
     # build time. Pin all 3 build.rs files together so a regression
     # dropping any silently reintroduces the crate-static fallback.
-    command: "for f in crates/tillandsias-host-shell/build.rs crates/tillandsias-browser-mcp/build.rs crates/tillandsias-windows-tray/build.rs; do grep -Fq '../../VERSION' \"$f\" || { echo \"FAIL: $f missing ../../VERSION read\"; exit 1; }; grep -Fq 'WORKSPACE_VERSION' \"$f\" || { echo \"FAIL: $f missing WORKSPACE_VERSION emit\"; exit 1; }; done && echo \"ok: 3 build.rs files read VERSION + emit WORKSPACE_VERSION\""
+    command: "for f in crates/tillandsias-host-shell/build.rs crates/tillandsias-browser-mcp/build.rs crates/tillandsias-windows-tray/build.rs; do mf_literal \"$f\" '../../VERSION' || { echo \"FAIL: $f missing ../../VERSION read\"; exit 1; }; mf_literal \"$f\" 'WORKSPACE_VERSION' || { echo \"FAIL: $f missing WORKSPACE_VERSION emit\"; exit 1; }; done && echo \"ok: 3 build.rs files read VERSION + emit WORKSPACE_VERSION\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
@@ -68,7 +68,7 @@ critical_path:
     # invariant. A regression dropping it would silently leave the
     # baked-in WORKSPACE_VERSION stale across version bumps until a
     # clean build was triggered.
-    command: "for f in crates/tillandsias-host-shell/build.rs crates/tillandsias-browser-mcp/build.rs crates/tillandsias-windows-tray/build.rs; do grep -Fq 'cargo:rerun-if-changed=../../VERSION' \"$f\" || { echo \"FAIL: $f missing rerun-if-changed\"; exit 1; }; done && echo \"ok: 3 build.rs files rebuild on VERSION change\""
+    command: "for f in crates/tillandsias-host-shell/build.rs crates/tillandsias-browser-mcp/build.rs crates/tillandsias-windows-tray/build.rs; do mf_literal \"$f\" 'cargo:rerun-if-changed=../../VERSION' || { echo \"FAIL: $f missing rerun-if-changed\"; exit 1; }; done && echo \"ok: 3 build.rs files rebuild on VERSION change\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 

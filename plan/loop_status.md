@@ -1,6 +1,28 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T20:20:00Z
+LastExecutionTime: 2026-07-16T00:45:00Z
+
+## Cycle 2026-07-16T00:34Z→00:45Z (linux — meta-orchestration: order 225 migration batch + stdlib shape litmus)
+
+- **Host**: linux_mutable, `linux-next`, agent linux-bigpickle-20260716T0034Z
+  (opencode/big-pickle). Credential guard `ok:gh-keyring`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.vfldAI` clean; pre-existing dirty paths
+  (TRACES.md, VERSION, Cargo files) are sibling/operator work.
+- **Sibling heads**: main 932ca13d, linux-next 8578e283, windows-next
+  92311850, osx-next 175127f2. Already up to date.
+- **Order 225 DONE (litmus-command-portability-dsl-implementation)**:
+  Migration batch complete. 4 litmus files converted to `mf_*` primitives:
+  forge-environment-discoverability-shape (5 steps + rollback),
+  forge-opencode-onboarding-shape (3 steps + rollback),
+  zen-default-with-ollama-shape (mf_regex_count for model count),
+  versioning-shape (2 for-loop steps). Created
+  litmus-stdlib-portability-shape (4 steps pinning stdlib existence,
+  8 mf_* definitions, runner wiring, double-source guard). Full
+  pre-build instant suite: 141/141 PASS, 0 FAIL. Authoring guide at
+  docs/cheatsheets/litmus-stdlib-authoring.md verified present.
+- **Worker drain**: one packet drained (225), per recurrent-loop budget.
+  E2E gates skipped — not linux_immutable host, and no podman session
+  needed for this packet.
 
 ## Cycle 2026-07-15T19:42Z→20:20Z (windows — HYBRID: linux order 238 DONE from the windows lane via wsl2 wrappers; decision boundary codified in methodology)
 

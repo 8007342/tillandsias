@@ -63,7 +63,7 @@ critical_path:
     # 32b}, llama3.2:{1b,3b}, llama3.1:8b, gpt-oss:20b). Pin >=8
     # so a regression dropping models surfaces without false-
     # positive on small-list pruning.
-    command: "MODEL_COUNT=$(grep -cE '\"(qwen|llama|gpt)[^\"]*\":' images/default/config-overlay/opencode/config.json); if [ \"$MODEL_COUNT\" -ge 8 ]; then echo \"ok: $MODEL_COUNT ollama models enumerated\"; else echo \"FAIL: only $MODEL_COUNT of >=8\"; exit 1; fi"
+    command: "MODEL_COUNT=$(mf_regex_count images/default/config-overlay/opencode/config.json '\"(qwen|llama|gpt)[^\"]*\":'); if [ \"$MODEL_COUNT\" -ge 8 ]; then echo \"ok: $MODEL_COUNT ollama models enumerated\"; else echo \"FAIL: only $MODEL_COUNT of >=8\"; exit 1; fi"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
