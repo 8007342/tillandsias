@@ -14337,3 +14337,36 @@ plan_index:
             §4. Linux builder window active — highest-value pickup: this
             is the LAST blocker between BigPickle/Hy3 and transparent
             in-forge pushes on Windows.
+
+    - packet_id: vault-root-token-rederivation
+      order: 383
+      title: "Vault root-token re-derivation from the Shamir share (generate-root) — heal token/storage skew without wiping real secrets"
+      status: ready
+      kind: implementation
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [vault, security, robustness, rust]
+      estimated_hours: 5
+      outcome: >
+        Two live repros 2026-07-16 (macOS lossless-reset variant; linux
+        REAL-SECRET variant where reset would destroy operator
+        credentials): a stale/rotated recovered root token wedges every
+        root-token write path while the vault volume itself is healthy.
+        vault_bootstrap should detect token-auth failure, and — holding
+        the stored Shamir share — run `vault operator generate-root` to
+        mint a fresh root token, restore it to the keychain/fallback,
+        and continue; only if the SHARE also fails does it surface the
+        operator-attended re-init path (never auto-wipe storage that may
+        hold real secrets). Pin with a fixture on the detect-and-heal
+        seam; the crash-skew filing's reduction ask folds in here.
+      exit_criteria:
+        - "stale root token + valid share: bootstrap self-heals (generate-root) and policy writes succeed"
+        - "stale token + missing/invalid share: loud operator-attended verdict, storage untouched"
+        - "macuahuitl's live skew healed via the new seam (real-secret evidence)"
+      events:
+        - type: filed
+          ts: "2026-07-16T10:58:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: "Promoted from the crash-skew filing after the linux real-secret repro env-failed the release-evidence ci-full (16/17)."

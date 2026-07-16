@@ -48,3 +48,20 @@ on-demand at v0.3.260716.5).
 3. Verifiable closure: a litmus that kills the bootstrap between secret
    rotation and storage init, then asserts the next boot either recovers
    or emits the skew diagnosis (not the permanent generic wedge).
+
+## Linux-host repro (2026-07-16T10:55Z, coordinator cycle 7) — REAL-SECRET variant
+
+Same disease, worse constraints: macuahuitl's vault (holding the
+operator's REAL github/provider credentials — reset is NOT lossless
+here) now rejects the recovered root token on write_policy
+(`permission denied + invalid token`) while the container is healthy
+and AppRole mint paths kept working earlier the same night. Hypothesis:
+the stored fallback root token was stale all along, masked by the
+"policies already exist; skipping" path — tonight's fresh-provisioning
+need (post windows-260716-2 refusal semantics) exposed it. Impact
+scope: root-token WRITE operations only (policy provisioning; the
+publish_local unit test env-fails on this host, 16/17 ci-full);
+AppRole-based runtime flows unaffected. Blocks: nothing on clean hosts
+(macOS bootstrapped v0.3.260716.5 cleanly today, 11 policies).
+Recovery on THIS host: implement the generate-root seam below or
+operator-attended re-init. Promoted: order 383.
