@@ -403,35 +403,11 @@ size_matches_filter() {
 # TEST EXECUTION
 # ============================================================================
 
-# Execute a single command from litmus test with timeout and progress reporting
-execute_test_command() {
-    local command="$1"
-    local timeout_ms="${2:-${TIMEOUT_SECONDS}000}"
-    local timeout_sec=$((timeout_ms / 1000))
-
-    # Ensure minimum timeout
-    [[ $timeout_sec -lt 1 ]] && timeout_sec=1
-
-    # Capture step output to a FILE, never a pipe: a fixture grandchild that
-    # survives the step (daemonized test server, detached container) inherits
-    # a pipe write-end and blocks the caller's command-substitution read
-    # FOREVER — the 2026-07-15 gate hang (a TERM-ignoring tls-server held the
-    # runner's fd for 40+ minutes, twice). A file read EOFs at whatever was
-    # written; survivors keep writing harmlessly after the step is scored.
-    # --kill-after: TERM first (podman writers get a rollback window — the
-    # sqlite hot-journal lock-stall cascade), then KILL for TERM-immune
-    # fixtures. Both signatures + evidence:
-    # plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md
-    # @trace spec:spec-traceability
-    local capture
-    capture="$(mktemp "${TMPDIR:-/tmp}/litmus-step-capture.XXXXXX")" || {
-        (timeout --kill-after=10s "${timeout_sec}s" bash -c "$command" 2>&1) || true
-        return 0
-    }
-    (timeout --kill-after=10s "${timeout_sec}s" bash -c "$command" >"$capture" 2>&1) || true
-    cat "$capture"
-    rm -f "$capture"
-}
+# NOTE: the former execute_test_command() helper was DEAD CODE — zero call
+# sites; the real step execution is the file-capture invocation inside
+# run_litmus_test_file (search for step_capture). It was deleted 2026-07-15
+# after its presence misled a hardening pass into patching the wrong site
+# while the live command-substitution path kept wedging the gate.
 
 # Check if output matches success/failure criteria
 check_signal() {
@@ -817,7 +793,21 @@ run_litmus_test_file() {
         # @trace spec:spec-traceability
         printf '  [STEP %d/%d] %s (timeout: %ds)...' "$step_index" "${#step_commands[@]}" "$step_name" "$timeout_sec" >&2
 
-        step_output=$(LITMUS_STDLIB="${LITMUS_STDLIB}" timeout "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" 2>&1) || exit_code=$?
+        # Capture step output to a FILE, never a command-substitution pipe:
+        # a fixture grandchild that survives the step (daemonized test
+        # server, detached container) inherits the pipe write-end and blocks
+        # this read FOREVER — three gate wedges on 2026-07-15, each unblocked
+        # only by hand-killing the stray (see
+        # plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md).
+        # A file read EOFs at whatever was written; survivors keep writing
+        # harmlessly after the step is scored. --kill-after: TERM first
+        # (podman writers get a sqlite-rollback window), then KILL for
+        # TERM-immune fixtures.
+        local step_capture
+        step_capture="$(mktemp "${TMPDIR:-/tmp}/litmus-step-capture.XXXXXX")"
+        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" >"$step_capture" 2>&1 || exit_code=$?
+        step_output="$(cat "$step_capture")"
+        rm -f "$step_capture"
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
 
         if [[ $exit_code -eq 124 ]]; then

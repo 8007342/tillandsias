@@ -157,8 +157,20 @@ int main(int argc, char *argv[]) {
     const char *keyfile = argv[3];
     int port            = atoi(argv[4]);
 
-    signal(SIGTERM, stop);
-    signal(SIGINT,  stop);
+    /* sigaction WITHOUT SA_RESTART: glibc signal() implies SA_RESTART, so
+     * the blocking accept() below auto-restarted and the stop flag was
+     * never observed — the server survived SIGTERM indefinitely. Orphaned
+     * instances then held inherited litmus-runner pipe fds and wedged the
+     * whole pre-build gate (2026-07-15, three occurrences; see
+     * plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md).
+     * Without SA_RESTART, accept() returns EINTR and the loop exits. */
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = stop;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT,  &sa, NULL);
 
     SSL_library_init();
     SSL_load_error_strings();
