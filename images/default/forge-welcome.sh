@@ -172,6 +172,7 @@ printf "  ${B_WHITE}Build${RST}        ${DIM}cargo, maven, gradle, npm/yarn/pnpm
 printf "  ${B_WHITE}Test${RST}         ${DIM}pytest, junit, cargo-test, chromium-headless, firefox, drivers${RST}\n"
   printf "  ${B_WHITE}Inventory${RST}    ${DIM}run ${B_CYAN}tillandsias-inventory${RST}${DIM} for the full list${RST}\n"
   printf "  ${B_WHITE}Services${RST}     ${DIM}run ${B_CYAN}tillandsias-services${RST}${DIM} for enclave endpoints${RST}\n"
+  printf "  ${B_WHITE}Publish${RST}      ${DIM}MCP ${B_CYAN}publish_local${RST}${DIM} hosts this project in a sibling web container (www.<project>.localhost)${RST}\n"
   printf "  ${B_WHITE}Models${RST}       ${DIM}run ${B_CYAN}tillandsias-models${RST}${DIM} for inference tiers${RST}\n"
   printf "  ${B_WHITE}Cheatsheets${RST}  ${DIM}run ${B_CYAN}tellme about <topic>${RST}${DIM} to query documentation${RST}\n"
   echo ""

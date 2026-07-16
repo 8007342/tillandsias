@@ -150,6 +150,36 @@ fn main() {
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
 
+    // @trace spec:enclave-service-catalog
+    // `--publish-local <project>` — order 364 e2e closure: bring up the
+    // service catalog and publish a local project's WEB container, returning
+    // the friendly https URL. Same path the MCP publish_local tool uses; the
+    // flag is the operator/agent CLI surface for the same call.
+    #[cfg(feature = "tray")]
+    let publish_local: Option<String> = match user_args.iter().position(|a| a == "--publish-local")
+    {
+        Some(i) => match user_args.get(i + 1) {
+            Some(v) if !v.starts_with('-') && !v.is_empty() => Some(v.to_string()),
+            _ => {
+                eprintln!("Error: --publish-local requires a <project> value");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
+    // `--service-stop <project>` — order 364 idempotency/cleanup closure.
+    #[cfg(feature = "tray")]
+    let service_stop: Option<String> = match user_args.iter().position(|a| a == "--service-stop") {
+        Some(i) => match user_args.get(i + 1) {
+            Some(v) if !v.starts_with('-') && !v.is_empty() => Some(v.to_string()),
+            _ => {
+                eprintln!("Error: --service-stop requires a <project> value");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
+
     // @trace spec:remote-projects, spec:host-shell-architecture
     // `--cloud <owner/repo | name>` — project-attach companion to the agent
     // mode flags (`--opencode` / `--claude` / `--codex` / `--bash`). Resolves
@@ -275,6 +305,8 @@ fn main() {
         "--cache-verify",
         "--listen-vsock",
         "--cloud",
+        "--publish-local",
+        "--service-stop",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -587,6 +619,36 @@ fn main() {
             eprintln!("Error: --observatorium requires project path");
             std::process::exit(2);
         }
+    }
+
+    // @trace spec:enclave-service-catalog, spec:subdomain-routing-via-reverse-proxy
+    // order 364 e2e closure: publish a local project's WEB container and
+    // return the friendly URL, or stop a published service. This is the
+    // operator-facing CLI for the same call the MCP publish_local tool makes.
+    #[cfg(feature = "tray")]
+    if let Some(project) = publish_local {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        match rt.block_on(crate::publish_local_service(&project, "WEB", debug)) {
+            Ok(url) => {
+                println!("{}", url);
+                return;
+            }
+            Err(e) => {
+                eprintln!("Error publishing {}: {}", project, e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    #[cfg(feature = "tray")]
+    if let Some(project) = service_stop {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        if let Err(e) = rt.block_on(crate::service_stop("WEB", &project, debug)) {
+            eprintln!("Error stopping {}: {}", project, e);
+            std::process::exit(1);
+        }
+        println!("stopped");
+        return;
     }
 
     // Phase 3, Task 12: Auto-detection (transparent mode)
@@ -2289,29 +2351,87 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
 /// project's GitHub upstream. The mirror's post-receive hook uses this URL
 /// (combined with the podman secret token) to push outbound to GitHub.
 ///
-/// Returns `None` for projects that aren't git repos, have no `origin`
-/// configured, or where the git invocation fails for any reason. A missing
-/// origin is benign — the mirror still serves the bare repo, and the
-/// post-receive hook logs "no remote configured, skipping push".
+/// Returns `None` for projects that aren't git repos or have no `origin`
+/// configured. A missing origin is benign — the mirror still serves the
+/// bare repo, and the post-receive hook logs "no remote configured,
+/// skipping push".
+///
+/// The `git` binary is preferred (it honors includes and multi-valued
+/// keys), but hosts without one — the WSL2/VZ guest OS ships no git; it
+/// exists only inside the forge containers — fall back to parsing the
+/// repository's `.git/config` directly. Without the fallback the launcher
+/// silently omitted the GitHub→mirror `insteadOf` rewrite on every wire
+/// lane, severing the forge push channel (order 350 root cause).
 ///
 /// @trace spec:git-mirror-service, spec:enclave-network
 fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
-    let output = std::process::Command::new("git")
+    if let Ok(output) = std::process::Command::new("git")
         .arg("-C")
         .arg(project_path)
         .args(["config", "--get", "remote.origin.url"])
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+        && output.status.success()
+        && let Ok(url) = String::from_utf8(output.stdout)
+    {
+        let trimmed = url.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
     }
-    let url = String::from_utf8(output.stdout).ok()?;
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        None
+    parse_gitdir_origin_url(project_path)
+}
+
+/// Minimal `.git/config` reader for `remote.origin.url`, used when no
+/// `git` binary is available on the launching host. Follows a `gitdir:`
+/// pointer file one hop (linked worktrees / staged gitdir facades).
+/// Understands only the canonical `[remote "origin"]` (and legacy dotted
+/// `[remote.origin]`) section with a plain `url = …` line — includes,
+/// quoting, and inline comments are out of scope; the git-binary path
+/// handles those hosts.
+fn parse_gitdir_origin_url(project_path: &Path) -> Option<String> {
+    let dot_git = project_path.join(".git");
+    let config_path = if dot_git.is_dir() {
+        dot_git.join("config")
     } else {
-        Some(trimmed.to_string())
+        // `.git` file form: `gitdir: <path>` (absolute, or relative to the
+        // project root).
+        let pointer = std::fs::read_to_string(&dot_git).ok()?;
+        let target = pointer.strip_prefix("gitdir:")?.trim();
+        let gitdir = if Path::new(target).is_absolute() {
+            PathBuf::from(target)
+        } else {
+            project_path.join(target)
+        };
+        gitdir.join("config")
+    };
+    let contents = std::fs::read_to_string(config_path).ok()?;
+    let mut in_origin = false;
+    for raw in contents.lines() {
+        let line = raw.trim();
+        if line.starts_with('[') {
+            // Section keyword is case-insensitive; the "origin" subsection
+            // name is case-sensitive per git-config(1). The legacy dotted
+            // form lowercases the subsection, so a lowercase compare is
+            // exactly right there.
+            let lowered = line.to_ascii_lowercase();
+            in_origin = (lowered.starts_with("[remote ") && line.contains("\"origin\""))
+                || lowered == "[remote.origin]";
+            continue;
+        }
+        if !in_origin {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim().eq_ignore_ascii_case("url") {
+            let url = value.trim();
+            if !url.is_empty() {
+                return Some(url.to_string());
+            }
+        }
     }
+    None
 }
 
 /// Best-effort mint of a Vault AppRole token for a git-mirror container.
@@ -2324,27 +2444,37 @@ fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
 ///
 /// @trace spec:tillandsias-vault
 #[allow(unused_variables)]
-async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<String> {
+/// Mint the per-project git-mirror relay credential (vault AppRole token,
+/// delivered to the container as a podman secret).
+///
+/// windows-260716-2 (P1, live repro on the WSL2 lane 2026-07-16): this
+/// used to return `Option<String>` and swallow mint failures behind a
+/// debug-gated message about a "legacy keyring" fallback that no longer
+/// exists post-Phase 6 — the ensure then created the mirror container
+/// WITHOUT any secret mount, and the broken push channel surfaced only
+/// when relay-refs.sh correctly fail-closed at push time, blocking the
+/// whole in-forge cycle. A mirror without a relay credential is a broken
+/// push channel by construction: fail LOUD at create time instead.
+async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Result<String, String> {
     #[cfg(feature = "vault")]
     {
         let instance = format!("{project_name}-{}", std::process::id());
-        match vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug)
+        vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug)
             .await
-        {
-            Ok((_token, secret_name)) => Some(secret_name),
-            Err(e) => {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] vault AppRole mint failed ({e}); falling back to legacy keyring secret"
-                    );
-                }
-                None
-            }
-        }
+            .map(|(_token, secret_name)| secret_name)
+            .map_err(|e| {
+                format!(
+                    "vault AppRole mint for the git-mirror relay credential failed: {e}. \
+                     Refusing to launch a credential-less mirror — every in-forge push \
+                     would fail-close at relay time (windows-260716-2). Check vault \
+                     health (tillandsias-vault container, unseal state) and retry."
+                )
+            })
     }
     #[cfg(not(feature = "vault"))]
     {
-        None
+        let _ = (project_name, debug);
+        Err("built without the vault feature: no git-mirror relay credential backend".to_string())
     }
 }
 
@@ -2606,6 +2736,27 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         "--tmpfs".into(),
         "/run/router:size=8m".into(),
         // @trace spec:subdomain-routing-via-reverse-proxy
+        // The router reverse-proxies to enclave containers by hostname
+        // (e.g. tillandsias-<project>-web). Those hostnames are NOT in
+        // ENCLAVE_NO_PROXY_BASE, and Go's NO_PROXY CIDR matching does not
+        // apply to resolved IPs — so Caddy would forward upstream connects
+        // through the egress proxy and 502. The router is the internal
+        // ingress; it must reach enclave containers directly, never via the
+        // egress proxy. Clear the proxy env so Caddy connects straight to
+        // the upstream container.
+        "--env".into(),
+        "http_proxy=".into(),
+        "--env".into(),
+        "https_proxy=".into(),
+        "--env".into(),
+        "HTTP_PROXY=".into(),
+        "--env".into(),
+        "HTTPS_PROXY=".into(),
+        "--env".into(),
+        "no_proxy=*".into(),
+        "--env".into(),
+        "NO_PROXY=*".into(),
+        // @trace spec:subdomain-routing-via-reverse-proxy
         // Host publish on loopback ONLY. The container listener stays on
         // :8080; the host port is selected from the 80 -> 8080 -> --port
         // fallback chain by `select_router_host_port()`.
@@ -2719,6 +2870,7 @@ async fn ensure_router_running(
     client: &PodmanClient,
     certs_dir: &Path,
     image: &str,
+    version: &str,
     host_port: u16,
     debug: bool,
 ) -> Result<(), String> {
@@ -2754,6 +2906,17 @@ async fn ensure_router_running(
             }
             let _ = client.remove_container(ROUTER_NAME).await;
         }
+    }
+
+    // router-web-images-ondemand-ensure-gap (2026-07-16): a version-bumped
+    // binary meets an image store that does not yet carry the new tag; a
+    // bare run then attempts a REGISTRY pull of `localhost/...` (connection
+    // refused, exit 125). Build on demand from runtime assets like every
+    // other ensure surface — the seam the operator's --init-on-demand goal
+    // pins (live-verified with the git image, 2026-07-16).
+    if !client.image_exists(image).await {
+        let root = resolve_runtime_asset_root(version, debug)?;
+        tokio::task::block_in_place(|| ensure_image_exists(&root, "router", image, debug))?;
     }
 
     if debug {
@@ -3358,6 +3521,21 @@ enum ForgeMode {
     Web,
 }
 
+/// Order 342: guest-owned checkout isolation for host-shared (virtiofs)
+/// project trees. When the launcher exports
+/// `TILLANDSIAS_FORGE_SRC_ISOLATION=clone`, the operator's checkout is
+/// staged READ-ONLY at `/home/forge/src-host/<project>` and the forge
+/// entrypoint's existing filesystem clone transport
+/// (`clone_project_from_mirror` + `TILLANDSIAS_GIT_MIRROR_PATH`) materializes
+/// a container-ephemeral working checkout at `~/src/<project>` — forge
+/// edits, index churn, and cleanup can never mutate operator bytes. The
+/// decision record (materialize-by-clone; linked `git worktree` REJECTED for
+/// sharing host refs/objects/locks) lives in
+/// plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md.
+fn forge_src_isolation_requested() -> bool {
+    std::env::var("TILLANDSIAS_FORGE_SRC_ISOLATION").is_ok_and(|v| v == "clone")
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
@@ -3419,8 +3597,6 @@ fn build_opencode_forge_args(
         "--env".into(),
         format!("TILLANDSIAS_PROJECT={project_name}"),
         "--env".into(),
-        "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
-        "--env".into(),
         "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
         "--tmpfs".into(),
         "/tmp:size=256m,mode=1777".into(),
@@ -3448,11 +3624,6 @@ fn build_opencode_forge_args(
         // `/home/forge/src` puts the project files where the forge expects a
         // sibling directory and confuses every consumer that resolves
         // `~/src/<project>/...`.
-        "-v".into(),
-        format!(
-            "{}:/home/forge/src/{project_name}:rw",
-            project_path.display()
-        ),
         // Persistent per-project tool/package cache (order 179), same as
         // build_forge_agent_run_args (Claude/Codex/Antigravity/Maintenance).
         // Without this, OpenCode/OpenCode Web launches lose $CARGO_HOME /
@@ -3472,7 +3643,36 @@ fn build_opencode_forge_args(
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
-    append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
+    // Project source routing. Both branches mount under
+    // `/home/forge/src/…` conventions (not flat at `/home/forge/src`) so the
+    // in-container tree matches the entrypoint clone path and
+    // `$TILLANDSIAS_PROJECT_PATH` consumers.
+    if forge_src_isolation_requested() {
+        // Order 342: operator checkout is a READ-ONLY staging source; the
+        // entrypoint's filesystem clone transport materializes the working
+        // checkout container-locally. No host-mount claim, no gitdir
+        // facade/mask — the workdir is forge-owned by construction.
+        args.extend([
+            "-v".into(),
+            format!(
+                "{}:/home/forge/src-host/{project_name}:ro",
+                project_path.display()
+            ),
+            "--env".into(),
+            format!("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
+        ]);
+    } else {
+        args.extend([
+            "--env".into(),
+            "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
+            "-v".into(),
+            format!(
+                "{}:/home/forge/src/{project_name}:rw",
+                project_path.display()
+            ),
+        ]);
+        append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
+    }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
@@ -4765,6 +4965,11 @@ fn run_status_check(debug: bool) -> Result<(), String> {
         "chromium-core",
         "chromium-framework",
         "forge",
+        // router-web-images-ondemand-ensure-gap (2026-07-16): both were
+        // missing from every ensure list; the publish path then hit a
+        // phantom registry pull (125) on any version handover.
+        "router",
+        "web",
     ];
     ensure_versioned_images(&root, &images, version, debug)?;
 
@@ -4792,7 +4997,17 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
+        let git_vault_secret = match mint_git_mirror_vault_token(project_name, debug).await {
+            Ok(secret) => Some(secret),
+            Err(e) => {
+                // Status-check mirror is a throwaway bare repo (no pushes) —
+                // tolerate, but LOUD (not debug-gated; windows-260716-2).
+                eprintln!(
+                    "[tillandsias] WARNING: status-check mirror launching credential-less: {e}"
+                );
+                None
+            }
+        };
         client
             .run_container_observed(
                 "status-git",
@@ -5692,6 +5907,10 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
     let mut config = String::new();
     config.push_str("[safe]\n");
     config.push_str("\tdirectory = /home/forge/src/*\n");
+    // Order 342: the isolated-checkout staging mount lives under src-host/
+    // (read-only, virtiofs uid-mismatched) — without this, the in-container
+    // clone refuses with "dubious ownership".
+    config.push_str("\tdirectory = /home/forge/src-host/*\n");
     config.push('\n');
     config.push_str("[credential]\n");
     config.push_str("\thelper =\n");
@@ -5739,26 +5958,31 @@ struct ForgeRepoGitDir {
     refs: PathBuf,
 }
 
-fn git_config_set(config_path: &Path, key: &str, value: &str) -> Option<()> {
-    let status = Command::new("git")
-        .args(["config", "--file"])
-        .arg(config_path)
-        .args([key, value])
-        .status()
-        .ok()?;
-    status.success().then_some(())
-}
-
 fn write_forge_index(root: &Path, project_path: &Path, host_gitdir: &Path) -> Option<()> {
-    let tree = Command::new("git")
+    let tree = match Command::new("git")
         .arg("-C")
         .arg(project_path)
         .args(["rev-parse", "--verify", "HEAD^{tree}"])
         .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|tree| tree.trim().to_string());
+    {
+        Ok(output) if output.status.success() => String::from_utf8(output.stdout)
+            .ok()
+            .map(|tree| tree.trim().to_string()),
+        // No `git` binary on the launching host (the WSL2/VZ guest OS ships
+        // none). Leave the index absent for in-container materialization —
+        // every forge image carries git and can `read-tree HEAD` against
+        // the nested objects/refs mounts. Aborting here instead collapses
+        // the whole facade into the empty fail-closed 0700 .git mask that
+        // order 382 observed in the field.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!(
+                "[tillandsias] forge gitdir facade: no `git` on this host; \
+                 index left for in-container materialization"
+            );
+            return Some(());
+        }
+        _ => None,
+    };
 
     let mut command = Command::new("git");
     command
@@ -5773,7 +5997,11 @@ fn write_forge_index(root: &Path, project_path: &Path, host_gitdir: &Path) -> Op
     } else {
         command.arg("--empty");
     }
-    command.status().ok()?.success().then_some(())
+    match command.status() {
+        Ok(status) => status.success().then_some(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(()),
+        Err(_) => None,
+    }
 }
 
 fn sanitize_forge_origin_url(origin: &str) -> Option<String> {
@@ -5811,6 +6039,44 @@ fn sanitize_forge_origin_url(origin: &str) -> Option<String> {
 /// is outside the project bind mount; returning `None` preserves that behavior
 /// without exposing the referenced host metadata.
 /// @trace spec:git-mirror-service
+/// Order 382: hand root-staged git trees to the forge uid.
+///
+/// The guest headless (WSL2/VZ) runs as root (order 309's least-privilege
+/// split is still open), so everything `write_forge_repo_gitdir` stages —
+/// and the host gitdir trees bind-mounted into the forge — lands
+/// root-owned. The forge user (uid 1000, no sudo) then cannot read `.git`,
+/// `git rev-parse` fails, and the credential-channel guard fail-closes
+/// every in-forge cycle (Windows curl-install live repro 2026-07-16:
+/// MO-SMOKE FAIL, root-owned mode-700 .git). When — and only when —
+/// running as root, chown the staged trees to the forge uid. Linux native
+/// runs as the desktop user and `--userns=keep-id` maps that uid onto the
+/// forge's, so the chown is skipped there (euid != 0). `lchown` + no
+/// recursion through symlinks so a crafted link inside a worktree cannot
+/// redirect ownership changes outside the staged tree.
+#[cfg(unix)]
+fn chown_tree_to_forge_uid(path: &Path) {
+    // The forge image's only interactive account; fixed at 1000 everywhere
+    // (keep-id mapping, tmpfs modes, /home/forge ownership).
+    const FORGE_UID: u32 = 1000;
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+    // Explicit stack, not recursion: objects trees can be tens of
+    // thousands of entries deep-ish and wide.
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(p) = stack.pop() {
+        let _ = std::os::unix::fs::lchown(&p, Some(FORGE_UID), Some(FORGE_UID));
+        if p.is_dir()
+            && !p.is_symlink()
+            && let Ok(entries) = std::fs::read_dir(&p)
+        {
+            for entry in entries.flatten() {
+                stack.push(entry.path());
+            }
+        }
+    }
+}
+
 fn write_forge_repo_gitdir(project_name: &str, project_path: &Path) -> Option<ForgeRepoGitDir> {
     let host_gitdir = project_path.join(".git");
     if !host_gitdir.is_dir() {
@@ -5837,33 +6103,43 @@ fn write_forge_repo_gitdir(project_name: &str, project_path: &Path) -> Option<Fo
         }
     }
 
+    // Written directly (not via `git config`) so facade staging works on
+    // hosts without a git binary — the same git-less-guest constraint as
+    // read_host_project_origin_url. Values are fixed strings plus the
+    // sanitized origin (control characters already rejected), so no
+    // escaping is needed.
     let config_path = root.join("config");
-    std::fs::write(&config_path, []).ok()?;
-    git_config_set(&config_path, "core.repositoryformatversion", "0")?;
-    git_config_set(&config_path, "core.bare", "false")?;
-    git_config_set(&config_path, "core.logallrefupdates", "true")?;
-    git_config_set(&config_path, "gc.auto", "0")?;
-    git_config_set(&config_path, "maintenance.auto", "false")?;
-    git_config_set(&config_path, "push.autoSetupRemote", "true")?;
-    git_config_set(&config_path, "push.default", "current")?;
-    git_config_set(
-        &config_path,
-        "core.hooksPath",
-        "/home/forge/.cache/tillandsias/git-hooks",
-    )?;
-
+    let mut local_config = String::new();
+    local_config.push_str("[core]\n");
+    local_config.push_str("\trepositoryformatversion = 0\n");
+    local_config.push_str("\tbare = false\n");
+    local_config.push_str("\tlogallrefupdates = true\n");
+    local_config.push_str("\thooksPath = /home/forge/.cache/tillandsias/git-hooks\n");
+    local_config.push_str("[gc]\n\tauto = 0\n");
+    local_config.push_str("[maintenance]\n\tauto = false\n");
+    local_config.push_str("[push]\n\tautoSetupRemote = true\n\tdefault = current\n");
     if let Some(origin) = read_host_project_origin_url(project_path)
         .as_deref()
         .and_then(sanitize_forge_origin_url)
     {
-        git_config_set(&config_path, "remote.origin.url", &origin)?;
-        git_config_set(
-            &config_path,
-            "remote.origin.fetch",
-            "+refs/heads/*:refs/remotes/origin/*",
-        )?;
+        local_config.push_str("[remote \"origin\"]\n");
+        local_config.push_str(&format!("\turl = {origin}\n"));
+        local_config.push_str("\tfetch = +refs/heads/*:refs/remotes/origin/*\n");
     }
+    std::fs::write(&config_path, local_config.as_bytes()).ok()?;
     write_forge_index(&root, project_path, &host_gitdir)?;
+
+    // Order 382: the facade AND the bind-mounted host trees must be
+    // readable by the forge uid. No-op unless running as root (guest lane).
+    // Also load-bearing for the git-less staging path above: an unwritable
+    // root-owned facade makes the in-container index materialization
+    // (`git read-tree HEAD`) fail EACCES.
+    #[cfg(unix)]
+    {
+        chown_tree_to_forge_uid(&root);
+        chown_tree_to_forge_uid(&host_gitdir.join("objects"));
+        chown_tree_to_forge_uid(&host_gitdir.join("refs"));
+    }
 
     Some(ForgeRepoGitDir {
         root,
@@ -6366,7 +6642,15 @@ fn run_observatorium_mode(
         // idempotent.
         //
         // @trace plan/steps/15-tray-network-bootstrap.md
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await?;
 
         client
             .run_container_observed(
@@ -6546,7 +6830,15 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             Some(port) => port,
             None => select_router_host_port(None, debug)?,
         };
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await?;
 
         // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
         // See the forge-launch-proxy site for the full rationale.
@@ -6570,7 +6862,18 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                 .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
         }
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
+        // windows-260716-2 made the git-mirror relay credential mandatory
+        // (mint fails loud), so the vault is a hard prerequisite of this
+        // lane. This ad-hoc bring-up chain predates the dependency model
+        // (order 227) and never ensured it — a fresh VM boot then refused
+        // the lane with "Vault container is not running" (macOS one-shot
+        // --opencode, live 2026-07-16). spawn_blocking because
+        // ensure_vault_running drives its own runtime.
+        #[cfg(feature = "vault")]
+        tokio::task::spawn_blocking(move || vault_bootstrap::ensure_vault_running(debug))
+            .await
+            .map_err(|e| format!("[OpenCode] vault ensure task panicked: {e}"))??;
+        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(
                 "opencode-git",
@@ -7624,7 +7927,7 @@ pub(crate) fn run_opencode_web_mode(
             Some(&versioned_image_tag("proxy", version)),
         )?;
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
+        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(
                 "opencode-web-git",
@@ -7711,13 +8014,20 @@ pub(crate) fn run_opencode_web_mode(
         // After forge starts, ensure router is running and write dynamic routes.
         let router_image = versioned_image_tag("router", version);
 
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug)
-            .await
-            .unwrap_or_else(|e| {
-                if debug {
-                    eprintln!("[tillandsias] Warning: router degraded: {e}");
-                }
-            });
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await
+        .unwrap_or_else(|e| {
+            if debug {
+                eprintln!("[tillandsias] Warning: router degraded: {e}");
+            }
+        });
 
         // Upsert the OpenCode Web route without dropping other project
         // services such as Observatorium.
@@ -8034,7 +8344,15 @@ pub(crate) fn ensure_enclave_for_project(
             Some(port) => port,
             None => select_router_host_port(None, debug)?,
         };
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await?;
 
         // The enclave proxy is already running (ensured by ensure_forge_launch
         // above via the RealSatisfier → ensure_proxy_running path).  No inline
@@ -8043,7 +8361,7 @@ pub(crate) fn ensure_enclave_for_project(
         // @trace plan/issues/launch-paths-route-through-dependency-model
 
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
+        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(
                 "forge-launch-git",
@@ -9914,7 +10232,7 @@ pub(crate) async fn publish_local_service(
         "--network".into(),
         "tillandsias-enclave".into(),
         "-v".into(),
-        format!("{}:/var/www:ro", worktree.display()),
+        format!("{}:/var/www:ro,Z", worktree.display()),
     ];
     args.push(image.into());
 
@@ -9923,17 +10241,42 @@ pub(crate) async fn publish_local_service(
         .await
         .map_err(|e| format!("Failed to start web container: {e}"))?;
 
-    let mut routes = read_router_routes(debug)?;
-    routes.retain(|r| r.subdomain != project_name);
+    // Order 364: the router is what actually serves the friendly URL. The
+    // publish path assumes it is up (the tray's forge-launch brings it up),
+    // but the standalone CLI path must ensure it explicitly so curl reaches
+    // the container through the reverse proxy.
+    let certs_dir = crate::ensure_ca_bundle(debug)?;
+    let router_image = crate::versioned_image_tag("router", VERSION.trim());
+    let router_host_port = match crate::existing_router_host_port(&client, debug).await? {
+        Some(port) => port,
+        None => crate::select_router_host_port(None, debug)?,
+    };
+    crate::ensure_router_running(
+        &client,
+        &certs_dir,
+        &router_image,
+        VERSION.trim(),
+        router_host_port,
+        debug,
+    )
+    .await?;
 
-    let mut new_route = RouterRoute::new(project_name, &container_name, 8080);
+    let mut routes = read_router_routes(debug)?;
+    routes.retain(|r| r.subdomain != format!("www.{project_name}"));
+
+    let mut new_route = RouterRoute::new(format!("www.{project_name}"), &container_name, 8080);
     new_route.public = true;
     routes.push(new_route);
 
     write_router_routes(&routes, debug)?;
     caddy_reload_routes(debug).await?;
 
-    Ok(format!("https://www.{project_name}.localhost"))
+    // The router publishes its listener on loopback :8080 over plain HTTP
+    // (no TLS termination on the loopback ingress), so the locally-served
+    // URL is http on the router's host port.
+    Ok(format!(
+        "http://www.{project_name}.localhost:{router_host_port}"
+    ))
 }
 
 #[cfg(feature = "tray")]
@@ -9968,7 +10311,7 @@ pub(crate) async fn service_stop(
 
     let mut routes = read_router_routes(debug)?;
     let initial_len = routes.len();
-    routes.retain(|r| r.subdomain != project_name);
+    routes.retain(|r| r.subdomain != format!("www.{project_name}"));
 
     if routes.len() < initial_len {
         write_router_routes(&routes, debug)?;
@@ -9982,6 +10325,71 @@ pub(crate) async fn service_stop(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn git_mirror_relay_credential_mint_fails_loud_not_silent() {
+        // windows-260716-2: a mint failure used to return None behind a
+        // debug-gated message, and the ensure launched the mirror WITHOUT
+        // its relay credential — every in-forge push then fail-closed at
+        // relay time. The mint is Result now; real lanes propagate (`?`),
+        // only the throwaway status-check mirror tolerates, loudly.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let mint = source_window(source, "async fn mint_git_mirror_vault_token(");
+        assert!(
+            mint.contains("Result<String, String>"),
+            "mint must be Result — silent Option was the fail-open vector"
+        );
+        assert!(
+            mint.contains("Refusing to launch a credential-less mirror"),
+            "mint error must name the refusal and the packet"
+        );
+        assert!(
+            !mint.contains("legacy keyring"),
+            "the phantom post-Phase-6 fallback message must stay dead"
+        );
+        for lane in ["fn run_opencode_mode(", "fn ensure_enclave_for_project("] {
+            let window = source_window(source, lane);
+            assert!(
+                window.contains("mint_git_mirror_vault_token(project_name, debug).await?"),
+                "{lane} must hard-fail on a missing relay credential"
+            );
+        }
+        let status = source_window(source, "fn run_status_check(");
+        assert!(
+            status.contains("WARNING: status-check mirror launching credential-less"),
+            "status-check tolerance must be loud, not debug-gated"
+        );
+    }
+
+    #[test]
+    fn forge_gitdir_staging_hands_root_staged_trees_to_forge_uid() {
+        // Order 382: the guest headless (WSL2/VZ) runs as root, so staged
+        // git trees land root-owned and the forge user cannot read .git —
+        // the credential-channel guard then fail-closes every in-forge
+        // cycle (Windows curl-install live repro 2026-07-16). The staging
+        // path must hand the facade AND the bind-mounted host trees to the
+        // forge uid, gated on euid==0 so Linux native (keep-id) is a no-op.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn write_forge_repo_gitdir(");
+        assert!(
+            window.contains("chown_tree_to_forge_uid(&root)"),
+            "staged facade gitdir must be handed to the forge uid"
+        );
+        assert!(
+            window.contains("chown_tree_to_forge_uid(&host_gitdir.join(\"objects\"))")
+                && window.contains("chown_tree_to_forge_uid(&host_gitdir.join(\"refs\"))"),
+            "bind-mounted host objects/refs trees must be handed to the forge uid"
+        );
+        let helper = source_window(source, "fn chown_tree_to_forge_uid(");
+        assert!(
+            helper.contains("geteuid() } != 0"),
+            "chown must be gated on running as root (guest lane only)"
+        );
+        assert!(
+            helper.contains("lchown"),
+            "must not follow symlinks while re-owning staged trees"
+        );
+    }
 
     #[test]
     fn github_token_injected_as_env_host_side_never_argv() {
@@ -11879,6 +12287,73 @@ mod tests {
         }
     }
 
+    // Pins the git-less-host fallback for the mirror insteadOf injection
+    // (order 350 root cause: the WSL2/VZ guest OS has no `git` binary, so
+    // the Command::new("git") path returns None and the wire lane lost its
+    // push channel). The parser must read a plain clone's config without
+    // shelling out.
+    #[test]
+    fn parse_gitdir_origin_url_reads_plain_clone_config() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("cloned");
+        let git_dir = project_path.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("create .git");
+        std::fs::write(
+            git_dir.join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\
+             [remote \"origin\"]\n\turl = https://github.com/8007342/tillandsias.git\n\
+             \tfetch = +refs/heads/*:refs/remotes/origin/*\n\
+             [branch \"main\"]\n\tremote = origin\n",
+        )
+        .expect("write config");
+
+        assert_eq!(
+            parse_gitdir_origin_url(&project_path).as_deref(),
+            Some("https://github.com/8007342/tillandsias.git")
+        );
+    }
+
+    #[test]
+    fn parse_gitdir_origin_url_follows_gitdir_pointer_file() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("worktree");
+        std::fs::create_dir_all(&project_path).expect("create worktree");
+        let real_gitdir = tmp.path().join("gitdirs").join("worktree");
+        std::fs::create_dir_all(&real_gitdir).expect("create real gitdir");
+        std::fs::write(
+            project_path.join(".git"),
+            format!("gitdir: {}\n", real_gitdir.display()),
+        )
+        .expect("write pointer");
+        std::fs::write(
+            real_gitdir.join("config"),
+            "[remote \"origin\"]\n\turl = git@github.com:org/repo.git\n",
+        )
+        .expect("write config");
+
+        assert_eq!(
+            parse_gitdir_origin_url(&project_path).as_deref(),
+            Some("git@github.com:org/repo.git")
+        );
+    }
+
+    #[test]
+    fn parse_gitdir_origin_url_ignores_other_remotes_and_missing_origin() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let project_path = tmp.path().join("no-origin");
+        let git_dir = project_path.join(".git");
+        std::fs::create_dir_all(&git_dir).expect("create .git");
+        std::fs::write(
+            git_dir.join("config"),
+            "[core]\n\tbare = false\n\
+             [remote \"upstream\"]\n\turl = https://github.com/other/repo.git\n",
+        )
+        .expect("write config");
+
+        assert_eq!(parse_gitdir_origin_url(&project_path), None);
+        assert_eq!(parse_gitdir_origin_url(&tmp.path().join("absent")), None);
+    }
+
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
         let _guard = env_lock();
@@ -12347,6 +12822,43 @@ mod tests {
         assert!(
             window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
             "observatorium mode must ensure the web image exists before launch"
+        );
+    }
+
+    /// Order 342 pin: guest-owned checkout isolation branch in the
+    /// opencode/web args builder — RO staging mount + filesystem clone
+    /// transport when requested; host-mount claim + gitdir mask only on the
+    /// default branch.
+    #[test]
+    fn opencode_args_isolation_branch_stages_ro_and_clones() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn build_opencode_forge_args(");
+        assert!(
+            window.contains("if forge_src_isolation_requested()"),
+            "isolation branch must exist (order 342)"
+        );
+        assert!(
+            window.contains(":/home/forge/src-host/{project_name}:ro"),
+            "operator checkout must be staged READ-ONLY under src-host/"
+        );
+        assert!(
+            window.contains("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
+            "isolated branch must route through the entrypoint filesystem clone transport"
+        );
+        // The host-mount claim and the gitdir facade/mask belong ONLY to the
+        // shared-tree branch: assert they appear after the else.
+        let else_idx = window
+            .find("} else {")
+            .expect("isolation must have a default else branch");
+        let host_mount_idx = window
+            .find("TILLANDSIAS_PROJECT_HOST_MOUNT=1")
+            .expect("default branch keeps the host-mount claim");
+        let mask_idx = window
+            .find("append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);")
+            .expect("default branch keeps the gitdir facade/mask");
+        assert!(
+            host_mount_idx > else_idx && mask_idx > else_idx,
+            "host-mount claim + gitdir mask must be confined to the non-isolated branch"
         );
     }
 
@@ -13243,5 +13755,32 @@ mod tests {
             ts_field.ends_with('Z'),
             "timestamp= must end with Z; got {ts_field}"
         );
+    }
+
+    #[cfg(feature = "tray")]
+    #[test]
+    fn publish_local_service_starts_container_and_returns_url() {
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            let _ = std::fs::create_dir_all(
+                crate::local_projects::host_project_root().join("test-publish-e2e"),
+            );
+            std::fs::write(
+                crate::local_projects::host_project_root().join("test-publish-e2e/index.html"),
+                b"<html><body>e2e</body></html>",
+            )
+            .ok();
+        });
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let url = rt
+            .block_on(publish_local_service("test-publish-e2e", "WEB", false))
+            .expect("publish_local_service should succeed");
+
+        assert!(url.starts_with("http://www.test-publish-e2e.localhost:"));
+
+        rt.block_on(service_stop("WEB", "test-publish-e2e", false))
+            .expect("service_stop should succeed");
     }
 }

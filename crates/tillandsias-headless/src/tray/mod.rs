@@ -736,7 +736,15 @@ fn handle_mcp_jsonrpc(project_label: &str, req: &serde_json::Value) -> Option<se
             let tool_name = req["params"]["name"].as_str().unwrap_or("");
             let args = req["params"]["arguments"].as_object();
 
-            let rt = tokio::runtime::Builder::new_current_thread()
+            // MULTI-thread runtime is load-bearing: the publish path re-enters
+            // podman_runtime()'s RuntimeOrHandle::block_on, which uses
+            // tokio::task::block_in_place — a PANIC on current-thread runtimes
+            // ("can call blocking only when running on the multi-threaded
+            // runtime"; live repro 2026-07-16, first tray publish_local killed
+            // its connection thread). The deny/handshake paths never hit it,
+            // so only a live publish exposes a regression here.
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
                 .enable_all()
                 .build()
                 .unwrap();
@@ -1971,6 +1979,40 @@ fn handle_select_agent(service: Arc<TrayService>, agent: SelectedAgent) {
     }
 }
 
+/// LIVE re-probe of a stale-negative availability snapshot.
+///
+/// `podman_available`/`forge_available` are captured ONCE at tray startup;
+/// a tray launched during a version handover (images still building — e.g.
+/// right after `./build.sh --install` bumps VERSION) caches
+/// `forge_available=false`, and without this re-probe the tray refuses
+/// every launch FOREVER while the top row sits at "Verifying environment…"
+/// (operator dead-on-arrival repro, 2026-07-16). A positive snapshot is
+/// trusted (no per-click podman cost on the happy path); a negative one is
+/// re-probed, and success self-heals the status row through the existing
+/// Verifying→AllHealthy transition in `set_status`.
+///
+/// @trace spec:tray-progress-and-icon-states, spec:menu-action-error-handling
+fn recheck_environment_if_stale(
+    service: &Arc<TrayService>,
+    snapshot: &TrayUiState,
+) -> (bool, bool) {
+    let mut podman_ready = snapshot.podman_available;
+    let mut forge_ready = snapshot.forge_available;
+    if !(podman_ready && forge_ready) {
+        podman_ready = podman_available();
+        forge_ready =
+            podman_ready && image_exists(&format!("tillandsias-forge:v{}", snapshot.version));
+        if forge_ready {
+            let _ = futures::executor::block_on(service.set_status(
+                status_label(&TrayStatusStage::AllReady),
+                enclave_status_to_icon(EnclaveStatus::AllHealthy),
+                Some(true),
+            ));
+        }
+    }
+    (podman_ready, forge_ready)
+}
+
 fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
     let snapshot = service.snapshot();
     let version = snapshot.version.clone();
@@ -2004,20 +2046,38 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
         return;
     }
 
-    // Verify forge image is available
-    if !snapshot.forge_available {
-        eprintln!(
-            "error: forge image not available for project '{}'; initialization may be in progress",
+    // Verify podman + forge image availability with a LIVE re-probe when
+    // the snapshot says no (see recheck_environment_if_stale — a tray
+    // started during a version handover cached false forever and every
+    // launch died silently; operator dead-on-arrival repro 2026-07-16).
+    let (podman_ready, forge_ready) = recheck_environment_if_stale(&service, &snapshot);
+    if !forge_ready {
+        let msg = format!(
+            "forge image not available for project '{}'; initialization may be in progress",
             project.name
         );
+        eprintln!("error: {msg}");
+        // Refusals must be visible in the tray, not just the journal.
+        // @trace spec:menu-action-error-handling, spec:tray-ux
+        let _ = futures::executor::block_on(service.set_status(
+            format!("🥀 {msg}"),
+            TrayIconState::Dried,
+            None,
+        ));
         return;
     }
 
-    if !snapshot.podman_available {
-        eprintln!(
-            "error: podman is not available; cannot launch project '{}'",
+    if !podman_ready {
+        let msg = format!(
+            "podman is not available; cannot launch project '{}'",
             project.name
         );
+        eprintln!("error: {msg}");
+        let _ = futures::executor::block_on(service.set_status(
+            format!("🥀 {msg}"),
+            TrayIconState::Dried,
+            None,
+        ));
         return;
     }
 
@@ -2073,18 +2133,33 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
     }
 
     let snapshot = service.snapshot();
-    if !snapshot.podman_available {
-        eprintln!(
-            "error: podman unavailable; cannot launch cloud project '{}'",
+    // Live re-probe on a stale-negative snapshot (same dead-on-arrival class
+    // as handle_launch_project; see recheck_environment_if_stale).
+    let (podman_ready, forge_ready) = recheck_environment_if_stale(&service, &snapshot);
+    if !podman_ready {
+        let msg = format!(
+            "podman unavailable; cannot launch cloud project '{}'",
             cloud.name
         );
+        eprintln!("error: {msg}");
+        let _ = futures::executor::block_on(service.set_status(
+            format!("🥀 {msg}"),
+            TrayIconState::Dried,
+            None,
+        ));
         return;
     }
-    if !snapshot.forge_available {
-        eprintln!(
-            "error: forge image not ready; cannot launch cloud project '{}'",
+    if !forge_ready {
+        let msg = format!(
+            "forge image not ready; cannot launch cloud project '{}'",
             cloud.name
         );
+        eprintln!("error: {msg}");
+        let _ = futures::executor::block_on(service.set_status(
+            format!("🥀 {msg}"),
+            TrayIconState::Dried,
+            None,
+        ));
         return;
     }
 
@@ -2855,7 +2930,7 @@ fn build_clone_project_submenu(state: &TrayUiState) -> MenuNode {
     // Show top 5 projects
     for (idx, project) in projects.iter().take(5).enumerate() {
         let item_id = 2000 + idx as i32;
-        let label = format!("{} {}", &project.owner, &project.name);
+        let label = format!("{} {}", project.owner, project.name);
         children.push(child(node(
             item_id,
             props(vec![

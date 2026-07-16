@@ -610,8 +610,24 @@ run_litmus_test_file() {
     # burns its full step budget and FAILs as a fake regression. Probe once,
     # fail FAST with the environmental cause named. fake-backend tests
     # (LITMUS_PODMAN_MODE=fake) never touch real podman — exempt.
+    # Trigger only when a critical-path COMMAND actually invokes podman —
+    # a test that merely MENTIONS the word (e.g. the cross-target cfg sweep
+    # naming the tillandsias-podman crate) must not inherit the podman
+    # environment. On Windows hosts common.sh primes a podman shim that
+    # exists-but-fails, which turned every grep-shape litmus into a false
+    # ENV-FAIL (2026-07-15 windows repro).
+    # PLEASE REVIEW: linux — trigger tightened from whole-file grep to
+    # command lines by the windows lane.
     # Evidence: plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md
-    if grep -q 'podman' "$test_file" 2>/dev/null \
+    # Linux hosts ONLY: on macOS/Windows podman is VM-internal by design —
+    # a homebrew podman CLI with no machine is the NORMAL host state, and
+    # the un-gated preflight blanket-ENV-FAILed 35 source-shape checks on
+    # darwin (2026-07-15, instant suite 96%→72%). Merge synthesis
+    # 2026-07-16: macOS's platform gate + windows' tightened trigger
+    # (command lines that actually invoke podman, not whole-file mentions)
+    # — each lane independently fixed one half of the same over-trigger.
+    if [ "$(uname -s)" = "Linux" ] \
+        && grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]' "$test_file" 2>/dev/null \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
         && command -v podman >/dev/null 2>&1 \
         && ! timeout 5 podman ps --format '{{.ID}}' >/dev/null 2>&1; then

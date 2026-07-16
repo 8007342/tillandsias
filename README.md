@@ -15,6 +15,29 @@ latest *promoted* release. Daily builds keep shipping as
 [pre-releases](https://github.com/8007342/tillandsias/releases) — grab one
 of those only if you want the bleeding edge.
 
+## RELEASE LEDGER
+
+For humans and agents alike: what each release set out to do, what it
+actually shipped, and what broke and got fixed along the way. Agents doing
+smoke curl-installs or jumpstarting work read the recent rows first; rows
+age into semantic distillation (detail lives with the most recent releases;
+see `plan/issues/` for the full evidence trail of any row).
+The release skill appends a row per release; STABLE marks channel promotions.
+
+<details>
+<summary>Release ledger (newest first)</summary>
+
+| RELEASE | INTENDED FEATURES | BUGFIXES |
+|---|---|---|
+| v0.3.260716.1 (daily) | Order 363: agent-reachable MCP publish tunnel (dedicated NDJSON `mcp.sock`, forge-mounted, SO_PEERCRED project gate) — implementation complete, live-publish e2e pending (order 374). FRESHNESS methodology rung 1 + packets 370-372. Order 225 litmus-stdlib `mf_*` migration batch. Windows order 238 credential research merged. Next-release milestone filed: web containers → one-prompt public share (orders 373-381). | Litmus runner: file-capture step execution + TERM→KILL ladder at the real site (dead `execute_test_command` decoy tombstoned); `tls-test-server.c` SA_RESTART SIGTERM immunity (wedged 3 gate runs); podman sqlite lock-stall cascade root-caused + ENV-FAIL preflight; `environment-isolation` allowlist caught up to `NODE_USE_SYSTEM_CA`; pre-restart fixture recovery (image-tag fallback + `ss` port-probe). |
+| v0.3.260715.2 (daily) | Windows order 312 (release-gating standard-user wire), macOS orders 331/332, cross-host integration. | Clippy-strict repair forward from windows lane; stable-Rust SO_PEERCRED via nix. |
+| v0.3.260714.1 (daily) | Forge runtime CA-trust convergence (one system bundle for Git/curl/Node/Python); order 320 parity checkpoint; vsock handshake litmus v2. | Six duplicate entrypoint CA blocks removed; stale v1 probe assertions replaced. |
+| v0.3.260712.1 (**STABLE**) | Promoted to the stable channel — the curl-install commands above resolve here. | — |
+
+*Older releases: distilled; see git tags and `plan/loop_status.md` history.*
+
+</details>
+
 ## LINUX INSTRUCTIONS
 
 We prefer Fedora Silverblue.

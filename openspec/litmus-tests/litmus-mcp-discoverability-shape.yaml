@@ -1,0 +1,66 @@
+name: litmus:mcp-discoverability-shape
+spec: forge-environment-discoverability
+description: Verify the config-overlay MCP entry, web-services instructions, and tray-side handler all reference the publish tool family — an agent must discover publish_local/service_status/service_stop without out-of-band hints
+severity: medium
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains images/default/config-overlay/opencode/config.json
+  - workspace contains images/default/config-overlay/mcp/host-browser.sh
+  - workspace contains images/default/config-overlay/opencode/instructions/web-services.md
+  - workspace contains crates/tillandsias-headless/src/tray/mod.rs
+
+critical_path:
+  - step: "config-overlay MCP entry points to the host-browser bridge"
+    command: "mf_literal images/default/config-overlay/opencode/config.json 'host-browser.sh' && echo 'mcp-entry-present'"
+    timeout_ms: 5000
+    expected_behavior: "mcp-entry-present"
+
+  - step: "web-services instruction documents publish_local"
+    command: "mf_literal images/default/config-overlay/opencode/instructions/web-services.md 'publish_local' && echo 'publish-local-documented'"
+    timeout_ms: 5000
+    expected_behavior: "publish-local-documented"
+
+  - step: "web-services instruction documents service_status"
+    command: "mf_literal images/default/config-overlay/opencode/instructions/web-services.md 'service_status' && echo 'service-status-documented'"
+    timeout_ms: 5000
+    expected_behavior: "service-status-documented"
+
+  - step: "web-services instruction documents service_stop"
+    command: "mf_literal images/default/config-overlay/opencode/instructions/web-services.md 'service_stop' && echo 'service-stop-documented'"
+    timeout_ms: 5000
+    expected_behavior: "service-stop-documented"
+
+  - step: "tray handler advertises publish_local in tools/list"
+    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"publish_local\"' && echo 'handler-publish-local-present'"
+    timeout_ms: 5000
+    expected_behavior: "handler-publish-local-present"
+
+  - step: "tray handler advertises service_status in tools/list"
+    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"service_status\"' && echo 'handler-service-status-present'"
+    timeout_ms: 5000
+    expected_behavior: "handler-service-status-present"
+
+  - step: "tray handler advertises service_stop in tools/list"
+    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"service_stop\"' && echo 'handler-service-stop-present'"
+    timeout_ms: 5000
+    expected_behavior: "handler-service-stop-present"
+
+  - step: "tray handler server name is tillandsias-host-services"
+    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs 'tillandsias-host-services' && echo 'server-name-present'"
+    timeout_ms: 5000
+    expected_behavior: "server-name-present"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace spec:host-browser-mcp"
+  expected_log: "MCP config-overlay, instructions, and handler all reference the publish tool family"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "mcp-discoverability-shape"
+
+rollback:
+  on_failure: "inspect images/default/config-overlay/opencode/config.json, images/default/config-overlay/opencode/instructions/web-services.md, and crates/tillandsias-headless/src/tray/mod.rs for publish tool surface drift"
+  command: "grep -n 'host-browser\\|publish_local\\|service_status\\|service_stop\\|tillandsias-host-services' images/default/config-overlay/opencode/config.json images/default/config-overlay/opencode/instructions/web-services.md crates/tillandsias-headless/src/tray/mod.rs"

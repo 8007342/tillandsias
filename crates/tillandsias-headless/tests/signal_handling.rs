@@ -1,5 +1,11 @@
 // @trace spec:linux-native-portable-executable, spec:headless-mode, spec:graceful-shutdown
 //! Direct-binary shutdown litmus for the headless launcher.
+//!
+//! Unix-only: drives the binary with libc::kill/SIGTERM process semantics.
+//! PLEASE REVIEW: linux — cfg gate added by the windows lane so
+//! `cargo test -p tillandsias-headless` compiles on Windows targets
+//! (E0425 libc::pid_t/kill; litmus:cross-target-cfg-gate-check class).
+#![cfg(unix)]
 
 use std::io::Read;
 use std::path::PathBuf;

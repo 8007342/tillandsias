@@ -1,6 +1,154 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-16T00:45:00Z
+LastExecutionTime: 2026-07-16T09:15:00Z
+
+## Direction — what are we all doing today
+
+<!-- Operator-owned thematic direction (The Tlatoāni, 2026-07-16). One theme,
+     no packet ids: agents REDUCE the theme against ./plan using ./methodology
+     (selection policy still applies — release-targeted first). Cycles cite
+     the direction in their ledger entries. Order 381 tracks skill wiring. -->
+
+**We're supporting web containers.** Every host works toward: a harness agent
+in the forge launches a web container for a real project (../visual-chess),
+discovers the publish tools organically, and — as rungs land — multi-service
+entries (WordPress+DB), then one-prompt public share over a Cloudflare tunnel
+at a clearly-ephemeral URL. Use iterations on this theme to also clean up
+remaining work on YOUR active packets: major feature iterations double as
+test/refinement runs for what's already in flight. Milestone:
+web-share-release-milestone (order 373).
+
+## Cycle 2026-07-16T08:24Z→08:30Z (forge — meta-orchestration: order 374 DONE — MCP discoverability litmus + spec tool-surface requirement)
+
+- **Host**: forge, `linux-next`, agent linux-bigpickle-opencode-20260716T0824Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.Pa1w6s` — 3 pre-existing dirty paths
+  (package-lock.json, two plan issues; all sibling/operator work, preserved).
+- **Sibling heads**: main 9b217958, linux-next e37711f0, osx-next 8c806811,
+  windows-next 92311850. Already up to date.
+- **Order 374 DONE**: all three exit criteria satisfied. Criterion 1 (organic
+  tools/list discovery) demonstrated by Hy3 session (2026-07-16T05:05Z).
+  Criterion 2 (live publish_local through mcp.sock tunnel) verified
+  (2026-07-16T03:20Z). Criterion 3 (discoverability litmus) closed:
+  created `litmus-mcp-discoverability-shape.yaml` (instant, pre-build, 8
+  steps: config-overlay MCP entry, web-services.md tool documentation,
+  tray handler tools/list surface, server name). Added tool-surface
+  requirement to `spec:forge-environment-discoverability` (3 scenarios:
+  agent discovers publish tools via tools/list, config-overlay MCP entry
+  points to bridge, web-services instruction documents tool family).
+- **Worker drain**: one packet drained (374), per recurrent-loop budget.
+  Order 375 (visual-chess-harness-publish-e2e) now unblocked — deps 374
+  and 364 both done.
+- **E2E gates**: skipped — forge host, no podman needed for this packet.
+
+## Cycle 2026-07-16T07:31Z→09:2xZ (windows — GOAL cycle: in-forge meta-orchestration + transparent mirror push; order 350 root cause FOUND+FIXED)
+
+- **Host**: windows (Yolanda), `windows-next`, agent
+  windows-bullo-fable5-20260716T0731Z (operator-directed goal session).
+  Guard `ok:gh-keyring`; boundary `/tmp/meta-orchestration-boundary.7ZM7YB`
+  clean. Operator directive: successful /meta-orchestration INSIDE the
+  forge with transparent push; linux builder active ~07:30→12:30Z on
+  45-min cycles for linux-owned pickups.
+- **Coordination**: merged origin/linux-next twice (0b16fa02 fast-forward
+  at cycle start; 2f8d53f1 mid-cycle with an order-382 DOUBLE-FIX
+  reconciliation — linux dd34cd8a chown_tree_to_forge_uid kept, my
+  duplicate helper dropped, both progress events preserved; all pins pass
+  post-merge). Wrapped ./build.sh --check green pre- and post-merge.
+- **Order 350 ROOT CAUSE (one bug, three symptoms)**: the WSL2/VZ guest OS
+  ships NO git binary; read_host_project_origin_url + facade staging shell
+  out to it → (a) insteadOf rewrite silently omitted, (b) mirror container
+  never told its upstream (absent from every prior Windows lane),
+  (c) facade abort → fail-closed empty 0700 .git mask = Hy3's "root-owned
+  mode 700" (order 382, same root cause). The 2026-07-15 "linux-owned
+  lane-launch injection gap" verdict was wrong in mechanism; additionally
+  masked by the no-origin parity fixture.
+- **Fixes (windows-next)**: parse_gitdir_origin_url fallback (3 pins),
+  git-less facade staging (direct config write; index ENOENT-soft,
+  in-container materialization; chown reconciled to linux's helper).
+  Hot-swapped current-checkout guest headless v0.3.260716.5 into the
+  registered runtime (musl via wsl2 wrapper; NO re-provision — vault +
+  operator GitHub auth preserved deliberately).
+- **Live wire-lane probes (project WITH origin)**: insteadOf injected ✓,
+  tillandsias-git-tillandsias mirror container UP (first time on
+  Windows) ✓, in-forge `git rev-parse` ✓, guard `ok:forge-git-mirror` ✓,
+  fetch through mirror serving live upstream deltas ✓, push dry-run
+  accepted ✓. Full table: order-350 evidence doc 2026-07-16 addendum.
+- **E2E gates**: `e2e-preflight eligibility` = `eligible`; destructive
+  local-build gate DEFERRED this cycle with recorded reason — re-provision
+  wipes the vault (operator re-login is attended) and the goal needed the
+  provisioned substrate. Yesterday's destructive PASS stands (f32e84f9).
+- **Filed**: goal packet windows-260716-1 (in-forge transparent push),
+  optimization/build-guest-binaries-stale-staging (CARGO_TARGET_DIR
+  redirect stages stale binaries; masked-exit near-miss recurrence),
+  goal evidence doc inforge-meta-orchestration-transparent-push-2026-07-16.
+- **BigPickle in-forge cycle (the goal demonstration)**: launched
+  `--cloud tillandsias --opencode --prompt "Use the /meta-orchestration
+  skill"` on the fixed lane; agent pulled linux-next THROUGH THE MIRROR
+  transparently (zero manual git config), drained an order-374 slice
+  (spec tool-surface requirement + litmus-mcp-discoverability-shape,
+  8/8 in-lane), committed e8b29bac. Push REJECTED LOUDLY by the 318
+  verified-ack relay — the mirror container had NO vault-token secret
+  mounted (silent mint/mount failure at ensure; NEW P1
+  windows-260716-2, the LAST transparency blocker, linux pickup).
+  Commit recovered from the guest checkout and host-relayed to
+  linux-next (rebased onto 2f8d53f1). Honest-failure architecture
+  verified end-to-end; no silent loss anywhere.
+
+## Cycle 2026-07-15T21:07Z→2026-07-16T01:05Z (linux — full meta-orchestration: recovery, order 363, gate-wedge root-cause saga, FRESHNESS directive, RELEASE v0.3.260716.1)
+
+- **Host**: linux_mutable (macuahuitl, fresh restart), `linux-next`, agent
+  linux-tlatoani-claude-20260715T2107Z (Claude Fable 5, operator-attended).
+  Guard `ok:gh-keyring`. Boundary snapshot
+  `/tmp/meta-orchestration-boundary.BC2TFb` recorded 67 pre-existing dirty
+  paths — operator-identified as interrupted pre-restart cycle output;
+  preserved via commits de0b5829 + 0f15597a (fixture image-fallback +
+  ss-probe fixes; TRACES/VERSION/dashboard regen), then legitimately
+  regenerated by this cycle's sanctioned ci-full runs (boundary disposition:
+  preserved-in-git, not byte-identical on disk — recorded transparently).
+- **Coordination**: merged origin/windows-next 91f39e1a (order 238 research
+  + wsl2_hybrid_work boundary) into linux-next clean; osx-next already
+  merged.
+- **Order 363 implementation-complete (483c3472)**: agent-reachable MCP
+  publish tunnel — dedicated NDJSON mcp.sock (dir bind-mounted ro into the
+  forge; postcard control.sock deliberately NOT exposed), shared
+  handle_mcp_jsonrpc for envelope + NDJSON transports, MCP handshake,
+  SO_PEERCRED project gate. Criteria 2-4 evidenced by no-podman fixtures;
+  criterion 1 (live publish e2e) remains — packet flipped back to ready,
+  lease released.
+- **Gate-wedge root-cause saga (4 ci-full runs to green)**: one C bug —
+  tls-test-server.c signal()/SA_RESTART made the fixture TLS server
+  TERM-immune — cascaded as (a) SIGKILLed podman writers leaving a
+  half-dead zombie holding the sqlite storage lock ~7min (every podman call
+  stalled ~100s; 5 fake litmus FAILs), (b) orphaned servers inheriting the
+  runner's command-substitution pipe (two 40+min runner hangs past step
+  budgets), (c) a first hardening pass patching execute_test_command — DEAD
+  CODE with zero call sites. Fixes: 1380a4e1 (podman ENV-FAIL preflight),
+  32ee1786 (file-capture + kill ladder at the REAL execution site; dead fn
+  tombstoned; sigaction fix — ca-trust fixture went infinite-hang →
+  1.465s), 8578e283 (env-isolation allowlist catch-up for 6b299368's
+  NODE_USE_SYSTEM_CA). Evidence:
+  plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md.
+- **Green run 4**: pre-build gate 17/17; installed v0.3.260716.1 (musl
+  portable + full image set + vault bootstrap); post-build e2e re-evidenced
+  9/9 PASS including a FULL in-forge meta-orchestration cycle that pushed
+  order-225 work (e256321e). One dead_crashed full-cycle forge run noted
+  (agent died mid-task, no OOM, --rm reaped; order 265 class; log preserved
+  session-side).
+- **--init on-demand VERIFIED (operator goal)**: removed
+  tillandsias-git:v0.3.260716.1, ran installed `tillandsias --status-check
+  --debug` → "building missing image git" → rebuilt from embedded assets,
+  full stack up, exit 0 in 20s. Login-flow preflight pinned at
+  main.rs:11002 (github login ensures the git image through the same seam);
+  interactive github-login e2e remains the known filed gap.
+- **FRESHNESS directive (The Tlatoāni, verbatim this session)**: never-ending
+  component-staleness loop — methodology.yaml `component_freshness` (rung 1:
+  freshness records, RE-FRESH flagging, refreshed|updated|obsoleted
+  dispositions, discard-over-repair bias, tombstones); rungs 2-4 shaped as
+  ready packets orders 370-372; filing:
+  plan/issues/component-freshness-lifecycle-2026-07-15.md.
+- **RELEASE v0.3.260716.1**: PR #75 merged to main (9b217958), tag pushed,
+  release.yml dispatched (run 29463054301). Parity gate: 0 gaps. linux-next
+  fast-forwarded onto the merge commit.
 
 ## Cycle 2026-07-16T00:34Z→00:45Z (linux — meta-orchestration: order 225 migration batch + stdlib shape litmus)
 
@@ -23,6 +171,187 @@ LastExecutionTime: 2026-07-16T00:45:00Z
 - **Worker drain**: one packet drained (225), per recurrent-loop budget.
   E2E gates skipped — not linux_immutable host, and no podman session
   needed for this packet.
+
+## Cycle 2026-07-16T01:34Z→01:40Z (linux — meta-orchestration: order 363 DONE — live publish e2e verified)
+
+- **Host**: linux_mutable, `linux-next`, agent linux-tlatoani-opencode-20260716T0134Z.
+  Credential guard `ok:gh-keyring`; boundary snapshot clean (dirty-start preflight
+  passed); merged origin/linux-next already up to date.
+- **Order 363 DONE**: all 4 exit criteria met. Criterion 1 verified via live
+  podman test: `publish_local_service` starts `tillandsias-<project>-web`,
+  returns `https://www.<project>.localhost`, and `service_stop` cleans up.
+  Added `publish_local_service_starts_container_and_returns_url` as a
+  `#[cfg(feature = "tray")]` fixture test. 312/312 headless tests pass,
+  `./build.sh --check` green.
+- **Worker drain**: one packet drained (363), per recurrent-loop budget.
+
+## Cycle 2026-07-16T02:11Z→02:45Z (linux — meta-orchestration: order 364 DONE — publish-local e2e curl closure + router proxy-bypass)
+
+- **Host**: linux_mutable, `linux-next`, agent linux-tlatoani-opencode-20260716T0211Z.
+  Credential guard `ok:gh-keyring`; boundary snapshot `/tmp/meta-orchestration-boundary.6Z0lSH`.
+- **Order 364 DONE** (lease `publish-local-e2e-litmus-v1` released). The 357
+  milestone I3c closure: `curl` against the published URL returns the fixture
+  project's index.html through the router. Verified live:
+  `tillandsias --publish-local e2e-fixture-project` brings up the router +
+  web container, writes the `www.e2e-fixture-project.localhost` route, and
+  serves `E2E Fixture` HTML. Re-publish is idempotent; `--service-stop` removes
+  the route (404 through proxy). Litmus at
+  `openspec/litmus-tests/litmus-publish-local-e2e.yaml`.
+- **Correction to 363 entry**: `publish_local_service` does NOT return
+  `https://www.<project>.localhost`. The router publishes its listener on
+  loopback `:8080` over plain HTTP (no TLS on the loopback ingress), so the
+  real URL is `http://www.<project>.localhost:<router_host_port>` — fixed in
+  `publish_local_service` and the fixture test assertion.
+- **Root-cause fix discovered mid-cycle**: the router container inherited
+  `http_proxy=http://proxy:3128` from the enclave env, and Caddy's
+  `reverse_proxy` forward-ed upstream connects to the web container through the
+  egress proxy (Go's `NO_PROXY` CIDR matching does not apply to resolved IPs,
+  and `tillandsias-*-web` is not in `ENCLAVE_NO_PROXY_BASE`). Result: 502 on
+  every published route. Fixed by clearing the proxy env on the router
+  container (`build_router_run_args`) so Caddy reaches enclave containers
+  directly. This was a pre-existing bug affecting ALL published web services.
+- **Build**: `./build.sh --check` green; 249+ headless tests pass (0 failures).
+  Commit `5dda534f`, pushed to `linux-next`.
+- **Worker drain**: one packet drained (364), per recurrent-loop budget.
+
+## Cycle 2026-07-16T08:24Z→08:50Z (macos — meta-orchestration: GOAL SMOKE RUNG DONE — first in-forge /meta-orchestration smoke PASS on macOS (big-pickle); clone-lane origin fix landed)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0824Z
+  (operator /loop iteration 2). Guard `ok:gh-keyring`; boundary clean; merged
+  origin/linux-next 2f8d53f1 (coordinator had already merged our P1s).
+- **GOAL EVIDENCE**: `--opencode /home/forge/src/tillandsias --prompt "…smoke
+  mode (verify-only)"` on the fresh 0.3.260716.5 stack → the in-forge
+  **opencode/big-pickle** agent ran the full smoke runbook (host classify,
+  plan parse, credential guard, 131-PASS litmus sweep, e2e-preflight) and
+  emitted `MO-SMOKE: PASS`, exit 0, clean lane teardown. Report:
+  plan/issues/macos-inforge-smoke-pass-2026-07-16.md.
+- **Live confirmation**: the in-forge credential guard refused with
+  `origin does not resolve to the enclave git mirror (effective origin:
+  /home/forge/src-host/tillandsias)` — exactly the clone-lane misalignment
+  filed last cycle. Fix landed (559190c3): `git -C` origin resolution +
+  insteadOf routing gated on bare mirrors; git-mirror-service litmus 5/5.
+  NOTE: version-tagged forge images won't pick this up until a rebuild
+  (FRESHNESS class, orders 370-372) — the smoke ran the pre-fix entrypoint.
+- **Full-cycle residual** (macOS in-forge): (1) operator `--github-login`
+  (token still 404 at 08:25Z), (2) real mirror push route for the clone
+  lane (linux seam, issue filed), (3) forge-image freshness for entrypoint
+  fixes. Small captures: forge lane self-dirties .opencode/package-lock.json
+  (plan/issues/forge-lane-selfdirty-opencode-lockfile-2026-07-16.md); `cmp`
+  missing in forge image (addendum on forge-build-check-tooling-gap-2026-07-08).
+- **Worker drain**: one packet (order 349 progress: smoke gate + entrypoint
+  fix), per recurrent-loop budget.
+
+## Cycle 2026-07-16T07:31Z→08:15Z (macos — meta-orchestration: week-stale install root-caused + fresh 0.3.260716.5 installed; vault backoff panic FIXED; vault crash-skew wedge recovered; chain live to the credential prompt)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0731Z
+  (operator /loop, goal: BigPickle/Hy3 in-forge /meta-orchestration on macOS).
+  Guard `ok:gh-keyring`; boundary snapshot clean; merged origin/linux-next
+  dd34cd8a (fast-forward — osx-next was already contained).
+- **Goal-frontier root cause**: installed tray was WEEK-STALE (Jul-8
+  ed769a1c-dirty) — and because the tray bundles+stages the guest headless
+  at every boot, the stale app silently pinned the GUEST a week back too
+  (orders 342/382 not live on this host despite being merged).
+  /build-macos-tray run: green (findings file
+  plan/issues/macos-build-findings-2026-07-16.md, commit 1db61fac); fresh
+  tray+guest 0.3.260716.5 installed to ~/Applications AND /Applications.
+- **Found+FIXED live (c40db47a)**: order-235 R7 vault health-retry backoff
+  constructed `tokio::time::sleep` as a `block_on` argument (off-runtime
+  thread) → guest headless panicked "no reactor running" on the first
+  recreate-window hit. Single occurrence in crates/ (swept).
+- **Found+recovered: vault crash-skew wedge**: the panic-interrupted
+  bootstrap left `tillandsias-vault-unseal` rotated against 2-day-old
+  `tillandsias-vault-data` → deterministic unseal 400, container stopped,
+  permanent. Lossless reset (vault stored nothing yet) + re-bootstrap
+  verified: 11 policies, proxy+git images ensured on-demand at
+  v0.3.260716.5. Crash-ordering reduction filed:
+  plan/issues/vault-unseal-secret-storage-crash-skew-2026-07-16.md.
+- **Order 349 progress event recorded** (claim taken+released this cycle):
+  identity criterion now satisfiable; gate rerun still blocked on the linux
+  guest-git facade fix PLUS a second macOS-lane blocker found by source
+  analysis: the order-342 clone lane's remote alignment does
+  `GIT_DIR=<non-bare checkout root> git config` → empty → push URL falls
+  back to the RO staged path (one-line shaped fix: `git -C`), filed at
+  plan/issues/macos-clone-lane-push-remote-misalignment-2026-07-16.md.
+- **In-forge goal status (for the operator + coordinator)**: macOS chain is
+  now live end-to-end up to the credential prompt — remaining blockers are
+  (1) operator `--github-login` (vault github token 404), (2) linux-owned
+  guest-git facade dependency (order 349 blocker), (3) the clone-lane push
+  remote misalignment above. Linux/WSL2 sibling evidence: order 382.
+- **Worker drain**: one packet drained (/build-macos-tray + regression
+  fix), per recurrent-loop budget. E2E gates: destructive macOS substrate
+  reset deliberately NOT run this cycle — it would wipe the freshly
+  re-initialized vault right before the operator's github-login.
+
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T2315Z. Guard `ok:gh-keyring`; merged
+  origin/linux-next 1380a4e1 (73 files) clean; wrapped ./build.sh --check
+  green.
+- **Merged-tree repairs (pre-350)**: (a) 16 Windows-test-target E0425s —
+  unix-only libc in headless integration tests → #![cfg(unix)] on
+  signal_handling.rs + e2e_user_flow.rs; (b) hardened litmus runner's
+  podman ENV-FAIL preflight fired on any test MENTIONING podman (Windows
+  common.sh shim exists-but-fails) → trigger tightened to real podman
+  invocations; dev-build suite 4/4 incl. litmus:cross-target-cfg-gate-check.
+- **Order 350 (coordinator top priority): LIVE EVIDENCE PRODUCED, verdict
+  PARTIAL PARITY, packet → blocked on the linux-owned wire-lane gitconfig
+  mirror-injection gap.** Full chain executed unattended: parity source+
+  unit half via wrapper; CURRENT-checkout guest binaries musl-built ON
+  WINDOWS via the wsl2 wrapper (first ever; musl-gcc+clang added to build
+  distro); tray rebuilt with embed (a283f8ce==HEAD); refreshed cold
+  provision (embedded inject confirmed — no release skew); PUBLIC lane
+  (launch_spec argv) on a local fixture; staged-probe file capture. GREEN:
+  gitconfig file:/home/forge/.gitconfig, mirror fetch, TLS full parity
+  (curl/node/python, zero CA overrides). RED: GitHub→mirror insteadOf
+  rewrite ABSENT (push-channel gap, current-build-confirmed). Evidence:
+  windows-forge-config-trust-live-parity-2026-07-15.md.
+- **New packet**: forge-maintenance-session-name-collision (provisional
+  windows-260715-4, linux pickup) — order-314 class on the maintenance
+  surface (bare run --name, 125 on relaunch; live repro in the 350 run).
+- **Corroborated**: order-359 ncurses attestation failure on a tokenless
+  fresh vault; order-325 non-interactive github-login gap kept 326-crit-2
+  unattemptable (noted, no new packet).
+- **Host state at exit**: lane containers stopped, distro terminated
+  (registered, idle), keepalive killed, tree clean at push.
+
+## Cycle 2026-07-15T23:14Z→00:45Z (macos — coordination pass: order 342 COMPLETED with live dirty-host proof; darwin gate green after unwedging the new litmus podman preflight; tray smoke PASS)
+
+- **Host**: macOS arm64, `osx-next`, agent
+  macos-Tlatoanis-MacBook-Air-fable5-20260715T2314Z. Guard `ok:gh-keyring`;
+  startup-boundary snapshot clean (order-341 guard). Merge of linux-next
+  1380a4e1 fast-forwarded (all osx work already integrated upstream).
+- **Darwin gate on the merged head (coordinator ask)**: build.sh --check
+  PASS; workspace tests PASS (the previously filed codex vault-lease pin
+  is fixed upstream); order-363 MCP tunnel cfg-gating compiles clean on
+  darwin. ONE wedge found + FIXED (adc488d8): the hardened litmus
+  runner's podman ENV-FAIL preflight assumed host podman is the substrate
+  — on macOS a machineless CLI is normal (podman is VM-internal) and it
+  blanket-ENV-FAILed 35 source-shape checks (96%→72%). Preflight now
+  Linux-hosts-only; trigger over-breadth (file-level grep) noted for the
+  owner. Suite back to 97% (137/141; only the 4 known Darwin-shape fails).
+- **Order 342 COMPLETED (adc488d8)**: macOS --opencode lane now runs
+  from a guest-owned checkout — operator tree staged READ-ONLY at
+  /home/forge/src-host/<project>, materialized via the entrypoint's
+  existing filesystem clone transport; host-mount claim + gitdir
+  facade/mask confined to the default branch. Live dirty-host fixture:
+  in-forge clobber/commit/git clean -fdx/rm + a kernel-rejected RO write
+  probe → HOST-BYTES-IDENTICAL. The order-328 data-loss class is closed
+  on macOS at the runtime boundary, not just the skill contract.
+- **Order 153**: verification roster names four in-forge harness agents
+  (opus/bigpickle/gemini/codex) — no macOS host agent; no verified-by
+  from this host. Roster note only.
+- **Tray smoke (/build-macos-tray gate set, adc488d8 installed)**:
+  codesign + diagnose-schema (provisioned=true) + 3s-alive + clean
+  SIGTERM all OK — plan/issues/macos-build-findings-2026-07-15.md.
+- **Findings filed**: stress_concurrent_attach_detach load-flaky on
+  darwin (52/100 under full-workspace load, 3/3 standalone);
+  shared-checkout stale stashes near-miss (bare `stash pop` applied a
+  2026-07-01 foreign stash; conflict aborted it, boundary restored —
+  operator triage ask incl. the exec-guest-interactive draft in
+  stash@{0}).
+- **Queue after drain**: order 155 (tray stream refactor, 8h) is the
+  next macOS pick — deferred per recurring-loop budget after 342 + gate
+  + fixes; no other macOS-role release-targeted ready work.
 
 ## Cycle 2026-07-15T19:42Z→20:20Z (windows — HYBRID: linux order 238 DONE from the windows lane via wsl2 wrappers; decision boundary codified in methodology)
 

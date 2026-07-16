@@ -76,6 +76,29 @@ All discovery commands MUST support `--help` and provide usage examples.
 - **THEN** the output includes the command purpose and `--json`
 - **AND** includes example usage for the flat command shape
 
+### Requirement: MCP host-services tool surface is organically discoverable
+
+The forge MUST expose host-service tools (publish_local, service_status,
+service_stop) via the MCP tool surface so that an agent can discover and
+use them without out-of-band instructions. The config-overlay MCP entry,
+the web-services instruction file, and the tray-side MCP handler MUST
+all reference the same tool family.
+
+#### Scenario: Agent discovers publish tools via tools/list
+- **WHEN** an agent sends `tools/list` through the host-browser MCP server
+- **THEN** the response includes `publish_local`, `service_status`, and `service_stop`
+- **AND** the server identifies itself as `tillandsias-host-services`
+
+#### Scenario: Config-overlay MCP entry points to the bridge
+- **WHEN** the opencode config.json is inspected
+- **THEN** the `host-browser` MCP entry command points to `mcp/host-browser.sh`
+- **AND** the entry is enabled
+
+#### Scenario: Web-services instruction documents the tool family
+- **WHEN** the `web-services.md` instruction file is read
+- **THEN** it documents `publish_local`, `service_status`, and `service_stop`
+- **AND** it explains the safety model (project attribution from session, not request)
+
 ## Litmus Tests
 
 ### Test: tillandsias-inventory command completeness

@@ -480,7 +480,13 @@ clone_project_from_mirror() {
             # Forge therefore stays credential-free (no token in its env or
             # config) and the user sees the canonical GitHub remote.
             local mirror_origin
-            mirror_origin="$(GIT_DIR="${src}" git config remote.origin.url 2>/dev/null || true)"
+            # `git -C` resolves the gitdir for BOTH bare mirrors (Windows/WSL)
+            # and non-bare staged checkouts (macOS clone lane, order 342).
+            # `GIT_DIR=$src` only worked for bare repos: on a non-bare checkout
+            # it reads <checkout>/config (absent) -> empty -> the push URL fell
+            # back to the read-only staged path and every in-forge push died.
+            # plan/issues/macos-clone-lane-push-remote-misalignment-2026-07-16.md
+            mirror_origin="$(git -C "${src}" config --get remote.origin.url 2>/dev/null || true)"
             local github_url=""
             if [[ -n "$mirror_origin" ]]; then
                 # Strip user[:password]@ prefix if present.
@@ -488,8 +494,20 @@ clone_project_from_mirror() {
             fi
             if [[ -n "$github_url" ]] && [[ "$github_url" != "$src" ]]; then
                 git remote set-url origin "$github_url" 2>/dev/null || true
-                git config --local "url.${src}.insteadOf" "$github_url" 2>/dev/null || true
-                trace_lifecycle "git-mirror" "origin presented as ${github_url}; routes to ${src}"
+                # Route GitHub-URL traffic back to ${src} ONLY when it is a
+                # bare mirror (accepts pushes, forwards via post-receive with
+                # the vault token). A non-bare staged checkout (macOS clone
+                # lane) can never accept a push — it is mounted read-only and
+                # denyCurrentBranch besides — so routing there just moves the
+                # failure. Keep the honest GitHub origin instead: pushes fail
+                # with a clear network/credential error until mirror routing
+                # for this lane lands (same plan issue as above).
+                if [[ "$(git -C "${src}" rev-parse --is-bare-repository 2>/dev/null)" == "true" ]]; then
+                    git config --local "url.${src}.insteadOf" "$github_url" 2>/dev/null || true
+                    trace_lifecycle "git-mirror" "origin presented as ${github_url}; routes to ${src}"
+                else
+                    trace_lifecycle "git-mirror" "origin presented as ${github_url}; no push route (non-bare staged source)"
+                fi
             else
                 # No real GitHub remote on the mirror — keep the local path.
                 git remote set-url --push origin "${src}" 2>/dev/null || true
@@ -1925,6 +1943,24 @@ Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-pla
 
 Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).
 Key skills: \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
+
+## Web servers — you are in a FORGE container (read before starting one)
+
+Two flows; pick by intent:
+
+1. **Dev server (iterating)**: run it in here, but bind \`0.0.0.0\` on the
+   framework's conventional port — NEVER \`localhost\`/\`127.0.0.1\` (that is
+   this container's own loopback; the router cannot reach it and the
+   enclave blocks direct ingress — the server will look dead). Hand the
+   user \`http://${project_name}.<service>.localhost/\` (no port). Full
+   conventions: the web-services instruction / \`tellme about web\`.
+2. **Hosting/publishing** ("host/serve/publish this project"): do NOT run
+   a server in here. Delegate to the host over the MCP tools
+   (\`host-browser\` server): \`publish_local {"category":"WEB"}\` returns
+   \`http://www.${project_name}.localhost:8080\` served by a SIBLING
+   container; \`service_status\` / \`service_stop\` manage it. The host
+   attributes the project from your session — publishing is local-only
+   today (public Cloudflare share is a planned rung).
 CONTEXT_EOF
 
     # Ensure the file is gitignored (idempotent append).

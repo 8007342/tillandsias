@@ -11217,6 +11217,43 @@ plan_index:
         - "inside the public macOS forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: progress
+          ts: "2026-07-16T08:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T0824Z"
+          host: macos
+          lease_id: "macos-forge-config-trust-live-parity-20260716b"
+          commits: [559190c3]
+          validation:
+            - "FIRST macOS in-forge /meta-orchestration smoke PASS: opencode/big-pickle in the VZ forge emitted MO-SMOKE: PASS, exit 0, clean teardown (plan/issues/macos-inforge-smoke-pass-2026-07-16.md)"
+            - "in-forge credential guard live-confirms the clone-lane push-remote misalignment (effective origin = RO src-host path); lib-common fix 559190c3 (git -C + bare-gated insteadOf), git-mirror-service litmus 5/5 PASS"
+            - "vault github token rechecked: still 404 (operator --github-login pending); vault healthy across VM restart"
+          summary: >
+            Goal smoke rung DONE. Full push-capable in-forge cycle remains
+            blocked on (1) operator github-login and (2) a real mirror push
+            route for the clone lane (linux seam; 559190c3 makes origin
+            honest but routes nothing) — plus forge-image freshness so the
+            entrypoint fix actually enters the lane (FRESHNESS orders
+            370-372 class).
+        - type: progress
+          ts: "2026-07-16T08:05:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T0731Z"
+          host: macos
+          lease_id: "macos-forge-config-trust-live-parity-20260716"
+          commits: [1db61fac, c40db47a]
+          validation:
+            - "fresh tray+guest 0.3.260716.5 (git c40db47a) built, smoked, installed — identity criterion now satisfiable (was week-stale Jul-8 ed769a1c-dirty)"
+            - "vault chain live-proven to the credential prompt: bootstrap complete (11 policies), proxy+git images ensured on-demand at v0.3.260716.5, clean 404 on secret/data/github/token (operator --github-login pending)"
+            - "found+fixed live: order-235 R7 backoff panic off-runtime (c40db47a); found+recovered: unseal-secret/storage crash skew (plan/issues/vault-unseal-secret-storage-crash-skew-2026-07-16.md)"
+          summary: >
+            Precondition work for the gate rerun: current build installed and
+            the vault/git-image chain re-proven live after fixing a bootstrap
+            panic and recovering a wedged vault. Gate itself still blocked on
+            the linux guest-git facade fix, and source analysis found a second
+            macOS-lane blocker: the clone lane's push remote falls back to the
+            RO staged path (plan/issues/
+            macos-clone-lane-push-remote-misalignment-2026-07-16.md). In-forge
+            meta-orchestration on macOS additionally needs the operator
+            github-login before pushes can transit the mirror.
         - type: blocked
           ts: "2026-07-15T06:05:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260715T0521Z"
@@ -11263,7 +11300,7 @@ plan_index:
       provisional_id: linux-260714-6
       release_target: stable-milestone-v1
       title: "Windows current-build forge live config, mirror, and TLS parity gate"
-      status: ready
+      status: in_progress
       kind: verification
       deliverable: attended Windows WSL forge evidence packet
       depends_on:
@@ -11284,6 +11321,75 @@ plan_index:
         - "inside the public Windows forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: progress
+          ts: "2026-07-16T08:20:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          lease_id: "windows-forge-config-trust-live-parity"
+          summary: >
+            UNBLOCKED — root cause of the "wire-lane injection gap" found
+            and fixed on windows-next: read_host_project_origin_url and
+            the write_forge_repo_gitdir facade both shell out to `git`,
+            and the WSL2/VZ guest OS ships NO git binary. The launcher
+            therefore (a) omitted the GitHub→mirror insteadOf rewrite,
+            (b) never told build_git_run_args the upstream (mirror
+            container missing from lanes, 2026-07-13), and (c) aborted
+            facade staging so the fail-closed empty 0700 .git tmpfs
+            masked the repo (order 382's field observation — same root
+            cause). Fix: .git/config direct-parse fallback for the origin
+            URL + git-less facade staging (direct config write; index
+            deferred to in-container materialization). Live re-probe on
+            THIS runtime (guest v0.3.260716.5 current checkout, tray
+            0712.1 stable, un-refreshed provision): crit-2b insteadOf
+            rewrite PASS, mirror container up + DNS resolving. Remaining
+            for full closure: crit-1 identity via locally built tray +
+            REFRESHED provision (wipes vault → needs attended re-login;
+            operator-gated), then the attended parity checklist.
+            Evidence: plan/issues/windows-forge-config-trust-live-parity-2026-07-15.md
+            (2026-07-16 addendum) + plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md.
+        - type: blocked
+          ts: "2026-07-16T00:10:00Z"
+          agent_id: "windows-bullo-fable5-20260715T2315Z"
+          host: windows
+          lease_id: "windows-forge-config-trust-live-parity"
+          summary: >
+            LIVE EVIDENCE PRODUCED (the packet's deliverable) — verdict
+            PARTIAL PARITY, packet blocked on a linux-owned gap.
+            Identity: tray+guest BOTH current checkout a283f8ce /
+            v0.3.260715.6 (guest musl-built ON this Windows host via the
+            wsl2 wrapper, embedded-injected — no release skew); refreshed
+            cold provision, wire v2 attempt=1; PUBLIC lane argv
+            (launch_spec --cloud parity-fixture --bash). GREEN: gitconfig
+            resolves file:/home/forge/.gitconfig; mirror FETCH through
+            the enclave; TLS parity FULL PASS (curl+node+python, zero
+            per-client CA overrides). RED (the blocker): GitHub->mirror
+            insteadOf rewrite ABSENT in the wire lane (rewrite-config
+            empty; ls-remote --get-url resolves github.com) — the
+            already-filed push-channel wire-lane injection gap, now
+            current-build-confirmed via the public path. OWNER: linux
+            (headless lane-launch gitconfig injection). NEXT ACTION: land
+            the injection, then re-run the staged probe set (~5 min warm;
+            harness notes in the evidence doc). Bonus: NEW order-314-class
+            bug filed (maintenance-session name collision 125, provisional
+            windows-260715-4); order-359 ncurses attestation corroborated
+            (tokenless fresh vault). Evidence:
+            plan/issues/windows-forge-config-trust-live-parity-2026-07-15.md.
+        - type: claim
+          ts: "2026-07-15T23:40:00Z"
+          agent_id: "windows-bullo-fable5-20260715T2315Z"
+          host: windows
+          lease_id: "windows-forge-config-trust-live-parity"
+          expires_at: "2026-07-16T03:40:00Z"
+          summary: >
+            Claimed per Linux coordinator remote-control directive (get
+            evidence pushed tonight). Staged: source+unit parity half
+            PASS through the wsl2 wrapper (podman-bound sub-scripts ride
+            the in-guest stage); CURRENT-checkout guest binaries built
+            on this Windows host via the wrapper (musl x86_64+aarch64,
+            v0.3.260715.6, verified) and embedded into the tray
+            (a283f8ce == HEAD); runtime unregistered for the refreshed
+            cold provision. Next: provision, then the public lane
+            (--cloud tillandsias --bash) with config/mirror/TLS probes.
         - type: order-assigned
           ts: "2026-07-15T01:05:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0046Z"
@@ -12145,7 +12251,7 @@ plan_index:
     - packet_id: macos-forge-owned-checkout-isolation
       order: 342
       title: "macOS forge: isolate in-forge agents from the operator checkout"
-      status: ready
+      status: completed
       kind: design+implementation
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
       depends_on: []
@@ -12163,6 +12269,39 @@ plan_index:
         - "macOS forge launch routes the agent project path to the isolated checkout"
         - "live dirty-host fixture proves forge-created edits and cleanup cannot change operator tracked or untracked bytes"
       events:
+        - type: completed
+          ts: "2026-07-16T00:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260715T2314Z"
+          host: macos
+          lease_id: "macos-forge-owned-checkout-isolation-20260715"
+          commit_sha: adc488d8
+          summary: >
+            All three criteria evidenced live. (1) Decision recorded:
+            materialize-by-clone via the entrypoint's EXISTING filesystem
+            clone transport (TILLANDSIAS_GIT_MIRROR_PATH pointed at a
+            READ-ONLY /home/forge/src-host/<project> staging bind of the
+            virtiofs tree); linked git-worktree REJECTED (shares host
+            refs/objects/locks) per the 2026-07-14 reduction note in
+            forge-shared-checkout-destructive-clean-2026-07-13.md.
+            Tradeoffs recorded in the fn doc: no object sharing (full
+            clone of committed state; operator UNCOMMITTED changes are
+            deliberately excluded from forge input), no credentials
+            inherited, lifecycle dies with the container. (2) The macOS
+            --opencode lane exports TILLANDSIAS_FORGE_SRC_ISOLATION=clone;
+            live fixture shows the agent in /home/forge/src/fixture-342
+            with a CONTAINER-LOCAL .git (host-mount claim + gitdir
+            facade/mask now confined to the default shared-tree branch;
+            source-pinned). (3) Dirty-host fixture (tracked mod +
+            untracked marker, hash-snapshotted): in-forge clobber + commit
+            + git clean -fdx + rm, and an explicit write probe on the
+            staging mount ("Read-only file system" from the kernel) —
+            HOST-BYTES-IDENTICAL after the run (.git HEAD/index included).
+            Evidence: plan/issues/macos-build-findings-2026-07-15.md.
+            Residual for the agent-lane builders (claude/codex/
+            maintenance spec path at build_forge_agent_run_args_with_
+            vault): same branch is applicable but unwired — follow-up for
+            the order 341/342 owner if those lanes ship on macOS before
+            the mirror-materialized path lands.
         - type: filed
           ts: "2026-07-14T23:25:16Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
@@ -13147,7 +13286,7 @@ plan_index:
     - packet_id: publish-local-mcp-tool-and-handler
       order: 363
       title: "357 rung I3b: McpFrame publish_local/service_status/service_stop tools + host-side handler + ensure_catalog_service orchestration"
-      status: claimed
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless (McpFrame dispatch) + crates/tillandsias-browser-mcp (tool family) + config-overlay MCP entry
@@ -13201,11 +13340,28 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
           host: linux_mutable
           summary: "357 sub-rung I3b, filed after shipping the host-side core (b1404180)."
+        - type: claim
+          ts: "2026-07-16T01:34:23Z"
+          agent_id: "linux-tlatoani-opencode-20260716T0134Z"
+          host: linux
+          lease_id: "publish-local-mcp-tool-and-handler-v2"
+          expires_at: "2026-07-16T05:34:23Z"
+        - type: completed
+          ts: "2026-07-16T01:40:00Z"
+          agent_id: "linux-tlatoani-opencode-20260716T0134Z"
+          host: linux
+          commits: ["c56ccd40"]
+          summary: >
+            Criterion 1 verified via live podman test
+            (publish_local_service_starts_container_and_returns_url):
+            the function starts tillandsias-<project>-web, returns
+            https://www.<project>.localhost, and service_stop cleans
+            up cleanly. All 312 headless tests pass, full build green.
 
     - packet_id: publish-local-e2e-litmus
       order: 364
       title: "357 rung I3c: e2e litmus — curl http://www.<project>.localhost returns a fixture project's index"
-      status: ready
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: verification
       deliverable: openspec/litmus-tests + scripts fixture project
@@ -13229,6 +13385,26 @@ plan_index:
           agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
           host: linux_mutable
           summary: "357 sub-rung I3c (e2e closure), filed after the host-side core."
+        - type: claim
+          ts: "2026-07-16T02:11:14Z"
+          agent_id: "linux-tlatoani-opencode-20260716T0211Z"
+          host: linux
+          lease_id: "publish-local-e2e-litmus-v1"
+          expires_at: "2026-07-16T06:11:14Z"
+        - type: completed
+          ts: "2026-07-16T02:45:00Z"
+          agent_id: "linux-tlatoani-opencode-20260716T0211Z"
+          host: linux
+          lease_id: "publish-local-e2e-litmus-v1"
+          summary: >
+            e2e closure verified live on linux-next. Added --publish-local /
+            --service-stop CLI flags; publish_local_service ensures the router,
+            uses www.<project> subdomain, :Z relabel, returns the real loopback
+            HTTP URL (http://www.<project>.localhost:<port>). Fixed router 502 by
+            clearing the egress proxy env on the router container so Caddy
+            reverse-proxies to enclave web containers directly. Litmus written at
+            openspec/litmus-tests/litmus-publish-local-e2e.yaml. Build green,
+            249+ headless tests pass. Commit 5dda534f.
 
     - packet_id: cross-target-unix-cfg-gate-check
       provisional_id: windows-260715-1
@@ -13597,3 +13773,600 @@ plan_index:
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
           host: linux
           summary: "Operator directive: never-ending component-freshness loop; rungs shaped from the 2026-07-15 dead-code/stale-allowlist incidents."
+
+    - packet_id: web-share-release-milestone
+      order: 373
+      title: "MILESTONE: harnesses launch web containers (../visual-chess) — through public one-prompt share"
+      status: ready
+      kind: milestone
+      multi_cycle: true
+      deliverable: plan/index.yaml (criteria holder; children carry the work)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [milestone, coordination, web, mcp, containers, cloudflare]
+      estimated_hours: 0
+      outcome: >
+        Operator vision 2026-07-16 (The Tlatoani, verbatim session directive).
+        CORE: an agent in the forge launches a web container serving
+        ../visual-chess and returns a clickable local URL — with the MCP tool
+        surface discoverable NATURALLY AND ORGANICALLY (no out-of-band
+        instructions). CHERRY: ../inat-observations-wp runs as a WordPress
+        container WITH its database — multi-service, compose-like, launched
+        transparently into the enclave. FULL VISION: --cloudflare-login +
+        WARP tunnel + DNS so 'share this project with <person>' publishes an
+        immediately clickable https://www.<clearly-ephemeral-ns>.<mydomain>
+        URL through our proxy without exposing the host. Builds on
+        enclave-service-catalog-milestone (orders 357-364) — that milestone
+        remains the local-host foundation; this one is the harness-facing +
+        public-share layer.
+      exit_criteria:
+        - "CORE: in-forge harness agent publishes ../visual-chess and curl fetches its index via the returned URL (live e2e evidence)"
+        - "CORE: agent discovers publish tools organically (tools/list via the standard MCP entry; no manual socket/env setup)"
+        - "CHERRY: ../inat-observations-wp serves from a WordPress+DB multi-service catalog entry in the enclave"
+        - "VISION: one-prompt public share produces a working ephemeral-namespaced https URL on the operator domain"
+      events:
+        - type: decision
+          ts: "2026-07-16T02:10:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            Operator roadmap context (The Tlatoani, verbatim session,
+            2026-07-16): tillandsias.org is OWNED in Cloudflare — the
+            eventual public-share domain. The tillandsias project itself
+            will be the FIRST CLIENT of web-container hosting (a ./var/www
+            in this repo, hosted locally first). Long-term substrate:
+            Raspberry Pi 5 devices running Fedora + tillandsias headless on
+            bare metal host durable 24/7 services behind the public URLs.
+            --cloudflare-login (order 377) is operator-wanted SOON.
+            Default remains local-only; design public rungs with the pi5
+            durable-host target in mind (arm64! see order 317
+            brew-aarch64-harness-strategy for the existing aarch64 track).
+        - type: filed
+          ts: "2026-07-16T01:20:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: "Operator directive: next-release north star; children 374-381."
+
+    - packet_id: forge-mcp-tools-organic-discoverability
+      order: 374
+      release_target: web-share-release-milestone
+      title: "Forge MCP tool surface is organically discoverable (publish family reachable + advertised, zero out-of-band setup)"
+      status: done
+      kind: implementation
+      deliverable: images/default/config-overlay (mcp entry + instructions + forge-welcome) + tray mcp.sock e2e
+      depends_on: [publish-local-mcp-tool-and-handler]
+      pickup_role: linux
+      capability_tags: [mcp, forge, ux, discoverability, web]
+      estimated_hours: 4
+      outcome: >
+        Order 363 built the transport (NDJSON mcp.sock, ro-mounted into the
+        forge, TILLANDSIAS_CONTROL_SOCKET set) and the MCP handshake. This
+        packet makes it ORGANIC: the MCP entry name/description reflect the
+        tool surface (host services, not just 'host-browser'), tools/list
+        works end-to-end from a real in-forge opencode session,
+        forge-welcome + web-services instructions + cheatsheets mention the
+        publish family exactly once each (discoverable, not spammy), and
+        spec:forge-environment-discoverability gains the tool-surface
+        requirement. Includes order 363's outstanding exit criterion 1 (live
+        publish through the tunnel) as its first evidence step.
+      exit_criteria:
+        - "fresh forge session: agent asked 'what tools do you have?' lists publish_local/service_status/service_stop without hints"
+        - "live publish_local via the mcp.sock tunnel returns the URL and the container serves (closes order 363 criterion 1)"
+        - "discoverability litmus: config-overlay MCP entry + instructions reference the tool family (instant, pre-build)"
+      events:
+        - type: progress
+          ts: "2026-07-16T05:05:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            ORGANIC DISCOVERABILITY EVIDENCE (exit criterion 1): a
+            third-party harness agent (Hy3, in-forge, operator-driven
+            session) unprompted about the mechanism reported 'I launched it
+            through the Tillandsias host-services MCP (publish_local,
+            category WEB) ... No podman/docker binary exists here —
+            container orchestration is handled by the control plane over
+            /run/host/tillandsias-mcp/mcp.sock' and its publish served
+            (HTTP 200 at /html/dev/ and /html/www/). Root-path / 404s on
+            raw-source mounts without index.html — docroot share-rule
+            (orders 361/376) is the fix. Session also surfaced: Claude
+            lane lacked forge bypass-permissions and Antigravity lacked
+            web awareness — both fixed in e7914aa2 (entrypoint gate +
+            startup-context web section, the seam all five entrypoints
+            write). NOTE: --init digest sentinel SKIPped the forge rebuild
+            after overlay content edits (containerfile-staleness gap,
+            order-341 family — skills invalidate, entrypoints/lib do not);
+            worked around with --init --force this session.
+        - type: progress
+          ts: "2026-07-16T03:20:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            LIVE tray-tunnel publish evidence (exit criterion 2 satisfied):
+            v0.3.260716.3 tray (systemd user unit) serving mcp.sock;
+            unattributed peer denied loudly; attributed session
+            (TILLANDSIAS_PROJECT=visual-chess) got initialize + tools/list
+            (3 tools) + publish_local -> http://www.visual-chess.localhost:8080
+            -> HTTP 200 for /html/www/ (Mnemonicarp index) through
+            router+enclave. Two live bugs found+fixed en route: tools/call
+            needed a multi-thread runtime (39afc15c, block_in_place panic);
+            router/web images lacked on-demand ensure (filed,
+            router-web-images-ondemand-ensure-gap-2026-07-16.md; unblocked
+            via --init). Root-path nuance: raw-source mounts 404 at / when
+            the project has no root index.html (visual-chess serves from
+            /html/www/) — the order 361/376 share-rule/docroot work is the
+            fix, noted there. Remaining for done: fresh-forge-session
+            organic tools/list + discoverability litmus.
+        - type: progress
+          ts: "2026-07-16T02:05:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            Bootstrap-awareness slice: web-services.md instruction now opens
+            with forge self-awareness (you are in a forge; two web flows:
+            in-forge dev server vs sibling-container publish via
+            publish_local/service_status/service_stop; session-attributed
+            safety model; local-by-default, cloudflare later) and
+            forge-welcome gained a Publish hint line. Note: order 363
+            criterion 1 was independently closed live by the BigPickle lane
+            (951975f3) — remaining here: fresh-session organic tools/list
+            evidence + the discoverability litmus.
+        - type: claim
+          ts: "2026-07-16T02:00:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          lease_id: "forge-mcp-tools-organic-discoverability"
+          expires_at: "2026-07-16T06:00:00Z"
+        - type: completed
+          ts: "2026-07-16T08:30:00Z"
+          agent_id: "linux-bigpickle-opencode-20260716T0824Z"
+          host: forge
+          lease_id: "forge-mcp-tools-organic-discoverability"
+          summary: >
+            All three exit criteria satisfied. Criterion 1: organic tools/list
+            discovery demonstrated by Hy3 session (2026-07-16T05:05Z).
+            Criterion 2: live publish_local through mcp.sock tunnel verified
+            (2026-07-16T03:20Z). Criterion 3: discoverability litmus created
+            (openspec/litmus-tests/litmus-mcp-discoverability-shape.yaml,
+            instant pre-build, 8 steps checking config-overlay MCP entry,
+            web-services.md tool documentation, and tray handler tools/list
+            surface). Spec:forge-environment-discoverability gained the
+            tool-surface requirement.
+
+    - packet_id: visual-chess-harness-publish-e2e
+      order: 375
+      release_target: web-share-release-milestone
+      title: "E2E: in-forge harness agent publishes ../visual-chess to a clickable local URL"
+      status: ready
+      kind: verification
+      deliverable: openspec/litmus-tests e2e + plan evidence report
+      depends_on: [forge-mcp-tools-organic-discoverability, publish-local-e2e-litmus]
+      pickup_role: linux
+      capability_tags: [web, e2e, forge, harness, podman]
+      estimated_hours: 3
+      outcome: >
+        The milestone's CORE closure: a real harness agent (opencode lane)
+        prompted only with project intent ('serve/publish this project')
+        publishes ../visual-chess; curl fetches the index through the router.
+        Extends order 364's fixture litmus to the harness-driven path;
+        evidence lands as a dated plan report.
+      exit_criteria:
+        - "agent-driven publish of ../visual-chess passes in the local-build e2e gate"
+        - "re-publish idempotent; service_stop removes container + route"
+
+    - packet_id: catalog-multi-service-compose
+      order: 376
+      release_target: web-share-release-milestone
+      title: "Catalog multi-service entries: WordPress+DB for ../inat-observations-wp (podman-pod compose-like, transparent into the enclave)"
+      status: ready
+      kind: implementation
+      deliverable: catalog manifest schema extension + pod orchestration + wordpress fixture
+      depends_on: [container-share-policy-and-debug-ports]
+      pickup_role: linux
+      capability_tags: [containers, catalog, podman, web, compose]
+      estimated_hours: 8
+      outcome: >
+        Cherry-on-top of the milestone. A catalog entry may declare MULTIPLE
+        services (web + db) with intra-entry networking, startup order,
+        secrets (db credentials via vault/podman secrets — no plaintext),
+        and per-service share rules (extends order 361's schema). Launch is
+        a podman POD (or equivalent) placed transparently on the enclave
+        network; the reverse proxy routes only the web service; the db stays
+        enclave-internal. Idiomatic layer only — no docker-compose
+        dependency; 'podman-compose-like magic' lives in our PodmanClient.
+        Fixture: ../inat-observations-wp (WordPress + mariadb) serves its
+        front page locally.
+      exit_criteria:
+        - "manifest expresses multi-service entries (services, order, internal net, secrets, share rules)"
+        - "publish of a wordpress entry launches web+db as one pod; only web is routed; db unreachable from outside the enclave"
+        - "../inat-observations-wp front page served locally (e2e evidence)"
+
+    - packet_id: cloudflare-login-implementation
+      order: 377
+      release_target: web-share-release-milestone
+      title: "--cloudflare-login: device/API login to vault (same shape as provider logins)"
+      status: ready
+      kind: implementation
+      deliverable: crates/tillandsias-headless login flow + vault policy
+      depends_on: [cloudflare-login-and-public-deploy]
+      pickup_role: linux
+      capability_tags: [cloudflare, login, vault, credentials]
+      estimated_hours: 4
+      outcome: >
+        First implementation rung of order 362 (roadmap doc + Tlatoani
+        sign-off gate it). Operator 2026-07-16: 'we already have all the
+        infra and example login flows, adding --cloudflare-login should be
+        easy.' Same ProviderLoginConfig shape: TTY flow, token to vault
+        under its own policy, --with-token automation path, preflights its
+        container image on demand (the --init-on-demand seam verified
+        2026-07-16). No tunnel yet — credential only.
+      exit_criteria:
+        - "tillandsias --cloudflare-login stores a scoped credential in vault (login container flow, image ensured on demand)"
+        - "unit pin on the login preflight seam; litmus on the flag surface"
+        - "roadmap sign-off recorded before merge (order 362 gate)"
+
+    - packet_id: warp-tunnel-ephemeral-public-serve
+      order: 378
+      release_target: web-share-release-milestone
+      title: "Cloudflare tunnel + DNS: serve a published container at https://www.<ephemeral-ns>.<operator-domain> without exposing the host"
+      status: ready
+      kind: implementation
+      deliverable: tunnel container/sidecar + DNS updater + router integration
+      depends_on: [cloudflare-login-implementation, visual-chess-harness-publish-e2e]
+      pickup_role: linux
+      capability_tags: [cloudflare, tunnel, dns, network, security, web]
+      estimated_hours: 8
+      outcome: >
+        WARP/cloudflared tunnel terminates in an enclave sidecar and
+        forwards through OUR proxy/router to the published web container;
+        DNS record (short TTL) points
+        www.<namespace-that-clearly-implies-ephemeral>.<operator-domain> at
+        the tunnel. Namespace grammar must scream ephemeral to end users
+        (e.g. a dated/temp prefix — design decision recorded with operator).
+        Host never exposed: only the tunnel egresses; enclave proxy
+        exemption pattern applies (every direct-to-enclave path explicitly
+        exempts the proxy — the 3-P0 lesson).
+      exit_criteria:
+        - "published container reachable at the ephemeral https URL from outside the LAN"
+        - "host exposes no new listening ports; tunnel dies with the stack (reaped like the rest of the enclave)"
+        - "DNS + route torn down on service_stop (no dangling public names)"
+
+    - packet_id: one-prompt-public-share-flow
+      order: 379
+      release_target: web-share-release-milestone
+      title: "'Share this project with <person>' — one prompt to a clickable public URL (publish_public MCP tool)"
+      status: ready
+      kind: implementation
+      deliverable: publish_public tool in the mcp.sock family + share UX
+      depends_on: [warp-tunnel-ephemeral-public-serve, forge-mcp-tools-organic-discoverability]
+      pickup_role: linux
+      capability_tags: [mcp, ux, web, cloudflare, share]
+      estimated_hours: 4
+      outcome: >
+        The milestone's headline UX: an average user tells their agent
+        'share this project I'm working on with <person/email/text>' and
+        gets back an immediately clickable public URL. publish_public rides
+        the same session-attributed mcp.sock surface (project from
+        SO_PEERCRED, never the request); the share TARGET is initially just
+        rendered into the agent's reply (mail/text delivery is a later
+        rung). Ephemeral by default; explicit TTL; service_stop or TTL
+        expiry unpublishes.
+      exit_criteria:
+        - "one-prompt flow returns a working public URL in a live forge session (e2e evidence)"
+        - "unpublish path verified (TTL or explicit stop removes DNS + route + tunnel)"
+
+    - packet_id: readme-release-ledger-wiring
+      order: 380
+      title: "README release ledger: skill wiring + distillation policy (ledger itself lands 2026-07-16)"
+      status: ready
+      kind: enhancement
+      deliverable: skills/merge-to-main-and-release + skills/smoke-curl-install-and-test-e2e + README.md policy note
+      depends_on: []
+      pickup_role: any
+      capability_tags: [documentation, release, methodology, ledger]
+      estimated_hours: 2
+      outcome: >
+        Operator 2026-07-16: README.md carries a collapsible RELEASE /
+        INTENDED FEATURES / BUGFIXES table — for humans AND agents (smoke
+        curl installs read it to validate and jumpstart). Initial ledger +
+        release-skill append hook land with this filing; this packet tracks
+        the rest: smoke-curl skill reads the ledger before testing; stable
+        promotions mark the RELEASE column; semantic distillation policy for
+        aging rows (detail on recent, distilled on old) wired into the
+        distillation inventory.
+      exit_criteria:
+        - "merge-to-main-and-release appends a row every release (verified by the next two releases)"
+        - "smoke-curl skill consults the ledger and cites it in its report"
+        - "distillation policy documented; oldest rows distilled once >10 rows"
+
+    - packet_id: loop-status-direction-ledger
+      order: 381
+      title: "loop_status 'Direction' ledger: thematic what-are-we-all-doing-today for multi-host agents"
+      status: ready
+      kind: enhancement
+      deliverable: plan/loop_status.md section + skill references
+      depends_on: []
+      pickup_role: any
+      capability_tags: [coordination, plan, methodology, multi-host]
+      estimated_hours: 2
+      outcome: >
+        Operator 2026-07-16: keep what works in loop_status; add a standing
+        THEMATIC direction ('we're supporting web containers') that gives
+        agents direction WITHOUT naming packet ids — agents reduce the theme
+        against ./plan using ./methodology. Section lands with this filing;
+        packet tracks: meta-orchestration + advance-work-from-plan +
+        coordinate-multihost-work read the direction during selection and
+        record their reduction of it; direction changes are operator-owned.
+      exit_criteria:
+        - "worker skills document reading the Direction section during packet selection"
+        - "two cycles from different hosts cite the direction in their ledger entries"
+    - packet_id: forge-maintenance-session-name-collision
+      provisional_id: windows-260715-4
+      order: provisional
+      title: "P2: forge maintenance-session relaunch dies 125 — bare podman run --name without --replace (order-314 class, maintenance surface)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lifecycle, containers, rust, cross-host]
+      estimated_hours: 2
+      outcome: >
+        Live repro 2026-07-15 (Windows public lane, order-350 evidence run,
+        a283f8ce): the SECOND `tillandsias-headless --cloud <p> --bash`
+        lane fails at "creating container storage: the container name
+        'tillandsias-<p>-forge-maintenance' is already in use ... or use
+        --replace" -> stage 'maintenance' attached command exited 125.
+        Order 314 fixed exactly this for DEPENDENCY-container ensure
+        (podman run --replace, decided by The Tlatoani 2026-07-12) but the
+        maintenance-session launcher still does a bare run --name. Same
+        remedy: --replace on the maintenance run (or rm-on-exit), plus a
+        decision-table pin mirroring order 314's. Evidence:
+        plan/issues/windows-forge-config-trust-live-parity-2026-07-15.md
+        finding 2 (350-lane2.log).
+      exit_criteria:
+        - "relaunching a --bash maintenance lane on the same project succeeds with the prior exited container present"
+        - "regression pinned (unit/litmus on the maintenance launch args or decision table)"
+      events:
+        - type: filed
+          ts: "2026-07-16T00:05:00Z"
+          agent_id: "windows-bullo-fable5-20260715T2315Z"
+          host: windows
+          summary: >
+            Filed from the order-350 live evidence run; unblocked in-run
+            by removing the stale container (fixture cleanup, recorded).
+            Provisional order per order_number_assignment.
+
+    - packet_id: guest-staged-gitdir-root-owned
+      order: 382
+      release_target: stable-milestone-v1
+      title: "P1: guest-staged forge gitdir is root-owned/700 on WSL2 — forge user cannot read git metadata; credential guard fail-closes every in-forge cycle"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs (write_forge_repo_gitdir + guest materialization ownership)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, headless, git, wsl, windows, forge, permissions]
+      estimated_hours: 4
+      outcome: >
+        Live repro 2026-07-16, operator's Windows curl-install of
+        v0.3.260716.1 (github login OK, OpenCode launch OK): the in-forge
+        agent (Hy3) ran the meta-orchestration smoke and correctly
+        diagnosed 'MO-SMOKE: FAIL — /home/forge/src/tillandsias/.git is
+        root-owned mode 700; forge (uid 1000, no sudo) cannot read it; git
+        rev-parse fails; check-credential-channel.sh reports
+        missing:no-credential-channel; entire cycle halts per the exit
+        contract.' Mechanism: write_forge_repo_gitdir stages the facade
+        gitdir as the invoking process uid — Linux native desktop = uid
+        1000 + keep-id (readable); WSL2 guest headless runs as ROOT
+        (systemd unit; order 309's least-privilege split is still open) so
+        the staged gitdir + materialized checkout land root-owned. The 700
+        mode source needs guest-side confirmation (umask/clone path).
+        Shaped fix: when the guest stages for a forge whose in-container
+        uid is 1000, chown the staged gitdir + checkout to 1000 (or create
+        via a dropped-privilege helper); pin with a guest-lane litmus
+        asserting the forge user can `git rev-parse` in a fresh
+        curl-install launch. Interim operator workaround (verified path by
+        Hy3): from the guest as root — chown -R forge:forge
+        /home/forge/src/tillandsias/.git && chmod -R u+rwX,go+rX
+        /home/forge/src/tillandsias/.git.
+      exit_criteria:
+        - "fresh Windows curl-install launch: in-forge `git rev-parse HEAD` and check-credential-channel.sh pass without manual chown"
+        - "guest-lane litmus pins staged-gitdir readability for the forge uid"
+        - "macOS VZ lane spot-checked for the same class (same shared guest binary)"
+      events:
+        - type: progress
+          ts: "2026-07-16T08:25:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          summary: >
+            ROOT CAUSE SHARPENED (live Windows wire-lane repro + code
+            trace): the "root-owned mode 700 .git" is the fail-closed
+            EMPTY tmpfs mask (--tmpfs size=8m,mode=0700,notmpcopyup in
+            append_forge_repo_gitdir_mount_args), mounted because facade
+            staging (write_forge_repo_gitdir) ABORTS on git-less hosts —
+            git_config_set and write_forge_index shell out to `git`,
+            which the WSL2/VZ guest OS does not ship. Complementary to
+            the 07:45Z chown fix below (root-owned staged trees ALSO bite
+            once staging succeeds: the in-container read-tree hits
+            EACCES; merge-reconciled — chown_tree_to_forge_uid kept,
+            windows-next's duplicate helper dropped). windows-next landed
+            the git-less staging half: facade config written directly
+            (no git) + index deferred with a loud log when git is
+            absent, so the facade now mounts with
+            config/HEAD/objects/refs. REMAINING (this packet, linux):
+            in-container index materialization (`git read-tree HEAD` at
+            entrypoint/lane start when the facade index is absent —
+            without it the worktree shows all-dirty and the
+            meta-orchestration dirty-start guard refuses), the
+            guest-lane litmus from the original shaping, and the macOS
+            VZ spot-check. Interim: prime the index once per facade via
+            in-container `git read-tree HEAD` (verified live this cycle).
+            Evidence: plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md.
+        - type: progress
+          ts: "2026-07-16T07:45:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: >
+            Implementation complete: chown_tree_to_forge_uid in
+            write_forge_repo_gitdir hands the staged facade + bind-mounted
+            host objects/refs trees to uid 1000, gated on euid==0 (guest
+            lane only; Linux native keep-id path untouched), lchown +
+            no-symlink-recursion so a crafted worktree link cannot redirect
+            re-owning. Pinned by
+            forge_gitdir_staging_hands_root_staged_trees_to_forge_uid.
+            ./build.sh --check green. Remaining: criterion 1 needs a fresh
+            Windows curl-install of a release carrying this (tonight's
+            daily); criterion 2 guest-lane litmus; criterion 3 macOS spot
+            check. Windows lane: your current install still needs the
+            manual chown workaround until you pick up the next daily.
+        - type: filed
+          ts: "2026-07-16T06:35:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            Filed from the operator's Windows curl-install session; Hy3's
+            in-forge smoke report is the primary evidence (correct
+            MO-SMOKE grammar + smallest-next-action). Related: order 309
+            (guest least-privilege — running the headless as non-root
+            would dissolve this class), order 350 (windows parity gate).
+
+    - packet_id: windows-inforge-meta-orchestration-transparent-push
+      provisional_id: windows-260716-1
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "GOAL: BigPickle/Hy3-class agent completes a full /meta-orchestration inside the Windows forge with a transparent verified push to GitHub"
+      status: in_progress
+      kind: verification
+      deliverable: plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, forge, git-mirror, meta-orchestration, e2e]
+      estimated_hours: 3
+      outcome: >
+        Operator directive 2026-07-16: a successful /meta-orchestration
+        cycle runs INSIDE the Windows forge (opencode/BigPickle or Hy3
+        class) and its commits reach GitHub through the enclave mirror
+        transparently — no manual insteadOf, no host-tier relay
+        babysitter. Chain measured and largely landed this cycle: order
+        318 verified-ack mirror (done, in the running v0.3.260715.6
+        images), git-less-guest origin-url + facade fixes (windows-next,
+        this cycle), interim in-container index prime. Recurring cadence
+        additionally needs windows-260715-4 (maintenance collision) and
+        order 382's in-container index materialization (linux).
+      exit_criteria:
+        - "an in-forge agent cycle commits plan work and pushes; GitHub shows the commit out-of-band (gh api / ls-remote against github.com, not the mirror)"
+        - "no manual git config inside the forge: the injected gitconfig alone routes the push through the mirror"
+        - "recurring viability: second cycle on the same guest succeeds (collision packet fixed or documented interim cleanup)"
+      events:
+        - type: filed
+          ts: "2026-07-16T08:35:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          summary: >
+            Filed per operator session goal (linux builder active ~5 h on
+            45-min /meta-orchestration cycles for the linux-owned
+            pieces). Probe-lane evidence live this cycle: insteadOf
+            rewrite injected on the wire lane and the
+            tillandsias-git-tillandsias mirror container up for the
+            first time on Windows (both were the order-350 RED).
+        - type: progress
+          ts: "2026-07-16T09:05:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          summary: >
+            DEMONSTRATION RAN END-TO-END minus one bug: BigPickle full
+            in-forge cycle on the fixed lane — pulled linux-next through
+            the mirror transparently, drained an order-374 slice (spec
+            tool-surface requirement + litmus-mcp-discoverability-shape,
+            8/8 in-lane), committed e8b29bac. Push REJECTED LOUDLY by
+            the order-318 verified-ack relay: mirror container had no
+            /run/secrets/vault-token mount (silent mint/mount failure at
+            ensure — filed windows-260716-2, the LAST transparency
+            blocker). Commit recovered from the guest checkout and
+            host-relayed to linux-next (rebased onto 2f8d53f1). Exit
+            criteria 1 remains open on windows-260716-2; criterion 2
+            (zero manual git config in-forge) PROVEN this run.
+
+    - packet_id: git-mirror-container-created-without-relay-credential
+      provisional_id: windows-260716-2
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "P1: per-project mirror container created WITHOUT the vault-token secret — relay fail-closes every in-forge push; mint/mount failure is silent"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs (mint_git_mirror_vault_token + ensure/recreate path) + images/git evidence
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, vault, containers, rust, forge]
+      estimated_hours: 3
+      outcome: >
+        Live Windows repro 2026-07-16 ~08:38Z (goal cycle, guest headless
+        v0.3.260716.5, images v0.3.260715.6): BigPickle's in-forge push
+        was rejected by relay-refs.sh with "HTTPS upstream credential is
+        unavailable" because the running tillandsias-git-tillandsias
+        container had NO /run/secrets/vault-token mount — podman inspect
+        showed only the repo volume + CA cert. Three
+        tillandsias-vault-token-git-mirror-tillandsias-* podman secrets
+        exist from earlier bring-ups the same morning, so minting works;
+        the failing bring-up created the container without the secret
+        arg and NOTHING surfaced the degradation
+        (mint_git_mirror_vault_token returns None best-effort → caller
+        silently builds a credential-less mirror; same silent-None class
+        as the order-350 facade abort). Fix direction: fail loud or
+        fail-closed at ensure when the mint returns None (the mirror
+        should not come up push-incapable while vault holds a GitHub
+        token), surface the mint error, and pin with a litmus that a
+        freshly ensured mirror has the vault-token mount whenever vault
+        is initialized. Note lane teardown ("cleaning project + shared
+        stack") recreates the mirror per lane — every recreate re-rolls
+        the dice. Related: order 319 (credential-helper broker) is the
+        durable ladder rung; this packet is the sharp regression slice.
+      exit_criteria:
+        - "freshly ensured per-project mirror has /run/secrets/vault-token mounted whenever vault is up + initialized (litmus-pinned)"
+        - "mint/mount failure is loud: ensure logs an actionable error and the lane launch surfaces it (no silent credential-less mirror)"
+        - "in-forge push relays to GitHub with zero manual credential steps (windows-260716-1 criterion 1 flips)"
+      events:
+        - type: filed
+          ts: "2026-07-16T09:10:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          summary: >
+            Filed from the goal-cycle live rejection; full evidence in
+            plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md
+            §4. Linux builder window active — highest-value pickup: this
+            is the LAST blocker between BigPickle/Hy3 and transparent
+            in-forge pushes on Windows.
+
+    - packet_id: vault-root-token-rederivation
+      order: 383
+      title: "Vault root-token re-derivation from the Shamir share (generate-root) — heal token/storage skew without wiping real secrets"
+      status: ready
+      kind: implementation
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [vault, security, robustness, rust]
+      estimated_hours: 5
+      outcome: >
+        Two live repros 2026-07-16 (macOS lossless-reset variant; linux
+        REAL-SECRET variant where reset would destroy operator
+        credentials): a stale/rotated recovered root token wedges every
+        root-token write path while the vault volume itself is healthy.
+        vault_bootstrap should detect token-auth failure, and — holding
+        the stored Shamir share — run `vault operator generate-root` to
+        mint a fresh root token, restore it to the keychain/fallback,
+        and continue; only if the SHARE also fails does it surface the
+        operator-attended re-init path (never auto-wipe storage that may
+        hold real secrets). Pin with a fixture on the detect-and-heal
+        seam; the crash-skew filing's reduction ask folds in here.
+      exit_criteria:
+        - "stale root token + valid share: bootstrap self-heals (generate-root) and policy writes succeed"
+        - "stale token + missing/invalid share: loud operator-attended verdict, storage untouched"
+        - "macuahuitl's live skew healed via the new seam (real-secret evidence)"
+      events:
+        - type: filed
+          ts: "2026-07-16T10:58:00Z"
+          agent_id: "linux-tlatoani-claude-20260716T0725Z"
+          host: linux
+          summary: "Promoted from the crash-skew filing after the linux real-secret repro env-failed the release-evidence ci-full (16/17)."
