@@ -13706,7 +13706,7 @@ plan_index:
       order: 369
       release_target: stable-milestone-v1
       title: "Implement: git mirror fetch-before-push reconciliation hooks"
-      status: claimed
+      status: done
       kind: implementation
       deliverable: images/git hook scripts and config
       depends_on: [git-mirror-pre-reconcile-research]
@@ -13741,6 +13741,51 @@ plan_index:
             held 44a45c24 (current GitHub head) — running mirror image predates
             the hook fix. This forge slice: real-hook auto-reconcile litmus case
             + ledger closure + deployment-residual packet for a podman host.
+        - type: completed
+          ts: "2026-07-16T17:55:00Z"
+          agent_id: "forge-chaparrita-fable5-20260716T1726Z"
+          host: forge
+          lease_id: "git-mirror-pre-reconcile-impl-20260716T1735Z"
+          commits: ["10c0c9b3", "efa54b5c"]
+          summary: >
+            Both exit criteria closed offline. Criterion 2: relay-verified-ack
+            fixture case 4 drives the REAL hooks — upstream advances
+            independently, stale client push is rejected, the relay failure path
+            fast-forwards the mirror's exported heads (stranded same-named head
+            preserved by the non-forced fetch), and the client's plain
+            fetch/rebase/retry converges; litmus suite 5/5 PASS in-forge.
+            Criterion 1's live half (rebuilt image on the running mirror) is
+            deployment, split to order 384 — same split as orders 301/302.
+            Bycatch fixed in efa54b5c: the fixture was RED in-forge on the
+            committed tree because the forge's global core.hooksPath redirection
+            (GIT_CONFIG_GLOBAL) silently disabled the fixture upstream's reject
+            hook; fixture now pins hermetic git config scopes.
+
+    - packet_id: git-mirror-reconcile-deploy-and-verify
+      order: 384
+      release_target: stable-milestone-v1
+      title: "Deploy: rebuild tillandsias-git image and live-verify order-369 auto-reconcile"
+      status: ready
+      kind: deployment
+      deliverable: plan/issues/git-mirror-pre-reconcile-research-2026-07-15.md (live-verify addendum)
+      depends_on: [git-mirror-pre-reconcile-impl]
+      pickup_role: linux
+      capability_tags: [podman, git-mirror]
+      estimated_hours: 1
+      outcome: >
+        Running forge mirrors predate the 10c0c9b3 reconcile hook: live repro
+        2026-07-16 (forge chaparrita) — the mirror served linux-next at
+        5343c856 (2026-07-08 vintage) while its refs/remotes/origin/linux-next
+        already held 44a45c24, so an in-forge agent fetching normally saw
+        week-old heads until a push healed the branch. Same deployment shape
+        as order 302: a podman-capable host rebuilds tillandsias-git, restarts
+        the mirror container (entrypoint refreshes hooks on start; no volume
+        recreation), and live-verifies that a stale-mirror rejection
+        auto-reconciles exported heads so the client retry loop converges.
+      exit_criteria:
+        - "rebuilt tillandsias-git image running; hooks dir carries the 10c0c9b3 reconcile path"
+        - "live probe: with upstream ahead of the mirror, a rejected push is followed by mirror heads == upstream heads (no manual tracking-ref fetch)"
+        - "startup path probe: container restart with stale serving heads fast-forwards them via the retry-push failure reconcile"
 
     - packet_id: freshness-inventory-and-stamps
       order: 370

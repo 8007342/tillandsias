@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-16T09:15:00Z
+LastExecutionTime: 2026-07-16T17:46:00Z
 
 ## Direction — what are we all doing today
 
@@ -17,6 +17,40 @@ at a clearly-ephemeral URL. Use iterations on this theme to also clean up
 remaining work on YOUR active packets: major feature iterations double as
 test/refinement runs for what's already in flight. Milestone:
 web-share-release-milestone (order 373).
+
+## Cycle 2026-07-16T17:26Z→17:5xZ (forge — meta-orchestration: order 369 CLOSED — auto-reconcile litmus, hermetic fixture fix; order 384 deploy residual filed)
+
+- **Host**: forge, `linux-next`, agent forge-chaparrita-fable5-20260716T1726Z.
+  Credential guard `ok:forge-git-mirror`. Worktree clean at start.
+- **Sync anomaly (live repro of the order-368/369 read-path gap)**: the forge
+  mirror served `linux-next` at 5343c856 (2026-07-08 vintage) while its own
+  `refs/remotes/origin/linux-next` held 44a45c24 — the real GitHub head, 516
+  commits ahead (today's whole coordination window). Recovered by fetching
+  the mirror's tracking refs explicitly and fast-forwarding; the running
+  mirror image predates the 10c0c9b3 reconcile hook. First push of the cycle
+  (461f6bc2) healed the serving head. Deployment residual filed as ready
+  order 384 (podman host: rebuild tillandsias-git, restart, live-verify).
+- **Worker drain (one packet, forge_cycle_budget)**: order 369
+  `git-mirror-pre-reconcile-impl` — expired-lease takeover (code had landed
+  2026-07-15 in 10c0c9b3 with no litmus/closure). Added relay-verified-ack
+  fixture case 4 driving the REAL hooks: stale-push rejection auto-reconciles
+  exported heads, stranded same-named head survives the non-forced fetch,
+  plain fetch/rebase/retry converges (efa54b5c). Suite 5/5 PASS. Packet done.
+- **Bycatch**: the ack fixture was RED in-forge on the committed tree — the
+  forge's global core.hooksPath redirection (GIT_CONFIG_GLOBAL) silently
+  disabled the fixture upstream's reject hook (case 3 never rejected).
+  Fixture now pins hermetic git config scopes.
+- **E2E gates**: `e2e-preflight eligibility` = `skip:no-podman-binary` —
+  local-build gate skipped, verdict recorded once.
+- **Direction (web containers)**: theme core packet 375 needs podman
+  (pickup_role linux) — not forge-eligible; this cycle instead cleared the
+  mirror-transparency blocker class that stalls every in-forge theme agent.
+- **Filed**: forge-image-sanctioned-yaml-validator-gap-2026-07-16 (no
+  tillandsias-policy/ruby in forge; yq/yamllint unblessed),
+  forge-stale-skill-snapshot-at-launch-2026-07-16 (session ran on skill text
+  516 commits stale until post-sync re-read; greedy-drain note was already
+  superseded by order 264), addendum on
+  git-mirror-pre-reconcile-research-2026-07-15 (live repro + closure).
 
 ## Cycle 2026-07-16T08:24Z→08:30Z (forge — meta-orchestration: order 374 DONE — MCP discoverability litmus + spec tool-surface requirement)
 
