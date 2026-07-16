@@ -11263,7 +11263,7 @@ plan_index:
       provisional_id: linux-260714-6
       release_target: stable-milestone-v1
       title: "Windows current-build forge live config, mirror, and TLS parity gate"
-      status: blocked
+      status: in_progress
       kind: verification
       deliverable: attended Windows WSL forge evidence packet
       depends_on:
@@ -11284,6 +11284,32 @@ plan_index:
         - "inside the public Windows forge lane, git config --global --show-origin resolves /home/forge/.gitconfig and the GitHub URL rewrite resolves to the Tillandsias mirror"
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
+        - type: progress
+          ts: "2026-07-16T08:20:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          lease_id: "windows-forge-config-trust-live-parity"
+          summary: >
+            UNBLOCKED — root cause of the "wire-lane injection gap" found
+            and fixed on windows-next: read_host_project_origin_url and
+            the write_forge_repo_gitdir facade both shell out to `git`,
+            and the WSL2/VZ guest OS ships NO git binary. The launcher
+            therefore (a) omitted the GitHub→mirror insteadOf rewrite,
+            (b) never told build_git_run_args the upstream (mirror
+            container missing from lanes, 2026-07-13), and (c) aborted
+            facade staging so the fail-closed empty 0700 .git tmpfs
+            masked the repo (order 382's field observation — same root
+            cause). Fix: .git/config direct-parse fallback for the origin
+            URL + git-less facade staging (direct config write; index
+            deferred to in-container materialization). Live re-probe on
+            THIS runtime (guest v0.3.260716.5 current checkout, tray
+            0712.1 stable, un-refreshed provision): crit-2b insteadOf
+            rewrite PASS, mirror container up + DNS resolving. Remaining
+            for full closure: crit-1 identity via locally built tray +
+            REFRESHED provision (wipes vault → needs attended re-login;
+            operator-gated), then the attended parity checklist.
+            Evidence: plan/issues/windows-forge-config-trust-live-parity-2026-07-15.md
+            (2026-07-16 addendum) + plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md.
         - type: blocked
           ts: "2026-07-16T00:10:00Z"
           agent_id: "windows-bullo-fable5-20260715T2315Z"
@@ -14096,6 +14122,30 @@ plan_index:
         - "guest-lane litmus pins staged-gitdir readability for the forge uid"
         - "macOS VZ lane spot-checked for the same class (same shared guest binary)"
       events:
+        - type: progress
+          ts: "2026-07-16T08:25:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          summary: >
+            ROOT CAUSE SHARPENED (live Windows wire-lane repro + code
+            trace): the "root-owned mode 700 .git" is the fail-closed
+            EMPTY tmpfs mask (--tmpfs size=8m,mode=0700,notmpcopyup in
+            append_forge_repo_gitdir_mount_args), mounted because facade
+            staging (write_forge_repo_gitdir) ABORTS on git-less hosts —
+            git_config_set and write_forge_index shell out to `git`,
+            which the WSL2/VZ guest OS does not ship. Not a staging-uid
+            chown issue. windows-next landed the first half: facade
+            config written directly (no git) + index deferred with a
+            loud log when git is absent, so the facade now mounts with
+            config/HEAD/objects/refs. REMAINING (this packet, linux):
+            in-container index materialization (`git read-tree HEAD` at
+            entrypoint/lane start when the facade index is absent —
+            without it the worktree shows all-dirty and the
+            meta-orchestration dirty-start guard refuses), the
+            guest-lane litmus from the original shaping, and the macOS
+            VZ spot-check. Interim: prime the index once per facade via
+            in-container `git read-tree HEAD` (verified live this cycle).
+            Evidence: plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md.
         - type: filed
           ts: "2026-07-16T06:35:00Z"
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
@@ -14106,3 +14156,44 @@ plan_index:
             MO-SMOKE grammar + smallest-next-action). Related: order 309
             (guest least-privilege — running the headless as non-root
             would dissolve this class), order 350 (windows parity gate).
+
+    - packet_id: windows-inforge-meta-orchestration-transparent-push
+      provisional_id: windows-260716-1
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "GOAL: BigPickle/Hy3-class agent completes a full /meta-orchestration inside the Windows forge with a transparent verified push to GitHub"
+      status: in_progress
+      kind: verification
+      deliverable: plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, forge, git-mirror, meta-orchestration, e2e]
+      estimated_hours: 3
+      outcome: >
+        Operator directive 2026-07-16: a successful /meta-orchestration
+        cycle runs INSIDE the Windows forge (opencode/BigPickle or Hy3
+        class) and its commits reach GitHub through the enclave mirror
+        transparently — no manual insteadOf, no host-tier relay
+        babysitter. Chain measured and largely landed this cycle: order
+        318 verified-ack mirror (done, in the running v0.3.260715.6
+        images), git-less-guest origin-url + facade fixes (windows-next,
+        this cycle), interim in-container index prime. Recurring cadence
+        additionally needs windows-260715-4 (maintenance collision) and
+        order 382's in-container index materialization (linux).
+      exit_criteria:
+        - "an in-forge agent cycle commits plan work and pushes; GitHub shows the commit out-of-band (gh api / ls-remote against github.com, not the mirror)"
+        - "no manual git config inside the forge: the injected gitconfig alone routes the push through the mirror"
+        - "recurring viability: second cycle on the same guest succeeds (collision packet fixed or documented interim cleanup)"
+      events:
+        - type: filed
+          ts: "2026-07-16T08:35:00Z"
+          agent_id: "windows-bullo-fable5-20260716T0731Z"
+          host: windows
+          summary: >
+            Filed per operator session goal (linux builder active ~5 h on
+            45-min /meta-orchestration cycles for the linux-owned
+            pieces). Probe-lane evidence live this cycle: insteadOf
+            rewrite injected on the wire lane and the
+            tillandsias-git-tillandsias mirror container up for the
+            first time on Windows (both were the order-350 RED).

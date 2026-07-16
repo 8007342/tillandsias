@@ -2930,7 +2930,7 @@ fn build_clone_project_submenu(state: &TrayUiState) -> MenuNode {
     // Show top 5 projects
     for (idx, project) in projects.iter().take(5).enumerate() {
         let item_id = 2000 + idx as i32;
-        let label = format!("{} {}", &project.owner, &project.name);
+        let label = format!("{} {}", project.owner, project.name);
         children.push(child(node(
             item_id,
             props(vec![

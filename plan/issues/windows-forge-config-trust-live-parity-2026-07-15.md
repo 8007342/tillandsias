@@ -73,3 +73,63 @@ sub-scripts were correctly out of wrapper scope (methodology
   (staged script + file capture; ~5 min warm) to flip the verdict.
 - 326 criterion-2 (real cloud clone) remains gated on non-interactive
   GitHub login (order 325) or an attended session.
+
+---
+
+## 2026-07-16 — ROOT CAUSE FOUND + FIXED; crit-2b/3a/3b re-probed GREEN
+
+- run_by: `windows-bullo-fable5-20260716T0731Z`; runtime = the same
+  registered guest (NOT re-provisioned; vault + operator GitHub auth
+  preserved), guest headless hot-swapped to current-checkout
+  v0.3.260716.5 (musl, wsl2-wrapper build), host tray = stable 0712.1
+  (uninvolved: lanes launched via the public wsl.exe argv).
+
+### Root cause (one bug, three symptoms)
+
+The 2026-07-15 verdict ("linux-owned lane-launch injection gap") was WRONG
+in mechanism: the injection engages fine. The launcher-side helpers shell
+out to `git`, and the WSL2/VZ **guest OS ships no git binary** (git exists
+only inside forge containers):
+
+1. `read_host_project_origin_url` → `None` → `write_forge_gitconfig` omits
+   the `url.insteadOf` rewrite (yesterday's crit-2b FAIL; additionally
+   masked by the no-origin parity fixture).
+2. Same `None` → `build_git_run_args` never learns the upstream → the
+   per-project mirror container is absent from lanes (2026-07-13
+   observation "no tillandsias-git-tillandsias observable").
+3. `write_forge_repo_gitdir` (git_config_set / write_forge_index) aborts →
+   `append_forge_repo_gitdir_mount_args` falls back to the fail-closed
+   EMPTY `--tmpfs …mode=0700` mask over `.git` → "root-owned mode 700
+   .git" as seen by Hy3 (order 382's field evidence — same root cause).
+
+### Fix (windows-next, this cycle; PLEASE REVIEW: linux — shared code)
+
+- `.git/config` direct-parse fallback for the origin URL
+  (`parse_gitdir_origin_url`, 3 unit pins).
+- Facade staging git-less: local config written directly; index deferred
+  with a loud log when git is absent; staged facade chown'd to the forge
+  container uid (1000) so in-container `git read-tree HEAD` can
+  materialize the index (root launcher + keep-id made a root-owned facade
+  unwritable — the read-tree EACCES → empty-index all-deleted status).
+
+### Live probe results (same protocol, project WITH origin: `tillandsias`)
+
+| Probe | 2026-07-15 | 2026-07-16 |
+|---|---|---|
+| gitconfig-origin (2a) | PASS | PASS (`file:/home/forge/.gitconfig`) |
+| mirror-rewrite (2b) | FAIL (empty) | **PASS** — `url.git://tillandsias-git/tillandsias.insteadOf=https://github.com/8007342/tillandsias.git`; ls-remote --get-url resolves to the mirror |
+| mirror container | absent | **UP** (`tillandsias-git-tillandsias`, DNS 10.0.42.x) |
+| repo readability (382) | n/a (root-owned mask) | **PASS** — `git rev-parse HEAD` = 9b217958 in-forge |
+| credential guard | missing:no-credential-channel | **ok:forge-git-mirror** |
+| mirror fetch (3a) | (github direct) | **PASS through mirror** — live upstream deltas served (linux-next 37602c0c..e37711f0) |
+| mirror push dry-run (3b) | SKIP (no origin) | **PASS** — `To git://tillandsias-git/tillandsias  * [new branch] HEAD -> probe-350-noop` |
+
+### Remaining for full packet closure
+
+- Crit-1 identity formality: locally built CURRENT tray + refreshed cold
+  provision. A re-provision wipes the vault (operator re-login is
+  attended) — deliberately NOT done this cycle to preserve the goal
+  demonstration; schedule with the operator.
+- The end-to-end transparent push proof rides the goal packet
+  (windows-260716-1): in-forge agent cycle push verified on GitHub
+  out-of-band.
