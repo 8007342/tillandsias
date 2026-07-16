@@ -2870,6 +2870,7 @@ async fn ensure_router_running(
     client: &PodmanClient,
     certs_dir: &Path,
     image: &str,
+    version: &str,
     host_port: u16,
     debug: bool,
 ) -> Result<(), String> {
@@ -2905,6 +2906,17 @@ async fn ensure_router_running(
             }
             let _ = client.remove_container(ROUTER_NAME).await;
         }
+    }
+
+    // router-web-images-ondemand-ensure-gap (2026-07-16): a version-bumped
+    // binary meets an image store that does not yet carry the new tag; a
+    // bare run then attempts a REGISTRY pull of `localhost/...` (connection
+    // refused, exit 125). Build on demand from runtime assets like every
+    // other ensure surface — the seam the operator's --init-on-demand goal
+    // pins (live-verified with the git image, 2026-07-16).
+    if !client.image_exists(image).await {
+        let root = resolve_runtime_asset_root(version, debug)?;
+        tokio::task::block_in_place(|| ensure_image_exists(&root, "router", image, debug))?;
     }
 
     if debug {
@@ -4953,6 +4965,11 @@ fn run_status_check(debug: bool) -> Result<(), String> {
         "chromium-core",
         "chromium-framework",
         "forge",
+        // router-web-images-ondemand-ensure-gap (2026-07-16): both were
+        // missing from every ensure list; the publish path then hit a
+        // phantom registry pull (125) on any version handover.
+        "router",
+        "web",
     ];
     ensure_versioned_images(&root, &images, version, debug)?;
 
@@ -6625,7 +6642,15 @@ fn run_observatorium_mode(
         // idempotent.
         //
         // @trace plan/steps/15-tray-network-bootstrap.md
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await?;
 
         client
             .run_container_observed(
@@ -6805,7 +6830,15 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             Some(port) => port,
             None => select_router_host_port(None, debug)?,
         };
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await?;
 
         // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
         // See the forge-launch-proxy site for the full rationale.
@@ -7981,13 +8014,20 @@ pub(crate) fn run_opencode_web_mode(
         // After forge starts, ensure router is running and write dynamic routes.
         let router_image = versioned_image_tag("router", version);
 
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug)
-            .await
-            .unwrap_or_else(|e| {
-                if debug {
-                    eprintln!("[tillandsias] Warning: router degraded: {e}");
-                }
-            });
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await
+        .unwrap_or_else(|e| {
+            if debug {
+                eprintln!("[tillandsias] Warning: router degraded: {e}");
+            }
+        });
 
         // Upsert the OpenCode Web route without dropping other project
         // services such as Observatorium.
@@ -8304,7 +8344,15 @@ pub(crate) fn ensure_enclave_for_project(
             Some(port) => port,
             None => select_router_host_port(None, debug)?,
         };
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await?;
 
         // The enclave proxy is already running (ensured by ensure_forge_launch
         // above via the RealSatisfier → ensure_proxy_running path).  No inline
@@ -10203,8 +10251,15 @@ pub(crate) async fn publish_local_service(
         Some(port) => port,
         None => crate::select_router_host_port(None, debug)?,
     };
-    crate::ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug)
-        .await?;
+    crate::ensure_router_running(
+        &client,
+        &certs_dir,
+        &router_image,
+        VERSION.trim(),
+        router_host_port,
+        debug,
+    )
+    .await?;
 
     let mut routes = read_router_routes(debug)?;
     routes.retain(|r| r.subdomain != format!("www.{project_name}"));

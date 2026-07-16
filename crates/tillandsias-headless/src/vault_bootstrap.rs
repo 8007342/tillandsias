@@ -523,7 +523,7 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
 }
 
 fn wait_for_vault_api_ready(
-    rt: &tokio::runtime::Runtime,
+    rt: &crate::RuntimeOrHandle,
     client: &VaultClient,
     debug: bool,
 ) -> Result<HealthStatus, String> {
@@ -1832,7 +1832,7 @@ fn dump_vault_failure_diagnostics() {
 }
 
 fn wait_for_vault_ready(
-    rt: &tokio::runtime::Runtime,
+    rt: &crate::RuntimeOrHandle,
     base_url: &str,
     debug: bool,
 ) -> Result<String, String> {
@@ -2207,11 +2207,18 @@ pub(crate) fn container_running(name: &str) -> bool {
     }
 }
 
-fn tokio_runtime() -> Result<tokio::runtime::Runtime, String> {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| format!("tokio runtime build failed: {e}"))
+/// Runtime seam for the sync bootstrap entry points.
+///
+/// Was a raw current-thread `Runtime` — which PANICS ("Cannot start a
+/// runtime from within a runtime") whenever the bootstrap is reached from
+/// an async context, e.g. publish_local_service → ensure_service_catalog →
+/// dependency graph → Service::Vault (ci-full tray-contract repro
+/// 2026-07-16, third member of the day's nested-runtime family after the
+/// tray tools/call and the order-235 backoff sleep). `RuntimeOrHandle`
+/// (crate root) resolves both worlds: a Handle + block_in_place inside a
+/// multi-thread runtime, an owned Runtime outside any.
+fn tokio_runtime() -> Result<crate::RuntimeOrHandle, String> {
+    crate::podman_runtime()
 }
 
 /// Push the four shipped policy bodies into Vault. Idempotent.

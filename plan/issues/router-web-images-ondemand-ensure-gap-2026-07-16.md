@@ -75,3 +75,15 @@ overloading the developer override; the spec's litmus should pin that a
 desktop `TILLANDSIAS_ROOT=… --init` run reaches the build phase.
 Workaround tonight: full ./build.sh --install to re-embed assets (one
 more VERSION hop).
+
+## RESOLVED (2026-07-16T10:15Z, linux coordinator cycle 6b)
+
+Shaped fix 1 implemented: ensure_router_running builds the router image
+on demand before starting (block_in_place + ensure_image_exists;
+verified live — the publish_local unit test built v0.3.260716.6 mid-run
+and passed), and run_status_check's ensure array gains router + web.
+Bonus root-cause in the same commit: vault_bootstrap's tokio_runtime()
+was a raw current-thread Runtime that panicked from async contexts
+(publish → catalog → Service::Vault); now delegates to RuntimeOrHandle.
+Residual: publish's web container uses the :latest tag (versioned-web
+litmus stays open with fix 2 / the collision packet).
