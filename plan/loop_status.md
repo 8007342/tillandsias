@@ -1,6 +1,253 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-15T07:00:00Z
+LastExecutionTime: 2026-07-16T00:45:00Z
+
+## Cycle 2026-07-16T00:34Z→00:45Z (linux — meta-orchestration: order 225 migration batch + stdlib shape litmus)
+
+- **Host**: linux_mutable, `linux-next`, agent linux-bigpickle-20260716T0034Z
+  (opencode/big-pickle). Credential guard `ok:gh-keyring`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.vfldAI` clean; pre-existing dirty paths
+  (TRACES.md, VERSION, Cargo files) are sibling/operator work.
+- **Sibling heads**: main 932ca13d, linux-next 8578e283, windows-next
+  92311850, osx-next 175127f2. Already up to date.
+- **Order 225 DONE (litmus-command-portability-dsl-implementation)**:
+  Migration batch complete. 4 litmus files converted to `mf_*` primitives:
+  forge-environment-discoverability-shape (5 steps + rollback),
+  forge-opencode-onboarding-shape (3 steps + rollback),
+  zen-default-with-ollama-shape (mf_regex_count for model count),
+  versioning-shape (2 for-loop steps). Created
+  litmus-stdlib-portability-shape (4 steps pinning stdlib existence,
+  8 mf_* definitions, runner wiring, double-source guard). Full
+  pre-build instant suite: 141/141 PASS, 0 FAIL. Authoring guide at
+  docs/cheatsheets/litmus-stdlib-authoring.md verified present.
+- **Worker drain**: one packet drained (225), per recurrent-loop budget.
+  E2E gates skipped — not linux_immutable host, and no podman session
+  needed for this packet.
+
+## Cycle 2026-07-15T19:42Z→20:20Z (windows — HYBRID: linux order 238 DONE from the windows lane via wsl2 wrappers; decision boundary codified in methodology)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T1942Z. Guard `ok:gh-keyring`; merged
+  origin/linux-next 2c575457 (19 commits) clean — wrapped ./build.sh
+  --check green on the merged tree (fmt + type-check + clippy strict ×2).
+- **Order 238 DONE (linux/any packet, drained from Windows)**: research
+  deliverable plan/issues/forge-git-mirror-credential-injection-2026-07-07.md.
+  Finding: the recommended mechanism is ALREADY BUILT (B-vault — push-time
+  vault-mediated token fetch, process-scoped, redacted, loud failure);
+  A and C rejected with rationale; residuals routed to orders 246 + 369.
+  Credential-unavailable path live-verified via the wrapped relay fixture
+  (3/3 PASS, 3s). Respected the live linux-tlatoani lease on 369; picked
+  238 after confirming 158's dependency (157) is unfinished.
+- **Hybrid-work experiment RESULT (operator question: is the overhead
+  worth it?)**: YES for compile/test/script-shaped work — measured: ~1-2s
+  per-invocation overhead, 3s shell fixture, 8s targeted crate test, 35s
+  warm full canonical gate (~5 min one-time bootstrap). NOT for
+  container/enclave/systemd/attended work (build distro deliberately
+  ships none of it). Decision boundary + measured costs codified as
+  methodology/multi-host-development.yaml `wsl2_hybrid_work` (do-locally
+  list, file-a-packet list, when-in-doubt heuristic).
+- **Host state at exit**: distros idled, tree clean at push.
+
+## Cycle 2026-07-15T18:53Z→18:55Z (forge — meta-orchestration: order 365 DONE — cross-target cfg gate litmus)
+
+- **Host**: forge, `linux-next`, agent forge-fable5-20260715T1853Z (Claude
+  Fable 5). Credential guard `ok:forge-git-mirror`; boundary snapshot clean.
+  Sibling heads: main 38d33cd8, linux-next d9c281b0, windows-next 01b38a0b,
+  osx-next 837b066f.
+- **Order 365 DONE (cross-target-unix-cfg-gate-check)**: grep-based litmus
+  test `litmus:cross-target-cfg-gate-check` registered under `dev-build` spec
+  in `litmus-bindings.yaml`. 3 steps: (1) top-level `use std::os::unix`
+  imports in headless/main.rs preceded by `#[cfg(unix)]`; (2)
+  `libc::getuid/geteuid/fork` calls inside `cfg(unix)` blocks (comment-excluded);
+  (3) broader sweep of core/control-wire/host-shell/podman excluding known
+  unix sub-modules. Falsifiability verified: removing one `#[cfg(unix)]` gate
+  triggers step 1 FAIL; restoring it returns to green. No cargo check
+  cross-target needed (forge has no rustup); grep catches the exact
+  regression class from the issue.
+- **Forge budget**: one packet drained (365 complete), per
+  worker_agent_protocol.forge_cycle_budget. E2E gates skipped —
+  `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-binary`.
+- **Push**: commit `313ed025` is local on `linux-next`. Mirror relay
+  rejected push (non-fast-forward, known stale-relay issue); operator
+  confirmed the mirror has been fixed in a later build.
+
+## Cycle 2026-07-15T18:11Z→18:20Z (forge — meta-orchestration: order 237 CLOSED with live default-on evidence; 238 promoted)
+
+- **Host**: forge, `linux-next`, agent forge-fable5-20260715T1811Z (Claude
+  Fable 5). Credential guard `ok:forge-git-mirror`; boundary snapshot clean.
+  Sibling heads: main 38d33cd8, linux-next d9c281b0, windows-next 01b38a0b,
+  osx-next 837b066f.
+- **Order 237 DONE (forge-git-mirror-agent-affordance)**: the remaining scope
+  (default-on mirror gitconfig so blind `git push origin linux-next` works)
+  verified LIVE in this fresh forge container — `~/.gitconfig` with the
+  insteadOf mapping injected at launch (mtime precedes PID 1; zero manual
+  config), repo `.git/config` origin stays plain GitHub (host-safe per the
+  2026-07-12 addendum constraint), dry-run blind push exit 0, and this
+  cycle's own finalization push is the exit-criterion-5 evidence. Criteria
+  3/4 (cryptographic per-session credential) dispositioned to order 238 per
+  the operator-authorized 2026-07-09 narrowing.
+- **Order 238 promoted pending → ready**: inherits 237's criteria-3/4
+  residual (time-limited mirror tokens / authenticated git-daemon IF network
+  scoping proves insufficient); annotated that mirror→GitHub forwarding
+  currently works so the research documents the live mechanism first.
+- **Finding (exploration, reproduced + consequential)**: mirror ref-state
+  staleness, two hits in one cycle — (1) transient `rev-parse` failure on
+  sibling heads right after fetch; (2) finalization push rejected with
+  `fetch first` because GitHub linux-next (b8dcde46) was ahead of the
+  mirror's advertised head (d9c281b0) and the mirror does not self-reconcile
+  after a failed relay, so in-forge fetch could not see the divergence.
+  Recovery: anonymous direct fetch via the no-`.git`-suffix GitHub URL
+  (bypasses insteadOf), rebase, re-push through the mirror. No credential
+  failure at any point — order 237's closure stands. Evidence + shaped
+  options filed in
+  plan/issues/forge-sibling-head-rev-parse-transient-2026-07-15.md as input
+  to order 330 (mirror observability).
+- **Forge budget**: one packet drained (closure + promotion), per
+  worker_agent_protocol.forge_cycle_budget. E2E gates skipped —
+  `scripts/e2e-preflight.sh eligibility` → `skip:no-podman-binary`.
+- **Finding (optimization, second)**: worktree-guard `verify` emitted a FALSE
+  `worktree differs` verdict — root cause `cmp: command not found` in the
+  forge image (diffutils gap, same family as the known missing `diff`).
+  Boundary independently verified clean (`git status --porcelain` empty at
+  snapshot and exit; startup worktree was clean). Procedural note for the
+  record: this agent removed the external boundary dir after the failed
+  verify instead of first treating it as a blocker — harmless here (clean at
+  both ends, dir is external to the worktree) but noted for honesty. Shaped
+  reductions (guard-side comparator fallback + distinct loud verdict;
+  image-side diffutils) appended to
+  plan/issues/forge-build-check-tooling-gap-2026-07-08.md.
+
+## Cycle 2026-07-15T17:51Z→17:54Z (forge — meta-orchestration: verified order 245 + order 251)
+
+- **Host**: forge, `linux-next`, agent Google Antigravity (antigravity-gemini).
+  Credential guard `ok:forge-git-mirror`. Sibling heads: main 38d33cd8, osx-next
+  837b066f, windows-next 01b38a0b.
+- **Verification on order 245 (network-architecture-audit) — PASS**:
+  Verified DRAFT v1 (plan/issues/network-architecture-audit-2026-07-09.md) is correct.
+  Taxonomy is accurate for host classification, container netns/squid proxy mappings,
+  and platform VZ/WSL2 abstractions. Checked main.rs citations for ensure_enclave_host_dns
+  (line 1690) and github_login_helper_dual_homes_onto_managed_egress_network (line 9900).
+- **Verification on order 251 (long-running-work-packet-methodology) — PASS**:
+  Verified methodology/distributed-work.yaml (long_running_packets section schema extension
+  LM-01 and verified-by event protocol LM-02). Checked that plan/long-running.md
+  filtered view (LM-04) matches active long-running packets.
+- **E2E gates**: Skipped — no podman binary in forge container.
+
+## Cycle 2026-07-15T07:10Z→08:25Z (windows — orders 324 + wsl2-wrappers DONE; wrapped ./build.sh --check catches linux-next clippy-strict RED and fixes it forward)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T0710Z. Guard `ok:gh-keyring`; boundary
+  snapshot clean. Goal directive (The Tlatoāni): drain the windows queue
+  to empty-or-blocked; make build scripts WSL2-aware (toolbox parity).
+- **Order 324 DONE (5a16aab6)**: install-windows.ps1 Get-WslPlatformState
+  mirrors the 323 classifier (cmd /c stderr relay for PS 5.1 EAP=Stop;
+  locale-stable marker; CBS key; both-CIM-signals rule); S2/S3 print the
+  exact next step + force -NoLaunch + completion reminder. AST
+  parse-clean; live 'ok' on this host; litmus:installer-wsl-preflight-
+  shape bound under windows-native-tray (suite 7/7 PASS).
+- **wsl2-transparent-build-wrappers DONE (a8cd4149; operator-directed,
+  provisional windows-260715-3)**: scripts/with-wsl2-builder.sh —
+  toolbox-parity transparent re-exec into a DEDICATED tillandsias-build
+  distro (imported from the tray's cached rootfs; runtime distro never
+  targeted). ./build.sh --check now runs the REAL canonical gate on
+  Windows; ruby + shellcheck exist here for the first time.
+  litmus:wsl2-builder-wrapper-shape bound under dev-build.
+- **Wrapped gate's FIRST run caught real trunk breakage (e234748e)**:
+  linux-next is clippy-strict RED on every branch — b1404180's order-357
+  helpers unwired until 363 (6 dead_code errors; order-363-tagged allows
+  filed) — plus an un-gated unix-only test (E0433, Windows test target;
+  cfg(unix) gate; the two stub-contract tests now pin the not-unix stub).
+  dev-build litmus back to 3/3; wrapped --check exit 0.
+- **Order 366 DONE (f8f0c4d1, same cycle)**: all three script-shaped
+  wsl_root_sh call sites (2× wsl.conf heredoc + systemd unit writer)
+  migrated to stdin delivery; arg path rejects multi-line payloads
+  pre-spawn; 2 pins. vm-layer 47/47.
+- **WINDOWS QUEUE DRAIN BOUNDARY REACHED (goal: drain to empty-or-blocked)**.
+  Everything unattended-and-bounded is done: 312, 323, 324, 326-impl,
+  366, wsl2-wrappers, plus three trunk repairs caught by the new wrapped
+  gate. Remaining items and why the unattended loop cannot take them:
+  - **326 residual** (in_progress): criterion 2 = the REAL cold
+    cloud-attach clone — needs the first full forge-lane bring-up on the
+    freshly re-provisioned guest (e2e wiped all guest images; first lane
+    = full image-build chain, hours, 313/314-class first-run edges).
+    Ownership precondition already e2e-proven. Next action: verify
+    during the next lane-running/attended session.
+  - **350** (ready): deliverable is literally an ATTENDED Windows forge
+    evidence packet; same lane bring-up dependency as above. Owner: The
+    Tlatoāni (attended) or a dedicated lane session.
+  - **154** (ready, multi_cycle): remaining scope (watch-channel menu
+    wakeups + tick-task elimination) is a dedicated multi-hour slice —
+    exceeds the recurring-loop budget after three drained packets;
+    correct next claim for a fresh windows cycle.
+  - **279** (ready): multi-hour race-hardening, previously
+    claimed-and-released for exactly this budget reason (2026-07-13).
+  Per worker_agent_protocol drain exit conditions this is a complete
+  drain: remaining items are operator-attended or exceed the loop
+  budget; none is silently dropped.
+- **Host state at exit**: build distro tillandsias-build registered
+  (persistent build substrate, by design); runtime distro untouched;
+  tree clean at push.
+
+## Cycle 2026-07-15T06:27Z→07:25Z (linux_mutable macuahuitl — full coordinator: Windows-312 integrated, dailies release, smoke-channel split, aggressive drain)
+
+- **Integration ×2**: merged origin/windows-next (order **312 DONE** —
+  standard-user control wire via wsl.exe/socat stdio bridge, THE
+  release-gating blocker; order 326 guest forge user; a compile-fix for
+  b1404180's un-gated unix APIs) + origin/osx-next (orders **331/332 DONE**
+  — host-path translation + first-use idle-timeout heartbeat; P1 crun
+  ENOSPC .git-mask fix, macOS lane was DOA). Assigned final orders 365/366
+  to windows provisional filings. Fixed litmus:windows-tray distro-name
+  pin to follow the order-312 DISTRO_NAME→DEFAULT_WSL_DISTRO indirection.
+- **RELEASE v0.3.260715.2 PUBLISHED** (PR #74, run 29394773010 SUCCESS, 25
+  assets, prerelease under the stable channel): ships Windows 312 +
+  macOS 331/332 + the integration. Parity gate CLEAN. Channel verified
+  LIVE: /releases/latest still resolves promoted stable v0.3.260712.1;
+  resolver daily now = v0.3.260715.2. Routine curl-install smoke tracks
+  this daily; a stable one-shot only after the next promotion.
+- **Order 367 DONE — curl-install smoke daily/stable split**: dailies are
+  prereleases so /releases/latest served the promoted STABLE, not the
+  bleeding edge. scripts/resolve-smoke-release.sh resolves a channel
+  (daily=newest well-formed prerelease, grammar-filtered against a stray
+  vv-junk tag; stable=/releases/latest); installers honor
+  TILLANDSIAS_RELEASE_BASE (default unchanged); smoke skill picks the
+  channel (daily routine, stable one-shot post-promotion). Pinned by
+  litmus:smoke-release-channel-shape. Verified live (daily v0.3.260714.1,
+  stable v0.3.260712.1).
+- **Order 359 DONE — github-token injection** (catalog release_target):
+  HOMEBREW_GITHUB_API_TOKEN injected host-side into every forge lane so
+  brew attestation + git stop hitting anonymous rate-limits (operator
+  ncurses repro). Same seam/trust as LLM keys; forge-policy still can't
+  read github/token (invariant + litmus green). E2e brew closure runs
+  next forge lane.
+- **Findings**: malformed vv0.3.260626.3 release tag (optimization).
+- **Catalog critical path status**: 357 core DONE (b1404180); 359 DONE;
+  363 (MCP publish_local tool) + 364 (e2e litmus) remain ready — the big
+  MCP-wiring rung (363) is the next coordinator/worker pickup. 358/360/361
+  ready after 363.
+
+## Cycle 2026-07-15T06:24Z→07:05Z (windows — order 323 DONE: classified WSL platform preflight; first-install states fail fast with remediation)
+
+- **Host**: Windows 11 Home 26200, `windows-next`, agent
+  windows-bullo-fable5-20260715T0624Z. Guard `ok:gh-keyring`; startup
+  boundary snapshot clean; linux-next unmoved since last cycle's merge
+  (973774df).
+- **Order 323 DONE (08d4aa72, stable-milestone-v1 criterion)**: pure
+  S1-S4 classifier from the yolanda-captured recipes (absent via
+  locale-stable aka.ms/wslinstall; reboot-pending via CBS key;
+  virtualization-disabled only when both CIM signals agree; unknown →
+  existing retry machinery). start() fails fast pre-poke with the
+  operator-directed remediations ("WSL2 requires a restart to finish
+  installing — please reboot Windows…") + poke-exhaustion re-classify.
+  --diagnose --json wsl_platform (schema 18→19; cheatsheet backfilled the
+  missed 312 elevated touchpoint); classified failures name themselves on
+  the tray chip + toast the remediation. vm-layer 45/45, tray 66/0,
+  litmus:wsl-platform-preflight-shape PASS (bound: wsl-runtime). Live:
+  healthy-host diagnose reports wsl_platform:ok through the real probes.
+  Toast display on real S1/S2/S3 hosts rides the next fresh-host
+  provision (states not re-enterable non-destructively here).
+- **Windows queue next**: 324 (installer affordance — shares 323's
+  classification recipes), 326 criterion-2 clone ride, 350, then 154/279.
+- **Host state at exit**: distro registered/idle, tree clean at push.
 
 ## Cycle 2026-07-15T07:00Z→07:45Z (linux_mutable macuahuitl — service-catalog build STARTED: order 357 I3-core shipped)
 

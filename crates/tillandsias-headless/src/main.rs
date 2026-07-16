@@ -81,6 +81,7 @@ mod vault_bootstrap;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
 // Process-global VmPhase mirror gating container mutations (order 234, R6).
+mod catalog;
 mod runtime_phase;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
@@ -2129,18 +2130,27 @@ fn build_stack_common_args(
 /// the schema is designed. A forge may request category `"WEB"` and NOTHING
 /// else until 358 generalizes this host-side.
 /// @trace spec:enclave-service-catalog
+// PLEASE REVIEW: linux — dead_code allows on the order-357 I3-core helpers:
+// order 363 (MCP publish_local tool + handler) wires the production callers;
+// remove these allows with it. Until then the bin target fails clippy-strict
+// (-D warnings) on every branch — caught 2026-07-15 by the Windows lane's
+// first wrapped ./build.sh --check (wsl2-transparent-build-wrappers).
+#[allow(dead_code)]
 const CATALOG_WEB_CATEGORY: &str = "WEB";
 /// Port the WEB image's busybox httpd listens on (images/web/Containerfile).
+#[allow(dead_code)]
 const CATALOG_WEB_PORT: u16 = 8080;
 
 /// Container name for a project's published WEB service. Stable per project
 /// so re-publish is idempotent (ensure semantics).
+#[allow(dead_code)]
 fn web_service_container_name(project_name: &str) -> String {
     format!("tillandsias-{project_name}-web")
 }
 
 /// The published URL for a project's WEB service. Friendly name only, never
 /// an IP (operator invariant). http today; order 360 adds transparent https.
+#[allow(dead_code)]
 fn web_service_url(project_name: &str) -> String {
     format!("http://www.{project_name}.localhost:8080")
 }
@@ -2151,8 +2161,16 @@ fn web_service_url(project_name: &str) -> String {
 /// is the WEB entry's fixed share rule, not agent-choosable). On the enclave
 /// network as `tillandsias-<project>-web` so the router reaches it by name.
 /// @trace spec:enclave-service-catalog, spec:web-image
-fn build_web_service_run_args(project_name: &str, worktree: &Path, image: &str) -> Vec<String> {
-    vec![
+// PLEASE REVIEW: linux — order 363 wires the caller; remove with it.
+#[allow(dead_code)]
+fn build_catalog_service_run_args(
+    project_name: &str,
+    worktree: &Path,
+    category: &str,
+    catalog_name: &str,
+) -> Result<Vec<String>, String> {
+    let entry = catalog::resolve_catalog_entry(category, catalog_name)?;
+    Ok(vec![
         "--detach".into(),
         "--rm".into(),
         "--name".into(),
@@ -2169,8 +2187,8 @@ fn build_web_service_run_args(project_name: &str, worktree: &Path, image: &str) 
         // Worktree served read-only (debug: live edits, no reload for static).
         "-v".into(),
         format!("{}:/var/www:ro", worktree.display()),
-        image.into(),
-    ]
+        entry.digest,
+    ])
 }
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
@@ -2531,6 +2549,19 @@ fn control_socket_host_dir() -> PathBuf {
     base.join("tillandsias")
 }
 
+/// Host directory holding the NDJSON MCP tool socket (`mcp.sock`) the tray
+/// serves for in-forge agents (order 363). The DIRECTORY — not the socket
+/// file — is bind-mounted into forge containers so a tray restart's
+/// re-bind stays visible inside an already-running forge. Deliberately a
+/// sibling of `control.sock`, never the control socket itself: the postcard
+/// control plane (VmShutdownRequest, IssueWebSession, …) must not be
+/// reachable from agent code.
+///
+/// @trace spec:host-browser-mcp
+fn mcp_socket_host_dir() -> PathBuf {
+    control_socket_host_dir().join("mcp")
+}
+
 /// Build `podman run` args for the Caddy reverse-proxy router container.
 ///
 /// The router runs on the enclave network with DNS alias `router` so Squid's
@@ -2800,6 +2831,8 @@ impl RouterRoute {
     }
 
     /// A public (no-auth) route for a "publish it locally" catalog service.
+    // PLEASE REVIEW: linux — order 363 wires the caller; remove with it.
+    #[allow(dead_code)]
     fn public_service(
         subdomain: impl Into<String>,
         upstream_host: impl Into<String>,
@@ -8206,6 +8239,27 @@ fn build_forge_agent_run_args_with_vault(
         );
     }
 
+    // Order 363: mount the host MCP tool socket directory so the in-forge
+    // socat bridge (config-overlay/mcp/host-browser.sh) can reach the
+    // tray's NDJSON tool surface (publish_local / service_status /
+    // service_stop). Read-only — connect() needs no filesystem write —
+    // and the tray attributes the project from SO_PEERCRED, so a forge
+    // can only ever publish its own project. The postcard control socket
+    // is deliberately NOT mounted (full control plane).
+    let mcp_dir = mcp_socket_host_dir();
+    if std::fs::create_dir_all(&mcp_dir).is_ok() {
+        spec = spec
+            .bind_mount(
+                mcp_dir.display().to_string(),
+                "/run/host/tillandsias-mcp",
+                true,
+            )
+            .env(
+                "TILLANDSIAS_CONTROL_SOCKET",
+                "/run/host/tillandsias-mcp/mcp.sock",
+            );
+    }
+
     // Forge gitconfig injection (order 224): pre-populate Git's standard
     // global config with mirror redirect and safe.directory so the
     // entrypoint's rewrite_origin_for_enclave_push can skip redundant writes
@@ -8238,6 +8292,27 @@ fn build_forge_agent_run_args_with_vault(
         if p.env_var() == "GEMINI_API_KEY" {
             spec = spec.env("GOOGLE_GENERATIVE_AI_API_KEY", key);
         }
+    }
+
+    // GitHub token injection (order 359): forge tooling that talks to GitHub —
+    // brew attestation verification (bottles + the GitHub API) and any direct
+    // git-over-HTTPS — otherwise goes ANONYMOUS and gets rate-limited/blocked
+    // (operator repro 2026-07-15: brew could not verify the ncurses bottle,
+    // "missing GitHub API token"). We control the credential, so inject it.
+    // Read HOST-SIDE from Vault (the tray has access) and hand it to the lane
+    // as env, EXACTLY like the provider keys above — never on disk, never in
+    // argv. The forge's OWN vault policy still cannot read secret/github/token
+    // (forge-policy-has-no-token-read invariant is untouched); a compromised
+    // lane holds only this one env value, same trust level as the LLM keys.
+    // Injected for every lane because brew is available in all of them.
+    // @trace plan/issues/forge-github-token-injection (order 359)
+    if let Ok(gh_token) =
+        crate::vault_bootstrap::vault_kv_get_via_exec("secret/github/token", "token", debug)
+        && !gh_token.is_empty()
+    {
+        // HOMEBREW_GITHUB_API_TOKEN: brew's documented env for authenticated
+        // ghcr.io bottle pulls + attestation verification.
+        spec = spec.env("HOMEBREW_GITHUB_API_TOKEN", &gh_token);
     }
 
     spec.build_run_args()
@@ -9806,10 +9881,129 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "tray")]
+pub(crate) async fn publish_local_service(
+    project_name: &str,
+    category: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if category != "WEB" {
+        return Err(format!(
+            "Category {} is not supported for local publish",
+            category
+        ));
+    }
+
+    crate::container_deps::ensure_service_catalog(debug)?;
+
+    let image = "tillandsias-web";
+    let client = tillandsias_podman::PodmanClient::new();
+    let container_name = format!("tillandsias-{project_name}-web");
+    let worktree = crate::local_projects::host_project_root().join(project_name);
+
+    let _ = client.stop_container(&container_name, 1).await;
+    let _ = client.remove_container(&container_name).await;
+
+    let mut args = vec![
+        "--detach".into(),
+        "--rm".into(),
+        "--name".into(),
+        container_name.clone(),
+        "--hostname".into(),
+        format!("web-{project_name}"),
+        "--network".into(),
+        "tillandsias-enclave".into(),
+        "-v".into(),
+        format!("{}:/var/www:ro", worktree.display()),
+    ];
+    args.push(image.into());
+
+    client
+        .run_container_observed("web", &container_name, &args, debug)
+        .await
+        .map_err(|e| format!("Failed to start web container: {e}"))?;
+
+    let mut routes = read_router_routes(debug)?;
+    routes.retain(|r| r.subdomain != project_name);
+
+    let mut new_route = RouterRoute::new(project_name, &container_name, 8080);
+    new_route.public = true;
+    routes.push(new_route);
+
+    write_router_routes(&routes, debug)?;
+    caddy_reload_routes(debug).await?;
+
+    Ok(format!("https://www.{project_name}.localhost"))
+}
+
+#[cfg(feature = "tray")]
+pub(crate) async fn service_status(project_name: &str) -> Result<String, String> {
+    let client = tillandsias_podman::PodmanClient::new();
+    let container_name = format!("tillandsias-{project_name}-web");
+
+    if let Ok(inspect) = client.inspect_container(&container_name).await {
+        Ok(inspect.state.clone())
+    } else {
+        Ok("stopped".to_string())
+    }
+}
+
+#[cfg(feature = "tray")]
+pub(crate) async fn service_stop(
+    category: &str,
+    project_name: &str,
+    debug: bool,
+) -> Result<(), String> {
+    if category != "WEB" {
+        return Err(format!(
+            "Category {} is not supported for service_stop",
+            category
+        ));
+    }
+    let client = tillandsias_podman::PodmanClient::new();
+    let container_name = format!("tillandsias-{project_name}-web");
+
+    let _ = client.stop_container(&container_name, 1).await;
+    let _ = client.remove_container(&container_name).await;
+
+    let mut routes = read_router_routes(debug)?;
+    let initial_len = routes.len();
+    routes.retain(|r| r.subdomain != project_name);
+
+    if routes.len() < initial_len {
+        write_router_routes(&routes, debug)?;
+        caddy_reload_routes(debug).await?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn github_token_injected_as_env_host_side_never_argv() {
+        // Order 359: the github token reaches the forge as an env var read
+        // HOST-SIDE, never on argv/disk, and the forge's own vault policy is
+        // untouched (still cannot read secret/github/token).
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn build_forge_agent_run_args_with_vault(");
+        // Injected via .env(), the same seam as the LLM provider keys.
+        assert!(window.contains("spec = spec.env(\"HOMEBREW_GITHUB_API_TOKEN\""));
+        // Read host-side from vault (the tray has access; the forge does not).
+        assert!(window.contains("vault_kv_get_via_exec(\"secret/github/token\", \"token\""));
+        // Quarantine invariant unchanged: forge-policy still forbids the read.
+        let forge_hcl = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/vault/policies/forge.hcl"
+        ));
+        assert!(
+            !forge_hcl.contains("github/token"),
+            "forge policy must never grant github/token read"
+        );
+    }
 
     // ── enclave service catalog: publish-it-locally MVP (order 357) ──
 
@@ -9832,11 +10026,13 @@ mod tests {
 
     #[test]
     fn build_web_service_run_args_bind_mounts_worktree_read_only() {
-        let args = build_web_service_run_args(
+        let args = build_catalog_service_run_args(
             "visual-chess",
             Path::new("/home/u/src/visual-chess"),
-            "tillandsias-web:v1",
-        );
+            "WEB",
+            "busybox",
+        )
+        .unwrap();
         // Worktree mounted RO at /var/www (debug: live static edits).
         assert!(
             args.iter()
@@ -9855,9 +10051,14 @@ mod tests {
         assert!(args.iter().any(|a| a == "--cap-drop=ALL"));
         assert!(args.iter().any(|a| a == "--security-opt=no-new-privileges"));
         assert!(args.iter().any(|a| a == "--rm"));
-        // Image is the LAST arg (podman positional), from the host — never
-        // a forge-supplied reference.
-        assert_eq!(args.last().unwrap(), "tillandsias-web:v1");
+        // Image is the LAST arg (podman positional), resolved HOST-SIDE from
+        // the catalog to a digest-pinned reference (order 358) — never a
+        // forge-supplied or tag-mutable reference.
+        let image = args.last().unwrap();
+        assert!(
+            image.contains("@sha256:"),
+            "catalog image must be digest-pinned, got: {image}"
+        );
     }
 
     #[test]
@@ -12934,6 +13135,11 @@ mod tests {
         );
     }
 
+    // PLEASE REVIEW: linux — cfg-gated by the windows lane: binding a real
+    // UnixListener is unix-only (std::os::unix). The two stub-contract tests
+    // above stay cross-platform on purpose — on Windows they pin the
+    // cfg(not(unix)) "not listening" stub.
+    #[cfg(unix)]
     #[test]
     fn control_socket_is_listening_returns_true_for_live_listener() {
         use std::os::unix::net::UnixListener;

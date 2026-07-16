@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "0.3.260715"
+version = "0.3.260716"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
@@ -65,7 +65,7 @@ tillandsias-vault-client = { path = "../tillandsias-vault-client" }
 # Used by the in-VM PTY handler (control-wire-pty-attach Tasks 4.x):
 # openpty + ioctl(TIOCSWINSZ) + kill(SIGTERM/SIGKILL) + waitpid.
 # Pulled in only on Unix targets — Windows builds skip pty_handler entirely.
-nix = { version = "0.29", features = ["fs", "ioctl", "process", "signal", "term"] }
+nix = { version = "0.29", features = ["fs", "ioctl", "process", "signal", "socket", "term"] }
 
 [features]
 # @trace spec:tillandsias-vault — Phase 6/6.5: Vault is the only Linux

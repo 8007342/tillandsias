@@ -110,11 +110,63 @@ if (-not [System.Environment]::Is64BitOperatingSystem) {
     Die "Tillandsias requires a 64-bit Windows installation."
 }
 
-# Warn if WSL2 is not installed (provisioning will fail later, better to surface now).
-$wsl = Get-Command wsl -ErrorAction SilentlyContinue
-if (-not $wsl) {
-    SayWn "WSL2 not found. Install it first: wsl --install (requires reboot)"
-    SayWn "Tillandsias will install, but provisioning requires WSL2 on next launch."
+# ── WSL platform preflight (order 324; mirrors the order-323 tray classifier) ─
+# A brand-new host can be in states where the tray's first VM create can NEVER
+# succeed (recipes: plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md):
+#   absent                  wsl.exe missing or Windows ships only the stub (S1)
+#   reboot-pending          VirtualMachinePlatform enabled, DISM 3010 (S2)
+#   virtualization-disabled VT-x/AMD-V off in firmware (S3)
+# The installer owns the restart instruction: on S2/S3 it prints the exact next
+# step and does NOT auto-launch the tray, so the first impression is never a
+# dead VM create. Classification parity with
+# tillandsias-vm-layer wsl.rs classify_wsl_platform (order 323).
+function Get-WslPlatformState {
+    if (-not (Get-Command wsl -ErrorAction SilentlyContinue)) { return 'absent' }
+    # cmd /c relays stderr into stdout so PS 5.1 never wraps native stderr in
+    # ErrorRecords under $ErrorActionPreference='Stop'; NUL-strip tolerates
+    # the UTF-16 pipe output wsl.exe emits.
+    $statusOut = ''
+    try { $statusOut = ((& cmd /c "wsl --status 2>&1") | Out-String) -replace "`0", '' } catch {}
+    if ($LASTEXITCODE -eq 0) { return 'ok' }   # S4 healthy
+    # S1: locale-stable install-URL marker, not English prose.
+    if ($statusOut -match 'aka\.ms/wslinstall') { return 'absent' }
+    # S3: only when BOTH firmware signals agree (half-known is not confident).
+    try {
+        $cs  = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+        $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        if (($cs.HypervisorPresent -eq $false) -and ($cpu.VirtualizationFirmwareEnabled -eq $false)) {
+            return 'virtualization-disabled'
+        }
+    } catch {}
+    # S2: WSL app present but unhealthy + a pending servicing reboot.
+    if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') {
+        return 'reboot-pending'
+    }
+    'ok'   # unclassified: the tray's own preflight (order 323) owns it
+}
+
+$WslState = Get-WslPlatformState
+$NoLaunchReason = ''
+switch ($WslState) {
+    'absent' {
+        SayWn "WSL is not installed. Install it with: wsl --install --no-distribution"
+        SayWn "(restart Windows if the installer asks). Tillandsias will install now,"
+        SayWn "but provisioning requires WSL2 on next launch."
+    }
+    'reboot-pending' {
+        SayWn "WSL2 requires a restart to finish installing."
+        SayWn "NEXT: 1) restart Windows   2) launch Tillandsias from the Start Menu."
+        $NoLaunchReason = 'restart Windows first, then launch Tillandsias from the Start Menu'
+    }
+    'virtualization-disabled' {
+        SayWn "Hardware virtualization is disabled on this machine."
+        SayWn "NEXT: enable VT-x/AMD-V in BIOS/UEFI, then launch Tillandsias."
+        $NoLaunchReason = 'enable virtualization in BIOS/UEFI first, then launch Tillandsias'
+    }
+}
+if ($NoLaunchReason -and -not $NoLaunch) {
+    $NoLaunch = $true
+    SayWn "Auto-launch disabled for this install ($WslState): the tray's first VM create cannot succeed yet."
 }
 
 # ── Hyper-V Administrators membership (order 312) ───────────────────────────
@@ -270,6 +322,9 @@ try {
         SayOk "(Right-click the icon for the menu; provisioning runs in the background.)"
     } else {
         Say "Installation complete. Run $InstalledExe to provision WSL2 (--init)."
+        if ($NoLaunchReason) {
+            SayWn "Reminder: $NoLaunchReason."
+        }
     }
     Write-Host ""
 

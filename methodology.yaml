@@ -212,3 +212,31 @@ methodology:
       Local builds MUST use an autoincremental build number so agents can quickly detect and discard stale binaries.
       Shared local resources (like e2e test execution) MUST use a `.lock` file system to prevent concurrent execution collisions between agents.
 
+
+  component_freshness:
+    authority: "The Tlatoāni, 2026-07-15 (operator directive)"
+    rule: >
+      Our own components age — code, scripts, litmus tests, cheatsheets,
+      methodology docs, images, artifacts. Every auditable component carries a
+      FRESHNESS record answering: when was this last PROPERLY looked at and
+      confirmed still meaningful, useful, efficient, sound, and complete?
+      CI/CD flags components whose freshness age exceeds threshold for
+      RE-FRESH; a flagged component dispatches an agent audit that ends in
+      exactly one of: refreshed (re-validated, stamp updated), updated
+      (fixed/tuned, stamp updated), or obsoleted (deleted/tombstoned, with
+      same-commit removal of dependents). This is a standing, never-ending
+      loop woven into the recurring skills, not a one-shot audit.
+    discard_over_repair: >
+      Agents MUST be able to recognize an obsolete component and DISCARD it
+      rather than reuse or repair it when a fresh implementation would be
+      better. Repair is not the default disposition. Removed components get a
+      tombstone naming what replaced them and why repair was declined (the
+      2026-07-15 execute_test_command tombstone in scripts/run-litmus-test.sh
+      is the exemplar: dead code that LOOKED live misled a hardening pass and
+      cost a full CI cycle).
+    freshness_record_grammar: >
+      A machine-greppable `freshness:` block (or `# freshness:` comment
+      header for scripts): auditor agent id, ISO date, verdict
+      (refreshed|updated|obsoleted), one-line scope note. Detailed schema and
+      rollout ladder: plan/issues/component-freshness-lifecycle-2026-07-15.md
+      (flag -> soak -> default, per migration_discipline).

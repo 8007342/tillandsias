@@ -201,8 +201,10 @@ specs:
   - litmus:headless-init-status-check-source-built
   - litmus:podman-idiomatic-launch-routing
   - litmus:build-ci-dispatch-shape
+  - litmus:wsl2-builder-wrapper-shape
+  - litmus:cross-target-cfg-gate-check
   coverage_ratio: 100
-  last_verified: '2026-06-04'
+  last_verified: '2026-07-15'
 - spec_id: direct-podman-calls
   status: obsolete
   litmus_tests: []
@@ -374,6 +376,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:git-mirror-fetch-reconcile
   - litmus:enclave-isolation
   - litmus:git-mirror-safe-refspec-push
   - litmus:git-mirror-ref-convergence
@@ -828,8 +831,9 @@ specs:
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:windows-tray-architectural-invariants
   - litmus:pty-attach-project-threading-symmetric
+  - litmus:installer-wsl-preflight-shape
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-07-15'
 - spec_id: wsl-daemon-orchestration
   status: active
   litmus_tests:
@@ -840,8 +844,15 @@ specs:
   status: active
   litmus_tests:
   - litmus:wsl-runtime-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:wsl-platform-preflight-shape
+  coverage_ratio: 40
+  last_verified: '2026-07-15'
+- spec_id: enclave-service-catalog
+  status: active
+  litmus_tests:
+  - litmus:service-catalog-allowlist-shape
+  coverage_ratio: 100
+  last_verified: '2026-07-15'
 - spec_id: zen-default-with-ollama-analysis-pool
   status: active
   litmus_tests:

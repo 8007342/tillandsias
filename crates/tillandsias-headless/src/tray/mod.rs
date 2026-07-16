@@ -472,33 +472,33 @@ fn control_socket_path() -> PathBuf {
     runtime_dir.join("tillandsias/control.sock")
 }
 
-/// Env var that overrides the default Linux-native host project root.
-/// Linux native (the tray running on the user's desktop, not in-VM)
-/// resolves projects from the host filesystem — convention is
-/// `$HOME/src` unless the user pins something else. See the in-VM
-/// sibling `vsock_server::IN_VM_PROJECT_ROOT_ENV` for the other half
-/// of the Q4 answer.
+/// Path of the NDJSON MCP tool socket served for in-forge agents (order
+/// 363). Lives in its OWN subdirectory so the directory — not the socket
+/// file — can be bind-mounted into forge containers: a tray restart
+/// re-binds the socket inode, and a file bind-mount would go stale while
+/// a directory mount picks the fresh socket up.
 ///
-/// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
-
-/// Resolve the Linux-native host project root.
+/// This is deliberately NOT `control.sock`. The control socket speaks
+/// postcard-framed `ControlEnvelope`s and carries the whole host control
+/// plane (VmShutdownRequest, IssueWebSession, …); the repo — including the
+/// wire format — is checked out inside every forge, so exposing it would
+/// hand agent code the full control plane. The MCP socket carries ONLY the
+/// JSON-RPC tool surface, and the project label is derived host-side from
+/// SO_PEERCRED, never from the request.
 ///
-/// Priority: `TILLANDSIAS_HOST_PROJECT_ROOT` env var → `$HOME/src`
-/// (matches the user's typical workspace layout) → an unreadable
-/// fallback so `scan_project_root` returns an empty list without
-/// panicking.
-fn host_project_root() -> PathBuf {
-    if let Ok(v) = env::var(HOST_PROJECT_ROOT_ENV) {
-        return PathBuf::from(v);
-    }
-    if let Some(home) = env::var_os("HOME") {
-        return PathBuf::from(home).join("src");
-    }
-    // No HOME and no override → a path that will fail read_dir and
-    // produce an empty list. Better than panicking.
-    PathBuf::from("/nonexistent")
+/// @trace spec:host-browser-mcp, spec:tray-host-control-socket
+fn mcp_socket_path() -> PathBuf {
+    let runtime_dir = env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() })));
+    runtime_dir.join("tillandsias/mcp/mcp.sock")
 }
+
+// Env var that overrides the default Linux-native host project root.
+// Linux native (the tray running on the user's desktop, not in-VM)
+// resolves projects from the host filesystem — convention is
+// `$HOME/src` unless the user pins something else. (Orphaned doc: the
+// const it documented moved; kept as prose for the next reader.)
 
 fn read_control_envelope(stream: &mut UnixStream) -> std::io::Result<ControlEnvelope> {
     let mut len = [0_u8; 4];
@@ -631,6 +631,265 @@ impl TrayPhaseHandle {
     }
 }
 
+/// Resolve the peer's project label from its process environment:
+/// SO_PEERCRED → `/proc/<pid>/environ` → `TILLANDSIAS_PROJECT`. Works for
+/// in-forge peers because `--userns=keep-id` maps the forge uid onto the
+/// tray's host uid, so the environ file is readable. Returns `None` when
+/// the peer cannot be attributed to a project — callers must deny, loudly.
+///
+/// @trace spec:host-browser-mcp
+fn resolve_peer_project(stream: &UnixStream) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        // SO_PEERCRED via nix (std's UCred::pid() is behind the unstable
+        // peer_credentials_unix_socket feature — broke the all-features/
+        // tray builds on stable Rust).
+        let cred = nix::sys::socket::getsockopt(stream, nix::sys::socket::sockopt::PeerCredentials)
+            .ok()?;
+        let pid = cred.pid();
+        if pid <= 0 {
+            return None;
+        }
+        let env_str = std::fs::read_to_string(format!("/proc/{}/environ", pid as u32)).ok()?;
+        env_str.split('\0').find_map(|kv| {
+            let mut parts = kv.splitn(2, '=');
+            if parts.next() == Some("TILLANDSIAS_PROJECT") {
+                parts.next().map(String::from)
+            } else {
+                None
+            }
+        })
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = stream;
+        None
+    }
+}
+
+/// Dispatch one JSON-RPC request from an MCP client against the host-side
+/// tool surface (order 363: `publish_local` / `service_status` /
+/// `service_stop`). The project label comes from the SESSION (peer
+/// attribution), never from the request — a forge cannot publish another
+/// project's worktree by naming it.
+///
+/// Handles the minimum MCP method surface a real client needs:
+/// `initialize`, `tools/list`, `tools/call`, and `notifications/*`
+/// (silently absorbed, per JSON-RPC 2.0 notifications get no reply —
+/// hence `None`). Tool-level refusals (non-WEB category, unknown tool)
+/// are actionable JSON-RPC errors, not silent drops.
+///
+/// @trace spec:host-browser-mcp, spec:subdomain-routing-via-reverse-proxy
+fn handle_mcp_jsonrpc(project_label: &str, req: &serde_json::Value) -> Option<serde_json::Value> {
+    let method = req["method"].as_str().unwrap_or("");
+    if method.starts_with("notifications/") {
+        return None;
+    }
+
+    let debug = true; // structured logs stay on while the tunnel hardens
+
+    let body = match method {
+        "initialize" => serde_json::json!({
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": { "tools": {} },
+                "serverInfo": {
+                    "name": "tillandsias-host-services",
+                    "version": env!("CARGO_PKG_VERSION"),
+                }
+            }
+        }),
+        "tools/list" => serde_json::json!({
+            "result": {
+                "tools": [
+                    {
+                        "name": "publish_local",
+                        "description": "Publish this project's WEB service on the local reverse proxy and return its www.<project>.localhost URL. Idempotent: re-publishing replaces the running container and keeps the same URL.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "category": { "type": "string", "enum": ["WEB"] }
+                            },
+                            "required": ["category"]
+                        }
+                    },
+                    {
+                        "name": "service_status",
+                        "description": "Report the state of this project's published local service.",
+                        "inputSchema": { "type": "object", "properties": {} }
+                    },
+                    {
+                        "name": "service_stop",
+                        "description": "Stop this project's published local service and remove its route.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "category": { "type": "string", "enum": ["WEB"] }
+                            },
+                            "required": ["category"]
+                        }
+                    }
+                ]
+            }
+        }),
+        "tools/call" => {
+            let tool_name = req["params"]["name"].as_str().unwrap_or("");
+            let args = req["params"]["arguments"].as_object();
+
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+
+            match tool_name {
+                "publish_local" => {
+                    let category = args
+                        .and_then(|a| a.get("category"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    match rt.block_on(crate::publish_local_service(project_label, category, debug))
+                    {
+                        Ok(url) => serde_json::json!({
+                            "result": { "url": url, "state": "running" }
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "service_status" => match rt.block_on(crate::service_status(project_label)) {
+                    Ok(state) => serde_json::json!({
+                        "result": { "state": state }
+                    }),
+                    Err(e) => serde_json::json!({
+                        "error": { "code": -32000, "message": e }
+                    }),
+                },
+                "service_stop" => {
+                    let category = args
+                        .and_then(|a| a.get("category"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    match rt.block_on(crate::service_stop(category, project_label, debug)) {
+                        Ok(_) => serde_json::json!({
+                            "result": { "state": "stopped" }
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                other => serde_json::json!({
+                    "error": { "code": -32601, "message": format!("Unknown tool: {other}") }
+                }),
+            }
+        }
+        other => serde_json::json!({
+            "error": { "code": -32601, "message": format!("Method not found: {other}") }
+        }),
+    };
+
+    let mut resp = body;
+    resp["jsonrpc"] = serde_json::json!("2.0");
+    if let Some(id) = req.get("id") {
+        resp["id"] = id.clone();
+    }
+    Some(resp)
+}
+
+/// Serve one NDJSON MCP connection: one JSON-RPC object per line in, one
+/// per line out (notifications get no line). An unattributed peer gets a
+/// single loud deny naming the project gate, then the connection closes —
+/// the same fail-closed contract as the envelope arm.
+///
+/// @trace spec:host-browser-mcp
+fn serve_mcp_connection(stream: UnixStream, project_label: Option<String>) {
+    use std::io::{BufRead, BufReader};
+
+    let mut writer = stream;
+
+    let Some(project_label) = project_label else {
+        let deny = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": serde_json::Value::Null,
+            "error": {
+                "code": -32000,
+                "message": "Missing or unresolvable TILLANDSIAS_PROJECT in peer environment",
+            }
+        });
+        let _ = writeln!(writer, "{deny}");
+        return;
+    };
+
+    let Ok(read_half) = writer.try_clone() else {
+        return;
+    };
+    for line in BufReader::new(read_half).lines() {
+        let Ok(line) = line else {
+            return;
+        };
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let resp = match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(req) => handle_mcp_jsonrpc(&project_label, &req),
+            Err(_) => Some(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": serde_json::Value::Null,
+                "error": {
+                    "code": -32700,
+                    "message": "Parse error: expected one JSON-RPC object per line",
+                }
+            })),
+        };
+        if let Some(resp) = resp
+            && writeln!(writer, "{resp}").is_err()
+        {
+            return;
+        }
+    }
+}
+
+/// Bind the NDJSON MCP tool socket and serve it from detached threads,
+/// mirroring `start_control_socket_server`'s std::thread shape. The socket
+/// is 0600 — with `--userns=keep-id` the forge peer maps to the tray's own
+/// uid, so in-forge agents can connect while other host users cannot.
+///
+/// @trace spec:host-browser-mcp, spec:tray-host-control-socket
+fn start_mcp_socket_server() -> Result<(), String> {
+    let socket_path = mcp_socket_path();
+    if let Some(parent) = socket_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create mcp socket directory: {err}"))?;
+    }
+    if socket_path.exists() {
+        fs::remove_file(&socket_path)
+            .map_err(|err| format!("failed to remove stale mcp socket: {err}"))?;
+    }
+
+    let listener = UnixListener::bind(&socket_path)
+        .map_err(|err| format!("failed to bind mcp socket: {err}"))?;
+    fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
+        .map_err(|err| format!("failed to chmod mcp socket: {err}"))?;
+
+    std::thread::spawn(move || {
+        for incoming in listener.incoming() {
+            match incoming {
+                Ok(stream) => {
+                    std::thread::spawn(move || {
+                        let project = resolve_peer_project(&stream);
+                        serve_mcp_connection(stream, project);
+                    });
+                }
+                Err(err) => warn!(error = %err, "mcp socket accept failed"),
+            }
+        }
+    });
+
+    Ok(())
+}
+
 fn handle_control_connection(
     mut stream: UnixStream,
     subscribers: ControlSubscribers,
@@ -724,7 +983,9 @@ fn handle_control_connection(
                     //
                     // @trace spec:host-shell-architecture
                     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                    let entries = crate::local_projects::scan_project_root(&host_project_root());
+                    let entries = crate::local_projects::scan_project_root(
+                        &crate::local_projects::host_project_root(),
+                    );
                     let reply = ControlEnvelope {
                         wire_version: WIRE_VERSION,
                         seq: first.seq,
@@ -816,6 +1077,54 @@ fn handle_control_connection(
                         drain_timeout_ms,
                         "VmShutdownRequest on unix socket; phase=Draining (drain wiring is follow-on)"
                     );
+                }
+                ControlMessage::McpFrame {
+                    session_id: in_session_id,
+                    payload,
+                } => {
+                    // Project label comes from the SESSION (peer attribution
+                    // via SO_PEERCRED), never from the request. Shared with
+                    // the NDJSON mcp.sock transport — the two paths dispatch
+                    // through the same `handle_mcp_jsonrpc` so they can
+                    // never disagree on the tool surface.
+                    //
+                    // @trace spec:host-browser-mcp
+                    let Some(project_label) = resolve_peer_project(&stream) else {
+                        let err = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: first.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(first.seq),
+                                code: ErrorCode::Unsupported,
+                                message: "Missing or unresolvable TILLANDSIAS_PROJECT in peer environment".to_string(),
+                            },
+                        };
+                        let _ = write_control_envelope(&mut stream, &err);
+                        return;
+                    };
+
+                    let Ok(req_str) = std::str::from_utf8(&payload) else {
+                        return;
+                    };
+
+                    let Ok(req) = serde_json::from_str::<serde_json::Value>(req_str) else {
+                        return;
+                    };
+
+                    // Notifications get no reply frame (JSON-RPC 2.0).
+                    let Some(resp) = handle_mcp_jsonrpc(&project_label, &req) else {
+                        return;
+                    };
+
+                    let reply = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::McpFrame {
+                            session_id: in_session_id,
+                            payload: serde_json::to_vec(&resp).unwrap(),
+                        },
+                    };
+                    let _ = write_control_envelope(&mut stream, &reply);
                 }
                 other => {
                     // Matrix says Handle but no inner arm yet. Write a
@@ -3371,6 +3680,17 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // @trace spec:graceful-shutdown, spec:app-lifecycle
     service.attach_signal_shutdown(Arc::clone(&shutdown));
     start_control_socket_server(Arc::clone(&shutdown))?;
+    // Order 363: the NDJSON MCP tool socket for in-forge agents. A bind
+    // failure degrades the tray to no-agent-publish rather than killing
+    // it — the control socket above is load-bearing, this one is not
+    // (yet), so log loud and continue.
+    if let Err(err) = start_mcp_socket_server() {
+        warn!(
+            spec = "host-browser-mcp",
+            error = %err,
+            "mcp tool socket failed to start; in-forge publish_local will be unavailable"
+        );
+    }
 
     // @trace spec:tillandsias-vault, spec:tray-minimal-ux
     // Asynchronous vault probe: is_github_logged_in can trigger a 60s Vault
@@ -3621,13 +3941,161 @@ mod tests {
             } => {
                 assert_eq!(seq_in_reply_to, Some(42));
                 assert_eq!(code, ErrorCode::Unsupported);
+                // Order 363: McpFrame on the unix socket is now HANDLED, but
+                // gated on the peer's TILLANDSIAS_PROJECT (SO_PEERCRED →
+                // /proc/<pid>/environ). This test process has no project env,
+                // so the deny must name the project gate — a caller that
+                // cannot be attributed to a project gets refused, loudly.
                 assert!(
-                    message.contains("McpFrame"),
-                    "error message should name the rejected variant; got {message:?}"
+                    message.contains("TILLANDSIAS_PROJECT"),
+                    "McpFrame deny must name the project gate; got {message:?}"
                 );
             }
             other => panic!("expected Error variant, got {other:?}"),
         }
+    }
+
+    /// Order 363: the MCP method surface a real client needs. `initialize`
+    /// and `tools/list` answer without podman, the advertised tool family
+    /// is exactly the publish trio, and notifications are absorbed without
+    /// a reply (JSON-RPC 2.0). The project label is a function parameter —
+    /// NOT process env — so this cannot race the project-gate test above.
+    ///
+    /// @trace spec:host-browser-mcp
+    #[test]
+    fn mcp_initialize_and_tools_list_advertise_publish_tool_family() {
+        let init =
+            serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}});
+        let resp = handle_mcp_jsonrpc("demo", &init).expect("initialize replies");
+        assert_eq!(resp["jsonrpc"], "2.0");
+        assert_eq!(resp["id"], 1);
+        assert_eq!(
+            resp["result"]["serverInfo"]["name"],
+            "tillandsias-host-services"
+        );
+
+        let list = serde_json::json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"});
+        let resp = handle_mcp_jsonrpc("demo", &list).expect("tools/list replies");
+        let tools: Vec<&str> = resp["result"]["tools"]
+            .as_array()
+            .expect("tools array")
+            .iter()
+            .map(|t| t["name"].as_str().expect("tool name"))
+            .collect();
+        assert_eq!(
+            tools,
+            vec!["publish_local", "service_status", "service_stop"]
+        );
+
+        let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
+        assert!(
+            handle_mcp_jsonrpc("demo", &note).is_none(),
+            "notifications get no reply"
+        );
+    }
+
+    /// Order 363 exit criterion: a non-WEB category is refused host-side
+    /// with an actionable JSON-RPC error. The deny happens BEFORE any
+    /// podman call — this test runs without podman.
+    ///
+    /// @trace spec:host-browser-mcp, spec:subdomain-routing-via-reverse-proxy
+    #[test]
+    fn mcp_tools_call_non_web_category_denied_loud() {
+        let call = serde_json::json!({
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": {"name": "publish_local", "arguments": {"category": "DATABASE"}}
+        });
+        let resp = handle_mcp_jsonrpc("demo", &call).expect("deny replies");
+        assert_eq!(resp["id"], 3);
+        assert_eq!(resp["error"]["code"], -32000);
+        let message = resp["error"]["message"].as_str().expect("error message");
+        assert!(
+            message.contains("DATABASE"),
+            "deny must name the refused category; got {message:?}"
+        );
+
+        let forged = serde_json::json!({
+            "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+            "params": {"name": "drop_all_containers", "arguments": {}}
+        });
+        let resp = handle_mcp_jsonrpc("demo", &forged).expect("unknown tool replies");
+        assert_eq!(resp["error"]["code"], -32601);
+    }
+
+    /// The NDJSON mcp.sock transport: a peer that cannot be attributed to
+    /// a project gets ONE loud deny line naming the gate, then EOF. Same
+    /// fail-closed contract as the envelope arm.
+    ///
+    /// @trace spec:host-browser-mcp
+    #[test]
+    fn mcp_ndjson_connection_denies_unattributed_peer() {
+        use std::io::{BufRead, BufReader};
+        use std::os::unix::net::UnixStream;
+
+        let (server_side, client_side) =
+            UnixStream::pair().expect("UnixStream::pair available on linux");
+        let server = std::thread::spawn(move || serve_mcp_connection(server_side, None));
+
+        let mut lines = BufReader::new(client_side).lines();
+        let deny_line = lines.next().expect("one deny line").expect("readable");
+        let deny: serde_json::Value = serde_json::from_str(&deny_line).expect("valid JSON-RPC");
+        assert!(
+            deny["error"]["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("TILLANDSIAS_PROJECT"),
+            "deny must name the project gate; got {deny_line:?}"
+        );
+        assert!(lines.next().is_none(), "connection closes after the deny");
+        server.join().expect("server thread joined");
+    }
+
+    /// The NDJSON transport round-trips the MCP handshake for an attributed
+    /// peer — one JSON-RPC object per line, replies in order. This is the
+    /// exact byte protocol the in-forge socat bridge
+    /// (`config-overlay/mcp/host-browser.sh`) carries.
+    ///
+    /// @trace spec:host-browser-mcp
+    #[test]
+    fn mcp_ndjson_connection_round_trips_handshake() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        let (server_side, client_side) =
+            UnixStream::pair().expect("UnixStream::pair available on linux");
+        let server =
+            std::thread::spawn(move || serve_mcp_connection(server_side, Some("demo".to_string())));
+
+        let mut writer = client_side.try_clone().expect("clone client side");
+        let mut lines = BufReader::new(client_side).lines();
+
+        writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+        )
+        .expect("write initialize");
+        let resp: serde_json::Value =
+            serde_json::from_str(&lines.next().expect("initialize reply").expect("readable"))
+                .expect("valid JSON");
+        assert_eq!(resp["id"], 1);
+        assert_eq!(
+            resp["result"]["serverInfo"]["name"],
+            "tillandsias-host-services"
+        );
+
+        writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+        )
+        .expect("write tools/list");
+        let resp: serde_json::Value =
+            serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
+                .expect("valid JSON");
+        assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 3);
+
+        drop(writer);
+        drop(lines);
+        server.join().expect("server thread joined");
     }
 
     /// `VmStatusRequest` is the third matrix-Handle-but-no-handler variant

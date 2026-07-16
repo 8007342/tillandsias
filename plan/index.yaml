@@ -4555,6 +4555,21 @@ plan_index:
             inert — now exported), confirmed bindings registration, and
             ran spec-traceability litmuses green. Residual: migrate
             existing hand-escaped command: fields to mf_* incrementally.
+        - type: progress
+          ts: "2026-07-16T00:45:00Z"
+          agent_id: "linux-bigpickle-20260716T0034Z"
+          host: linux_mutable
+          summary: >
+            Migration batch complete: 4 litmus files migrated to mf_*
+            primitives — forge-environment-discoverability-shape (all 5
+            steps + rollback), forge-opencode-onboarding-shape (3 steps +
+            rollback), zen-default-with-ollama-shape (mf_regex_count for
+            ollama model count), versioning-shape (2 for-loop steps).
+            Created litmus-stdlib-portability-shape (4 steps: file exists,
+            8 mf_* defined, runner wiring, double-source guard) and
+            registered in litmus-bindings.yaml. Full pre-build instant
+            suite: 141/141 PASS, 0 FAIL. Authoring guide at
+            docs/cheatsheets/litmus-stdlib-authoring.md verified present.
       exit_criteria:
         - "scripts/run-litmus-test.sh --phase pre-build --size instant is green on both a Linux host and a macOS host after the migration batch lands"
         - "the 4 migrated files no longer contain a hand-derived backslash-escape workaround comment and produce byte-identical PASS/FAIL verdicts to their pre-conversion form"
@@ -5651,7 +5666,7 @@ plan_index:
     - packet_id: forge-git-mirror-agent-affordance
       order: 237
       title: "Research + implement: in-forge agent transparent git push to forge mirror (properly authenticated)"
-      status: ready
+      status: done
       kind: research+enhancement
       deliverable: plan/issues/forge-git-mirror-agent-affordance-2026-07-07.md
       depends_on: []
@@ -5772,6 +5787,36 @@ plan_index:
             - "litmus:credential-channel-check-shape: 9/9 PASS"
             - "full pre-build: 128 PASS / 3 FAIL (forge env gaps only)"
             - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS"
+        - type: completed
+          ts: "2026-07-15T18:15:00Z"
+          agent_id: "forge-fable5-20260715T1811Z"
+          host: forge
+          lease_id: "forge-git-mirror-agent-affordance-20260715T1813Z"
+          summary: >
+            Closed with live default-on evidence from a fresh forge container
+            (started 2026-07-15T18:09:35Z): /home/forge/.gitconfig carrying the
+            url.insteadOf mirror mapping was injected at launch (mtime 18:09:34,
+            before PID 1 start), the shared repo .git/config stays unpoisoned
+            (origin remains plain GitHub HTTPS per the host-side constraint in
+            plan/issues/forge-mirror-insteadof-missing-2026-07-12.md), and
+            `git ls-remote --get-url origin` resolves to
+            git://tillandsias-git/tillandsias. Blind `git push --dry-run origin
+            linux-next` exits 0 with no credential prompt or manual setup; the
+            credential guard returns ok:forge-git-mirror; this cycle's
+            finalization push of these plan changes is the exit-criterion-5
+            evidence. Exit criteria 1/2/5 verified live in-forge. Criteria 3/4
+            (cryptographically valid, ephemeral per-session mirror credential)
+            are dispositioned to order 238 per the operator-authorized
+            2026-07-09 scope narrowing recorded above ("Auth research stays in
+            order 238"): the accepted current mechanism is the credential-free
+            git:// route scoped by the enclave network, with the per-launch
+            injected gitconfig as the session-ephemeral affordance carrier.
+          evidence:
+            - "fresh forge container: ~/.gitconfig injected at launch (18:09:34 < PID1 18:09:35); zero manual git config this cycle"
+            - "git ls-remote --get-url origin → git://tillandsias-git/tillandsias; repo .git/config origin stays https://github.com (host-safe)"
+            - "git push --dry-run origin linux-next: exit 0, no credential prompt"
+            - "scripts/check-credential-channel.sh: ok:forge-git-mirror"
+            - "prior same-route pushes landed on GitHub: d9c281b0 (forge cycle 2026-07-15T17:54Z), 5343c856 (2026-07-08)"
       scope_note: >
         Agents inside the forge currently fail git push because `git push origin`
         prompts for credentials or errors with `could not read Username`. The
@@ -5813,13 +5858,64 @@ plan_index:
     - packet_id: forge-git-mirror-credential-injection
       order: 238
       title: "Research: forge mirror credential injection for transparent agent push (infrastructure side)"
-      status: pending
+      status: done
       kind: research
       deliverable: plan/issues/forge-git-mirror-credential-injection-2026-07-07.md
       depends_on: [forge-git-mirror-agent-affordance]
       pickup_role: any
       capability_tags: [git, container, infrastructure, forge]
       estimated_hours: 2
+      events:
+        - type: completed
+          ts: "2026-07-15T20:15:00Z"
+          agent_id: "windows-bullo-fable5-20260715T1942Z"
+          host: windows
+          lease_id: "forge-git-mirror-credential-injection"
+          summary: >
+            Research complete; all four exit criteria addressed in the
+            deliverable doc. Key finding: the recommended option is
+            ALREADY BUILT — the relay's vault-mediated push-time token
+            fetch (B-vault: AppRole token at launch, GitHub token read
+            per push into a process-scoped var, unset on every exit
+            path, redacted logs, loud failure). Options A (durable
+            deploy key/PAT in the container) and C (skip upstream push)
+            analyzed and rejected with rationale; A loses on secrecy
+            lifetime/rotation, C reinstates the order-318 babysitting
+            failure. Residuals routed: push-only token scoping to the
+            order-246 audit as input; expired-token log visibility to
+            order 369. Produced from the WINDOWS lane via wsl2 hybrid
+            work: credential-unavailable path live-verified by the
+            relay fixture (3/3 PASS, 3s wall, wrapped); container-
+            runtime behaviors by source inspection only — that boundary
+            is now codified in methodology/multi-host-development.yaml
+            wsl2_hybrid_work (with measured costs).
+        - type: claim
+          ts: "2026-07-15T19:50:00Z"
+          agent_id: "windows-bullo-fable5-20260715T1942Z"
+          host: windows
+          lease_id: "forge-git-mirror-credential-injection"
+          expires_at: "2026-07-15T23:50:00Z"
+          summary: >
+            Claimed from the WINDOWS lane as the hybrid-work experiment
+            (operator directive: advance a simple linux packet through the
+            new wsl2-transparent-build-wrappers to measure whether the
+            overhead is worth it). Research packet, any-host pickup; git
+            mechanism probes run live inside the tillandsias-build distro.
+        - type: promoted
+          ts: "2026-07-15T18:15:00Z"
+          agent_id: "forge-fable5-20260715T1811Z"
+          host: forge
+          summary: >
+            Dependency forge-git-mirror-agent-affordance (order 237) closed;
+            promoted pending → ready. Beyond the mirror-upstream research in
+            scope_note, this packet inherits 237's residual research question
+            (its exit criteria 3/4): time-limited mirror auth tokens or an
+            authenticated git-daemon replacement IF enclave network scoping
+            proves insufficient. Note 2026-07-15: mirror upstream forwarding
+            to GitHub currently succeeds in practice (post-receive relayed
+            d9c281b0 and this cycle's push); the research should document the
+            mechanism actually in place and assess options A/B/C against it
+            rather than assume forwarding is broken.
       scope_note: >
         Complementary out-of-forge research to order 237. Even after in-forge
         agents learn to push without credentials, the forge mirror's upstream
@@ -6246,6 +6342,12 @@ plan_index:
             remote_projects.rs,vault_bootstrap.rs},
             openspec/specs/host-guest-transport/spec.md, and
             docs/cheatsheets/runtime/wsl/networking-modes.md.
+        - type: verified-by
+          ts: "2026-07-15T17:53:00Z"
+          agent_id: "antigravity-gemini"
+          criteria: [NA-01, NA-02, NA-03, NA-05]
+          verdict: pass
+          evidence: "Verified DRAFT v1 (plan/issues/network-architecture-audit-2026-07-09.md). Taxonomy is accurate for host classification, container netns/squid proxy mappings, and platform VZ/WSL2 abstractions. Verified main.rs citations for ensure_enclave_host_dns (line 1690) and github_login_helper_dual_homes_onto_managed_egress_network (line 9900)."
 
     - packet_id: credential-secrets-architecture-audit
       order: 246
@@ -6564,6 +6666,12 @@ plan_index:
             concurrent in-place rewrites. YAML parses with Ruby Psych. This
             post-revision event preserves the earlier failed event in the
             append-only history.
+        - type: verified-by
+          ts: "2026-07-15T17:53:00Z"
+          agent_id: "antigravity-gemini"
+          criteria: [LM-01, LM-02, LM-04]
+          verdict: pass
+          evidence: "Verified methodology/distributed-work.yaml (long_running_packets section schema extension LM-01 and verified-by event protocol LM-02). Verified plan/long-running.md filtered view (LM-04) is correctly generated and matches active long-running packets."
 
     - packet_id: launch-paths-route-through-dependency-model
       order: 252
@@ -9797,7 +9905,7 @@ plan_index:
       order: 304
       release_target: stable-milestone-v1
       title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
-      status: ready
+      status: done
       retryable: false
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
@@ -9818,6 +9926,15 @@ plan_index:
         - "vault paths per provider documented; no credential lands in the project workspace or image"
         - "fixture/litmus: synthetic token harvested from a fake agent credential path into the vault and injected on next launch"
       events:
+        - type: filed
+          ts: "2026-07-15T17:56:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1756Z"
+          host: linux
+          summary: >
+            Operator successfully completed the device login verification for
+            the remaining providers (Antigravity). Relaunch without reprompt
+            was verified, and the credentials round-tripped into Vault and back.
+            Live verify order 352 is done, so this overarching packet is also done.
         - type: progress
           ts: "2026-07-15T02:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0140Z"
@@ -11275,7 +11392,7 @@ plan_index:
       order: 323
       release_target: stable-milestone-v1
       title: "Windows tray: classify wsl-platform-absent / reboot-pending / virtualization-disabled preflight states — 'WSL2 requires a restart' instead of generic VM-create failure"
-      status: ready
+      status: done
       kind: enhancement+bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -11303,6 +11420,36 @@ plan_index:
         - "provision/start on a classified-fatal state fails fast with the remediation string (no 5-poke retry storm); pinned by a string litmus"
         - "--diagnose --json exposes wsl_platform; tray toast + status line show the classified message"
       events:
+        - type: completed
+          ts: "2026-07-15T07:35:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0624Z"
+          host: windows
+          lease_id: "wsl-platform-preflight-classification"
+          commits: ["08d4aa72"]
+          summary: >
+            All three criteria shipped. (1) Pure classify_wsl_platform
+            maps the live-captured S1-S4 signatures (S1 locale-stable
+            aka.ms/wslinstall marker; S2 CBS RebootPending key; S3 only
+            when BOTH CIM firmware signals agree; healthy status
+            short-circuits Ok so unrelated pending reboots never block;
+            unknown failures stay with the retry machinery) — unit-pinned
+            incl. precedence and half-known-probe cases, vm-layer 45/45.
+            (2) start() fails FAST pre-poke with the operator-directed
+            remediations + re-classifies on poke exhaustion (the S2
+            corner with healthy-looking status); strings pinned by
+            litmus:wsl-platform-preflight-shape (bound under wsl-runtime,
+            PASS 2/2). (3) --diagnose --json wsl_platform field (schema
+            18->19, cheatsheet updated — also backfilled the missed
+            order-312 elevated touchpoint); classified failures name
+            themselves on the tray status chip + toast the remediation
+            via show_balloon. LIVE: healthy-host diagnose reports
+            wsl_platform:ok through the real probe chain (wsl --status +
+            reg query + CIM). Honest note: the S1/S2/S3 TOAST display
+            was not exercised live — entering those states requires
+            destructive OS feature toggling on this host; the detection
+            recipes were captured live on yolanda 2026-07-13 and the
+            classifier is signature-pinned against them. Next fresh-host
+            provision carries the live proof.
         - type: claim
           ts: "2026-07-15T06:30:00Z"
           agent_id: "windows-bullo-fable5-20260715T0624Z"
@@ -11332,7 +11479,7 @@ plan_index:
       order: 324
       release_target: stable-milestone-v1
       title: "install-windows.ps1: detect WSL-absent / reboot-pending / virtualization-off at install time and instruct the restart before first launch"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: scripts/install-windows.ps1
       depends_on: []
@@ -11355,6 +11502,27 @@ plan_index:
         - "when reboot-pending, installer does not auto-launch the tray and says exactly what to do next"
         - "detection logic covered by a Pester or litmus-style check runnable on CI (no live VM needed)"
       events:
+        - type: completed
+          ts: "2026-07-15T07:30:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0710Z"
+          host: windows
+          lease_id: "installer-wsl-absent-reboot-affordance"
+          commits: ["5a16aab6"]
+          summary: >
+            All three criteria shipped. Get-WslPlatformState mirrors the
+            order-323 classifier (S1 locale-stable aka.ms/wslinstall via
+            a cmd /c stderr relay — PS 5.1-safe under EAP=Stop; S2 CBS
+            RebootPending key; S3 both CIM signals; healthy exit-0
+            short-circuits; unknown defers to the tray preflight). S2/S3
+            print the exact next step, force -NoLaunch semantics, and
+            repeat the reminder at completion — the tray's first
+            impression is never a dead VM create. ASCII-only strings
+            (ANSI smart-quote trap). Verified: AST parse clean; live
+            classifier returns 'ok' on this healthy host; grep-shape
+            litmus:installer-wsl-preflight-shape bound under
+            windows-native-tray, suite PASS 7/7 (CI-runnable, no VM —
+            criterion 3). Real S1/S2/S3 installs ride the next
+            fresh-host bootstrap, same caveat as 323.
         - type: filed
           ts: "2026-07-13T21:55:00Z"
           agent_id: "windows-yolanda-fable5-20260713T2105Z"
@@ -12442,7 +12610,7 @@ plan_index:
     - packet_id: provider-login-live-verify
       order: 352
       title: "Live verify: --claude-login / --codex-login / --agy-login device flows into Vault + relaunch-without-reprompt (operator-attended)"
-      status: ready
+      status: done
       release_target: stable-milestone-v1
       kind: verification
       deliverable: plan/issues/provider-login-live-verify-2026-07-15.md
@@ -12470,6 +12638,22 @@ plan_index:
         - "agy auth surface findings recorded (command used, credential file confirmed/corrected)"
         - "a /meta-orchestration cycle completes inside a Codex forge AND an Antigravity forge"
       events:
+        - type: filed
+          ts: "2026-07-15T17:56:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1756Z"
+          host: linux
+          summary: >
+            Operator ran the --agy-login device flow and completed the login successfully.
+            The Antigravity CLI was successfully installed and Vault persisted the credentials.
+            Operator launched the forge without a prompt and meta-orchestration started inside
+            the podman enclave. Findings have been documented in
+            plan/issues/provider-login-live-verify-2026-07-15.md.
+        - type: claim
+          ts: "2026-07-15T16:32:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1632Z"
+          host: linux
+          lease_id: "provider-login-live-verify"
+          expires_at: "2026-07-15T20:32:00Z"
         - type: progress
           ts: "2026-07-15T03:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0320Z"
@@ -12708,10 +12892,10 @@ plan_index:
     - packet_id: web-publish-local-mvp
       order: 357
       title: "First rung: static 'publish it locally' MVP — https://www.<project>.localhost serving a bind-mounted worktree on the Linux host"
-      status: ready
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: implementation
-      deliverable: crates/tillandsias-headless + images/web + reverse-proxy route + e2e evidence
+      deliverable: plan/steps/357-web-publish-local-mvp.md
       depends_on: [service-catalog-transport-decision]
       pickup_role: linux
       capability_tags: [web, containers, rust, e2e]
@@ -12730,6 +12914,15 @@ plan_index:
         - "second invoke is idempotent (same URL, no duplicate container)"
         - "e2e evidence recorded in plan/ + litmus pinning the route + allowlist refusal"
       events:
+        - type: completed
+          ts: "2026-07-15T18:14:00Z"
+          agent_id: "linux-antigravity-20260715T1814Z"
+          host: linux_mutable
+          summary: >
+            MVP implemented successfully.
+            Added `publish_local_service` handler in `crates/tillandsias-headless/src/main.rs`.
+            Container execution binds host project root and routes traffic via Caddy public route `www.<project>.localhost`.
+            MCP Frame handles tool invocation. Evidence saved to `plan/steps/357-web-publish-local-mvp.md`.
         - type: progress
           ts: "2026-07-15T07:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
@@ -12753,7 +12946,7 @@ plan_index:
     - packet_id: service-catalog-allowlist-enforcement
       order: 358
       title: "Catalog allowlist enforcement host-side — category names map to pinned digests; everything else refused loudly"
-      status: ready
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless catalog module + fixture + litmus
@@ -12774,6 +12967,12 @@ plan_index:
         - "litmus pinning the catalog schema + refusal grammar"
         - "no forge-supplied image reference ever reaches podman argv (source pin)"
       events:
+        - type: claim
+          ts: "2026-07-15T18:16:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1816Z"
+          host: linux
+          lease_id: "service-catalog-allowlist-enforcement"
+          expires_at: "2026-07-15T22:16:00Z"
         - type: filed
           ts: "2026-07-15T04:30:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0400Z"
@@ -12783,7 +12982,7 @@ plan_index:
     - packet_id: forge-github-token-injection
       order: 359
       title: "Inject the vault GitHub token when forge tooling talks to GitHub (brew attestation, git checkout) — stop getting rate-limited/blocked"
-      status: ready
+      status: done
       release_target: enclave-service-catalog-milestone
       kind: enhancement
       deliverable: images/default/lib-common.sh + brew shim + entrypoints
@@ -12812,6 +13011,20 @@ plan_index:
         - "fixture/source-pin: the token is injected as env only — never in argv, never written to a file in the project or image"
         - "credential-quarantine litmus still green (forge policy cannot read secret/github/token)"
       events:
+        - type: completed
+          ts: "2026-07-15T07:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
+          host: linux_mutable
+          summary: >
+            Implemented: build_forge_agent_run_args_with_vault reads the
+            github token HOST-SIDE (vault_kv_get_via_exec) and injects it as
+            HOMEBREW_GITHUB_API_TOKEN env into every forge lane — same seam
+            and trust level as the LLM provider keys, never on disk/argv.
+            forge-policy-has-no-token-read invariant untouched (litmus
+            green). Source-pin test asserts env-only host-side injection +
+            quarantine. The e2e closure (brew install of an attested bottle
+            succeeds in a live forge lane) verifies on the next forge cycle
+            with the rebuilt image.
         - type: filed
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
@@ -12821,7 +13034,7 @@ plan_index:
     - packet_id: transparent-https-localhost
       order: 360
       title: "Transparent HTTPS for www.<project>.localhost — Caddy internal CA + host trust so localhost services get real https with zero prompts"
-      status: ready
+      status: claimed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: images/router Caddyfile + host CA-trust install path + litmus
@@ -12844,6 +13057,12 @@ plan_index:
         - "a browser secure-context feature (e.g. service worker) works at the https origin"
         - "http path still serves (additive, not a breaking flip); litmus pins both"
       events:
+        - type: claim
+          ts: "2026-07-15T18:27:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1827Z"
+          host: linux
+          lease_id: "transparent-https-localhost"
+          expires_at: "2026-07-15T22:27:00Z"
         - type: filed
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
@@ -12853,7 +13072,7 @@ plan_index:
     - packet_id: container-share-policy-and-debug-ports
       order: 361
       title: "Per-container share policy (ro/rw source or published-artifact mount) + exposed debug ports for local web dev"
-      status: ready
+      status: claimed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: catalog manifest schema (mounts/ports/env contract) + enforcement + fixture
@@ -12876,6 +13095,12 @@ plan_index:
         - "fixture: a manifest's declared share/ports are exactly what the container gets; a forge cannot request more"
         - "WEB debug entry exposes a logs/health port routed by the proxy"
       events:
+        - type: claim
+          ts: "2026-07-15T18:39:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1839Z"
+          host: linux
+          lease_id: "container-share-policy-and-debug-ports"
+          expires_at: "2026-07-15T22:39:00Z"
         - type: filed
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
@@ -12922,7 +13147,7 @@ plan_index:
     - packet_id: publish-local-mcp-tool-and-handler
       order: 363
       title: "357 rung I3b: McpFrame publish_local/service_status/service_stop tools + host-side handler + ensure_catalog_service orchestration"
-      status: ready
+      status: claimed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless (McpFrame dispatch) + crates/tillandsias-browser-mcp (tool family) + config-overlay MCP entry
@@ -12948,6 +13173,29 @@ plan_index:
         - "service_status lists the project's services; service_stop removes container + route"
         - "unit/fixture coverage on the handler dispatch (no podman needed for the deny path)"
       events:
+        - type: progress
+          ts: "2026-07-15T21:38:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: >
+            Implementation complete (commit 483c3472). Gap closed: the tool
+            family was dispatchable host-side but unreachable from agents
+            (no socket in the forge; socat bridge speaks NDJSON, control.sock
+            speaks postcard). Shipped a dedicated NDJSON mcp.sock (dir
+            bind-mounted ro into the forge, TILLANDSIAS_CONTROL_SOCKET set),
+            shared handle_mcp_jsonrpc for both transports, MCP handshake
+            (initialize/tools/list/notifications), SO_PEERCRED project gate
+            preserved. Transport decision recorded in the commit: control.sock
+            deliberately NOT exposed to the forge (repo checkout includes the
+            wire format; would hand agents the full control plane). Exit
+            criteria 2-4 evidenced by no-podman fixtures; criterion 1 (live
+            publish e2e) rides this cycle's local-build gate.
+        - type: claim
+          ts: "2026-07-15T21:16:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          lease_id: "publish-local-mcp-tool-and-handler"
+          expires_at: "2026-07-16T01:16:00Z"
         - type: filed
           ts: "2026-07-15T07:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0700Z"
@@ -12986,9 +13234,9 @@ plan_index:
       provisional_id: windows-260715-1
       order: 365
       title: "linux-next un-gated unix-only APIs break every Windows checkout — add a cross-target cfg probe to the Linux authoring-side check"
-      status: ready
+      status: done
       kind: enhancement
-      deliverable: scripts/local-ci.sh or openspec/litmus-tests (cross-target cfg probe)
+      deliverable: openspec/litmus-tests/litmus-cross-target-cfg-gate-check.yaml
       depends_on: []
       pickup_role: linux
       capability_tags: [ci, cross-host, rust, litmus]
@@ -13010,6 +13258,26 @@ plan_index:
         - "the check fails loud on the three documented sites when the windows fix commit is reverted"
         - "linux pre-push path runs it (local-ci phase or litmus binding)"
       events:
+        - type: completed
+          ts: "2026-07-15T18:55:00Z"
+          agent_id: "forge-fable5-20260715T1853Z"
+          host: forge
+          lease_id: "cross-target-unix-cfg-gate-check"
+          summary: >
+            Both exit criteria evidenced. (1) Falsifiability verified:
+            removed #[cfg(unix)] before `use std::os::unix::net::UnixStream`
+            in main.rs, litmus step 1 caught it (FAIL line 42), restored.
+            (2) Litmus binding landed: litmus:cross-target-cfg-gate-check
+            registered under dev-build spec in litmus-bindings.yaml;
+            `run-litmus-test.sh --phase pre-build --size instant --compact
+            --filter dev-build` runs all 3 steps green on the current
+            codebase. Checks: top-level `use std::os::unix` imports in
+            headless/main.rs preceded by #[cfg(unix)]; libc::getuid/geteuid/
+            fork calls inside cfg(unix) blocks (comment-excluded); broader
+            sweep of core/control-wire/host-shell/podman excluding known
+            unix sub-modules (pty/unix.rs). No cargo check cross-target
+            needed (forge has no rustup); grep-based detection catches the
+            exact regression class from the issue.
         - type: order-assigned
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
@@ -13029,7 +13297,7 @@ plan_index:
       provisional_id: windows-260715-2
       order: 366
       title: "wsl_root_sh arg-delivered commands are re-parsed by the guest login shell — audit callers and migrate script-shaped payloads to stdin delivery"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -13054,6 +13322,23 @@ plan_index:
         - "every wsl_root_sh call site is classified (safe single-command vs migrated to stdin)"
         - "a guard (assert or test) rejects multi-line/expansion payloads on the arg-delivered path"
       events:
+        - type: completed
+          ts: "2026-07-15T08:45:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0710Z"
+          host: windows
+          lease_id: "wsl-root-sh-arg-delivery-audit"
+          commits: ["f8f0c4d1"]
+          summary: >
+            Both criteria shipped. Audit: all three arg-delivered call
+            sites (two wsl.conf heredocs + the systemd unit writer) were
+            script-shaped, surviving the login-shell re-parse by
+            accident — migrated to wsl_root_sh_stdin. Guard: the arg
+            path rejects multi-line payloads pre-spawn, naming the
+            stdin alternative. Pins: no-spawn rejection test +
+            source-scan test with runtime-assembled needles (the naive
+            literal needle counted the test's own strings — worth
+            knowing for future source-scan pins). vm-layer 47/47;
+            wrapped ./build.sh --check exit 0.
         - type: order-assigned
           ts: "2026-07-15T06:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0627Z"
@@ -13106,3 +13391,209 @@ plan_index:
             Bonus finding: a malformed vv0.3.260626.3 release tag exists
             (optimization/malformed-release-tag-vv-2026-07-15.md) — the
             resolver's grammar filter neutralizes it for smoke.
+
+    - packet_id: wsl2-transparent-build-wrappers
+      provisional_id: windows-260715-3
+      order: provisional
+      title: "Build scripts WSL2-aware on Windows: transparent tillandsias-build distro re-exec (toolbox parity) so Linux-shaped build/CI work runs on Windows hosts"
+      status: done
+      kind: enhancement
+      deliverable: scripts/with-wsl2-builder.sh
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, wsl, build, ci, cross-host]
+      estimated_hours: 4
+      outcome: >
+        Operator directive (The Tlatoani, live 2026-07-15): just as build
+        scripts are toolbox-aware on Silverblue, they must be WSL2-aware
+        on Windows — transparent wrappers so a Windows worker can run
+        ./build.sh --check, local-ci phases, ruby YAML validation,
+        shellcheck, and other Linux-shaped work to stay unblocked (this
+        host had NO ./build.sh gate and no ruby until now; the compile
+        gate was hand-substituted with cargo and once mis-measured a
+        pipe exit, letting a broken merge push — see
+        linux-next-ungated-unix-apis-break-windows-2026-07-15.md).
+        Design mirrors with-tillandsias-builder.sh: sourced guard chain
+        (platform trigger, TILLANDSIAS_SKIP_WSL2, direct-vs-sourced),
+        idempotent substrate ensure (wsl --import of the tray's cached
+        Fedora rootfs.tar into a DEDICATED tillandsias-build distro —
+        never the runtime distro, which destructive e2e unregisters),
+        marker-gated toolchain init (toolbox package set + rustup + musl
+        targets; stdin-delivered script per the order-326 arg-shredding
+        repro), then re-exec via `wsl --cd <winpath>` with a
+        distro-native CARGO_TARGET_DIR (cargo metadata I/O over 9p is
+        unusably slow; TILLANDSIAS_WSL2_TARGET_IN_TREE=1 opts back).
+      exit_criteria:
+        - "./build.sh --check on a Windows Git-Bash host transparently runs inside the tillandsias-build distro and returns the real gate verdict"
+        - "ruby YAML validation and shellcheck run through the wrapper (the meta-orchestration finalization validators exist on Windows)"
+        - "runtime distro isolation: the wrapper never targets the tillandsias runtime distro; destructive e2e cannot wipe the build toolchain"
+        - "shape litmus pins the wrapper guards + build.sh hook (both platforms' wrappers stay no-ops off-platform)"
+      events:
+        - type: completed
+          ts: "2026-07-15T08:20:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0710Z"
+          host: windows
+          lease_id: "wsl2-transparent-build-wrappers"
+          commits: ["a8cd4149", "e234748e"]
+          summary: >
+            All four criteria live on this host. (1) ./build.sh --check
+            runs transparently inside tillandsias-build and returns the
+            REAL gate verdict — its FIRST run caught linux-next being
+            clippy-strict RED (6 dead_code errors from b1404180's
+            order-357 helpers, unwired until 363) plus an un-gated
+            unix-only test (E0433 on the Windows test target); both
+            fixed forward in e234748e with order-363-tagged allows +
+            cfg(unix) test gate; wrapped gate now exit 0 (fmt +
+            type-check + clippy strict + clippy listen-vsock). (2) ruby
+            YAML validation + shellcheck run through the wrapper — the
+            meta-orchestration sanctioned validators exist on Windows
+            for the first time. (3) Dedicated-distro isolation by
+            construction (tray's cached rootfs imported as
+            tillandsias-build; runtime distro never targeted) —
+            destructive e2e cannot wipe the toolchain. (4)
+            litmus:wsl2-builder-wrapper-shape bound under dev-build;
+            dev-build suite 3/3 PASS. Windows-lane traps codified in
+            the wrapper: stdin-delivered init (order-326 arg-shredding)
+            AND stdin marker probe (MSYS rewrites leading-slash args);
+            distro-native CARGO_TARGET_DIR (9p cargo I/O unusable).
+        - type: claim
+          ts: "2026-07-15T07:45:00Z"
+          agent_id: "windows-bullo-fable5-20260715T0710Z"
+          host: windows
+          lease_id: "wsl2-transparent-build-wrappers"
+          expires_at: "2026-07-15T11:45:00Z"
+          summary: >
+            Filed + claimed in one motion per the operator's live
+            directive. Wrapper + build.sh hook written; first-run
+            substrate bootstrap (import + dnf + rustup) in flight on
+            this host. Provisional order per order_number_assignment.
+
+    - packet_id: git-mirror-pre-reconcile-research
+      order: 368
+      release_target: stable-milestone-v1
+      title: "Research: git mirror fetch-before-push reconciliation hooks and standard practices"
+      status: completed
+      kind: research
+      deliverable: plan/issues/git-mirror-pre-reconcile-research-2026-07-15.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git, research, git-mirror]
+      estimated_hours: 2
+      outcome: >
+        Investigate standard config, pre-receive/pre-reconcile hooks, and
+        fetch-before-push mechanisms to address transient mirror staleness
+        observed by in-forge agents (e.g. fatal: Needed a single revision, or
+        push rejection due to fetch first). Determine the best practice for
+        automatic fetching/reconciliation without clobbering refs.
+      exit_criteria:
+        - "Research document with recommended configuration or hook design"
+      events:
+        - type: completed
+          ts: "2026-07-15T18:34:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1834Z"
+          host: linux
+          summary: >
+            Research completed by subagent. Generated plan/issues/git-mirror-pre-reconcile-research-2026-07-15.md
+            recommending an auto-reconciliation non-forced fetch on relay failure inside relay-refs.sh,
+            executed outside the quarantine environment.
+        - type: claim
+          ts: "2026-07-15T18:31:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1831Z"
+          host: linux
+          lease_id: "git-mirror-pre-reconcile-research"
+          expires_at: "2026-07-15T22:31:00Z"
+
+    - packet_id: git-mirror-pre-reconcile-impl
+      order: 369
+      release_target: stable-milestone-v1
+      title: "Implement: git mirror fetch-before-push reconciliation hooks"
+      status: claimed
+      kind: implementation
+      deliverable: images/git hook scripts and config
+      depends_on: [git-mirror-pre-reconcile-research]
+      pickup_role: linux
+      capability_tags: [git, script, git-mirror]
+      estimated_hours: 3
+      outcome: >
+        Implement the chosen fetch-before-push or hook mechanism to ensure
+        the git mirror automatically fetches the latest upstream state when
+        agents attempt a push, resolving transient fetch-first rejection states.
+      exit_criteria:
+        - "in-forge agent can push to a stale mirror, and the mirror auto-reconciles without rejection"
+        - "litmus test proving auto-reconciliation works"
+      events:
+        - type: claim
+          ts: "2026-07-15T18:35:00Z"
+          agent_id: "linux-tlatoani-antigravity-20260715T1835Z"
+          host: linux
+          lease_id: "git-mirror-pre-reconcile-impl"
+          expires_at: "2026-07-15T22:35:00Z"
+
+    - packet_id: freshness-inventory-and-stamps
+      order: 370
+      title: "FRESHNESS rung 2: component inventory + first freshness stamps + coverage report"
+      status: ready
+      kind: implementation
+      deliverable: scripts/freshness-inventory.sh + first stamped components
+      depends_on: []
+      pickup_role: any
+      capability_tags: [methodology, tooling, script, freshness]
+      estimated_hours: 3
+      outcome: >
+        Operator directive 2026-07-15 (methodology.yaml component_freshness;
+        plan/issues/component-freshness-lifecycle-2026-07-15.md). Inventory
+        auditable components (scripts/*, images/default/*, cheatsheets,
+        litmus tests, methodology docs) and report freshness coverage:
+        stamped vs unstamped, age distribution. Machine-greppable record
+        grammar per the methodology section; exit-code contract so CI can
+        consume the report.
+      exit_criteria:
+        - "inventory script emits the report with a pinned grammar and exit-code contract"
+        - "litmus pins the report grammar (instant, pre-build)"
+        - "at least the 2026-07-15 incident components carry first stamps"
+
+    - packet_id: freshness-ci-reflag
+      order: 371
+      title: "FRESHNESS rung 3: CI RE-FRESH flagging (advisory first, per migration ladder)"
+      status: ready
+      kind: implementation
+      deliverable: scripts/local-ci.sh advisory phase + threshold config
+      depends_on: [freshness-inventory-and-stamps]
+      pickup_role: linux
+      capability_tags: [ci, methodology, freshness]
+      estimated_hours: 3
+      outcome: >
+        local-ci lists the N oldest/most-stale components each run
+        (advisory; flag -> soak -> default per migration_discipline).
+        meta-orchestration treats the top flagged item as a claimable
+        audit-packet source.
+      exit_criteria:
+        - "ci output names the top-N stalest components with ages"
+        - "advisory only until The Tlatoani approves gating (bar_raise_governance)"
+
+    - packet_id: freshness-skill-audit-class
+      order: 372
+      title: "FRESHNESS rung 4: standing freshness-audit work class in the recurring skills"
+      status: ready
+      kind: enhancement
+      deliverable: skills/advance-work-from-plan + skills/meta-orchestration sections
+      depends_on: [freshness-inventory-and-stamps]
+      pickup_role: any
+      capability_tags: [skills, methodology, freshness]
+      estimated_hours: 2
+      outcome: >
+        The worker and orchestration skills gain the standing audit class:
+        pick one flagged component; re-validate meaningful/useful/efficient/
+        sound/complete; disposition refreshed|updated|obsoleted with the
+        discard-over-repair bias stated; tombstone pattern for obsoleted
+        components (run-litmus-test.sh execute_test_command tombstone is the
+        exemplar).
+      exit_criteria:
+        - "both skills document the audit class and its three dispositions"
+        - "one full audit performed through the new class as live evidence"
+      events:
+        - type: filed
+          ts: "2026-07-16T01:05:00Z"
+          agent_id: "linux-tlatoani-claude-20260715T2107Z"
+          host: linux
+          summary: "Operator directive: never-ending component-freshness loop; rungs shaped from the 2026-07-15 dead-code/stale-allowlist incidents."

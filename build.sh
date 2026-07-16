@@ -30,6 +30,13 @@ export TILLANDSIAS_NO_SINGLETON=1
 # Non-Silverblue hosts skip with zero overhead.
 _BUILDER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_BUILDER_DIR/scripts/with-tillandsias-builder.sh"
+
+# On Windows (Git Bash / MSYS), transparently re-exec inside the dedicated
+# tillandsias-build WSL2 distro — the WSL2 sibling of the toolbox re-exec
+# above (operator directive 2026-07-15). Non-Windows hosts skip with zero
+# overhead. PLEASE REVIEW: linux — shared-scope hook added from the
+# windows lane.
+source "$_BUILDER_DIR/scripts/with-wsl2-builder.sh"
 unset _BUILDER_DIR
 
 # @trace spec:linux-native-portable-executable, spec:dev-build, spec:build-script-architecture, spec:windows-cross-build

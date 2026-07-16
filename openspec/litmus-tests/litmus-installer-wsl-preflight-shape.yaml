@@ -1,0 +1,55 @@
+# @trace spec:windows-native-tray
+#
+# Pins the order-324 installer-side WSL platform preflight (plan packet
+# installer-wsl-absent-reboot-affordance, sibling of order 323). The curl
+# installer is the FIRST surface a brand-new Windows user touches; it must
+# classify absent / reboot-pending / virtualization-disabled at install time,
+# print the exact next step, and refuse to auto-launch the tray into a dead VM
+# create. Grep-shape checks: runnable on any CI runner, no live VM or Windows
+# host needed (the classification recipes themselves were captured live on a
+# fresh Win11 host — plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md).
+name: litmus:installer-wsl-preflight-shape
+spec: windows-native-tray
+phase: pre-build
+description: >
+  Pin scripts/install-windows.ps1's Get-WslPlatformState classifier (S1 via
+  the locale-stable aka.ms/wslinstall marker, S2 via the CBS RebootPending
+  key, S3 only when both CIM firmware signals agree) and the no-auto-launch
+  coupling for reboot-pending / virtualization-disabled installs.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/install-windows.ps1
+  - shell utilities (grep, awk) are available in PATH
+
+critical_path:
+  - step: "classifier function exists and covers the four states"
+    command: "grep -q 'function Get-WslPlatformState' scripts/install-windows.ps1 && grep -q \"'absent'\" scripts/install-windows.ps1 && grep -q \"'reboot-pending'\" scripts/install-windows.ps1 && grep -q \"'virtualization-disabled'\" scripts/install-windows.ps1 && echo 'ok: states-covered'"
+    timeout_ms: 3000
+    expected_behavior: "ok: states-covered"
+
+  - step: "S1 detection uses the locale-stable aka.ms/wslinstall marker"
+    command: "grep -q 'aka\\\\.ms/wslinstall' scripts/install-windows.ps1 || grep -q 'aka.ms/wslinstall' scripts/install-windows.ps1 && echo 'ok: locale-stable-marker'"
+    timeout_ms: 3000
+    expected_behavior: "ok: locale-stable-marker"
+
+  - step: "S2 detection consults the CBS RebootPending key; S3 needs both CIM signals"
+    command: "grep -q 'Component Based Servicing\\\\RebootPending' scripts/install-windows.ps1 && grep -q 'HypervisorPresent' scripts/install-windows.ps1 && grep -q 'VirtualizationFirmwareEnabled' scripts/install-windows.ps1 && echo 'ok: s2-s3-recipes'"
+    timeout_ms: 3000
+    expected_behavior: "ok: s2-s3-recipes"
+
+  - step: "reboot-pending prints the restart-first instruction verbatim"
+    command: "grep -q 'WSL2 requires a restart to finish installing' scripts/install-windows.ps1 && grep -q 'restart Windows' scripts/install-windows.ps1 && echo 'ok: s2-instruction'"
+    timeout_ms: 3000
+    expected_behavior: "ok: s2-instruction"
+
+  - step: "classified-fatal installs disable auto-launch (NoLaunch coupling)"
+    command: "awk '/NoLaunchReason -and -not .NoLaunch/{found=1} END{exit !found}' scripts/install-windows.ps1 && grep -q 'Auto-launch disabled' scripts/install-windows.ps1 && echo 'ok: no-launch-coupled'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no-launch-coupled"
+
+  - step: "strings stay PS5.1-safe: no em-dash in the preflight block (BOM-less UTF-8 ANSI trap)"
+    command: "awk '/function Get-WslPlatformState/,/^\\}$/' scripts/install-windows.ps1 | grep -c $'\\u2014' | grep -qx 0 && echo 'ok: ascii-strings'"
+    timeout_ms: 3000
+    expected_behavior: "ok: ascii-strings"

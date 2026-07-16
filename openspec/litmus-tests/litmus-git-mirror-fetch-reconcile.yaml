@@ -1,0 +1,30 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-fetch-reconcile
+spec: git-mirror-service
+description: >
+  Verify git mirror pre-receive hook auto-reconciles by executing a non-forced
+  fetch from upstream after escaping the git quarantine environment.
+severity: critical
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains images/git/relay-refs.sh
+
+critical_path:
+  - step: "relay helper hook unsets quarantine and fetches upstream on push failure"
+    command: "grep -Fq 'env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES' images/git/relay-refs.sh && grep -Fq \"git fetch \\\"\\$PUSH_URL\\\" 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*'\" images/git/relay-refs.sh && echo 'quarantine escape and non-forced fetch present'"
+    timeout_ms: 10000
+    expected_behavior: "quarantine escape and non-forced fetch present"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "git mirror pre-receive hook contains quarantine escape and non-forced fetch"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-fetch-reconcile"
+
+rollback:
+  on_failure: "inspect images/git/relay-refs.sh for missing quarantine escape or missing non-forced fetch"
+  command: "rg -n -- 'GIT_QUARANTINE_PATH' images/git/relay-refs.sh"

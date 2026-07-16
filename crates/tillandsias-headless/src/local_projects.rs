@@ -19,9 +19,29 @@
 //! (dirs only, no dot-files, sorted by label, mtime as
 //! `last_seen_unix`) is identical and lives in one place.
 
+#[cfg(feature = "tray")]
+use std::env;
 use std::path::Path;
+#[cfg(feature = "tray")]
+use std::path::PathBuf;
 
 use tillandsias_control_wire::LocalProjectEntry;
+
+#[cfg(feature = "tray")]
+pub const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
+
+#[cfg(feature = "tray")]
+pub fn host_project_root() -> PathBuf {
+    if let Ok(v) = env::var(HOST_PROJECT_ROOT_ENV) {
+        return PathBuf::from(v);
+    }
+    if let Some(mut d) = dirs::home_dir() {
+        d.push("src");
+        d
+    } else {
+        PathBuf::from("/nonexistent")
+    }
+}
 
 /// Walk `root` and return one entry per visible directory child.
 /// Hidden entries (leading dot) and non-directories are skipped.
