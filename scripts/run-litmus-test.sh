@@ -619,7 +619,15 @@ run_litmus_test_file() {
     # PLEASE REVIEW: linux — trigger tightened from whole-file grep to
     # command lines by the windows lane.
     # Evidence: plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md
-    if grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]' "$test_file" 2>/dev/null \
+    # Linux hosts ONLY: on macOS/Windows podman is VM-internal by design —
+    # a homebrew podman CLI with no machine is the NORMAL host state, and
+    # the un-gated preflight blanket-ENV-FAILed 35 source-shape checks on
+    # darwin (2026-07-15, instant suite 96%→72%). Merge synthesis
+    # 2026-07-16: macOS's platform gate + windows' tightened trigger
+    # (command lines that actually invoke podman, not whole-file mentions)
+    # — each lane independently fixed one half of the same over-trigger.
+    if [ "$(uname -s)" = "Linux" ] \
+        && grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]' "$test_file" 2>/dev/null \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
         && command -v podman >/dev/null 2>&1 \
         && ! timeout 5 podman ps --format '{{.ID}}' >/dev/null 2>&1; then

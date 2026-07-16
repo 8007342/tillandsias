@@ -3442,6 +3442,21 @@ enum ForgeMode {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Order 342: guest-owned checkout isolation for host-shared (virtiofs)
+/// project trees. When the launcher exports
+/// `TILLANDSIAS_FORGE_SRC_ISOLATION=clone`, the operator's checkout is
+/// staged READ-ONLY at `/home/forge/src-host/<project>` and the forge
+/// entrypoint's existing filesystem clone transport
+/// (`clone_project_from_mirror` + `TILLANDSIAS_GIT_MIRROR_PATH`) materializes
+/// a container-ephemeral working checkout at `~/src/<project>` — forge
+/// edits, index churn, and cleanup can never mutate operator bytes. The
+/// decision record (materialize-by-clone; linked `git worktree` REJECTED for
+/// sharing host refs/objects/locks) lives in
+/// plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md.
+fn forge_src_isolation_requested() -> bool {
+    std::env::var("TILLANDSIAS_FORGE_SRC_ISOLATION").is_ok_and(|v| v == "clone")
+}
+
 fn build_opencode_forge_args(
     project_path: &Path,
     project_name: &str,
@@ -3502,8 +3517,6 @@ fn build_opencode_forge_args(
         "--env".into(),
         format!("TILLANDSIAS_PROJECT={project_name}"),
         "--env".into(),
-        "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
-        "--env".into(),
         "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
         "--tmpfs".into(),
         "/tmp:size=256m,mode=1777".into(),
@@ -3531,11 +3544,6 @@ fn build_opencode_forge_args(
         // `/home/forge/src` puts the project files where the forge expects a
         // sibling directory and confuses every consumer that resolves
         // `~/src/<project>/...`.
-        "-v".into(),
-        format!(
-            "{}:/home/forge/src/{project_name}:rw",
-            project_path.display()
-        ),
         // Persistent per-project tool/package cache (order 179), same as
         // build_forge_agent_run_args (Claude/Codex/Antigravity/Maintenance).
         // Without this, OpenCode/OpenCode Web launches lose $CARGO_HOME /
@@ -3555,7 +3563,36 @@ fn build_opencode_forge_args(
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
-    append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
+    // Project source routing. Both branches mount under
+    // `/home/forge/src/…` conventions (not flat at `/home/forge/src`) so the
+    // in-container tree matches the entrypoint clone path and
+    // `$TILLANDSIAS_PROJECT_PATH` consumers.
+    if forge_src_isolation_requested() {
+        // Order 342: operator checkout is a READ-ONLY staging source; the
+        // entrypoint's filesystem clone transport materializes the working
+        // checkout container-locally. No host-mount claim, no gitdir
+        // facade/mask — the workdir is forge-owned by construction.
+        args.extend([
+            "-v".into(),
+            format!(
+                "{}:/home/forge/src-host/{project_name}:ro",
+                project_path.display()
+            ),
+            "--env".into(),
+            format!("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
+        ]);
+    } else {
+        args.extend([
+            "--env".into(),
+            "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
+            "-v".into(),
+            format!(
+                "{}:/home/forge/src/{project_name}:rw",
+                project_path.display()
+            ),
+        ]);
+        append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
+    }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
@@ -5775,6 +5812,10 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
     let mut config = String::new();
     config.push_str("[safe]\n");
     config.push_str("\tdirectory = /home/forge/src/*\n");
+    // Order 342: the isolated-checkout staging mount lives under src-host/
+    // (read-only, virtiofs uid-mismatched) — without this, the in-container
+    // clone refuses with "dubious ownership".
+    config.push_str("\tdirectory = /home/forge/src-host/*\n");
     config.push('\n');
     config.push_str("[credential]\n");
     config.push_str("\thelper =\n");
@@ -12448,6 +12489,43 @@ mod tests {
         assert!(
             window.contains("ensure_versioned_images(&root, &images, version, debug)?;"),
             "observatorium mode must ensure the web image exists before launch"
+        );
+    }
+
+    /// Order 342 pin: guest-owned checkout isolation branch in the
+    /// opencode/web args builder — RO staging mount + filesystem clone
+    /// transport when requested; host-mount claim + gitdir mask only on the
+    /// default branch.
+    #[test]
+    fn opencode_args_isolation_branch_stages_ro_and_clones() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn build_opencode_forge_args(");
+        assert!(
+            window.contains("if forge_src_isolation_requested()"),
+            "isolation branch must exist (order 342)"
+        );
+        assert!(
+            window.contains(":/home/forge/src-host/{project_name}:ro"),
+            "operator checkout must be staged READ-ONLY under src-host/"
+        );
+        assert!(
+            window.contains("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
+            "isolated branch must route through the entrypoint filesystem clone transport"
+        );
+        // The host-mount claim and the gitdir facade/mask belong ONLY to the
+        // shared-tree branch: assert they appear after the else.
+        let else_idx = window
+            .find("} else {")
+            .expect("isolation must have a default else branch");
+        let host_mount_idx = window
+            .find("TILLANDSIAS_PROJECT_HOST_MOUNT=1")
+            .expect("default branch keeps the host-mount claim");
+        let mask_idx = window
+            .find("append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);")
+            .expect("default branch keeps the gitdir facade/mask");
+        assert!(
+            host_mount_idx > else_idx && mask_idx > else_idx,
+            "host-mount claim + gitdir mask must be confined to the non-isolated branch"
         );
     }
 

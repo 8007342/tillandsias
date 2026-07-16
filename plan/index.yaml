@@ -12188,7 +12188,7 @@ plan_index:
     - packet_id: macos-forge-owned-checkout-isolation
       order: 342
       title: "macOS forge: isolate in-forge agents from the operator checkout"
-      status: ready
+      status: completed
       kind: design+implementation
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
       depends_on: []
@@ -12206,6 +12206,39 @@ plan_index:
         - "macOS forge launch routes the agent project path to the isolated checkout"
         - "live dirty-host fixture proves forge-created edits and cleanup cannot change operator tracked or untracked bytes"
       events:
+        - type: completed
+          ts: "2026-07-16T00:40:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260715T2314Z"
+          host: macos
+          lease_id: "macos-forge-owned-checkout-isolation-20260715"
+          commit_sha: adc488d8
+          summary: >
+            All three criteria evidenced live. (1) Decision recorded:
+            materialize-by-clone via the entrypoint's EXISTING filesystem
+            clone transport (TILLANDSIAS_GIT_MIRROR_PATH pointed at a
+            READ-ONLY /home/forge/src-host/<project> staging bind of the
+            virtiofs tree); linked git-worktree REJECTED (shares host
+            refs/objects/locks) per the 2026-07-14 reduction note in
+            forge-shared-checkout-destructive-clean-2026-07-13.md.
+            Tradeoffs recorded in the fn doc: no object sharing (full
+            clone of committed state; operator UNCOMMITTED changes are
+            deliberately excluded from forge input), no credentials
+            inherited, lifecycle dies with the container. (2) The macOS
+            --opencode lane exports TILLANDSIAS_FORGE_SRC_ISOLATION=clone;
+            live fixture shows the agent in /home/forge/src/fixture-342
+            with a CONTAINER-LOCAL .git (host-mount claim + gitdir
+            facade/mask now confined to the default shared-tree branch;
+            source-pinned). (3) Dirty-host fixture (tracked mod +
+            untracked marker, hash-snapshotted): in-forge clobber + commit
+            + git clean -fdx + rm, and an explicit write probe on the
+            staging mount ("Read-only file system" from the kernel) —
+            HOST-BYTES-IDENTICAL after the run (.git HEAD/index included).
+            Evidence: plan/issues/macos-build-findings-2026-07-15.md.
+            Residual for the agent-lane builders (claude/codex/
+            maintenance spec path at build_forge_agent_run_args_with_
+            vault): same branch is applicable but unwired — follow-up for
+            the order 341/342 owner if those lanes ship on macOS before
+            the mirror-materialized path lands.
         - type: filed
           ts: "2026-07-14T23:25:16Z"
           agent_id: "linux-macuahuitl-codex-20260714T2010Z"
