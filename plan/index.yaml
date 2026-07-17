@@ -15721,3 +15721,57 @@ plan_index:
             (landed same commit). Milestone holds the sweep; children carry
             per-skill/per-script/per-error-path edits. Born from the live
             2026-07-17 fix-forward cascade the directive explicitly bans.
+
+    - packet_id: host-guest-project-src-mapping
+      provisional_id: windows-260717-6
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "Host<->guest project src mapping: cloud clones land in the guest VM (invisible to host); decide guest-native vs host-mapped + fail-loud clone"
+      status: needs_clarification
+      kind: architecture
+      deliverable: plan/issues/host-guest-project-src-mapping-gap-2026-07-17.md + headless projects_root/clone + vm-layer mount + tray labeling
+      depends_on: []
+      pickup_role: any
+      capability_tags: [architecture, vm, mounts, tray, ux, cross-host]
+      estimated_hours: 10
+      clarification:
+        question: >
+          Where do operator-facing project checkouts live — guest-native
+          (current: guest /home/forge/src, host cannot see them) or
+          host-mapped (a host ~/src mapped into the guest so one location is
+          host-visible+editable AND guest-mountable)? And how does the
+          chosen model reconcile with order 342's operator-checkout
+          isolation (read-only src-host staging + forge-owned working copy)?
+        recommended_default: >
+          Model B (host-mapped) reconciled with 342: a host projects dir is
+          the SOURCE, host-visible/editable; the guest still materializes a
+          forge-owned in-container working copy from it (clone/copy
+          transport, NOT a raw rw host bind — which re-introduces the drvfs
+          uid-mismatch / dubious-ownership class 342 fixed). This matches the
+          operator's mental model and removes the "where did my clone go?"
+          disconnect while keeping 342's isolation.
+      outcome: >
+        Live 2026-07-17 (fresh Windows guest): projects_root() resolves to
+        guest /home/forge/src, so `--cloud owner/repo` clones INTO the guest
+        VM, invisible on the host; the tray's host scanner watches an
+        unrelated empty ~/src while guest-cloned projects surface as 'local'
+        (they are — local in the guest). A cloud checkout hung silently
+        (likely missing GitHub token on the fresh vault + concurrent
+        terminal), leaving the antigravity lane with no project. Decide the
+        model, then implement mapping + a FAIL-LOUD clone (a checkout that
+        cannot proceed must emit a recreate/next-step message, never hang).
+      exit_criteria:
+        - "operator/coordinator decision recorded (A vs B) with the 342 reconciliation"
+        - "chosen model implemented on WSL2 + VZ; a cloud project is visible+editable per the decision and mounts into the forge container"
+        - "clone that cannot proceed (no token / no parent / network) FAILS LOUD with a next-step message; no silent hung lane+terminal (ties runtime_ephemerality error-message policy)"
+        - "tray 'local' label is unambiguous about host-vs-guest origin until unified"
+      events:
+        - type: filed
+          ts: "2026-07-17T15:30:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            Filed from the operator's live observation on the fresh guest.
+            Guest-native mounting works; the gap is location/visibility +
+            a silent-hang cloud checkout. Design decision operator-gated;
+            recommended default is host-mapped reconciled with order 342.
