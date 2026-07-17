@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-16T18:26:00Z
+LastExecutionTime: 2026-07-17T10:35:00Z
 
 ## Direction — what are we all doing today
 
@@ -24,6 +24,37 @@ Milestone: forge-local-experts-milestone (order 391).
 
 *(Previous theme, 2026-07-16: web containers — largely landed; see the
 release ledger row for v0.3.260716.7.)*
+
+## Cycle 2026-07-17T09:05Z→10:35Z (linux_immutable — toolbox-awareness + FRESHNESS rungs drain)
+
+- **Host**: linux_immutable (Fedora Silverblue), `linux-next`, agent
+  `linux-tlatoani-opencode-20260717T0920Z`. Direction cited: EXPERTS /
+  blazing-fast local-knowledge + fleet-on-immutable-hosts.
+- **Toolbox-awareness fix (unblocks the whole fleet on immutable hosts)**:
+  `scripts/local-ci.sh` now sources `with-tillandsias-builder.sh` (was NOT
+  toolbox-aware — only `build.sh` was), so `--ci`/`--ci-full` re-exec inside
+  the builder toolbox. Fixed the wrapper's init gate to check the FULL
+  toolchain (gcc/pkg-config/ruby/rustup + musl targets) instead of rustup
+  alone, so a builder toolbox missing host build tools re-runs dnf init
+  instead of leaving `./build.sh --check` failing. Verified end-to-end:
+  `./build.sh --check` re-execs into `tillandsias-builder` and exits 0 on
+  this Silverblue host (commit c2cffb59; record on order 239).
+- **FRESHNESS rungs 370/371/372 DONE** (operator directive 2026-07-15):
+  `scripts/freshness-inventory.sh` (pinned report grammar + exit-code
+  contract), `litmus:freshness-inventory-shape` (instant/pre-build, PASS
+  6/6), `local-ci.sh` CHECK 0 advisory flagging (top-5 stale, never gates),
+  both worker skills gain the standing freshness-audit class; live audit
+  evidence: `check-cheatsheet-staleness.sh` REFRESHED + stamped. Commit
+  15ab8768.
+- **Order 381 DONE**: worker skills (advance-work-from-plan,
+  coordinate-multihost-work) wired to read the operator-owned `## Direction`
+  section during selection and cite it in ledger entries (commit 3d4cdee4).
+- **Verification**: `./build.sh --check` green inside toolbox; spec-
+  traceability instant litmus suite 6/6 PASS. No live forge/podman work
+  (immutable host without rootless daemon this cycle).
+- **Next**: continue draining verifiable `ready` packets; keep pulling
+  frequently — mutable integration host is landing release-targeted
+  experts work.
 
 ## Cycle 2026-07-16T18:07Z→19:00Z (linux_immutable — operator-directed reduction + web-container drain: order 362 sign-off closed)
 
