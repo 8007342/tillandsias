@@ -14688,7 +14688,7 @@ plan_index:
     - packet_id: stack-containers-replace-idempotent-relaunch
       order: 387
       title: "Extend order-314 --replace idempotency to the sibling stack containers (proxy, git, router, vault) so a crashed container always relaunches"
-      status: ready
+      status: completed
       kind: optimization
       deliverable: crates/tillandsias-headless/src/main.rs + vault launch path
       depends_on: []
@@ -14719,6 +14719,26 @@ plan_index:
           agent_id: "linux-tlatoani-claude-20260716T0725Z"
           host: linux
           summary: "Operator directive (message 1, 2026-07-16 --replace / always-restart). inference already has --replace via order 314; this generalizes the pattern to the sibling stack containers that still lack it."
+        - type: claim
+          ts: "2026-07-17T10:00:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T0848Z"
+          host: linux
+          lease_id: "stack-containers-replace-idempotent-relaunch-20260717"
+          expires_at: "2026-07-17T14:00:00Z"
+        - type: completed
+          ts: "2026-07-17T10:25:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T0848Z"
+          host: linux
+          summary: >
+            Extended order 314's --replace idempotency to the sibling stack
+            containers: build_proxy_run_args, build_git_run_args,
+            build_router_run_args (main.rs) and launch_vault_container
+            (vault_bootstrap.rs) now push --replace after --detach, so a
+            crashed/exited container holding the name no longer blocks relaunch
+            with exit-125. Added stack_run_args_use_replace_for_idempotency
+            (proxy/git/router) and vault_run_args_use_replace_for_idempotency
+            (source-window) regression tests. Verified ./build.sh --check green
+            + both tests PASS (vault with --features vault). Closes order 387.
 
     - packet_id: cloudflare-tunnel-tls-in-proxy-router-research
       order: 388

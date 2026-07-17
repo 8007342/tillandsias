@@ -1729,6 +1729,10 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let mut run_args: Vec<String> = vec![
         "run".into(),
         "-d".into(),
+        // Order 387: a crashed/exited vault container holding the name must
+        // not block relaunch with exit-125; --replace atomically removes it
+        // (mirrors order 314/378/387 across the enclave stack).
+        "--replace".into(),
         "--name".into(),
         VAULT_CONTAINER_NAME.into(),
         "--hostname".into(),
@@ -2442,6 +2446,26 @@ mod tests {
                 "{func} must NOT do a racy `secret rm` before `secret create` — use --replace"
             );
         }
+    }
+
+    /// Order 387: the vault container `podman run` must include `--replace` so a
+    /// crashed/exited vault holding the name does not block relaunch with a
+    /// Permanent exit-125 (mirrors the proxy/git/router/inference builders).
+    #[test]
+    fn vault_run_args_use_replace_for_idempotency() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn launch_vault_container(")
+            .nth(1)
+            .expect("launch_vault_container source must exist");
+        assert!(
+            window.contains("\"--replace\""),
+            "vault container run args must include --replace so relaunch is \
+             idempotent (order 387): launch_vault_container body missing --replace"
+        );
     }
 
     #[test]

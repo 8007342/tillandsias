@@ -2268,6 +2268,10 @@ fn build_catalog_service_run_args(
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     vec![
         "--detach".into(),
+        // Order 387: a crashed/exited container holding the name must not
+        // block relaunch with exit-125; --replace atomically removes it
+        // (mirrors order 314's inference fix and order 378's forge-agent fix).
+        "--replace".into(),
         "--name".into(),
         "tillandsias-proxy".into(),
         "--hostname".into(),
@@ -2532,6 +2536,9 @@ fn build_git_run_args(
     let mut args = vec![
         "--detach".into(),
         "--rm".into(),
+        // Order 387: relaunch a mirror container while an exited one still
+        // holds the name must not fail with exit-125 (mirrors order 314/378).
+        "--replace".into(),
         "--name".into(),
         format!("tillandsias-git-{project_name}"),
         "--hostname".into(),
@@ -2811,6 +2818,9 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
     vec![
         "--detach".into(),
         "--rm".into(),
+        // Order 387: relaunch while an exited container holds the name must
+        // not fail with exit-125 (mirrors order 314/378).
+        "--replace".into(),
         "--name".into(),
         "tillandsias-router".into(),
         "--hostname".into(),
@@ -11877,6 +11887,33 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Order 387: extend order 314's idempotent-relaunch pattern to the sibling
+    /// stack containers. A crashed/exited proxy, git-mirror, or router container
+    /// holding the name must not block the next ensure with a Permanent exit-125
+    /// — `--replace` atomically removes the exited container.
+    #[test]
+    fn stack_run_args_use_replace_for_idempotency() {
+        let certs = PathBuf::from("/tmp/ca");
+
+        let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
+        assert!(
+            has_arg(&proxy, "--replace"),
+            "proxy args must include --replace (order 387): {proxy:?}"
+        );
+
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        assert!(
+            has_arg(&git, "--replace"),
+            "git-mirror args must include --replace (order 387): {git:?}"
+        );
+
+        let router = build_router_run_args(&certs, "tillandsias-router:v1", 8080);
+        assert!(
+            has_arg(&router, "--replace"),
+            "router args must include --replace (order 387): {router:?}"
+        );
     }
 
     // Regression: the egress network must be ensured on every enclave-bootstrap
