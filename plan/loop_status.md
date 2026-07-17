@@ -25,6 +25,21 @@ portability half.
   `scripts/inference-tier-probe.sh` → `tier:gpu-cuda`. `tillandsias-inference`
   currently Exited(137) on a stale pre-392 image (v0.3.260716.4) — order 406
   brings it up with GPU passthrough.
+- **BUILD+LAUNCH 2026-07-17 (operator directive)**: built + installed
+  `v0.3.260717.2` (musl-static, tray) and launched the tray (`--tray`, PID
+  live). Stack rebuilt fresh at the new version: vault healthy (real secrets
+  PRESERVED — Shamir share recovered from keychain, data volume kept), proxy
+  up, git-mirror loaded 23 cloud projects (transparent vault-token push path
+  works). NON-destructive — no podman reset.
+- **GPU inference gate (operator/sudo action needed)**: order 392's GPU
+  DELIVERY CODE IS ALREADY IMPLEMENTED (build_inference_run_args gates
+  `--device nvidia.com/gpu=all` on tier:gpu-cuda + nvidia_cdi_available; 392
+  still status:ready → needs verification/reconciliation, not fresh impl). The
+  ONLY thing between this fat host and GPU-accelerated local models is HOST
+  CDI SETUP: `nvidia-container-toolkit` is NOT installed and
+  `/etc/cdi/nvidia.yaml` is absent. Remedy (sudo): install the toolkit +
+  `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`. Until then
+  local models serve CPU-ONLY (loud warning). Tracked in order 406.
 
 ## Cycle 2026-07-17T17:47Z→(open) (linux_mutable macuahuitl — order 383 vault heal; WINDOWS UNBLOCKED)
 

@@ -15490,10 +15490,33 @@ plan_index:
         this is green the fat host can build/serve the PLAN + METHODOLOGY
         experts (394) end-to-end. Modest-hardware tiers stay v0.5 (order 397).
       exit_criteria:
-        - "tillandsias-inference is Up (healthy) launched with GPU passthrough on this host; nvidia-smi shows the ollama/inference process holding VRAM"
+        - "HOST CDI SETUP (operator/sudo): nvidia-container-toolkit installed + `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` run, so nvidia_cdi_available() returns true"
+        - "tillandsias-inference is Up (healthy) with GPU passthrough on this host; nvidia-smi shows the ollama/inference process holding VRAM"
         - "`ollama list` inside the container works and at least one default model is warm/pullable via the proxy"
-        - "the launch path (podman run args) gates GPU passthrough on the tier probe (tier:gpu-cuda) so a cpu host is unaffected — evidence recorded; feeds order 392"
+        - "the launch path already gates GPU passthrough on the tier probe (tier:gpu-cuda) + CDI presence (order 392 code, present); confirm cpu host is unaffected"
       events:
+        - type: progress
+          ts: "2026-07-17T19:45:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            KEY FINDING during build+launch on the fat host: order 392's GPU
+            DELIVERY CODE IS ALREADY IMPLEMENTED (code-ahead-of-ledger; 392
+            still status:ready — needs a verification/reconciliation pass, not
+            fresh implementation). build_inference_run_args already: detects
+            tier via detect_inference_tier() → gpu-cuda; gates delivery on
+            nvidia_cdi_available(); emits `--device nvidia.com/gpu=all` when
+            CDI is present; and prints a LOUD "GPU detected but no CDI spec —
+            inference will run CPU-ONLY. Remedy: sudo nvidia-ctk cdi generate
+            --output=/etc/cdi/nvidia.yaml" otherwise. So the residual on THIS
+            host is HOST-SIDE SETUP, an operator/sudo action I cannot perform:
+            nvidia-container-toolkit is NOT installed and /etc/cdi/nvidia.yaml
+            does NOT exist. Until that runs, the freshly-launched stack serves
+            local models CPU-ONLY on the RTX A5000. Tray+stack are up at
+            v0.3.260717.2 (vault healthy w/ real secrets preserved, proxy up,
+            git-mirror loaded 23 cloud projects). NEXT: operator installs the
+            toolkit + generates the CDI spec, then relaunch a forge → inference
+            comes up GPU-accelerated. Also reconcile order 392's status.
         - type: filed
           ts: "2026-07-17T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
