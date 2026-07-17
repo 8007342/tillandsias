@@ -14294,7 +14294,7 @@ plan_index:
       provisional_id: windows-260715-4
       order: provisional
       title: "P2: forge maintenance-session relaunch dies 125 — bare podman run --name without --replace (order-314 class, maintenance surface)"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -14326,6 +14326,12 @@ plan_index:
             Filed from the order-350 live evidence run; unblocked in-run
             by removing the stale container (fixture cleanup, recorded).
             Provisional order per order_number_assignment.
+        - type: claim
+          ts: "2026-07-17T08:48:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T0848Z"
+          host: linux
+          lease_id: "forge-maintenance-session-name-collision-20260717"
+          expires_at: "2026-07-17T12:48:00Z"
 
     - packet_id: guest-staged-gitdir-root-owned
       order: 382
