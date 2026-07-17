@@ -14515,6 +14515,28 @@ plan_index:
             host-relayed to linux-next (rebased onto 2f8d53f1). Exit
             criteria 1 remains open on windows-260716-2; criterion 2
             (zero manual git config in-forge) PROVEN this run.
+        - type: progress
+          ts: "2026-07-17T11:35:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            RERUN on the fully-fixed stack (guest v0.3.260716.7, all six
+            images rebuilt on-demand): windows-260716-2 CONFIRMED FIXED —
+            the lane reached the git-mirror vault write and failed loud
+            ('vault unauthorized: permission denied / invalid token' on
+            write_policy git-mirror-policy), i.e. the mandatory-credential
+            path works and there is NO silent credential-less mirror. The
+            blocker MOVED one layer deeper to order 383 (vault root-token
+            skew): bootstrap wrote a storage-rejected root token. Manual
+            generate-root heal from the intact Shamir share restored
+            policy-list but NOT approle/KV (deeper wrinkle recorded on
+            383). Operator github token not lost (KV volume intact,
+            currently unreadable pending 383's heal). Criterion 1 (real
+            transparent relay to GitHub) now gated on order 383, not on
+            the mirror path. Not retried again — the lane bootstrap
+            re-skews the token; durable fix is 383 or attended re-init.
+            Full: plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md
+            (2026-07-17 vault addendum).
 
     - packet_id: git-mirror-container-created-without-relay-credential
       provisional_id: windows-260716-2
@@ -14575,11 +14597,12 @@ plan_index:
       depends_on: []
       pickup_role: linux
       capability_tags: [vault, security, robustness, rust]
-      estimated_hours: 5
+      estimated_hours: 7
       outcome: >
-        Two live repros 2026-07-16 (macOS lossless-reset variant; linux
-        REAL-SECRET variant where reset would destroy operator
-        credentials): a stale/rotated recovered root token wedges every
+        Three live repros (macOS lossless-reset variant; linux REAL-SECRET
+        variant; Windows real-secret variant 2026-07-17 where generate-root
+        healed policy-list but NOT approle/KV — see the 2026-07-17 event):
+        a stale/rotated recovered root token wedges every
         root-token write path while the vault volume itself is healthy.
         vault_bootstrap should detect token-auth failure, and — holding
         the stored Shamir share — run `vault operator generate-root` to
@@ -14592,7 +14615,45 @@ plan_index:
         - "stale root token + valid share: bootstrap self-heals (generate-root) and policy writes succeed"
         - "stale token + missing/invalid share: loud operator-attended verdict, storage untouched"
         - "macuahuitl's live skew healed via the new seam (real-secret evidence)"
+        - "AFTER generate-root heal, the fresh root token can READ approle roles + the operator github KV (not just policy list) — see the 2026-07-17 Windows wrinkle"
       events:
+        - type: progress
+          ts: "2026-07-17T11:30:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            THIRD live repro, Windows lane (real operator secrets) — and a
+            DEEPER WRINKLE the fix must cover. BigPickle's in-forge
+            /meta-orchestration on the fully-fixed stack (guest
+            v0.3.260716.7, all six images rebuilt on-demand) got PAST the
+            mirror-credential path (windows-260716-2's mint fail-loud
+            worked — clean 'vault unauthorized: permission denied / invalid
+            token' on the git-mirror-policy WRITE, not a silent
+            credential-less mirror) and wedged exactly here: the headless
+            vault bootstrap at ~10:19Z wrote a root token that storage
+            rejects (permission denied on token lookup-self). Manual heal
+            performed to characterize + restore: `vault operator
+            generate-root` with the intact Shamir share
+            (fallback_vault-shamir-share-v1, 44B, untouched) minted a fresh
+            token — `token lookup` shows policies:[root], `vault policy
+            list` succeeds. BUT the SAME root-policy token still 403s on
+            `vault list auth/approle/role` and `vault kv get secret/github`
+            — so generate-root alone did NOT restore mount/KV access on
+            this vault; the skew is deeper than the root token. The
+            operator github token is NOT lost (KV data lives in the intact
+            vault-data volume; generate-root never touches it) — it is
+            currently unreadable pending the real heal or an
+            attended storage-preserving re-init. Fix scope grows: the
+            self-heal must verify post-generate-root that approle+KV are
+            actually reachable and, if not, escalate to the
+            attended-reinit-preserving-storage verdict rather than
+            reporting success. NOTE self-inflicted: an early botched
+            manual attempt truncated fallback_vault-root-token-v1 to 0B
+            (podman exec -i stole nested-shell stdin); regenerated and
+            restored (28B, hvs. prefix). Bumped estimate 5->7h. Evidence +
+            heal script rationale:
+            plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md
+            (2026-07-17 vault addendum).
         - type: filed
           ts: "2026-07-16T10:58:00Z"
           agent_id: "linux-tlatoani-claude-20260716T0725Z"

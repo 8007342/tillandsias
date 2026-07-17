@@ -108,8 +108,66 @@ runtime preserved (no re-provision; vault + operator GitHub auth intact).
    session. Work preserved; transparency criterion stays OPEN on
    windows-260716-2.
 
-**Goal status**: in-forge cycle ✓, mirror-transparent fetch ✓, honest
-verified-ack push channel ✓, commit durability ✓, ZERO manual git
+**Goal status (2026-07-16)**: in-forge cycle ✓, mirror-transparent fetch ✓,
+honest verified-ack push channel ✓, commit durability ✓, ZERO manual git
 config in-forge ✓; transparent RELAY blocked by exactly one
 linux-owned bug (windows-260716-2). Recurring cadence additionally
 needs windows-260715-4 (collision) + order-382 index materialization.
+
+---
+
+## 2026-07-17 — rerun on the fully-fixed stack: blocker moved one layer
+deeper (mirror-credential path CONFIRMED fixed; now vault token/policy
+skew = order 383)
+
+Overnight the whole chain landed: macOS reused this doc's
+`parse_gitdir_origin_url` fallback, and windows-260716-2 was fixed by
+making the git-mirror relay credential mandatory + Vault a structural
+forge-lane prerequisite (`35253356`); the collision became order 378
+(`--replace` idempotency, `6ef71659`); order 382's chown landed
+(`dd34cd8a`). I merged all of it (fast-forward to `834c513b`), rebuilt
+the guest to **v0.3.260716.7**, and relaunched BigPickle.
+
+**What worked (real forward progress):**
+- Fresh-tag stack bring-up: all six images (`…:v0.3.260716.7`) rebuilt
+  on-demand from embedded assets (FRESHNESS working end to end).
+- **windows-260716-2 is FIXED, confirmed by the failure MODE**: the lane
+  reached the git-mirror vault write and failed with
+  `Error: write_policy git-mirror-policy: vault unauthorized:
+  permission denied / invalid token` — i.e. the mirror credential path
+  is now mandatory and LOUD, exactly as designed. No silent
+  credential-less mirror.
+
+**The new (and deeper) blocker — order 383 vault root-token skew:**
+- The headless vault bootstrap wrote a root token that storage rejects
+  (`permission denied` on `token lookup-self`). This is order 383's
+  stale-root-token skew, third live repro, now on the Windows lane with
+  real operator secrets.
+- Manual heal to characterize + restore (the vault was ALREADY wedged
+  before I touched it): `vault operator generate-root` with the intact
+  Shamir share (`fallback_vault-shamir-share-v1`, 44B, untouched) minted
+  a fresh token — `token lookup` → policies:[root], `vault policy list`
+  succeeds. **But the same root-policy token still 403s on
+  `list auth/approle/role` and `kv get secret/github`.** generate-root
+  alone did NOT restore mount/KV access — the skew is deeper than the
+  root token. Recorded as an order-383 exit-criterion extension.
+- **Operator github token is NOT lost**: KV data lives in the intact
+  `vault-data` volume; generate-root never touches it. It is currently
+  unreadable pending order 383's proper heal or an attended
+  storage-preserving re-init.
+- Self-inflicted note: an early botched manual attempt truncated the
+  root-token cache file to 0B (`podman exec -i` stole nested-shell
+  stdin); regenerated and restored. The recovery-critical Shamir share
+  was never touched.
+
+**Updated goal status**: in-forge cycle ✓, mirror-transparent fetch ✓,
+verified-ack push ✓, mirror-credential path ✓ (windows-260716-2 fixed),
+git-less origin/facade ✓, order-382 chown ✓. Transparent RELAY now
+blocked SOLELY by vault token/policy reliability = **order 383**
+(linux-owned, ready, estimate bumped 5→7h for the approle/KV wrinkle).
+Not retried again this session: re-running the lane just re-hits the
+vault wall and its bootstrap re-skews the token — the durable fix is
+383's code path or an attended re-init (operator-gated). The blocker has
+moved from "the push channel is broken" to "one known vault-reliability
+bug stands between us and a clean transparent push" — which is exactly
+the reliability bar the EXPERTS/zeroclaw sequencing depends on too.
