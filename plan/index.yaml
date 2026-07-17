@@ -15700,3 +15700,52 @@ plan_index:
             Filed per operator directive to at least capture the AMD/ROCm
             analogs for research (custom passthrough likely). Sibling of the
             NVIDIA CDI work (408); v0.5 since this host is NVIDIA.
+
+    - packet_id: tray-forge-launch-missing-image-ux
+      order: 411
+      desired_release: v0.4
+      title: "Tray forge-launch on a missing forge image must build it (or say 'run --init'), not report a misleading 'initialization may be in progress'"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs (forge-launch image gate) + optional --install/--init coupling
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [tray, ux, init, forge, robustness, rust]
+      estimated_hours: 3
+      outcome: >
+        Live operator repro 2026-07-17: after a fresh `./build.sh --install`
+        bumped the version, the tray launched but every forge launch
+        (OpenCode, Antigravity) failed with "forge image not available for
+        project '...'; initialization may be in progress" — and it never
+        finished, because NOTHING was building it. Root cause: `--install`
+        bumps VERSION → new image tags (forge_image_tag(version)) → the forge
+        image, which is built ONLY by `tillandsias --init` (run_init →
+        ensure_image_exists("forge-base"/"forge"), tray/mod.rs launch path
+        only CHECKS via recheck_environment_if_stale), is now missing for the
+        new version, and no init was triggered. The message
+        "initialization may be in progress" is FALSE when no init is running —
+        it implies progress that is not happening, so the user waits forever.
+        Fix direction: on a missing forge image the tray forge-launch should
+        EITHER (a) trigger the forge image build on-demand with a visible
+        "building forge image (several minutes)" status (best UX), OR (b)
+        surface an ACTIONABLE message naming the exact remedy
+        ("forge image for vX not built — run `tillandsias --init`"), never the
+        ambiguous "may be in progress". Consider coupling: `--install` could
+        note that images must be rebuilt at the new version (or offer to run
+        --init). Workaround this cycle: ran `tillandsias --init` explicitly,
+        which built forge-base + forge + all enclave images at v0.3.260717.1;
+        forges launchable again.
+      exit_criteria:
+        - "with the forge image missing for the running binary's version, the tray forge-launch either builds it (visible progress) or emits an actionable 'run tillandsias --init' message naming the version — never a bare 'initialization may be in progress' when nothing is initializing"
+        - "behavioral/source guard: the missing-image branch does not claim in-progress initialization unless an init is actually running/tracked (init-build-state.json or a live lock)"
+        - "documented (or implemented) coupling so a fresh --install does not silently leave the forge unlaunchable until a manual --init"
+      events:
+        - type: filed
+          ts: "2026-07-17T20:45:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed from a live operator repro (two forges stuck on the
+            misleading 'initialization may be in progress' after a version
+            bump with no init). Real papercut on the launch path the
+            local-inference/EXPERTS work depends on. v0.4.
