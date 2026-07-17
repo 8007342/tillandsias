@@ -2656,14 +2656,28 @@ fn detect_inference_tier() -> &'static str {
 /// container? Requires a CDI spec (`nvidia-ctk cdi generate`). Hardware
 /// without CDI is reported loudly with the exact remedy instead of
 /// silently launching a CPU-only "GPU tier".
+///
+/// Checks the system CDI dirs (`/etc/cdi`, `/var/run/cdi`) AND the rootless
+/// USER CDI dir (`$HOME/.config/cdi`) — a user-level spec needs no root to
+/// generate, so honoring it lets the auto-enablement path (order 408) wire
+/// GPU passthrough without a second sudo once the toolkit package is present.
 fn nvidia_cdi_available() -> bool {
-    ["/etc/cdi/nvidia.yaml", "/etc/cdi/nvidia.json"]
-        .iter()
-        .any(|p| Path::new(p).exists())
-        || Path::new("/var/run/cdi")
-            .read_dir()
-            .map(|mut d| d.any(|e| e.is_ok()))
+    let mut dirs: Vec<PathBuf> = vec![PathBuf::from("/etc/cdi"), PathBuf::from("/var/run/cdi")];
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(Path::new(&home).join(".config/cdi"));
+    }
+    dirs.iter().any(|dir| {
+        dir.read_dir()
+            .map(|entries| {
+                entries.filter_map(Result::ok).any(|e| {
+                    let name = e.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("nvidia")
+                        && (name.ends_with(".yaml") || name.ends_with(".json"))
+                })
+            })
             .unwrap_or(false)
+    })
 }
 
 fn build_inference_run_args(
@@ -2707,10 +2721,21 @@ fn build_inference_run_args(
             if nvidia_cdi_available() {
                 args.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
             } else {
+                // The old remedy ("sudo nvidia-ctk cdi generate …") misleads on
+                // any host without the toolkit installed: nvidia-ctk does not
+                // exist yet, so the command fails "command not found" (operator
+                // repro, Fedora 44, 2026-07-17). The toolkit PACKAGE must be
+                // installed first — and on Fedora/RHEL that needs NVIDIA's repo,
+                // which the default repos do not carry. Order 408 automates the
+                // CDI-spec generation once the package is present.
                 eprintln!(
                     "[tillandsias] WARNING: NVIDIA GPU detected but no CDI spec — \
-                     inference will run CPU-ONLY. Remedy: sudo nvidia-ctk cdi generate \
-                     --output=/etc/cdi/nvidia.yaml   (order 392)"
+                     inference will run CPU-ONLY. Remedy (Fedora/RHEL): install the \
+                     NVIDIA container toolkit, then generate a CDI spec:\n\
+                     \x20 curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo\n\
+                     \x20 sudo dnf install -y nvidia-container-toolkit\n\
+                     \x20 sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml\n\
+                     (Debian/Ubuntu: apt-get install nvidia-container-toolkit.) See order 408."
                 );
             }
         }
@@ -10499,6 +10524,35 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn nvidia_cdi_available_honors_user_config_dir() {
+        // Order 408: a user-level ~/.config/cdi/nvidia.yaml (generatable with
+        // NO sudo once the toolkit is installed) must count as "CDI available",
+        // so GPU passthrough can be auto-enabled without a second root step.
+        let _guard = env_lock();
+        let tmp = std::env::temp_dir().join(format!("tilland-cdi-{}", std::process::id()));
+        let cdi = tmp.join(".config/cdi");
+        std::fs::create_dir_all(&cdi).expect("mk temp cdi dir");
+        let prev = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", &tmp);
+        }
+        std::fs::write(cdi.join("nvidia.yaml"), "cdiVersion: 0.6.0\n").expect("write spec");
+        let seen = nvidia_cdi_available();
+        // Restore HOME before asserting so a failure can't leak env state.
+        unsafe {
+            match prev {
+                Some(h) => std::env::set_var("HOME", h),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert!(
+            seen,
+            "a user-level ~/.config/cdi/nvidia.yaml must be honored"
+        );
+    }
+
+    #[test]
     fn inference_run_args_gate_gpu_delivery_on_tier_and_cdi() {
         // Order 392: hardware truth (detect_inference_tier) decides the
         // tier; DELIVERY is gated separately — cuda needs a CDI spec and
@@ -10518,6 +10572,18 @@ mod tests {
                 && window.contains("nvidia.com/gpu=all")
                 && window.contains("nvidia-ctk cdi generate"),
             "cuda delivery must be CDI-gated with the remedy named"
+        );
+        // The remedy must tell the operator to INSTALL THE TOOLKIT PACKAGE
+        // first — `nvidia-ctk cdi generate` alone fails "command not found" on
+        // any host without it (operator repro Fedora 44, 2026-07-17). Order 408.
+        assert!(
+            window.contains("nvidia-container-toolkit"),
+            "the CDI remedy must name the toolkit package install, not just nvidia-ctk"
+        );
+        let cdi_window = source_window(source, "fn nvidia_cdi_available(");
+        assert!(
+            cdi_window.contains(".config/cdi"),
+            "nvidia_cdi_available must also honor the rootless user CDI dir (~/.config/cdi)"
         );
         assert!(
             window.contains("TILLANDSIAS_INFERENCE_TIER"),
