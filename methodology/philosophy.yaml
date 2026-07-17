@@ -24,6 +24,40 @@ philosophy:
     - validated_invariants_are_stable_until_superseded_by_stronger_evidence
     - spec_is_source_of_truth_not_code
     - convergence_claims_must_cite_evidence_bundle
+    - runtime_substrate_is_ephemeral_recreate_never_repair
+
+  runtime_ephemerality:
+    principle: >
+      Everything at RUNTIME is ephemeral by design. Persistence (vaults,
+      clones, caches, provisioned guests) is a convenience side-effect, not a
+      source of truth — everything of value lives in the cloud and the
+      operator's identity. Therefore the DEFAULT response to a borked
+      host/VM/guest/podman/stack layer is to DESTROY and RECREATE it, never to
+      hand-patch it forward. Fix-forward is reserved for durable bugs in
+      source/spec/config; it is the wrong tool for borked runtime substrate.
+      Directive: The Tlatoāni, 2026-07-17. Detail:
+      plan/issues/ephemeral-runtime-destroy-and-recreate-directive-2026-07-17.md.
+    anti_pattern: >
+      Hand-fixing a disposable layer tends to spawn a new failure one layer
+      down (live 2026-07-17: vault key skew → generate-root → unseal-secret
+      regen → podman pause-process → podman uid_map/subuid). Never slow the
+      loop to nurse borked substrate.
+    ladder:
+      layers: "podman/stack -> guest(WSL/VZ) -> host tray -> release"
+      step_1: "Recreate the borked unit from scratch; it is designed to come up clean."
+      step_2: "If that fails, throw away the unit AND the layer above, recreate both (guest keeps coming up stale? recreate the tray too — its version pins the guest)."
+      step_3: "Repeat up the ladder. A stale release is a layer: recreate from CURRENT SOURCE when the release lags (order 334)."
+    guardrail: >
+      Applies to the runtime substrate only. NEVER destroys durable work —
+      committed/unpushed code, specs, plan, methodology (those follow
+      between-commits-work-discipline: push to origin first). If a recreate
+      path ITSELF loops, that is a real bug in the recreate path — file it,
+      do not fall back to fix-forward.
+    error_message_policy: >
+      User- and agent-facing errors for borked RECREATABLE runtime state must
+      instruct recreation with the exact command ("just recreate this
+      container/guest — it's ephemeral; you'll re-auth once"), not dead-end
+      remediations ("operation not permitted / try X / reboot to recover").
 
   math_foundations:
     - claim: "Finite ordered convergence under declared validators."

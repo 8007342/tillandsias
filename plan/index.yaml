@@ -15676,3 +15676,48 @@ plan_index:
             comparison half (needs a real forge launch + provider budget),
             gated on the order-404 launcher. Divergence between codex and
             opencode is the valuable feedback the operator asked to monitor.
+
+    - packet_id: ephemeral-runtime-destroy-recreate-sweep
+      provisional_id: windows-260717-5
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "MILESTONE: make ALL skills, scripts, and error messages follow destroy-and-recreate (runtime ephemerality) — never fix-forward borked substrate"
+      status: ready
+      kind: milestone
+      deliverable: methodology/philosophy.yaml (runtime_ephemerality, landed) + skills/*/SKILL.md + scripts + error-message source paths
+      depends_on: []
+      pickup_role: any
+      capability_tags: [methodology, skills, scripts, ux, robustness, cross-host]
+      estimated_hours: 12
+      outcome: >
+        Operator directive 2026-07-17 (ephemeral all the way): the DEFAULT
+        response to any borked host/VM/guest/podman/stack layer is
+        destroy-and-recreate, never hand-patch. philosophy.yaml now carries
+        the runtime_ephemerality principle + the layer ladder + the
+        error-message policy (landed this cycle). This milestone drives the
+        SWEEP so every surface embodies it: (1) skills — each
+        runtime-touching skill's borked-state branch says RECREATE per the
+        ladder, not diagnose-and-patch, and never slows the loop to nurse a
+        borked layer; (2) scripts — recovery/ensure paths prefer
+        --replace/recreate over in-place repair and expose the one-click
+        reset (windows-260717-4); (3) error messages — runtime-borked errors
+        TELL YOU TO RECREATE with the exact command ('just recreate this
+        container/guest bro — it's ephemeral; you'll re-auth once'), not
+        dead-ends like 'operation not permitted / podman system migrate /
+        reboot to recover'. Full shape:
+        plan/issues/ephemeral-runtime-destroy-and-recreate-directive-2026-07-17.md.
+      exit_criteria:
+        - "philosophy.yaml runtime_ephemerality principle + ladder + error-message policy present and parsed (LANDED — verify)"
+        - "audit: each runtime-touching skill's borked-state guidance is recreate-first (grep/checklist pinned); child packets per skill as needed"
+        - "source scan: runtime-borked error paths emit a recreate-this-with-command instruction; no bare dead-end remediation for recreatable substrate (litmus)"
+        - "the one-click reset (windows-260717-4) is the referenced remediation across surfaces"
+      events:
+        - type: filed
+          ts: "2026-07-17T13:20:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            Filed with the philosophy.yaml runtime_ephemerality principle
+            (landed same commit). Milestone holds the sweep; children carry
+            per-skill/per-script/per-error-path edits. Born from the live
+            2026-07-17 fix-forward cascade the directive explicitly bans.
