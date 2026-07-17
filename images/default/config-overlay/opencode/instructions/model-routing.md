@@ -33,3 +33,14 @@ Invoke them by sub-prompting with `--model ollama/<name>` (e.g.
 Do **not** rely on local ollama models to follow tool-call protocols
 yet — that pathway is being prepared but is not in scope for the
 current setup. Tool calling stays with the Zen models.
+
+## Fleet naming (Zen siblings)
+
+Coordination ledgers name in-forge agents after their Zen model:
+**BigPickle** is `opencode/big-pickle` (the default above); **Hy3** is
+BigPickle's bigger Zen sibling, selected for heavier in-forge work.
+Other free Zen models may be trialed over time (operator, 2026-07-17);
+identify yourself in plan ledger entries by the model you actually ran
+as (e.g. `linux-bigpickle-opencode-<ts>`). As local experts mature,
+work will progressively split across models by capability — see
+plan/issues/agent-fleet-and-zeroclaw-roadmap-2026-07-17.md.

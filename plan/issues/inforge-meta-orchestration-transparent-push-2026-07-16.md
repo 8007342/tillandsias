@@ -16,9 +16,11 @@
 
 - **BigPickle** — the opencode-harness in-forge agent (plan.yaml
   `big_pickle_template`; first full Windows in-forge cycle 2026-07-13).
-- **Hy3** — in-forge agent identity observed in the operator's 2026-07-16
-  curl-install session (orders 374/382 field evidence; correct MO-SMOKE
-  grammar). Same lane class as BigPickle.
+- **Hy3** — BigPickle's big brother: the larger free Zen sibling model
+  (operator, 2026-07-17), selected for heavier in-forge work. Field
+  evidence: orders 374/382 (correct MO-SMOKE grammar, criterion-1 demo).
+  More Zen models may be trialed; fleet roadmap:
+  `agent-fleet-and-zeroclaw-roadmap-2026-07-17.md`.
 
 ## Root cause chain, as measured on this host (Yolanda, Windows 11 + WSL2)
 

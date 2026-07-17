@@ -15192,3 +15192,58 @@ plan_index:
         - "tier probe verdict inside the WSL2 guest's inference container matches reality (gpu-cuda if /dev/dxg passthrough works, else cpu — pinned grammar)"
         - "expert query set measured on the landed tier; numbers recorded in the 393 decision doc"
         - "cpu fallback proven if GPU passthrough is unavailable (no wedge, honest tier report)"
+      events:
+        - type: progress
+          ts: "2026-07-17T11:10:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            First lane datapoints (bare WSL2 guest, host Yolanda): the
+            host GPU is an AMD Radeon 860M iGPU — NO NVIDIA hardware, so
+            the packet's gpu-cuda branch is N/A on this machine (needs a
+            different Windows host to exercise nvidia-in-WSL2). /dev/dxg
+            EXISTS in the guest (WSL2 paravirt device present) but no
+            nvidia-smi/CUDA lane behind it. scripts/inference-tier-probe.sh
+            run in the bare guest emits `tier:cpu` (pinned grammar,
+            matches reality — honest fallback half of criterion 3).
+            Remaining: the same verdict INSIDE the inference container
+            (this guest's inference image is pre-392 v0.3.260715.6 and
+            crash-looping, order-313 class — rides the next image
+            refresh) and the ground-truth measurement set on the cpu
+            tier.
+      provisional_id: windows-260717-1
+      order: provisional
+      title: "ROADMAP (Tlatoani-gated, NOT YET): reintroduce zeroclaw as a local-only enclave container — main consumer of the experts"
+      status: pending
+      kind: roadmap
+      deliverable: plan/issues/agent-fleet-and-zeroclaw-roadmap-2026-07-17.md
+      depends_on: [forge-local-experts-milestone]
+      pickup_role: linux
+      capability_tags: [zeroclaw, experts, inference, containers, security]
+      estimated_hours: 0
+      outcome: >
+        Operator directive 2026-07-17: zeroclaw returns LAST and LOCAL-ONLY.
+        Sequence: (1) local inference figured out (EXPERTS milestone 391 +
+        tier packets 401/402), (2) experts demonstrably RELIABLE (391 exit
+        criteria green), (3) THEN The Tlatoani may authorize a zeroclaw
+        CONTAINER — enclave-isolated, consuming inference:11434 experts
+        exclusively, zero remote credentials, zero new release artifacts
+        (the 2026-06-27 order-114 violation ran zeroclaw as an unauthorized
+        host-resident binary; the reintroduction inverts both failures by
+        construction). Filing this packet is NOT authorization: status
+        stays pending until the operator flips it explicitly. Roadmap
+        context + guardrails:
+        plan/issues/agent-fleet-and-zeroclaw-roadmap-2026-07-17.md.
+      exit_criteria:
+        - "GATE: experts milestone (391) exit criteria green + explicit Tlatoani authorization recorded as an event on this packet"
+        - "zeroclaw runs as an enclave container in the dependency graph; no host-resident socket server, no release artifact changes"
+        - "zeroclaw's model calls resolve ONLY to the local inference container (egress-policy pinned)"
+      events:
+        - type: filed
+          ts: "2026-07-17T10:55:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            Distilled from the operator's session directive (Hy3/Zen fleet
+            + zeroclaw sequencing). Deliberately pending, not ready — the
+            reliability gate and the authorization gate are both explicit.
