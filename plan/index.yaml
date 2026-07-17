@@ -11900,6 +11900,12 @@ plan_index:
 
     - packet_id: forge-hot-path-placement-metrics
       order: 329
+      release_target: forge-local-experts-milestone
+      # Promoted 2026-07-17 (operator): 'making sure that the checkout from
+      # the git mirror into the forge happens in RAMDISK as we expected' —
+      # the experts + compiled YAML engine (398) + LSP (399) all read the
+      # mounted checkout on their hot paths; RAM placement is part of the
+      # blazing-fast local-knowledge story.
       title: "Measure forge hot paths (checkout/pull-cache/proxy/router/git-mirror) and decide ramdisk vs disk vs virtiofs with data"
       status: ready
       kind: research
@@ -14772,9 +14778,26 @@ plan_index:
         VRAM/RAM footprint. Ends in a Tlatoani-signed decision record
         BEFORE implementation rungs (ambitious_milestone_reduction).
       exit_criteria:
-        - "benchmark harness with ground-truth query set committed (reusable as the milestone's grading gate)"
+        - "benchmark harness with ground-truth query set committed (reusable as the milestone's grading gate) — co-develops with rung 1 as its grading gate"
         - "per-tier technique recommendation with measured build-time/quality/footprint"
         - "Tlatoani sign-off recorded on the decision"
+      events:
+        - type: decision
+          ts: "2026-07-17T04:30:00Z"
+          agent_id: "linux-tlatoani-claude-20260717T0355Z"
+          host: linux
+          summary: >
+            DECISION SIGNED by The Tlatoani (interactive session):
+            per-corpus technique — Modelfile stuffing for methodology
+            (ollama-native keep_alive TTL eviction), graph-aware RAG for
+            plan (deterministic YAML-graph retrieval + embeddings for
+            prose), transparent OpenAI-compatible proxy in the inference
+            container (agents see only model names), no training
+            anywhere, delta refresh on commit, tmpfs+keep_alive
+            ephemerality. Record + rejected-alternatives ledger:
+            plan/issues/experts-construction-decision-2026-07-17.md.
+            Residual scope: per-tier measurements + ground-truth harness
+            (consumed by 394 as its grading gate). 394 is UN-GATED.
 
     - packet_id: plan-methodology-experts-rung1
       order: 394
@@ -14783,7 +14806,9 @@ plan_index:
       status: ready
       kind: implementation
       deliverable: inference expert-build pipeline + named expert endpoints
-      depends_on: [inference-startup-cleanup, experts-construction-research]
+      # 393's technique decision is SIGNED (2026-07-17); only its harness
+      # residual co-develops here, so the research packet no longer gates.
+      depends_on: [inference-startup-cleanup]
       pickup_role: linux
       capability_tags: [inference, ollama, experts, rust, forge]
       estimated_hours: 10
@@ -14871,3 +14896,92 @@ plan_index:
       exit_criteria:
         - "same expert query set passes on GPU tier (this host) and one non-GPU tier (macOS llama.cpp or CPU)"
         - "tier switch requires zero agent-side config change (transparency litmus)"
+
+    - packet_id: plan-yaml-compiled-editor
+      order: 398
+      release_target: forge-local-experts-milestone
+      title: "Compiled deterministic YAML query/edit engine for ./plan + ./methodology — one engine for agents (CLI) and the PLAN EXPERT (library)"
+      status: ready
+      kind: implementation
+      deliverable: tillandsias-plan crate (library + CLI) + schema validations + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, yaml, plan, tooling, experts]
+      estimated_hours: 10
+      outcome: >
+        Operator directive 2026-07-17: writing the plan should be as
+        supported as reading it — load the YAML tree into memory, edit
+        under rules, flush validated. A compiled engine (Rust) that
+        round-trips plan/index.yaml and methodology YAML
+        FORMAT-PRESERVINGLY (survey the OSS landscape first: tree-sitter-
+        yaml-based editing vs the thin yaml-edit crate vs canonicalizing
+        our own format so serde round-trip is lossless — we OWN the
+        format, canonical-form is an acceptable answer; record the
+        choice). Operations agents need daily: query (blocked-by closure,
+        status, lease holder, release-target burndown) and edit
+        (claim/release events, event append, status flip, packet append)
+        — each edit schema-validated BEFORE flush (fail loud, never write
+        a broken ledger; retires the order-263 broken-YAML class by
+        construction). The SAME library is the PLAN EXPERT's
+        deterministic graph-retrieval backend (order 394) — one engine,
+        two consumers. CLI replaces the eyeball-and-append editing every
+        cycle does today.
+      exit_criteria:
+        - "round-trip litmus: load+flush of the real plan/index.yaml is byte-identical (or canonical-form documented + one-time migration signed)"
+        - "blocked-by/status/lease queries answer correctly on live plan state (ground-truth harness shares 393/394's query set)"
+        - "an invalid edit (schema violation) refuses to flush, loudly; the broken-ledger class is structurally impossible through the tool"
+        - "meta-orchestration/advance-work skills document the CLI as the preferred ledger-edit path"
+
+    - packet_id: forge-lsp-by-default
+      order: 399
+      release_target: forge-local-experts-milestone
+      title: "LSP available by default in the forge — agents query code structurally (OpenCode LSP wiring; rust-analyzer first)"
+      status: ready
+      kind: implementation
+      deliverable: images/default (rust-analyzer + config-overlay OpenCode LSP config)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [lsp, forge, opencode, images, dx]
+      estimated_hours: 5
+      outcome: >
+        Operator: 'just like LSP (which we should enable or at least make
+        available by default)'. Ship rust-analyzer in the forge image
+        (weigh image cost; the container diet order 279-era discipline
+        applies — lazy-install via the brew/allowlist lane is acceptable
+        if cold-start beats bloat) and wire OpenCode's native LSP support
+        in the config overlay so agents resolve
+        'MyClass.MySubClass.MyMethod' structurally (definitions,
+        references, symbols) instead of grepping. TypeScript/others are
+        follow-on rungs; rust-analyzer covers the primary repo.
+      exit_criteria:
+        - "fresh OpenCode forge session: go-to-definition/references on a tillandsias-headless symbol works with zero setup"
+        - "forge image size / cold-start delta measured and recorded (diet discipline)"
+
+    - packet_id: code-spec-cheatsheet-expert
+      order: 400
+      release_target: forge-local-experts-milestone
+      title: "CODE EXPERT (+ SPEC/CHEATSHEET expert) — structural code + spec + cheatsheet knowledge, commit-fresh, audit-capable"
+      status: ready
+      kind: implementation
+      deliverable: expert pipeline extension + cheatsheet provenance integration
+      depends_on: [plan-methodology-experts-rung1, forge-lsp-by-default]
+      pickup_role: linux
+      capability_tags: [inference, experts, lsp, cheatsheets, specs, audit]
+      estimated_hours: 12
+      outcome: >
+        Third expert wave: CODE EXPERT indexes the mounted source
+        (embeddings for prose/comments + LSP/symbol-graph for structure —
+        same hybrid shape as the plan's graph retrieval; 'find
+        MyClass.MySubClass.MyMethod(WithArgsOverride 1)' resolves
+        structurally), refreshed on commit like the others (396's hook),
+        able to AUDIT/troubleshoot: cite definition sites, spec @trace
+        links, and the owning cheatsheet in one answer. SPEC+CHEATSHEET
+        expert rides the same pipeline and finally delivers the
+        cheatsheet system's standing intent — freshness, provenance,
+        queryable-on-demand ('tellme about <topic>' answered from the
+        fresh checkout with provenance lines; cheatsheet-mcp-server spec
+        + FRESHNESS methodology component records feed it).
+      exit_criteria:
+        - "structural symbol query resolves through the expert (LSP-backed), matching rust-analyzer ground truth"
+        - "an audit question ('who writes X and which spec pins it') answers with code+spec+cheatsheet provenance"
+        - "cheatsheet freshness/provenance surfaced in answers (FRESHNESS records honored)"
