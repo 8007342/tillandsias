@@ -6017,6 +6017,22 @@ plan_index:
             2026-07-13 (fix(builder) commit); packet stays done. Recorded
             so future completions of host-class-specific criteria are
             verified on the target host class, not by code inspection.
+        - type: note
+          ts: "2026-07-17T09:20:00Z"
+          agent_id: "linux-tlatoani-opencode-20260717T0920Z"
+          host: linux_immutable
+          summary: >
+            Follow-up Silverblue toolchain gap closed on this host: local-ci.sh
+            was NOT toolbox-aware (only build.sh sourced the wrapper), so
+            ./build.sh --ci/--ci-full would run on the bare Silverblue host and
+            fail to find rust/cargo inside the toolbox. Also the wrapper's init
+            gate checked only rustup, so a builder toolbox with rustup but
+            missing gcc/pkg-config left ./build.sh --check failing with
+            "Missing host build tools". Fixed: local-ci.sh now sources the
+            wrapper at the top; init gate checks gcc/pkg-config/ruby/rustup +
+            musl targets. Verified: ./build.sh --check re-execs into
+            tillandsias-builder and exits 0 on this Silverblue host. Commit
+            c2cffb59.
 
     - packet_id: forge-build-check-tooling-gap
       order: 240
