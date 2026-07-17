@@ -313,6 +313,53 @@ web-share-release-milestone (order 373).
   Commit `5dda534f`, pushed to `linux-next`.
 - **Worker drain**: one packet drained (364), per recurrent-loop budget.
 
+## Cycle 2026-07-16T12:24Z→12:40Z (macos — meta-orchestration: LOOP WINDOW CLOSE — 6-cycle summary; goal one credential from done)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T1224Z
+  (operator /loop iteration 6 of 6; window 07:30→12:30Z). Guard
+  `ok:gh-keyring`; boundary clean; no new sibling commits (all host
+  windows now closed).
+- **Window summary (macOS lane, operator goal: BigPickle/Hy3 in-forge
+  /meta-orchestration)**:
+  1. Root-caused week-stale install; fresh stack + findings (1db61fac).
+  2. Vault backoff panic FIXED (c40db47a); crash-skew wedge recovered +
+     filed (promoted to order 383 with Linux repro).
+  3. FIRST macOS in-forge smoke PASS — big-pickle, MO-SMOKE grammar
+     honored (08:27Z).
+  4. Transparent-push chain LIVE: ForgeLaunch vault edge + opencode-lane
+     ensure (35253356), lib-common `git -C` + bare-gated insteadOf
+     (559190c3), mirror rewrite verified in-lane, push --dry-run clean.
+     Order 349 blocked→ready, criteria 1+2 PASS live.
+  5. v0.3.260716.7 curl-install e2e from WIPED substrate: release carries
+     the whole chain unattended; installer bash-3.2 bug found+fixed
+     (e15d34fe) with litmus closure (e2b6bf06); embed-integrity green on
+     macOS; 5 packets filed, 2 closed same-day.
+  6. Token rechecked every cycle: 404 throughout — the operator
+     --github-login never happened during the window (overnight hours).
+- **Single residual**: operator `--github-login`, then the one-command
+  closing gate — runbook appended to
+  plan/issues/macos-inforge-transparent-push-chain-live-2026-07-16.md
+  (Operator handoff section).
+
+## Cycle 2026-07-16T11:24Z→11:55Z (macos — meta-orchestration: installer-safety litmus landed; guest-binary embed-integrity green on macOS; token still pending)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T1124Z
+  (operator /loop iteration 5). Guard `ok:gh-keyring`; boundary clean; merged
+  origin/linux-next 44a45c24 (coordinator final heartbeat — their window
+  closed, lanes converged).
+- **Worker drain (one packet, e2b6bf06)**: closed
+  smoke-finding/install-macos-bash32-ellipsis-unbound with its verifiable
+  closure — litmus:installer-ascii-expansion-safety (bash -n + perl
+  byte-level guard against non-ASCII abutting $VAR; BSD grep locale
+  classes proved unreliable for this, documented in the litmus). Same
+  commit: build-macos-tray.sh mirrors zigbuilt guest binaries into
+  target-guest/, closing the macOS half of
+  litmus:guest-binary-embed-integrity (failed on every macOS sweep incl.
+  both in-forge smokes; the version-stamp check caught a live .5-vs-.7
+  staleness during bring-up — the litmus works). ci-release suite 5/5.
+- **Goal state**: vault github token still 404 (rechecked 11:27Z). Loop
+  window ends ~12:30Z; one iteration remains.
+
 ## Cycle 2026-07-16T10:24Z→11:30Z (macos — meta-orchestration: v0.3.260716.7 curl-install e2e — release carries the goal chain from a WIPED substrate; installer bash-3.2 bug hot-fixed; in-forge litmus grading triaged)
 
 - **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T1024Z
