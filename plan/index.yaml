@@ -15565,3 +15565,138 @@ plan_index:
             the backfill is tracked work, not an implicit expectation. Active
             release seeded to v0.4 (EXPERTS fat-host core); cross-platform +
             modest-hardware tiering seeded to v0.5.
+
+    - packet_id: gpu-passthrough-auto-enablement
+      order: 408
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      title: "Auto-enable GPU passthrough: generate + wire the CDI spec (no second sudo) when the host supports it; loud guided remedy when the toolkit is missing"
+      status: ready
+      kind: implementation
+      deliverable: crates/tillandsias-headless (init/preflight GPU enablement) + user-level CDI generation + containers.conf cdi_spec_dirs wiring
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, gpu, cuda, cdi, provisioning, podman, forge]
+      estimated_hours: 5
+      outcome: >
+        Operator directive 2026-07-17: "if the host supports gpu passthrough
+        then we shall also pass it through to the containers" — and "this will
+        also happen for users at runtime", so passthrough must be a PRODUCT
+        behaviour, not a manual sudo dance. Ground truth (macuahuitl, Fedora
+        44): the driver + CUDA userspace libs are present, the tier probe says
+        gpu-cuda, and the GPU-delivery CODE already emits
+        `--device nvidia.com/gpu=all` when a CDI spec exists (order 392) — but
+        the toolkit package (`nvidia-container-toolkit`, providing `nvidia-ctk`)
+        is NOT installed and no CDI spec exists, so inference runs CPU-only.
+        Installing the PACKAGE is the one unavoidable root step (and on
+        Fedora/RHEL needs NVIDIA's libnvidia-container repo added — the default
+        repos lack it; the corrected remedy shipped in 41c2bde2). This packet
+        removes EVERY OTHER manual step: once `nvidia-ctk` is on PATH,
+        Tillandsias generates a USER-level CDI spec
+        (`nvidia-ctk cdi generate --output=$HOME/.config/cdi/nvidia.yaml`, no
+        sudo) at init/inference bring-up and ensures rootless podman reads it
+        (containers.conf `cdi_spec_dirs` includes ~/.config/cdi, user-writable),
+        so GPU passthrough engages automatically. When the toolkit is ABSENT,
+        surface the corrected guided remedy at INIT/preflight (prominent), not
+        only buried in the inference launch warning. nvidia_cdi_available()
+        already honors the user CDI dir (41c2bde2).
+      exit_criteria:
+        - "on a gpu-cuda host with nvidia-ctk present but no CDI spec, init/bring-up auto-generates a user-level ~/.config/cdi/nvidia.yaml (no sudo) and inference launches with --device nvidia.com/gpu=all"
+        - "rootless podman actually reads the user CDI spec (containers.conf cdi_spec_dirs wired if needed); nvidia-smi shows the ollama process holding VRAM (live evidence on macuahuitl)"
+        - "when nvidia-ctk is ABSENT, `tillandsias --init`/preflight prints the corrected toolkit-install remedy prominently; cpu hosts are unaffected"
+        - "regeneration on driver update handled or documented (a stale CDI spec after a driver bump is a known nvidia-ctk gotcha)"
+      events:
+        - type: filed
+          ts: "2026-07-17T20:05:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed from the operator's runtime-GPU directive after the Fedora 44
+            CDI repro. 41c2bde2 already fixed the misleading remedy + made
+            nvidia_cdi_available honor the user CDI dir; this packet is the
+            auto-enablement (generate + wire the user CDI spec, no second sudo)
+            + the init/preflight guided remedy. v0.4 (fat-host core). Sibling:
+            409 (VM guest-image GPU awareness, v0.5), 410 (AMD/ROCm research).
+
+    - packet_id: fedora-vm-image-gpu-awareness
+      order: 409
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Fedora VM guest images GPU-aware: bundle nvidia userspace libs + toolkit so host->VM->container passthrough works on macOS/Windows"
+      status: ready
+      kind: implementation
+      deliverable: Fedora VM guest image definitions (nvidia userspace libs + container toolkit) + nested passthrough wiring
+      depends_on: [gpu-passthrough-auto-enablement]
+      pickup_role: any
+      capability_tags: [vm, guest-image, gpu, cuda, cross-platform, fedora, inference]
+      estimated_hours: 8
+      outcome: >
+        Operator directive 2026-07-17: "our fedora vm images should also be
+        aware of these libraries". On macOS/Windows, Tillandsias runs its Linux
+        enclave inside a Fedora VM (Virtualization.framework / WSL2), so the
+        GPU path is TWO hops: host -> VM, then VM -> container. This packet
+        covers the VM-image half: the Fedora guest image must bundle the nvidia
+        userspace libraries + the container toolkit so that WHEN the host
+        exposes the GPU to the VM (WSL2 already exposes /dev/dxg; macOS VZ has
+        no GPU passthrough today — record that reality), the VM's enclave
+        containers can consume it via the same CDI path as bare metal (order
+        408). Where host->VM passthrough is impossible (macOS VZ), the tier
+        probe must honestly report cpu/metal and NOT pretend gpu-cuda. Gated to
+        v0.5 (cross-platform) so the v0.4 bare-metal Linux path ships first.
+      exit_criteria:
+        - "Fedora guest image bundles the nvidia userspace libs + container toolkit (or documents why a tier cannot); image size/build impact recorded"
+        - "on a Windows/WSL2 host with an NVIDIA GPU, the VM's inference container sees the GPU (nested passthrough proven) OR the gap is precisely characterized (order 402 datapoint: /dev/dxg present, needs the WSL CUDA lane)"
+        - "macOS VZ reality recorded: no GPU passthrough → honest cpu/metal tier, no false gpu-cuda"
+      events:
+        - type: filed
+          ts: "2026-07-17T20:05:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            The VM-image half of the operator's runtime-GPU directive. Nested
+            host->VM->container passthrough; depends on 408 (the container-side
+            CDI path). v0.5 cross-platform gate. Relates to order 402 (Windows
+            WSL2 tier) which already has /dev/dxg datapoints.
+
+    - packet_id: amd-rocm-gpu-passthrough-research
+      order: 410
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Research: AMD/ROCm GPU passthrough analogs — CDI-equivalent vs custom /dev/kfd+/dev/dri device + group/permission passthrough"
+      status: ready
+      kind: research
+      deliverable: plan/issues/amd-rocm-gpu-passthrough-decision-2026-07-17.md (research doc + decision record)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [research, inference, rocm, amd, gpu, passthrough, cdi]
+      estimated_hours: 5
+      outcome: >
+        Operator directive 2026-07-17: "make sure the amd analogs are at least
+        filed for research, they will possibly need custom passthrough." The
+        NVIDIA path standardized on CDI (nvidia-ctk generates a spec, podman
+        consumes `--device nvidia.com/gpu=all`). AMD/ROCm has no identical
+        story: build_inference_run_args already passes `/dev/kfd` + `/dev/dri`
+        for the gpu-rocm tier, but that is the CRUDE version — real rootless
+        ROCm passthrough usually also needs the invoking user in the `render`
+        and `video` groups, correct device permissions, and sometimes a ROCm
+        container runtime. Research: (1) is there a CDI generator for AMD
+        (amd-ctk / the AMD container toolkit) or must we hand-roll a CDI spec /
+        keep explicit --device? (2) the exact rootless-podman requirements
+        (groups, perms, seccomp) for ROCm; (3) the "custom passthrough" the
+        operator anticipates; (4) the provisioning analog to order 408
+        (auto-enable without sudo where possible); (5) nested VM passthrough
+        for AMD. Produce a decision record feeding a future implementation
+        packet. v0.5 (this fat host is NVIDIA; AMD is a modest/other-host tier).
+      exit_criteria:
+        - "research doc: AMD CDI-equivalent (if any) vs explicit-device passthrough; the exact rootless-ROCm requirements (render/video groups, /dev/kfd+/dev/dri perms, runtime)"
+        - "the 'custom passthrough' cases enumerated (which AMD gens/hosts need what beyond /dev/kfd+/dev/dri)"
+        - "decision record + a shaped follow-up implementation packet mirroring order 408 for AMD; provisioning-without-sudo assessed"
+      events:
+        - type: filed
+          ts: "2026-07-17T20:05:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed per operator directive to at least capture the AMD/ROCm
+            analogs for research (custom passthrough likely). Sibling of the
+            NVIDIA CDI work (408); v0.5 since this host is NVIDIA.

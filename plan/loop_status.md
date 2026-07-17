@@ -40,6 +40,18 @@ portability half.
   `/etc/cdi/nvidia.yaml` is absent. Remedy (sudo): install the toolkit +
   `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`. Until then
   local models serve CPU-ONLY (loud warning). Tracked in order 406.
+- **GPU as a PRODUCT concern (operator directive 2026-07-17)**: "if the host
+  supports gpu passthrough then we shall also pass it through to the
+  containers" — and this hits end users too. Fedora 44 wrinkle:
+  `nvidia-container-toolkit` is NOT in the default repos (needs NVIDIA's
+  libnvidia-container repo). 41c2bde2 fixed the misleading remedy (it said
+  `sudo nvidia-ctk cdi generate`, which fails "command not found" when the
+  toolkit is absent) + made `nvidia_cdi_available()` honor the rootless user
+  CDI dir (~/.config/cdi) so passthrough can auto-enable without a second sudo.
+  New packets: **408** (auto-enable — generate + wire the user CDI spec, guided
+  init/preflight remedy; v0.4), **409** (Fedora VM guest-image GPU awareness
+  for nested host→VM→container passthrough; v0.5), **410** (AMD/ROCm
+  passthrough research — likely custom; v0.5).
 
 ## Cycle 2026-07-17T17:47Z→(open) (linux_mutable macuahuitl — order 383 vault heal; WINDOWS UNBLOCKED)
 
