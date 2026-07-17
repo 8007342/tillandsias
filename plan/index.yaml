@@ -14751,7 +14751,7 @@ plan_index:
     - packet_id: container-teardown-straggler-probe
       order: 386
       title: "Executable probe: stack/container teardown leaves zero tray-parented zombies and zero orphaned terminal-launcher processes"
-      status: ready
+      status: completed
       kind: optimization
       deliverable: scripts/ (teardown straggler probe) + crates/tillandsias-headless lane-close reaping
       depends_on: []
@@ -14773,6 +14773,32 @@ plan_index:
         - "probe wired into the smoke/e2e teardown lane so the straggler class is guarded automatically"
         - "podman-exec-into-container terminal windows are reaped or explicitly documented as service-owned at lane close"
       events:
+        - type: completed
+          ts: "2026-07-17T18:35:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
+          host: linux
+          summary: >
+            Adopted the operator-identified probe draft, hardened it
+            (STRAGGLERS verdict grammar, space-safe /proc stat parsing,
+            real @trace), and wired it into the Linux smoke lane
+            (scripts/e2e-step2-linux.sh + SKILL.md step 2) immediately
+            after the full stack teardown, failing the lane loud on any
+            straggler (32ce69ae). Design note vs criterion 1: the probe is
+            assert-only; the LANE owns the destructive teardown and the
+            wired sequence is teardown→probe — a standalone
+            teardown-running probe would duplicate a destructive surface
+            for no guard value. podman-exec-into-container terminal
+            ownership documented (criterion 3). Live evidence
+            (macuahuitl): clean run against the running tray (zombies=0
+            orphans=0 — order 385 holding) and a synthetic unreaped child
+            correctly detected (exit 1). First automatic post-teardown run
+            rides the next e2e smoke cycle.
+        - type: claim
+          ts: "2026-07-17T18:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
+          host: linux
+          lease_id: "container-teardown-straggler-probe-20260717"
+          expires_at: "2026-07-17T22:20:00Z"
         - type: filed
           ts: "2026-07-16T18:15:00Z"
           agent_id: "linux-tlatoani-claude-20260716T0725Z"
@@ -15305,8 +15331,10 @@ plan_index:
             crash-looping, order-313 class — rides the next image
             refresh) and the ground-truth measurement set on the cpu
             tier.
+
+    - packet_id: zeroclaw-reintroduction-roadmap
+      order: 403
       provisional_id: windows-260717-1
-      order: provisional
       title: "ROADMAP (Tlatoani-gated, NOT YET): reintroduce zeroclaw as a local-only enclave container — main consumer of the experts"
       status: pending
       kind: roadmap
