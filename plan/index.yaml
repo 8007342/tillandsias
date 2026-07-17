@@ -14537,6 +14537,27 @@ plan_index:
             re-skews the token; durable fix is 383 or attended re-init.
             Full: plan/issues/inforge-meta-orchestration-transparent-push-2026-07-16.md
             (2026-07-17 vault addendum).
+        - type: progress
+          ts: "2026-07-17T12:15:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            Tested on a build carrying order 383 (072f6efb). Deploying via
+            guest-binary hot-swap + restart exposed a SEPARATE P1
+            (windows-260717-2): re-ensure regenerated a non-matching vault
+            unseal secret, crash-looping the barrier. Recovered the barrier
+            live from the intact fallback share (vault healthy, wire
+            Reachable). Headless restart then ran the 383 seam, which
+            correctly ESCALATED (generate-root share auth failed ->
+            OPERATOR ACTION REQUIRED, storage untouched). NET for this
+            goal: the transparent in-forge push remains blocked, now on
+            ATTENDED vault recovery (deep root-key skew) + windows-260717-2,
+            NOT on any push-chain code (all of which — git-less origin,
+            mint fail-loud, order-382 chown — are confirmed working). The
+            goal chain is code-complete; the residual is vault-reliability,
+            which is exactly the EXPERTS/zeroclaw precondition. Recommend an
+            attended vault re-init (storage-preserving) before the next
+            rerun. Evidence: vault-unseal-secret-regenerated-on-reensure-2026-07-17.md.
 
     - packet_id: git-mirror-container-created-without-relay-credential
       provisional_id: windows-260716-2

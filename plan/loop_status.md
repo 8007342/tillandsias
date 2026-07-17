@@ -18,10 +18,22 @@ LastExecutionTime: 2026-07-17T18:15:00Z
   litmus-mock-podman-keychain-pollution-2026-07-17.md). Macuahuitl's live
   skew HEALED with real secrets: fresh hvs. token minted+verified, real KV
   github token readable again (23 remote projects listed).
-- **WINDOWS**: rebuild guest from linux-next ≥ 072f6efb and rerun the
-  BigPickle goal lane — self-heal or loud attended verdict with ground
-  truth on the deeper approle/KV skew. See the transparent-push doc's
-  2026-07-17 linux addendum.
+- **WINDOWS — DONE, ground truth captured (windows-bullo-fable5-20260717)**:
+  rebuilt guest to 072f6efb (v0.3.260716.7) and reran the BigPickle goal
+  lane. The 383 seam WORKED on the deep-skew path: it detected the stale
+  root token, ran generate-root from the stored share, the share FAILED
+  auth (`cipher: message authentication failed`), and it emitted the
+  designed **OPERATOR ACTION REQUIRED** verdict, storage untouched — the
+  approle/KV-wrinkle escalation, live-verified. verified-by event on order
+  383. Deploying via binary hot-swap ALSO exposed a separate P1
+  (windows-260717-2): re-ensure regenerated a non-matching vault unseal
+  secret, crash-looping the barrier; recovered live from the intact
+  fallback share (vault healthy, wire Reachable). NET: the transparent
+  in-forge push is now blocked on ATTENDED vault recovery (deep root-key
+  skew) + windows-260717-2, NOT on any push-chain code (all confirmed
+  working). Recommend a storage-preserving attended vault re-init before
+  the next rerun. Also filed the operator's CODE EXPERT temporal/convergence
+  directive (order 400 extended) + Hy3/Zen-fleet + zeroclaw roadmap.
 - **Order 386 COMPLETED (32ce69ae)**: teardown straggler probe adopted +
   hardened, wired post-reset into the Linux smoke lane (fails loud);
   positive + negative live evidence on macuahuitl.
