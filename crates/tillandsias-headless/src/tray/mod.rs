@@ -1833,7 +1833,7 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
 /// OS reclaims it. Both terminal-launch sites (`launch_in_terminal` here and
 /// `launch_forge_agent` in `main.rs`) route through this helper, defined
 /// ungated in `main.rs` so the non-`tray`-feature build still links.
-pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> {
+pub(crate) fn spawn_terminal_and_reap(child: Command) -> Result<(), String> {
     crate::spawn_terminal_and_reap(child)
 }
 
