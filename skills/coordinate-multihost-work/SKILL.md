@@ -33,8 +33,11 @@ in `plan/loop_status.md` and stop.
    - `methodology/convergence.yaml`
    - `plan.yaml`
    - `plan/index.yaml`
-   - `plan/loop_status.md`
-   - active `plan/issues/*work-queue*`
+    - `plan/loop_status.md`
+    -   **Read the `## Direction` section of `plan/loop_status.md`** (operator-owned
+        thematic direction) and reduce cross-host coordination priorities against
+        it; cite the direction in coordination ledger entries (order 381).
+    - active `plan/issues/*work-queue*`
    - active `plan/issues/*blocker*`
    - active `plan/issues/multi-host-integration-loop-*.md`
 

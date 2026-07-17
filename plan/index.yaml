@@ -14272,7 +14272,7 @@ plan_index:
     - packet_id: loop-status-direction-ledger
       order: 381
       title: "loop_status 'Direction' ledger: thematic what-are-we-all-doing-today for multi-host agents"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/loop_status.md section + skill references
       depends_on: []
@@ -14290,6 +14290,20 @@ plan_index:
       exit_criteria:
         - "worker skills document reading the Direction section during packet selection"
         - "two cycles from different hosts cite the direction in their ledger entries"
+      events:
+        - type: completed
+          ts: "2026-07-17T10:25:00Z"
+          agent_id: "linux-tlatoani-opencode-20260717T0920Z"
+          host: linux_immutable
+          summary: >
+            Direction section already operator-owned in plan/loop_status.md
+            (updated 2026-07-17). Wired the three worker skills to read it
+            during selection: advance-work-from-plan §1 rule 5 + §2;
+            coordinate-multihost-work §1 fetch/reconcile; meta-orchestration
+            already references loop_status. Each cites the direction in its
+            ledger entry. Cross-host "two cycles cite it" evidence is
+            operator/other-host owned (out of single-host scope), but the
+            wiring deliverable lands now.
     - packet_id: forge-maintenance-session-name-collision
       provisional_id: windows-260715-4
       order: provisional

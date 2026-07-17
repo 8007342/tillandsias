@@ -26,12 +26,16 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | macOS           | `macos`       | `osx-next`       |
     | Windows         | `windows`     | `windows-next`   |
 4.  **Create Agent ID**: Compose a unique ID: `<platform>-<workstation>-<backend>-<utc-timestamp>`.
-5.  **Read Authoritative Ledgers**: Read:
-    -   `methodology.yaml`
-    -   `methodology/distributed-work.yaml`
-    -   `plan.yaml`
-    -   `plan/index.yaml`
-    -   `plan/loop_status.md`
+ 5.  **Read Authoritative Ledgers**: Read:
+     -   `methodology.yaml`
+     -   `methodology/distributed-work.yaml`
+     -   `plan.yaml`
+     -   `plan/index.yaml`
+     -   `plan/loop_status.md`
+     -   **Read the `## Direction` section of `plan/loop_status.md`** (operator-owned
+         thematic direction). Reduce your packet selection against that theme
+         rather than inventing new direction; cite the direction in your work-queue
+         ledger entry (order 381).
 
 ---
 
