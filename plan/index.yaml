@@ -4516,7 +4516,7 @@ plan_index:
     - packet_id: litmus-command-portability-dsl-implementation
       order: 225
       title: "Implement portable building-block primitives for litmus command: fields"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/litmus-command-portability-dsl-implementation-2026-07-06.md
       depends_on: [litmus-command-portability-dsl-research]
@@ -4570,6 +4570,23 @@ plan_index:
             registered in litmus-bindings.yaml. Full pre-build instant
             suite: 141/141 PASS, 0 FAIL. Authoring guide at
             docs/cheatsheets/litmus-stdlib-authoring.md verified present.
+        - type: verified
+          ts: "2026-07-17T00:00:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T0000Z"
+          host: linux_mutable
+          summary: >
+            Closure verified by /meta-orchestration cycle. Ran
+            scripts/run-litmus-test.sh --size instant --phase pre-build
+            --compact on this Linux host: 144 PASS, 0 FAIL, 100% spec
+            coverage (277 total, 133 skipped). Confirmed scripts/litmus-stdlib.sh
+            (20 mf_* primitive references) is sourced per step via an exported
+            LITMUS_STDLIB in the runner (run-litmus-test.sh:75-76,824);
+            litmus-stdlib-portability-shape registered in openspec/litmus-bindings.yaml:714;
+            docs/cheatsheets/litmus-stdlib-authoring.md present; the 4 migrated
+            shape files contain no hand-escape/workaround comments
+            (grep for escape|workaround across the migrated files returned
+            empty). macOS green was recorded by the prior progress event
+            (141/141). All 5 exit criteria satisfied; marking completed.
       exit_criteria:
         - "scripts/run-litmus-test.sh --phase pre-build --size instant is green on both a Linux host and a macOS host after the migration batch lands"
         - "the 4 migrated files no longer contain a hand-derived backslash-escape workaround comment and produce byte-identical PASS/FAIL verdicts to their pre-conversion form"
