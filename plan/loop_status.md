@@ -31,12 +31,28 @@ LastExecutionTime: 2026-07-17T18:15:00Z
   (exec branch no longer fabricates a vault handover — the order-383
   keychain-pollution poison source; isolation reduction ask stays open in
   litmus-mock-podman-keychain-pollution-2026-07-17.md).
-- **Ledger hygiene**: dropped the duplicate `order:` key the windows lane
-  left on windows-inference-tier-verification (order 402 + trailing
-  `order: provisional`), which was failing
-  litmus:plan-index-order-uniqueness — instant pre-build suite back to
-  green (145/145). Known class: sibling pushes without the ledger-YAML
-  gate (order 263).
+- **Ledger hygiene**: a windows-next push (a5da4899) had GLUED the zeroclaw
+  roadmap packet into the windows-inference-tier-verification (order 402)
+  mapping with no `- packet_id:` separator (duplicate order/title/status
+  keys), failing litmus:plan-index-order-uniqueness — the whole instant
+  pre-build suite was red (144/145). Split zeroclaw into its own list item
+  (order 403). Known class: order 263 (ledger-YAML gate before sibling
+  push) — live datapoint.
+- **METHODOLOGY (operator directive 2026-07-17, Hy3 size-aversion)**: new
+  `large_packet_is_eligible_work` rule in distributed-work.yaml — a large
+  packet is eligible work; size is never a skip reason; three valid
+  outcomes (partial slice / split / audit-dispose); rank by value+relevance
+  not smallness; near-obsolete = audit signal not busywork. Wired into
+  select_shaped_work + /advance-work-from-plan, pinned by
+  litmus:large-packet-eligibility-doctrine-shape (5/5). Commit 579acf5b.
+- **CODEX non-interactive forge lane (operator directive 2026-07-17)**:
+  landed `tillandsias --codex <proj> --prompt` → `codex exec` headless with
+  forge-gated bypass (3c2ae51e). Verified the Codex OAuth token is already
+  persisted in vault (secret/data/codex/oauth, 2026-07-15) + restored by
+  the entrypoint; bypass posture is order 171 (already done). Remaining
+  work SPLIT (per the new rule) into ready packets: order 404 (codex e2e
+  smoke launcher + rate-limit/MO-SMOKE verdict parity) and order 405
+  (live codex-vs-opencode divergence comparison, multi_cycle).
 
 ## Direction — what are we all doing today
 
