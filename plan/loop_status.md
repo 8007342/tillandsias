@@ -1,6 +1,45 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-17T18:15:00Z
+LastExecutionTime: 2026-07-17T19:25:00Z
+
+## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
+
+Releases are sequential, stability-gated bundles (versioning.yaml Minor;
+methodology `version_aware_release_planning`). Current shipped line is v0.3
+(v0.3.260716.7). The **active release-in-progress is v0.4**: make the
+forge-local EXPERTS / local-inference architecture work END-TO-END on the fat
+GPU host (RTX A5000, tier:gpu-cuda). Cross-platform + modest-hardware tiering
+is gated to **v0.5** (orders 397 tiered-backends, 401 macOS tier, 402 Windows
+tier) so v0.4 can ship the capable-host architecture without waiting on the
+portability half.
+
+- **v0.4 open packets** (EXPERTS core, all `desired_release: v0.4`): 391
+  (milestone), 392 (inference startup cleanup), 393 (construction research,
+  forge-eligible), 394 (plan/methodology expert rung1, forge), 395 (opencode
+  affordance, forge), 406 (inference cuda bring-up on the fat host — thinnest
+  rung, KICKSTART), + 396/398/399/400 (default-active pending backfill).
+- **v0.5 open packets** (cross-platform / modest-hardware): 397, 401, 402.
+- **Backfill**: order 407 (standing) tags the rest of the open backlog; this
+  pointer is refreshed each coordinator cycle.
+- **Fat-host ground truth 2026-07-17**: RTX A5000 24GB, driver 595.80,
+  `scripts/inference-tier-probe.sh` → `tier:gpu-cuda`. `tillandsias-inference`
+  currently Exited(137) on a stale pre-392 image (v0.3.260716.4) — order 406
+  brings it up with GPU passthrough.
+- **BUILD+LAUNCH 2026-07-17 (operator directive)**: built + installed
+  `v0.3.260717.2` (musl-static, tray) and launched the tray (`--tray`, PID
+  live). Stack rebuilt fresh at the new version: vault healthy (real secrets
+  PRESERVED — Shamir share recovered from keychain, data volume kept), proxy
+  up, git-mirror loaded 23 cloud projects (transparent vault-token push path
+  works). NON-destructive — no podman reset.
+- **GPU inference gate (operator/sudo action needed)**: order 392's GPU
+  DELIVERY CODE IS ALREADY IMPLEMENTED (build_inference_run_args gates
+  `--device nvidia.com/gpu=all` on tier:gpu-cuda + nvidia_cdi_available; 392
+  still status:ready → needs verification/reconciliation, not fresh impl). The
+  ONLY thing between this fat host and GPU-accelerated local models is HOST
+  CDI SETUP: `nvidia-container-toolkit` is NOT installed and
+  `/etc/cdi/nvidia.yaml` is absent. Remedy (sudo): install the toolkit +
+  `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`. Until then
+  local models serve CPU-ONLY (loud warning). Tracked in order 406.
 
 ## Cycle 2026-07-17T17:47Z→(open) (linux_mutable macuahuitl — order 383 vault heal; WINDOWS UNBLOCKED)
 

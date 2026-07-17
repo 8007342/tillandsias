@@ -498,6 +498,7 @@ specs:
   - litmus:plan-index-order-uniqueness
   - litmus:idiomatic-layers-doctrine-shape
   - litmus:large-packet-eligibility-doctrine-shape
+  - litmus:version-release-and-forge-selfservice-shape
   coverage_ratio: 100
   last_verified: '2026-07-17'
 - spec_id: meta-orchestration
