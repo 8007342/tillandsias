@@ -1,5 +1,6 @@
 #!/bin/bash
 # @trace spec:spec-traceability
+# freshness: auditor=linux-tlatoani-opencode-20260717T0920Z date=2026-07-17 verdict=updated scope=removed dead execute_test_command() tombstone; audit live executor path after 32ee1786 gate-wedge fix
 #
 # Tillandsias Litmus Test Execution Runner
 #

@@ -3,6 +3,7 @@
  * Handles git smart HTTP for info/refs endpoints.
  * Usage: tls-test-server <docroot> <cert> <key> <port>
  * Prints READY to stdout when listening; serves until SIGTERM/SIGINT. */
+// freshness: auditor=linux-tlatoani-opencode-20260717T0920Z date=2026-07-17 verdict=updated scope=broken-by-construction SIGTERM handler (signal()/SA_RESTART) re-audited after gate-wedge fix 32ee1786
 #include <arpa/inet.h>
 #include <signal.h>
 #include <stdio.h>

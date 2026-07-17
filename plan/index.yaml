@@ -13842,7 +13842,7 @@ plan_index:
     - packet_id: freshness-inventory-and-stamps
       order: 370
       title: "FRESHNESS rung 2: component inventory + first freshness stamps + coverage report"
-      status: ready
+      status: done
       kind: implementation
       deliverable: scripts/freshness-inventory.sh + first stamped components
       depends_on: []
@@ -13861,11 +13861,27 @@ plan_index:
         - "inventory script emits the report with a pinned grammar and exit-code contract"
         - "litmus pins the report grammar (instant, pre-build)"
         - "at least the 2026-07-15 incident components carry first stamps"
+      events:
+        - type: completed
+          ts: "2026-07-17T09:40:00Z"
+          agent_id: "linux-tlatoani-opencode-20260717T0920Z"
+          host: linux_immutable
+          summary: >
+            Implemented scripts/freshness-inventory.sh: inventories scripts/
+            (sh+c), images/default, cheatsheets, litmus tests, methodology docs;
+            emits the pinned grammar (freshness-inventory / freshness-coverage /
+            freshness-stamp / freshness-unstamped / freshness-stale) with
+            exit-code 0 (report-only contract). Added litmus:freshness-
+            inventory-shape (instant/pre-build) bound to spec-traceability;
+            registered in litmus-bindings.yaml. Stamped the three 2026-07-15
+            incident components (run-litmus-test.sh, tls-test-server.c,
+            litmus-environment-isolation.yaml). Verified: litmus PASS (6/6 in
+            spec-traceability instant run).
 
     - packet_id: freshness-ci-reflag
       order: 371
       title: "FRESHNESS rung 3: CI RE-FRESH flagging (advisory first, per migration ladder)"
-      status: ready
+      status: done
       kind: implementation
       deliverable: scripts/local-ci.sh advisory phase + threshold config
       depends_on: [freshness-inventory-and-stamps]
@@ -13880,11 +13896,23 @@ plan_index:
       exit_criteria:
         - "ci output names the top-N stalest components with ages"
         - "advisory only until The Tlatoani approves gating (bar_raise_governance)"
+      events:
+        - type: completed
+          ts: "2026-07-17T09:55:00Z"
+          agent_id: "linux-tlatoani-opencode-20260717T0920Z"
+          host: linux_immutable
+          summary: >
+            Added CHECK 0 (FRESHNESS advisory flagging) to scripts/local-ci.sh:
+            runs freshness-inventory.sh, prints coverage % and the top-5
+            stalest components with ages, and NEVER fails the suite (advisory
+            per migration_discipline; gating requires Tlatoani approval via
+            bar_raise_governance). Verified the section parses + lists stale
+            components (bash -n clean; inline simulation confirmed output).
 
     - packet_id: freshness-skill-audit-class
       order: 372
       title: "FRESHNESS rung 4: standing freshness-audit work class in the recurring skills"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: skills/advance-work-from-plan + skills/meta-orchestration sections
       depends_on: [freshness-inventory-and-stamps]
@@ -13907,6 +13935,18 @@ plan_index:
           agent_id: "linux-tlatoani-claude-20260715T2107Z"
           host: linux
           summary: "Operator directive: never-ending component-freshness loop; rungs shaped from the 2026-07-15 dead-code/stale-allowlist incidents."
+        - type: completed
+          ts: "2026-07-17T10:05:00Z"
+          agent_id: "linux-tlatoani-opencode-20260717T0920Z"
+          host: linux_immutable
+          summary: >
+            Both skills (skills/advance-work-from-plan §2 rule 6; skills/
+            meta-orchestration Reduction Engine) now document the standing
+            freshness-audit class with the three dispositions + discard-over-
+            repair bias. Live evidence: audited scripts/check-cheatsheet-
+            staleness.sh through the class — ran it, confirmed it still
+            surfaces MISSING_DATE + age for all cheatsheets, disposition
+            REFRESHED, stamped with # freshness: record.
 
     - packet_id: web-share-release-milestone
       order: 373
