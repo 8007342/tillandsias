@@ -65,3 +65,17 @@ AppRole-based runtime flows unaffected. Blocks: nothing on clean hosts
 (macOS bootstrapped v0.3.260716.5 cleanly today, 11 policies).
 Recovery on THIS host: implement the generate-root seam below or
 operator-attended re-init. Promoted: order 383.
+
+## 2026-07-17 — order 383 landed; macuahuitl healed (real secrets intact)
+
+The generate-root seam shipped in `072f6efb` and healed this host's live
+skew end-to-end: stale token detected (403 lookup-self) → generate-root
+from the stored share → post-heal verification (lookup-self + approle +
+KV all reachable) → fresh `hvs.` token persisted → real KV github token
+readable again (23 remote projects listed). Root cause was NOT a stale
+token from bootstrap crash-ordering but keychain pollution by a
+mocked-podman litmus (see
+plan/issues/litmus-mock-podman-keychain-pollution-2026-07-17.md); a
+handover persist guard now blocks that class. Reduction asks 1
+(crash-ordered secret rotation) and 3 (kill-window litmus) remain open;
+ask 2 is covered by the seam's self-diagnosis + loud attended verdicts.

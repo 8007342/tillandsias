@@ -14591,7 +14591,7 @@ plan_index:
     - packet_id: vault-root-token-rederivation
       order: 383
       title: "Vault root-token re-derivation from the Shamir share (generate-root) — heal token/storage skew without wiping real secrets"
-      status: ready
+      status: completed
       kind: implementation
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
       depends_on: []
@@ -14617,6 +14617,39 @@ plan_index:
         - "macuahuitl's live skew healed via the new seam (real-secret evidence)"
         - "AFTER generate-root heal, the fresh root token can READ approle roles + the operator github KV (not just policy list) — see the 2026-07-17 Windows wrinkle"
       events:
+        - type: completed
+          ts: "2026-07-17T18:08:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
+          host: linux
+          summary: >
+            Implemented + live-verified with REAL secrets (072f6efb). New
+            detect-and-heal seam validated_root_token fronts both vault
+            bring-up paths: 403 on token lookup-self triggers generate-root
+            from the stored Shamir share (HTTP API attempt/update + XOR-OTP
+            decode), then POST-HEAL VERIFICATION requires lookup-self AND
+            approle list AND KV read to be reachable before persisting —
+            the 2026-07-17 Windows wrinkle escalates to a loud OPERATOR
+            ACTION REQUIRED verdict, storage always untouched (never-wipes
+            source pin). ROOT CAUSE of the macuahuitl skew found: a
+            mocked-podman litmus fed 'mock-exec-output' through the
+            first-boot handover and overwrote the operator's real keychain
+            credentials; a handover persist guard now rejects any pair that
+            is not hvs.-token + 32-byte-b64 share (follow-up isolation ask
+            filed: litmus-mock-podman-keychain-pollution-2026-07-17.md).
+            MACUAHUITL LIVE SKEW HEALED via the new seam: mock token
+            rejected → share (restored from the live container's mounted
+            unseal secret, attended) → generate-root → probes Reachable →
+            hvs. token persisted → approle mint + real KV github-token read
+            OK (--list-cloud-projects fetched 23 projects). All four exit
+            criteria met. WINDOWS UNBLOCK: rerun the BigPickle goal lane on
+            a build with 072f6efb; the seam either self-heals or emits the
+            attended-reinit verdict with ground truth on the deeper skew.
+        - type: claim
+          ts: "2026-07-17T17:52:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
+          host: linux
+          lease_id: "vault-root-token-rederivation-20260717"
+          expires_at: "2026-07-17T21:52:00Z"
         - type: progress
           ts: "2026-07-17T11:30:00Z"
           agent_id: "windows-bullo-fable5-20260717T1030Z"

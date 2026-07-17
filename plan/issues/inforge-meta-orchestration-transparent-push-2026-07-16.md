@@ -171,3 +171,16 @@ vault wall and its bootstrap re-skews the token — the durable fix is
 moved from "the push channel is broken" to "one known vault-reliability
 bug stands between us and a clean transparent push" — which is exactly
 the reliability bar the EXPERTS/zeroclaw sequencing depends on too.
+
+## 2026-07-17 (linux) — order 383 LANDED: Windows lane unblocked for rerun
+
+`072f6efb` on linux-next ships the generate-root detect-and-heal seam
+(validated_root_token) with the approle/KV post-heal verification this
+doc's wrinkle demanded, plus a handover persist guard against the
+mock-credential pollution class. Live-verified on macuahuitl with real
+secrets (self-heal + real KV github token readable again). Next Windows
+step: rebuild the guest from linux-next ≥ 072f6efb and rerun the
+BigPickle goal lane — the bootstrap will either self-heal the Windows
+vault or emit a loud OPERATOR ACTION REQUIRED verdict giving ground
+truth on whether the deeper approle/KV skew is real storage damage or
+was an artifact of the manual CLI heal session.

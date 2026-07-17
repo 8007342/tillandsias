@@ -1,6 +1,27 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-17T10:35:00Z
+LastExecutionTime: 2026-07-17T18:15:00Z
+
+## Cycle 2026-07-17T17:47Z→(open) (linux_mutable macuahuitl — order 383 vault heal; WINDOWS UNBLOCKED)
+
+- **Host**: linux_mutable (macuahuitl), `linux-next`, agent
+  `linux-macuahuitl-fable5-20260717T1747Z`. Operator-directed priority:
+  unblock the Windows host (blocked by order 383).
+- **Coordination**: fast-forwarded `linux-next` to `origin/windows-next`
+  (90f371f5 — order 383 extended criteria + agent-fleet roadmap). osx-next
+  already merged; main behind.
+- **Order 383 COMPLETED (072f6efb)**: generate-root detect-and-heal seam
+  (validated_root_token) on both vault bring-up paths, approle/KV post-heal
+  verification (the 2026-07-17 Windows wrinkle), handover persist guard.
+  ROOT CAUSE found: mocked-podman litmus wrote `mock-exec-output` over the
+  operator's REAL keychain credentials (isolation ask filed:
+  litmus-mock-podman-keychain-pollution-2026-07-17.md). Macuahuitl's live
+  skew HEALED with real secrets: fresh hvs. token minted+verified, real KV
+  github token readable again (23 remote projects listed).
+- **WINDOWS**: rebuild guest from linux-next ≥ 072f6efb and rerun the
+  BigPickle goal lane — self-heal or loud attended verdict with ground
+  truth on the deeper approle/KV skew. See the transparent-push doc's
+  2026-07-17 linux addendum.
 
 ## Direction — what are we all doing today
 
