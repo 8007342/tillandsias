@@ -14961,6 +14961,7 @@ plan_index:
 
     - packet_id: forge-local-experts-milestone
       order: 391
+      desired_release: v0.4
       title: "MILESTONE: forge-local EXPERTS — ephemeral tiny models over ./plan, ./methodology, and code; agents query instead of browse"
       status: ready
       kind: milestone
@@ -14993,6 +14994,7 @@ plan_index:
 
     - packet_id: inference-startup-cleanup
       order: 392
+      desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Inference container startup cleanup — deterministic readiness, tier detection, preload policy"
       status: ready
@@ -15023,6 +15025,7 @@ plan_index:
 
     - packet_id: experts-construction-research
       order: 393
+      desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Research: expert-construction technique — fine-tune vs LoRA vs RAG-index vs Modelfile context, per tier, under a launch-time budget"
       status: ready
@@ -15031,7 +15034,7 @@ plan_index:
       deliverable: plan/issues/experts-construction-decision-2026-07-17.md
       depends_on: []
       pickup_role: linux
-      capability_tags: [research, inference, ollama, experts, gpu]
+      capability_tags: [research, inference, ollama, experts, gpu, forge]
       estimated_hours: 8
       outcome: >
         The operator says 'trained'; the packet keeps the CONTRACT fixed
@@ -15071,6 +15074,7 @@ plan_index:
 
     - packet_id: plan-methodology-experts-rung1
       order: 394
+      desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "PLAN EXPERT + METHODOLOGY EXPERT rung 1 — ephemeral build on forge launch from the mounted checkout"
       status: ready
@@ -15098,6 +15102,7 @@ plan_index:
 
     - packet_id: experts-opencode-affordance
       order: 395
+      desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "OpenCode affordance — experts transparently queryable by forge agents (config provider entries + instructions; MCP only if needed)"
       status: ready
@@ -15146,6 +15151,7 @@ plan_index:
 
     - packet_id: experts-tier-backends
       order: 397
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Tiered inference backends — cuda/rocm ollama, cpu ollama, llama.cpp (apple silicon) behind one transparent seam"
       status: ready
@@ -15261,6 +15267,7 @@ plan_index:
 
     - packet_id: macos-inference-tier-verification
       order: 401
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "macOS lane: aarch64 guest inference tier — llama.cpp vs cpu-ollama decision + tier probe verification on the VZ guest"
       status: ready
@@ -15289,6 +15296,7 @@ plan_index:
 
     - packet_id: windows-inference-tier-verification
       order: 402
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Windows lane: WSL2 guest inference tier — nvidia-in-WSL2 GPU probe + cpu fallback verification"
       status: ready
@@ -15451,3 +15459,86 @@ plan_index:
             comparison half (needs a real forge launch + provider budget),
             gated on the order-404 launcher. Divergence between codex and
             opencode is the valuable feedback the operator asked to monitor.
+
+    - packet_id: inference-cuda-bringup-fat-host
+      order: 406
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      title: "Thinnest rung: bring the inference container UP on the fat cuda host with GPU passthrough + one model warm"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: inference container running with nvidia CDI passthrough + ollama serving + a warm default model on the RTX A5000 host
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, ollama, gpu, cuda, podman, forge]
+      estimated_hours: 4
+      outcome: >
+        The EXPERTS milestone's thinnest end-to-end demonstrable rung on THIS
+        capable host (operator: "this fat host should allow some quick
+        progress to make the local model architecture work end to end, then
+        we can try to make it run in the modest hardware later"). Ground
+        truth 2026-07-17: RTX A5000 (24GB), driver 595.80,
+        scripts/inference-tier-probe.sh already emits `tier:gpu-cuda`, BUT
+        `tillandsias-inference` is Exited(137) on a stale pre-392 image
+        (v0.3.260716.4). This rung: relaunch the inference container with
+        nvidia CDI GPU passthrough (`--device nvidia.com/gpu=all` or the
+        tier-probe-gated equivalent), confirm ollama inside sees the GPU
+        (nvidia-smi shows the ollama process), and warm one default model —
+        the concrete first slice of order 392's GPU-passthrough + readiness
+        work, carved out so a concurrent agent can drive it immediately. Once
+        this is green the fat host can build/serve the PLAN + METHODOLOGY
+        experts (394) end-to-end. Modest-hardware tiers stay v0.5 (order 397).
+      exit_criteria:
+        - "tillandsias-inference is Up (healthy) launched with GPU passthrough on this host; nvidia-smi shows the ollama/inference process holding VRAM"
+        - "`ollama list` inside the container works and at least one default model is warm/pullable via the proxy"
+        - "the launch path (podman run args) gates GPU passthrough on the tier probe (tier:gpu-cuda) so a cpu host is unaffected — evidence recorded; feeds order 392"
+      events:
+        - type: filed
+          ts: "2026-07-17T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed to KICKSTART local inference on the fat host (operator
+            directive 2026-07-17). Thinnest rung of the EXPERTS milestone;
+            unblocks 393/394/395 (all forge-eligible now). Concrete slice of
+            order 392 (inference-startup-cleanup) so concurrent in-forge/host
+            agents have an immediately drivable v0.4 target. multi_cycle: the
+            container may need image-refresh (pre-392 image is crash-looping).
+
+    - packet_id: desired-release-backfill
+      order: 407
+      desired_release: v0.4
+      title: "Standing: backfill desired_release across open packets so every open packet carries a ship-bucket"
+      status: ready
+      kind: housekeeping
+      multi_cycle: true
+      deliverable: plan/index.yaml (desired_release on open packets) + plan/loop_status.md active-release pointer kept current
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [coordination, plan, housekeeping]
+      estimated_hours: 3
+      outcome: >
+        version_aware_release_planning (Tlatoāni 2026-07-17) says every OPEN
+        packet SHOULD carry `desired_release: vX.Y`, defaulting to the active
+        release until curated. This standing coordinator task backfills the
+        field across the open backlog in small batches (a coordinator duty,
+        not a blocker), assigning the active release (v0.4) unless a packet is
+        cross-platform/modest-hardware/later-scope (then v0.5+), and keeps the
+        plan/loop_status.md active-release pointer current. Cross-platform
+        deps are the gating tool: a dependent gets a release >= its upstream.
+        Reduce in batches — do NOT try to tag all 260+ packets in one cycle.
+      exit_criteria:
+        - "every OPEN packet (ready/pending/in_progress/blocked) carries a desired_release, batched across cycles with each batch committed"
+        - "plan/loop_status.md names the ACTIVE release-in-progress and its remaining open-packet count each coordinator cycle"
+        - "cross-platform/cross-host deps are release-ordered (dependent's desired_release >= upstream's); any exception is noted"
+      events:
+        - type: filed
+          ts: "2026-07-17T19:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed alongside the version_aware_release_planning methodology so
+            the backfill is tracked work, not an implicit expectation. Active
+            release seeded to v0.4 (EXPERTS fat-host core); cross-platform +
+            modest-hardware tiering seeded to v0.5.
