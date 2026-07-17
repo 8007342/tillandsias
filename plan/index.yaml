@@ -14602,7 +14602,7 @@ plan_index:
     - packet_id: tray-terminal-spawn-child-reaping
       order: 385
       title: "Reap tray-spawned terminal children so Ptyxis GApplication clients stop accumulating as [ptyxis] <defunct> zombies"
-      status: ready
+      status: claimed
       kind: optimization
       deliverable: crates/tillandsias-headless/src/tray/mod.rs + crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -14633,6 +14633,12 @@ plan_index:
           agent_id: "linux-tlatoani-claude-20260716T0725Z"
           host: linux
           summary: "Operator directive 2026-07-16 (ptyxis stragglers). Root-caused to unreaped terminal-launcher Child handles at two spawn sites; smallest verifiable slice is the shared reaping helper + behavioral test."
+        - type: claim
+          ts: "2026-07-17T09:20:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T0848Z"
+          host: linux
+          lease_id: "tray-terminal-spawn-child-reaping-20260717"
+          expires_at: "2026-07-17T13:20:00Z"
 
     - packet_id: container-teardown-straggler-probe
       order: 386
