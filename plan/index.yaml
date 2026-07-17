@@ -14602,7 +14602,7 @@ plan_index:
     - packet_id: tray-terminal-spawn-child-reaping
       order: 385
       title: "Reap tray-spawned terminal children so Ptyxis GApplication clients stop accumulating as [ptyxis] <defunct> zombies"
-      status: claimed
+      status: completed
       kind: optimization
       deliverable: crates/tillandsias-headless/src/tray/mod.rs + crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -14639,6 +14639,20 @@ plan_index:
           host: linux
           lease_id: "tray-terminal-spawn-child-reaping-20260717"
           expires_at: "2026-07-17T13:20:00Z"
+        - type: completed
+          ts: "2026-07-17T09:45:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T0848Z"
+          host: linux
+          summary: >
+            Added a shared ungated spawn_terminal_and_reap helper (main.rs) that
+            moves the terminal-launcher Child into a detached wait() thread so
+            fast-exiting Ptyxis GApplication clients are reaped instead of
+            leaking [ptyxis] <defunct> zombies. Both spawn sites now route
+            through it: launch_in_terminal (tray/mod.rs) and launch_forge_agent
+            (main.rs). Behavioral regression test
+            spawn_terminal_and_reap_does_not_leave_zombies (8 /bin/true spawns,
+            asserts zero Z-state children of the test process) passes with
+            --features tray. Verified ./build.sh --check green. Closes order 385.
 
     - packet_id: container-teardown-straggler-probe
       order: 386

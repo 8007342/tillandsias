@@ -9059,23 +9059,18 @@ pub(crate) fn launch_forge_agent(
     // Window title hint for terminals that honor it via env (e.g. foot).
     child.env("TILLANDSIAS_WINDOW_TITLE", mode.window_title(project_name));
 
-    match child.spawn() {
-        Ok(_) => {
-            // Always log spawn success so silent menu clicks are
-            // distinguishable from silent failures. Single line, not gated on
-            // debug — at this level the tray has emitted one click-receipt
-            // line and one spawn-receipt line, no more.
-            // @trace spec:tray-ux
-            eprintln!(
-                "[tillandsias] launch_forge_agent: spawned {} for project '{}' via {}",
-                mode.slug(),
-                project_name,
-                executable
-            );
-            Ok(())
-        }
-        Err(e) => Err(format!("failed to spawn host terminal '{executable}': {e}")),
-    }
+    // Order 385: spawn on a detached thread that waits() so the fast-exiting
+    // Ptyxis GApplication client is reaped instead of leaking a <defunct>
+    // zombie under the tray process. Log spawn intent up-front (single line,
+    // not gated on debug) so silent menu clicks stay distinguishable from
+    // silent failures. @trace spec:tray-ux
+    eprintln!(
+        "[tillandsias] launch_forge_agent: spawned {} for project '{}' via {}",
+        mode.slug(),
+        project_name,
+        executable
+    );
+    crate::spawn_terminal_and_reap(child)
 }
 
 // Module declarations for Phase 4+
@@ -9083,6 +9078,29 @@ mod metrics_server;
 
 #[cfg(feature = "tray")]
 mod tray;
+
+/// Spawn a terminal-launcher child and reap it on a detached thread.
+///
+/// Order 385: Ptyxis's GApplication client exits in milliseconds after
+/// delegating the window to the resident `--gapplication-service`, but
+/// `std::process::Child` does NOT reap on `Drop` — so a bare `.spawn()`-and-drop
+/// leaks a `<defunct>` zombie parented to the tray process, one per terminal
+/// launch. Move the `Child` into a detached thread that calls `wait()` so the
+/// OS reclaims it. Both terminal-launch sites (`launch_forge_agent` here and
+/// `launch_in_terminal` in `tray/mod.rs`) route through this helper. Defined
+/// ungated (binary root) so the non-`tray`-feature build still links.
+pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> {
+    match child.spawn() {
+        Ok(handle) => {
+            std::thread::spawn(move || {
+                let mut handle = handle;
+                let _ = handle.wait();
+            });
+            Ok(())
+        }
+        Err(e) => Err(format!("failed to spawn terminal launcher: {e}")),
+    }
+}
 
 #[cfg(all(feature = "listen-vsock", unix))]
 mod pty_handler;

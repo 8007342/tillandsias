@@ -1823,6 +1823,20 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
 // Candidate order prefers the modern GNOME/Fedora default (ptyxis) and GNOME
 // Console (kgx) ahead of the legacy emulators so Silverblue hosts get a real
 // window instead of the inline prompt.
+/// Spawn a terminal-launcher child and reap it on a detached thread.
+///
+/// Order 385: Ptyxis's GApplication client exits in milliseconds after
+/// delegating the window to the resident `--gapplication-service`, but
+/// `std::process::Child` does NOT reap on `Drop` — so a bare `.spawn()`-and-drop
+/// leaks a `<defunct>` zombie parented to the tray process, one per terminal
+/// launch. Move the `Child` into a detached thread that calls `wait()` so the
+/// OS reclaims it. Both terminal-launch sites (`launch_in_terminal` here and
+/// `launch_forge_agent` in `main.rs`) route through this helper, defined
+/// ungated in `main.rs` so the non-`tray`-feature build still links.
+pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> {
+    crate::spawn_terminal_and_reap(child)
+}
+
 fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<(), String> {
     for candidate in ["ptyxis", "gnome-terminal", "kgx", "konsole", "xterm"] {
         if terminal_present(candidate) {
@@ -1859,10 +1873,7 @@ fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<
                 }
                 _ => {}
             }
-            child
-                .spawn()
-                .map_err(|e| format!("failed to launch {candidate}: {e}"))?;
-            return Ok(());
+            return spawn_terminal_and_reap(child);
         }
     }
 
@@ -3924,6 +3935,67 @@ mod tests {
         assert!(
             sanitized.starts_with("Error: vault issue_approle_token failed"),
             "must preserve the informative first line: {sanitized}"
+        );
+    }
+
+    /// Order 385: a fast-exiting terminal-launcher child (the Ptyxis
+    /// GApplication client pattern) must be reaped — not left as a `<defunct>`
+    /// zombie under the tray process. The helper moves the `Child` into a
+    /// detached `wait()` thread; after the child exits, no Z-state child of
+    /// this process should remain.
+    #[test]
+    fn spawn_terminal_and_reap_does_not_leave_zombies() {
+        use std::process::Command;
+
+        // Find any Z-state (zombie) children currently parented to us.
+        fn has_zombie_children() -> bool {
+            let me = std::process::id();
+            let Ok(entries) = std::fs::read_dir("/proc") else {
+                return false;
+            };
+            for entry in entries.flatten() {
+                let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+                    continue;
+                };
+                if pid == me {
+                    continue;
+                }
+                let stat = std::fs::read_to_string(entry.path().join("stat")).unwrap_or_default();
+                // /proc/<pid>/stat: "pid (comm) state ..." — state is char 3.
+                if let Some(state) = stat.split_whitespace().nth(2) {
+                    if state.starts_with('Z') {
+                        // Confirm it is actually our child via /proc/<pid>/status PPid.
+                        let status = std::fs::read_to_string(entry.path().join("status"))
+                            .unwrap_or_default();
+                        for line in status.lines() {
+                            if line.starts_with("PPid:") {
+                                if line.split_whitespace().nth(1) == Some(&me.to_string()) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        }
+
+        // Precondition: a clean slate.
+        assert!(
+            !has_zombie_children(),
+            "test harness started with stray zombies"
+        );
+
+        for _ in 0..8 {
+            let cmd = Command::new("/bin/true");
+            spawn_terminal_and_reap(cmd).expect("spawn must succeed");
+        }
+
+        // Give the reaping threads time to wait() the exited children.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        assert!(
+            !has_zombie_children(),
+            "fast-exiting children must be reaped, not left as zombies"
         );
     }
 
