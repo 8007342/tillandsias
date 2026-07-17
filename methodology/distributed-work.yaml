@@ -125,9 +125,24 @@ distributed_work:
           - appkit
           - docs
           - testing
+          - forge
         note: >
           Agents filter eligible work by intersecting their declared
-          capabilities with these tags.
+          capabilities with these tags. The `forge` tag marks a packet an
+          IN-FORGE agent may pick up (see [[in_forge_agent_self_service]]).
+      desired_release:
+        kind: recommended
+        format: "vMAJOR.MINOR (sequential release bucket, e.g. v0.4)"
+        note: >
+          The sequential numbered release this packet is DESIRABLE BY — its
+          ship-bucket. Distinct from `release_target` (a milestone-packet
+          grouping): a packet may carry BOTH (belongs to milestone M, desired
+          by v0.4). Releases are stability-gated, not time-based, and strictly
+          sequential (v0.3 → v0.4 → v0.5 …). Cross-platform/cross-host
+          dependencies are gated by assigning the dependent a release >= its
+          upstream's. Full model: [[version_aware_release_planning]]. Unmarked
+          open packets default to the active release-in-progress until the
+          coordinator curates them.
       status:
         kind: required
         enum: [pending, claimed, in_progress, blocked, done, failed]
@@ -587,6 +602,67 @@ distributed_work:
       - "The milestone packet's progress events form the burndown record;
          plan/loop_status.md mirrors it at each coordinator cycle."
 
+  version_aware_release_planning:
+    decided_by: "The Tlatoāni, 2026-07-17"
+    purpose: >
+      Give the plan a SEQUENTIAL, NUMBERED release dimension so cross-platform
+      and cross-milestone work is gated by VERSION instead of guessed by
+      cadence. The app is at v0.3; the next bundle is v0.4. A release is a
+      BUNDLE of features that ships when STABLE — not on a weekly/timed
+      cadence. Releases are strictly sequential (v0.3 → v0.4 → v0.5 …);
+      however long a bundle takes, it is still just "the next release".
+    the_release_number_is_the_minor: >
+      "Release X" == the CalVer MINOR component (versioning.yaml
+      semantic_intent.Minor is already "user-driven feature phases"). Shipping
+      the v0.4 bundle == bumping Minor 0.3 → 0.4 on main at release-cut time;
+      YYMMDD.Build keep moving per build, but the MINOR is the human-facing
+      release bucket. This adds NO new version format — it names the planning
+      use of the Minor that versioning.yaml already defines.
+    every_open_packet_carries_a_desired_release: >
+      Every OPEN work packet SHOULD carry `desired_release: vX.Y` — the release
+      it is desirable by. Orthogonal to `release_target` (milestone grouping):
+      a packet may have BOTH. Unmarked open packets are implicitly the active
+      release-in-progress until the coordinator curates them; the standing
+      backfill task (desired-release-backfill) closes the gap without blocking.
+    cross_platform_gating: >
+      Introduce cross-platform / cross-host dependencies by RELEASE ORDER:
+      give the dependent packet a `desired_release` >= its upstream
+      dependency's. Worked example (EXPERTS milestone, this cycle): the Linux
+      fat-host local-inference core is v0.4; the modest-hardware tiering and
+      the Windows/macOS tier-verification packets are v0.5 — so v0.4 ships the
+      end-to-end architecture on the capable host WITHOUT waiting on the
+      cross-platform half, and the dependency is a visible version gate rather
+      than a hidden depends_on that silently blocks a release.
+    release_readiness: >
+      Release vX.Y is READY TO CUT when every `desired_release: vX.Y` open
+      packet is `done` (or explicitly slipped to a later release with a reason
+      event) AND the release-evidence gate is green — an e2e/smoke PASS record
+      naming the build, the same gate scripts/promote-stable.sh enforces
+      (versioning.yaml stable_channel). SLIPPING is a first-class move: bumping
+      a packet's desired_release from v0.4 to v0.5 with a reason event un-gates
+      the release honestly; leaving an unfinished packet tagged v0.4 to "not
+      block the count" is drift.
+    ownership: >
+      The linux coordinator OWNS desired_release assignment and the
+      active-release pointer (both mirrored in plan/loop_status.md each
+      coordinator cycle, alongside the milestone burndown). Workers treat
+      desired_release as read-only; a worker that finds a packet must slip
+      files a `progress` note proposing the slip and the coordinator ratifies.
+    selection_effect: >
+      Within [[large_packet_is_eligible_work]] value ranking, after the
+      [[release_aware_packets]] milestone preference and before generic
+      freshness: a packet targeting the ACTIVE release outranks one targeting a
+      LATER release (concentrate effort on shipping the current bundle). Never
+      idles a host — no active-release work eligible → fall back to
+      next-release, then backlog.
+    trace: >
+      operator directive 2026-07-17 (numbered sequential releases, version-gated
+      cross-platform deps, "bump the sub-version to v0.4 when stable");
+      versioning.yaml (CalVer Minor = release bucket + stable_channel evidence
+      gate); release_aware_packets (the orthogonal milestone-grouping axis).
+      Pinned by litmus:version-aware-release-planning-shape. Mirrored in
+      /advance-work-from-plan selection + /meta-orchestration coordinator duties.
+
   release_aware_packets:
     decided_by: "The Tlatoāni, 2026-07-14"
     purpose: >
@@ -620,6 +696,57 @@ distributed_work:
       reservations, priority lanes with aging, and blocked-set
       auto-fallback. Do not grow this section ad hoc — reduce through
       that packet.
+
+  in_forge_agent_self_service:
+    decided_by: "The Tlatoāni, 2026-07-17"
+    purpose: >
+      Give agents running INSIDE the forge a durable, verifiable way to
+      unblock THEMSELVES on FUTURE launches. The forge is ephemeral and
+      rebuilt from the freshly checked-out sources on every launch (image
+      assets under images/, config-overlay, cheatsheets, and the harness
+      installers), so an in-forge agent cannot mutate its own running
+      environment for keeps — but it CAN change the SOURCES the next launch
+      rebuilds from. That is the self-service loop.
+    the_loop: >
+      In-forge agent hits a missing capability, tool, fix, or rough edge →
+      files a durable, shaped request in the SHARED CHECKOUT (never a
+      throwaway note in the container) → commits + pushes via the transparent
+      git-mirror → a capable host/coordinator agent implements it into the
+      image/config sources → the NEXT forge launch rebuilds from those sources
+      and the capability is present. "Available on future launches" literally
+      means "landed in the sources the launcher rebuilds the forge from".
+    where_to_file:
+      missing_tool_or_toolchain_or_capability: >
+        A missing dev tool, toolchain, cheatsheet, MCP surface, or forge
+        affordance → a proposal under `plan/forge-improvements/proposals/
+        <YYYY-MM-DD>-<slug>.md`. This is the existing intake the worker skill
+        already scans; the linux/any host that owns the forge image drains it
+        into images/ + config-overlay. State the capability, why the lane
+        needs it, and the falsifiable check that the next launch has it.
+      a_bug_in_the_forge_itself: >
+        A defect in the forge image/entrypoint/harness → a `plan/issues/`
+        packet (the normal reduction-engine intake), `capability_tags: [forge,
+        …]`, `owner_host: linux` or `any` (the image is built host-side).
+        Include the repro and the smallest verifiable closure, same as any
+        finding.
+      work_the_forge_agent_can_do_itself: >
+        If the packet is `forge`-capability-tagged or `owner_host: any` and
+        fits the forge_cycle_budget (one packet/cycle; split if it will not
+        fit the launch envelope), the in-forge agent CLAIMS and implements it
+        directly rather than only proposing — self-service includes doing the
+        work when the lane is capable.
+    discipline:
+      - "Every request is a shaped, VERIFIABLE packet/proposal (work_shaping_protocol + large_packet_is_eligible_work), never prose intent alone — a wish an attentive host might honor is not a constraint."
+      - "File with agent_id + host=forge so the coordinator can see forge-originated demand and prioritize what unblocks the most lanes."
+      - "Push it: an in-forge finding that dies with the container is a lost finding (Non-Negotiable Exit Contract). The transparent git-mirror is the push channel; if it is unavailable, that itself is the highest-priority self-service filing."
+      - "Tag the request's `desired_release` so image/config work is scheduled into a release bundle like everything else (version_aware_release_planning)."
+    trace: >
+      operator directive 2026-07-17 ("make sure ./methodology instructs agents
+      running inside the forge how to file for enhancement and fixes to be
+      available on future launches to unblock themselves"); builds on the
+      existing plan/forge-improvements/proposals intake + the forge
+      ephemeral-rebuild-from-checkout model (forge-hot-cold-split). Mirrored in
+      /advance-work-from-plan (forge selection) + /meta-orchestration.
 
   order_number_assignment:
     decided_by: "The Tlatoāni, 2026-07-14"
@@ -711,10 +838,15 @@ distributed_work:
           matches or is 'any', and matching capability tags exist. Rank the
           survivors by VALUE and RELEVANCE per [[large_packet_is_eligible_work]],
           not by smallness: a large, fresh, release-targeted packet outranks a
-          small, stale one. A packet you cannot finish this cycle is still
-          eligible — claim it and take a partial slice, split it, or
-          audit-dispose it (the three valid outcomes). Do NOT dodge a large
-          relevant packet by reaching for an older, lower-value one.
+          small, stale one. Ranking order: milestone `release_target` first
+          ([[release_aware_packets]]), then ACTIVE-release `desired_release`
+          over later-release ([[version_aware_release_planning]]), then
+          freshness. A packet you cannot finish this cycle is still eligible —
+          claim it and take a partial slice, split it, or audit-dispose it (the
+          three valid outcomes). Do NOT dodge a large relevant packet by
+          reaching for an older, lower-value one. In-forge agents also have the
+          self-service intake [[in_forge_agent_self_service]] for capabilities
+          the lane lacks.
       - step: claim_lease
         description: >
           Write a 'claim' event under the chosen task (upsert), minting a unique lease_id. Commit
