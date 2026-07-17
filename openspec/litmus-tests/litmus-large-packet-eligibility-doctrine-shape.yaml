@@ -1,0 +1,71 @@
+# @trace spec:methodology-accountability
+#
+# Pins the large-packet-eligibility doctrine (decided by The Tlatoāni
+# 2026-07-17 after Hy3's overnight loop scanned ~70 ready packets, judged
+# them all "too large", claimed NONE, and churned old near-obsolete tasks
+# instead). The rule: a large packet is fully eligible work; size is never a
+# skip reason; a cycle that cannot finish a large packet ends in one of three
+# valid outcomes — partial slice, split, or audit-disposition. This litmus
+# falsifies drift in the canonical methodology block and its skill
+# cross-reference so unattended agents keep inheriting the rule instead of
+# silently reverting to size-aversion.
+name: litmus:large-packet-eligibility-doctrine-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin methodology/distributed-work.yaml large_packet_is_eligible_work (the
+  three valid outcomes + relevance-over-size ranking), its wiring into the
+  select_shaped_work worker step, and the grepable cross-reference in
+  skills/advance-work-from-plan.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains methodology/distributed-work.yaml
+  - workspace contains skills/advance-work-from-plan/SKILL.md
+
+critical_path:
+  - step: "canonical block exists with the three valid outcomes"
+    command: "grep -q 'large_packet_is_eligible_work:' methodology/distributed-work.yaml && grep -q 'PARTIAL SLICE' methodology/distributed-work.yaml && grep -q 'SPLIT' methodology/distributed-work.yaml && grep -q 'AUDIT-DISPOSITION' methodology/distributed-work.yaml && echo 'ok: canonical-block'"
+    timeout_ms: 3000
+    expected_behavior: "ok: canonical-block"
+
+  - step: "the block ranks by value/relevance, not smallness, and names the anti-pattern"
+    command: "grep -q 'relevance_over_size:' methodology/distributed-work.yaml && grep -q 'near_obsolete_is_an_audit_signal:' methodology/distributed-work.yaml && echo 'ok: ranking-and-antipattern'"
+    timeout_ms: 3000
+    expected_behavior: "ok: ranking-and-antipattern"
+
+  - step: "the select_shaped_work worker step references the rule"
+    command: "grep -q 'large_packet_is_eligible_work' methodology/distributed-work.yaml && echo 'ok: selection-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: selection-wired"
+
+  - step: "worker skill carries the grepable cross-reference"
+    command: "grep -q 'large_packet_is_eligible_work' skills/advance-work-from-plan/SKILL.md && echo 'ok: worker-skill-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: worker-skill-wired"
+
+  - step: "methodology file still parses as YAML"
+    command: "if command -v cargo >/dev/null 2>&1; then cargo run -q -p tillandsias-policy -- validate-yaml methodology/distributed-work.yaml >/dev/null && echo 'ok: yaml-parses'; else ruby -ryaml -e 'YAML.load_file(%q(methodology/distributed-work.yaml)); puts %q(ok: yaml-parses)'; fi"
+    timeout_ms: 120000
+    expected_behavior: "ok: yaml-parses"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "large-packet-eligibility doctrine pinned (canonical block + three outcomes + ranking + worker-skill wiring + parseable)"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "large-packet-eligibility-doctrine-shape"
+    artifact: "methodology/distributed-work.yaml + advance-work-from-plan SKILL.md cross-ref"
+
+rollback:
+  on_failure: >
+    The large-packet-eligibility doctrine drifted. Restore the
+    large_packet_is_eligible_work block in methodology/distributed-work.yaml
+    (the three valid outcomes — partial slice / split / audit-disposition —
+    plus relevance_over_size and near_obsolete_is_an_audit_signal), keep it
+    referenced from the select_shaped_work worker step, and keep the grepable
+    large_packet_is_eligible_work cross-reference in
+    skills/advance-work-from-plan/SKILL.md.
+  command: "grep -n 'large_packet_is_eligible_work' methodology/distributed-work.yaml skills/advance-work-from-plan/SKILL.md"
