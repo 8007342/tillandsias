@@ -10,6 +10,7 @@ members = [
     "crates/tillandsias-macos-tray",
     "crates/tillandsias-metrics",
     "crates/tillandsias-otp",
+    "crates/tillandsias-plan",
     "crates/tillandsias-podman",
     "crates/tillandsias-podman-cli",
     "crates/tillandsias-policy",

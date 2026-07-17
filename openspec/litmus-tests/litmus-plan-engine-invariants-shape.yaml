@@ -1,0 +1,42 @@
+# @trace spec:spec-traceability
+name: litmus:plan-engine-invariants-shape
+spec: spec-traceability
+phase: pre-build
+description: The compiled plan engine loads the live ledger, holds the invariant core (ids unique + live references sound across active∪archive), and answers the flagship blocked-by query
+severity: medium
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-plan
+  - cargo is available in PATH
+
+critical_path:
+  - step: "engine unit + integration tests pass on the live ledger"
+    command: "cargo test -q -p tillandsias-plan 2>&1 | tail -5"
+    timeout_ms: 180000
+
+  - step: "check gate passes on the real plan/index.yaml (invariant core sound)"
+    command: "cargo run -q -p tillandsias-plan -- check"
+    timeout_ms: 120000
+    expected_behavior: "live references sound"
+
+  - step: "blocked-by is deterministic and correct (401/402 are downstream of order 392)"
+    command: "cargo run -q -p tillandsias-plan -- blocked-by 392 | grep -F inference-tier-verification | wc -l"
+    timeout_ms: 120000
+    expected_behavior: "2"
+
+  - step: "schema is DATA loadable from the checkout (open-world evolution)"
+    command: "test -f plan/schema.yaml && grep -F 'reference_fields' plan/schema.yaml"
+    timeout_ms: 3000
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "compiled engine holds id/reference invariants and answers plan queries deterministically"
+  log_fields:
+    spec: "spec-traceability"
+    test: "plan-engine-invariants-shape"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-plan/src/lib.rs (check_integrity, reference_resolves) and plan/schema.yaml"
+  command: "cargo run -q -p tillandsias-plan -- check"

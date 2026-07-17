@@ -1,0 +1,22 @@
+# @trace spec:spec-traceability
+# Order 398: compiled deterministic query/validation engine for the plan
+# ledger. One engine, two consumers: agents (this CLI) and the PLAN
+# EXPERT's graph retrieval (this library). Slice 1 is read-only
+# (load/query/check); format-preserving edits are slice 2, behind the
+# round-trip decision documented in the packet.
+[package]
+name = "tillandsias-plan"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["Tlatoani"]
+description = "Deterministic query/validation engine for the Tillandsias plan ledger"
+publish = false
+
+[[bin]]
+name = "tillandsias-plan"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = { workspace = true }

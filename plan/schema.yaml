@@ -1,0 +1,34 @@
+# Plan ledger schema — DATA, not code (order 398, operator constraint
+# 2026-07-17: schemas evolve on the fly; changing a rule is one commit,
+# never a recompile). Consumed by tillandsias-plan.
+#
+# NOTE the split: field rules below are PLUGGABLE and may be edited
+# freely as the plan grows. Id uniqueness and referential soundness are
+# the engine's INVARIANT CORE — they hold regardless of this file.
+#
+# Open-world: fields not listed here are legal on any packet and survive
+# every load/flush untouched.
+
+required_fields:
+  - packet_id
+  - title
+  - status
+
+# Statuses observed in the organically-grown corpus. Extend freely.
+statuses:
+  - ready
+  - pending
+  - claimed
+  - blocked
+  - failed
+  - failed-retryable
+  - done
+  - provisional
+
+# Fields whose values must resolve to existing packet_ids (checked by the
+# invariant core; listing them here tells the engine WHERE references live
+# as the schema evolves).
+reference_fields:
+  - depends_on
+  - release_target
+  - split_into

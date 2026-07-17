@@ -3248,6 +3248,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-plan"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yaml",
+]
+
+[[package]]
 name = "tillandsias-podman"
 version = "0.3.260716"
 dependencies = [
