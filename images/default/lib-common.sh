@@ -1950,6 +1950,12 @@ Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-pla
 Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).
 Key skills: \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
 
+## Code navigation — LSP is available (order 399)
+
+\`rust-analyzer\` ships in this forge. OpenCode's built-in LSP picks it up
+from PATH — prefer structural queries (go-to-definition, references,
+symbol search) over grepping source when resolving code questions.
+
 ## Web servers — you are in a FORGE container (read before starting one)
 
 Two flows; pick by intent:
