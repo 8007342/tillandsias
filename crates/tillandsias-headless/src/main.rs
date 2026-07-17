@@ -8748,6 +8748,13 @@ pub(crate) fn build_forge_agent_run_argv(
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
+    // Order 314 class (order 378): relaunching a forge-agent lane (incl. the
+    // `--bash` maintenance terminal) while an exited container still holds the
+    // name must not die 125 "name already in use". `--replace` atomically
+    // removes the exited container and creates a fresh one — mirrors the
+    // inference-container ensure fix. Applies to every agent mode since all
+    // share the `tillandsias-<project>-forge-<mode>` name.
+    argv.push("--replace".to_string());
     argv.extend(build_forge_agent_run_args(
         project_path,
         project_name,
@@ -11038,6 +11045,38 @@ mod tests {
         );
         assert!(has_arg(&argv, "--interactive"));
         assert!(has_arg(&argv, "--tty"));
+    }
+
+    /// Order 378 (order-314 class): relaunching any forge-agent lane — incl. the
+    /// `--bash` maintenance terminal — while an exited container still holds the
+    /// `tillandsias-<project>-forge-<mode>` name must not die 125 "name already
+    /// in use". `--replace` on `podman run` atomically removes the exited
+    /// container and creates a fresh one.
+    #[test]
+    fn forge_agent_run_args_use_replace_for_idempotent_relaunch() {
+        for mode in [
+            ForgeAgentMode::Maintenance,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Antigravity,
+        ] {
+            let argv = build_forge_agent_run_argv(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+            );
+            assert!(
+                has_arg(&argv, "--replace"),
+                "{:?} run args must include --replace so an exited container \
+                 does not block the next launch with a Permanent exit-125 \
+                 (order 378): {argv:?}",
+                mode
+            );
+        }
     }
 
     // @trace spec:tray-ux, spec:browser-isolation-tray-integration

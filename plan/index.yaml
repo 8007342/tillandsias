@@ -14294,7 +14294,7 @@ plan_index:
       provisional_id: windows-260715-4
       order: provisional
       title: "P2: forge maintenance-session relaunch dies 125 — bare podman run --name without --replace (order-314 class, maintenance surface)"
-      status: claimed
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -14332,6 +14332,23 @@ plan_index:
           host: linux
           lease_id: "forge-maintenance-session-name-collision-20260717"
           expires_at: "2026-07-17T12:48:00Z"
+        - type: completed
+          ts: "2026-07-17T09:05:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T0848Z"
+          host: linux
+          summary: >
+            Fixed the order-314-class name-collision on forge-agent relaunch.
+            build_forge_agent_run_argv now pushes --replace immediately after
+            `podman run`, so an exited container holding
+            tillandsias-<project>-forge-<mode> is atomically replaced instead
+            of failing 125 "name already in use" — covers the Maintenance
+            --bash lane (order 378) plus every other agent mode sharing the
+            name. ContainerSpec has no --replace builder and passthrough
+            --option is allowlist-dropped (policy.rs only permits --device=),
+            so the flag is injected directly into the argv Vec. Added
+            forge_agent_run_args_use_replace_for_idempotent_relaunch covering
+            all 5 modes. Verified: ./build.sh --check green (fmt+clippy),
+            targeted test PASS.
 
     - packet_id: guest-staged-gitdir-root-owned
       order: 382
