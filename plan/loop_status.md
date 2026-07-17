@@ -4,19 +4,26 @@ LastExecutionTime: 2026-07-16T18:26:00Z
 
 ## Direction — what are we all doing today
 
-<!-- Operator-owned thematic direction (The Tlatoāni, 2026-07-16). One theme,
-     no packet ids: agents REDUCE the theme against ./plan using ./methodology
-     (selection policy still applies — release-targeted first). Cycles cite
-     the direction in their ledger entries. Order 381 tracks skill wiring. -->
+<!-- Operator-owned thematic direction (The Tlatoāni, updated 2026-07-17).
+     One theme, no packet ids: agents REDUCE the theme against ./plan using
+     ./methodology (selection policy still applies — release-targeted first).
+     Cycles cite the direction in their ledger entries. Order 381 tracks
+     skill wiring. -->
 
-**We're supporting web containers.** Every host works toward: a harness agent
-in the forge launches a web container for a real project (../visual-chess),
-discovers the publish tools organically, and — as rungs land — multi-service
-entries (WordPress+DB), then one-prompt public share over a Cloudflare tunnel
-at a clearly-ephemeral URL. Use iterations on this theme to also clean up
-remaining work on YOUR active packets: major feature iterations double as
-test/refinement runs for what's already in flight. Milestone:
-web-share-release-milestone (order 373).
+**We're giving forge agents local EXPERTS.** Every host works toward: agents
+in the forge querying ephemeral tiny local models — built at launch from the
+freshly mounted checkout, refreshed on commit, dead on shutdown — instead of
+browsing files. The construction decision is SIGNED (see
+experts-construction-decision-2026-07-17.md); the deterministic compiled
+YAML engine, LSP-by-default, and hot-path RAM placement are part of the same
+blazing-fast local-knowledge story. macOS and Windows lanes: your inference
+TIER verification packets are filed and release-targeted — probe your guest,
+measure the ground-truth set, record your lane's backend decision.
+Web-share work (milestone 373) continues as the secondary theme.
+Milestone: forge-local-experts-milestone (order 391).
+
+*(Previous theme, 2026-07-16: web containers — largely landed; see the
+release ledger row for v0.3.260716.7.)*
 
 ## Cycle 2026-07-16T18:07Z→19:00Z (linux_immutable — operator-directed reduction + web-container drain: order 362 sign-off closed)
 

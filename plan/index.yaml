@@ -14988,3 +14988,57 @@ plan_index:
         - "structural symbol query resolves through the expert (LSP-backed), matching rust-analyzer ground truth"
         - "an audit question ('who writes X and which spec pins it') answers with code+spec+cheatsheet provenance"
         - "cheatsheet freshness/provenance surfaced in answers (FRESHNESS records honored)"
+
+    - packet_id: macos-inference-tier-verification
+      order: 401
+      release_target: forge-local-experts-milestone
+      title: "macOS lane: aarch64 guest inference tier — llama.cpp vs cpu-ollama decision + tier probe verification on the VZ guest"
+      status: ready
+      kind: implementation
+      deliverable: tier decision + probe evidence on VZ guest + per-tier expert measurements
+      depends_on: [inference-startup-cleanup]
+      pickup_role: macos
+      capability_tags: [macos, inference, llama-cpp, aarch64, experts]
+      estimated_hours: 6
+      outcome: >
+        Experts milestone tier work for the macOS lane (operator: apple
+        silicon gets llama.cpp transparently where real ollama doesn't
+        fit). Reality on this lane: the enclave runs inside the aarch64
+        Linux VZ guest — no GPU passthrough — so the candidates are
+        cpu-ollama (aarch64) vs a llama.cpp lane. Verify 392's tier probe
+        emits the right verdict on the guest; MEASURE both candidates on
+        the 393 ground-truth query set (tiny models, expert build times,
+        answer latency, RAM inside the VM budget); record the lane
+        decision. Feeds 397's transparent-backend seam and 393's per-tier
+        numbers. Related standing work: order 317 (brew aarch64 harness
+        strategy).
+      exit_criteria:
+        - "tier probe verdict on the VZ guest matches reality (pinned grammar)"
+        - "measured llama.cpp-vs-cpu-ollama comparison on the ground-truth set recorded; lane decision noted in the 393 decision doc"
+        - "one expert (methodology Modelfile) builds and answers on the chosen backend inside the VM"
+
+    - packet_id: windows-inference-tier-verification
+      order: 402
+      release_target: forge-local-experts-milestone
+      title: "Windows lane: WSL2 guest inference tier — nvidia-in-WSL2 GPU probe + cpu fallback verification"
+      status: ready
+      kind: implementation
+      deliverable: tier probe evidence on WSL2 guest + per-tier expert measurements
+      depends_on: [inference-startup-cleanup]
+      pickup_role: windows
+      capability_tags: [windows, wsl, inference, gpu, experts]
+      estimated_hours: 6
+      outcome: >
+        Experts milestone tier work for the Windows lane. WSL2 CAN expose
+        the host NVIDIA GPU to the guest (/dev/dxg + nvidia-smi in WSL) —
+        verify whether 392's tier probe sees it INSIDE the enclave's
+        inference container (nested: WSL2 guest -> podman container; CDI/
+        device availability may differ from the bare guest), fall back to
+        cpu tier cleanly when not. Measure the 393 ground-truth query set
+        on whichever tier lands. Record findings for 397's seam; a
+        GPU-in-WSL2 success here is a big win for the lane's expert
+        latency.
+      exit_criteria:
+        - "tier probe verdict inside the WSL2 guest's inference container matches reality (gpu-cuda if /dev/dxg passthrough works, else cpu — pinned grammar)"
+        - "expert query set measured on the landed tier; numbers recorded in the 393 decision doc"
+        - "cpu fallback proven if GPU passthrough is unavailable (no wedge, honest tier report)"
