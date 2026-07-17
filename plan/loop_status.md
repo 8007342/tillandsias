@@ -34,6 +34,19 @@ LastExecutionTime: 2026-07-17T18:15:00Z
   working). Recommend a storage-preserving attended vault re-init before
   the next rerun. Also filed the operator's CODE EXPERT temporal/convergence
   directive (order 400 extended) + Hy3/Zen-fleet + zeroclaw roadmap.
+- **RUNTIME CRASH-LOOP INCIDENT + ephemeral-reset directive**: after a
+  Quit (wsl --terminate) + relaunch, windows-260717-2 re-wedged the vault
+  barrier, cascading to a headless/tray restart loop that flashed terminal
+  windows. Operator confirmed this can hit END USERS at runtime
+  (updates/crashes/restarts) and ruled: ephemeral all the way — guest+vault
+  disposable, cloud-backed, worst case one re-auth; destructive reset OK.
+  RECOVERED via destructive reprovision from scratch (wsl --unregister +
+  tray relaunch) -> fresh guest v0.3.260712.1 (tray-matched, wire Reachable,
+  clean vault-on-first-login, no loop). Filed the resilience layer:
+  windows-260717-3 (crash-loop DETECTION, falsifiable diagnose+tray grammar)
+  + windows-260717-4 (intentional one-click EPHEMERAL RESET). windows-260717-2
+  elevated to runtime/end-user severity (root fix). Shape:
+  plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md.
 - **Order 386 COMPLETED (32ce69ae)**: teardown straggler probe adopted +
   hardened, wired post-reset into the Linux smoke lane (fails loud);
   positive + negative live evidence on macuahuitl.

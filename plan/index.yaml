@@ -15480,6 +15480,28 @@ plan_index:
         - "if no available key unseals extant storage, ensure emits the attended-recovery verdict ONCE (loud, no regeneration loop, storage untouched)"
         - "litmus pins: a unseal secret that fails to unseal existing storage is never written/kept"
       events:
+        - type: severity
+          ts: "2026-07-17T12:30:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            RUNTIME / END-USER severity CONFIRMED by the operator: this
+            fires on any guest cold-start (app update restarting the VM,
+            host reboot, crash, or Quit+relaunch) — it is not a test-only
+            artifact. Live cascade this session: after a Quit
+            (wsl --terminate), the cold restart re-ran re-ensure, the
+            barrier crash-looped, headless cycled app.stopped->started
+            every ~1-2 min, and the tray re-poked WSL, flashing terminal
+            windows with no user recourse. Operator's design ruling:
+            ephemeral all the way — the guest+vault are disposable, state
+            lives in the cloud, worst case is one re-auth. Recovery this
+            cycle = destructive reprovision from scratch (wsl --unregister
+            + tray relaunch) -> FRESH guest v0.3.260712.1 (tray-matched, no
+            skew), vault inits clean on first login, wire Reachable, no
+            loop. This packet is still the ROOT fix (stop the regeneration
+            loop); the resilience layer that makes ANY such wedge
+            detectable + one-click recoverable is windows-260717-3
+            (detection) + windows-260717-4 (intentional ephemeral reset).
         - type: filed
           ts: "2026-07-17T12:05:00Z"
           agent_id: "windows-bullo-fable5-20260717T1030Z"
@@ -15490,3 +15512,86 @@ plan_index:
             still need attended recovery (deep key skew, layer 2 in the
             issue doc). Contributing factor: binary hot-swap deploy exposed
             it, but a version-matched restart could hit the same path.
+
+    - packet_id: guest-crashloop-detection
+      provisional_id: windows-260717-3
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "Guest crash-loop DETECTION — bounded restart/unseal/handshake counter surfaced as a falsifiable diagnose+tray verdict"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-headless (liveness/diagnose) + tray status + litmus
+      depends_on: []
+      pickup_role: any
+      capability_tags: [robustness, lifecycle, diagnose, tray, cross-host]
+      estimated_hours: 6
+      outcome: >
+        Operator directive 2026-07-17 (after a live runtime crash-loop):
+        end users CAN hit a guest crash-loop at runtime (app update restarts
+        the VM, host reboot, crash, or Quit+relaunch — windows-260717-2 is
+        one trigger). The host tier must DETECT looping vs progressing and
+        say so. Bounded counter over a time window (N headless
+        app.stopped->started, or M vault unseal failures, or K wire
+        handshake timeouts within T seconds) => verdict; provision phases
+        advancing => NOT a loop (never flag slow-but-healthy). Emit pinned
+        grammar ^(healthy|starting|crash-loop:[a-z0-9-]+)$ from --diagnose
+        and a matching tray status line (feeds order 250 ultra-minimal
+        tray UX and the reset affordance windows-260717-4). Full shape:
+        plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md.
+      exit_criteria:
+        - "--diagnose emits the pinned grammar; a driven stop->start series (or sealed vault) flips it to crash-loop:<subsystem> within the window (litmus)"
+        - "a normal progressing provision does NOT flip to crash-loop (no false positive on slow starts)"
+        - "tray surfaces the crash-loop state as the single most-important notification (order 250 alignment)"
+      events:
+        - type: filed
+          ts: "2026-07-17T12:25:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            Filed from the live Windows crash-loop incident + the operator's
+            ephemeral-resilience directive. Detection is the trigger for
+            both auto-recovery backoff and the manual reset (windows-260717-4).
+
+    - packet_id: guest-intentional-ephemeral-reset
+      provisional_id: windows-260717-4
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "Intentional EPHEMERAL RESET — one-click wipe+reprovision of the guest (destructive-by-design; re-auth is the only cost)"
+      status: ready
+      kind: enhancement
+      deliverable: tray menu + --reset-guest CLI + host reprovision path + e2e
+      depends_on: [guest-crashloop-detection]
+      pickup_role: any
+      capability_tags: [robustness, lifecycle, tray, cli, ephemeral, cross-host]
+      estimated_hours: 8
+      outcome: >
+        Operator directive 2026-07-17 (verbatim intent): 'Ephemeral all the
+        way, the Tillandsias way. Do rebuild and reprovision from scratch as
+        needed, destructive ok.' The guest+vault are DISPOSABLE; state of
+        value lives in the cloud + operator auth, so recovery is a
+        first-class one-click op, not a last resort. Supported reset that
+        does exactly what was done by hand this cycle: terminate +
+        unregister/destroy the guest + reprovision fresh + re-establish the
+        wire (Windows: wsl --unregister + tray reprovision; macOS VZ / Linux
+        podman equivalents). Fresh first-provision inits vault cleanly
+        (windows-260717-2 bites only on re-ensure), so a reset ALWAYS yields
+        a working vault. Honest UX ('discards the local guest + cached
+        credentials; everything is in the cloud; you'll re-auth once').
+        Optional bounded auto-reset on a detected crash-loop (capped,
+        backoff — never an unbounded loop). Full shape:
+        plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md.
+      exit_criteria:
+        - "tray menu item + --reset-guest CLI wipe+reprovision reaches VM Ready + healthy vault + wire Reachable with no manual steps"
+        - "from a deliberately-wedged guest, the reset path recovers to healthy; a subsequent auth restores cloud project listing (e2e)"
+        - "auto-reset (if enabled) is bounded + backed-off and defers to the manual affordance after the cap (no unbounded loop)"
+      events:
+        - type: filed
+          ts: "2026-07-17T12:25:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            Filed with windows-260717-3 from the live incident. This is the
+            resilience layer: any runtime wedge (any subsystem/cause)
+            degrades to reset+re-auth, never to flashing terminals with no
+            recourse. The manual reprovision performed this cycle
+            (unregister + tray relaunch) is the reference implementation.
