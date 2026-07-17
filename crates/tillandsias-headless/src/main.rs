@@ -130,6 +130,7 @@ fn main() {
     let init = user_args.iter().any(|a| a == "--init");
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
+    let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let with_token = user_args.iter().any(|a| a == "--with-token");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
@@ -284,6 +285,7 @@ fn main() {
         "--diagnostics",
         "--force",
         "--init",
+        "--inference-tier",
         "--status-check",
         "--github-login",
         "--with-token",
@@ -502,6 +504,16 @@ fn main() {
             if debug {
                 eprintln!("[tillandsias] vault feature not compiled; continuing without Vault");
             }
+        }
+
+        if inference_tier {
+            // Order 392: the launch-authoritative tier verdict, in the
+            // pinned falsifiable grammar. scripts/inference-tier-probe.sh
+            // defers to this when the binary is installed so the two
+            // detection surfaces can never drift; the sibling lanes
+            // (orders 401/402) grade their guests against it.
+            println!("tier:{}", detect_inference_tier());
+            std::process::exit(0);
         }
 
         if status_check {
@@ -2589,6 +2601,62 @@ fn build_git_run_args(
     args
 }
 
+/// Order 392: classify this host's inference hardware tier.
+///
+/// Pinned falsifiable grammar (shared with
+/// scripts/inference-tier-probe.sh, which defers to `--inference-tier`
+/// when the binary is installed): `gpu-cuda | gpu-rocm | metal | cpu`.
+/// The tier is HARDWARE TRUTH only — whether the container runtime can
+/// actually hand the GPU to the container (CDI spec present) is checked
+/// separately at launch, with a loud remedy when it cannot.
+///
+/// Presence of a tool is never enough: Fedora ships rocm-smi on hosts
+/// with no AMD GPU, so each probe must observe actual hardware
+/// (nvidia-smi -L must list a device; rocminfo must report a gfx agent).
+fn detect_inference_tier() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        return "metal";
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let nvidia = std::process::Command::new("nvidia-smi")
+            .arg("-L")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+            .unwrap_or(false);
+        if nvidia {
+            return "gpu-cuda";
+        }
+        let rocm = std::process::Command::new("rocminfo")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("gfx"))
+            .unwrap_or(false);
+        if rocm {
+            return "gpu-rocm";
+        }
+        "cpu"
+    }
+}
+
+/// Order 392: can rootless podman actually deliver the NVIDIA GPU to a
+/// container? Requires a CDI spec (`nvidia-ctk cdi generate`). Hardware
+/// without CDI is reported loudly with the exact remedy instead of
+/// silently launching a CPU-only "GPU tier".
+fn nvidia_cdi_available() -> bool {
+    ["/etc/cdi/nvidia.yaml", "/etc/cdi/nvidia.json"]
+        .iter()
+        .any(|p| Path::new(p).exists())
+        || Path::new("/var/run/cdi")
+            .read_dir()
+            .map(|mut d| d.any(|e| e.is_ok()))
+            .unwrap_or(false)
+}
+
 fn build_inference_run_args(
     certs_dir: &Path,
     image: &str,
@@ -2619,6 +2687,35 @@ fn build_inference_run_args(
         "--env".into(),
         "OLLAMA_KEEP_ALIVE=24h".into(),
     ];
+
+    // Order 392: tier-appropriate GPU delivery. Hardware truth comes from
+    // detect_inference_tier(); deliverability is gated separately (CDI for
+    // cuda), and a GPU host without CDI degrades to CPU with a LOUD remedy
+    // rather than a silent cpu-tier-in-gpu-clothing.
+    let tier = detect_inference_tier();
+    match tier {
+        "gpu-cuda" => {
+            if nvidia_cdi_available() {
+                args.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
+            } else {
+                eprintln!(
+                    "[tillandsias] WARNING: NVIDIA GPU detected but no CDI spec — \
+                     inference will run CPU-ONLY. Remedy: sudo nvidia-ctk cdi generate \
+                     --output=/etc/cdi/nvidia.yaml   (order 392)"
+                );
+            }
+        }
+        "gpu-rocm" => {
+            args.extend([
+                "--device".into(),
+                "/dev/kfd".into(),
+                "--device".into(),
+                "/dev/dri".into(),
+            ]);
+        }
+        _ => {}
+    }
+    args.extend(["--env".into(), format!("TILLANDSIAS_INFERENCE_TIER={tier}")]);
     args.extend(proxy_env_args());
     args.extend([
         "-v".into(),
@@ -8485,6 +8582,9 @@ fn build_forge_agent_run_args_with_vault(
         .env("PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
+        // Order 392: agents (and the startup context) learn the host's
+        // inference tier without probing hardware they cannot see.
+        .env("TILLANDSIAS_INFERENCE_TIER", detect_inference_tier())
         .tmpfs("/tmp:size=256m,mode=1777")
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
@@ -10325,6 +10425,38 @@ pub(crate) async fn service_stop(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn inference_run_args_gate_gpu_delivery_on_tier_and_cdi() {
+        // Order 392: hardware truth (detect_inference_tier) decides the
+        // tier; DELIVERY is gated separately — cuda needs a CDI spec and
+        // the absence path warns with the exact operator remedy instead
+        // of silently launching a cpu-only "gpu tier". The tier is also
+        // exported to the container and the forge env so agents and the
+        // startup context report it without probing hardware.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let tier = detect_inference_tier();
+        assert!(
+            ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&tier),
+            "tier grammar violated: {tier}"
+        );
+        let window = source_window(source, "fn build_inference_run_args(");
+        assert!(
+            window.contains("nvidia_cdi_available()")
+                && window.contains("nvidia.com/gpu=all")
+                && window.contains("nvidia-ctk cdi generate"),
+            "cuda delivery must be CDI-gated with the remedy named"
+        );
+        assert!(
+            window.contains("TILLANDSIAS_INFERENCE_TIER"),
+            "tier must be exported into the inference container env"
+        );
+        let forge = source_window(source, "fn build_forge_agent_run_args_with_vault(");
+        assert!(
+            forge.contains("TILLANDSIAS_INFERENCE_TIER"),
+            "tier must be exported into the forge env for agents/startup context"
+        );
+    }
 
     #[test]
     fn git_mirror_relay_credential_mint_fails_loud_not_silent() {

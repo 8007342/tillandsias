@@ -422,6 +422,7 @@ specs:
   - litmus:inference-deferred-model-pulls
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
+  - litmus:inference-tier-probe-shape
   coverage_ratio: 80
   last_verified: '2026-07-04'
 - spec_id: inference-host-side-pull

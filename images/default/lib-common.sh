@@ -1905,6 +1905,12 @@ inject_startup_context() {
     [[ -d "$project_dir" ]] || return 0
 
     local ctx_file="$project_dir/.forge-startup-context.md"
+    # Order 392: truthful inference readiness — probe the endpoint once
+    # (1s budget) instead of the old indeterminate "may still be starting".
+    local _inference_status="starting (poll /api/tags)"
+    if curl -fsS --max-time 1 http://inference:11434/api/tags >/dev/null 2>&1; then
+        _inference_status="READY"
+    fi
     local branch version agent_name
     branch="$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
     version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
@@ -1926,7 +1932,7 @@ inject_startup_context() {
 
 - **Git**: push/fetch route through the enclave git mirror; GitHub token is handled automatically.
 - **HTTPS proxy**: outbound traffic is cached; CA is trusted at startup.
-- **Inference**: available at \`http://inference:11434\` (Ollama); may still be starting up.
+- **Inference**: \`http://inference:11434\` (Ollama) — ${_inference_status}, tier: ${TILLANDSIAS_INFERENCE_TIER:-unknown}.
 - **Vault**: secrets are available at \`http://vault:8200\`; token is injected automatically.
 
 You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA certs.

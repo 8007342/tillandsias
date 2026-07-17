@@ -70,7 +70,9 @@ critical_path:
     # Spec § Req 2 mandates `~/.cache/tillandsias/models` → `/home/
     # ollama/.ollama/models` rw. The CA cert mount enables HTTPS
     # trust for proxy bumping.
-    command: "grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/home/ollama/.ollama/models:rw' && grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/etc/tillandsias/ca.crt' | head -1"
+    # Window widened 60 -> 120 (order 392): the tier-gated GPU-delivery
+    # block now sits between the base args and these mounts.
+    command: "grep -A 120 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/home/ollama/.ollama/models:rw' && grep -A 120 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/etc/tillandsias/ca.crt' | head -1"
     timeout_ms: 3000
     expected_behavior: "/etc/tillandsias/ca.crt"
 
