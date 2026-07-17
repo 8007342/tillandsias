@@ -14931,6 +14931,9 @@ plan_index:
         - "blocked-by/status/lease queries answer correctly on live plan state (ground-truth harness shares 393/394's query set)"
         - "an invalid edit (schema violation) refuses to flush, loudly; the broken-ledger class is structurally impossible through the tool"
         - "meta-orchestration/advance-work skills document the CLI as the preferred ledger-edit path"
+        - "SCHEMA EVOLUTION (operator constraint 2026-07-17): schema/validations are DATA in the repo (versioned, e.g. plan/schema.yaml), loadable on the fly — changing field rules never requires recompiling the engine; a schema change is one commit"
+        - "OPEN-WORLD ROUND-TRIP: fields the active schema does not declare survive load+flush untouched (the organically-grown corpus never loses data to a stricter tool)"
+        - "INVARIANT CORE vs pluggable rules: id stability and referential soundness (depends_on/release_target/split_into resolve; ids never mutate on edit) are engine-level non-negotiables that hold ACROSS schema versions — pinned by a litmus that renames a schema field and proves references still validate (aligns with methodology/between-commits-work-discipline.yaml stable-ID preconditions)"
 
     - packet_id: forge-lsp-by-default
       order: 399
