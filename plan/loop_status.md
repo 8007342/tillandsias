@@ -22,6 +22,21 @@ LastExecutionTime: 2026-07-17T18:15:00Z
   BigPickle goal lane — self-heal or loud attended verdict with ground
   truth on the deeper approle/KV skew. See the transparent-push doc's
   2026-07-17 linux addendum.
+- **Order 386 COMPLETED (32ce69ae)**: teardown straggler probe adopted +
+  hardened, wired post-reset into the Linux smoke lane (fails loud);
+  positive + negative live evidence on macuahuitl.
+- **Order 385 follow-through (ff4954a5)**: tray-feature-only unused-mut
+  warning removed from the spawn_terminal_and_reap shim.
+- **FRESHNESS audit**: scripts/test-support/podman-mock.sh → **updated**
+  (exec branch no longer fabricates a vault handover — the order-383
+  keychain-pollution poison source; isolation reduction ask stays open in
+  litmus-mock-podman-keychain-pollution-2026-07-17.md).
+- **Ledger hygiene**: dropped the duplicate `order:` key the windows lane
+  left on windows-inference-tier-verification (order 402 + trailing
+  `order: provisional`), which was failing
+  litmus:plan-index-order-uniqueness — instant pre-build suite back to
+  green (145/145). Known class: sibling pushes without the ledger-YAML
+  gate (order 263).
 
 ## Direction — what are we all doing today
 
