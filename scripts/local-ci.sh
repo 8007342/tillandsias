@@ -26,6 +26,12 @@
 
 set -uo pipefail
 
+# On Fedora Silverblue (immutable), transparently re-exec inside the
+# tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
+# Non-Silverblue hosts skip with zero overhead. Sourced first so the
+# ci-full container/runtime toolchain resolves inside the toolbox.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/with-tillandsias-builder.sh"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 source "$REPO_ROOT/scripts/common.sh"
