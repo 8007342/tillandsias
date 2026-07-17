@@ -714,8 +714,9 @@ specs:
   - litmus:litmus-stdlib-portability-shape
   - litmus:litmus-name-filter-fail-loud-shape
   - litmus:plan-engine-invariants-shape
-  coverage_ratio: 77
-  last_verified: '2026-07-12'
+  - litmus:freshness-inventory-shape
+  coverage_ratio: 83
+  last_verified: '2026-07-17'
 - spec_id: subdomain-naming-flip
   status: active
   litmus_tests:

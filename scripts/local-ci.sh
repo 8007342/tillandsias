@@ -742,6 +742,41 @@ archive_check_log() {
 log_info "CI phase: ${CI_PHASE}"
 
 # ============================================================================
+# CHECK 0: FRESHNESS advisory flagging (rung 3 — order 371)
+# ============================================================================
+# Advisory ONLY. Per methodology component_freshness (flag -> soak -> default,
+# migration_discipline): this step names the N oldest/stalest components each
+# run but NEVER fails the suite. A flagged component is a claimable audit
+# source for /meta-orchestration and /advance-work-from-plan — not a gate.
+# Gating requires explicit The Tlatoāni approval (bar_raise_governance).
+
+if [[ -x "scripts/freshness-inventory.sh" ]]; then
+    log_section "FRESHNESS advisory flagging (non-gating)"
+    _fresh_report="$(scripts/freshness-inventory.sh 2>/dev/null || true)"
+    _fresh_total="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-inventory:' | grep -oE '[0-9]+ components' | grep -oE '[0-9]+')"
+    _fresh_stamped="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-inventory:' | grep -oE '[0-9]+ stamped' | grep -oE '[0-9]+')"
+    _fresh_cov="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-coverage:' | grep -oE '[0-9]+%')"
+    if [[ -n "$_fresh_cov" ]]; then
+        log_info "FRESHNESS coverage: ${_fresh_cov} (${_fresh_stamped:-0}/${_fresh_total:-?} components stamped)"
+    fi
+    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k2 -n -r | head -5)"
+    if [[ -n "$_fresh_flagged" ]]; then
+        log_info "Top stalest components (audit candidates — advisory only):"
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            log_info "  $line"
+        done <<< "$_fresh_flagged"
+        log_info "Disposition via /meta-orchestration freshness-audit class: refreshed|updated|obsoleted (discard-over-repair bias)."
+    else
+        log_info "No stale components flagged (all stamped components are fresh)."
+    fi
+    archive_check_log "freshness-advisory" "pass" /dev/null
+else
+    log_skip "FRESHNESS inventory script not found (advisory step skipped)"
+    archive_check_log "freshness-advisory" "skipped"
+fi
+
+# ============================================================================
 # CHECK 1: Spec-cheatsheet binding validation
 # ============================================================================
 
