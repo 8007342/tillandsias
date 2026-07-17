@@ -14650,6 +14650,31 @@ plan_index:
           host: linux
           lease_id: "vault-root-token-rederivation-20260717"
           expires_at: "2026-07-17T21:52:00Z"
+        - type: verified-by
+          ts: "2026-07-17T12:00:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            383 SEAM DEMONSTRATED LIVE on Windows (real secrets), and it
+            worked exactly as designed on the deep-skew path. After I
+            recovered the vault BARRIER (see the new packet
+            vault-unseal-secret-regenerated-on-reensure — re-ensure had
+            written a non-matching unseal secret; restored from the intact
+            fallback share → sealed:false, healthy), headless restart ran
+            validated_root_token: it detected the stale cached root token
+            (403 lookup-self), logged 'attempting generate-root self-heal
+            (order 383)', ran generate-root from the stored share, and the
+            share FAILED authentication ('root generation aborted: unable
+            to retrieve stored keys ... error decrypting using seal shamir:
+            cipher: message authentication failed'). The seam then emitted
+            the designed loud verdict — 'OPERATOR ACTION REQUIRED:
+            generate-root rejected the stored Shamir share' — and left
+            storage UNTOUCHED. This is precisely the approle/KV-wrinkle
+            escalation the 2026-07-17 event asked for: no false success, no
+            auto-wipe. The seam's happy path (macuahuitl) + this deep-skew
+            escalation path (Yolanda) are now both live-verified. Residual
+            is NOT a 383 defect: it is layer-1 (barrier) bug + a deep key
+            skew needing attended recovery, both captured in the new packet.
         - type: progress
           ts: "2026-07-17T11:30:00Z"
           agent_id: "windows-bullo-fable5-20260717T1030Z"
@@ -15232,6 +15257,31 @@ plan_index:
         - "structural symbol query resolves through the expert (LSP-backed), matching rust-analyzer ground truth"
         - "an audit question ('who writes X and which spec pins it') answers with code+spec+cheatsheet provenance"
         - "cheatsheet freshness/provenance surfaced in answers (FRESHNESS records honored)"
+        - "TEMPORAL (operator 2026-07-17): per-file latest shape + last-N version trajectory + a semantic-distillation summary of the longer trail are in the expert's inputs; a 'how do I add Foo?' answer cites prior attempts/reverts and sibling-code lessons, not just the API"
+        - "CONVERGENCE signal: a deterministic trajectory metric flags a seeded flip-flop series as instability and does NOT flag a monotonic-hardening series; the /code-review path can consult it"
+      events:
+        - type: directive
+          ts: "2026-07-17T12:10:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            Operator EXTENDED the CODE EXPERT with a temporal/convergence
+            dimension beyond the structural+provenance scope above: each
+            file's LATEST shape PLUS its version TRAJECTORY (last few
+            versions) PLUS a semantic-distillation summary of the longer
+            trail. Purpose (verbatim-close): answer 'how do I add a method
+            that does Foo?' with lived context — 'try Baz and Bar, but
+            previous agents tried X and reverted, sibling code had issues
+            with Y, so we standardized on library Z for stability'; FLAG
+            work flip-flopping back and forth as unnecessary instability
+            during code review; NOTE implementation CONVERGENCE per
+            methodology's monotonic reduction of uncertainty through
+            verifiable constraints. Experts are fine-grained authority
+            layers (plan/methodology/code), models + methodology together
+            driving monotonic uncertainty reduction; velocity via hot-path
+            (RAM-disk, order 329) + short high-confidence verifiable steps
+            + fully-local open-source inference. Shaping + verifiable rungs:
+            plan/issues/code-expert-file-trajectory-and-convergence-2026-07-17.md.
 
     - packet_id: macos-inference-tier-verification
       order: 401
@@ -15341,3 +15391,53 @@ plan_index:
             Distilled from the operator's session directive (Hy3/Zen fleet
             + zeroclaw sequencing). Deliberately pending, not ready — the
             reliability gate and the authorization gate are both explicit.
+
+    - packet_id: vault-unseal-secret-regenerated-on-reensure
+      provisional_id: windows-260717-2
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "P1: headless re-ensure regenerates a non-matching vault unseal secret on restart — barrier orphaned, crash-loop (restart self-wedge)"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs (ensure_vault_running unseal-secret create path)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [vault, lifecycle, robustness, rust, security]
+      estimated_hours: 5
+      outcome: >
+        Live Windows repro 2026-07-17 (real operator secrets): a
+        previously-healthy vault (unsealed ~1h) was WEDGED by a headless
+        restart. The liveness re-ensure regenerated the podman secret
+        tillandsias-vault-unseal (updated=restart time; storage init=43h
+        earlier) with a key that does NOT unseal existing storage -> vault
+        entrypoint unseal returned HTTP 400 -> crash-loop (exit 22, health
+        125), and because vault was down liveness kept regenerating the
+        secret every cycle (self-sustaining wedge). The correct barrier key
+        was intact in fallback_vault-shamir-share-v1 (32 raw bytes, mtime
+        == storage init to the second); restoring the podman secret from it
+        (no trailing newline) + replaying the container's own --replace
+        create-command unsealed cleanly (sealed:false, healthy). So
+        re-ensure SOURCED/WROTE the wrong key when a matching one existed.
+        Distinct from order 383 (root-token layer, which correctly
+        escalated OPERATOR ACTION REQUIRED on the deeper skew). Fix: on
+        re-ensure with existing storage, never regenerate the unseal secret
+        — reuse the matching key; if the only available key cannot unseal,
+        FAIL LOUD ONCE (no loop) with the attended verdict; guard the
+        secret-create path like 383 guarded the handover pair. Full
+        analysis + the deep-skew (attended) residual:
+        plan/issues/vault-unseal-secret-regenerated-on-reensure-2026-07-17.md.
+      exit_criteria:
+        - "initialized storage + a non-matching unseal key offered to re-ensure: ensure does NOT overwrite the working secret and does NOT crash-loop"
+        - "if no available key unseals extant storage, ensure emits the attended-recovery verdict ONCE (loud, no regeneration loop, storage untouched)"
+        - "litmus pins: a unseal secret that fails to unseal existing storage is never written/kept"
+      events:
+        - type: filed
+          ts: "2026-07-17T12:05:00Z"
+          agent_id: "windows-bullo-fable5-20260717T1030Z"
+          host: windows
+          summary: >
+            Filed from the goal-rerun incident. Barrier recovered live this
+            session (vault healthy, wire Reachable); root-token/KV writes
+            still need attended recovery (deep key skew, layer 2 in the
+            issue doc). Contributing factor: binary hot-swap deploy exposed
+            it, but a version-matched restart could hit the same path.
