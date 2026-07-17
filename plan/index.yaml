@@ -14682,3 +14682,192 @@ plan_index:
           agent_id: "linux-tlatoani-claude-20260716T0725Z"
           host: linux
           summary: "D3-future spun out of order 362 sign-off. Operator explicitly requested a GitHub App research packet for fine-grained interactions + temporary elevated promotion/release tokens."
+
+    - packet_id: forge-local-experts-milestone
+      order: 391
+      title: "MILESTONE: forge-local EXPERTS — ephemeral tiny models over ./plan, ./methodology, and code; agents query instead of browse"
+      status: ready
+      kind: milestone
+      multi_cycle: true
+      deliverable: plan/index.yaml (criteria holder; children carry the work)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [milestone, inference, ollama, experts, opencode, forge]
+      estimated_hours: 0
+      outcome: >
+        Operator vision (The Tlatoani, verbatim session 2026-07-17): agents
+        running in the forge get instant, targeted answers from tiny LOCAL
+        expert models built at forge launch from the freshly checked-out and
+        mounted ./plan and ./methodology (and later the code + forge docs)
+        — 'what work packets are blocked by X' answered in an instant
+        instead of browsing files. EVERYTHING EPHEMERAL: experts are built
+        on launch from the fresh checkout and die on shutdown; refreshed on
+        commit/push so answers track the tree. Hardware-tiered: this
+        primary host has massive VRAM+GPU (real ollama, nvidia-smi /
+        amd-rocm); other hosts run CPU-only ollama or llama.cpp
+        transparently (apple silicon). These are AGENT-facing experts, not
+        end-user surfaces; affordance is OpenCode-FIRST (Tillandsias is
+        OpenCode first) — other harnesses later. First experts: PLAN
+        EXPERT + METHODOLOGY EXPERT.
+      exit_criteria:
+        - "in a fresh forge session, an OpenCode agent asks a plan question (e.g. blocked-by relations) and gets a correct instant answer from the local PLAN EXPERT (ground-truth harness graded)"
+        - "METHODOLOGY EXPERT answers discipline questions matching methodology.yaml ground truth"
+        - "experts are ephemeral (gone after stack shutdown) and rebuilt from the CURRENT checkout at launch; commit/push refreshes them"
+        - "tier matrix proven on >=2 host classes (GPU ollama + one CPU/llama.cpp tier)"
+
+    - packet_id: inference-startup-cleanup
+      order: 392
+      release_target: forge-local-experts-milestone
+      title: "Inference container startup cleanup — deterministic readiness, tier detection, preload policy"
+      status: ready
+      kind: implementation
+      deliverable: images/inference + container_deps ensure + readiness litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, ollama, containers, robustness, gpu]
+      estimated_hours: 6
+      outcome: >
+        Operator: 'clean up the startup of the inference container so we can
+        start leveraging OpenCode much better.' Today the startup context
+        says inference 'may still be starting up' — indeterminate for
+        agents. Wanted: (a) deterministic readiness (ensure blocks or
+        reports a falsifiable state; startup context states READY or a
+        truthful ETA); (b) hardware tier detection AT LAUNCH (nvidia-smi ->
+        cuda ollama; rocm-smi -> rocm ollama; apple silicon -> llama.cpp
+        lane; else cpu ollama) with the tier recorded in the startup
+        context and a probe verdict grammar
+        (tier:gpu-cuda|gpu-rocm|cpu|metal); (c) model preload policy
+        (default model warm at ready; expert slots reserved); (d) GPU
+        passthrough args on the tiered lanes (podman --device nvidia.com/gpu
+        / rocm equivalents) behind the same tier probe.
+      exit_criteria:
+        - "tier probe script emits the pinned grammar and matches the host (litmus, instant)"
+        - "forge startup context reports inference: ready|starting(eta)s truthfully (no 'may still be starting' ambiguity)"
+        - "GPU tier actually uses the GPU (nvidia-smi shows the ollama process) on this host; CPU tier works unchanged"
+
+    - packet_id: experts-construction-research
+      order: 393
+      release_target: forge-local-experts-milestone
+      title: "Research: expert-construction technique — fine-tune vs LoRA vs RAG-index vs Modelfile context, per tier, under a launch-time budget"
+      status: ready
+      kind: research
+      multi_cycle: true
+      deliverable: plan/issues/experts-construction-decision-2026-07-17.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [research, inference, ollama, experts, gpu]
+      estimated_hours: 8
+      outcome: >
+        The operator says 'trained'; the packet keeps the CONTRACT fixed
+        (instant, correct, fresh, ephemeral) and researches the technique:
+        tiny-model fine-tune / LoRA adapter built on launch (GPU tier can
+        afford it; can CPU?), embedding+RAG index (fast build, strong
+        freshness), Ollama Modelfile with structured context distillation,
+        or hybrid (RAG for recall + tiny model for speed). Measure per
+        technique and tier: build time at forge launch (budget: experts may
+        finish building ASYNC after launch, but must report
+        building->ready honestly), answer quality on a canonical
+        ground-truth query set built from ./plan (blocked-by, status,
+        lease-holder queries) and ./methodology (discipline questions),
+        VRAM/RAM footprint. Ends in a Tlatoani-signed decision record
+        BEFORE implementation rungs (ambitious_milestone_reduction).
+      exit_criteria:
+        - "benchmark harness with ground-truth query set committed (reusable as the milestone's grading gate)"
+        - "per-tier technique recommendation with measured build-time/quality/footprint"
+        - "Tlatoani sign-off recorded on the decision"
+
+    - packet_id: plan-methodology-experts-rung1
+      order: 394
+      release_target: forge-local-experts-milestone
+      title: "PLAN EXPERT + METHODOLOGY EXPERT rung 1 — ephemeral build on forge launch from the mounted checkout"
+      status: ready
+      kind: implementation
+      deliverable: inference expert-build pipeline + named expert endpoints
+      depends_on: [inference-startup-cleanup, experts-construction-research]
+      pickup_role: linux
+      capability_tags: [inference, ollama, experts, rust, forge]
+      estimated_hours: 10
+      outcome: >
+        On forge launch, build the two experts from the JUST-mounted
+        ./plan and ./methodology using the technique the 393 decision
+        selected; expose them at the inference endpoint as named models
+        (e.g. tillandsias-plan-expert, tillandsias-methodology-expert);
+        report building->ready in the startup context; everything torn
+        down with the stack (ephemeral by construction — named ephemeral
+        models/indexes live in the inference container's tmpfs or are
+        reaped by the shared-stack cleanup).
+      exit_criteria:
+        - "fresh forge launch produces both experts; ground-truth harness (from 393) grades PASS on the canonical query set"
+        - "'what packets are blocked by <order>' answered correctly against the live plan/index.yaml state"
+        - "stack shutdown leaves no expert artifacts (ephemerality litmus)"
+
+    - packet_id: experts-opencode-affordance
+      order: 395
+      release_target: forge-local-experts-milestone
+      title: "OpenCode affordance — experts transparently queryable by forge agents (config provider entries + instructions; MCP only if needed)"
+      status: ready
+      kind: implementation
+      deliverable: images/default/config-overlay/opencode + instructions + discoverability litmus
+      depends_on: [plan-methodology-experts-rung1]
+      pickup_role: linux
+      capability_tags: [opencode, mcp, ux, discoverability, forge]
+      estimated_hours: 4
+      outcome: >
+        OpenCode-first (operator: Tillandsias should be OpenCode first).
+        The opencode config overlay already carries an ollama provider
+        pointed at inference:11434 — add the expert models there so any
+        OpenCode agent can query them natively; teach the bootstrap
+        (web-services.md sibling section / startup context) ONE line:
+        'ask tillandsias-plan-expert before grepping ./plan'. Prefer plain
+        provider/model entries over a new MCP server; add an MCP tool only
+        if the query ergonomics demand it (decision recorded either way).
+        Agent-facing only — never surfaced to end users. Other harnesses
+        are explicitly LATER packets.
+      exit_criteria:
+        - "fresh OpenCode session lists/queries the experts with zero out-of-band setup"
+        - "instructions mention the experts exactly once (discoverable, not spammy); discoverability litmus pins it"
+
+    - packet_id: experts-refresh-on-commit
+      order: 396
+      release_target: forge-local-experts-milestone
+      title: "Expert refresh on commit/push — answers track the working tree"
+      status: ready
+      kind: implementation
+      deliverable: git-hooks (existing /home/forge/.cache/tillandsias/git-hooks path) + incremental refresh
+      depends_on: [plan-methodology-experts-rung1]
+      pickup_role: linux
+      capability_tags: [inference, experts, git, hooks]
+      estimated_hours: 5
+      outcome: >
+        Operator: experts get refreshed on commit/push. The forge already
+        owns a hooks path (core.hooksPath is injected); post-commit /
+        pre-push triggers an INCREMENTAL expert refresh (technique-specific
+        per 393: re-index deltas / adapter refresh) so 'what changed'
+        questions answer against the current tree, not launch state.
+        Must never block the commit/push (async, bounded, loud on failure).
+      exit_criteria:
+        - "commit changing plan/index.yaml -> plan expert answers reflect it within a bounded window (harness-graded)"
+        - "hook adds no perceptible latency to commit/push (measured budget pinned)"
+
+    - packet_id: experts-tier-backends
+      order: 397
+      release_target: forge-local-experts-milestone
+      title: "Tiered inference backends — cuda/rocm ollama, cpu ollama, llama.cpp (apple silicon) behind one transparent seam"
+      status: ready
+      kind: implementation
+      deliverable: images/inference tier lanes + backend seam + tier litmus per host class
+      depends_on: [inference-startup-cleanup, experts-construction-research]
+      pickup_role: any
+      capability_tags: [inference, gpu, rocm, metal, cross-host, containers]
+      estimated_hours: 8
+      outcome: >
+        One agent-visible endpoint, tier-appropriate backend underneath:
+        massive-VRAM hosts (this one) run real ollama with GPU (nvidia-smi
+        -> cuda; amd -> rocm); CPU-only hosts keep plain ollama; apple
+        silicon gets a llama.cpp lane transparently. Backend choice comes
+        from 392's tier probe; experts and default models run unmodified
+        on every tier (budget/quality expectations per tier come from
+        393's measurements). macOS/Windows lanes verify their tiers.
+      exit_criteria:
+        - "same expert query set passes on GPU tier (this host) and one non-GPU tier (macOS llama.cpp or CPU)"
+        - "tier switch requires zero agent-side config change (transparency litmus)"
