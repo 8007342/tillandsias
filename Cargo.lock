@@ -3348,6 +3348,7 @@ version = "0.1.0"
 name = "tillandsias-vault-client"
 version = "0.1.1"
 dependencies = [
+ "base64 0.22.1",
  "hkdf",
  "reqwest",
  "serde",
