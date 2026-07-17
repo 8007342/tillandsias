@@ -592,7 +592,9 @@ fn main() {
             (ForgeAgentMode::Maintenance, "--bash")
         };
         if let Some(project_path) = config_path {
-            if let Err(e) = run_forge_agent_cli_mode(&project_path, mode, flag, debug) {
+            if let Err(e) =
+                run_forge_agent_cli_mode(&project_path, mode, flag, prompt.as_deref(), debug)
+            {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -8544,9 +8546,13 @@ pub(crate) fn build_forge_agent_run_args(
         mode,
         debug,
         None,
+        None,
     )
 }
 
+// All arguments are distinct, named forge-launch inputs; bundling them into a
+// struct would add indirection without clarifying the call sites.
+#[allow(clippy::too_many_arguments)]
 fn build_forge_agent_run_args_with_vault(
     project_path: &Path,
     project_name: &str,
@@ -8555,15 +8561,23 @@ fn build_forge_agent_run_args_with_vault(
     mode: ForgeAgentMode,
     debug: bool,
     vault_secret: Option<&str>,
+    prompt: Option<&str>,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
-    let spec = ContainerSpec::new(image)
+    // A prompt-driven Codex run is non-interactive (`codex exec "<prompt>"`):
+    // like the OpenCode CLI prompt path, it must NOT claim a TTY, or podman
+    // refuses with "input device is not a TTY" / the child stops (T-state)
+    // when the parent is a background/e2e harness rather than a live terminal.
+    let non_interactive_prompt = prompt.is_some();
+    let mut spec = ContainerSpec::new(image)
         .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
-        .pids_limit(512)
-        .interactive()
-        .tty()
+        .pids_limit(512);
+    if !non_interactive_prompt {
+        spec = spec.interactive().tty();
+    }
+    let spec = spec
         // Project workspace at /home/forge/src/<project>/ — matches the
         // forge entrypoint clone path and the `$TILLANDSIAS_PROJECT_PATH`
         // contract every agent expects.
@@ -8625,6 +8639,17 @@ fn build_forge_agent_run_args_with_vault(
     }
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");
+    }
+
+    // Non-interactive Codex prompt (e.g. e2e smoke launching
+    // `/meta-orchestration`): the codex entrypoint reads this env and execs
+    // `codex exec --dangerously-bypass-approvals-and-sandbox "<prompt>"`
+    // instead of the interactive TUI. Codex-only (guarded at the CLI seam
+    // in run_forge_agent_cli_mode); other lanes never receive a prompt.
+    if let Some(prompt) = prompt
+        && matches!(mode, ForgeAgentMode::Codex)
+    {
+        spec = spec.env("TILLANDSIAS_CODEX_PROMPT", prompt);
     }
 
     for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
@@ -8853,8 +8878,19 @@ fn run_forge_agent_cli_mode(
     project_path: &str,
     mode: ForgeAgentMode,
     flag: &str,
+    prompt: Option<&str>,
     debug: bool,
 ) -> Result<(), String> {
+    // A non-interactive prompt is only honored by the Codex lane today
+    // (`codex exec "<prompt>"`); other agent CLIs ignore it. Fail loud
+    // rather than silently drop it so an operator/e2e harness learns the
+    // lane it targeted does not yet support headless prompting.
+    if prompt.is_some() && !matches!(mode, ForgeAgentMode::Codex) {
+        return Err(format!(
+            "{flag} does not support --prompt (non-interactive prompting is Codex-only today); \
+             use --codex --prompt or --opencode --prompt"
+        ));
+    }
     require_desktop_user_session(&format!("tillandsias {flag}"))?;
     report_runtime_lane(flag, debug);
 
@@ -8915,6 +8951,7 @@ fn run_forge_agent_cli_mode(
         mode,
         debug,
         provider_vault_secret,
+        prompt,
     );
 
     let rt = podman_runtime()?;
@@ -12303,6 +12340,7 @@ mod tests {
                 mode,
                 false,
                 Some("provider-forge-lease"),
+                None,
             );
             assert!(
                 has_arg(&args, "--secret"),
@@ -12324,12 +12362,88 @@ mod tests {
                 mode,
                 false,
                 Some("must-not-mount"),
+                None,
             );
             assert!(
                 !args.iter().any(|arg| arg.contains("must-not-mount")),
                 "{mode:?} must not mount a provider lease"
             );
         }
+    }
+
+    /// A prompt-driven Codex lane launches NON-INTERACTIVELY: it injects
+    /// TILLANDSIAS_CODEX_PROMPT for the entrypoint's `codex exec` path and
+    /// drops --interactive/--tty so a background e2e harness never wedges in
+    /// T-state (mirrors the OpenCode CLI prompt path). Without a prompt it
+    /// stays the interactive TUI. This is the seam that lets a forge smoke
+    /// agent run /meta-orchestration as Codex alongside OpenCode.
+    #[test]
+    fn codex_prompt_run_is_non_interactive_and_injects_prompt_env() {
+        let prompt = "Use the /meta-orchestration skill";
+        let with_prompt = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            Some("codex-forge-lease"),
+            Some(prompt),
+        );
+        assert!(
+            has_arg(&with_prompt, &format!("TILLANDSIAS_CODEX_PROMPT={prompt}")),
+            "codex prompt run must inject TILLANDSIAS_CODEX_PROMPT; args={with_prompt:?}"
+        );
+        assert!(
+            !has_arg(&with_prompt, "--tty") && !has_arg(&with_prompt, "--interactive"),
+            "codex prompt run must be non-interactive (no --tty/--interactive); args={with_prompt:?}"
+        );
+
+        // No prompt → interactive TUI, no prompt env.
+        let no_prompt = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            Some("codex-forge-lease"),
+            None,
+        );
+        assert!(
+            has_arg(&no_prompt, "--tty") && has_arg(&no_prompt, "--interactive"),
+            "codex without a prompt stays the interactive TUI; args={no_prompt:?}"
+        );
+        assert!(
+            !no_prompt
+                .iter()
+                .any(|a| a.starts_with("TILLANDSIAS_CODEX_PROMPT=")),
+            "codex without a prompt must not inject a prompt env; args={no_prompt:?}"
+        );
+    }
+
+    /// The Codex forge entrypoint must run the non-interactive `codex exec`
+    /// path when (and only when) TILLANDSIAS_CODEX_PROMPT is set, keeping the
+    /// forge-gated bypass flag. Source-shape pin so the headless-prompt seam
+    /// cannot silently regress to TUI-only.
+    #[test]
+    fn codex_entrypoint_has_non_interactive_exec_path() {
+        let entry = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/default/entrypoint-forge-codex.sh"
+        ));
+        assert!(
+            entry.contains("TILLANDSIAS_CODEX_PROMPT"),
+            "codex entrypoint must branch on TILLANDSIAS_CODEX_PROMPT"
+        );
+        assert!(
+            entry.contains("codex exec"),
+            "codex entrypoint must exec `codex exec` for the non-interactive prompt path"
+        );
+        assert!(
+            entry.contains("--dangerously-bypass-approvals-and-sandbox"),
+            "codex entrypoint must keep the forge-gated bypass flag"
+        );
     }
 
     #[test]

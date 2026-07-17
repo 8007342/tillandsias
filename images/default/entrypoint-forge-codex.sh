@@ -111,6 +111,25 @@ codex_forge_args=()
 if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
     codex_forge_args+=(--dangerously-bypass-approvals-and-sandbox)
 fi
+
+# ── Non-interactive prompt mode (e2e smoke / unattended loops) ──
+# @trace spec:codex-tray-launcher
+# When the host launcher passes a prompt (TILLANDSIAS_CODEX_PROMPT, set by
+# `tillandsias --codex <project> --prompt "<text>"`), run Codex HEADLESS via
+# its `exec` subcommand instead of the interactive TUI — the mirror of the
+# OpenCode lane's `opencode run --dangerously-skip-permissions "<prompt>"`.
+# This is what lets a forge smoke agent run `/meta-orchestration` as Codex
+# alongside OpenCode so their results can be compared. The bypass flag rides
+# the exec subcommand (documented on `codex exec`); it stays forge-gated
+# above. No TTY is claimed (the launcher already drops --interactive --tty
+# for a prompt run), so a background harness never wedges in T-state.
+if [ -n "${TILLANDSIAS_CODEX_PROMPT:-}" ]; then
+    trace_lifecycle "entrypoint" "codex launching (non-interactive exec)"
+    trace_lifecycle "exec" "launching codex exec"
+    exec /usr/local/bin/codex-oauth-session -- \
+        codex exec "${codex_forge_args[@]}" "$TILLANDSIAS_CODEX_PROMPT"
+fi
+
 trace_lifecycle "entrypoint" "codex launching"
 trace_lifecycle "exec" "launching codex"
 exec /usr/local/bin/codex-oauth-session -- codex "${codex_forge_args[@]}" "$@"

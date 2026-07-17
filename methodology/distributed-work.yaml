@@ -276,6 +276,69 @@ distributed_work:
       - "Prefer bundling serial micro-tasks under one claim when they touch the same owned_files and share the same evidence."
       - "Do not split a packet merely to create more ledger entries; split only at ownership, dependency, or evidence boundaries."
 
+    large_packet_is_eligible_work:
+      decided_by: "The Tlatoāni, 2026-07-17"
+      problem: >
+        A recurring failure mode (Hy3, 2026-07-17 overnight loop): an agent
+        scans the ready queue (~70 packets), judges them all "too large" to
+        finish in one cycle, hesitates to claim ANY of them, and instead
+        reaches for an old, small, near-obsolete packet — one more likely to
+        be audited away as stale than implemented, and often already made
+        irrelevant by later specs. Size-aversion inverts the queue's value
+        order: the biggest, most relevant, release-targeted work starves
+        while low-value backlog churns. A large estimated_hours is a shaping
+        signal, NOT a "skip me" flag.
+      rule: >
+        A large packet is FULLY ELIGIBLE work. An agent MUST NOT skip a
+        relevant, high-value ready packet merely because it cannot be
+        finished in a single cycle. On encountering a large packet, the
+        cycle has THREE first-class valid outcomes — each a complete,
+        successful cycle that lowers residual uncertainty
+        (philosophy.yaml → Monotonic Reduction of Uncertainty Under
+        Verifiable Constraints):
+          1. PARTIAL SLICE — implement the smallest vertical slice that
+             produces a coherent commit under a verifiable constraint, then
+             emit a `progress` event carrying `partial_artifact_refs` and an
+             updated `next_action` so the next cycle resumes without replay.
+             Partial progress on a large packet is real progress, not a
+             half-failure.
+          2. SPLIT — decompose the packet into smaller ready child packets
+             at ownership / dependency / evidence boundaries
+             (`split_into`), record the shaping events, commit, and push.
+             The shaping commit IS that cycle's completed work — a split
+             that lowers residual ambiguity is a valid reduction step. This
+             GENERALIZES the forge-only [[forge_cycle_budget]] split rule
+             (order 264) to every host.
+          3. AUDIT-DISPOSITION — if inspection shows the packet is stale,
+             superseded, or obsoleted by later specs, retire it explicitly
+             (obsolete / tombstone with same-commit dependent cleanup, per
+             the freshness audit class in methodology `component_freshness`).
+             Retiring dead work is reduction, not avoidance.
+        The ONLY invalid response is silent size-avoidance: leaving a large
+        relevant packet unclaimed while claiming a smaller, staler,
+        lower-value one to dodge its size.
+      relevance_over_size: >
+        Selection ranks by VALUE and RELEVANCE, never by smallness:
+        release-targeted ([[release_aware_packets]]) first, then
+        unblocks-another-host or a user-visible path, then
+        freshness / current-spec relevance. A large, fresh, release-targeted
+        packet OUTRANKS a small, stale, untargeted one. "It is smaller" is
+        never a tiebreaker and never a reason to prefer stale work; when
+        value ties, prefer the packet this host is uniquely capable of.
+      near_obsolete_is_an_audit_signal: >
+        A packet that looks near-obsolete is a signal to AUDIT it
+        (outcome 3), NOT to implement it as the path of least resistance.
+        Implementing soon-to-be-irrelevant work burns budget and can
+        conflict with the specs about to supersede it — the exact anti-value
+        churn this rule exists to stop.
+      trace: >
+        operator directive 2026-07-17 (Hy3 size-aversion → stale-task
+        churn); philosophy.yaml (monotonic reduction); convergence.yaml
+        (drift_control); worker_agent_protocol.select_shaped_work (selection
+        seam); forge_cycle_budget (the forge-scoped split precedent this
+        generalizes). Mirrored operationally in the /advance-work-from-plan
+        and /meta-orchestration reduction-engine sections.
+
   agent_status_packet:
     purpose: >
       Give implementation agents a compact, copyable event shape for progress,
@@ -645,7 +708,13 @@ distributed_work:
       - step: select_shaped_work
         description: >
           Scan the plan ledger. Filter for ready/pending/failed-retryable tasks where owner_host
-          matches or is 'any', and matching capability tags exist.
+          matches or is 'any', and matching capability tags exist. Rank the
+          survivors by VALUE and RELEVANCE per [[large_packet_is_eligible_work]],
+          not by smallness: a large, fresh, release-targeted packet outranks a
+          small, stale one. A packet you cannot finish this cycle is still
+          eligible — claim it and take a partial slice, split it, or
+          audit-dispose it (the three valid outcomes). Do NOT dodge a large
+          relevant packet by reaching for an older, lower-value one.
       - step: claim_lease
         description: >
           Write a 'claim' event under the chosen task (upsert), minting a unique lease_id. Commit

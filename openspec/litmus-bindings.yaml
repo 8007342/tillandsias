@@ -497,8 +497,9 @@ specs:
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
   - litmus:idiomatic-layers-doctrine-shape
+  - litmus:large-packet-eligibility-doctrine-shape
   coverage_ratio: 100
-  last_verified: '2026-07-10'
+  last_verified: '2026-07-17'
 - spec_id: meta-orchestration
   status: active
   litmus_tests:

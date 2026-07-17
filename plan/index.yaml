@@ -15595,3 +15595,84 @@ plan_index:
             degrades to reset+re-auth, never to flashing terminals with no
             recourse. The manual reprovision performed this cycle
             (unregister + tray relaunch) is the reference implementation.
+    - packet_id: codex-e2e-smoke-launcher-and-verdict-parity
+      order: 404
+      title: "Codex e2e smoke launcher: launch codex non-interactively in the forge smoke lane with rate-limit + MO-SMOKE verdict parity"
+      status: ready
+      kind: implementation
+      deliverable: scripts/ (codex e2e launch path) + skills/build-install-and-smoke-test-e2e + smoke-mode verdict wiring
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [codex, forge, e2e, smoke, opencode, verification]
+      estimated_hours: 5
+      outcome: >
+        The non-interactive Codex lane now exists (3c2ae51e: `tillandsias
+        --codex <proj> --prompt "<text>"` execs `codex exec` headless with
+        the forge-gated bypass, token restored from vault). The e2e smoke
+        surface is still OpenCode-only: scripts/litmus-opencode-e2e-launch.sh
+        owns the branch + rate-limit stamp + greps the MO-SMOKE verdict, and
+        skills/build-install-and-smoke-test-e2e launches `/meta-orchestration`
+        via opencode. This packet adds the CODEX launch path to the smoke
+        lane: a launcher (generalize the opencode launcher or add a codex
+        sibling) that runs `tillandsias --codex <proj> --prompt "Use the
+        /meta-orchestration skill"`, records the same
+        scripts/forge-e2e-rate-limit.sh stamp class, and greps the identical
+        `MO-SMOKE: PASS|FAIL <reason>` verdict grammar so a codex smoke run
+        is scored exactly like an opencode one. Operator directive
+        2026-07-17 ("Codex is also happy to run in non-interactive mode").
+      exit_criteria:
+        - "a codex smoke launcher runs `tillandsias --codex <proj> --prompt` non-interactively and returns the MO-SMOKE verdict line (dry-run/mock evidence acceptable for this packet; live run is order 405)"
+        - "rate-limit stamp parity: codex smoke consumes/records the same forge-e2e-rate-limit class as opencode so the 4h/full-cycle budget is shared, not doubled"
+        - "the e2e smoke SKILL documents the codex option (alongside/before opencode) and how the two are compared"
+        - "a shape litmus pins the codex launch path + verdict-grammar parity"
+      events:
+        - type: filed
+          ts: "2026-07-17T18:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
+          host: linux
+          summary: >
+            Split from the operator's Codex-in-e2e directive after landing
+            the non-interactive prompt lane (3c2ae51e). This is the launcher
+            + verdict-parity plumbing (verifiable without a live provider
+            run); the live codex-vs-opencode comparison is order 405. Shaped
+            per methodology large_packet_is_eligible_work (split at the
+            evidence boundary).
+
+    - packet_id: codex-opencode-smoke-divergence-comparison
+      order: 405
+      title: "Live codex-vs-opencode forge smoke comparison — run both on /meta-orchestration, capture + file divergences"
+      status: ready
+      kind: verification
+      multi_cycle: true
+      deliverable: plan/issues/ comparison report + any divergence packets filed
+      depends_on: [codex-e2e-smoke-launcher-and-verdict-parity]
+      pickup_role: linux
+      capability_tags: [codex, opencode, forge, e2e, smoke, divergence]
+      estimated_hours: 6
+      outcome: >
+        The operator's actual goal: "start running some of the e2e smoke
+        tests agents running inside the forge as codex, sometimes
+        along/next/before opencode and let's monitor and validate their
+        results, if both face the same issue, or one can work fine but the
+        other stamps on its face, these are all valuable feedback." Once the
+        codex launcher (order 404) lands, run BOTH harnesses on the same
+        `/meta-orchestration` (or a smaller pinned prompt) in the same forge
+        environment and record a comparison: same-issue (shared root cause →
+        high-signal environment bug), codex-only failure, or opencode-only
+        failure. Each divergence becomes its own filed plan/issues packet.
+        Multi_cycle: this is a standing comparison that accretes datapoints,
+        not a one-shot.
+      exit_criteria:
+        - "at least one live paired run recorded: codex + opencode on the same prompt/forge, both verdicts captured"
+        - "a comparison report in plan/issues/ classifying the outcome (shared-issue | codex-only | opencode-only | both-clean) with the actual logs"
+        - "every divergence surfaced is filed as its own plan/issues packet (not left only in the report)"
+      events:
+        - type: filed
+          ts: "2026-07-17T18:55:00Z"
+          agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
+          host: linux
+          summary: >
+            Split from the operator's Codex-in-e2e directive; the live
+            comparison half (needs a real forge launch + provider budget),
+            gated on the order-404 launcher. Divergence between codex and
+            opencode is the valuable feedback the operator asked to monitor.
