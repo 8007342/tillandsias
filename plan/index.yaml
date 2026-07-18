@@ -14997,7 +14997,7 @@ plan_index:
       desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Inference container startup cleanup — deterministic readiness, tier detection, preload policy"
-      status: ready
+      status: in_progress
       kind: implementation
       deliverable: images/inference + container_deps ensure + readiness litmus
       depends_on: []
@@ -15022,6 +15022,36 @@ plan_index:
         - "tier probe script emits the pinned grammar and matches the host (litmus, instant)"
         - "forge startup context reports inference: ready|starting(eta)s truthfully (no 'may still be starting' ambiguity)"
         - "GPU tier actually uses the GPU (nvidia-smi shows the ollama process) on this host; CPU tier works unchanged"
+      events:
+        - type: progress
+          ts: "2026-07-18T04:20:00Z"
+          agent_id: "linux-forge-20260718T0334Z"
+          host: forge
+          lease_id: "inference-startup-cleanup-1"
+          summary: >
+            Significant progress on order 392 (forge cycle, single packet).
+            (a) DETERMINISTIC READINESS: added wait_for_inference_ready() that
+            blocks the forge-launch path until `ollama serve` answers
+            /api/version from INSIDE the tillandsias-inference container
+            (127.0.0.1:11434, no enclave-DNS dependency), 60s bounded, truthful
+            last-probe reason on timeout. The forge agent now boots only after
+            the endpoint is live — no more indeterminate "may still be
+            starting". (b) TRUTHFUL TIER: added effective_inference_tier()
+            which downgrades gpu-cuda -> cpu when no NVIDIA CDI spec exists
+            (podman cannot deliver the GPU), so the tier reported to the
+            container env AND the forge agent env (TILLANDSIAS_INFERENCE_TIER)
+            matches what actually runs — never a "gpu tier in cpu clothing".
+            (c/d) RESIDUAL: model preload policy (expert slots reserved) and the
+            >=2-host-class tier matrix (392's exit criterion, shared with 397)
+            remain; GPU passthrough args were already CDI-gated. Updated the
+            startup-context probe to report READY / NOT-READY(reason) and the
+            observed-failure hint to stop implying silent "starting".
+          evidence:
+            - "crates/tillandsias-headless/src/main.rs: effective_inference_tier(); wait_for_inference_ready() (async, 60x1s poll via podman exec curl); forge-launch path awaits it after run_container_observed('forge-launch-inference')."
+            - "TILLANDSIAS_INFERENCE_TIER now set from effective_inference_tier() in both build_inference_run_args and build_forge_agent_run_args_with_vault."
+            - "images/default/lib-common.sh inject_startup_context: probe reports READY or NOT-READY(<curl reason>), never 'may still be starting'."
+            - "crates/tillandsias-podman/src/client.rs observed_failure_hint: inference hint now names `podman logs` + the readiness gate instead of the ambiguous 'may still be starting'."
+            - "Unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi extended to assert effective_inference_tier grammar + env export; cargo build + clippy clean."
 
     - packet_id: experts-construction-research
       order: 393

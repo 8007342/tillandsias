@@ -59,8 +59,9 @@ use tillandsias_core::image_builder::{
 };
 use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_podman::{
-    ContainerSpec, MountMode, PodmanClient, current_runtime_lane, detect_gpu_devices,
-    podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
+    ContainerSpec, MountMode, OperationKind, PodmanClient, current_runtime_lane,
+    detect_gpu_devices, podman_cmd_sync, require_desktop_user_session,
+    require_headless_service_account,
 };
 use tracing::{debug, error, info, warn};
 
@@ -2652,6 +2653,22 @@ fn detect_inference_tier() -> &'static str {
     }
 }
 
+/// Order 392: the tier agents are TOLD must match what the container ACTUALLY
+/// runs, not just the hardware. A `gpu-cuda` host with no CDI spec (order 408
+/// automates generation once the toolkit package is present) silently runs
+/// CPU-only — reporting `gpu-cuda` there is a lie that makes agents expect a
+/// GPU that is not delivered. The effective tier downgrades `gpu-cuda` to
+/// `cpu` when podman cannot hand the GPU to the container, while `gpu-rocm`
+/// (explicit --device) and `metal` are delivered as-is. Keeps the pinned
+/// grammar: `gpu-cuda | gpu-rocm | metal | cpu`.
+fn effective_inference_tier() -> &'static str {
+    let hardware = detect_inference_tier();
+    match hardware {
+        "gpu-cuda" if !nvidia_cdi_available() => "cpu",
+        other => other,
+    }
+}
+
 /// Order 392: can rootless podman actually deliver the NVIDIA GPU to a
 /// container? Requires a CDI spec (`nvidia-ctk cdi generate`). Hardware
 /// without CDI is reported loudly with the exact remedy instead of
@@ -2678,6 +2695,68 @@ fn nvidia_cdi_available() -> bool {
             })
             .unwrap_or(false)
     })
+}
+
+/// Order 392: deterministic inference readiness probe. Polls the ollama API
+/// from inside the `tillandsias-inference` container (where `127.0.0.1:11434`
+/// is reachable regardless of enclave DNS) until `/api/version` answers. This
+/// replaces the old non-blocking, indeterminate "may still be starting" posture
+/// so a forge agent never boots before the endpoint is live. Models may still
+/// be pulling in the background — the API is ready the instant `ollama serve`
+/// is listening, which is all an agent needs to query it.
+///
+/// Returns `Ok(())` once ready, or `Err` after a bounded wait with a truthful
+/// reason (container not running, ollama not yet up, or API error).
+async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<(), String> {
+    use std::time::Duration;
+    const MAX_ATTEMPTS: u32 = 60; // 60 * 1s = 60s budget for a cold ollama boot
+    let mut last = String::from("no probe attempted");
+    for attempt in 1..=MAX_ATTEMPTS {
+        // Probes from inside the container so we don't depend on the enclave
+        // DNS alias resolving from the host launcher.
+        match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    "tillandsias-inference".into(),
+                    "curl".into(),
+                    "-fsS".into(),
+                    "--max-time".into(),
+                    "2".into(),
+                    "http://127.0.0.1:11434/api/version".into(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [forge-launch] inference ready on attempt {attempt}/{MAX_ATTEMPTS}"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(out) => {
+                last = format!("api not ready (exit {})", out.status.unwrap_or(-1));
+            }
+            Err(e) => {
+                last = format!("probe failed: {e}");
+            }
+        }
+        if debug {
+            eprintln!(
+                "[tillandsias] [forge-launch] inference not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    Err(format!(
+        "inference did not become ready within {MAX_ATTEMPTS}s. Last probe: {last}. \
+         Inspect `podman logs tillandsias-inference` for ollama startup errors \
+         (common: ollama binary self-install failed, or model cache volume missing)."
+    ))
 }
 
 fn build_inference_run_args(
@@ -2750,6 +2829,15 @@ fn build_inference_run_args(
         _ => {}
     }
     args.extend(["--env".into(), format!("TILLANDSIAS_INFERENCE_TIER={tier}")]);
+    // The tier reported to the container must reflect DELIVERABILITY, not just
+    // hardware: a gpu-cuda host without a CDI spec runs CPU-only. The container
+    // entrypoint re-detects actual device access at startup, but agents should
+    // not be promised a GPU that podman cannot hand them. Downgrade here so the
+    // whole enclave agrees on the effective tier (order 392).
+    let effective_tier = effective_inference_tier();
+    if effective_tier != tier {
+        args.extend(["--env".into(), format!("TILLANDSIAS_INFERENCE_TIER={effective_tier}")]);
+    }
     args.extend(proxy_env_args());
     args.extend([
         "-v".into(),
@@ -8524,6 +8612,16 @@ pub(crate) fn ensure_enclave_for_project(
             )
             .await
             .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+
+        // Order 392: deterministic inference readiness. The forge agent must
+        // not boot into an indeterminate "inference may still be starting"
+        // state. Block until the ollama API answers inside the enclave (the
+        // probe runs from the container's own network namespace where
+        // 127.0.0.1:11434 is reachable), with a truthful bounded wait and a
+        // loud reason on timeout. Models may still be pulling in the
+        // background — the API is up the moment ollama `serve` is listening,
+        // which is all the agent needs to query it.
+        wait_for_inference_ready(&client, debug).await?;
         Ok::<(), String>(())
     })?;
 
@@ -8632,8 +8730,9 @@ fn build_forge_agent_run_args_with_vault(
         .env("TILLANDSIAS_PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
         // Order 392: agents (and the startup context) learn the host's
-        // inference tier without probing hardware they cannot see.
-        .env("TILLANDSIAS_INFERENCE_TIER", detect_inference_tier())
+        // EFFECTIVE inference tier (hardware truth AND podman deliverability)
+        // without probing hardware they cannot see.
+        .env("TILLANDSIAS_INFERENCE_TIER", effective_inference_tier())
         .tmpfs("/tmp:size=256m,mode=1777")
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
@@ -10566,6 +10665,18 @@ mod tests {
             ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&tier),
             "tier grammar violated: {tier}"
         );
+        // Order 392: the EFFECTIVE tier is what agents/startup-context are
+        // told — it must match what the container actually runs, not just
+        // hardware. On a host with no GPU (this one), both agree on `cpu`.
+        let effective = effective_inference_tier();
+        assert!(
+            ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&effective),
+            "effective tier grammar violated: {effective}"
+        );
+        assert_eq!(
+            effective, tier,
+            "with no GPU present, effective tier must equal hardware tier"
+        );
         let window = source_window(source, "fn build_inference_run_args(");
         assert!(
             window.contains("nvidia_cdi_available()")
@@ -10585,14 +10696,17 @@ mod tests {
             cdi_window.contains(".config/cdi"),
             "nvidia_cdi_available must also honor the rootless user CDI dir (~/.config/cdi)"
         );
+        // The container env must export the EFFECTIVE tier (downgraded when a
+        // gpu-cuda host has no CDI spec, so it never lies about GPU delivery).
         assert!(
-            window.contains("TILLANDSIAS_INFERENCE_TIER"),
-            "tier must be exported into the inference container env"
+            window.contains("TILLANDSIAS_INFERENCE_TIER") && window.contains("effective_inference_tier()"),
+            "effective tier must be exported into the inference container env"
         );
         let forge = source_window(source, "fn build_forge_agent_run_args_with_vault(");
         assert!(
-            forge.contains("TILLANDSIAS_INFERENCE_TIER"),
-            "tier must be exported into the forge env for agents/startup context"
+            forge.contains("TILLANDSIAS_INFERENCE_TIER")
+                && forge.contains("effective_inference_tier()"),
+            "effective tier must be exported into the forge env for agents/startup context"
         );
     }
 
