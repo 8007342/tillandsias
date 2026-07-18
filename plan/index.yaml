@@ -15856,15 +15856,11 @@ plan_index:
         and tooling depend on: cmp (worktree boundary guard), diff (basic
         comparison), patch (applying diffs), file (type detection). These are
         in the Fedora diffutils/file packages. The boundary guard verify
-        produces false "worktree differs" verdicts because cmp is absent
-        (plan/issues/forge-build-check-tooling-gap-2026-07-08.md, addendums
-        2026-07-15, 2026-07-16, 2026-07-18). On a clean host this is the
-        first thing agents hit. Also missing: xxd (hex dump for debugging),
-        envsubst ( templating), diffstat (diff summary). These are tiny
-        packages with zero image-size concerns.
+        produces false "worktree differs" verdicts because cmp is absent.
+        On a clean host this is the first thing agents hit.
       exit_criteria:
         - "cmp, diff, patch, file available on PATH in a fresh forge session"
-        - "litmus:forge-lsp-availability-shape or a new litmus pins the CLI utils"
+        - "litmus:forge-lsp-availability-shape pins the CLI utils"
         - "worktree guard verify produces a truthful verdict in-forge"
       events:
         - type: filed
@@ -15878,6 +15874,15 @@ plan_index:
             diff/patch. Standing gap since 2026-07-08 (order 240 addressed
             build.sh path but not the missing packages). This is a clean
             new host with fresh tokens — the gap is in the image recipe.
+        - type: progress
+          ts: "2026-07-18T06:00:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Implementation committed (f79b0926): added diffutils patch file
+            gettext diffstat to Containerfile.base microdnf install line.
+            Extended forge-lsp-availability-shape litmus with a step verifying
+            the packages are pinned. Image rebuild needed for availability.
 
     - packet_id: git-mirror-relay-fetch-before-push
       order: 413
@@ -15892,6 +15897,21 @@ plan_index:
       estimated_hours: 1
       desired_release: v0.4
       release_target: forge-local-experts-milestone
+      events:
+        - type: progress
+          ts: "2026-07-18T05:55:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Implementation committed (b49b7776): pre-push fetch added to
+            relay-refs.sh before the atomic push, using plain git fetch
+            (no custom refspec) to safely update remote tracking branches.
+            Post-failure reconcile also switched from dangerous
+            refs/heads/*:refs/heads/* to plain git fetch. Running mirror
+            container still has old code — fix takes effect on next
+            container restart. Push to GitHub rejected (same stale-mirror
+            class) because the fix is in the repo but not yet in the
+            running container.
       outcome: >
         On a clean host with fresh OAuth tokens, `git push origin linux-next`
         from the forge was rejected with non-fast-forward. Root cause:

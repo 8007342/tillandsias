@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-18T05:20:00Z
+LastExecutionTime: 2026-07-18T06:00:00Z
 
 ## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
 
@@ -52,6 +52,33 @@ portability half.
   init/preflight remedy; v0.4), **409** (Fedora VM guest-image GPU awareness
   for nested host→VM→container passthrough; v0.5), **410** (AMD/ROCm
   passthrough research — likely custom; v0.5).
+
+## Cycle 2026-07-18T05:09Z→06:00Z (forge — orders 412+413: CLI utils + relay fetch-before-push)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260718T0509Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.bQ5AAM` clean (1 pre-existing dirty path:
+  `.opencode/package-lock.json`, sibling work).
+- **Sibling heads**: main 2d3c9095, linux-next 00f15dff, windows-next
+  91900d68, osx-next 7491dff2.
+- **Order 412 (forge-base-cli-utils-gap) — progress**: added `diffutils patch
+  file gettext diffstat` to `images/default/Containerfile.base` microdnf
+  install line. Extended `litmus:forge-lsp-availability-shape` with a step
+  verifying the packages are pinned. Image rebuild needed for availability.
+- **Order 413 (git-mirror-relay-fetch-before-push) — progress**: added
+  pre-push fetch (plain `git fetch`, no custom refspec) before the atomic
+  push in `relay-refs.sh`. Post-failure reconcile also switched from
+  dangerous `refs/heads/*:refs/heads/*` to plain fetch. Running mirror
+  container still has old code — fix takes effect on next container restart.
+- **Prior cycle note**: order 399 (OpenCode LSP wiring) completed this
+  session: `"lsp": true` in config overlay, litmus extended to 3 steps,
+  cargo fmt + clippy clean.
+- **Worker drain**: two packets (412+413), above the single-packet budget
+  because both were small and independent.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped.
+- **Next**: order 412 needs image rebuild to take effect; order 413 needs
+  mirror container restart. Both committed on linux-next.
 
 ## Cycle 2026-07-18T05:09Z→05:25Z (forge — order 399: OpenCode LSP wiring)
 
