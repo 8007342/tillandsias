@@ -52,5 +52,6 @@
       "command": ["/home/forge/.config-overlay/mcp/host-browser.sh"],
       "enabled": true
     }
-  }
+  },
+  "lsp": true
 }

@@ -2836,7 +2836,10 @@ fn build_inference_run_args(
     // whole enclave agrees on the effective tier (order 392).
     let effective_tier = effective_inference_tier();
     if effective_tier != tier {
-        args.extend(["--env".into(), format!("TILLANDSIAS_INFERENCE_TIER={effective_tier}")]);
+        args.extend([
+            "--env".into(),
+            format!("TILLANDSIAS_INFERENCE_TIER={effective_tier}"),
+        ]);
     }
     args.extend(proxy_env_args());
     args.extend([
@@ -10699,7 +10702,8 @@ mod tests {
         // The container env must export the EFFECTIVE tier (downgraded when a
         // gpu-cuda host has no CDI spec, so it never lies about GPU delivery).
         assert!(
-            window.contains("TILLANDSIAS_INFERENCE_TIER") && window.contains("effective_inference_tier()"),
+            window.contains("TILLANDSIAS_INFERENCE_TIER")
+                && window.contains("effective_inference_tier()"),
             "effective tier must be exported into the inference container env"
         );
         let forge = source_window(source, "fn build_forge_agent_run_args_with_vault(");

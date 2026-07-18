@@ -2040,10 +2040,7 @@ fn forge_missing_actionable_message(version: &str, project_name: &str) -> String
 /// must never claim initialization is "in progress" unless something is
 /// actually building; this returns the real build result, and the caller
 /// surfaces an actionable message only on failure.
-fn try_build_forge_image_on_demand(
-    service: &Arc<TrayService>,
-    snapshot: &TrayUiState,
-) -> bool {
+fn try_build_forge_image_on_demand(service: &Arc<TrayService>, snapshot: &TrayUiState) -> bool {
     let msg = format!(
         "building forge image v{} (this can take several minutes)...",
         snapshot.version
@@ -2056,12 +2053,8 @@ fn try_build_forge_image_on_demand(
     ));
 
     let forge_tag = format!("tillandsias-forge:v{}", snapshot.version);
-    let build_result = crate::ensure_image_exists(
-        &snapshot.root,
-        "forge",
-        &forge_tag,
-        snapshot.debug,
-    );
+    let build_result =
+        crate::ensure_image_exists(&snapshot.root, "forge", &forge_tag, snapshot.debug);
 
     match build_result {
         Ok(()) => {

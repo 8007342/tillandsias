@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-17T19:25:00Z
+LastExecutionTime: 2026-07-18T05:20:00Z
 
 ## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
 
@@ -52,6 +52,28 @@ portability half.
   init/preflight remedy; v0.4), **409** (Fedora VM guest-image GPU awareness
   for nested host→VM→container passthrough; v0.5), **410** (AMD/ROCm
   passthrough research — likely custom; v0.5).
+
+## Cycle 2026-07-18T05:09Z→05:25Z (forge — order 399: OpenCode LSP wiring)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260718T0509Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.bQ5AAM` clean (1 pre-existing dirty path:
+  `.opencode/package-lock.json`, sibling work).
+- **Sibling heads**: main 2d3c9095, linux-next 00f15dff, windows-next
+  91900d68, osx-next 7491dff2.
+- **Order 399 (forge-lsp-by-default) — progress**: OpenCode config overlay
+  now has `"lsp": true` (schema-validated; enables built-in LSP auto-detection
+  of rust-analyzer from PATH). rust-analyzer was already in forge-base
+  (Containerfile.base line 16; zero image-size delta). Litmus extended to 3
+  steps (binary + startup-context + config flag), all PASS. cargo fmt + clippy
+  clean. Exit criterion 1 (live go-to-definition) remains for live session
+  verification; criterion 2 (image size delta) is zero by construction.
+- **Prior cycle note**: order 392 (inference-startup-cleanup) implementation
+  complete, committed as f7701ffd, push blocked on GitHub upstream credential
+  (blocker filed). Local mirror has the commits.
+- **Worker drain**: one packet (399), per recurrent-loop budget.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped.
 
 ## Cycle 2026-07-17T17:47Z→(open) (linux_mutable macuahuitl — order 383 vault heal; WINDOWS UNBLOCKED)
 
