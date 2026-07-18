@@ -79,6 +79,24 @@ esac
 REMOTE_URL_REDACTED="$(redact_url "$REMOTE_URL")"
 log_msg "Relaying $CREATE_UPDATE_COUNT update(s) and $DELETE_COUNT deletion(s) atomically to $REMOTE_URL_REDACTED"
 
+# Fetch upstream state BEFORE pushing so stale mirror tracking refs do not
+# cause a non-fast-forward rejection on a clean host. Use the safe tracking
+# refspec (refs/remotes/origin/*) so fetched heads never clobber the
+# mirror's exported refs/heads/*. A fetch failure is non-fatal — the push
+# will fail visibly and the post-failure reconcile will retry.
+# Escape quarantine so fetched objects are persisted to the main database.
+if [ "$CREATE_UPDATE_COUNT" -gt 0 ]; then
+    log_msg "Pre-push fetch from upstream (staleness guard)..."
+    # shellcheck disable=SC2086
+    if PRE_FETCH="$(env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+        git fetch "$PUSH_URL" 2>&1)"; then
+        log_msg "Pre-push fetch succeeded"
+    else
+        PRE_FETCH_REDACTED="$(redact_output "$PRE_FETCH")"
+        log_msg "Pre-push fetch failed (non-fatal, push may still succeed): $PRE_FETCH_REDACTED"
+    fi
+fi
+
 # receive-pack exposes proposed objects through GIT_OBJECT_DIRECTORY and
 # GIT_ALTERNATE_OBJECT_DIRECTORIES. Keep Git's quarantine marker intact here:
 # an HTTPS/SSH upstream cannot inherit the local hook environment, and local
@@ -97,7 +115,7 @@ if [ -n "$PUSH_URL" ]; then
     log_msg "Attempting non-forced reconcile fetch from upstream..."
     # Escape quarantine so fetched objects are persisted to the main database
     if FETCH_OUTPUT="$(env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
-        git fetch "$PUSH_URL" 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*' 2>&1)"; then
+        git fetch "$PUSH_URL" 2>&1)"; then
         log_msg "Reconcile fetch succeeded. Mirror is now up to date."
     else
         FETCH_OUTPUT_REDACTED="$(redact_output "$FETCH_OUTPUT")"
