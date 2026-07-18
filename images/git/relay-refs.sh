@@ -56,8 +56,20 @@ if [ "$DELETE_COUNT" -gt 10 ] && [ "${TILLANDSIAS_ALLOW_BULK_DELETE:-0}" != "1" 
     exit 1
 fi
 
+# @trace spec:tillandsias-vault, spec:git-mirror-service
+# Read the GitHub token from Vault at push time. The mirror's own AppRole token
+# has a 1h default TTL; the entrypoint renewer (order 414) keeps it alive, but
+# best-effort renew here too so a push landing right after a missed heartbeat
+# refreshes the lease before the read.
 TOKEN=""
-if [ -r /run/secrets/vault-token ] && command -v vault-cli >/dev/null 2>&1; then
+HAVE_VAULT_CLI=0
+# VAULT_TOKEN_FILE mirrors vault-cli's own default so a test/fixture can point
+# the mounted-token check at a temp file; production leaves it at the podman
+# secret mount.
+VAULT_TOKEN_FILE="${VAULT_TOKEN_FILE:-/run/secrets/vault-token}"
+if [ -r "$VAULT_TOKEN_FILE" ] && command -v vault-cli >/dev/null 2>&1; then
+    HAVE_VAULT_CLI=1
+    vault-cli renew-self >/dev/null 2>&1 || true
     TOKEN="$(vault-cli read -field=token secret/github/token 2>/dev/null || true)"
 fi
 
@@ -68,7 +80,17 @@ PUSH_URL="$REMOTE_URL"
 case "$REMOTE_URL" in
     https://*)
         if [ -z "$TOKEN" ]; then
-            log_msg "HTTPS upstream credential is unavailable; run GitHub Login before pushing"
+            # @trace spec:tillandsias-vault, spec:git-mirror-service
+            # Distinguish an EXPIRED MIRROR TOKEN from an ABSENT GitHub token
+            # (order 414). If our own AppRole token cannot even look itself up,
+            # the mirror's Vault access has expired (~1h TTL) — the GitHub
+            # credential is almost certainly fine and "run GitHub Login" would
+            # send the operator down the wrong path. The remedy is a re-mint.
+            if [ "$HAVE_VAULT_CLI" -eq 1 ] && ! vault-cli lookup-self >/dev/null 2>&1; then
+                log_msg "git-mirror Vault token is expired or unrenewable (AppRole ~1h TTL, not renewed). The GitHub credential itself is likely valid — do NOT run GitHub Login. Relaunch the forge to re-mint the mirror token (build_git_run_args uses --replace)."
+            else
+                log_msg "HTTPS upstream credential is unavailable; run GitHub Login before pushing"
+            fi
             exit 1
         fi
         BARE_URL="$(echo "$REMOTE_URL" | sed -E 's#https://[^@/]+@#https://#')"

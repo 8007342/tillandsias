@@ -15942,3 +15942,71 @@ plan_index:
             AFTER failure but not fetch BEFORE push. The startup path
             (entrypoint.sh:182) already fetches before retry-push; the live
             relay path must do the same.
+
+    - packet_id: git-mirror-relay-token-renewal
+      order: 414
+      title: "Git mirror: renew the mirror's AppRole vault-token before its 1h TTL, and diagnose an expired mirror token distinctly from an absent GitHub token"
+      status: implemented
+      kind: bugfix
+      deliverable: images/git/entrypoint.sh, images/git/relay-refs.sh, images/git/vault-cli.sh
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [git, git-mirror, relay, vault, credentials, correctness]
+      estimated_hours: 2
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      supersedes_issue: plan/issues/blocker-git-mirror-relay-token-expiry-2026-07-18.md
+      note: >
+        The blocker doc that root-caused this (0f1deba9) labeled it "proposed
+        order 412", but 412 was already claimed by forge-base-cli-utils-gap in
+        the ledger; promoted here as 414 (next free order).
+      outcome: >
+        The git-mirror container's own AppRole vault-token has a 1h default TTL
+        (APPROLE_TOKEN_TTL_SECS=3600) and a 24h max TTL. The shared mirror
+        container outlives 1h, but nothing renewed the token, so every forge
+        session past the first hour silently lost push capability: the relay's
+        `vault-cli read secret/github/token` 403'd, the `2>/dev/null || true`
+        swallowed it, TOKEN="", and the push was rejected as "run GitHub Login"
+        — a FALSE error, because the GitHub token in Vault was valid and
+        push-capable the whole time. Operators chased a credential that was
+        fine. This bug hid behind the (recovered) order-413 fetch-before-push
+        fix and turned unattended forge cycles past 1h into lost work.
+      fix: >
+        (1) vault-cli.sh gains `renew-self` (POST auth/token/renew-self) and
+        `lookup-self` (GET auth/token/lookup-self) token-auth verbs. (2)
+        entrypoint.sh starts a background renewer that renews the mirror token
+        every VAULT_TOKEN_RENEW_INTERVAL (default 1800s, < the 1h TTL) toward
+        the 24h ceiling, and loudly names the re-mint remedy once the token can
+        no longer be renewed. (3) relay-refs.sh best-effort renews at push time
+        and, on a failed GitHub-token read over HTTPS, probes `lookup-self`: a
+        failing self-lookup means the MIRROR token expired (→ relaunch the forge
+        to re-mint via build_git_run_args --replace), distinct from a genuinely
+        absent GitHub token (→ run GitHub Login). No more swallowed 403.
+      exit_criteria:
+        - "a forge session running > 1h can still push: the mirror's vault-token is renewed before expiry — no 403 on lookup-self mid-session"
+        - "relay-refs.sh distinguishes an expired/unrenewable mirror token (→ re-mint) from an absent GitHub token (→ GitHub Login) instead of conflating both into 'credential unavailable'"
+        - "behavioral fixture simulates an expired mirror token and asserts the honest diagnosis, not a false GitHub Login (scripts/test-git-mirror-relay-token-expiry.sh)"
+      verification:
+        - "scripts/test-git-mirror-relay-token-expiry.sh: PASS (3 cases)"
+        - "litmus:git-mirror-relay-token-expiry (openspec/litmus-tests/litmus-git-mirror-relay-token-expiry.yaml)"
+        - "existing scripts/test-git-mirror-ref-convergence.sh: PASS (no regression)"
+      deploy_note: >
+        Code-only; the running mirror still serves the pre-414 image and its
+        token is already expired, so live push recovery until redeploy is the
+        operator remedy (relaunch the forge — `--replace` re-mints the token).
+        Takes effect for forge sessions after the tillandsias-git image is
+        rebuilt from this ref.
+      events:
+        - type: implemented
+          ts: "2026-07-18T00:00:00Z"
+          agent_id: "linux-macuahuitl-opus48"
+          host: linux
+          summary: >
+            Implemented on a host-side checkout separate from the live forge
+            agent (Hy3). vault-cli renew-self/lookup-self verbs, entrypoint
+            renewer heartbeat, relay-refs.sh lookup-self discriminator, plus a
+            hermetic behavioral fixture + litmus. Did not rebuild or relaunch
+            the running forge (operator-scoped). Filed after recovering Hy3's
+            stuck forge commits (ce6a3b35..43c9580e) to origin/linux-next via a
+            host-side merge with 0f1deba9.

@@ -32,6 +32,43 @@ else
     echo "No credential source available; authenticated git operations will fail."
 fi
 
+# @trace spec:tillandsias-vault, spec:git-mirror-service
+# Background token-renewer (order 414). The launcher mints the git-mirror's
+# AppRole token with a 1h default TTL (APPROLE_TOKEN_TTL_SECS=3600) and a 24h
+# max TTL. The mirror container outlives 1h, but nothing renewed the token, so
+# every forge session past the first hour lost push capability: the relay's
+# `vault-cli read secret/github/token` 403'd, the failure was swallowed, and
+# the push was rejected as "run GitHub Login" — a FALSE error, since the GitHub
+# token in Vault was fine (blocker-git-mirror-relay-token-expiry-2026-07-18).
+#
+# This heartbeat renews the token well inside its TTL so it stays valid up to
+# the 24h ceiling. Renewal MUST happen while the token is still live — once it
+# has expired, renew-self 403s and only a re-mint (relaunch the forge, which
+# uses `--replace`) recovers. Interval defaults to 30 min (< the 1h TTL);
+# override with VAULT_TOKEN_RENEW_INTERVAL for tests.
+VAULT_TOKEN_RENEW_INTERVAL="${VAULT_TOKEN_RENEW_INTERVAL:-1800}"
+start_vault_token_renewer() {
+    if [ ! -r /run/secrets/vault-token ] || ! command -v vault-cli >/dev/null 2>&1; then
+        return 0
+    fi
+    (
+        while true; do
+            sleep "$VAULT_TOKEN_RENEW_INTERVAL"
+            if lease="$(vault-cli renew-self "$VAULT_TOKEN_RENEW_INTERVAL" 2>/dev/null)"; then
+                echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') [vault-renewer] git-mirror token renewed (lease_duration=${lease:-?}s)"
+            else
+                # renew-self failed: the token hit its 24h max TTL or already
+                # expired. It can no longer be kept alive from inside the
+                # container — surface the honest remedy loudly; the next push
+                # will reject with the same expired-token diagnosis.
+                echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') [vault-renewer] WARNING: git-mirror Vault token can no longer be renewed (max TTL reached or expired). Relaunch the forge to re-mint (build_git_run_args --replace)." >&2
+            fi
+        done
+    ) &
+    VAULT_RENEWER_PID=$!
+    echo "[git-service] vault token-renewer started (pid=$VAULT_RENEWER_PID, every ${VAULT_TOKEN_RENEW_INTERVAL}s)"
+}
+
 # CA certificate from podman secret.
 # @trace spec:podman-secrets-integration, spec:git-mirror-service
 # Git CLI uses GIT_SSL_CAINFO to trust custom CA certificates.
@@ -194,8 +231,14 @@ done
 
 echo "$(date -Is) [git-service] daemon ready" >> "$SLOG"
 
+# @trace spec:tillandsias-vault, spec:git-mirror-service
+# Start the token-renewer heartbeat (order 414) so a forge session past 1h
+# keeps its Vault access and can still relay pushes upstream.
+VAULT_RENEWER_PID=""
+start_vault_token_renewer
+
 # Propagate shutdown signals (SIGTERM, SIGINT) to child processes
-trap 'echo "[git-service] shutting down..."; kill -TERM "$LIGHTTPD_PID" "$GIT_DAEMON_PID" 2>/dev/null; exit 0' SIGTERM SIGINT
+trap 'echo "[git-service] shutting down..."; kill -TERM "$LIGHTTPD_PID" "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
 
 # Start lighttpd for git HTTP smart protocol support.
 echo "[git-service] starting lighttpd on port 8080"
