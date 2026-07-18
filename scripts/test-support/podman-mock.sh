@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# freshness: auditor=linux-macuahuitl-fable5-20260717T1747Z date=2026-07-17 verdict=updated scope=exec branch no longer fabricates a vault handover (order 383 keychain-pollution root cause); keychain isolation ask still open
+# freshness: auditor=linux-forge-20260718T0334Z date=2026-07-18 verdict=refreshed scope=re-validated; still used by run-litmus-test.sh and remote_projects.rs command-shape litmus; verdict from 2026-07-17 (exec branch no longer fabricates vault handover) still holds; keychain isolation ask still open
 
 # Minimal Podman test backend for command-shape litmus runs.
 # It records the invocation and returns canned success outputs for the

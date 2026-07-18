@@ -15705,7 +15705,7 @@ plan_index:
       order: 411
       desired_release: v0.4
       title: "Tray forge-launch on a missing forge image must build it (or say 'run --init'), not report a misleading 'initialization may be in progress'"
-      status: ready
+      status: success
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/tray/mod.rs (forge-launch image gate) + optional --install/--init coupling
       depends_on: []
@@ -15749,3 +15749,28 @@ plan_index:
             misleading 'initialization may be in progress' after a version
             bump with no init). Real papercut on the launch path the
             local-inference/EXPERTS work depends on. v0.4.
+        - type: completed
+          ts: "2026-07-18T03:50:00Z"
+          agent_id: "linux-forge-20260718T0334Z"
+          host: forge
+          lease_id: "tray-forge-launch-missing-image-ux-1"
+          summary: >
+            Implemented option (a)+(b): when the forge image for the running
+            binary's version is missing, the tray launch path now attempts an
+            on-demand build via the newly-pub(crate) ensure_image_exists("forge")
+            (recursing into forge-base) with a visible "building forge image vX"
+            status (TrayIconState::Building), instead of falsely claiming init is
+            "in progress". On build failure it surfaces an actionable message
+            naming the exact version + "run tillandsias --init" — never the
+            ambiguous "may be in progress". Applied to both handle_launch_project
+            and handle_launch_cloud_project. Added a unit test asserting the
+            actionable-message contract. cargo build + clippy clean; 266 tray-
+            feature tests pass. The 2 failing tests (publish_local_service_*,
+            unsupported_variant_on_unix_socket_*) fail identically on a clean
+            tree — pre-existing environment-coupled failures, not regressions.
+          evidence:
+            - "crates/tillandsias-headless/src/main.rs: ensure_image_exists now pub(crate) so the tray can trigger on-demand forge image builds."
+            - "crates/tillandsias-headless/src/tray/mod.rs: try_build_forge_image_on_demand() builds the forge image for snapshot.version with a visible Building status; forge_missing_actionable_message() names version + `tillandsias --init`."
+            - "handle_launch_project / handle_launch_cloud_project: missing-forge branch tries on-demand build first, then actionable refusal; no longer emits 'initialization may be in progress'."
+            - "Unit test forge_missing_message_is_actionable_not_in_progress asserts the message names the version and `tillandsias --init` and never contains 'may be in progress'."
+            - "cargo clippy -p tillandsias-headless --features tray --bin tillandsias: clean. cargo test --features tray: 266 passed (1 new); 2 pre-existing env-coupled failures unchanged from clean tree."

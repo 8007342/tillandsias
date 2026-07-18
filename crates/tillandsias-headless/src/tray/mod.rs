@@ -2024,6 +2024,61 @@ fn recheck_environment_if_stale(
     (podman_ready, forge_ready)
 }
 
+/// Order 411: the actionable message shown when the forge image for the
+/// running binary's version is genuinely missing and on-demand build failed.
+/// It names the exact version and the remedy (`tillandsias --init`) and never
+/// claims initialization is "in progress" when nothing is building.
+fn forge_missing_actionable_message(version: &str, project_name: &str) -> String {
+    format!(
+        "forge image v{version} for project '{project_name}' is missing; run `tillandsias --init` to build it"
+    )
+}
+
+/// Attempt to build the forge image for the running binary's version on
+/// demand, so a tray launched after a `--install` version bump can recover
+/// without a manual `tillandsias --init`. Order 411: the missing-image branch
+/// must never claim initialization is "in progress" unless something is
+/// actually building; this returns the real build result, and the caller
+/// surfaces an actionable message only on failure.
+fn try_build_forge_image_on_demand(
+    service: &Arc<TrayService>,
+    snapshot: &TrayUiState,
+) -> bool {
+    let msg = format!(
+        "building forge image v{} (this can take several minutes)...",
+        snapshot.version
+    );
+    eprintln!("[tillandsias] tray: {msg}");
+    let _ = futures::executor::block_on(service.set_status(
+        format!("🔨 {msg}"),
+        TrayIconState::Building,
+        None,
+    ));
+
+    let forge_tag = format!("tillandsias-forge:v{}", snapshot.version);
+    let build_result = crate::ensure_image_exists(
+        &snapshot.root,
+        "forge",
+        &forge_tag,
+        snapshot.debug,
+    );
+
+    match build_result {
+        Ok(()) => {
+            let _ = futures::executor::block_on(service.set_status(
+                status_label(&TrayStatusStage::AllReady),
+                enclave_status_to_icon(EnclaveStatus::AllHealthy),
+                Some(true),
+            ));
+            true
+        }
+        Err(err) => {
+            eprintln!("error: forge image build failed: {err}");
+            false
+        }
+    }
+}
+
 fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
     let snapshot = service.snapshot();
     let version = snapshot.version.clone();
@@ -2061,12 +2116,15 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
     // the snapshot says no (see recheck_environment_if_stale — a tray
     // started during a version handover cached false forever and every
     // launch died silently; operator dead-on-arrival repro 2026-07-16).
-    let (podman_ready, forge_ready) = recheck_environment_if_stale(&service, &snapshot);
+    let (podman_ready, mut forge_ready) = recheck_environment_if_stale(&service, &snapshot);
     if !forge_ready {
-        let msg = format!(
-            "forge image not available for project '{}'; initialization may be in progress",
-            project.name
-        );
+        // Order 411: a missing forge image after a `--install` version bump is
+        // NOT "initialization in progress" — nothing is building on its own.
+        // Try to build it on demand before refusing with an actionable message.
+        forge_ready = try_build_forge_image_on_demand(&service, &snapshot);
+    }
+    if !forge_ready {
+        let msg = forge_missing_actionable_message(&snapshot.version, &project.name);
         eprintln!("error: {msg}");
         // Refusals must be visible in the tray, not just the journal.
         // @trace spec:menu-action-error-handling, spec:tray-ux
@@ -2146,7 +2204,7 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
     let snapshot = service.snapshot();
     // Live re-probe on a stale-negative snapshot (same dead-on-arrival class
     // as handle_launch_project; see recheck_environment_if_stale).
-    let (podman_ready, forge_ready) = recheck_environment_if_stale(&service, &snapshot);
+    let (podman_ready, mut forge_ready) = recheck_environment_if_stale(&service, &snapshot);
     if !podman_ready {
         let msg = format!(
             "podman unavailable; cannot launch cloud project '{}'",
@@ -2161,10 +2219,12 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
         return;
     }
     if !forge_ready {
-        let msg = format!(
-            "forge image not ready; cannot launch cloud project '{}'",
-            cloud.name
-        );
+        // Order 411: build the forge image on demand rather than claiming init
+        // is in progress; only refuse with an actionable message on failure.
+        forge_ready = try_build_forge_image_on_demand(&service, &snapshot);
+    }
+    if !forge_ready {
+        let msg = forge_missing_actionable_message(&snapshot.version, &cloud.name);
         eprintln!("error: {msg}");
         let _ = futures::executor::block_on(service.set_status(
             format!("🥀 {msg}"),
@@ -4007,6 +4067,27 @@ mod tests {
         assert_eq!(
             sanitize_status_text("🥀 Launch failed: image missing"),
             "🥀 Launch failed: image missing"
+        );
+    }
+
+    /// Order 411: the missing-forge-image path must surface an actionable
+    /// message (names the version + `tillandsias --init`) and must NEVER claim
+    /// initialization "may be in progress" — that wording implies silent
+    /// progress that, post `--install` version bump, never happens.
+    #[test]
+    fn forge_missing_message_is_actionable_not_in_progress() {
+        let msg = forge_missing_actionable_message("v0.3.260717.1", "myproj");
+        assert!(
+            msg.contains("v0.3.260717.1"),
+            "message must name the exact version: {msg}"
+        );
+        assert!(
+            msg.contains("tillandsias --init"),
+            "message must name the remedy: {msg}"
+        );
+        assert!(
+            !msg.to_lowercase().contains("may be in progress"),
+            "must not imply silent in-progress init: {msg}"
         );
     }
 

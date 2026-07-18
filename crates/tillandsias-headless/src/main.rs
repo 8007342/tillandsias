@@ -1656,7 +1656,7 @@ fn capture_containerfile_mtime(root: &Path, image_name: &str) -> Result<(), Stri
     InitBuildState::save_containerfile_mtime(image_name, mtime)
 }
 
-fn ensure_image_exists(
+pub(crate) fn ensure_image_exists(
     root: &Path,
     image_name: &str,
     image_tag: &str,
