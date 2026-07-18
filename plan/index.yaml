@@ -16010,3 +16010,77 @@ plan_index:
             the running forge (operator-scoped). Filed after recovering Hy3's
             stuck forge commits (ce6a3b35..43c9580e) to origin/linux-next via a
             host-side merge with 0f1deba9.
+
+    - packet_id: git-mirror-relay-reconcile-exported-head-regression
+      order: 415
+      title: "Git mirror: relay post-failure reconcile must fast-forward exported heads (order 413 regressed order 369)"
+      status: ready
+      kind: bugfix
+      deliverable: images/git/relay-refs.sh
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [git, git-mirror, relay, reconcile, correctness]
+      estimated_hours: 2
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      issue_ref: plan/issues/git-mirror-relay-reconcile-exported-head-regression-2026-07-18.md
+      outcome: >
+        scripts/test-git-mirror-relay-verified-ack.sh case 4 (the order-369
+        auto-reconcile guarantee) FAILS on a clean linux-next: after the relay
+        rejects a stale push, the mirror's exported refs/heads/main is not
+        fast-forwarded to upstream. Root cause: order 413 (b49b7776) replaced
+        the reconcile's ref-updating fetch with `git fetch "$PUSH_URL"` — a URL
+        fetch with no refspec updates only FETCH_HEAD, nothing under refs/. So
+        an unattended forge agent whose branch diverged from upstream can no
+        longer converge through the mirror; every diverged push dead-ends until
+        a host operator intervenes — defeating the point of order 369.
+      exit_criteria:
+        - "post-failure (and pre-push staleness) reconcile fast-forwards exported refs/heads/* to upstream FAST-FORWARD-ONLY (never forced); a stranded non-ancestor head is preserved"
+        - "scripts/test-git-mirror-relay-verified-ack.sh case 4 passes AND litmus:git-mirror-relay-verified-ack still asserts no '+refs/heads/*:refs/heads/*' forced refspec (both 369 and 413 hold)"
+        - "litmus:git-mirror-relay-verified-ack and litmus:git-mirror-fetch-reconcile both green"
+      events:
+        - type: filed
+          ts: "2026-07-18T00:00:00Z"
+          agent_id: "linux-macuahuitl-opus48"
+          host: linux
+          summary: >
+            Found on pristine linux-next while validating the order-414 change:
+            relay-verified-ack case 4 fails; reproduced without any 414 edit.
+            Regression traced to order 413's fetch-before-push rewrite.
+
+    - packet_id: plan-index-duplicate-events-key
+      order: 416
+      title: "plan/index.yaml: duplicate events: key in the order-413 packet drops evidence / breaks strict YAML parsers"
+      status: ready
+      kind: bugfix
+      deliverable: plan/index.yaml
+      depends_on: []
+      pickup_role: coordinator
+      owner_host: linux
+      capability_tags: [plan-ledger, yaml, ci, correctness]
+      estimated_hours: 1
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      issue_ref: plan/issues/plan-index-duplicate-events-key-2026-07-18.md
+      outcome: >
+        The order-413 packet declares `events:` twice in one mapping. Strict
+        YAML loaders (js-yaml) reject the whole ledger; lenient last-wins
+        loaders (Ruby Psych, PyYAML) keep only the second `events:` and DROP the
+        `type: progress` record that documents 413 was implemented (b49b7776) —
+        a reader concludes 413 is only "filed". A success-shaped evidence loss
+        in the machine-read work ledger that /advance-work-from-plan trusts.
+      exit_criteria:
+        - "the order-413 packet has a single `events:` list merging both events chronologically; no event data lost"
+        - "a CI/litmus guard rejects duplicate mapping keys in plan/index.yaml and other ledger YAML (strict-loader parse step wired into litmus:git-mirror-yaml-gate-shape or plan-lint)"
+        - "`npx js-yaml plan/index.yaml` parses cleanly"
+      events:
+        - type: filed
+          ts: "2026-07-18T00:00:00Z"
+          agent_id: "linux-macuahuitl-opus48"
+          host: linux
+          summary: >
+            Found while YAML-validating the order-414 ledger edit. Coordinator
+            should reconcile the merged event history rather than have a
+            passer-by rewrite another agent's ledger evidence; the durable value
+            is the duplicate-key CI guard.
