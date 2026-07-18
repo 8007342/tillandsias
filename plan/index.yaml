@@ -15837,3 +15837,88 @@ plan_index:
             - "handle_launch_project / handle_launch_cloud_project: missing-forge branch tries on-demand build first, then actionable refusal; no longer emits 'initialization may be in progress'."
             - "Unit test forge_missing_message_is_actionable_not_in_progress asserts the message names the version and `tillandsias --init` and never contains 'may be in progress'."
             - "cargo clippy -p tillandsias-headless --features tray --bin tillandsias: clean. cargo test --features tray: 266 passed (1 new); 2 pre-existing env-coupled failures unchanged from clean tree."
+
+    - packet_id: forge-base-cli-utils-gap
+      order: 412
+      title: "Forge-base image: add cmp, diff, patch, file and other CLI utilities agents need"
+      status: ready
+      kind: enhancement
+      deliverable: images/default/Containerfile.base + litmus pin
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [forge, images, tooling, dx]
+      estimated_hours: 1
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      outcome: >
+        The forge-base image is missing fundamental CLI utilities that agents
+        and tooling depend on: cmp (worktree boundary guard), diff (basic
+        comparison), patch (applying diffs), file (type detection). These are
+        in the Fedora diffutils/file packages. The boundary guard verify
+        produces false "worktree differs" verdicts because cmp is absent
+        (plan/issues/forge-build-check-tooling-gap-2026-07-08.md, addendums
+        2026-07-15, 2026-07-16, 2026-07-18). On a clean host this is the
+        first thing agents hit. Also missing: xxd (hex dump for debugging),
+        envsubst ( templating), diffstat (diff summary). These are tiny
+        packages with zero image-size concerns.
+      exit_criteria:
+        - "cmp, diff, patch, file available on PATH in a fresh forge session"
+        - "litmus:forge-lsp-availability-shape or a new litmus pins the CLI utils"
+        - "worktree guard verify produces a truthful verdict in-forge"
+      events:
+        - type: filed
+          ts: "2026-07-18T05:30:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Observed during meta-orchestration cycle: boundary guard verify
+            failed with "cmp: command not found" then false "worktree differs".
+            Also blocked ./build.sh --check and ad-hoc agent work requiring
+            diff/patch. Standing gap since 2026-07-08 (order 240 addressed
+            build.sh path but not the missing packages). This is a clean
+            new host with fresh tokens — the gap is in the image recipe.
+
+    - packet_id: git-mirror-relay-fetch-before-push
+      order: 413
+      title: "Git mirror: relay-refs.sh must fetch upstream BEFORE pushing, not just after failure"
+      status: ready
+      kind: bugfix
+      deliverable: images/git/relay-refs.sh
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [git, git-mirror, relay, correctness]
+      estimated_hours: 1
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      outcome: >
+        On a clean host with fresh OAuth tokens, `git push origin linux-next`
+        from the forge was rejected with non-fast-forward. Root cause:
+        relay-refs.sh does `git push --atomic` FIRST and only fetches to
+        reconcile AFTER failure (line 87-106). The mirror's tracking refs
+        were stale relative to GitHub because another host had pushed in the
+        interval. The startup retry loop in entrypoint.sh (line 182) DOES
+        fetch before pushing, but the live relay path — which handles every
+        normal forge push — does not. On a clean host with valid tokens, a
+        push should never fail due to stale mirror state. The fix is a
+        `git fetch origin` before the `git push --atomic` in relay-refs.sh,
+        gated on HTTPS upstream (git:// daemon doesn't need it). This is a
+        configuration that should not require guessing.
+      exit_criteria:
+        - "relay-refs.sh fetches upstream before pushing when remote is HTTPS"
+        - "on a clean host with fresh tokens, `git push origin linux-next` succeeds on first attempt"
+        - "litmus or fixture proving relay does not reject on stale mirror state"
+      events:
+        - type: filed
+          ts: "2026-07-18T05:30:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Observed during meta-orchestration cycle: push to mirror succeeded
+            but relay to GitHub failed non-fast-forward (mirror tracking stale).
+            Clean host, fresh tokens — the relay should have fetched first.
+            Prior order 369 (git-mirror-pre-reconcile-impl) added reconcile
+            AFTER failure but not fetch BEFORE push. The startup path
+            (entrypoint.sh:182) already fetches before retry-push; the live
+            relay path must do the same.
