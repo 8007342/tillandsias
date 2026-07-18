@@ -14997,7 +14997,7 @@ plan_index:
       desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Inference container startup cleanup — deterministic readiness, tier detection, preload policy"
-      status: in_progress
+      status: blocked
       kind: implementation
       deliverable: images/inference + container_deps ensure + readiness litmus
       depends_on: []
@@ -15052,6 +15052,22 @@ plan_index:
             - "images/default/lib-common.sh inject_startup_context: probe reports READY or NOT-READY(<curl reason>), never 'may still be starting'."
             - "crates/tillandsias-podman/src/client.rs observed_failure_hint: inference hint now names `podman logs` + the readiness gate instead of the ambiguous 'may still be starting'."
             - "Unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi extended to assert effective_inference_tier grammar + env export; cargo build + clippy clean."
+        - type: blocked
+          ts: "2026-07-18T04:52:00Z"
+          agent_id: "linux-forge-20260718T0334Z"
+          host: forge
+          lease_id: "inference-startup-cleanup-1"
+          summary: >
+            Implementation complete and committed locally (f7701ffd, clean
+            tree). PUSH BLOCKED: the forge relay's GitHub-upstream credential is
+            unavailable (local mirror channel ok; github.com leg rejected with
+            "HTTPS upstream credential is unavailable; run GitHub Login before
+            pushing"). No GH_TOKEN/GITHUB_TOKEN in env; gh auth config
+            unreadable. Filed blocker:
+            plan/issues/blocker-github-upstream-credential-2026-07-18.md.
+            Smallest next action: operator runs `tillandsias --github-login
+            --with-token` (or sets GH_TOKEN), then `git push origin linux-next`.
+            Work is finished; only the upstream transport credential is missing.
 
     - packet_id: experts-construction-research
       order: 393
