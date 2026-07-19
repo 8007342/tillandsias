@@ -499,8 +499,9 @@ specs:
   - litmus:idiomatic-layers-doctrine-shape
   - litmus:large-packet-eligibility-doctrine-shape
   - litmus:version-release-and-forge-selfservice-shape
+  - litmus:ephemerality-invariant-shape
   coverage_ratio: 100
-  last_verified: '2026-07-17'
+  last_verified: '2026-07-18'
 - spec_id: meta-orchestration
   status: active
   litmus_tests:

@@ -201,6 +201,36 @@ methodology:
       Instead of using heavy tools like JIRA, we treat project management as code.
       Issues, tasks, and specifications are managed via Git history, Markdown (.md), and YAML (.yaml) files in the ./plan directory.
       Agents must self-improve by logging inefficiencies (e.g., repeated steps, invalidated caches due to uncoordinated build scripts) directly into plan/issues/ as actionable items.
+    issue_filing_mandate:
+      authority: "operator directive, 2026-07-18"
+      rule: >
+        EVERY issue, bug, gap, regression, flaky/failing test, false signal, or
+        broken invariant an agent OBSERVES during ANY task MUST be filed as a
+        plan/issues/<slug>-<ISO-date>.md packet before that task is reported
+        complete — regardless of whether it lies inside the current task's
+        scope, whose code it is, or who introduced it. "Not mine", "out of
+        scope", "pre-existing", "another agent's work", or "unrelated" are NOT
+        acceptable reasons to leave an observed problem unfiled. Noticing is the
+        trigger; filing is the obligation. If you can describe it well enough to
+        dismiss it, you can describe it well enough to file it.
+      minimum_packet_contents:
+        - "what was observed (symptom) with a concrete repro or evidence pointer"
+        - "root cause if known, or the leading hypothesis and how to confirm it"
+        - "why it matters (blast radius / which invariant or guarantee it breaks)"
+        - "smallest correct fix as exit_criteria a picker can verify"
+        - "order: <next free>, status: ready — so /advance-work-from-plan can claim it"
+      scope_boundary: >
+        Filing is mandatory; FIXING out-of-scope issues inline is not. Prefer to
+        file the packet and keep your commit focused, especially when the defect
+        lives in another agent's recently-landed work or a shared ledger — let a
+        coordinator or the owning lane pick it up. Fix inline only when it is
+        cheap, obviously correct, and in your own change's blast radius.
+      exit_contract_binding: >
+        This mandate is part of the Non-Negotiable Exit Contract: a cycle that
+        observed a problem and ended without a corresponding plan/issues packet
+        (or a pointer to a pre-existing open one) has NOT satisfied its exit
+        contract. Reviewers and coordinators treat an unfiled known issue as a
+        defect in the cycle itself.
 
   clean_workspace_discipline:
     rule: >

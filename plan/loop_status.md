@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-17T19:25:00Z
+LastExecutionTime: 2026-07-18T06:00:00Z
 
 ## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
 
@@ -40,6 +40,67 @@ portability half.
   `/etc/cdi/nvidia.yaml` is absent. Remedy (sudo): install the toolkit +
   `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`. Until then
   local models serve CPU-ONLY (loud warning). Tracked in order 406.
+- **GPU as a PRODUCT concern (operator directive 2026-07-17)**: "if the host
+  supports gpu passthrough then we shall also pass it through to the
+  containers" — and this hits end users too. Fedora 44 wrinkle:
+  `nvidia-container-toolkit` is NOT in the default repos (needs NVIDIA's
+  libnvidia-container repo). 41c2bde2 fixed the misleading remedy (it said
+  `sudo nvidia-ctk cdi generate`, which fails "command not found" when the
+  toolkit is absent) + made `nvidia_cdi_available()` honor the rootless user
+  CDI dir (~/.config/cdi) so passthrough can auto-enable without a second sudo.
+  New packets: **408** (auto-enable — generate + wire the user CDI spec, guided
+  init/preflight remedy; v0.4), **409** (Fedora VM guest-image GPU awareness
+  for nested host→VM→container passthrough; v0.5), **410** (AMD/ROCm
+  passthrough research — likely custom; v0.5).
+
+## Cycle 2026-07-18T05:09Z→06:00Z (forge — orders 412+413: CLI utils + relay fetch-before-push)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260718T0509Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.bQ5AAM` clean (1 pre-existing dirty path:
+  `.opencode/package-lock.json`, sibling work).
+- **Sibling heads**: main 2d3c9095, linux-next 00f15dff, windows-next
+  91900d68, osx-next 7491dff2.
+- **Order 412 (forge-base-cli-utils-gap) — progress**: added `diffutils patch
+  file gettext diffstat` to `images/default/Containerfile.base` microdnf
+  install line. Extended `litmus:forge-lsp-availability-shape` with a step
+  verifying the packages are pinned. Image rebuild needed for availability.
+- **Order 413 (git-mirror-relay-fetch-before-push) — progress**: added
+  pre-push fetch (plain `git fetch`, no custom refspec) before the atomic
+  push in `relay-refs.sh`. Post-failure reconcile also switched from
+  dangerous `refs/heads/*:refs/heads/*` to plain fetch. Running mirror
+  container still has old code — fix takes effect on next container restart.
+- **Prior cycle note**: order 399 (OpenCode LSP wiring) completed this
+  session: `"lsp": true` in config overlay, litmus extended to 3 steps,
+  cargo fmt + clippy clean.
+- **Worker drain**: two packets (412+413), above the single-packet budget
+  because both were small and independent.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped.
+- **Next**: order 412 needs image rebuild to take effect; order 413 needs
+  mirror container restart. Both committed on linux-next.
+
+## Cycle 2026-07-18T05:09Z→05:25Z (forge — order 399: OpenCode LSP wiring)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260718T0509Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.bQ5AAM` clean (1 pre-existing dirty path:
+  `.opencode/package-lock.json`, sibling work).
+- **Sibling heads**: main 2d3c9095, linux-next 00f15dff, windows-next
+  91900d68, osx-next 7491dff2.
+- **Order 399 (forge-lsp-by-default) — progress**: OpenCode config overlay
+  now has `"lsp": true` (schema-validated; enables built-in LSP auto-detection
+  of rust-analyzer from PATH). rust-analyzer was already in forge-base
+  (Containerfile.base line 16; zero image-size delta). Litmus extended to 3
+  steps (binary + startup-context + config flag), all PASS. cargo fmt + clippy
+  clean. Exit criterion 1 (live go-to-definition) remains for live session
+  verification; criterion 2 (image size delta) is zero by construction.
+- **Prior cycle note**: order 392 (inference-startup-cleanup) implementation
+  complete, committed as f7701ffd, push blocked on GitHub upstream credential
+  (blocker filed). Local mirror has the commits.
+- **Worker drain**: one packet (399), per recurrent-loop budget.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped.
 
 ## Cycle 2026-07-17T17:47Z→(open) (linux_mutable macuahuitl — order 383 vault heal; WINDOWS UNBLOCKED)
 

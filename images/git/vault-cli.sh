@@ -28,6 +28,8 @@ usage() {
 Usage: vault-cli read [-field=<key>] <path>
        vault-cli write <path> <field>=<value> [<field>=<value> ...]
        vault-cli write-stdin <path> <field>
+       vault-cli renew-self [<increment-seconds>]
+       vault-cli lookup-self [-field=<key>]
        vault-cli health
 
 Examples:
@@ -35,6 +37,8 @@ Examples:
   vault-cli read secret/github/token
   vault-cli write secret/github/token token=ghp_example
   printf '%s' opaque-value | vault-cli write-stdin secret/provider/oauth credentials_b64
+  vault-cli renew-self 3600          # extend this token's lease (approle TTL heartbeat)
+  vault-cli lookup-self -field=ttl   # remaining TTL in seconds; exit 2 if expired/invalid
 EOF
 }
 
@@ -165,10 +169,79 @@ cmd_health() {
         || { echo "vault-cli: health probe failed" >&2; exit 2; }
 }
 
+# @trace spec:tillandsias-vault, spec:git-mirror-service
+# Renew the mounted AppRole token against its own lease (token-auth endpoint,
+# NOT KV-v2 — no secret/data path normalisation). The git-mirror's approle
+# lease has a 1h default TTL and a 24h max TTL; a periodic renew-self keeps the
+# mirror's Vault access alive across a long forge session so the relay can read
+# the GitHub token for every push, not just the first hour. A renew on an
+# already-expired token 403s (exit 2); the caller treats that as "must re-mint"
+# (relaunch the forge) rather than a renewable heartbeat.
+cmd_renew_self() {
+    increment="${1:-}"
+    body=""
+    if [ -n "$increment" ]; then
+        body="{\"increment\": \"${increment}s\"}"
+    fi
+    token="$(read_token)"
+    if [ -n "$body" ]; then
+        if ! response="$(curl -k -fsS -H "X-Vault-Token: $token" \
+            -d "$body" "$VAULT_ADDR/v1/auth/token/renew-self" 2>&1)"; then
+            echo "vault-cli: HTTP error renewing token: $response" >&2
+            exit 2
+        fi
+    else
+        if ! response="$(curl -k -fsS -H "X-Vault-Token: $token" \
+            -X POST "$VAULT_ADDR/v1/auth/token/renew-self" 2>&1)"; then
+            echo "vault-cli: HTTP error renewing token: $response" >&2
+            exit 2
+        fi
+    fi
+    # Print the granted lease duration (seconds) so a renewer loop can log it.
+    printf '%s' "$response" | jq -r '.auth.lease_duration // empty'
+}
+
+# @trace spec:tillandsias-vault, spec:git-mirror-service
+# Probe the mounted token's own validity/TTL (token-auth endpoint). Used by the
+# relay to DISTINGUISH an expired mirror token (this call 403s → exit 2 → the
+# fix is "relaunch the forge to re-mint") from a genuinely-absent GitHub token
+# (this call succeeds but `read secret/github/token` fails → "run GitHub
+# Login"). Without this discriminator the relay reported every mirror-token
+# expiry as a missing GitHub credential — the false error operators chased.
+cmd_lookup_self() {
+    field=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -field=*) field="${1#-field=}"; shift ;;
+            --field=*) field="${1#--field=}"; shift ;;
+            -field|--field) shift; field="$1"; shift ;;
+            *) break ;;
+        esac
+    done
+    token="$(read_token)"
+    if ! body="$(curl -k -fsS -H "X-Vault-Token: $token" \
+        "$VAULT_ADDR/v1/auth/token/lookup-self" 2>&1)"; then
+        echo "vault-cli: HTTP error on lookup-self (token expired or invalid): $body" >&2
+        exit 2
+    fi
+    if [ -n "$field" ]; then
+        value="$(printf '%s' "$body" | jq -r ".data.${field} // empty")"
+        if [ -z "$value" ] || [ "$value" = "null" ]; then
+            echo "vault-cli: field '$field' missing or null on lookup-self" >&2
+            exit 3
+        fi
+        printf '%s' "$value"
+    else
+        printf '%s' "$body"
+    fi
+}
+
 case "${1:-}" in
     read) shift; cmd_read "$@" ;;
     write) shift; cmd_write "$@" ;;
     write-stdin) shift; cmd_write_stdin "$@" ;;
+    renew-self) shift; cmd_renew_self "$@" ;;
+    lookup-self) shift; cmd_lookup_self "$@" ;;
     health) cmd_health ;;
     -h|--help|help|"") usage; exit 0 ;;
     *) echo "vault-cli: unknown subcommand: $1" >&2; usage; exit 4 ;;

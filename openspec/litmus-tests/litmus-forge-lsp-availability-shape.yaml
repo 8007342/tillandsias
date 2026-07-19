@@ -18,6 +18,14 @@ critical_path:
     command: "grep -F 'rust-analyzer' images/default/lib-common.sh"
     timeout_ms: 3000
 
+  - step: "OpenCode config overlay enables LSP (order 399)"
+    command: "grep -q '\"lsp\": true' images/default/config-overlay/opencode/config.json"
+    timeout_ms: 3000
+
+  - step: "forge-base includes diffutils, patch, file, gettext, diffstat (order 412)"
+    command: "grep -q 'diffutils patch file gettext diffstat' images/default/Containerfile.base"
+    timeout_ms: 3000
+
 observability:
   traces:
     - "@trace spec:forge-environment-discoverability"

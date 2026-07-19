@@ -1867,7 +1867,9 @@ fn observed_failure_hint(stage: &str, _container_name: &str, args: &[String]) ->
             .to_string();
     }
     if stage.contains("inference") {
-        return "next: inspect the inference container logs; local models may still be starting"
+        return "next: inspect the inference container logs (`podman logs tillandsias-inference`); \
+                 ollama may have failed to start (missing binary, model cache volume) — the \
+                 launch path blocks on /api/version readiness and reports the last probe reason"
             .to_string();
     }
     if stage.contains("proxy") {

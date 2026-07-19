@@ -15043,7 +15043,7 @@ plan_index:
       desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Inference container startup cleanup — deterministic readiness, tier detection, preload policy"
-      status: ready
+      status: blocked
       kind: implementation
       deliverable: images/inference + container_deps ensure + readiness litmus
       depends_on: []
@@ -15068,6 +15068,52 @@ plan_index:
         - "tier probe script emits the pinned grammar and matches the host (litmus, instant)"
         - "forge startup context reports inference: ready|starting(eta)s truthfully (no 'may still be starting' ambiguity)"
         - "GPU tier actually uses the GPU (nvidia-smi shows the ollama process) on this host; CPU tier works unchanged"
+      events:
+        - type: progress
+          ts: "2026-07-18T04:20:00Z"
+          agent_id: "linux-forge-20260718T0334Z"
+          host: forge
+          lease_id: "inference-startup-cleanup-1"
+          summary: >
+            Significant progress on order 392 (forge cycle, single packet).
+            (a) DETERMINISTIC READINESS: added wait_for_inference_ready() that
+            blocks the forge-launch path until `ollama serve` answers
+            /api/version from INSIDE the tillandsias-inference container
+            (127.0.0.1:11434, no enclave-DNS dependency), 60s bounded, truthful
+            last-probe reason on timeout. The forge agent now boots only after
+            the endpoint is live — no more indeterminate "may still be
+            starting". (b) TRUTHFUL TIER: added effective_inference_tier()
+            which downgrades gpu-cuda -> cpu when no NVIDIA CDI spec exists
+            (podman cannot deliver the GPU), so the tier reported to the
+            container env AND the forge agent env (TILLANDSIAS_INFERENCE_TIER)
+            matches what actually runs — never a "gpu tier in cpu clothing".
+            (c/d) RESIDUAL: model preload policy (expert slots reserved) and the
+            >=2-host-class tier matrix (392's exit criterion, shared with 397)
+            remain; GPU passthrough args were already CDI-gated. Updated the
+            startup-context probe to report READY / NOT-READY(reason) and the
+            observed-failure hint to stop implying silent "starting".
+          evidence:
+            - "crates/tillandsias-headless/src/main.rs: effective_inference_tier(); wait_for_inference_ready() (async, 60x1s poll via podman exec curl); forge-launch path awaits it after run_container_observed('forge-launch-inference')."
+            - "TILLANDSIAS_INFERENCE_TIER now set from effective_inference_tier() in both build_inference_run_args and build_forge_agent_run_args_with_vault."
+            - "images/default/lib-common.sh inject_startup_context: probe reports READY or NOT-READY(<curl reason>), never 'may still be starting'."
+            - "crates/tillandsias-podman/src/client.rs observed_failure_hint: inference hint now names `podman logs` + the readiness gate instead of the ambiguous 'may still be starting'."
+            - "Unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi extended to assert effective_inference_tier grammar + env export; cargo build + clippy clean."
+        - type: blocked
+          ts: "2026-07-18T04:52:00Z"
+          agent_id: "linux-forge-20260718T0334Z"
+          host: forge
+          lease_id: "inference-startup-cleanup-1"
+          summary: >
+            Implementation complete and committed locally (f7701ffd, clean
+            tree). PUSH BLOCKED: the forge relay's GitHub-upstream credential is
+            unavailable (local mirror channel ok; github.com leg rejected with
+            "HTTPS upstream credential is unavailable; run GitHub Login before
+            pushing"). No GH_TOKEN/GITHUB_TOKEN in env; gh auth config
+            unreadable. Filed blocker:
+            plan/issues/blocker-github-upstream-credential-2026-07-18.md.
+            Smallest next action: operator runs `tillandsias --github-login
+            --with-token` (or sets GH_TOKEN), then `git push origin linux-next`.
+            Work is finished; only the upstream transport credential is missing.
 
     - packet_id: experts-construction-research
       order: 393
@@ -15268,6 +15314,23 @@ plan_index:
       pickup_role: linux
       capability_tags: [lsp, forge, opencode, images, dx]
       estimated_hours: 5
+      events:
+        - type: progress
+          ts: "2026-07-18T05:20:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            OpenCode config overlay now has "lsp": true (schema-validated,
+            enables built-in LSP auto-detection of rust-analyzer from PATH).
+            Litmus:forge-lsp-availability-shape extended to 3 steps —
+            binary in Containerfile.base, startup-context affordance, and
+            config overlay LSP flag. All 3 PASS. rust-analyzer was already
+            present in forge-base (zero image-size delta); no Containerfile
+            change needed. cargo fmt + clippy clean (pre-existing formatting
+            in tray/mod.rs and main.rs auto-fixed). Exit criterion 1
+            (go-to-definition works in live session) remains for live
+            verification; exit criterion 2 (image size delta) is zero by
+            construction (binary already shipped).
       outcome: >
         Operator: 'just like LSP (which we should enable or at least make
         available by default)'. Ship rust-analyzer in the forge image
@@ -15888,3 +15951,459 @@ plan_index:
             the backfill is tracked work, not an implicit expectation. Active
             release seeded to v0.4 (EXPERTS fat-host core); cross-platform +
             modest-hardware tiering seeded to v0.5.
+
+    - packet_id: gpu-passthrough-auto-enablement
+      order: 408
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      title: "Auto-enable GPU passthrough: generate + wire the CDI spec (no second sudo) when the host supports it; loud guided remedy when the toolkit is missing"
+      status: ready
+      kind: implementation
+      deliverable: crates/tillandsias-headless (init/preflight GPU enablement) + user-level CDI generation + containers.conf cdi_spec_dirs wiring
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, gpu, cuda, cdi, provisioning, podman, forge]
+      estimated_hours: 5
+      outcome: >
+        Operator directive 2026-07-17: "if the host supports gpu passthrough
+        then we shall also pass it through to the containers" — and "this will
+        also happen for users at runtime", so passthrough must be a PRODUCT
+        behaviour, not a manual sudo dance. Ground truth (macuahuitl, Fedora
+        44): the driver + CUDA userspace libs are present, the tier probe says
+        gpu-cuda, and the GPU-delivery CODE already emits
+        `--device nvidia.com/gpu=all` when a CDI spec exists (order 392) — but
+        the toolkit package (`nvidia-container-toolkit`, providing `nvidia-ctk`)
+        is NOT installed and no CDI spec exists, so inference runs CPU-only.
+        Installing the PACKAGE is the one unavoidable root step (and on
+        Fedora/RHEL needs NVIDIA's libnvidia-container repo added — the default
+        repos lack it; the corrected remedy shipped in 41c2bde2). This packet
+        removes EVERY OTHER manual step: once `nvidia-ctk` is on PATH,
+        Tillandsias generates a USER-level CDI spec
+        (`nvidia-ctk cdi generate --output=$HOME/.config/cdi/nvidia.yaml`, no
+        sudo) at init/inference bring-up and ensures rootless podman reads it
+        (containers.conf `cdi_spec_dirs` includes ~/.config/cdi, user-writable),
+        so GPU passthrough engages automatically. When the toolkit is ABSENT,
+        surface the corrected guided remedy at INIT/preflight (prominent), not
+        only buried in the inference launch warning. nvidia_cdi_available()
+        already honors the user CDI dir (41c2bde2).
+      exit_criteria:
+        - "on a gpu-cuda host with nvidia-ctk present but no CDI spec, init/bring-up auto-generates a user-level ~/.config/cdi/nvidia.yaml (no sudo) and inference launches with --device nvidia.com/gpu=all"
+        - "rootless podman actually reads the user CDI spec (containers.conf cdi_spec_dirs wired if needed); nvidia-smi shows the ollama process holding VRAM (live evidence on macuahuitl)"
+        - "when nvidia-ctk is ABSENT, `tillandsias --init`/preflight prints the corrected toolkit-install remedy prominently; cpu hosts are unaffected"
+        - "regeneration on driver update handled or documented (a stale CDI spec after a driver bump is a known nvidia-ctk gotcha)"
+      events:
+        - type: filed
+          ts: "2026-07-17T20:05:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed from the operator's runtime-GPU directive after the Fedora 44
+            CDI repro. 41c2bde2 already fixed the misleading remedy + made
+            nvidia_cdi_available honor the user CDI dir; this packet is the
+            auto-enablement (generate + wire the user CDI spec, no second sudo)
+            + the init/preflight guided remedy. v0.4 (fat-host core). Sibling:
+            409 (VM guest-image GPU awareness, v0.5), 410 (AMD/ROCm research).
+
+    - packet_id: fedora-vm-image-gpu-awareness
+      order: 409
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Fedora VM guest images GPU-aware: bundle nvidia userspace libs + toolkit so host->VM->container passthrough works on macOS/Windows"
+      status: ready
+      kind: implementation
+      deliverable: Fedora VM guest image definitions (nvidia userspace libs + container toolkit) + nested passthrough wiring
+      depends_on: [gpu-passthrough-auto-enablement]
+      pickup_role: any
+      capability_tags: [vm, guest-image, gpu, cuda, cross-platform, fedora, inference]
+      estimated_hours: 8
+      outcome: >
+        Operator directive 2026-07-17: "our fedora vm images should also be
+        aware of these libraries". On macOS/Windows, Tillandsias runs its Linux
+        enclave inside a Fedora VM (Virtualization.framework / WSL2), so the
+        GPU path is TWO hops: host -> VM, then VM -> container. This packet
+        covers the VM-image half: the Fedora guest image must bundle the nvidia
+        userspace libraries + the container toolkit so that WHEN the host
+        exposes the GPU to the VM (WSL2 already exposes /dev/dxg; macOS VZ has
+        no GPU passthrough today — record that reality), the VM's enclave
+        containers can consume it via the same CDI path as bare metal (order
+        408). Where host->VM passthrough is impossible (macOS VZ), the tier
+        probe must honestly report cpu/metal and NOT pretend gpu-cuda. Gated to
+        v0.5 (cross-platform) so the v0.4 bare-metal Linux path ships first.
+      exit_criteria:
+        - "Fedora guest image bundles the nvidia userspace libs + container toolkit (or documents why a tier cannot); image size/build impact recorded"
+        - "on a Windows/WSL2 host with an NVIDIA GPU, the VM's inference container sees the GPU (nested passthrough proven) OR the gap is precisely characterized (order 402 datapoint: /dev/dxg present, needs the WSL CUDA lane)"
+        - "macOS VZ reality recorded: no GPU passthrough → honest cpu/metal tier, no false gpu-cuda"
+      events:
+        - type: filed
+          ts: "2026-07-17T20:05:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            The VM-image half of the operator's runtime-GPU directive. Nested
+            host->VM->container passthrough; depends on 408 (the container-side
+            CDI path). v0.5 cross-platform gate. Relates to order 402 (Windows
+            WSL2 tier) which already has /dev/dxg datapoints.
+
+    - packet_id: amd-rocm-gpu-passthrough-research
+      order: 410
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Research: AMD/ROCm GPU passthrough analogs — CDI-equivalent vs custom /dev/kfd+/dev/dri device + group/permission passthrough"
+      status: ready
+      kind: research
+      deliverable: plan/issues/amd-rocm-gpu-passthrough-decision-2026-07-17.md (research doc + decision record)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [research, inference, rocm, amd, gpu, passthrough, cdi]
+      estimated_hours: 5
+      outcome: >
+        Operator directive 2026-07-17: "make sure the amd analogs are at least
+        filed for research, they will possibly need custom passthrough." The
+        NVIDIA path standardized on CDI (nvidia-ctk generates a spec, podman
+        consumes `--device nvidia.com/gpu=all`). AMD/ROCm has no identical
+        story: build_inference_run_args already passes `/dev/kfd` + `/dev/dri`
+        for the gpu-rocm tier, but that is the CRUDE version — real rootless
+        ROCm passthrough usually also needs the invoking user in the `render`
+        and `video` groups, correct device permissions, and sometimes a ROCm
+        container runtime. Research: (1) is there a CDI generator for AMD
+        (amd-ctk / the AMD container toolkit) or must we hand-roll a CDI spec /
+        keep explicit --device? (2) the exact rootless-podman requirements
+        (groups, perms, seccomp) for ROCm; (3) the "custom passthrough" the
+        operator anticipates; (4) the provisioning analog to order 408
+        (auto-enable without sudo where possible); (5) nested VM passthrough
+        for AMD. Produce a decision record feeding a future implementation
+        packet. v0.5 (this fat host is NVIDIA; AMD is a modest/other-host tier).
+      exit_criteria:
+        - "research doc: AMD CDI-equivalent (if any) vs explicit-device passthrough; the exact rootless-ROCm requirements (render/video groups, /dev/kfd+/dev/dri perms, runtime)"
+        - "the 'custom passthrough' cases enumerated (which AMD gens/hosts need what beyond /dev/kfd+/dev/dri)"
+        - "decision record + a shaped follow-up implementation packet mirroring order 408 for AMD; provisioning-without-sudo assessed"
+      events:
+        - type: filed
+          ts: "2026-07-17T20:05:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed per operator directive to at least capture the AMD/ROCm
+            analogs for research (custom passthrough likely). Sibling of the
+            NVIDIA CDI work (408); v0.5 since this host is NVIDIA.
+
+    - packet_id: tray-forge-launch-missing-image-ux
+      order: 411
+      desired_release: v0.4
+      title: "Tray forge-launch on a missing forge image must build it (or say 'run --init'), not report a misleading 'initialization may be in progress'"
+      status: success
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs (forge-launch image gate) + optional --install/--init coupling
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [tray, ux, init, forge, robustness, rust]
+      estimated_hours: 3
+      outcome: >
+        Live operator repro 2026-07-17: after a fresh `./build.sh --install`
+        bumped the version, the tray launched but every forge launch
+        (OpenCode, Antigravity) failed with "forge image not available for
+        project '...'; initialization may be in progress" — and it never
+        finished, because NOTHING was building it. Root cause: `--install`
+        bumps VERSION → new image tags (forge_image_tag(version)) → the forge
+        image, which is built ONLY by `tillandsias --init` (run_init →
+        ensure_image_exists("forge-base"/"forge"), tray/mod.rs launch path
+        only CHECKS via recheck_environment_if_stale), is now missing for the
+        new version, and no init was triggered. The message
+        "initialization may be in progress" is FALSE when no init is running —
+        it implies progress that is not happening, so the user waits forever.
+        Fix direction: on a missing forge image the tray forge-launch should
+        EITHER (a) trigger the forge image build on-demand with a visible
+        "building forge image (several minutes)" status (best UX), OR (b)
+        surface an ACTIONABLE message naming the exact remedy
+        ("forge image for vX not built — run `tillandsias --init`"), never the
+        ambiguous "may be in progress". Consider coupling: `--install` could
+        note that images must be rebuilt at the new version (or offer to run
+        --init). Workaround this cycle: ran `tillandsias --init` explicitly,
+        which built forge-base + forge + all enclave images at v0.3.260717.1;
+        forges launchable again.
+      exit_criteria:
+        - "with the forge image missing for the running binary's version, the tray forge-launch either builds it (visible progress) or emits an actionable 'run tillandsias --init' message naming the version — never a bare 'initialization may be in progress' when nothing is initializing"
+        - "behavioral/source guard: the missing-image branch does not claim in-progress initialization unless an init is actually running/tracked (init-build-state.json or a live lock)"
+        - "documented (or implemented) coupling so a fresh --install does not silently leave the forge unlaunchable until a manual --init"
+      events:
+        - type: filed
+          ts: "2026-07-17T20:45:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed from a live operator repro (two forges stuck on the
+            misleading 'initialization may be in progress' after a version
+            bump with no init). Real papercut on the launch path the
+            local-inference/EXPERTS work depends on. v0.4.
+        - type: completed
+          ts: "2026-07-18T03:50:00Z"
+          agent_id: "linux-forge-20260718T0334Z"
+          host: forge
+          lease_id: "tray-forge-launch-missing-image-ux-1"
+          summary: >
+            Implemented option (a)+(b): when the forge image for the running
+            binary's version is missing, the tray launch path now attempts an
+            on-demand build via the newly-pub(crate) ensure_image_exists("forge")
+            (recursing into forge-base) with a visible "building forge image vX"
+            status (TrayIconState::Building), instead of falsely claiming init is
+            "in progress". On build failure it surfaces an actionable message
+            naming the exact version + "run tillandsias --init" — never the
+            ambiguous "may be in progress". Applied to both handle_launch_project
+            and handle_launch_cloud_project. Added a unit test asserting the
+            actionable-message contract. cargo build + clippy clean; 266 tray-
+            feature tests pass. The 2 failing tests (publish_local_service_*,
+            unsupported_variant_on_unix_socket_*) fail identically on a clean
+            tree — pre-existing environment-coupled failures, not regressions.
+          evidence:
+            - "crates/tillandsias-headless/src/main.rs: ensure_image_exists now pub(crate) so the tray can trigger on-demand forge image builds."
+            - "crates/tillandsias-headless/src/tray/mod.rs: try_build_forge_image_on_demand() builds the forge image for snapshot.version with a visible Building status; forge_missing_actionable_message() names version + `tillandsias --init`."
+            - "handle_launch_project / handle_launch_cloud_project: missing-forge branch tries on-demand build first, then actionable refusal; no longer emits 'initialization may be in progress'."
+            - "Unit test forge_missing_message_is_actionable_not_in_progress asserts the message names the version and `tillandsias --init` and never contains 'may be in progress'."
+            - "cargo clippy -p tillandsias-headless --features tray --bin tillandsias: clean. cargo test --features tray: 266 passed (1 new); 2 pre-existing env-coupled failures unchanged from clean tree."
+
+    - packet_id: forge-base-cli-utils-gap
+      order: 412
+      title: "Forge-base image: add cmp, diff, patch, file and other CLI utilities agents need"
+      status: ready
+      kind: enhancement
+      deliverable: images/default/Containerfile.base + litmus pin
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [forge, images, tooling, dx]
+      estimated_hours: 1
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      outcome: >
+        The forge-base image is missing fundamental CLI utilities that agents
+        and tooling depend on: cmp (worktree boundary guard), diff (basic
+        comparison), patch (applying diffs), file (type detection). These are
+        in the Fedora diffutils/file packages. The boundary guard verify
+        produces false "worktree differs" verdicts because cmp is absent.
+        On a clean host this is the first thing agents hit.
+      exit_criteria:
+        - "cmp, diff, patch, file available on PATH in a fresh forge session"
+        - "litmus:forge-lsp-availability-shape pins the CLI utils"
+        - "worktree guard verify produces a truthful verdict in-forge"
+      events:
+        - type: filed
+          ts: "2026-07-18T05:30:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Observed during meta-orchestration cycle: boundary guard verify
+            failed with "cmp: command not found" then false "worktree differs".
+            Also blocked ./build.sh --check and ad-hoc agent work requiring
+            diff/patch. Standing gap since 2026-07-08 (order 240 addressed
+            build.sh path but not the missing packages). This is a clean
+            new host with fresh tokens — the gap is in the image recipe.
+        - type: progress
+          ts: "2026-07-18T06:00:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Implementation committed (f79b0926): added diffutils patch file
+            gettext diffstat to Containerfile.base microdnf install line.
+            Extended forge-lsp-availability-shape litmus with a step verifying
+            the packages are pinned. Image rebuild needed for availability.
+
+    - packet_id: git-mirror-relay-fetch-before-push
+      order: 413
+      title: "Git mirror: relay-refs.sh must fetch upstream BEFORE pushing, not just after failure"
+      status: ready
+      kind: bugfix
+      deliverable: images/git/relay-refs.sh
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [git, git-mirror, relay, correctness]
+      estimated_hours: 1
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      events:
+        - type: progress
+          ts: "2026-07-18T05:55:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Implementation committed (b49b7776): pre-push fetch added to
+            relay-refs.sh before the atomic push, using plain git fetch
+            (no custom refspec) to safely update remote tracking branches.
+            Post-failure reconcile also switched from dangerous
+            refs/heads/*:refs/heads/* to plain git fetch. Running mirror
+            container still has old code — fix takes effect on next
+            container restart. Push to GitHub rejected (same stale-mirror
+            class) because the fix is in the repo but not yet in the
+            running container.
+      outcome: >
+        On a clean host with fresh OAuth tokens, `git push origin linux-next`
+        from the forge was rejected with non-fast-forward. Root cause:
+        relay-refs.sh does `git push --atomic` FIRST and only fetches to
+        reconcile AFTER failure (line 87-106). The mirror's tracking refs
+        were stale relative to GitHub because another host had pushed in the
+        interval. The startup retry loop in entrypoint.sh (line 182) DOES
+        fetch before pushing, but the live relay path — which handles every
+        normal forge push — does not. On a clean host with valid tokens, a
+        push should never fail due to stale mirror state. The fix is a
+        `git fetch origin` before the `git push --atomic` in relay-refs.sh,
+        gated on HTTPS upstream (git:// daemon doesn't need it). This is a
+        configuration that should not require guessing.
+      exit_criteria:
+        - "relay-refs.sh fetches upstream before pushing when remote is HTTPS"
+        - "on a clean host with fresh tokens, `git push origin linux-next` succeeds on first attempt"
+        - "litmus or fixture proving relay does not reject on stale mirror state"
+      events:
+        - type: filed
+          ts: "2026-07-18T05:30:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Observed during meta-orchestration cycle: push to mirror succeeded
+            but relay to GitHub failed non-fast-forward (mirror tracking stale).
+            Clean host, fresh tokens — the relay should have fetched first.
+            Prior order 369 (git-mirror-pre-reconcile-impl) added reconcile
+            AFTER failure but not fetch BEFORE push. The startup path
+            (entrypoint.sh:182) already fetches before retry-push; the live
+            relay path must do the same.
+
+    - packet_id: git-mirror-relay-token-renewal
+      order: 414
+      title: "Git mirror: renew the mirror's AppRole vault-token before its 1h TTL, and diagnose an expired mirror token distinctly from an absent GitHub token"
+      status: implemented
+      kind: bugfix
+      deliverable: images/git/entrypoint.sh, images/git/relay-refs.sh, images/git/vault-cli.sh
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [git, git-mirror, relay, vault, credentials, correctness]
+      estimated_hours: 2
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      supersedes_issue: plan/issues/blocker-git-mirror-relay-token-expiry-2026-07-18.md
+      note: >
+        The blocker doc that root-caused this (0f1deba9) labeled it "proposed
+        order 412", but 412 was already claimed by forge-base-cli-utils-gap in
+        the ledger; promoted here as 414 (next free order).
+      outcome: >
+        The git-mirror container's own AppRole vault-token has a 1h default TTL
+        (APPROLE_TOKEN_TTL_SECS=3600) and a 24h max TTL. The shared mirror
+        container outlives 1h, but nothing renewed the token, so every forge
+        session past the first hour silently lost push capability: the relay's
+        `vault-cli read secret/github/token` 403'd, the `2>/dev/null || true`
+        swallowed it, TOKEN="", and the push was rejected as "run GitHub Login"
+        — a FALSE error, because the GitHub token in Vault was valid and
+        push-capable the whole time. Operators chased a credential that was
+        fine. This bug hid behind the (recovered) order-413 fetch-before-push
+        fix and turned unattended forge cycles past 1h into lost work.
+      fix: >
+        (1) vault-cli.sh gains `renew-self` (POST auth/token/renew-self) and
+        `lookup-self` (GET auth/token/lookup-self) token-auth verbs. (2)
+        entrypoint.sh starts a background renewer that renews the mirror token
+        every VAULT_TOKEN_RENEW_INTERVAL (default 1800s, < the 1h TTL) toward
+        the 24h ceiling, and loudly names the re-mint remedy once the token can
+        no longer be renewed. (3) relay-refs.sh best-effort renews at push time
+        and, on a failed GitHub-token read over HTTPS, probes `lookup-self`: a
+        failing self-lookup means the MIRROR token expired (→ relaunch the forge
+        to re-mint via build_git_run_args --replace), distinct from a genuinely
+        absent GitHub token (→ run GitHub Login). No more swallowed 403.
+      exit_criteria:
+        - "a forge session running > 1h can still push: the mirror's vault-token is renewed before expiry — no 403 on lookup-self mid-session"
+        - "relay-refs.sh distinguishes an expired/unrenewable mirror token (→ re-mint) from an absent GitHub token (→ GitHub Login) instead of conflating both into 'credential unavailable'"
+        - "behavioral fixture simulates an expired mirror token and asserts the honest diagnosis, not a false GitHub Login (scripts/test-git-mirror-relay-token-expiry.sh)"
+      verification:
+        - "scripts/test-git-mirror-relay-token-expiry.sh: PASS (3 cases)"
+        - "litmus:git-mirror-relay-token-expiry (openspec/litmus-tests/litmus-git-mirror-relay-token-expiry.yaml)"
+        - "existing scripts/test-git-mirror-ref-convergence.sh: PASS (no regression)"
+      deploy_note: >
+        Code-only; the running mirror still serves the pre-414 image and its
+        token is already expired, so live push recovery until redeploy is the
+        operator remedy (relaunch the forge — `--replace` re-mints the token).
+        Takes effect for forge sessions after the tillandsias-git image is
+        rebuilt from this ref.
+      events:
+        - type: implemented
+          ts: "2026-07-18T00:00:00Z"
+          agent_id: "linux-macuahuitl-opus48"
+          host: linux
+          summary: >
+            Implemented on a host-side checkout separate from the live forge
+            agent (Hy3). vault-cli renew-self/lookup-self verbs, entrypoint
+            renewer heartbeat, relay-refs.sh lookup-self discriminator, plus a
+            hermetic behavioral fixture + litmus. Did not rebuild or relaunch
+            the running forge (operator-scoped). Filed after recovering Hy3's
+            stuck forge commits (ce6a3b35..43c9580e) to origin/linux-next via a
+            host-side merge with 0f1deba9.
+
+    - packet_id: git-mirror-relay-reconcile-exported-head-regression
+      order: 415
+      title: "Git mirror: relay post-failure reconcile must fast-forward exported heads (order 413 regressed order 369)"
+      status: ready
+      kind: bugfix
+      deliverable: images/git/relay-refs.sh
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [git, git-mirror, relay, reconcile, correctness]
+      estimated_hours: 2
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      issue_ref: plan/issues/git-mirror-relay-reconcile-exported-head-regression-2026-07-18.md
+      outcome: >
+        scripts/test-git-mirror-relay-verified-ack.sh case 4 (the order-369
+        auto-reconcile guarantee) FAILS on a clean linux-next: after the relay
+        rejects a stale push, the mirror's exported refs/heads/main is not
+        fast-forwarded to upstream. Root cause: order 413 (b49b7776) replaced
+        the reconcile's ref-updating fetch with `git fetch "$PUSH_URL"` — a URL
+        fetch with no refspec updates only FETCH_HEAD, nothing under refs/. So
+        an unattended forge agent whose branch diverged from upstream can no
+        longer converge through the mirror; every diverged push dead-ends until
+        a host operator intervenes — defeating the point of order 369.
+      exit_criteria:
+        - "post-failure (and pre-push staleness) reconcile fast-forwards exported refs/heads/* to upstream FAST-FORWARD-ONLY (never forced); a stranded non-ancestor head is preserved"
+        - "scripts/test-git-mirror-relay-verified-ack.sh case 4 passes AND litmus:git-mirror-relay-verified-ack still asserts no '+refs/heads/*:refs/heads/*' forced refspec (both 369 and 413 hold)"
+        - "litmus:git-mirror-relay-verified-ack and litmus:git-mirror-fetch-reconcile both green"
+      events:
+        - type: filed
+          ts: "2026-07-18T00:00:00Z"
+          agent_id: "linux-macuahuitl-opus48"
+          host: linux
+          summary: >
+            Found on pristine linux-next while validating the order-414 change:
+            relay-verified-ack case 4 fails; reproduced without any 414 edit.
+            Regression traced to order 413's fetch-before-push rewrite.
+
+    - packet_id: plan-index-duplicate-events-key
+      order: 416
+      title: "plan/index.yaml: duplicate events: key in the order-413 packet drops evidence / breaks strict YAML parsers"
+      status: ready
+      kind: bugfix
+      deliverable: plan/index.yaml
+      depends_on: []
+      pickup_role: coordinator
+      owner_host: linux
+      capability_tags: [plan-ledger, yaml, ci, correctness]
+      estimated_hours: 1
+      desired_release: v0.4
+      release_target: forge-local-experts-milestone
+      issue_ref: plan/issues/plan-index-duplicate-events-key-2026-07-18.md
+      outcome: >
+        The order-413 packet declares `events:` twice in one mapping. Strict
+        YAML loaders (js-yaml) reject the whole ledger; lenient last-wins
+        loaders (Ruby Psych, PyYAML) keep only the second `events:` and DROP the
+        `type: progress` record that documents 413 was implemented (b49b7776) —
+        a reader concludes 413 is only "filed". A success-shaped evidence loss
+        in the machine-read work ledger that /advance-work-from-plan trusts.
+      exit_criteria:
+        - "the order-413 packet has a single `events:` list merging both events chronologically; no event data lost"
+        - "a CI/litmus guard rejects duplicate mapping keys in plan/index.yaml and other ledger YAML (strict-loader parse step wired into litmus:git-mirror-yaml-gate-shape or plan-lint)"
+        - "`npx js-yaml plan/index.yaml` parses cleanly"
+      events:
+        - type: filed
+          ts: "2026-07-18T00:00:00Z"
+          agent_id: "linux-macuahuitl-opus48"
+          host: linux
+          summary: >
+            Found while YAML-validating the order-414 ledger edit. Coordinator
+            should reconcile the merged event history rather than have a
+            passer-by rewrite another agent's ledger evidence; the durable value
+            is the duplicate-key CI guard.

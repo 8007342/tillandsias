@@ -59,8 +59,9 @@ use tillandsias_core::image_builder::{
 };
 use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_podman::{
-    ContainerSpec, MountMode, PodmanClient, current_runtime_lane, detect_gpu_devices,
-    podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
+    ContainerSpec, MountMode, OperationKind, PodmanClient, current_runtime_lane,
+    detect_gpu_devices, podman_cmd_sync, require_desktop_user_session,
+    require_headless_service_account,
 };
 use tracing::{debug, error, info, warn};
 
@@ -1656,7 +1657,7 @@ fn capture_containerfile_mtime(root: &Path, image_name: &str) -> Result<(), Stri
     InitBuildState::save_containerfile_mtime(image_name, mtime)
 }
 
-fn ensure_image_exists(
+pub(crate) fn ensure_image_exists(
     root: &Path,
     image_name: &str,
     image_tag: &str,
@@ -2652,18 +2653,110 @@ fn detect_inference_tier() -> &'static str {
     }
 }
 
+/// Order 392: the tier agents are TOLD must match what the container ACTUALLY
+/// runs, not just the hardware. A `gpu-cuda` host with no CDI spec (order 408
+/// automates generation once the toolkit package is present) silently runs
+/// CPU-only — reporting `gpu-cuda` there is a lie that makes agents expect a
+/// GPU that is not delivered. The effective tier downgrades `gpu-cuda` to
+/// `cpu` when podman cannot hand the GPU to the container, while `gpu-rocm`
+/// (explicit --device) and `metal` are delivered as-is. Keeps the pinned
+/// grammar: `gpu-cuda | gpu-rocm | metal | cpu`.
+fn effective_inference_tier() -> &'static str {
+    let hardware = detect_inference_tier();
+    match hardware {
+        "gpu-cuda" if !nvidia_cdi_available() => "cpu",
+        other => other,
+    }
+}
+
 /// Order 392: can rootless podman actually deliver the NVIDIA GPU to a
 /// container? Requires a CDI spec (`nvidia-ctk cdi generate`). Hardware
 /// without CDI is reported loudly with the exact remedy instead of
 /// silently launching a CPU-only "GPU tier".
+///
+/// Checks the system CDI dirs (`/etc/cdi`, `/var/run/cdi`) AND the rootless
+/// USER CDI dir (`$HOME/.config/cdi`) — a user-level spec needs no root to
+/// generate, so honoring it lets the auto-enablement path (order 408) wire
+/// GPU passthrough without a second sudo once the toolkit package is present.
 fn nvidia_cdi_available() -> bool {
-    ["/etc/cdi/nvidia.yaml", "/etc/cdi/nvidia.json"]
-        .iter()
-        .any(|p| Path::new(p).exists())
-        || Path::new("/var/run/cdi")
-            .read_dir()
-            .map(|mut d| d.any(|e| e.is_ok()))
+    let mut dirs: Vec<PathBuf> = vec![PathBuf::from("/etc/cdi"), PathBuf::from("/var/run/cdi")];
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(Path::new(&home).join(".config/cdi"));
+    }
+    dirs.iter().any(|dir| {
+        dir.read_dir()
+            .map(|entries| {
+                entries.filter_map(Result::ok).any(|e| {
+                    let name = e.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("nvidia")
+                        && (name.ends_with(".yaml") || name.ends_with(".json"))
+                })
+            })
             .unwrap_or(false)
+    })
+}
+
+/// Order 392: deterministic inference readiness probe. Polls the ollama API
+/// from inside the `tillandsias-inference` container (where `127.0.0.1:11434`
+/// is reachable regardless of enclave DNS) until `/api/version` answers. This
+/// replaces the old non-blocking, indeterminate "may still be starting" posture
+/// so a forge agent never boots before the endpoint is live. Models may still
+/// be pulling in the background — the API is ready the instant `ollama serve`
+/// is listening, which is all an agent needs to query it.
+///
+/// Returns `Ok(())` once ready, or `Err` after a bounded wait with a truthful
+/// reason (container not running, ollama not yet up, or API error).
+async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<(), String> {
+    use std::time::Duration;
+    const MAX_ATTEMPTS: u32 = 60; // 60 * 1s = 60s budget for a cold ollama boot
+    let mut last = String::from("no probe attempted");
+    for attempt in 1..=MAX_ATTEMPTS {
+        // Probes from inside the container so we don't depend on the enclave
+        // DNS alias resolving from the host launcher.
+        match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    "tillandsias-inference".into(),
+                    "curl".into(),
+                    "-fsS".into(),
+                    "--max-time".into(),
+                    "2".into(),
+                    "http://127.0.0.1:11434/api/version".into(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [forge-launch] inference ready on attempt {attempt}/{MAX_ATTEMPTS}"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(out) => {
+                last = format!("api not ready (exit {})", out.status.unwrap_or(-1));
+            }
+            Err(e) => {
+                last = format!("probe failed: {e}");
+            }
+        }
+        if debug {
+            eprintln!(
+                "[tillandsias] [forge-launch] inference not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    Err(format!(
+        "inference did not become ready within {MAX_ATTEMPTS}s. Last probe: {last}. \
+         Inspect `podman logs tillandsias-inference` for ollama startup errors \
+         (common: ollama binary self-install failed, or model cache volume missing)."
+    ))
 }
 
 fn build_inference_run_args(
@@ -2707,10 +2800,21 @@ fn build_inference_run_args(
             if nvidia_cdi_available() {
                 args.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
             } else {
+                // The old remedy ("sudo nvidia-ctk cdi generate …") misleads on
+                // any host without the toolkit installed: nvidia-ctk does not
+                // exist yet, so the command fails "command not found" (operator
+                // repro, Fedora 44, 2026-07-17). The toolkit PACKAGE must be
+                // installed first — and on Fedora/RHEL that needs NVIDIA's repo,
+                // which the default repos do not carry. Order 408 automates the
+                // CDI-spec generation once the package is present.
                 eprintln!(
                     "[tillandsias] WARNING: NVIDIA GPU detected but no CDI spec — \
-                     inference will run CPU-ONLY. Remedy: sudo nvidia-ctk cdi generate \
-                     --output=/etc/cdi/nvidia.yaml   (order 392)"
+                     inference will run CPU-ONLY. Remedy (Fedora/RHEL): install the \
+                     NVIDIA container toolkit, then generate a CDI spec:\n\
+                     \x20 curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo\n\
+                     \x20 sudo dnf install -y nvidia-container-toolkit\n\
+                     \x20 sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml\n\
+                     (Debian/Ubuntu: apt-get install nvidia-container-toolkit.) See order 408."
                 );
             }
         }
@@ -2725,6 +2829,18 @@ fn build_inference_run_args(
         _ => {}
     }
     args.extend(["--env".into(), format!("TILLANDSIAS_INFERENCE_TIER={tier}")]);
+    // The tier reported to the container must reflect DELIVERABILITY, not just
+    // hardware: a gpu-cuda host without a CDI spec runs CPU-only. The container
+    // entrypoint re-detects actual device access at startup, but agents should
+    // not be promised a GPU that podman cannot hand them. Downgrade here so the
+    // whole enclave agrees on the effective tier (order 392).
+    let effective_tier = effective_inference_tier();
+    if effective_tier != tier {
+        args.extend([
+            "--env".into(),
+            format!("TILLANDSIAS_INFERENCE_TIER={effective_tier}"),
+        ]);
+    }
     args.extend(proxy_env_args());
     args.extend([
         "-v".into(),
@@ -8499,6 +8615,16 @@ pub(crate) fn ensure_enclave_for_project(
             )
             .await
             .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+
+        // Order 392: deterministic inference readiness. The forge agent must
+        // not boot into an indeterminate "inference may still be starting"
+        // state. Block until the ollama API answers inside the enclave (the
+        // probe runs from the container's own network namespace where
+        // 127.0.0.1:11434 is reachable), with a truthful bounded wait and a
+        // loud reason on timeout. Models may still be pulling in the
+        // background — the API is up the moment ollama `serve` is listening,
+        // which is all the agent needs to query it.
+        wait_for_inference_ready(&client, debug).await?;
         Ok::<(), String>(())
     })?;
 
@@ -8607,8 +8733,9 @@ fn build_forge_agent_run_args_with_vault(
         .env("TILLANDSIAS_PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
         // Order 392: agents (and the startup context) learn the host's
-        // inference tier without probing hardware they cannot see.
-        .env("TILLANDSIAS_INFERENCE_TIER", detect_inference_tier())
+        // EFFECTIVE inference tier (hardware truth AND podman deliverability)
+        // without probing hardware they cannot see.
+        .env("TILLANDSIAS_INFERENCE_TIER", effective_inference_tier())
         .tmpfs("/tmp:size=256m,mode=1777")
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
@@ -10499,6 +10626,35 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn nvidia_cdi_available_honors_user_config_dir() {
+        // Order 408: a user-level ~/.config/cdi/nvidia.yaml (generatable with
+        // NO sudo once the toolkit is installed) must count as "CDI available",
+        // so GPU passthrough can be auto-enabled without a second root step.
+        let _guard = env_lock();
+        let tmp = std::env::temp_dir().join(format!("tilland-cdi-{}", std::process::id()));
+        let cdi = tmp.join(".config/cdi");
+        std::fs::create_dir_all(&cdi).expect("mk temp cdi dir");
+        let prev = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", &tmp);
+        }
+        std::fs::write(cdi.join("nvidia.yaml"), "cdiVersion: 0.6.0\n").expect("write spec");
+        let seen = nvidia_cdi_available();
+        // Restore HOME before asserting so a failure can't leak env state.
+        unsafe {
+            match prev {
+                Some(h) => std::env::set_var("HOME", h),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert!(
+            seen,
+            "a user-level ~/.config/cdi/nvidia.yaml must be honored"
+        );
+    }
+
+    #[test]
     fn inference_run_args_gate_gpu_delivery_on_tier_and_cdi() {
         // Order 392: hardware truth (detect_inference_tier) decides the
         // tier; DELIVERY is gated separately — cuda needs a CDI spec and
@@ -10512,6 +10668,18 @@ mod tests {
             ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&tier),
             "tier grammar violated: {tier}"
         );
+        // Order 392: the EFFECTIVE tier is what agents/startup-context are
+        // told — it must match what the container actually runs, not just
+        // hardware. On a host with no GPU (this one), both agree on `cpu`.
+        let effective = effective_inference_tier();
+        assert!(
+            ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&effective),
+            "effective tier grammar violated: {effective}"
+        );
+        assert_eq!(
+            effective, tier,
+            "with no GPU present, effective tier must equal hardware tier"
+        );
         let window = source_window(source, "fn build_inference_run_args(");
         assert!(
             window.contains("nvidia_cdi_available()")
@@ -10519,14 +10687,30 @@ mod tests {
                 && window.contains("nvidia-ctk cdi generate"),
             "cuda delivery must be CDI-gated with the remedy named"
         );
+        // The remedy must tell the operator to INSTALL THE TOOLKIT PACKAGE
+        // first — `nvidia-ctk cdi generate` alone fails "command not found" on
+        // any host without it (operator repro Fedora 44, 2026-07-17). Order 408.
         assert!(
-            window.contains("TILLANDSIAS_INFERENCE_TIER"),
-            "tier must be exported into the inference container env"
+            window.contains("nvidia-container-toolkit"),
+            "the CDI remedy must name the toolkit package install, not just nvidia-ctk"
+        );
+        let cdi_window = source_window(source, "fn nvidia_cdi_available(");
+        assert!(
+            cdi_window.contains(".config/cdi"),
+            "nvidia_cdi_available must also honor the rootless user CDI dir (~/.config/cdi)"
+        );
+        // The container env must export the EFFECTIVE tier (downgraded when a
+        // gpu-cuda host has no CDI spec, so it never lies about GPU delivery).
+        assert!(
+            window.contains("TILLANDSIAS_INFERENCE_TIER")
+                && window.contains("effective_inference_tier()"),
+            "effective tier must be exported into the inference container env"
         );
         let forge = source_window(source, "fn build_forge_agent_run_args_with_vault(");
         assert!(
-            forge.contains("TILLANDSIAS_INFERENCE_TIER"),
-            "tier must be exported into the forge env for agents/startup context"
+            forge.contains("TILLANDSIAS_INFERENCE_TIER")
+                && forge.contains("effective_inference_tier()"),
+            "effective tier must be exported into the forge env for agents/startup context"
         );
     }
 

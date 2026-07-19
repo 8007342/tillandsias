@@ -21,6 +21,7 @@ RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
         gdb lldb strace ltrace valgrind heaptrack delve \
         shellcheck shfmt \
         gcc gcc-c++ make cmake pkgconfig unzip \
+        diffutils patch file gettext diffstat \
         iproute iputils socat nmap-ncat sqlite \
     && git lfs install --system \
     && microdnf clean all

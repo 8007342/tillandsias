@@ -1907,9 +1907,16 @@ inject_startup_context() {
     local ctx_file="$project_dir/.forge-startup-context.md"
     # Order 392: truthful inference readiness — probe the endpoint once
     # (1s budget) instead of the old indeterminate "may still be starting".
-    local _inference_status="starting (poll /api/tags)"
-    if curl -fsS --max-time 1 http://inference:11434/api/tags >/dev/null 2>&1; then
+    # The forge-launch path already blocks until /api/version answers, so this
+    # probe is the authoritative live check; it reports READY or a concrete
+    # not-ready reason, never an ambiguous "may be starting".
+    local _inference_status="NOT-READY"
+    local _inference_reason=""
+    if _probe_out="$(curl -fsS --max-time 1 http://inference:11434/api/tags 2>&1)"; then
         _inference_status="READY"
+    else
+        _inference_reason="${_probe_out:-connection refused}"
+        _inference_status="NOT-READY (${_inference_reason})"
     fi
     local branch version agent_name
     branch="$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
