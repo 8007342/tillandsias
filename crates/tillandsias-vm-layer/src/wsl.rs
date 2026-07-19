@@ -952,9 +952,7 @@ impl VmRuntime for WslRuntime {
                         if let Some(remediation) = classify_launch_stderr(&stderr) {
                             // A confident classified verdict never improves
                             // with retries — surface it immediately.
-                            return Err(format!(
-                                "WSL start failed (classified). {remediation}"
-                            ));
+                            return Err(format!("WSL start failed (classified). {remediation}"));
                         }
                         last_poke_stderr = stderr;
                         // If E_UNEXPECTED (-1) or similar error occurs, try to recover

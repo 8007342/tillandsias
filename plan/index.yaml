@@ -17407,7 +17407,7 @@ plan_index:
     - order: 430
       desired_release: v0.4
       title: "Codex lane is unauthenticated by construction: OPENAI_API_KEY does not authenticate Codex AND injecting it suppresses the vault OAuth restore"
-      status: ready
+      status: done
       kind: fix
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: []
@@ -17441,6 +17441,29 @@ plan_index:
           host: linux
           summary: Filed from the 2026-07-19 forge delegation research.
 
+
+        - type: completed
+          ts: "2026-07-19T02:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            ProviderId::Openai now maps to CODEX_API_KEY (vault_bootstrap.rs)
+            and entrypoint-forge-codex.sh gates its Vault OAuth restore on the
+            same variable. Verified the blast radius before changing the shared
+            mapping: env_var() has exactly two consumers (main.rs:8871 forge
+            injection and the Gemini special-case at :3935), and
+            ProviderId::Openai reaches env_var() only via
+            ForgeAgentMode::Codex, so no other lane is affected. No fixture
+            pinned the old name (test-codex-oauth-restore.sh exercises the
+            restore script directly, not the gate). Pinned by
+            litmus:codex-api-key-env-var, whose rollback note instructs any
+            future agent to re-run the falsification experiment rather than
+            revert on intuition — "OpenAI provider therefore OPENAI_API_KEY"
+            reads as obviously correct and is wrong. NOT verified end-to-end
+            against a live OpenAI credential; that needs a real key and is
+            covered by order 429's result-retrieval work.
+            ./build.sh --check passes; workspace tests 187/188 with the single
+            failure pre-existing and environment-dependent (see order 433).
     - order: 431
       desired_release: v0.4
       title: "OpenCode vault provider: inject credentials via OPENCODE_AUTH_CONTENT so no auth.json ever touches disk"
@@ -17510,3 +17533,40 @@ plan_index:
           summary: >
             Filed from the 2026-07-19 read-only diagnosis of the stalled agent
             in ~/src/tillandsias.
+
+
+    - order: 433
+      desired_release: v0.4
+      title: "Unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi fails on any GPU host — ./build.sh --test is red on the CUDA machine"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs (test hermeticity)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, testing, hermeticity, gpu, ci]
+      estimated_hours: 2
+      outcome: >
+        tests::inference_run_args_gate_gpu_delivery_on_tier_and_cdi asserts
+        "with no GPU present, effective tier must equal hardware tier" but reads
+        REAL host hardware, so on a CUDA host it fails with left "cpu" vs right
+        "gpu-cuda". Confirmed pre-existing and independent of any working-tree
+        change by stashing and re-running: it fails identically on a clean tree.
+        Consequence: `./build.sh --test` is RED for every developer and agent on
+        a GPU host, which trains people to ignore the test gate — the same
+        erosion class as a litmus that cannot fail. The test must inject the
+        hardware tier rather than probe the host. Note the sibling
+        litmus:inference-container-implementation-shape STEP 8 also fails on this
+        host; check whether it shares the root cause.
+      exit_criteria:
+        - "the test injects hardware tier instead of probing real host hardware"
+        - "./build.sh --test is green on both a CPU-only host and a CUDA host"
+        - "the GPU-present path is covered by its own case rather than being untestable"
+      events:
+        - type: filed
+          ts: "2026-07-19T02:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Found while validating order 430. Isolated as pre-existing by
+            stashing the working tree and re-running the single test.

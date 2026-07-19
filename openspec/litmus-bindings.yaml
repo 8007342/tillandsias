@@ -916,6 +916,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:vault-auto-unseal-no-prompt
+  - litmus:codex-api-key-env-var
   - litmus:vault-policy-forge-cannot-read-github-token
   - litmus:git-mirror-safe-refspec-push
   - litmus:vault-github-token-capture-shape

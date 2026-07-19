@@ -783,10 +783,28 @@ impl ProviderId {
     }
 
     /// The environment variable name that the provider's CLI reads.
+    ///
+    /// NOTE (order 430): OpenAI maps to `CODEX_API_KEY`, not `OPENAI_API_KEY`.
+    /// The CLI we run for the OpenAI provider is Codex, and Codex **ignores**
+    /// `OPENAI_API_KEY` entirely. Verified empirically against codex-cli
+    /// 0.144.4 with bogus keys and an empty `CODEX_HOME`:
+    ///
+    ///   OPENAI_API_KEY -> "Missing bearer or basic authentication in header"
+    ///                     (the key is never sent — no auth header at all)
+    ///   CODEX_API_KEY  -> "Incorrect API key provided: sk-bogus*****-111"
+    ///                     (the key is used)
+    ///
+    /// Injecting `OPENAI_API_KEY` was worse than a no-op: the Codex entrypoint
+    /// gated its Vault OAuth restore on that variable being empty, so setting
+    /// it ALSO suppressed the restore, leaving the lane with no credential at
+    /// all. Do not "fix" this back without re-running that experiment.
+    ///
+    /// `CODEX_API_KEY` is honoured only by `codex exec` — it is deliberately
+    /// disabled in the TUI upstream.
     pub fn env_var(self) -> &'static str {
         match self {
             ProviderId::Anthropic => "ANTHROPIC_API_KEY",
-            ProviderId::Openai => "OPENAI_API_KEY",
+            ProviderId::Openai => "CODEX_API_KEY",
             ProviderId::Gemini => "GEMINI_API_KEY",
         }
     }

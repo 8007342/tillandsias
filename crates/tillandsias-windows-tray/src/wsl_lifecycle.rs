@@ -387,8 +387,9 @@ impl WslLifecycle {
                  guest as damaged and reprovisioning from scratch (one-shot \
                  self-heal; the guest is disposable by design)"
             );
-            progress
-                .report_message("\u{267B}\u{FE0F} Local VM is damaged — reprovisioning from scratch...");
+            progress.report_message(
+                "\u{267B}\u{FE0F} Local VM is damaged — reprovisioning from scratch...",
+            );
             self.unregister_distro().await?;
             let _ = tokio::fs::remove_file(&marker).await;
             // Fall through to the full download + import path below.

@@ -85,7 +85,13 @@ require_codex
 # API-key launches need no OAuth state. Otherwise restore the complete opaque
 # Codex credential document from the scoped Vault lease mounted only for this
 # agent mode; failure is loud before the TUI starts.
-if [ -z "${OPENAI_API_KEY:-}" ]; then
+#
+# Gate on CODEX_API_KEY, NOT OPENAI_API_KEY (order 430). Codex ignores
+# OPENAI_API_KEY as an env var — it is only a FIELD NAME inside auth.json — so
+# gating on it meant an injected OPENAI_API_KEY suppressed this restore while
+# supplying no usable credential, leaving the lane unauthenticated by
+# construction.
+if [ -z "${CODEX_API_KEY:-}" ]; then
     /usr/local/bin/codex-oauth-vault restore
 fi
 

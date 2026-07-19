@@ -2400,7 +2400,10 @@ fn spawn_provisioning(hwnd: HWND) {
                             while terminal_rx.changed().await.is_ok() {
                                 let reason = terminal_rx.borrow_and_update().clone();
                                 if let Some(reason) = reason {
-                                    update_status_text("\u{1F534} VM connection lost — Retry", hwnd);
+                                    update_status_text(
+                                        "\u{1F534} VM connection lost — Retry",
+                                        hwnd,
+                                    );
                                     show_balloon(
                                         hwnd,
                                         "Tillandsias — VM connection lost",
@@ -2541,16 +2544,20 @@ fn spawn_provisioning(hwnd: HWND) {
                 // is, so a remote crash is debuggable with zero live help.
                 let reason = err_text.clone();
                 tokio::task::spawn_local(async move {
-                    let written =
-                        tokio::task::spawn_blocking(move || write_failure_diagnostics_bundle(&reason))
-                            .await
-                            .ok()
-                            .flatten();
+                    let written = tokio::task::spawn_blocking(move || {
+                        write_failure_diagnostics_bundle(&reason)
+                    })
+                    .await
+                    .ok()
+                    .flatten();
                     if let Some(path) = written {
                         show_balloon(
                             hwnd,
                             "Tillandsias — diagnostics saved",
-                            &format!("Share this file when reporting the problem:\n{}", path.display()),
+                            &format!(
+                                "Share this file when reporting the problem:\n{}",
+                                path.display()
+                            ),
                             BalloonSeverity::Info,
                         );
                     }
@@ -3073,10 +3080,7 @@ mod tests {
         assert!(path.ends_with("launch-failure-diagnostics.json"));
         let content = std::fs::read_to_string(&path).expect("bundle readable");
         let json: serde_json::Value = serde_json::from_str(&content).expect("valid JSON");
-        assert_eq!(
-            json["schema"],
-            "tillandsias-launch-failure-bundle/v1"
-        );
+        assert_eq!(json["schema"], "tillandsias-launch-failure-bundle/v1");
         assert!(json["reason"].as_str().unwrap().contains("[REDACTED]"));
         assert!(!content.contains("ghp_16C7"), "no raw token in the bundle");
         assert!(json["diagnose"]["version"].is_string(), "diagnose embedded");
