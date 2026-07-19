@@ -21,12 +21,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GATE="$ROOT/scripts/check-running-image-freshness.sh"
 
 C_NAME="tillandsias-git-freshness-fixture"
-STALE_TAG="localhost/tillandsias-git:v0.0.0-freshness-fixture"
+# A REAL stale image is one build-image.sh produced from different sources, so
+# it carries a canonical 64-hex source-hash tag that simply is not the expected
+# one. Modelling it with a version-style tag (as the first fixture did) tested a
+# case that cannot occur, and hid the fact that a tagless image is
+# INDETERMINATE rather than stale.
+STALE_HASH="00000000000000000000000000000000000000000000000000000000deadbeef"
+STALE_TAG="localhost/tillandsias-git:$STALE_HASH"
+UNIDENTIFIED_TAG="localhost/tillandsias-git:v0.0.0-freshness-fixture"
 WORK="$(mktemp -d)"
 
 cleanup() {
     podman rm -f "$C_NAME" >/dev/null 2>&1 || true
     podman rmi -f "$STALE_TAG" >/dev/null 2>&1 || true
+    podman rmi -f "$UNIDENTIFIED_TAG" >/dev/null 2>&1 || true
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -68,7 +76,7 @@ echo "case 2 ok: absent container skips, --require-running fails loud"
 # --- case 3: NEGATIVE CONTROL — a stale running image must be detected ------
 # LABEL (not RUN) so the derived image needs no write access; the image runs as
 # a non-root user and any RUN touching / would fail.
-printf 'FROM localhost/tillandsias-git:latest\nLABEL tillandsias.freshness.fixture="1"\n' \
+printf 'FROM localhost/tillandsias-git:latest\nLABEL tillandsias.freshness.fixture="stale"\n' \
     > "$WORK/Containerfile"
 podman build -q -t "$STALE_TAG" "$WORK" >/dev/null 2>&1 \
     || fail "case3 setup: could not build the synthetic stale image"
@@ -103,5 +111,39 @@ OUT="$("$GATE" git 2>&1)"; RC=$?
 set -e
 [ "$RC" -eq 0 ] || fail "case4: current image should pass, got exit $RC. Output: $OUT"
 echo "case 4 ok: current running image passes"
+
+# --- case 5: an image with NO identity is INDETERMINATE, never stale ---------
+# Tag absence does not imply stale content: build-image.sh prunes tags on later
+# builds, and the Rust image_builder identifies images by a source-digest LABEL
+# that shell cannot recompute. Claiming STALE here would be asserting more than
+# the evidence supports — the same error as claiming PASS on ambiguous
+# evidence, just in the safer direction.
+podman rm -f "$C_NAME" >/dev/null 2>&1 || true
+printf 'FROM localhost/tillandsias-git:latest\nLABEL tillandsias.freshness.fixture="unidentified"\n' \
+    > "$WORK/Containerfile"
+podman build -q -t "$UNIDENTIFIED_TAG" "$WORK" >/dev/null 2>&1 \
+    || fail "case5 setup: could not build the unidentified image"
+podman inspect -f '{{range .RepoTags}}{{.}} {{end}}' "$UNIDENTIFIED_TAG" 2>/dev/null \
+    | grep -qE 'tillandsias-git:[0-9a-f]{64}' \
+    && fail "case5 setup: the unidentified image unexpectedly carries a canonical hash tag"
+podman run -d --name "$C_NAME" --entrypoint sleep "$UNIDENTIFIED_TAG" 300 >/dev/null 2>&1 \
+    || fail "case5 setup: could not start the unidentified container"
+
+set +e
+OUT="$("$GATE" git 2>&1)"; RC=$?
+set -e
+[ "$RC" -eq 0 ] || fail "case5: an unidentifiable image must not be reported as drift (exit $RC). Output: $OUT"
+printf '%s' "$OUT" | grep -qi "indeterminate" \
+    || fail "case5: expected an indeterminate verdict. Output: $OUT"
+printf '%s' "$OUT" | grep -q "STALE" \
+    && fail "case5: must NOT claim STALE without positive evidence. Output: $OUT"
+echo "case 5 ok: unidentifiable image is INDETERMINATE, not stale"
+
+# --- case 6: --strict turns indeterminate into a failure --------------------
+set +e
+"$GATE" --strict git >/dev/null 2>&1; RC=$?
+set -e
+[ "$RC" -eq 3 ] || fail "case6: --strict must exit 3 on indeterminate, got $RC"
+echo "case 6 ok: --strict escalates indeterminate to exit 3"
 
 echo "PASS: running-image freshness gate fixture (order 422)"

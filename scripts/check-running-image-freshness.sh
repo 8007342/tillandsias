@@ -26,10 +26,36 @@
 # exactly "does the running container's image carry the tag equal to the current
 # source hash?" — a deterministic check with no timestamps and no heuristics.
 #
+# TWO BUILD PATHS, TWO IDENTITY CONVENTIONS (corrected 2026-07-19)
+#
+# The first version of this gate assumed one convention — that a current image
+# always carries a tag equal to hash-image-sources.sh output — and reported
+# STALE whenever that tag was absent. That assumption is UNSOUND, and it
+# produced a false STALE verdict against the live vault and proxy containers:
+#
+#   * scripts/build-image.sh tags with the bare source hash, but
+#     _remove_stale_image_tags PRUNES tags on later builds, and an explicit
+#     --tag bypasses the canonical tag entirely. Tag absence therefore does not
+#     imply stale content.
+#   * crates/tillandsias-core/src/image_builder.rs builds with an
+#     `io.tillandsias.image.source-digest` LABEL and states outright that "the
+#     canonical tag and its source-digest label are the durable identity". That
+#     digest is computed in Rust over the context tree plus non-filesystem build
+#     inputs, and shell cannot reproduce it.
+#
+# So this gate now reports three states, not two, and only claims STALE when it
+# has positive evidence. An image whose identity it cannot evaluate is
+# INDETERMINATE and defers to the Rust builder — claiming STALE on ambiguous
+# evidence is the same error as claiming PASS on ambiguous evidence, just in the
+# safer direction. Either way the gate would be asserting more than it knows.
+#
 # Exit codes:
-#   0  every checked image is current (or absent, unless --require-running)
-#   1  DRIFT: a running container serves an image older than the checkout
+#   0  every checked image is current, absent (unless --require-running), or
+#      deferred to the authoritative Rust builder
+#   1  DRIFT: positive evidence that a running container is older than the
+#      checkout
 #   2  usage error / missing dependency
+#   3  INDETERMINATE with --strict: identity could not be evaluated
 
 set -euo pipefail
 
@@ -48,6 +74,9 @@ image sources in this checkout, and fails loud when they diverge.
   --require-running  treat "no container running for this image" as a failure
                      instead of a skip. Use in e2e lanes that have just
                      launched the runtime.
+  --strict           treat an INDETERMINATE identity as a failure (exit 3)
+                     instead of passing. Use where every image is expected to
+                     carry a canonical source-hash tag.
 
 Exit: 0 current, 1 drift, 2 usage error.
 EOF
@@ -55,10 +84,12 @@ EOF
 }
 
 REQUIRE_RUNNING=0
+STRICT=0
 IMAGES=()
 while [ $# -gt 0 ]; do
     case "$1" in
         --require-running) REQUIRE_RUNNING=1; shift ;;
+        --strict) STRICT=1; shift ;;
         -h|--help) usage ;;
         -*) echo "check-running-image-freshness: unknown flag: $1" >&2; usage ;;
         *) IMAGES+=("$1"); shift ;;
@@ -84,6 +115,7 @@ fi
 DRIFTED=0
 CHECKED=0
 SKIPPED=0
+INDETERMINATE=0
 
 for IMAGE in "${IMAGES[@]}"; do
     IMAGE_DIR="$ROOT/images/$IMAGE"
@@ -124,15 +156,36 @@ for IMAGE in "${IMAGES[@]}"; do
         fi
 
         TAGS="$(podman inspect -f '{{range .RepoTags}}{{.}} {{end}}' "$IMAGE_ID" 2>/dev/null || true)"
+        SOURCE_DIGEST="$(podman inspect -f '{{index .Labels "io.tillandsias.image.source-digest"}}' "$IMAGE_ID" 2>/dev/null || true)"
+
         if printf '%s' "$TAGS" | tr ' ' '\n' | grep -qx "localhost/tillandsias-$IMAGE:$EXPECTED"; then
+            # Positive evidence of currency: the canonical source-hash tag is
+            # present on the exact image this container runs.
             echo "ok: $C runs current tillandsias-$IMAGE (${EXPECTED:0:12})"
-        else
-            RUNNING_TAG="$(printf '%s' "$TAGS" | tr ' ' '\n' | grep "tillandsias-$IMAGE:" | head -1 || true)"
+        elif [ -n "$SOURCE_DIGEST" ] && [ "$SOURCE_DIGEST" != "<no value>" ]; then
+            # Built by the Rust image_builder, whose source-digest is computed
+            # over the context tree plus non-filesystem build inputs. Shell
+            # cannot recompute it, so this gate must NOT guess. Defer.
+            echo "indeterminate: $C carries a source-digest label (${SOURCE_DIGEST:0:19}…);"
+            echo "               freshness for this image is owned by tillandsias-core::image_builder."
+            INDETERMINATE=$((INDETERMINATE + 1))
+        elif printf '%s' "$TAGS" | tr ' ' '\n' | grep -q "tillandsias-$IMAGE:[0-9a-f]\{64\}$"; then
+            # It carries SOME canonical source-hash tag, just not the expected
+            # one. That is positive evidence of drift.
+            RUNNING_TAG="$(printf '%s' "$TAGS" | tr ' ' '\n' | grep "tillandsias-$IMAGE:[0-9a-f]\{64\}$" | head -1)"
             echo "FAIL: $C runs a STALE tillandsias-$IMAGE image" >&2
-            echo "      running:  ${RUNNING_TAG:-<untagged> $IMAGE_ID}" >&2
+            echo "      running:  $RUNNING_TAG" >&2
             echo "      expected: localhost/tillandsias-$IMAGE:${EXPECTED}" >&2
             echo "      fix:      ./build-$IMAGE.sh && relaunch the container" >&2
             DRIFTED=1
+        else
+            # No canonical tag and no label — tags may simply have been pruned
+            # by a later build. Absence of evidence is not evidence of drift.
+            RUNNING_TAG="$(printf '%s' "$TAGS" | tr ' ' '\n' | grep "tillandsias-$IMAGE:" | head -1 || true)"
+            echo "indeterminate: $C carries neither a canonical source-hash tag nor a"
+            echo "               source-digest label (running: ${RUNNING_TAG:-<untagged> $IMAGE_ID});"
+            echo "               cannot prove current or stale. Rebuild to establish identity."
+            INDETERMINATE=$((INDETERMINATE + 1))
         fi
     done
 done
@@ -142,5 +195,10 @@ if [ "$DRIFTED" -ne 0 ]; then
     exit 1
 fi
 
-echo "PASS: running image freshness (checked $CHECKED container(s), skipped $SKIPPED image(s) with none running)"
+if [ "$INDETERMINATE" -gt 0 ] && [ "$STRICT" -eq 1 ]; then
+    echo "INDETERMINATE (--strict): $INDETERMINATE container(s) could not be evaluated" >&2
+    exit 3
+fi
+
+echo "PASS: running image freshness (checked $CHECKED container(s), $INDETERMINATE indeterminate, skipped $SKIPPED image(s) with none running)"
 exit 0

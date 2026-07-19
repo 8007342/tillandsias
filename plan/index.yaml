@@ -17108,6 +17108,46 @@ plan_index:
             runs a container from it, and asserts the gate FAILS. That control
             caught a real bug during development — the first gate build reported
             PASS against a container that had never started.
+
+        - type: correction
+          ts: "2026-07-19T06:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            SELF-CORRECTION — the freshness gate shipped earlier in this packet
+            had an UNSOUND core assumption and produced a FALSE STALE verdict
+            against the live vault and proxy containers. Found by finally
+            pointing it at the real running fleet rather than only at its own
+            fixture, which is precisely the fixture-green-versus-reality gap
+            this night's work has been criticising elsewhere.
+            The gate assumed a current image always carries a tag equal to
+            hash-image-sources.sh output. It does not: build-image.sh's
+            _remove_stale_image_tags PRUNES tags on later builds, and an
+            explicit --tag bypasses the canonical tag entirely, so tag absence
+            never implied stale content. Worse, there are TWO build paths with
+            different identity conventions —
+            crates/tillandsias-core/src/image_builder.rs already identifies
+            images by an io.tillandsias.image.source-digest LABEL and states
+            outright that "the canonical tag and its source-digest label are the
+            durable identity". That is a correct, pre-existing mechanism; this
+            gate was an inferior parallel reinvention of it.
+            CORRECTED to three states. STALE is now claimed ONLY on positive
+            evidence (the image carries a canonical 64-hex source-hash tag that
+            is not the expected one). An image carrying a source-digest label
+            defers to the Rust builder, and an image with neither is
+            INDETERMINATE. Claiming STALE on ambiguous evidence is the same
+            error as claiming PASS on ambiguous evidence — both assert more than
+            is known — so the gate now says what it cannot determine. --strict
+            escalates indeterminate to exit 3 for lanes that require identity.
+            The fixture was ALSO wrong twice and both were instructive: its
+            "stale" image carried no canonical tag, modelling a case that cannot
+            occur; and its first attempt at an unidentified image used
+            `podman tag`, which merely ADDS an alias while the image keeps its
+            canonical tag — so the gate correctly called it current. Now six
+            cases over genuinely distinct derived images, covering current,
+            stale, unidentified, and --strict.
+            Live re-run: vault and proxy now report indeterminate with the
+            reason, and exit 0 — no false accusation.
     - order: 423
       desired_release: v0.4
       title: "SECURITY: mirror exposes two unauthenticated write paths (git daemon --enable=receive-pack, and lighttpd git-http-backend with http.receivepack and no auth module)"

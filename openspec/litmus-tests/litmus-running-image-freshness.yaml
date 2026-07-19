@@ -39,6 +39,11 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: fails loud"
 
+  - step: "the gate reports three states and never claims STALE without positive evidence"
+    command: "grep -Fq 'INDETERMINATE' scripts/check-running-image-freshness.sh && grep -Fq 'io.tillandsias.image.source-digest' scripts/check-running-image-freshness.sh && echo 'ok: three-state honesty'"
+    timeout_ms: 5000
+    expected_behavior: "ok: three-state honesty"
+
 observability:
   traces:
     - "@trace spec:git-mirror-service"
