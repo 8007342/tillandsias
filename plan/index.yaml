@@ -17412,7 +17412,7 @@ plan_index:
     - order: 428
       desired_release: v0.4
       title: "Forge delegation rung 2: per-worker in-RAM checkout and state isolation (tmpfs /home/forge/src, per-worker XDG_* and CODEX_HOME)"
-      status: ready
+      status: in_progress
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: [427]
@@ -17445,6 +17445,35 @@ plan_index:
           host: linux
           summary: Filed from the 2026-07-19 forge delegation research.
 
+
+        - type: progress
+          ts: "2026-07-19T04:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Per-worker STATE isolation DONE; the tmpfs mount topology is split
+            out as order 437 because it is a much larger, workflow-visible
+            change. Forge lanes now get per-worker XDG_DATA_HOME,
+            XDG_STATE_HOME and CODEX_HOME derived from the order-427 instance,
+            so the documented credential races (OpenCode's unlocked auth.json;
+            Codex's truncate-then-write auth.json plus upstream #11435 and
+            #20213) cannot bite concurrent workers.
+            XDG_CONFIG_HOME is DELIBERATELY NOT isolated, and that is
+            load-bearing: the forge bakes OpenCode's permission overlay to
+            /home/forge/.config/opencode/config.json, the standard config
+            location, so redirecting config per worker would orphan the overlay
+            and silently drop the lane's permissive defaults. Config is shared
+            read-only input; the races are all in mutable state. Asserted by a
+            dedicated test so a future agent does not "complete" the set.
+            CAUGHT A LATENT DEFECT while doing this: codex-device-auth.sh and
+            codex-oauth-vault.sh hardcoded $HOME/.codex/auth.json rather than
+            $CODEX_HOME, so isolating CODEX_HOME without fixing them would have
+            made the vault restore write the credential into a directory codex
+            never reads — precisely order 430's defect class, recreated one
+            layer down. Both are now CODEX_HOME-aware.
+            Strictly additive: no instance emits NO overrides, so single-worker
+            launches are byte-identical to pre-428 (asserted).
+            REMAINING here: nothing. Mount topology moved to order 437.
     - order: 429
       desired_release: v0.4
       title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
@@ -17765,3 +17794,54 @@ plan_index:
           summary: >
             Split out of order 426 after re-verification showed both alias names
             have live consumers, so this is a migration rather than a deletion.
+
+    - order: 437
+      desired_release: v0.5
+      title: "/home/forge/src is a host bind mount, but BOTH active specs forbid that — forge-hot-cold-split requires tmpfs and forge-offline requires clone-only"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
+      depends_on: [427, 428]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, tmpfs, topology, data-loss, operator-visible]
+      estimated_hours: 10
+      outcome: >
+        CORRECTION to an earlier audit note that called these two specs
+        "incompatible topologies". They are NOT in conflict — they AGREE, and
+        the implementation is the outlier. openspec/specs/forge-hot-cold-split
+        requires /home/forge/src be kernel tmpfs sized by compute_hot_budget();
+        openspec/specs/forge-offline requires forge containers have NO host
+        project mount, with source obtained exclusively via git clone from the
+        mirror and "no bind mount from the host project directory". Those
+        compose cleanly: tmpfs mount, then clone into it. The code instead
+        read-write bind-mounts the host checkout, violating both.
+        This is not merely cosmetic. The shared host checkout already caused a
+        near-data-loss incident (plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md),
+        and it is the reason concurrent workers cannot be trusted with a project
+        even after orders 427 and 428 gave them isolated names and state. The
+        sizing helpers the spec references — compute_hot_budget, check_host_ram,
+        compute_memory_ceiling_mb — already EXIST and are unit-tested but have
+        ZERO production callers, and --memory is never passed, so the hot-budget
+        design was built and then never wired.
+        OPERATOR-VISIBLE: switching to tmpfs + clone changes the daily workflow.
+        Today an agent's edits appear directly in the host checkout; afterwards
+        work reaches the host only once committed and relayed through the
+        mirror. That is the intended design and it removes the destructive-clean
+        hazard, but it is a behaviour change the operator should agree to rather
+        than discover. Surface it before implementing.
+      exit_criteria:
+        - "/home/forge/src is tmpfs sized by compute_hot_budget(), with --memory actually passed"
+        - "source arrives by clone from the mirror; no host project bind mount remains"
+        - "the existing sizing helpers gain production callers"
+        - "a litmus asserts findmnt -t tmpfs lists /home/forge/src inside a live forge"
+        - "operator has agreed to the workflow change before it lands"
+      events:
+        - type: filed
+          ts: "2026-07-19T04:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Split out of order 428. Re-read both specs directly rather than
+            trusting the earlier audit summary, and found they agree with each
+            other while the implementation diverges from both.

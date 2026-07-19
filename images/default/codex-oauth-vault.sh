@@ -2,7 +2,11 @@
 # @trace spec:tillandsias-vault
 set -euo pipefail
 
-AUTH_FILE="${TILLANDSIAS_CODEX_AUTH_FILE:-$HOME/.codex/auth.json}"
+# CODEX_HOME-aware (order 428): when a worker is given its own CODEX_HOME for
+# concurrency isolation, the vault restore MUST write where codex actually
+# reads. Hardcoding $HOME/.codex here would silently place the credential in a
+# directory codex never consults — the same class of defect as order 430.
+AUTH_FILE="${TILLANDSIAS_CODEX_AUTH_FILE:-${CODEX_HOME:-$HOME/.codex}/auth.json}"
 
 restore_auth() {
     local auth_dir tmp

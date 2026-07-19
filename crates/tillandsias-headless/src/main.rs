@@ -3639,6 +3639,45 @@ fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> St
     )
 }
 
+/// Per-worker agent state directories (order 428). Pure so the rules are
+/// unit-testable without mutating process env, which is racy under the
+/// parallel test runner.
+///
+/// Returns an EMPTY vec when no instance is set, so single-worker launches keep
+/// the tools' own defaults byte-identically.
+///
+/// `XDG_CONFIG_HOME` is deliberately absent: the forge bakes OpenCode's
+/// permission overlay to `/home/forge/.config/opencode/config.json`, the
+/// standard config location, so redirecting it per worker would orphan that
+/// overlay and silently drop the lane's permissive defaults. Config is shared
+/// read-only input; the documented races are in mutable state (OpenCode's
+/// unlocked `auth.json`, Codex's truncate-then-write `auth.json` and SQLite).
+fn forge_worker_state_env(instance: Option<&str>) -> Vec<(String, String)> {
+    let worker = sanitize_forge_instance(instance.unwrap_or(""));
+    if worker.is_empty() {
+        return Vec::new();
+    }
+    vec![
+        (
+            "XDG_DATA_HOME".to_string(),
+            format!("/home/forge/.local/share/{worker}"),
+        ),
+        (
+            "XDG_STATE_HOME".to_string(),
+            format!("/home/forge/.local/state/{worker}"),
+        ),
+        // codex reads CODEX_HOME. The vault restore helpers were made
+        // CODEX_HOME-aware in the same change (they previously hardcoded
+        // $HOME/.codex/auth.json) so the restored credential lands where codex
+        // actually looks — otherwise this isolation would recreate order 430's
+        // "credential written where the tool never reads" defect.
+        (
+            "CODEX_HOME".to_string(),
+            format!("/home/forge/.codex-{worker}"),
+        ),
+    ]
+}
+
 /// Instance-scoped so two concurrent workers do not collide on the enclave
 /// network's DNS. Sharing a hostname would make container-to-container
 /// resolution non-deterministic between workers.
@@ -8969,6 +9008,30 @@ fn build_forge_agent_run_args_with_vault(
         }
     }
 
+    // Per-worker agent state isolation (order 428), paired with the
+    // instance-scoped container names from order 427.
+    //
+    // Both agent CLIs have documented concurrency races on their credential
+    // files: OpenCode's auth.json is NOT lock-protected (its Flock utility
+    // covers only plugin/theme/MCP-auth), and Codex's is truncate-then-write
+    // with no advisory lock at all (upstream #11435 parallel-exec cross-talk,
+    // #20213 SQLite deadlock). Two workers sharing a state directory can lose
+    // credential updates and bleed sessions into each other. Per-worker state
+    // dirs are therefore mandatory for concurrency, not a nicety.
+    //
+    // DATA and STATE are isolated; CONFIG deliberately is NOT. The forge bakes
+    // OpenCode's permission overlay to /home/forge/.config/opencode/config.json
+    // — the standard XDG_CONFIG_HOME location — so redirecting CONFIG would
+    // orphan that overlay and silently drop the lane's permissive defaults.
+    // Config is shared read-only input; the races live in mutable state.
+    //
+    // No instance means no override, so the tools keep their own defaults and
+    // single-worker behaviour is byte-identical to before.
+    for (key, value) in
+        forge_worker_state_env(std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok().as_deref())
+    {
+        spec = spec.env(key, value);
+    }
     // GitHub token injection (order 359): forge tooling that talks to GitHub —
     // brew attestation verification (bottles + the GitHub API) and any direct
     // git-over-HTTPS — otherwise goes ANONYMOUS and gets rate-limited/blocked
@@ -11389,6 +11452,55 @@ mod tests {
         );
         assert!(has_arg(&argv, "--interactive"));
         assert!(has_arg(&argv, "--tty"));
+    }
+
+    /// Order 428: concurrent workers must not share agent state. Both CLIs have
+    /// documented races on their credential files (OpenCode's auth.json is
+    /// unlocked; Codex's is truncate-then-write, upstream #11435/#20213).
+    #[test]
+    fn forge_worker_state_dirs_are_isolated_per_worker() {
+        let w1 = forge_worker_state_env(Some("w1"));
+        let w2 = forge_worker_state_env(Some("w2"));
+        assert!(!w1.is_empty(), "an instance must produce state overrides");
+        for (k, v1) in &w1 {
+            let v2 = w2
+                .iter()
+                .find(|(k2, _)| k2 == k)
+                .map(|(_, v)| v)
+                .unwrap_or_else(|| panic!("{k} missing for worker 2"));
+            assert_ne!(v1, v2, "{k} must differ between workers, else they race");
+        }
+        let keys: Vec<&str> = w1.iter().map(|(k, _)| k.as_str()).collect();
+        assert!(keys.contains(&"XDG_DATA_HOME"));
+        assert!(keys.contains(&"XDG_STATE_HOME"));
+        assert!(keys.contains(&"CODEX_HOME"));
+    }
+
+    /// XDG_CONFIG_HOME must NOT be isolated: the forge bakes OpenCode's
+    /// permission overlay to /home/forge/.config/opencode/config.json, so
+    /// redirecting config per worker would orphan it and silently drop the
+    /// lane's permissive defaults.
+    #[test]
+    fn forge_worker_state_never_redirects_config_home() {
+        for inst in [Some("w1"), Some("lead"), Some("worker-9")] {
+            let pairs = forge_worker_state_env(inst);
+            assert!(
+                !pairs.iter().any(|(k, _)| k == "XDG_CONFIG_HOME"),
+                "redirecting XDG_CONFIG_HOME orphans the baked OpenCode permission overlay"
+            );
+        }
+    }
+
+    /// Strictly additive: no instance means no overrides at all, so a
+    /// single-worker launch is byte-identical to pre-428 behaviour.
+    #[test]
+    fn absent_forge_instance_emits_no_state_overrides() {
+        for raw in [None, Some(""), Some("   "), Some("---")] {
+            assert!(
+                forge_worker_state_env(raw).is_empty(),
+                "instance {raw:?} must emit no state overrides"
+            );
+        }
     }
 
     /// Order 427: two workers on one project must not collide. Before the
