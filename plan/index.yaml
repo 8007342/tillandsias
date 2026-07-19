@@ -17293,6 +17293,49 @@ plan_index:
             Filed from the 2026-07-19 as-built mirror audit. Cross-cutting
             defect class behind most filed mirror issues.
 
+
+        - type: progress
+          ts: "2026-07-19T09:40:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Mirror-redirect arm DONE. The facade and index arms remain.
+            CORRECTION to this packet's own framing first: it claimed "3 of 5
+            live forge gitconfigs carry NO mirror redirect" as a defect. Checked
+            the three on this host — alpha, test-opencode-smoke, test-project —
+            and they genuinely have NO origin remote. They are local-only
+            scratch checkouts, so having no redirect is CORRECT. The audit (and
+            this packet quoting it) mistook three healthy projects for
+            breakage.
+            But the mistake was only possible because of a real defect, and a
+            worse one than the packet described: the code could not distinguish
+            "no origin configured" from "origin resolution FAILED". Both
+            collapsed to Option::None and produced byte-identical output — a
+            config with no [url] block and no signal anywhere. Those need
+            opposite responses. A local-only project is healthy; a project whose
+            origin could not be READ (no git binary on a guest, unreadable
+            .git/config) gets a forge that pushes straight at github.com and
+            fails "could not read Username" while the banner claims the mirror
+            is wired.
+            Introduced OriginResolution { Found, NoRemote, Unresolvable }.
+            Unresolvable now prints a three-line operator warning naming the
+            reason and stating explicitly that this is NOT the same as a project
+            with no remote. The generated config records WHY in the artifact
+            itself, so reading one is no longer ambiguous — if that comment had
+            existed, the misdiagnosis this packet is built on could not have
+            happened.
+            Subtlety worth recording: `git config --get` exits 1 for
+            "key not found" REGARDLESS of whether the path is a repository, so
+            the exit code alone cannot separate "repo without origin" from "not
+            a repo". Caught by the test, which initially failed. Resolution now
+            confirms `rev-parse --is-inside-work-tree` before calling an absence
+            definitive — otherwise a path we never interrogated would report a
+            healthy NoRemote.
+            REMAINING in 425: the .git facade and forge index arms, which
+            degrade to no-ops via `?` / `.ok()?` and fail closed into an empty
+            8MB tmpfs mask. Not touched here.
+            Evidence: 211/211 workspace tests; ./build.sh --check and --test
+            pass; instant litmus 151/154 (same 3 pre-existing).
     - order: 426
       packet_id: git-hack-obsolescence
       desired_release: v0.4

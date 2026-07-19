@@ -2384,6 +2384,101 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
 /// lane, severing the forge push channel (order 350 root cause).
 ///
 /// @trace spec:git-mirror-service, spec:enclave-network
+/// Why a project has no mirror redirect (order 425).
+///
+/// These three outcomes used to collapse into `Option::None`, which made a
+/// LOCAL-ONLY project and a BROKEN resolution produce byte-identical output:
+/// a forge gitconfig with no `[url]` block, and no signal anywhere about
+/// which had happened.
+///
+/// That matters because they need opposite responses. A project with no
+/// origin has nothing to redirect to and is perfectly healthy. A project
+/// whose origin exists but could not be READ (no git binary on the host, an
+/// unreadable `.git/config`) gets a forge whose pushes go straight at
+/// github.com and fail with "could not read Username" — while the launch
+/// banner cheerfully claims the mirror is wired.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum OriginResolution {
+    /// Origin configured and readable.
+    Found(String),
+    /// The repository is readable and genuinely has no origin remote.
+    /// A missing redirect is CORRECT here.
+    NoRemote,
+    /// We could not determine the origin. A missing redirect here is a
+    /// SILENT BREAKAGE and must be surfaced, never assumed benign.
+    Unresolvable(String),
+}
+
+/// Resolve the host origin, preserving WHY when there is none.
+pub(crate) fn resolve_host_project_origin(project_path: &Path) -> OriginResolution {
+    match std::process::Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args(["config", "--get", "remote.origin.url"])
+        .output()
+    {
+        Ok(output) => {
+            if output.status.success() {
+                let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if url.is_empty() {
+                    // git ran and reported success with no value.
+                    return OriginResolution::NoRemote;
+                }
+                return OriginResolution::Found(url);
+            }
+            // `git config --get` exits 1 for "key not found" — but it does so
+            // whether or not the path is a repository at all, so the exit code
+            // ALONE cannot tell "repo without an origin" from "not a repo".
+            // Confirm it is a work tree before calling the absence definitive;
+            // otherwise we would report a healthy NoRemote for a path we never
+            // actually interrogated.
+            if output.status.code() == Some(1) {
+                let is_repo = std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(project_path)
+                    .args(["rev-parse", "--is-inside-work-tree"])
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false);
+                if is_repo {
+                    OriginResolution::NoRemote
+                } else {
+                    OriginResolution::Unresolvable(format!(
+                        "{} is not a git work tree",
+                        project_path.display()
+                    ))
+                }
+            } else {
+                OriginResolution::Unresolvable(format!(
+                    "git config --get remote.origin.url exited {:?}",
+                    output.status.code()
+                ))
+            }
+        }
+        Err(e) => {
+            // No git binary (guest VMs ship none). Fall back to parsing
+            // .git/config directly; only if THAT also cannot answer is the
+            // origin genuinely unresolvable.
+            match parse_gitdir_origin_url(project_path) {
+                Some(url) => OriginResolution::Found(url),
+                None => {
+                    let git_dir = project_path.join(".git");
+                    if git_dir.exists() {
+                        // We could see the repo but not read an origin from
+                        // it — treat as absent rather than broken.
+                        OriginResolution::NoRemote
+                    } else {
+                        OriginResolution::Unresolvable(format!(
+                            "no git binary ({e}) and no readable .git at {}",
+                            project_path.display()
+                        ))
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
     if let Ok(output) = std::process::Command::new("git")
         .arg("-C")
@@ -6260,10 +6355,33 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
 
-    // Read the host origin URL for mirror redirect.
-    let origin_url = read_host_project_origin_url(project_path)
-        .as_deref()
-        .and_then(sanitize_forge_origin_url);
+    // Read the host origin URL for mirror redirect (order 425).
+    //
+    // Resolve WHY there is no origin rather than collapsing every reason into
+    // None. A local-only project legitimately has no redirect; a project whose
+    // origin could not be READ produces a forge that pushes at github.com and
+    // fails with "could not read Username" while the banner claims the mirror
+    // is wired. Those need opposite responses, so they must not look alike.
+    let resolution = resolve_host_project_origin(project_path);
+    let origin_url = match &resolution {
+        OriginResolution::Found(url) => sanitize_forge_origin_url(url),
+        OriginResolution::NoRemote => None,
+        OriginResolution::Unresolvable(reason) => {
+            eprintln!(
+                "[tillandsias] WARNING: cannot determine the git origin for project '{project_name}' \
+                 ({reason})."
+            );
+            eprintln!(
+                "[tillandsias]   The forge will launch WITHOUT a mirror redirect, so in-container \
+                 `git push` will target the upstream directly and fail on credentials."
+            );
+            eprintln!(
+                "[tillandsias]   This is NOT the same as a project with no remote — resolution \
+                 failed. Fix the checkout or install git on this host."
+            );
+            None
+        }
+    };
 
     let mut config = String::new();
     config.push_str("[safe]\n");
@@ -6294,6 +6412,37 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
                 .unwrap_or(origin.strip_prefix("git@github.com:").unwrap_or(""));
             let https_form = format!("https://github.com/{}.git", nwo);
             config.push_str(&format!("\tinsteadOf = {}\n", https_form));
+        }
+    } else {
+        // Order 425: state WHY there is no redirect, in the artifact itself.
+        // Reading a generated config and seeing no [url] block used to be
+        // ambiguous between "correct, local-only project" and "resolution
+        // broke" — the audit that found this initially mis-read three healthy
+        // local-only projects as defects for exactly that reason. A file that
+        // cannot be misread is worth three lines.
+        config.push('\n');
+        match &resolution {
+            OriginResolution::NoRemote => {
+                config.push_str(
+                    "# No mirror redirect: this project has no origin remote.\n\
+                     # This is CORRECT for a local-only checkout — there is no upstream to mirror.\n",
+                );
+            }
+            OriginResolution::Unresolvable(reason) => {
+                config.push_str(
+                    "# No mirror redirect: THE ORIGIN COULD NOT BE RESOLVED. This is a FAULT,\n\
+                     # not a local-only project. In-container `git push` will target the upstream\n\
+                     # directly and fail on credentials.\n",
+                );
+                config.push_str(&format!("# reason: {reason}\n"));
+            }
+            OriginResolution::Found(_) => {
+                // Origin found but rejected by sanitize_forge_origin_url.
+                config.push_str(
+                    "# No mirror redirect: an origin was found but was not a form this mirror\n\
+                     # can redirect (see sanitize_forge_origin_url). Pushes will not be relayed.\n",
+                );
+            }
         }
     }
 
@@ -13044,6 +13193,127 @@ mod tests {
         assert!(!has_arg(&args, "run"));
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
+    }
+
+    /// Order 425: a repo with NO origin and a repo whose origin cannot be
+    /// RESOLVED must not look alike. They used to both yield `None`, and a
+    /// generated config with no `[url]` block was ambiguous between "healthy
+    /// local-only project" and "silently broken" — an audit genuinely
+    /// mis-read three healthy local-only projects as defects because of it.
+    #[test]
+    fn origin_resolution_distinguishes_absent_from_unresolvable() {
+        let temp = tempfile::tempdir().expect("tempdir");
+
+        // A real git repo with no origin remote -> NoRemote (healthy).
+        let no_remote = temp.path().join("no-remote");
+        std::fs::create_dir_all(&no_remote).expect("mkdir");
+        let init = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&no_remote)
+            .status();
+        if init.map(|s| s.success()).unwrap_or(false) {
+            assert_eq!(
+                resolve_host_project_origin(&no_remote),
+                OriginResolution::NoRemote,
+                "a repo with no origin must report NoRemote, not Unresolvable"
+            );
+        }
+
+        // A path that is not a repo at all and has no .git -> Unresolvable
+        // whenever the git binary itself is unavailable. With git present,
+        // `git config --get` in a non-repo exits non-1, which is also
+        // Unresolvable. Either way it must NOT be NoRemote: we did not
+        // establish that there is no remote, we failed to look.
+        let bare = temp.path().join("not-a-repo");
+        std::fs::create_dir_all(&bare).expect("mkdir");
+        assert!(
+            matches!(
+                resolve_host_project_origin(&bare),
+                OriginResolution::Unresolvable(_)
+            ),
+            "a path we cannot interrogate must be Unresolvable, never a silent NoRemote"
+        );
+
+        // A repo WITH an origin -> Found.
+        let with_remote = temp.path().join("with-remote");
+        std::fs::create_dir_all(&with_remote).expect("mkdir");
+        let ok = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&with_remote)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if ok {
+            let _ = std::process::Command::new("git")
+                .args([
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://github.com/example/repo.git",
+                ])
+                .current_dir(&with_remote)
+                .status();
+            assert_eq!(
+                resolve_host_project_origin(&with_remote),
+                OriginResolution::Found("https://github.com/example/repo.git".to_string()),
+                "a configured origin must be Found"
+            );
+        }
+    }
+
+    /// Order 425: the generated config must SAY why there is no redirect.
+    /// A file with no [url] block used to be unreadable evidence — it could
+    /// mean "healthy local-only project" or "silently broken", and an audit
+    /// genuinely misread the former as the latter.
+    #[test]
+    fn write_forge_gitconfig_states_why_no_redirect_was_written() {
+        let _guard = crate::runtime_assets::env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let old_home = std::env::var_os("HOME");
+        unsafe {
+            std::env::set_var("HOME", temp.path());
+        }
+        struct RestoreHome(Option<std::ffi::OsString>);
+        impl Drop for RestoreHome {
+            fn drop(&mut self) {
+                unsafe {
+                    match self.0.take() {
+                        Some(v) => std::env::set_var("HOME", v),
+                        None => std::env::remove_var("HOME"),
+                    }
+                }
+            }
+        }
+        let _restore = RestoreHome(old_home);
+
+        // A real repo with no origin: the config must say so explicitly and
+        // must NOT read as a fault.
+        let proj = temp.path().join("local-only");
+        std::fs::create_dir_all(&proj).expect("mkdir");
+        let inited = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&proj)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !inited {
+            return; // no git binary on this host; the resolver test covers the rest
+        }
+
+        let path = write_forge_gitconfig("local-only", &proj).expect("config written");
+        let text = std::fs::read_to_string(&path).expect("read config");
+        assert!(
+            !text.contains("[url "),
+            "a project with no origin must get no redirect"
+        );
+        assert!(
+            text.contains("has no origin remote"),
+            "the config must state that absence is CORRECT here; got:\n{text}"
+        );
+        assert!(
+            !text.contains("FAULT"),
+            "a healthy local-only project must not be described as a fault; got:\n{text}"
+        );
     }
 
     #[test]
