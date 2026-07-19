@@ -124,24 +124,42 @@ exact flow the 2026-07-18 field failure took and behaved as specified.
   - Guest journal: git containers (`tillandsias-git:v0.3.260712.1`) churn on
     the same 404 every list/attach poll (spawn → 404 → die → secret remove).
   - Tray log: GitHub Login PTY opened 02:51:52Z (`--github-login`), cloud
-    attach clicked 02:59:07Z; login flow starts with an interactive
-    `Git author name [...]:` prompt and only writes the token AFTER the
-    device flow completes — the 02:51 login was evidently not completed, so
-    no token existed. Write/read paths agree (`secret/github/token`); this
-    is NOT version skew.
+    attach clicked 02:59:07Z. Write/read paths agree
+    (`secret/github/token`); NOT version skew.
+  - ROOT-CAUSE TIMELINE (guest journal, decisive): the vault container's
+    security barrier was INITIALIZED FRESH at **02:59:27Z** — 7.5 minutes
+    AFTER the login PTY opened and 20 seconds AFTER the first attach click
+    (the attach's ensure_vault_running performed the lazy first init). So
+    the 02:51 login ran against a NOT-YET-INITIALIZED vault: even a
+    completed device flow had nowhere to store the token.
+    `/run/tillandsias/` contains NO `login-transition` sentinel (order 276
+    touches it only after a successful token store) — the store never
+    happened, and the login terminal did not make that failure loud.
+  - GATE BYPASS (operator invariant: cloud UX gates on token present AND
+    working to list — `probe_github_username` implements exactly this):
+    the tray menu nonetheless carried attachable
+    `project.cloud.8007342/tillandsias.*` entries at 02:59:07, BEFORE
+    vault init — so a CloudProjects populate path bypassed the definitive
+    probe (plausibly the login flow's own in-process verification listing
+    pushing entries with the ephemeral in-memory token it had just
+    obtained but could not store). The menu must never be more optimistic
+    than the probe.
 - repro:
-  - Fresh guest, skip/abandon GitHub Login, click a cloud project attach.
+  - Fresh guest, open GitHub Login before any vault-touching action,
+    complete (or abandon) it, click a cloud project attach.
 - next_action: >
-    Fail-loud-but-actionable at the auth boundary: (1) headless cloud
-    attach/clone should classify the missing-token 404 into "Not signed in
-    to GitHub — run GitHub Login first" (and exit once, not a bare curl
-    error); (2) the tray should gate cloud-project attach entries on login
-    state (disabled + "Sign in first" hint, or auto-open the login flow);
-    (3) the remote-projects list poll should back off / stop respawning git
-    containers while unauthenticated (container churn every poll cycle);
-    (4) the login PTY should make clear the flow is incomplete if closed
-    early. Also relay this classified error at ERROR so it reaches the
-    Windows Event Log.
+    Four slices, fail-loud-but-actionable at the auth boundary:
+    (1) `--github-login` MUST ensure_vault_running (init + unseal) BEFORE
+    the device flow, and a token-store failure must be LOUD in the login
+    terminal ("signed in, but the token could NOT be saved — retry") —
+    never a silent success-looking exit; (2) the cloud-projects menu MUST
+    be gated on the definitive probe (token present AND gh api user works)
+    — audit every CloudProjectsPush producer for paths that push entries
+    without a stored+working token; (3) headless cloud attach/clone should
+    classify the missing-token 404 into "Not signed in to GitHub — run
+    GitHub Login first" (exit once, no bare curl error, ERROR-relayed so
+    it reaches the Windows Event Log); (4) the remote-projects poll should
+    back off while unauthenticated (git-container churn every cycle).
 - events:
   - type: discovered
     ts: "2026-07-19T03:00:00Z"
