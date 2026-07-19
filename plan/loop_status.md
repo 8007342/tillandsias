@@ -1,6 +1,27 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-18T06:25:00Z
+LastExecutionTime: 2026-07-18T07:00:00Z
+
+## Cycle 2026-07-18T06:40Z→07:00Z (linux_mutable macuahuitl — orchestration: FULL release backfill + macOS signing answer)
+
+- **RELEASE BACKFILL (order 407, operator directive "split into releases to
+  plan the following ones")**: assigned `desired_release` to all 97 open
+  packets → v0.4=36, v0.5=47, v0.6=11, v0.7=3. Full roadmap in the ACTIVE
+  RELEASE section below; cross-platform gating respected. plan-orders gate
+  green.
+- **macOS signing (operator question: would curl users hit the DMG's
+  Gatekeeper block?)**: NO. The DMG fails because a browser download is
+  quarantined + the `.app` is only ad-hoc signed → Gatekeeper "unidentified
+  developer". The CURL installer (scripts/install-macos.sh) fetches a tar.gz
+  via `curl` + extracts with `tar` + `open -a` — curl downloads are NOT
+  quarantined, so Gatekeeper never gates it; the app launches cleanly. Both
+  artifacts are the same ad-hoc-signed `.app`; only delivery differs. The real
+  cross-path fix (Developer ID + notarization) is scoped but UNIMPLEMENTED in
+  `openspec/changes/macos-app-signing-2026-07-07/` (deferred to v0.0.2+, gated
+  on an Apple Developer ID cert — operator action). Filed order 421 (v0.5) for
+  the small win: the curl installer over-warns about a Gatekeeper block that
+  does not apply to its own path. **Recommend curl-install as the macOS path
+  until notarization lands.**
 
 ## Cycle 2026-07-18T05:00Z→06:25Z (linux_mutable macuahuitl — Windows crashloop packets + ephemerality + ownership)
 
@@ -41,14 +62,35 @@ is gated to **v0.5** (orders 397 tiered-backends, 401 macOS tier, 402 Windows
 tier) so v0.4 can ship the capable-host architecture without waiting on the
 portability half.
 
-- **v0.4 open packets** (EXPERTS core, all `desired_release: v0.4`): 391
-  (milestone), 392 (inference startup cleanup), 393 (construction research,
-  forge-eligible), 394 (plan/methodology expert rung1, forge), 395 (opencode
-  affordance, forge), 406 (inference cuda bring-up on the fat host — thinnest
-  rung, KICKSTART), + 396/398/399/400 (default-active pending backfill).
-- **v0.5 open packets** (cross-platform / modest-hardware): 397, 401, 402.
-- **Backfill**: order 407 (standing) tags the rest of the open backlog; this
-  pointer is refreshed each coordinator cycle.
+### Release roadmap (FULL backfill 2026-07-18 — all 97 open packets bucketed; order 407)
+
+Every open packet now carries `desired_release`. The following releases are
+sequential and stability-gated; the coordinator may slip individual packets
+with a reason event.
+
+- **v0.4 — ACTIVE (36 packets): "local inference works end-to-end on the
+  capable host + the product doesn't crashloop or lose work."** EXPERTS
+  fat-host core (391 milestone, 392–400, 406, 408), the in-flight
+  agent-workflow bugs/robustness (270, 273, 281, 313, 326, 328, 382, 384, the
+  git-mirror credential fixes 412/413/415/416, the mirror-no-credential P1),
+  the Windows crashloop (417–420), codex smoke (404/405), and the operator-
+  gated verifications (306/307). Ship when this bundle is stable → bump Minor
+  0.3 → 0.4.
+- **v0.5 (47): "cross-platform parity + streams/transport + security channel
+  + audits."** Tiered/modest-hardware inference (397, 401 macOS, 402 Windows,
+  409 VM-image GPU, 410 AMD research), the observable-streams/transport
+  refactor cluster (147, 151, 153–158, 161, 333), the encrypted vsock control
+  channel + auth (137, 141, 142, 145), the architecture audits (245–251), the
+  facade conformance (125/128/130/132), macOS/Windows lane parity (279, 348,
+  349, 350, 280), and macOS install polish (421). Cross-platform deps are
+  release-gated (the v0.5 macOS/Windows inference tiers depend on the v0.4
+  linux core).
+- **v0.6 (11): "web-share / publish-locally."** The web-container milestone
+  (373) + children (353, 360, 361, 375–379), Cloudflare tunnel/DNS/WARP
+  (377/378/388), and the API-key-entry track (143).
+- **v0.7 (3): "deploy lifecycle + advanced," Tlatoani-gated.** Evidence-gated
+  deploy ladder research (389), GitHub App research (390), and the zeroclaw
+  reintroduction roadmap (403).
 - **Fat-host ground truth 2026-07-17**: RTX A5000 24GB, driver 595.80,
   `scripts/inference-tier-probe.sh` → `tier:gpu-cuda`. `tillandsias-inference`
   currently Exited(137) on a stale pre-392 image (v0.3.260716.4) — order 406
