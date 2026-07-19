@@ -11016,6 +11016,31 @@ plan_index:
           host: linux_mutable
           summary: "Order-315 migration ladder rung B."
 
+
+        - type: progress
+          ts: "2026-07-19T12:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            SUBSTANTIALLY SATISFIED by order 424 — recorded so this packet is
+            not picked up and redone. Its title's "kill token-in-URL" is exactly
+            what 424 implemented.
+            EC1 (relay authenticates via credential.helper; no token in remote
+            URLs, argv or env dumps) — DONE. git-credential-tillandsias supplies
+            the token over git's credential protocol; the push URL is clean;
+            pinned by scripts/test-git-credential-helper.sh case 4.
+            EC2 (rotation takes effect without container rebuild) — DONE and
+            PROVEN live: the helper reads Vault per invocation, so two
+            successive invocations with the secret swapped between them return
+            the new value with no restart, verified in the running image.
+            EC3 (decision record: GitHub App tokens adopted or rejected with
+            reasons) — NOT done, and it is the only thing keeping this open.
+            The research exists in
+            plan/issues/git-mirror-architecture-decision-2026-07-19.md, which
+            recommends GitHub App installation tokens over a PAT (scoped by
+            repository_ids and permissions, 1h expiry, no licensed seat); order
+            390 covers the broader App work. What is missing is the DECISION,
+            which is operator-facing.
     - packet_id: forge-gitconfig-single-injection
       order: 320
       desired_release: v0.5
@@ -13912,6 +13937,29 @@ plan_index:
         - "live probe: with upstream ahead of the mirror, a rejected push is followed by mirror heads == upstream heads (no manual tracking-ref fetch)"
         - "startup path probe: container restart with stale serving heads fast-forwards them via the retry-push failure reconcile"
 
+
+        - type: progress
+          ts: "2026-07-19T12:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            PARTIALLY satisfied by order 422 — recorded to prevent duplicate
+            work, deliberately NOT closed, because the live criteria genuinely
+            remain.
+            EC1 (rebuilt image running, hooks carry the reconcile path) — the
+            image IS rebuilt and carries the order-413/415 refspec fix plus the
+            quarantine escape, verified in-image. But no mirror container is
+            running on this host, so "running" is unproven.
+            EC2 (live probe: upstream ahead, rejected push, mirror heads ==
+            upstream afterwards) — proven by FIXTURE
+            (test-git-mirror-relay-verified-ack.sh case 4, RED to GREEN
+            tonight), NOT live against a real forge and real GitHub.
+            EC3 (startup path probe) — not attempted.
+            The distinction is the whole lesson of order 422: the order-414
+            renewer passed its litmus while the running container served a
+            pre-414 image for days. A fixture proves the LOGIC; only a live
+            probe proves the DEPLOYMENT. Do not mark this done on fixture
+            evidence.
     - packet_id: freshness-inventory-and-stamps
       order: 370
       title: "FRESHNESS rung 2: component inventory + first freshness stamps + coverage report"
