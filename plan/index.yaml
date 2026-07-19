@@ -15374,6 +15374,13 @@ plan_index:
         - "OPEN-WORLD ROUND-TRIP: fields the active schema does not declare survive load+flush untouched (the organically-grown corpus never loses data to a stricter tool)"
         - "INVARIANT CORE vs pluggable rules: id stability and referential soundness (depends_on/release_target/split_into resolve; ids never mutate on edit) are engine-level non-negotiables that hold ACROSS schema versions — pinned by a litmus that renames a schema field and proves references still validate (aligns with methodology/between-commits-work-discipline.yaml stable-ID preconditions)"
 
+      events:
+        - type: progress
+          ts: "2026-07-18T09:15:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Slice 2 rung 1 (validated event-append) implemented + dogfooded: this very event was written by the new tillandsias-plan append-event CLI, which surgically inserts (format-preserving) then REFUSES to flush unless the candidate re-parses (serde_yaml rejects duplicate keys) and passes invariant-core integrity — the order-263 broken-ledger class is now structurally impossible through the tool. lib: Ledger::parse (no-IO validation) + edit module (append_event/validate_candidate/event_block). Tests 7/7 incl. dup-key + dangling-ref refusal. build.sh --check green. Remaining slices: claim/status-flip edits, the format-preserving round-trip design decision, and skill docs.
     - packet_id: forge-lsp-by-default
       order: 399
       desired_release: v0.4
