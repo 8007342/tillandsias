@@ -172,4 +172,3 @@ External behaviour above was verified empirically against installed binaries
 (opencode 1.18.3, codex-cli 0.144.4) rather than taken from documentation, because
 several documented claims were found stale. Upstream issue references:
 codex #11435 (parallel `exec` cross-talk), #20213 (SQLite deadlock).
-</content>

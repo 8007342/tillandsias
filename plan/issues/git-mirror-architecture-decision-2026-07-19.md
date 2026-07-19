@@ -228,5 +228,4 @@ See `plan/index.yaml` orders filed alongside this document, and:
   <https://developer.hashicorp.com/vault/docs/agent-and-proxy/agent>
 - GitHub App installation auth: <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation>
 - Gitea / Forgejo repo mirror: <https://docs.gitea.com/usage/repo-mirror>, <https://forgejo.org/docs/v15.0/user/repo-mirror/>
-</content>
 </invoke>

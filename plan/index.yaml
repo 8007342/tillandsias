@@ -17048,7 +17048,7 @@ plan_index:
     - order: 422
       desired_release: v0.4
       title: "Deploy gate: rebuild tillandsias-git image so the mirror's vault-cli has renew-self — the running image is pre-order-414 and every forge session loses push ~1h after container start"
-      status: ready
+      status: done
       kind: deploy
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: []
@@ -17087,6 +17087,27 @@ plan_index:
             "credential unavailable" push failures that agents misdiagnose as
             needing GitHub Login.
 
+
+        - type: completed
+          ts: "2026-07-19T01:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Rebuilt tillandsias-git from linux-next. Verified the DEFECT first:
+            the prior image's vault-cli defined only read/write/health (no
+            renew-self, no lookup-self) while the checkout has defined both for
+            days. New image carries renew-self + lookup-self AND the order-413/415
+            relay refspec fix with the quarantine escape intact. Class fix shipped
+            alongside: scripts/check-running-image-freshness.sh compares each
+            running container against the content hash the build engine already
+            tags images with (scripts/hash-image-sources.sh), so
+            running-image-older-than-checkout is now detectable deterministically
+            with no timestamps or heuristics. Guarded by
+            litmus:running-image-freshness whose case 3 is a NEGATIVE CONTROL:
+            it builds a genuinely distinct image under the tillandsias-git repo,
+            runs a container from it, and asserts the gate FAILS. That control
+            caught a real bug during development — the first gate build reported
+            PASS against a container that had never started.
     - order: 423
       desired_release: v0.4
       title: "SECURITY: mirror exposes two unauthenticated write paths (git daemon --enable=receive-pack, and lighttpd git-http-backend with http.receivepack and no auth module)"

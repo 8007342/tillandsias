@@ -379,6 +379,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:git-mirror-fetch-reconcile
+  - litmus:running-image-freshness
   - litmus:enclave-isolation
   - litmus:git-mirror-safe-refspec-push
   - litmus:git-mirror-ref-convergence
