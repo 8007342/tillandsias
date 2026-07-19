@@ -2302,6 +2302,29 @@ fn spawn_provisioning(hwnd: HWND) {
                 match lifecycle.spawn_keepalive(is_debug) {
                     Ok(_keepalive) => {
                         tracing::info!("VM keepalive holding the control wire warm");
+                        // Order 417: if the bounded keepalive supervisor gives
+                        // up (terminal failed state), flip the tray out of
+                        // Ready into an actionable failed chip + error toast,
+                        // and re-arm Retry. Without this the menu would keep
+                        // claiming Ready while nothing holds the VM open.
+                        let mut terminal_rx = _keepalive.terminal_rx();
+                        tokio::task::spawn_local(async move {
+                            while terminal_rx.changed().await.is_ok() {
+                                let reason = terminal_rx.borrow_and_update().clone();
+                                if let Some(reason) = reason {
+                                    update_status_text("\u{1F534} VM connection lost — Retry", hwnd);
+                                    show_balloon(
+                                        hwnd,
+                                        "Tillandsias — VM connection lost",
+                                        &reason,
+                                        BalloonSeverity::Error,
+                                    );
+                                    PROVISIONING_ACTIVE
+                                        .store(false, std::sync::atomic::Ordering::SeqCst);
+                                    break;
+                                }
+                            }
+                        });
                         // Live status, push-first (order 154 slices 1-3): a
                         // dedicated reader task subscribes to all four push
                         // topics (VmStatus + LoginState + CloudProjects +

@@ -82,7 +82,6 @@ fn connect_backoff_delay(attempt: u32) -> Duration {
     Duration::from_secs(exp.min(30))
 }
 
-/// A guard that aborts the supervised keepalive task when dropped.
 /// Build a background `wsl.exe` command with CREATE_NO_WINDOW applied.
 /// From the GUI-subsystem tray a raw console child flashes a visible window
 /// per invocation — the operator-reported "terminals popping open and
@@ -95,13 +94,83 @@ fn wsl_cmd() -> tokio::process::Command {
     cmd
 }
 
+/// A guard that aborts the supervised keepalive task when dropped.
 pub struct KeepaliveGuard {
     abort_handle: tokio::task::AbortHandle,
+    /// Fires `Some(reason)` exactly once if the supervisor gives up (order
+    /// 417 terminal failed state). Holders that own a UX surface watch this
+    /// to flip the tray into the failed state; connect-window holders that
+    /// drop the guard quickly may ignore it.
+    terminal_rx: tokio::sync::watch::Receiver<Option<String>>,
+}
+
+impl KeepaliveGuard {
+    pub fn terminal_rx(&self) -> tokio::sync::watch::Receiver<Option<String>> {
+        self.terminal_rx.clone()
+    }
 }
 
 impl Drop for KeepaliveGuard {
     fn drop(&mut self) {
         self.abort_handle.abort();
+    }
+}
+
+/// Order 417 (windows-vm-launch-keepalive-loop-bound): bounded supervision
+/// for the keepalive respawn loop. The old loop respawned `wsl.exe` every 1s
+/// FOREVER; against a distro that can never come up (partial import,
+/// kernel/WSL mismatch), every respawn re-poked the WSL2 VM create — the
+/// field crash-loop. Consecutive rapid failures back off exponentially
+/// (1..60s cap) and give up into a terminal failed state after the cap; a
+/// child that stayed alive ≥ [`KEEPALIVE_HEALTHY_RUN_SECS`] resets the
+/// counter, so a long-healthy keepalive dying (VM idle, user kill) still
+/// respawns promptly (the supervision half of
+/// plan/issues/keepalive-terminal-visibility-2026-07-02.md).
+const KEEPALIVE_MAX_CONSECUTIVE_FAILURES: u32 = 8;
+
+/// A keepalive child that lived at least this long counts as a healthy run
+/// and resets the consecutive-failure counter.
+const KEEPALIVE_HEALTHY_RUN_SECS: u64 = 60;
+
+/// Delay before respawn attempt after `consecutive_failures` rapid failures
+/// (1-based): doubles from 1s, caps at 60s. Pure for unit pinning.
+fn keepalive_backoff_delay(consecutive_failures: u32) -> Duration {
+    let exp = 1u64 << consecutive_failures.saturating_sub(1).min(6);
+    Duration::from_secs(exp.min(60))
+}
+
+/// What the supervisor should do after a keepalive child failed.
+#[derive(Debug, PartialEq, Eq)]
+enum KeepaliveDecision {
+    RetryAfter(Duration),
+    GiveUp,
+}
+
+/// Pure consecutive-failure state machine backing the keepalive loop, so the
+/// bound + reset semantics are unit-testable without spawning wsl.exe.
+struct KeepaliveSupervisor {
+    consecutive_failures: u32,
+}
+
+impl KeepaliveSupervisor {
+    fn new() -> Self {
+        Self {
+            consecutive_failures: 0,
+        }
+    }
+
+    /// The child ran long enough to count as healthy; forget prior failures.
+    fn record_healthy_run(&mut self) {
+        self.consecutive_failures = 0;
+    }
+
+    fn record_failure(&mut self) -> KeepaliveDecision {
+        self.consecutive_failures += 1;
+        if self.consecutive_failures >= KEEPALIVE_MAX_CONSECUTIVE_FAILURES {
+            KeepaliveDecision::GiveUp
+        } else {
+            KeepaliveDecision::RetryAfter(keepalive_backoff_delay(self.consecutive_failures))
+        }
     }
 }
 
@@ -162,37 +231,77 @@ impl WslLifecycle {
     }
 
     /// Spawn a keepalive `wsl --exec` session that holds the WSL2 utility VM
-    /// open. The background task supervises it and respawns it if killed.
-    /// The caller holds the returned `KeepaliveGuard` for the tray's lifetime;
-    /// dropping it aborts the task and lets the VM idle normally again.
+    /// open. The background task supervises it and respawns it if killed —
+    /// BOUNDED (order 417): consecutive rapid failures back off exponentially
+    /// and give up into a terminal failed state (watch `terminal_rx`) instead
+    /// of re-poking wsl.exe every second forever. A classified-fatal platform
+    /// failure short-circuits with no respawn at all. The caller holds the
+    /// returned `KeepaliveGuard` for the tray's lifetime; dropping it aborts
+    /// the task and lets the VM idle normally again.
     pub fn spawn_keepalive(&self, debug: bool) -> Result<KeepaliveGuard, String> {
         let distro_name = self.runtime.distro_name.clone();
+        let (terminal_tx, terminal_rx) = tokio::sync::watch::channel(None::<String>);
         let handle = tokio::spawn(async move {
+            let mut supervisor = KeepaliveSupervisor::new();
             loop {
                 // Install root is unused by spawn_keepalive, so dummy path is fine.
                 let runtime = WslRuntime::new(&distro_name, std::path::PathBuf::new());
-                match runtime.spawn_keepalive(debug) {
+                let started = std::time::Instant::now();
+                let failure = match runtime.spawn_keepalive(debug) {
                     Ok(mut child) => match child.wait().await {
-                        Ok(status) => {
-                            tracing::warn!(
-                                "Keepalive wsl.exe exited with status {status}. Respawning in 1s..."
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Keepalive wsl.exe failed to wait: {e}. Respawning in 1s..."
-                            );
-                        }
+                        Ok(status) => format!("keepalive wsl.exe exited with status {status}"),
+                        Err(e) => format!("keepalive wsl.exe failed to wait: {e}"),
                     },
                     Err(e) => {
-                        tracing::warn!("Failed to spawn keepalive wsl.exe: {e}. Retrying in 1s...");
+                        let text = e.to_string();
+                        if tillandsias_vm_layer::wsl::classified_short_status(&text).is_some() {
+                            // This platform state (WSL absent / reboot pending /
+                            // virtualization off) can NEVER succeed by retrying —
+                            // give up immediately, zero respawns (417 criterion 2).
+                            tracing::error!(
+                                error = %text,
+                                "keepalive hit a classified-fatal platform failure; not respawning"
+                            );
+                            let _ = terminal_tx.send(Some(text));
+                            return;
+                        }
+                        format!("failed to spawn keepalive wsl.exe: {text}")
+                    }
+                };
+                if started.elapsed() >= Duration::from_secs(KEEPALIVE_HEALTHY_RUN_SECS) {
+                    supervisor.record_healthy_run();
+                }
+                match supervisor.record_failure() {
+                    KeepaliveDecision::RetryAfter(delay) => {
+                        tracing::warn!(
+                            consecutive_failures = supervisor.consecutive_failures,
+                            delay_s = delay.as_secs(),
+                            failure = %failure,
+                            "keepalive died; respawning after backoff"
+                        );
+                        tokio::time::sleep(delay).await;
+                    }
+                    KeepaliveDecision::GiveUp => {
+                        // ERROR relays to tray.log + Windows Event Log, so
+                        // this terminal state is discoverable post-hoc.
+                        tracing::error!(
+                            consecutive_failures = supervisor.consecutive_failures,
+                            failure = %failure,
+                            "keepalive gave up after repeated rapid failures — \
+                             not respawning (crash-loop guard); VM may idle out"
+                        );
+                        let _ = terminal_tx.send(Some(format!(
+                            "VM keepalive stopped after {} failed restarts: {failure}",
+                            supervisor.consecutive_failures
+                        )));
+                        return;
                     }
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         });
         Ok(KeepaliveGuard {
             abort_handle: handle.abort_handle(),
+            terminal_rx,
         })
     }
 
@@ -251,13 +360,38 @@ impl WslLifecycle {
         // Idempotent: if a prior run already imported the distro, skip the
         // download + `wsl --import` and just (re)start it, then connect to
         // deliver credentials so the headless can bootstrap vault.
+        //
+        // Order 418 (windows-registered-distro-integrity-probe): registration
+        // is a bare name match — a partial/corrupt import (first run killed
+        // mid-provision) still LISTS, and every relaunch then fed a dead
+        // distro to start()+keepalive: the second crash-loop vector. Trust
+        // the fast path only when the distro passes an actual exec probe;
+        // otherwise self-heal ONCE by discarding the damaged guest and
+        // falling through to a fresh import (ephemeral-by-design: the guest
+        // is disposable, plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md).
         if self.runtime.is_registered().await {
-            progress.report_phase(ProvisionPhase::StartingVm);
-            self.runtime.start().await?;
-            progress.report_phase(ProvisionPhase::Connecting);
-            const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-            let _keepalive = self.spawn_keepalive(false).ok();
-            return self.connect_with_backoff(CW_PORT).await;
+            if self.distro_exec_probe().await {
+                // Adopt pre-marker healthy installs: probe green is the truth.
+                self.write_import_complete_marker().await;
+                progress.report_phase(ProvisionPhase::StartingVm);
+                self.runtime.start().await?;
+                progress.report_phase(ProvisionPhase::Connecting);
+                const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+                let _keepalive = self.spawn_keepalive(false).ok();
+                return self.connect_with_backoff(CW_PORT).await;
+            }
+            let marker = Self::import_complete_marker_path();
+            tracing::error!(
+                marker_present = marker.exists(),
+                "registered WSL distro failed the exec probe — treating the \
+                 guest as damaged and reprovisioning from scratch (one-shot \
+                 self-heal; the guest is disposable by design)"
+            );
+            progress
+                .report_message("\u{267B}\u{FE0F} Local VM is damaged — reprovisioning from scratch...");
+            self.unregister_distro().await?;
+            let _ = tokio::fs::remove_file(&marker).await;
+            // Fall through to the full download + import path below.
         }
 
         let manifest = Manifest::from_toml(RECIPE_MANIFEST)
@@ -328,6 +462,11 @@ impl WslLifecycle {
         self.runtime.configure_recipe_distro().await?;
         self.inject_bootstrap_logic().await?;
 
+        // Provisioning is complete only past this point; the marker gates the
+        // registered fast path on future launches (order 418). An interrupted
+        // run leaves no marker AND fails the exec probe, so it re-imports.
+        self.write_import_complete_marker().await;
+
         progress.report_phase(ProvisionPhase::StartingVm);
         self.runtime.start().await?;
 
@@ -338,6 +477,65 @@ impl WslLifecycle {
         let _keepalive = self.spawn_keepalive(false).ok();
 
         self.connect_with_backoff(CW_PORT).await
+    }
+
+    /// Marker written at the end of a COMPLETE provision (import + packages +
+    /// configure + bootstrap injection). Its absence on a registered distro
+    /// marks a suspect (interrupted) import. Order 418.
+    fn import_complete_marker_path() -> PathBuf {
+        Self::install_root().join(".import-complete")
+    }
+
+    /// Best-effort: the marker is an optimization hint, never a hard gate on
+    /// success paths — the exec probe is the authority.
+    async fn write_import_complete_marker(&self) {
+        let content = format!("{}\n", env!("WORKSPACE_VERSION"));
+        if let Err(e) = tokio::fs::write(Self::import_complete_marker_path(), content).await {
+            tracing::warn!(error = %e, "could not write import-complete marker");
+        }
+    }
+
+    /// Cheap integrity probe for a registered distro: can it actually exec?
+    /// `wsl -d <distro> --exec /bin/true` (hidden window, 60s cap — first
+    /// exec may boot the utility VM). A partial/corrupt import errors out;
+    /// a healthy distro exits 0. Timeout counts as failure.
+    async fn distro_exec_probe(&self) -> bool {
+        let fut = wsl_cmd()
+            .args(["-d", self.distro_name(), "--exec", "/bin/true"])
+            .status();
+        match tokio::time::timeout(Duration::from_secs(60), fut).await {
+            Ok(Ok(status)) => status.success(),
+            Ok(Err(e)) => {
+                tracing::warn!(error = %e, "distro exec probe failed to spawn wsl.exe");
+                false
+            }
+            Err(_) => {
+                tracing::warn!("distro exec probe timed out after 60s");
+                false
+            }
+        }
+    }
+
+    /// Discard the damaged guest: `wsl --shutdown`-free targeted unregister
+    /// (deletes the distro + its VHDX). Only called after a failed integrity
+    /// probe on the ephemeral-reset doctrine.
+    async fn unregister_distro(&self) -> Result<(), String> {
+        let status = wsl_cmd()
+            .args(["--unregister", self.distro_name()])
+            .status()
+            .await
+            .map_err(|e| format!("wsl --unregister failed to spawn: {e}"))?;
+        if status.success() {
+            tracing::info!(distro = self.distro_name(), "damaged distro unregistered");
+            Ok(())
+        } else {
+            Err(format!(
+                "wsl --unregister {} exited with {status} — cannot self-heal; \
+                 run the installer with -Purge or `wsl --unregister {}` manually",
+                self.distro_name(),
+                self.distro_name()
+            ))
+        }
     }
 
     /// Connect-until-ready with capped exponential backoff (operator
@@ -881,6 +1079,53 @@ pub fn recipe_rootfs_artifact(manifest: &Manifest) -> Result<RemoteArtifact, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_complete_marker_lives_under_install_root() {
+        // SAFETY: single-process test env mutation, matching sibling tests.
+        unsafe {
+            std::env::set_var("LOCALAPPDATA", "C:\\Users\\Tester\\AppData\\Local");
+        }
+        let marker = WslLifecycle::import_complete_marker_path();
+        assert!(marker.starts_with(WslLifecycle::install_root()));
+        assert!(marker.ends_with(".import-complete"));
+    }
+
+    #[test]
+    fn keepalive_supervisor_gives_up_after_cap_with_backoff() {
+        let mut sup = KeepaliveSupervisor::new();
+        let mut delays = Vec::new();
+        let mut give_up_at = None;
+        for attempt in 1..=KEEPALIVE_MAX_CONSECUTIVE_FAILURES {
+            match sup.record_failure() {
+                KeepaliveDecision::RetryAfter(d) => delays.push(d.as_secs()),
+                KeepaliveDecision::GiveUp => {
+                    give_up_at = Some(attempt);
+                    break;
+                }
+            }
+        }
+        // Exponential with a ceiling, then a hard give-up — never an
+        // unbounded 1s drumbeat (order 417).
+        assert_eq!(delays, vec![1, 2, 4, 8, 16, 32, 60]);
+        assert_eq!(give_up_at, Some(KEEPALIVE_MAX_CONSECUTIVE_FAILURES));
+    }
+
+    #[test]
+    fn keepalive_supervisor_healthy_run_resets_failure_count() {
+        let mut sup = KeepaliveSupervisor::new();
+        for _ in 0..KEEPALIVE_MAX_CONSECUTIVE_FAILURES - 1 {
+            let _ = sup.record_failure();
+        }
+        sup.record_healthy_run();
+        // A long-lived child dying afterwards is failure #1 again: prompt
+        // 1s respawn, not a give-up — supervision keeps working forever for
+        // a healthy-but-occasionally-dying keepalive.
+        assert_eq!(
+            sup.record_failure(),
+            KeepaliveDecision::RetryAfter(Duration::from_secs(1))
+        );
+    }
 
     #[test]
     fn connect_backoff_schedule_is_capped_exponential() {

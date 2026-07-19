@@ -16498,7 +16498,7 @@ plan_index:
       order: 417
       desired_release: v0.4
       title: "Windows crashloop fix: bound the keepalive wsl.exe respawn loop — cap + backoff + classified-fatal give-up instead of respawning every 1s forever"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs (spawn_keepalive) + terminal failed-state surfacing
       depends_on: []
@@ -16543,12 +16543,32 @@ plan_index:
             crashloop fix. Sibling packets: 418 (registered-distro integrity),
             419 (launch-failure taxonomy + spec), 420 (diagnostics capture). No
             existing packet covered this loop.
+        - type: completed
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Implemented on windows-next (claimed via ledger lease). New
+            KeepaliveSupervisor: consecutive rapid failures back off
+            1,2,4,8,16,32,60s then GIVE UP after 8 into a terminal failed
+            state broadcast on KeepaliveGuard::terminal_rx; a child alive
+            >=60s resets the counter so healthy-keepalive supervision stays
+            unlimited (the 2026-07-02 keepalive issue's resilience half). A
+            classified-fatal platform error short-circuits with ZERO
+            respawns. The tray's long-lived holder watches terminal_rx and
+            flips to "VM connection lost — Retry" + error toast + re-arms
+            Retry; the give-up ERROR relays to tray.log AND the Windows
+            Event Log (windows-260718-1) so field give-ups are post-hoc
+            diagnosable. Pinned by keepalive_supervisor_gives_up_after_cap_
+            with_backoff + keepalive_supervisor_healthy_run_resets_failure_
+            count; tray suite green. Live behavioral verification rides the
+            operator-ordered purge + curl-install e2e this same session.
 
     - packet_id: windows-registered-distro-integrity-probe
       order: 418
       desired_release: v0.4
       title: "Windows: health-probe a 'registered' WSL distro before the re-import-skip fast path — a partial/corrupt import loops on every launch"
-      status: ready
+      status: done
       kind: bug
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs (registered fast path) + crates/tillandsias-vm-layer/src/wsl.rs (is_registered integrity)
       depends_on: []
@@ -16583,6 +16603,24 @@ plan_index:
             Second crashloop vector: the registered-but-corrupt fast path trusts
             a name match with no integrity probe. Pairs with 417 (the loop bound)
             — together they close the "crashloop on VM launch" class.
+        - type: completed
+          ts: "2026-07-19T02:25:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Implemented on windows-next (claimed via ledger lease). The
+            registered fast path now requires a real exec probe
+            (`wsl -d tillandsias --exec /bin/true`, hidden window, 60s cap)
+            before trusting registration; probe green also adopts a
+            .import-complete marker (written at the end of every full
+            provision; absence marks interrupted imports). Probe failure =>
+            loud ERROR (Event Log), honest "reprovisioning from scratch"
+            chip, `wsl --unregister` of the damaged guest, and fall-through
+            to a fresh import in the SAME run — one-shot self-heal per the
+            operator's ephemeral doctrine, no keepalive ever spun on a dead
+            distro. Marker path pinned by unit test; full behavioral pass
+            rides the purge + curl-install e2e this session (fresh provision
+            writes the marker; relaunch takes the healthy fast path).
 
     - packet_id: windows-vm-launch-failure-taxonomy-and-spec
       order: 419
