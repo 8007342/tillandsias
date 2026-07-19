@@ -15666,6 +15666,76 @@ plan_index:
             degrades to reset+re-auth, never to flashing terminals with no
             recourse. The manual reprovision performed this cycle
             (unregister + tray relaunch) is the reference implementation.
+
+    - packet_id: windows-crashloop-diagnosability-fixes
+      provisional_id: windows-260718-1
+      order: provisional
+      release_target: stable-milestone-v1
+      title: "Windows crash-loop diagnosability + resilience: Event Log relay (real), singleton contention/deadline fixes, console-flash suppression, connect backoff"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray (eventlog.rs, notify_icon.rs, wsl_lifecycle.rs, main.rs) + tillandsias-core singleton + scripts/install-windows.ps1 + spec windows-event-logging (reactivated)
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, tray, logging, robustness, diagnose]
+      estimated_hours: 6
+      outcome: >
+        Operator-directed cycle after a field crash-loop on an end-user
+        Windows machine (release tray reached "Downloading Fedora", then
+        looped with terminal flashes; zero discoverable diagnostics). Four
+        fixes landed on windows-next: (1) windows-event-logging spec
+        REACTIVATED as a real implementation — the archived Tauri-era
+        layer never called ReportEventW (hollow no-op despite "27 tasks
+        complete"); the new WindowsEventLogLayer relays ALL INFO/WARN/
+        ERROR (operator delta vs old accountability-only INFO) to the
+        Application Event Log, init'd before the singleton guard, with a
+        panic hook, provisioning phases mirrored at INFO, installer
+        best-effort source registration piggybacked on the single UAC
+        prompt, and a live write+Get-EventLog readback test (PASSED on
+        host). (2) tillandsias-core singleton: fs2 busy-lock errors are
+        ERROR_LOCK_VIOLATION on Windows, not WouldBlock — every busy path
+        errored hard (pre-existing test FAILED at HEAD); plus the
+        forever-blocking lock_exclusive fallback (invisible GUI hang) is
+        now a bounded deadline poll. (3) Three --diagnose spawns
+        (cmd/where/wsl -l -q) lacked CREATE_NO_WINDOW — console-flash
+        class, fixed. (4) The two fixed-5s control-wire connect loops are
+        one capped-exponential connect_with_backoff (1..30s, ~3min
+        envelope, pinned schedule). Field root cause remains undiagnosed
+        by design of this slice — the Event Log relay makes the NEXT
+        occurrence attributable. Detail:
+        plan/issues/windows-crashloop-diagnosability-fixes-2026-07-18.md.
+      exit_criteria:
+        - "eventlog e2e (ignored, opt-in) writes through the layer and reads the event back via Get-EventLog on a Windows host"
+        - "singleton: busy lock => Ok(None)/bounded refusal on Windows; both pinned by unit tests green (one was failing at HEAD)"
+        - "no unflagged console-window spawns remain in the tray diagnose path"
+        - "connect backoff schedule pinned exponential-capped within the ~3min budget"
+      events:
+        - type: completed
+          ts: "2026-07-19T01:05:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            All four slices implemented + verified on windows-next this
+            cycle (tests: tillandsias-core singleton 2/2 incl. the
+            previously-failing contention pin; windows-tray suite green
+            incl. new backoff + eventlog pins; live Event Log write/readback
+            PASSED; install-windows.ps1 parses). Residuals filed in the
+            issue doc: field root cause pending next-occurrence Event Log
+            evidence; guest-crashloop-detection + ephemeral reset
+            (windows-260717-3/4) and the vault re-ensure P1 remain the
+            open convergence layer; Windows terminate_process still a
+            no-op (bounded now, enhancement open).
+        - type: filed
+          ts: "2026-07-19T00:45:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Operator directive (field test 2026-07-18 morning): crash loop
+            on startup at an end-user machine, terminals popping open, no
+            diagnostics available; bring back Windows logging, enforce
+            exponential backoff, suppress terminal flashes, then daily
+            release + from-scratch curl-install e2e.
+
     - packet_id: codex-e2e-smoke-launcher-and-verdict-parity
       order: 404
       title: "Codex e2e smoke launcher: launch codex non-interactively in the forge smoke lane with rate-limit + MO-SMOKE verdict parity"
@@ -16220,21 +16290,6 @@ plan_index:
       estimated_hours: 1
       desired_release: v0.4
       release_target: forge-local-experts-milestone
-      events:
-        - type: progress
-          ts: "2026-07-18T05:55:00Z"
-          agent_id: "linux-forge-opencode-20260718T0509Z"
-          host: forge
-          summary: >
-            Implementation committed (b49b7776): pre-push fetch added to
-            relay-refs.sh before the atomic push, using plain git fetch
-            (no custom refspec) to safely update remote tracking branches.
-            Post-failure reconcile also switched from dangerous
-            refs/heads/*:refs/heads/* to plain git fetch. Running mirror
-            container still has old code — fix takes effect on next
-            container restart. Push to GitHub rejected (same stale-mirror
-            class) because the fix is in the repo but not yet in the
-            running container.
       outcome: >
         On a clean host with fresh OAuth tokens, `git push origin linux-next`
         from the forge was rejected with non-fast-forward. Root cause:
@@ -16265,6 +16320,20 @@ plan_index:
             AFTER failure but not fetch BEFORE push. The startup path
             (entrypoint.sh:182) already fetches before retry-push; the live
             relay path must do the same.
+        - type: progress
+          ts: "2026-07-18T05:55:00Z"
+          agent_id: "linux-forge-opencode-20260718T0509Z"
+          host: forge
+          summary: >
+            Implementation committed (b49b7776): pre-push fetch added to
+            relay-refs.sh before the atomic push, using plain git fetch
+            (no custom refspec) to safely update remote tracking branches.
+            Post-failure reconcile also switched from dangerous
+            refs/heads/*:refs/heads/* to plain git fetch. Running mirror
+            container still has old code — fix takes effect on next
+            container restart. Push to GitHub rejected (same stale-mirror
+            class) because the fix is in the repo but not yet in the
+            running container.
 
     - packet_id: git-mirror-relay-token-renewal
       order: 414
@@ -16407,3 +16476,19 @@ plan_index:
             should reconcile the merged event history rather than have a
             passer-by rewrite another agent's ledger evidence; the durable value
             is the duplicate-key CI guard.
+        - type: progress
+          ts: "2026-07-19T01:20:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Exit criterion 1 done (claimed via ledger lease
+            git-mirror-relay-fetch-before-push/duplicate-events-key-repair,
+            not silently): merged the order-413 events into ONE chronological
+            list (filed 05:30Z then progress 05:55Z) — no event text altered
+            or lost; tillandsias-policy validate-yaml (which itself rejects
+            duplicate keys) now passes on plan/index.yaml. Done from
+            windows-next because the duplicate key blocked ALL ledger YAML
+            validation on this host's cycle. Remaining for the coordinator:
+            exit criterion 2, the durable duplicate-key CI/litmus guard
+            (criterion 3's js-yaml check equivalent is covered here by the
+            policy validator; wire the strict guard into CI to close).

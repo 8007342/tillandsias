@@ -95,6 +95,13 @@ if ($Uninstall -or $Purge) {
         foreach ($d in @('cache', 'logs', 'wsl') | ForEach-Object { Join-Path $DataRoot $_ }) {
             if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue; Say "  removed $d" }
         }
+        # Event Log source registration (HKLM) — removable only from an
+        # elevated shell; best-effort, silent skip otherwise. Already-logged
+        # events stay in the Application log by design (they are the record).
+        try {
+            Remove-EventLog -Source 'Tillandsias' -ErrorAction Stop
+            Say "  removed Event Log source 'Tillandsias'"
+        } catch {}
         SayOk "Purged."
     } else {
         SayOk "Uninstalled. (Use -Purge for full cleanup including WSL distro + cache.)"
@@ -186,6 +193,28 @@ function Test-HcsAccess {
     }
     return $false
 }
+# ── Windows Event Log source (@trace spec:windows-event-logging) ────────────
+# The tray relays INFO/WARN/ERROR to the Application Event Log so failures are
+# discoverable in Event Viewer. The relay works WITHOUT registration (events
+# render inside Event Viewer's generic wrapper); registering the source under
+# HKLM (admin-only) makes them render clean. Never block install on this.
+function Test-EventSourceRegistered {
+    Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application\Tillandsias'
+}
+$RegisterEventSourceCmd = "try { New-EventLog -LogName Application -Source Tillandsias -ErrorAction Stop } catch {}"
+$IsElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+    ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not (Test-EventSourceRegistered)) {
+    if ($IsElevated) {
+        Invoke-Expression $RegisterEventSourceCmd
+        if (Test-EventSourceRegistered) { SayOk "Registered Event Log source 'Tillandsias'." }
+    } else {
+        # Non-elevated: piggyback on the Hyper-V group-add UAC prompt below if
+        # it runs; otherwise leave the (fully functional) unregistered mode.
+        Say "Event Log source not registered (optional; events still reach Event Viewer)."
+    }
+}
+
 if (-not (Test-HcsAccess)) {
     SayWn "Your account is not in 'Hyper-V Administrators' - Tillandsias cannot"
     SayWn "reach its VM without it (https://aka.ms/hcsadmin)."
@@ -199,9 +228,11 @@ if (-not (Test-HcsAccess)) {
     if ($doAdd) {
         $me = "${env:USERDOMAIN}\${env:USERNAME}"
         try {
+            # Single UAC prompt does double duty: group-add + (best-effort)
+            # Event Log source registration, so we never ask for admin twice.
             Start-Process powershell -Verb RunAs -Wait -ArgumentList @(
                 '-NoProfile', '-Command',
-                "Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '$me'"
+                "Add-LocalGroupMember -SID 'S-1-5-32-578' -Member '$me'; $RegisterEventSourceCmd"
             ) -ErrorAction Stop
             if (Test-HcsAccess) {
                 SayOk "Membership active."

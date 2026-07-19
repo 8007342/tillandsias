@@ -41,6 +41,11 @@ tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = [
     "materialize",
 ] }
 windows = { version = "0.58", features = [
+    # Event Log relay (@trace spec:windows-event-logging): RegisterEventSourceW /
+    # ReportEventW live in Win32_System_EventLog; ReportEventW's SID parameter
+    # type comes from Win32_Security.
+    "Win32_System_EventLog",
+    "Win32_Security",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",

@@ -3,6 +3,7 @@
 
 use fs2::FileExt;
 use std::fs::{File, OpenOptions};
+use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::process;
 use std::time::Duration;
@@ -15,6 +16,20 @@ use tracing::{debug, warn};
 /// A guard that ensures only one instance of the application is running.
 pub struct SingletonGuard {
     _file: File,
+}
+
+/// `true` when a failed `try_lock_exclusive` means "someone else holds the
+/// lock" rather than a real I/O error. On Unix that surfaces as
+/// `ErrorKind::WouldBlock` (EWOULDBLOCK); on Windows `LockFileEx` fails with
+/// `ERROR_LOCK_VIOLATION`, which std maps to an uncategorized kind — so
+/// compare against `fs2::lock_contended_error()` (the canonical
+/// platform-specific contention errno) instead of the kind alone. The
+/// kind-only check made every busy-lock path on Windows report a hard error:
+/// a second tray instance died with "Failed to try-lock" instead of the
+/// clean "already running" exit.
+fn is_lock_contended(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::WouldBlock
+        || err.raw_os_error() == fs2::lock_contended_error().raw_os_error()
 }
 
 impl SingletonGuard {
@@ -57,7 +72,7 @@ impl SingletonGuard {
 
         match file.try_lock_exclusive() {
             Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => return Ok(None),
+            Err(err) if is_lock_contended(&err) => return Ok(None),
             Err(err) => return Err(format!("Failed to try-lock {}: {err}", lock_path.display())),
         }
 
@@ -128,9 +143,36 @@ impl SingletonGuard {
                 Self::terminate_process(pid, timeout);
             }
 
-            // Now block until we get the lock
-            file.lock_exclusive()
-                .map_err(|e| format!("Failed to acquire exclusive lock: {e}"))?;
+            // Poll for the lock with a hard deadline instead of a blocking
+            // `lock_exclusive()`. The blocking wait hung FOREVER when the
+            // owner never exited — on Windows `terminate_process` is a no-op,
+            // so a second GUI tray instance (no console, no visible error)
+            // just wedged invisibly, reading as a silent startup failure.
+            // Bounded-wait-then-error is the honest behavior on every
+            // platform: the caller logs the refusal and exits cleanly.
+            let deadline = std::time::Instant::now() + timeout;
+            loop {
+                match file.try_lock_exclusive() {
+                    Ok(()) => break,
+                    Err(err) if is_lock_contended(&err) => {
+                        if std::time::Instant::now() >= deadline {
+                            return Err(format!(
+                                "another instance (pid {:?}) still holds {} after {:?}",
+                                owner_pid,
+                                lock_path.display(),
+                                timeout
+                            ));
+                        }
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                    Err(err) => {
+                        return Err(format!(
+                            "Failed to acquire exclusive lock on {}: {err}",
+                            lock_path.display()
+                        ));
+                    }
+                }
+            }
         }
 
         // Truncate and write own PID
@@ -190,6 +232,29 @@ impl SingletonGuard {
 mod tests {
     use super::SingletonGuard;
     use std::process;
+
+    #[test]
+    fn acquire_times_out_instead_of_blocking_forever() {
+        if std::env::var("TILLANDSIAS_NO_SINGLETON").is_ok() {
+            return;
+        }
+        let name = format!("tillandsias-singleton-timeout-test-{}", process::id());
+        let first = SingletonGuard::try_acquire(&name)
+            .expect("first try_acquire should not error")
+            .expect("first try_acquire should acquire");
+        let timeout = std::time::Duration::from_millis(300);
+        let start = std::time::Instant::now();
+        let second = SingletonGuard::acquire(&name, timeout);
+        assert!(
+            second.is_err(),
+            "acquire must refuse while the lock is held elsewhere"
+        );
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(10),
+            "acquire must return within the bounded deadline, not block forever"
+        );
+        drop(first);
+    }
 
     #[test]
     fn try_acquire_returns_none_when_lock_is_busy() {

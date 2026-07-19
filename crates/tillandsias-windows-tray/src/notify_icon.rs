@@ -164,9 +164,17 @@ impl TrayProgress {
 
 impl ProvisionProgress for TrayProgress {
     fn report_phase(&self, phase: ProvisionPhase) {
+        // Mirror every UX phase transition into tracing: the INFO relays to
+        // tray.log AND the Windows Event Log, so a power user can reconstruct
+        // how far provisioning got even when the tray UI is gone.
+        // @trace spec:windows-event-logging
+        tracing::info!(phase = phase.status_text(), "provisioning phase");
         update_status_text(phase.status_text(), self.hwnd.0);
     }
     fn report_message(&self, message: &str) {
+        // High-frequency progress refinements (download % ticks) stay at
+        // DEBUG: file-visible under RUST_LOG=debug, never Event Log spam.
+        tracing::debug!(message, "provisioning progress");
         // Sub-messages refine the current phase chip in-place — e.g. the
         // recipe path streams "Downloading rootfs N / M MB (P%)" through here
         // during materialization, mirroring the macOS fetch-progress chip
@@ -502,18 +510,29 @@ fn maybe_rotate_log(dir: &std::path::Path) {
 /// Before opening the appender, [`maybe_rotate_log`] rotates the existing
 /// `tray.log` to `tray.log.bak` if it exceeds [`TRAY_LOG_MAX_BYTES`] so the
 /// log directory's disk footprint stays bounded at ~10 MiB.
-fn init_tracing() {
+///
+/// Alongside the file layer, [`crate::eventlog::try_layer`] relays
+/// INFO/WARN/ERROR to the Windows Application Event Log (source
+/// "Tillandsias") so failures are discoverable in Event Viewer even when
+/// the file log is unreachable — e.g. mid crash loop on an end-user
+/// machine. @trace spec:windows-event-logging
+pub(crate) fn init_tracing() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
     maybe_rotate_log(&dir);
     let appender = tracing_appender::rolling::never(&dir, "tray.log");
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    let _ = tracing_subscriber::fmt()
+    let fmt_layer = tracing_subscriber::fmt::layer()
         .with_writer(appender)
         .with_ansi(false)
-        .with_target(false)
-        .with_env_filter(filter)
+        .with_target(false);
+    let _ = tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt_layer)
+        .with(crate::eventlog::try_layer())
         .try_init();
 }
 
@@ -1901,10 +1920,12 @@ fn distro_running() -> bool {
 /// version payload (`"10.0.26200.8524"`) is locale-neutral so the whole
 /// line is safe to surface as-is.
 fn sniff_windows_version() -> Option<String> {
-    let output = std::process::Command::new("cmd")
-        .args(["/c", "ver"])
-        .output()
-        .ok()?;
+    let mut cmd = std::process::Command::new("cmd");
+    cmd.args(["/c", "ver"]);
+    // CREATE_NO_WINDOW: a console child spawned from the GUI tray otherwise
+    // flashes a blank terminal (keepalive-terminal-visibility class).
+    tillandsias_vm_layer::no_window_sync(&mut cmd);
+    let output = cmd.output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -1920,26 +1941,29 @@ fn collect_report() -> DiagnoseReport {
     let log = log_file_path();
     let log_exists = log.exists();
 
-    let wt_present = std::process::Command::new("where.exe")
-        .arg("wt.exe")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let wt_present = {
+        let mut cmd = std::process::Command::new("where.exe");
+        cmd.arg("wt.exe");
+        tillandsias_vm_layer::no_window_sync(&mut cmd);
+        cmd.output().map(|o| o.status.success()).unwrap_or(false)
+    };
 
     // `wsl.exe -l -q` emits UTF-16LE with a BOM by default; `WSL_UTF8=1` forces
     // plain UTF-8 so `String::from_utf8_lossy` actually sees readable lines.
     // Without this, `lines().any(eq DISTRO_NAME)` returned false even on a
     // registered distro — the bytes parsed as mojibake.
-    let distro_registered = std::process::Command::new("wsl.exe")
-        .env("WSL_UTF8", "1")
-        .args(["-l", "-q"])
-        .output()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .any(|l| l.trim() == crate::wsl_lifecycle::DISTRO_NAME)
-        })
-        .unwrap_or(false);
+    let distro_registered = {
+        let mut cmd = std::process::Command::new("wsl.exe");
+        cmd.env("WSL_UTF8", "1").args(["-l", "-q"]);
+        tillandsias_vm_layer::no_window_sync(&mut cmd);
+        cmd.output()
+            .map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .any(|l| l.trim() == crate::wsl_lifecycle::DISTRO_NAME)
+            })
+            .unwrap_or(false)
+    };
 
     let manifest_pin =
         parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.oci.tar.xz");

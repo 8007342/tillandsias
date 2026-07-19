@@ -20,6 +20,9 @@
     windows_subsystem = "windows"
 )]
 
+// Windows Event Log relay (self-gated with `#![cfg(target_os = "windows")]`;
+// compiles to nothing elsewhere). @trace spec:windows-event-logging
+mod eventlog;
 #[cfg(target_os = "windows")]
 mod hvsocket;
 #[cfg(target_os = "windows")]
@@ -107,6 +110,22 @@ fn main() {
         let bak = std::env::args().any(|a| a == "--bak");
         std::process::exit(notify_icon::logs(tail, bak));
     }
+    // Initialize tracing BEFORE the singleton guard and any Win32 setup so
+    // every startup failure below lands in tray.log AND the Windows Event
+    // Log (source "Tillandsias") — a GUI-subsystem binary has no console, so
+    // an unlogged early exit is invisible and reads as a silent crash loop
+    // to the user. @trace spec:windows-event-logging
+    notify_icon::init_tracing();
+    // Panics in a GUI binary otherwise vanish (no console, default hook
+    // prints to stderr). Record them where a power user can find them —
+    // the ERROR relays to the Event Log — then continue into the default
+    // hook to preserve abort/backtrace semantics.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!(panic = %info, "tray panicked");
+        default_hook(info);
+    }));
+
     // R2: Concurrent tray instances race and double-poll. Enforce singleton behavior.
     let _singleton = match tillandsias_core::singleton::SingletonGuard::acquire(
         "tray-windows",
@@ -114,6 +133,7 @@ fn main() {
     ) {
         Ok(g) => g,
         Err(e) => {
+            tracing::error!(error = %e, "tray startup refused: singleton lock unavailable");
             eprintln!("Error: Tray is already running, or failed to acquire singleton: {e}");
             std::process::exit(1);
         }

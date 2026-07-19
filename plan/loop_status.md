@@ -1,6 +1,27 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-18T06:00:00Z
+LastExecutionTime: 2026-07-19T01:25:00Z
+
+## WINDOWS LANE 2026-07-18/19 (operator-directed crash-loop cycle)
+
+Field report: the latest release CRASH-LOOPED on startup on an end-user
+Windows machine (tray reached "Downloading Fedora" — first field sighting of
+the download UX — then looped, flashing terminals, zero diagnostics).
+Landed on windows-next (packet windows-260718-1, done):
+`windows-event-logging` spec REACTIVATED with a REAL Event Log relay (the
+archived Tauri impl never called ReportEventW; all INFO/WARN/ERROR now relay
+— live write/readback verified), singleton fs2 contention misclassification
++ unbounded-blocking fixes in tillandsias-core (one pre-existing test was
+failing at HEAD on Windows), CREATE_NO_WINDOW on the three unflagged
+diagnose spawns, control-wire connect retries now capped-exponential.
+Ledger repair: order 416 criterion 1 done (order-413 duplicate `events:`
+merged; policy validator green) — criterion 2 (CI guard) stays with the
+linux coordinator. Detail:
+plan/issues/windows-crashloop-diagnosability-fixes-2026-07-18.md.
+BLOCKER at cycle time: no push credential on the Windows host (stale GCM
+token; operator `gh auth refresh` needed) — commits staged locally until
+auth returns, then: push windows-next → daily release → purge + curl-install
+e2e from the remote binary (operator-ordered).
 
 ## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
 

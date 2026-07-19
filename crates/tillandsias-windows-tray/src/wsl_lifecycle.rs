@@ -70,6 +70,18 @@ const EMBEDDED_HEADLESS_AARCH64: &[u8] =
 /// bridge and the tray can never drift to different distros.
 pub const DISTRO_NAME: &str = tillandsias_vm_layer::wsl::DEFAULT_WSL_DISTRO;
 
+/// Attempts for the control-wire connect loop (see `connect_with_backoff`).
+/// With `connect_backoff_delay`'s 1,2,4,8,16,30…30s capped-exponential
+/// schedule this keeps the historical ~3-minute total budget.
+const CONNECT_ATTEMPTS: u32 = 10;
+
+/// Delay after connect attempt `attempt` (1-based): doubles from 1s and
+/// caps at 30s. Pure so the schedule is unit-testable.
+fn connect_backoff_delay(attempt: u32) -> Duration {
+    let exp = 1u64 << attempt.saturating_sub(1).min(5);
+    Duration::from_secs(exp.min(30))
+}
+
 /// A guard that aborts the supervised keepalive task when dropped.
 /// Build a background `wsl.exe` command with CREATE_NO_WINDOW applied.
 /// From the GUI-subsystem tray a raw console child flashes a visible window
@@ -245,23 +257,7 @@ impl WslLifecycle {
             progress.report_phase(ProvisionPhase::Connecting);
             const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
             let _keepalive = self.spawn_keepalive(false).ok();
-            let mut last_err = String::from("(no attempt)");
-            for attempt in 1..=36u32 {
-                match self.try_connect_until_ready(CW_PORT, attempt).await {
-                    Ok(VmPhase::Ready) | Ok(VmPhase::Starting) => return Ok(()),
-                    Ok(other) => {
-                        last_err = format!("VM in phase {other:?}");
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                    }
-                    Err(e) => {
-                        last_err = e;
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                    }
-                }
-            }
-            return Err(format!(
-                "control-wire handshake did not succeed within budget: {last_err}"
-            ));
+            return self.connect_with_backoff(CW_PORT).await;
         }
 
         let manifest = Manifest::from_toml(RECIPE_MANIFEST)
@@ -341,18 +337,33 @@ impl WslLifecycle {
         // Hold a keepalive across the connect loop so the VM doesn't idle out mid-wait.
         let _keepalive = self.spawn_keepalive(false).ok();
 
+        self.connect_with_backoff(CW_PORT).await
+    }
+
+    /// Connect-until-ready with capped exponential backoff (operator
+    /// directive 2026-07-18: every retry loop backs off exponentially).
+    /// Fast first probes catch the common quick bring-up; later waits grow
+    /// 1→2→4→8→16→30s (cap) so a wedged guest is re-poked ever more gently
+    /// instead of on a fixed drumbeat. Total sleep budget ≈181s — the same
+    /// ~3-minute envelope as the old fixed 36×5s loop. Schedule pinned by
+    /// `connect_backoff_schedule_is_capped_exponential`.
+    async fn connect_with_backoff(&self, port: u32) -> Result<(), String> {
         let mut last_err = String::from("(no attempt)");
-        for attempt in 1..=36u32 {
-            match self.try_connect_until_ready(CW_PORT, attempt).await {
+        for attempt in 1..=CONNECT_ATTEMPTS {
+            match self.try_connect_until_ready(port, attempt).await {
                 Ok(VmPhase::Ready) | Ok(VmPhase::Starting) => return Ok(()),
-                Ok(other) => {
-                    last_err = format!("VM in phase {other:?}");
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                }
-                Err(e) => {
-                    last_err = e;
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                }
+                Ok(other) => last_err = format!("VM in phase {other:?}"),
+                Err(e) => last_err = e,
+            }
+            if attempt < CONNECT_ATTEMPTS {
+                let delay = connect_backoff_delay(attempt);
+                tracing::info!(
+                    attempt,
+                    delay_s = delay.as_secs(),
+                    last = %last_err,
+                    "control wire not ready; backing off"
+                );
+                tokio::time::sleep(delay).await;
             }
         }
         Err(format!(
@@ -870,6 +881,21 @@ pub fn recipe_rootfs_artifact(manifest: &Manifest) -> Result<RemoteArtifact, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connect_backoff_schedule_is_capped_exponential() {
+        let secs: Vec<u64> = (1..=CONNECT_ATTEMPTS)
+            .map(|a| connect_backoff_delay(a).as_secs())
+            .collect();
+        assert_eq!(secs, vec![1, 2, 4, 8, 16, 30, 30, 30, 30, 30]);
+        // Sleeps happen between attempts only (never after the last), so the
+        // worst-case wait stays inside the historical ~3-minute envelope.
+        let total: u64 = secs[..(CONNECT_ATTEMPTS as usize - 1)].iter().sum();
+        assert!(
+            (120..=200).contains(&total),
+            "total backoff budget drifted: {total}s"
+        );
+    }
 
     #[test]
     fn install_root_resolves_under_localappdata() {
