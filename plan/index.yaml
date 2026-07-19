@@ -17307,6 +17307,44 @@ plan_index:
             (d) curl -k at 6 sites in vault-cli.sh. Load-bearing hacks confirmed
             untouched: explicit push refspecs, bulk-delete guard, safe.directory,
             forge-uid chown, and the quarantine escape.
+
+        - type: progress
+          ts: "2026-07-19T03:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            CORRECTION — this packet's "removable now" list was OVER-CONFIDENT.
+            Only 2 of 4 items were actually dead hacks. Each was re-verified
+            against the code before touching it, and two turned out to have live
+            consumers. A future agent trusting the original list would have
+            broken brew attestation and the forge shell helpers.
+            (a) lighttpd/git-http-backend — REMOVED, genuinely orphaned (order
+            423 event has the evidence).
+            (d) curl -k in vault-cli.sh — REMOVED and verified LIVE against the
+            running Vault 1.18.5: with --cacert the health endpoint returns 200;
+            with no CA at all vault-cli now exits 2 naming the missing bundle
+            instead of reaching Vault unverified. All six sites now pin
+            --cacert explicitly rather than trusting ambient CURL_CA_BUNDLE, and
+            the gate is applied centrally at the subcommand dispatch so a new
+            subcommand cannot bypass it. Pinned by litmus:vault-cli-verifies-tls,
+            proven falsifiable by reintroducing -k. This mattered: -k disabled
+            verification on exactly the requests carrying the Vault AppRole
+            token, so a MITM on the enclave network could have harvested the
+            mirror's credential to GitHub.
+            (b) HOMEBREW_GITHUB_API_TOKEN — NOT a dead hack, do NOT delete.
+            Order 359 added it against a real operator repro (brew could not
+            verify the ncurses bottle, "missing GitHub API token"); it is read
+            host-side from Vault, never on disk, never in argv, and the forge's
+            own Vault policy still cannot read secret/github/token. Deleting it
+            regresses brew. It IS a genuine conflict with forge-offline's "forge
+            containers carry ZERO credentials" — that needs a spec decision, not
+            a deletion. Split out as order 435.
+            (c) dual git-service/tillandsias-git alias — NOT a dead hack. BOTH
+            names have live consumers: config-overlay/shell-helpers.sh defaults
+            GIT_SERVICE_HOST to git-service, forge-welcome.sh prints
+            git-service:9418, and both appear in NO_PROXY in container_profile.rs
+            and main.rs. This is a rename migration, not a deletion. Split out
+            as order 436.
     - order: 427
       desired_release: v0.4
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
@@ -17642,3 +17680,88 @@ plan_index:
             Found while landing order 427. Isolated as pre-existing and
             intermittent by running the suite three times with the change and
             once on a stashed clean tree.
+
+    - order: 435
+      desired_release: v0.5
+      title: "Spec reconciliation: forge-offline says 'forge containers carry ZERO credentials' but the Codex/brew lane legitimately needs a GitHub token — decide, do not silently drift"
+      status: ready
+      kind: spec
+      deliverable: openspec change proposal reconciling forge-offline + git-mirror-service R5 with order 359
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, openspec, security, forge, spec-drift, operator-decision]
+      estimated_hours: 3
+      outcome: >
+        Two invariants are false as written. openspec/specs/forge-offline states
+        forge containers carry ZERO credentials and git-mirror-service R5 forbids
+        a credential crossing the enclave, yet main.rs injects
+        HOMEBREW_GITHUB_API_TOKEN into every forge lane (order 359) for a REAL
+        reason: brew attestation verification of ghcr.io bottles goes anonymous
+        and gets rate-limited without it, with an operator repro on 2026-07-15.
+        The implementation is defensible — read host-side from Vault, env only,
+        never disk or argv, and the forge's own Vault policy still cannot read
+        secret/github/token — but no change proposal was ever filed, so the spec
+        and reality silently disagree. That is corrosive: an agent auditing
+        against the spec concludes the code is wrong, and an agent reading the
+        code concludes the spec is stale, and neither is safe to act on.
+        Options to weigh: (1) amend the spec to permit a narrowly-scoped,
+        vault-sourced token with stated threat model; (2) scope the injection to
+        only the lanes/phases where brew actually runs rather than every lane
+        for the whole session; (3) remove the token and accept anonymous brew
+        (regresses order 359). This is an operator-facing security-posture
+        decision — surface it rather than deciding unilaterally.
+        NOTE: this is a sibling of the SAME drift class recorded for
+        tillandsias-vault R6 ("forge containers receive zero Vault tokens"),
+        which the implementation has also deliberately contradicted since
+        2026-07-14 with no proposal filed. Fix both together.
+      exit_criteria:
+        - "an openspec change proposal exists reconciling forge-offline and git-mirror-service R5 with the real credential need"
+        - "the same pass reconciles tillandsias-vault R6"
+        - "the operator has signed off on the resulting security posture"
+        - "no invariant in any active spec is false as written when the change lands"
+      events:
+        - type: filed
+          ts: "2026-07-19T03:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Split out of order 426 after re-verification showed the token is not
+            a dead hack but a genuine spec-vs-need conflict requiring a decision.
+
+    - order: 436
+      desired_release: v0.5
+      title: "Unify the git-service / tillandsias-git dual network alias — a rename migration, not a deletion (both names have live consumers)"
+      status: ready
+      kind: cleanup
+      deliverable: images/default/config-overlay/shell-helpers.sh, forge-welcome.sh, container_profile.rs, main.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, git-mirror, naming, cleanup]
+      estimated_hours: 3
+      outcome: >
+        The mirror container is given BOTH network aliases because code and docs
+        disagree on its name. Re-verified: this cannot be fixed by dropping one
+        alias, because both are actively referenced —
+        config-overlay/shell-helpers.sh defaults GIT_SERVICE_HOST to
+        "git-service", forge-welcome.sh advertises "git-service:9418" to the
+        operator, and both names appear in the NO_PROXY literals in
+        container_profile.rs and main.rs. Meanwhile the URL actually injected
+        into forge gitconfig is git://tillandsias-git/<project>. Pick ONE
+        canonical name, migrate every consumer, keep the second alias for one
+        release as a deprecation shim, then drop it. Low risk but touches
+        several surfaces, so it wants its own pass rather than riding along with
+        an unrelated change.
+      exit_criteria:
+        - "one canonical service name, with every consumer migrated"
+        - "the second alias is either removed or explicitly documented as a time-boxed deprecation shim"
+        - "operator-facing banners name the same host the transport actually uses"
+      events:
+        - type: filed
+          ts: "2026-07-19T03:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Split out of order 426 after re-verification showed both alias names
+            have live consumers, so this is a migration rather than a deletion.

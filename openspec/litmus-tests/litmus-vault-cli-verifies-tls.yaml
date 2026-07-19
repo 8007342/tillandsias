@@ -1,0 +1,65 @@
+# @trace spec:tillandsias-vault
+name: litmus:vault-cli-verifies-tls
+spec: tillandsias-vault
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  The git-mirror's vault-cli shim must verify Vault's TLS certificate, and must
+  FAIL LOUD rather than degrade when it cannot.
+
+  It previously used `curl -k` at six sites, disabling verification on exactly
+  the requests that carry the Vault AppRole token — a MITM anywhere on the
+  enclave network could have harvested it. That contradicted a commit explicitly
+  requiring CA-authenticated HTTPS, and was unnecessary throughout: the launcher
+  already bind-mounts the intermediate CA at /etc/tillandsias/ca.crt and exports
+  CURL_CA_BUNDLE whenever the Vault token secret is attached, which is exactly
+  when this shim runs.
+
+  Verified against the live Vault 1.18.5 listener: with --cacert, health returns
+  200; with no CA at all, vault-cli exits 2 naming the missing bundle instead of
+  reaching Vault unverified.
+
+  The fail-loud half is the point. A silent fall back to -k would keep working
+  and look healthy while quietly dropping the security property — the exact
+  failure class behind the inert relay reconcile and the false-passing freshness
+  gate.
+
+preconditions:
+  - workspace contains images/git/vault-cli.sh
+
+critical_path:
+  - step: "no insecure curl invocation anywhere in the shim"
+    command: "! grep -qE '^[^#]*curl[^|]*(\\s-k\\s|--insecure)' images/git/vault-cli.sh && echo 'ok: no insecure curl'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no insecure curl"
+
+  - step: "every curl call pins the CA bundle explicitly rather than trusting ambient env"
+    command: "test \"$(grep -cE '^[^#]*curl .*--cacert \\\"\\$VAULT_CACERT\\\"' images/git/vault-cli.sh)\" = \"$(grep -cE '^[^#]*curl ' images/git/vault-cli.sh)\" && echo 'ok: all curl calls pin the CA'"
+    timeout_ms: 5000
+    expected_behavior: "ok: all curl calls pin the CA"
+
+  - step: "a missing CA bundle fails closed instead of degrading to unverified TLS"
+    command: "grep -Fq 'require_cacert()' images/git/vault-cli.sh && grep -Fq 'refusing to talk to' images/git/vault-cli.sh && echo 'ok: fails closed'"
+    timeout_ms: 5000
+    expected_behavior: "ok: fails closed"
+
+  - step: "the CA gate is applied centrally so a new subcommand cannot bypass it"
+    command: "grep -Eq 'read\\|write\\|write-stdin\\|renew-self\\|lookup-self\\|health\\) require_cacert' images/git/vault-cli.sh && echo 'ok: centrally gated'"
+    timeout_ms: 5000
+    expected_behavior: "ok: centrally gated"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "vault-cli verifies Vault TLS and fails closed without a CA bundle"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "vault-cli-verifies-tls"
+
+rollback:
+  on_failure: >
+    Do NOT restore `curl -k` or add an insecure fallback. If Vault's certificate
+    genuinely does not validate, fix the certificate chain or the CA mount — the
+    token on these requests is the mirror's credential to GitHub.
+  command: "grep -n 'curl' images/git/vault-cli.sh"
