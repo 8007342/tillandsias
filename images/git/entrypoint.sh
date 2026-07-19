@@ -104,8 +104,13 @@ if [ -n "$PROJECT" ]; then
         git -C "$PROJECT_REPO" config receive.denyNonFastforwards false
         git -C "$PROJECT_REPO" config receive.denyDeletes false
     fi
-    # Always ensure http.receivepack is enabled so we can push via HTTP
-    git -C "$PROJECT_REPO" config http.receivepack true
+    # http.receivepack is deliberately NOT enabled (order 423/426). Git
+    # documents it as enabling push "for all users, including anonymous users",
+    # and the mirror serves no authenticated HTTP. All forge transport is
+    # git:// (see write_forge_gitconfig, which injects
+    # url.git://tillandsias-git/<project>.insteadOf). Leaving it on gave the
+    # mirror a second anonymous write path with no consumer.
+    git -C "$PROJECT_REPO" config --unset-all http.receivepack 2>/dev/null || true
     if [ -n "$TILLANDSIAS_PROJECT_REMOTE_URL" ]; then
         # Redact any embedded credentials in the URL we log (defense in depth;
         # the launcher should pass a clean URL).
@@ -238,12 +243,13 @@ VAULT_RENEWER_PID=""
 start_vault_token_renewer
 
 # Propagate shutdown signals (SIGTERM, SIGINT) to child processes
-trap 'echo "[git-service] shutting down..."; kill -TERM "$LIGHTTPD_PID" "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
+trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
 
-# Start lighttpd for git HTTP smart protocol support.
-echo "[git-service] starting lighttpd on port 8080"
-lighttpd -D -f /usr/local/share/git-service/lighttpd.conf &
-LIGHTTPD_PID=$!
+# lighttpd + git-http-backend were removed in order 423/426. Nothing in the
+# launcher or the forge ever spoke HTTP to the mirror — every injected remote is
+# git://tillandsias-git/<project> — so the HTTP listener was dead code that also
+# accepted anonymous pushes. Do not reintroduce it without authentication; see
+# plan/issues/git-mirror-architecture-decision-2026-07-19.md Decision 4.
 
 # Run git daemon on port 9418 in background.
 git daemon \
@@ -257,4 +263,4 @@ git daemon \
 GIT_DAEMON_PID=$!
 
 # Wait for background services to complete
-wait "$LIGHTTPD_PID" "$GIT_DAEMON_PID"
+wait "$GIT_DAEMON_PID"

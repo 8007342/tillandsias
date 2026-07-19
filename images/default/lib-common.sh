@@ -396,7 +396,7 @@ rewrite_origin_for_enclave_push() {
     fi
 
     trace_lifecycle "git-mirror" "host-mount origin rewrite: ${original} -> ${mirror_url}"
-    echo "[forge] git push origin <branch> routes to the enclave mirror (tillandsias-git:8080); upstream is ${original}."
+    echo "[forge] git push origin <branch> routes to the enclave mirror (${mirror_url}); upstream is ${original}."
 }
 
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:forge-offline

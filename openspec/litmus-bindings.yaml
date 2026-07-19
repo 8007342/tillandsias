@@ -380,6 +380,7 @@ specs:
   litmus_tests:
   - litmus:git-mirror-fetch-reconcile
   - litmus:running-image-freshness
+  - litmus:git-mirror-no-anonymous-http-write
   - litmus:enclave-isolation
   - litmus:git-mirror-safe-refspec-push
   - litmus:git-mirror-ref-convergence

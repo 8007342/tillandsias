@@ -17149,6 +17149,30 @@ plan_index:
             Filed from the 2026-07-19 industry-standard mirror research.
             Supersedes the research half of order 322 (rung E).
 
+
+        - type: progress
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            PARTIAL — the lighttpd/git-http-backend half is CLOSED; the git
+            daemon half remains OPEN. Independently re-verified the orphan claim
+            before deleting: production injects git://tillandsias-git/<project>
+            (main.rs:6148) and the only 8080 references were an operator banner
+            in lib-common.sh and an arbitrary fixture string in
+            test-forge-standard-gitconfig-path.sh that never connects. Removed
+            the lighttpd package, lighttpd.conf, the listener, the EXPOSE 8080,
+            and the http.receivepack enablement (now explicitly unset with the
+            rationale inline); corrected the banner to name the real git:// URL.
+            Image rebuilt, 2 MB smaller, lighttpd absent. Relay fixture and
+            forge-standard-gitconfig-path fixture both still PASS. Guarded by
+            litmus:git-mirror-no-anonymous-http-write, verified falsifiable by
+            temporarily reintroducing all three of lighttpd, receivepack and
+            EXPOSE 8080 and confirming each step fails. STILL OPEN: `git daemon
+            --enable=receive-pack` on 9418 remains an unauthenticated write path.
+            That is the serving-layer change (order 322 rung E) and it depends on
+            the credential-helper work in order 424 — deliberately not done in
+            the same pass.
     - order: 424
       desired_release: v0.4
       title: "Mirror credential lifecycle: replace read-token-once-at-startup with a git credential.helper, and the AppRole token with Vault Agent auto-auth"
@@ -17269,6 +17293,20 @@ plan_index:
             Filed from the operator's simplification directive plus the
             2026-07-19 as-built hack inventory.
 
+
+        - type: progress
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            PARTIAL — hack (a) lighttpd/git-http-backend REMOVED (see order 423
+            event for evidence and the guarding litmus). Still to remove: (b)
+            HOMEBREW_GITHUB_API_TOKEN injected into forge lanes, which
+            contradicts forge-offline's "forge containers carry ZERO
+            credentials"; (c) the dual git-service/tillandsias-git network alias;
+            (d) curl -k at 6 sites in vault-cli.sh. Load-bearing hacks confirmed
+            untouched: explicit push refspecs, bulk-delete guard, safe.directory,
+            forge-uid chown, and the quarantine escape.
     - order: 427
       desired_release: v0.4
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
