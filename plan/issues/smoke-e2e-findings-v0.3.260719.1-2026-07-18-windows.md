@@ -194,3 +194,43 @@ the 02:59:50 subscription line). Now: one change-gated WARN per degradation
 episode ("control wire unreachable — …menu state may be stale…") and an INFO
 on recovery, both relayed to the Event Log. A stale-menu episode is now
 post-hoc attributable from Event Viewer alone.
+
+## Third post-PASS operator finding (2026-07-19T04:40Z): VERSION SKEW — the release ships no embedded guest; the guest fetched the STABLE headless
+
+Operator's agent-lane pass crashed across the board (AntiGravity, OpenCode,
+Claude; terminal died on `forge-launch-inference`: container name
+"tillandsias-inference" already in use, podman run WITHOUT --replace).
+
+Root cause chain (confirmed live):
+1. The guest headless is **v0.3.260712.1** under the **v0.3.260719.1** tray
+   (`tillandsias-headless --version` in the distro). All guest images are
+   v0.3.260712.1 to match.
+2. The released source at the tag HAS `--replace` on the inference args —
+   the crashes are OLD-guest behavior (pre-387/378), not new bugs.
+3. Why the old guest: CI's `windows-release` job stages NO `target-guest/`
+   binaries (untracked dir, no staging step — unlike macOS which
+   zig-cross-builds its own), so the released tray embeds zero-byte
+   placeholders and `fetch-headless.sh` falls back to
+   `releases/latest/download` = the newest STABLE (260712.1) by GitHub
+   semantics. Every CI-built Windows tray provisions a stale guest.
+
+FIXED THIS CYCLE (windows-next):
+- `fetch-headless.sh` now pins `releases/download/v<WORKSPACE_VERSION>/…`
+  — never `releases/latest`; unit-pinned (fetch URL must carry the tray's
+  own version; the latest alias is rejected by test).
+- `.github/workflows/release.yml` windows-release job now downloads the
+  `release` job's source-matched musl guest binaries into `target-guest/`
+  before `build-windows-tray.ps1` and FAILS the job if absent.
+- Filed `guest-tray-build-version-handshake` (windows-260719-4) so any
+  future skew is loud instead of silent.
+
+Also filed from the same operator pass:
+- `login-transitive-states-all-platforms` (windows-260719-2): "Logging
+  in…" transitive state + prompt cloud refresh; stale "GitHub Login"
+  rendering after successful login.
+- `codex-lane-device-oauth-login` (windows-260719-3): codex lane prompted
+  for a raw token; must be device/oauth.
+
+Agent-lane crash class (inference name collision et al.) is EXPECTED FIXED
+by a source-matched guest (the fixes are in 260719.1 code); verification
+rides the next source-matched install.

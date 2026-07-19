@@ -15748,6 +15748,126 @@ plan_index:
             recourse. The manual reprovision performed this cycle
             (unregister + tray relaunch) is the reference implementation.
 
+    - packet_id: login-transitive-states-all-platforms
+      provisional_id: windows-260719-2
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Login UX transitive states (all platforms): 'Logging in…' while credentials verify, 'Logged in as X' on success, fall back to 'GitHub Login' on invalid/missing token"
+      status: ready
+      kind: enhancement
+      deliverable: tray menus (windows/macos/linux) + headless LoginStatePush states + prompt cloud-projects refresh on login
+      depends_on: []
+      pickup_role: any
+      capability_tags: [ux, auth, tray, cross-platform, wire]
+      estimated_hours: 5
+      outcome: >
+        Operator directive 2026-07-19 (live on v0.3.260719.1): after a
+        successful GitHub login the menu still showed "GitHub Login" for
+        several seconds, and the cloud-projects list took noticeably long
+        to appear ("probably after some refresh"). The login surface must
+        be a three-state machine, not a boolean: (1) "Logging in…" the
+        moment the login flow starts AND while the containerized
+        credential verification (probe_github_username) runs; (2)
+        "Logged in as <user>" once the probe confirms; (3) fall back to
+        "GitHub Login" when the token is invalid or missing (the
+        definitive probe fails). The order-276 sentinel funnel already
+        kills most of the presence-poll lag — extend it so the tray
+        renders the transitive state immediately on login start
+        (menu-click is a local signal; no wire round-trip needed) and so
+        the logged-in flip also fast-refreshes cloud projects (the
+        listing lag the operator saw). All three platforms; the wire
+        LoginStatePush may need an explicit InProgress variant.
+      exit_criteria:
+        - "clicking GitHub Login flips the menu to a 'Logging in…' state immediately, before any wire round-trip"
+        - "successful device flow + probe => 'Logged in as <user>' within a couple of seconds (no stale 'GitHub Login' window); cloud projects refresh promptly on the flip"
+        - "invalid/missing token (probe fails) => menu falls back to 'GitHub Login'; never a stale logged-in rendering"
+        - "behavior verified on windows + linux + macos trays (or unit-pinned per platform where no live host is available)"
+      events:
+        - type: filed
+          ts: "2026-07-19T04:45:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Operator UX directive from the live post-e2e session, filed
+            with the fresh-guest auth findings (same session: silent
+            token-store failure + menu gate bypass, see
+            smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md).
+
+    - packet_id: codex-lane-device-oauth-login
+      provisional_id: windows-260719-3
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Codex agent lane: device/oauth login flow — never a raw token prompt"
+      status: ready
+      kind: bug
+      deliverable: forge lane codex bootstrap (images/ + headless agent-launch env)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [codex, forge, auth, ux]
+      estimated_hours: 3
+      outcome: >
+        Operator 2026-07-19 (live): launching the Codex agent lane
+        prompted for a raw API token. Policy: agent lanes use device/oauth
+        flows (like the GitHub login), never paste-a-token prompts. Wire
+        the codex lane's auth bootstrap to its oauth/device flow (or
+        surface a classified "codex needs one-time oauth — run <verb>"
+        message), matching how opencode/claude lanes authenticate.
+      exit_criteria:
+        - "fresh forge: launching the codex lane never prompts for a pasted token; it either reuses vault-held credentials or walks a device/oauth flow"
+        - "the auth path is documented in the lane's spec/cheatsheet"
+      events:
+        - type: filed
+          ts: "2026-07-19T04:45:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Filed from the operator's live fresh-guest agent-launch pass
+            (v0.3.260719.1 tray over a — skewed — v0.3.260712.1 guest;
+            the token prompt is auth-flow shape, not skew, so it stands
+            regardless).
+
+    - packet_id: guest-tray-build-version-handshake
+      provisional_id: windows-260719-4
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Wire handshake carries BUILD versions; tray goes loud on guest/tray skew (chip + WARN → Event Log)"
+      status: ready
+      kind: enhancement
+      deliverable: tillandsias-control-wire handshake + headless + all trays
+      depends_on: []
+      pickup_role: any
+      capability_tags: [wire, versioning, diagnose, cross-platform, fail-loud]
+      estimated_hours: 4
+      outcome: >
+        2026-07-19 field repro: a v0.3.260719.1 tray silently drove a
+        v0.3.260712.1 guest for a whole session (CI shipped no embedded
+        guest; the in-VM fetch script pulled the stable) — every
+        already-fixed guest bug resurfaced with zero indication of skew.
+        The wire handshake pins wire_version (protocol) but not BUILD
+        version. Add build-version exchange to the handshake: on
+        mismatch, the tray logs one WARN (relayed to the Windows Event
+        Log), renders a "guest v<X> ≠ app v<Y>" hint (diagnose report +
+        tooltip/chip), and --diagnose surfaces both versions. The
+        root-cause fixes (fetch-script version pin, CI target-guest
+        staging, this cycle) prevent the skew; this packet is the guard
+        that makes any future skew impossible to miss.
+      exit_criteria:
+        - "handshake exchanges build versions; --diagnose --json reports guest_version alongside version"
+        - "mismatch => one change-gated WARN (Event Log on Windows) + visible skew hint; match => silent"
+        - "litmus/unit pin: a mismatched pair renders the skew, a matched pair does not"
+      events:
+        - type: filed
+          ts: "2026-07-19T04:45:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Filed from the version-skew root-cause session (see
+            smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md
+            addendum). Order-282 family; the handshake guard half.
+
     - packet_id: windows-crashloop-diagnosability-fixes
       provisional_id: windows-260718-1
       order: provisional
