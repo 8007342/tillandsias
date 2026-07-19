@@ -17336,6 +17336,46 @@ plan_index:
             8MB tmpfs mask. Not touched here.
             Evidence: 211/211 workspace tests; ./build.sh --check and --test
             pass; instant litmus 151/154 (same 3 pre-existing).
+
+        - type: progress
+          ts: "2026-07-19T10:10:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Index arm DONE, and it was a DATA-LOSS path, not the "agents cannot
+            commit" the audit described — wrong in the dangerous direction.
+            Agents CAN commit with an absent index; what they commit is the
+            deletion of the entire tree. Verified empirically rather than
+            reasoned:
+              rm .git/index; git status --porcelain
+                -> "D  a.txt" AND "?? a.txt"  (staged-deleted and untracked)
+              git commit -am "work"
+                -> 3 files changed, 3 deletions(-); HEAD is EMPTY
+            The working tree still holds every file, so nothing looks wrong
+            locally — and the mirror relays that commit straight to GitHub. An
+            agent running the single most ordinary git command wipes the repo
+            upstream.
+            Reachable whenever write_forge_index hits its
+            `Err(NotFound) => Some(())` escape, which is EVERY WSL2 and VZ guest
+            launch, since those guests ship no git binary. The escape's comment
+            promised "in-container materialization — every forge image carries
+            git and can read-tree HEAD"; independently confirmed nothing ever
+            implemented it (grep -rn 'read-tree' images/ returns zero). The
+            comment's PREMISE was true though, so keeping the promise is a
+            one-liner.
+            ensure_forge_git_index now rebuilds the index from HEAD, hooked into
+            configure_git_identity so all five lanes get it without touching
+            five entrypoints. No-ops safely for non-repos and for repos with no
+            HEAD yet. Fails LOUD if it cannot rebuild, naming the consequence,
+            rather than proceeding into the dangerous state.
+            Guarded by litmus:forge-git-index-materialization. Its case 3
+            REPRODUCES the mass deletion without the guard and proves prevention
+            with it — the same sequence that emptied HEAD now reports "nothing
+            to commit, working tree clean" with all files intact.
+            REMAINING in 425: the .git facade arm (write_forge_repo_gitdir
+            returning None into the empty 8MB tmpfs mask). The index and
+            mirror-redirect arms are closed.
+            Evidence: fixture 5/5; litmus 3/3; instant gate 152/155.
     - order: 426
       packet_id: git-hack-obsolescence
       desired_release: v0.4

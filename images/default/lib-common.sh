@@ -241,11 +241,69 @@ export_pull_cache_path
 # Lifecycle tracing — function defined earlier in this file. See the forward
 # declaration block above.
 
+# @trace spec:git-mirror-service, spec:forge-hot-cold-split
+# Materialise the git index if the gitdir facade left it absent (order 425).
+#
+# THIS PREVENTS A MASS-DELETION COMMIT. The host-side facade builder
+# (write_forge_index) cannot run `git read-tree` when the launching host has no
+# git binary — WSL2 and VZ guests ship none — so it returns early, leaving
+# .git/index absent and a comment promising "in-container materialization".
+# Nothing implemented that promise; `grep -rn read-tree images/` returned zero.
+#
+# An absent index is NOT merely inconvenient. Verified empirically:
+#
+#   $ rm .git/index && git status --porcelain
+#   D  a.txt          <- every tracked file reads as STAGED-DELETED
+#   ?? a.txt          <- and simultaneously untracked
+#   $ git commit -am "work"
+#   3 files changed, 3 deletions(-)   <- HEAD is now EMPTY
+#
+# The working tree still holds every file, so nothing looks wrong locally — and
+# through the mirror relay that commit is pushed straight to GitHub. An agent
+# doing the most ordinary thing in the world, `git commit -am`, wipes the repo.
+#
+# Every forge image carries git, which is what the original comment assumed, so
+# keeping the promise is a one-liner. Fails LOUD rather than proceeding into the
+# dangerous state.
+ensure_forge_git_index() {
+    local dir="${1:-$PWD}"
+    git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+
+    local gitdir
+    gitdir="$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+    [ -n "$gitdir" ] || return 0
+    [ -e "$gitdir/index" ] && return 0
+
+    # No HEAD yet (freshly initialised repo) — an absent index is correct.
+    git -C "$dir" rev-parse --verify HEAD >/dev/null 2>&1 || return 0
+
+    trace_lifecycle "git" "index absent — materialising from HEAD (order 425)"
+    if git -C "$dir" read-tree HEAD 2>/dev/null; then
+        trace_lifecycle "git" "index materialised from HEAD"
+        return 0
+    fi
+
+    echo "" >&2
+    echo "ERROR: git index is absent and could not be rebuilt from HEAD." >&2
+    echo "  Repo: $dir" >&2
+    echo "  Committing in this state would record the DELETION of every tracked" >&2
+    echo "  file — 'git commit -am' would empty the repository and the mirror" >&2
+    echo "  would relay that upstream. Refusing to continue silently." >&2
+    echo "  Fix: run 'git read-tree HEAD' in the repo, or relaunch the forge." >&2
+    echo "" >&2
+    return 1
+}
+
 configure_git_identity() {
     # @trace spec:secrets-management, spec:git-mirror-service
     # GitHub Login stores identity on the host; launchers pass it in as env.
     # Write repo-local config too so `git config user.*` and tools that inspect
     # config see the same identity that Git uses for commits.
+    #
+    # Order 425: materialise the index FIRST. Every lane already calls this
+    # function after find_project_dir, so hooking here covers them all without
+    # touching five entrypoints.
+    ensure_forge_git_index "${PROJECT_DIR:-$PWD}" || true
     local name="${GIT_AUTHOR_NAME:-${GIT_COMMITTER_NAME:-}}"
     local email="${GIT_AUTHOR_EMAIL:-${GIT_COMMITTER_EMAIL:-}}"
 
