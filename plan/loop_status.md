@@ -28,9 +28,18 @@ collision, both merges identical — reconciled in this merge commit).
 UPDATE 02:35Z: orders 417+418 DRAINED on windows-next (aeb2ba91) — the
 keepalive respawn loop is bounded (backoff + give-up + tray surfacing)
 and the registered fast path exec-probes before trusting registration
-(one-shot ephemeral self-heal). 419/420 remain open for the windows lane.
-Next: daily release, then purge + curl-install e2e verifying 417/418
-live.
+(one-shot ephemeral self-heal).
+FINAL 02:45Z: 419+420 ALSO DRAINED (launch-failure taxonomy + spec +
+litmus; auto-captured redacted diagnostics bundle) — the v0.4 windows
+lane is complete. RELEASE v0.3.260719.1 shipped (PR #77 → main → tag →
+run 29668750741, all three platform jobs green) and PASSED the
+operator-ordered full-wipe curl-install e2e on Windows: from-scratch
+provision to VM-ready in ~17.5 min with the Event Log relay live
+(provisioning phases visible in Event Viewer), .import-complete marker
+written, and a 12s probe-gated fast-path relaunch. LATEST TESTED DAILY:
+v0.3.260719.1. Two installer findings filed (transient --version verify
+flake; -Purge leaves .bak):
+plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
 
 ## Cycle 2026-07-18T06:40Z→07:00Z (linux_mutable macuahuitl — orchestration: FULL release backfill + macOS signing answer)
 

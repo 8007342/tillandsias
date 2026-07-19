@@ -16666,6 +16666,17 @@ plan_index:
             with_backoff + keepalive_supervisor_healthy_run_resets_failure_
             count; tray suite green. Live behavioral verification rides the
             operator-ordered purge + curl-install e2e this same session.
+        - type: verified-by
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            LIVE on release v0.3.260719.1: full wipe + curl-install e2e —
+            from-scratch provision reached VM ready in ~17.5 min with the
+            bounded keepalive holding the wire; no terminal flashes, no
+            respawn storm. Report:
+            plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md
+            (PASS).
 
     - packet_id: windows-registered-distro-integrity-probe
       order: 418
@@ -16854,6 +16865,17 @@ plan_index:
             redaction_masks_github_and_vault_tokens_only,
             failure_bundle_writes_redacted_json (writes + parses a real
             bundle under a temp LOCALAPPDATA). Tray suite 65 green.
+        - type: verified-by
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Release v0.3.260719.1 e2e (PASS report): the happy path leaves
+            no bundle (correct — bundle only on terminal failure); the
+            marker + fast-path behaviors of sibling 418 verified live:
+            .import-complete written with 0.3.260719.1 after the
+            from-scratch provision; Stop-Process + relaunch took the
+            probe-gated fast path (no re-download) to VM ready in 12s.
 
     - packet_id: macos-curl-installer-gatekeeper-overwarn
       order: 421
