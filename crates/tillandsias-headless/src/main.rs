@@ -14109,6 +14109,41 @@ mod tests {
     fn init_build_state_persists_to_cache_directory() {
         // Test that InitBuildState can be saved and loaded from the cache directory.
         // @trace spec:init-incremental-builds
+        //
+        // Order 434: this used to write into the REAL user cache directory,
+        // because init_cache_dir() falls back to $HOME/.cache/tillandsias when
+        // XDG_CACHE_HOME is unset. That is the same directory the actual
+        // application and the image build scripts use, so the test raced with
+        // anything else touching it — including a concurrent ./build-*.sh — and
+        // failed intermittently (observed 1, 1, then 2 failures across three
+        // identical suite runs). A test that mutates real user state is not a
+        // unit test; it is a coin flip that also litters the developer's cache.
+        //
+        // Redirect the cache to a temp dir for the duration. env mutation is
+        // process-global, so this serialises on the SAME lock every other
+        // env-mutating test in the crate uses — two independent mutexes would
+        // serialise nothing.
+        let _guard = crate::runtime_assets::env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let old_xdg = std::env::var_os("XDG_CACHE_HOME");
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", temp.path());
+        }
+        struct RestoreXdg(Option<std::ffi::OsString>);
+        impl Drop for RestoreXdg {
+            fn drop(&mut self) {
+                // Restore on the panic path too, or one failing assertion
+                // leaves every later test pointed at a deleted temp dir.
+                unsafe {
+                    match self.0.take() {
+                        Some(value) => std::env::set_var("XDG_CACHE_HOME", value),
+                        None => std::env::remove_var("XDG_CACHE_HOME"),
+                    }
+                }
+            }
+        }
+        let _restore = RestoreXdg(old_xdg);
+
         let mut state = InitBuildState::new();
         state.mark_success("proxy");
         state.mark_success("git");

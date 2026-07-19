@@ -296,15 +296,27 @@ fn hex_digest(bytes: &[u8]) -> String {
     out
 }
 
+/// Process-wide lock for tests that mutate environment variables.
+///
+/// `std::env::set_var` is process-global and unsound to race with `getenv`,
+/// so EVERY env-mutating test in this crate must serialise on the SAME lock.
+/// Two independent mutexes would not serialise anything — which is why this
+/// lives at module level rather than inside one test module (order 434).
+#[cfg(test)]
+pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    use std::sync::{Mutex, OnceLock};
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    // A poisoned lock only means some other env test panicked; the guard is
+    // still usable and failing here would mask the real failure.
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
-    }
+    use crate::runtime_assets::env_lock;
 
     #[test]
     fn embedded_assets_include_required_runtime_contexts() {

@@ -17871,7 +17871,7 @@ plan_index:
     - order: 434
       desired_release: v0.4
       title: "Flaky test: init_build_state_persists_to_cache_directory fails intermittently under the parallel runner (shared cache-directory state)"
-      status: ready
+      status: done
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (test hermeticity)
       depends_on: []
@@ -17905,6 +17905,35 @@ plan_index:
             intermittent by running the suite three times with the change and
             once on a stashed clean tree.
 
+
+        - type: completed
+          ts: "2026-07-19T08:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            ROOT CAUSE was worse than "shared state between tests": the test
+            wrote into the REAL user cache directory. init_cache_dir() falls
+            back to $HOME/.cache/tillandsias when XDG_CACHE_HOME is unset, which
+            is the same directory the actual application and the image build
+            scripts use — so it raced with anything else on the machine touching
+            it, including the ./build-*.sh runs happening during this session.
+            That is not a unit test; it is a coin flip that also mutates the
+            developer's real state.
+            Fixed by redirecting XDG_CACHE_HOME to a tempdir for the test's
+            duration, serialised on the crate's SHARED env lock. That lock was
+            previously private to runtime_assets' test module, so it was
+            promoted to pub(crate) at module level — two independent mutexes
+            would serialise nothing, and std::env::set_var is process-global.
+            Restoration uses a Drop guard so the panic path also restores; the
+            previous inline restore in runtime_assets would have leaked a
+            deleted tempdir path into every later test had an assertion failed.
+            PROVEN, not assumed: captured the mtime of
+            ~/.cache/tillandsias/init-build-state.json before and after a test
+            run — unchanged, so the real cache is genuinely untouched. Its
+            timestamp of 01:44 tonight is itself evidence the test HAD been
+            writing there during earlier runs this session.
+            Suite: 210/210 across three consecutive runs; full ./build.sh --test
+            passes.
     - order: 435
       desired_release: v0.5
       title: "Spec reconciliation: forge-offline says 'forge containers carry ZERO credentials' but the Codex/brew lane legitimately needs a GitHub token — decide, do not silently drift"
