@@ -165,3 +165,32 @@ exact flow the 2026-07-18 field failure took and behaved as specified.
     ts: "2026-07-19T03:00:00Z"
     agent_id: windows-bullo-fable5-20260719T0043Z
     host: windows
+
+## Second post-PASS operator finding (2026-07-19T04:15Z live session)
+
+### Wire-reconnect-never-recovers REPRODUCED on the fresh install (order 154 class)
+
+Operator report: tray shows "Wire unreachable" while the guest is verifiably
+HEALTHY (tillandsias-headless service active, vault Up healthy ~1h, proxy Up,
+health-check execs ticking). The tray's last tray.log line is 02:59:50Z
+("vm status push subscription established on legacy topics") — NOTHING was
+logged in the following hour+ including the degradation itself. This is
+`windows-tray-wire-reconnect-never-recovers-2026-07-12.md` reproducing on a
+pristine v0.3.260719.1 install: the push subscription dropped during the
+02:59-03:02 vault-init/login/attach flurry and the tray never re-established.
+Event appended here rather than a new packet (existing issue owns the class).
+Recovery: Quit + relaunch the tray (fast path reconnects in ~12s).
+
+Also observed: `tillandsias-github-login-37510` one-shot container Up ~1h,
+orphaned — the known `login-oneshot-containers-never-reaped-2026-07-12.md`
+class, reproduced on the fresh guest.
+
+### FIXED THIS CYCLE (windows-next): wire transitions were invisible
+
+`mark_wire_unreachable`/`mark_wire_recovered` rendered the chip but logged
+NOTHING — tray.log and the Windows Event Log stayed silent through the whole
+episode (exactly the operator's Event Viewer observation: newest event was
+the 02:59:50 subscription line). Now: one change-gated WARN per degradation
+episode ("control wire unreachable — …menu state may be stale…") and an INFO
+on recovery, both relayed to the Event Log. A stale-menu episode is now
+post-hoc attributable from Event Viewer alone.
