@@ -889,10 +889,79 @@ ensure_forge_prebuilt_tools() {
 # without a survival path, so every update is now probed and a broken
 # fresh install rolls back to the last KNOWN-GOOD version recorded in the
 # persistent npm cache.
+# ── Harness CONTRACT verification (order 439) ───────────────
+# Liveness is not enough. An upstream release can start cleanly while having
+# renamed or dropped a flag we pass, and `--version` will happily report OK:
+#
+#   * order 429 found the forge passing `--dangerously-skip-permissions` to
+#     opencode — a flag it DOES NOT HAVE. yargs is non-strict, so it was
+#     silently swallowed for an unknown length of time while the lane's
+#     permissive behaviour actually came from the config overlay.
+#   * order 431 is blocked because we would depend on the UNDOCUMENTED
+#     OPENCODE_AUTH_CONTENT for keeping credentials off disk; a release that
+#     renames it passes a liveness probe while credentials silently revert to
+#     auth.json — inside the container built to keep them off disk.
+#
+# So the probe now asserts the contracts we actually rely on. A harness that
+# starts but no longer accepts a flag we pass is broken FOR US, and takes the
+# same last-good rollback path as a crashing one (order 284).
+#
+# Keep these lists in sync with the entrypoints that pass the flags. A flag
+# listed here and absent upstream is a LOUD failure by design — that is the
+# whole point.
+harness_contract_help_cmd() {
+    # Flags live on subcommands, so each harness needs its own help invocation.
+    case "$1" in
+        opencode) echo "run --help" ;;
+        codex)    echo "exec --help" ;;
+        *)        echo "" ;;
+    esac
+}
+
+harness_contract_flags() {
+    case "$1" in
+        # entrypoint-forge-opencode.sh: `opencode run --auto [--format json]`
+        opencode) echo "--auto --format" ;;
+        # entrypoint-forge-codex.sh: `codex exec --dangerously-bypass-approvals-and-sandbox [--json --output-last-message]`
+        codex)    echo "--json --output-last-message --dangerously-bypass-approvals-and-sandbox" ;;
+        *)        echo "" ;;
+    esac
+}
+
+harness_contract_ok() {
+    # $1 = binary name. Returns 0 when every flag we pass still exists, or when
+    # no contract is declared for this harness. Never fails merely because help
+    # output could not be captured (offline/slow): a contract check that fails
+    # open on infrastructure noise would cause spurious rollbacks, so ambiguity
+    # is treated as "not disproven" and only a POSITIVE absence fails.
+    local bin="$1"
+    local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+    local help_cmd flags help_out missing=""
+    help_cmd="$(harness_contract_help_cmd "$bin")"
+    flags="$(harness_contract_flags "$bin")"
+    [ -n "$help_cmd" ] && [ -n "$flags" ] || return 0
+
+    # shellcheck disable=SC2086
+    help_out="$(timeout 30 "$bin_path" $help_cmd 2>&1)" || return 0
+    [ -n "$help_out" ] || return 0
+
+    for f in $flags; do
+        printf '%s' "$help_out" | grep -qF -- "$f" || missing="$missing $f"
+    done
+    if [ -n "$missing" ]; then
+        trace_lifecycle "harness" "$bin CONTRACT BROKEN — flags we pass are absent upstream:$missing"
+        return 1
+    fi
+    return 0
+}
+
 harness_probe() {
-    # $1 = binary name. Cheap liveness: --version within a short timeout.
+    # $1 = binary name. Liveness (--version within a short timeout) AND the
+    # contracts we depend on (order 439). Both must hold: a harness that starts
+    # but silently ignores our flags is not usable, it just fails invisibly.
     local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1"
-    [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1
+    [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1 \
+        && harness_contract_ok "$1"
 }
 
 harness_last_good_file() {

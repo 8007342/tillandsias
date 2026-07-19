@@ -320,6 +320,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-hot-cold-split-shape
+  - litmus:harness-contract-probe
   - litmus:forge-hot-cold-split-tmpfs-shape
   coverage_ratio: 92
   last_verified: '2026-05-30'

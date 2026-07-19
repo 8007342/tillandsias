@@ -28,7 +28,7 @@ if [[ "$*" == *"ls -g"* ]]; then echo "opencode-ai@9.9.9-broken"; exit 0; fi
 for a in "$@"; do
   case "$a" in
     opencode-ai@latest) printf '#!/bin/bash\nexit 1\n' > "$NPM_CONFIG_PREFIX/bin/opencode"; chmod +x "$NPM_CONFIG_PREFIX/bin/opencode" ;;
-    opencode-ai@1.2.3) printf '#!/bin/bash\necho 1.2.3\n' > "$NPM_CONFIG_PREFIX/bin/opencode"; chmod +x "$NPM_CONFIG_PREFIX/bin/opencode" ;;
+    opencode-ai@1.2.3) printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --auto"; echo "  --format"; exit 0;; esac\necho 1.2.3\n' > "$NPM_CONFIG_PREFIX/bin/opencode"; chmod +x "$NPM_CONFIG_PREFIX/bin/opencode" ;;
   esac
 done
 exit 0
@@ -37,7 +37,11 @@ chmod +x npm
 export PATH="$WORK:$PATH"
 
 # Extract the functions under test from the shipped library.
-sed -n '/^harness_probe()/,/^}/p;/^harness_last_good_file()/,/^}/p;/^harness_record_last_good()/,/^}/p;/^ensure_forge_harnesses()/,/^}/p' \
+# harness_probe gained a CONTRACT check in order 439, so its helpers must be
+# extracted too — otherwise the probe fails with "harness_contract_ok: command
+# not found" and this fixture reports a rollback failure that is really a
+# missing-function error.
+sed -n '/^harness_probe()/,/^}/p;/^harness_contract_help_cmd()/,/^}/p;/^harness_contract_flags()/,/^}/p;/^harness_contract_ok()/,/^}/p;/^harness_last_good_file()/,/^}/p;/^harness_record_last_good()/,/^}/p;/^ensure_forge_harnesses()/,/^}/p' \
     "$ROOT/images/default/lib-common.sh" > funcs.sh
 # shellcheck disable=SC1091
 source funcs.sh
@@ -61,7 +65,7 @@ echo "fixture 2 ok: no last-good is loud but non-fatal"
 
 # Fixture 3: healthy install records last-good.
 rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock"
-printf '#!/bin/bash\necho 9.9.9\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
+printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --auto"; echo "  --format"; exit 0;; esac\necho 9.9.9\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
 chmod +x "$NPM_CONFIG_PREFIX/bin/opencode"
 harness_record_last_good opencode opencode-ai || fail "record must succeed for a healthy binary"
 [ "$(cat "$(harness_last_good_file opencode)")" = "9.9.9-broken" ] || fail "last-good not recorded from npm ls"
@@ -77,7 +81,7 @@ rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
 mkdir -p "$HOME/.cache/tillandsias-project/npm-update.lock"
 (
     sleep 3
-    printf '#!/bin/bash\necho raced-ok\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
+    printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --auto"; echo "  --format"; exit 0;; esac\necho raced-ok\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
     chmod +x "$NPM_CONFIG_PREFIX/bin/opencode"
     sleep 1
     rmdir "$HOME/.cache/tillandsias-project/npm-update.lock"
@@ -107,7 +111,7 @@ echo "fixture 5 ok: pristine cache + dead egress fails LOUD and clears the caden
 # the order-181 fail-soft contract holds: silent fallback, no floor warning.
 rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock"
 rm -f "$HOME/.cache/tillandsias-project/harness-update-stamp"
-printf '#!/bin/bash\necho cached\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
+printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --auto"; echo "  --format"; exit 0;; esac\necho cached\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
 chmod +x "$NPM_CONFIG_PREFIX/bin/opencode"
 out="$(PATH="$WORK/failnpm:$PATH" ensure_forge_harnesses 2>&1)" || fail "updater must stay fail-soft"
 echo "$out" | grep -q "WARNING: no agent harness is installed" \

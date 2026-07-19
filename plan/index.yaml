@@ -18088,7 +18088,7 @@ plan_index:
     - order: 439
       desired_release: v0.4
       title: "Harness liveness probe cannot detect BEHAVIOURAL drift — a working @latest that changed an undocumented contract passes it"
-      status: ready
+      status: done
       kind: fix
       deliverable: images/default/lib-common.sh (harness_probe) + per-harness contract checks
       depends_on: []
@@ -18128,3 +18128,43 @@ plan_index:
             Filed while scoping order 431. Generalises the order-429 phantom
             flag finding: liveness probes cannot see behavioural drift, and we
             consume several undocumented or unverified upstream contracts.
+
+        - type: completed
+          ts: "2026-07-19T07:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            harness_probe now verifies CONTRACTS, not just liveness. Declared
+            contracts: opencode `run` must still accept --auto and --format;
+            codex `exec` must still accept --json, --output-last-message and
+            --dangerously-bypass-approvals-and-sandbox. All six were verified
+            present against the installed opencode 1.18.3 and codex-cli 0.144.4
+            before being declared. A contract failure takes the SAME last-good
+            rollback path as a crash (order 284's machinery), because a harness
+            that starts while silently ignoring our flags is not usable — it
+            just fails invisibly.
+            Deliberately FAILS OPEN on ambiguity: a help invocation that errors,
+            times out, or returns nothing is treated as "not disproven" rather
+            than broken. Failing closed on infrastructure noise would trigger
+            spurious rollbacks, and this repo has already been burned by gates
+            that cry wolf (see the order-422 self-correction). Only a POSITIVE
+            absence fails.
+            The fixture's load-bearing case reproduces the REAL order-429 bug:
+            declare --dangerously-skip-permissions against actual opencode and
+            confirm the probe rejects it, naming the flag. Had this existed, the
+            phantom flag would have been caught automatically instead of
+            surviving an unknown length of time.
+            SIDE EFFECT WORTH RECORDING: this change broke
+            scripts/test-harness-rollback.sh in two distinct ways, both real.
+            First, that fixture extracts individual functions from lib-common.sh
+            and did not know about the new helpers, so the probe died with
+            "harness_contract_ok: command not found" and the fixture reported it
+            as a ROLLBACK failure — a misleading symptom for a missing-function
+            cause. Second, its stub harnesses echoed their version for any
+            argument, so they modelled contract-BROKEN harnesses and were
+            correctly rejected; the good stubs now answer --help properly. A
+            stub standing in for a working tool must satisfy the contracts a
+            working tool satisfies, or the fixture tests a fiction.
+            Evidence: contract fixture 5/5; harness rollback fixture 6/6;
+            litmus:harness-contract-probe 3/3; instant gate 151/154 with the
+            same 3 pre-existing unrelated failures.

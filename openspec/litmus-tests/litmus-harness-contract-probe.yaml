@@ -1,0 +1,61 @@
+# @trace spec:forge-hot-cold-split
+name: litmus:harness-contract-probe
+spec: forge-hot-cold-split
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  The forge installs agent harnesses at @latest on EVERY launch. Order 284 added
+  a health probe with last-good rollback after a broken opencode-ai@latest took
+  the whole lane down — but that probe is `--version`, i.e. LIVENESS. It proves
+  a binary starts; it proves nothing about the contracts we depend on.
+
+  We have already been bitten by the gap twice. Order 429 found the forge
+  passing `--dangerously-skip-permissions` to opencode, a flag it does not have,
+  silently swallowed because yargs is non-strict. Order 431 is blocked because a
+  release renaming the undocumented OPENCODE_AUTH_CONTENT would pass a liveness
+  probe while credentials silently revert to disk — inside the container built
+  to keep them off disk.
+
+  So the probe must assert the flags we actually pass, and a harness that starts
+  while ignoring them must take the same rollback path as one that crashes.
+
+  The fixture's case 2 is the load-bearing one: it reproduces the real order-429
+  phantom flag. If that case cannot fail, this whole mechanism is decorative.
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains scripts/test-harness-contract-probe.sh
+
+critical_path:
+  - step: "contract probe detects a missing flag, names it, and tolerates ambiguous help"
+    command: "scripts/test-harness-contract-probe.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: harness contract probe fixture (order 439)"
+
+  - step: "harness_probe checks contracts, not only liveness"
+    command: "grep -Fq 'harness_contract_ok' images/default/lib-common.sh && sed -n '/^harness_probe()/,/^}/p' images/default/lib-common.sh | grep -Fq 'harness_contract_ok' && echo 'ok: probe is contract-aware'"
+    timeout_ms: 5000
+    expected_behavior: "ok: probe is contract-aware"
+
+  - step: "the declared contracts cover the flags the entrypoints actually pass"
+    command: "grep -Fq -- '--auto --format' images/default/lib-common.sh && grep -Fq -- '--dangerously-bypass-approvals-and-sandbox' images/default/lib-common.sh && echo 'ok: contracts declared'"
+    timeout_ms: 5000
+    expected_behavior: "ok: contracts declared"
+
+observability:
+  traces:
+    - "@trace spec:forge-hot-cold-split"
+  expected_log: "harness probe rejects an upstream release that dropped a flag we pass"
+  log_fields:
+    spec: "forge-hot-cold-split"
+    test: "harness-contract-probe"
+
+rollback:
+  on_failure: >
+    Do NOT weaken the contract list to make this pass. If upstream genuinely
+    renamed a flag, update BOTH the entrypoint that passes it and the contract
+    list in the same change, citing the new `--help` output. Silently dropping a
+    flag from the contract list restores the exact blind spot this exists to
+    close.
+  command: "sed -n '/^harness_contract_flags()/,/^}/p' images/default/lib-common.sh"
