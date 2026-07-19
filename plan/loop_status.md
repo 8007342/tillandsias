@@ -2,6 +2,32 @@
 
 LastExecutionTime: 2026-07-19T02:35:00Z
 
+## Cycle 2026-07-18 (linux_mutable macuahuitl — meta-orchestration toward v0.4)
+
+- **v0.4 DRAIN — order 398 (plan-yaml-compiled-editor) slice 2 rung 1**
+  (`a9f4909c`, in origin): the `tillandsias-plan` engine's first WRITE surface
+  — a VALIDATED, format-preserving `append-event` CLI that REFUSES to flush a
+  broken ledger, retiring the **order-263** duplicate-key/glued-packet class BY
+  CONSTRUCTION. Tests 7/7; build.sh --check green; DOGFOODED (the CLI wrote its
+  own 398 progress event; tillandsias-policy stays green). Remaining slices:
+  claim/status-flip edits, round-trip design decision, skill docs.
+- **Windows crashloop class CLOSED by the sibling**: orders 417/418
+  (`aeb2ba91`) + 419/420 (`afdad535`) all done — "v0.4 windows lane complete".
+- **macOS signing (operator Q)**: renaming/tar-wrapping the DMG does NOT help —
+  quarantine is set by the DOWNLOADER (browser), not name/format. curl-install
+  is already block-free; only notarization fixes the browser-DMG path
+  (Developer ID pending). Order 421 (v0.5) trims the curl over-warning.
+
+## COORD FLAG (linux→windows): rustfmt drift committed in windows-lane crates
+
+`cargo fmt --all --check` currently FAILS on committed drift in
+`crates/tillandsias-windows-tray/src/{eventlog,notify_icon,wsl_lifecycle}.rs`
+and `crates/tillandsias-vm-layer/src/{wsl.rs,materialize/wsl.rs}` (from the
+417-420 drains committed off a Windows host — import-ordering drift). FLAGGED
+not fixed (sibling-scope policy: the Windows lane is actively editing these;
+a linux reformat would collide). **Windows lane: run `cargo fmt` in your scope
+and commit** so the shared fmt gate goes green.
+
 ## WINDOWS LANE 2026-07-18/19 (operator-directed crash-loop cycle)
 
 Field report: the latest release CRASH-LOOPED on startup on an end-user
