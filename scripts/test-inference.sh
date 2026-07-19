@@ -24,9 +24,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Create model cache directory
+# Model cache: DELIBERATELY the real user cache, not a tempdir (order 438).
+# Sibling test-*.sh scripts sandbox $HOME, and this one does not, on purpose:
+# the cache holds multi-GB model blobs, so redirecting it would force a full
+# re-download on every run and the test would stop being run at all. The
+# sharing is a considered trade, not an oversight.
+# Concurrency caveat: a simultaneous app run touching the same cache can race
+# this test. Accepted because ollama's blob store is content-addressed and
+# read-mostly; revisit if this test ever starts WRITING models.
 MODEL_CACHE="$HOME/.cache/tillandsias/models"
 mkdir -p "$MODEL_CACHE"
+
+# The log path, by contrast, was a genuine defect: a fixed /tmp path collides
+# between concurrent runs of this script AND between users on a shared host
+# (the second user cannot write the first user's file).
+INFERENCE_LOG="$(mktemp -t tillandsias-test-inference.XXXXXX.log)"
 
 echo "[diagnostic] Launching container with model cache at: $MODEL_CACHE"
 if ! podman run \
@@ -40,7 +52,7 @@ if ! podman run \
   --env "OLLAMA_KEEP_ALIVE=24h" \
   -v "$MODEL_CACHE:/home/ollama/.ollama/models:rw" \
   "$IMAGE" \
-  /usr/bin/ollama serve >/tmp/tillandsias-test-inference.log 2>&1; then
+  /usr/bin/ollama serve >"$INFERENCE_LOG" 2>&1; then
   echo "[diagnostic] ERROR: failed to start inference container" >&2
   exit 1
 fi

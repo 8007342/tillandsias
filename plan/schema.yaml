@@ -24,6 +24,19 @@ statuses:
   - failed-retryable
   - done
   - provisional
+  # Recorded 2026-07-19 (order 438): these are in ACTIVE use in the corpus but
+  # were never listed, so `check` emitted schema-drift advisories for 66
+  # packets. This file documents what the corpus does; leaving reality
+  # unrecorded makes the advisory channel noisy and therefore ignored.
+  # NOTE: completed/done/success are semantic DUPLICATES, as are
+  # in_progress/claimed and active/in_progress. Normalising the vocabulary is
+  # a separate decision (order 440) — recording usage is not endorsing it.
+  - completed
+  - in_progress
+  - success
+  - active
+  - implemented
+  - needs_clarification
 
 # Fields whose values must resolve to existing packet_ids (checked by the
 # invariant core; listing them here tells the engine WHERE references live

@@ -457,18 +457,62 @@ mod tests {
         Ledger::load(&path).expect("live plan/index.yaml loads")
     }
 
+    /// A small ledger the test owns outright. Resolution, dependency and
+    /// open-world behaviour are asserted HERE rather than against the live
+    /// plan, so completing or archiving real work can never turn this suite
+    /// red (order 438).
+    fn synthetic_ledger() -> Ledger {
+        let raw = r#"
+plan_index:
+  steps:
+    - order: 900
+      packet_id: alpha-packet
+      title: "Alpha"
+      status: ready
+      depends_on: []
+      provisional_id: prov-alpha
+    - order: 901
+      packet_id: beta-packet
+      title: "Beta"
+      status: ready
+      depends_on: [alpha-packet]
+    - order: 902
+      packet_id: gamma-packet
+      title: "Gamma"
+      status: ready
+      depends_on: [alpha-packet]
+"#;
+        Ledger::parse(raw, BTreeSet::new()).expect("synthetic ledger parses")
+    }
+
     #[test]
-    fn live_ledger_loads_and_indexes() {
-        let ledger = live_ledger();
-        assert!(ledger.packets.len() > 100, "expected a grown corpus");
+    fn resolution_works_by_order_number_and_packet_id() {
+        // Order 438: this used to resolve "392" and "inference-startup-cleanup"
+        // against the LIVE ledger, so archiving that real packet — i.e.
+        // FINISHING the work — would have failed the test. Assert the
+        // mechanism on a ledger the test owns.
+        let ledger = synthetic_ledger();
         assert!(
-            ledger.resolve("392").is_some(),
+            ledger.resolve("900").is_some(),
             "order-number resolution works"
         );
         assert!(
-            ledger.resolve("inference-startup-cleanup").is_some(),
+            ledger.resolve("alpha-packet").is_some(),
             "packet_id resolution works"
         );
+        assert!(
+            ledger.resolve("no-such-packet").is_none(),
+            "unknown ids must not resolve"
+        );
+    }
+
+    #[test]
+    fn live_ledger_loads_and_is_non_trivial() {
+        // The only thing worth asserting against the LIVE ledger here is that
+        // it still loads and is not empty. A lower bound is safe; naming
+        // specific packets is not, because packets legitimately come and go.
+        let ledger = live_ledger();
+        assert!(ledger.packets.len() > 100, "expected a grown corpus");
     }
 
     #[test]
@@ -485,36 +529,60 @@ mod tests {
             "live ledger integrity violations: {:#?}",
             report.violations
         );
-        // The organic debt is real and documented — pin that we still SEE
-        // it (if the warnings vanish, the cleanup happened; update the
-        // debt filing).
-        assert!(
-            !report.warnings.is_empty(),
-            "expected documented organic warnings until the debt filing is drained"
-        );
+        // Order 438: this used to ALSO assert `!report.warnings.is_empty()`
+        // — "expected documented organic warnings until the debt filing is
+        // drained". That pinned the live ledger to an INCOMPLETE state, so
+        // draining plan-ledger-reference-debt-2026-07-17.md, i.e. doing the
+        // cleanup, would have turned this test red. Completing work must
+        // never break a test. Warnings are reported, not asserted; only
+        // violations are an invariant.
+        if !report.warnings.is_empty() {
+            eprintln!(
+                "[plan] live ledger carries {} reference warning(s) (documented debt, not a failure)",
+                report.warnings.len()
+            );
+        }
     }
 
     #[test]
     fn blocked_by_answers_the_flagship_query() {
-        let ledger = live_ledger();
-        // 401/402 depend on inference-startup-cleanup (order 392).
+        // Order 438: previously asserted that two NAMED real packets were
+        // downstream of order 392 on the live ledger. Landing or archiving
+        // either of them — or legitimately re-pointing the dependency —
+        // would have failed it. Assert the traversal on a graph the test
+        // owns.
+        let ledger = synthetic_ledger();
         let blocked: Vec<String> = ledger
-            .blocked_by("392")
+            .blocked_by("900")
             .iter()
             .map(|p| ledger.id_of(p))
             .collect();
         assert!(
-            blocked.contains(&"macos-inference-tier-verification".to_string())
-                && blocked.contains(&"windows-inference-tier-verification".to_string()),
-            "expected the tier packets downstream of 392, got {blocked:?}"
+            blocked.contains(&"beta-packet".to_string())
+                && blocked.contains(&"gamma-packet".to_string()),
+            "expected both dependents of 900, got {blocked:?}"
+        );
+        assert!(
+            !blocked.contains(&"alpha-packet".to_string()),
+            "a packet must not be listed as blocked by itself, got {blocked:?}"
+        );
+        assert!(
+            ledger.blocked_by("902").is_empty(),
+            "a leaf packet blocks nothing"
         );
     }
 
     #[test]
     fn unknown_fields_survive_load() {
-        // Open-world: provisional_id and other organic fields are present
-        // on raw packets even though this engine never declared them.
-        let ledger = live_ledger();
+        // Open-world: fields this engine never declared must survive a
+        // load/inspect round trip.
+        //
+        // Order 438: this used to require that some LIVE packet still carried
+        // a `provisional_id`. Promoting the last provisional packet — a
+        // desirable event — would have failed it. The synthetic ledger
+        // declares the field explicitly, so the property is tested without
+        // depending on the state of real work.
+        let ledger = synthetic_ledger();
         assert!(
             ledger
                 .packets

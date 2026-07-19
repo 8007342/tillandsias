@@ -17046,6 +17046,7 @@ plan_index:
             (macOS distribution polish).
 
     - order: 422
+      packet_id: git-mirror-image-deploy-gate
       desired_release: v0.4
       title: "Deploy gate: rebuild tillandsias-git image so the mirror's vault-cli has renew-self — the running image is pre-order-414 and every forge session loses push ~1h after container start"
       status: done
@@ -17149,6 +17150,7 @@ plan_index:
             Live re-run: vault and proxy now report indeterminate with the
             reason, and exit 0 — no false accusation.
     - order: 423
+      packet_id: git-mirror-unauthenticated-write-paths
       desired_release: v0.4
       title: "SECURITY: mirror exposes two unauthenticated write paths (git daemon --enable=receive-pack, and lighttpd git-http-backend with http.receivepack and no auth module)"
       status: ready
@@ -17214,12 +17216,13 @@ plan_index:
             the credential-helper work in order 424 — deliberately not done in
             the same pass.
     - order: 424
+      packet_id: git-mirror-credential-lifecycle
       desired_release: v0.4
       title: "Mirror credential lifecycle: replace read-token-once-at-startup with a git credential.helper, and the AppRole token with Vault Agent auto-auth"
       status: ready
       kind: fix
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
-      depends_on: [422]
+      depends_on: [git-mirror-image-deploy-gate]
       pickup_role: linux
       owner_host: linux
       capability_tags: [linux, git-mirror, vault, credentials, p1]
@@ -17251,6 +17254,7 @@ plan_index:
             gate on order 319 rung B.
 
     - order: 425
+      packet_id: forge-mirror-fail-loud-invariant
       desired_release: v0.4
       title: "Fail-loud invariant for the mirror redirect / gitdir facade / forge index — three subsystems silently degrade to no-ops and 3 of 5 live forge gitconfigs have NO mirror redirect"
       status: ready
@@ -17290,12 +17294,13 @@ plan_index:
             defect class behind most filed mirror issues.
 
     - order: 426
+      packet_id: git-hack-obsolescence
       desired_release: v0.4
       title: "Obsolete dead git hacks: remove orphaned lighttpd HTTP path, the GitHub token injected into forge lanes, the dual git-service/tillandsias-git alias, and curl -k in vault-cli"
       status: ready
       kind: cleanup
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
-      depends_on: [423]
+      depends_on: [git-mirror-unauthenticated-write-paths]
       pickup_role: linux
       owner_host: linux
       capability_tags: [linux, git-mirror, cleanup, security, spec-drift]
@@ -17386,6 +17391,7 @@ plan_index:
             and main.rs. This is a rename migration, not a deletion. Split out
             as order 436.
     - order: 427
+      packet_id: forge-delegation-instance-names
       desired_release: v0.4
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
       status: in_progress
@@ -17450,12 +17456,13 @@ plan_index:
             prove Podman actually keeps both containers alive. Do not mark this
             done on the unit tests alone.
     - order: 428
+      packet_id: forge-delegation-worker-state-isolation
       desired_release: v0.4
       title: "Forge delegation rung 2: per-worker in-RAM checkout and state isolation (tmpfs /home/forge/src, per-worker XDG_* and CODEX_HOME)"
       status: in_progress
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
-      depends_on: [427]
+      depends_on: [forge-delegation-instance-names]
       pickup_role: linux
       owner_host: linux
       capability_tags: [linux, forge, tmpfs, delegation, concurrency, blocker]
@@ -17515,12 +17522,13 @@ plan_index:
             launches are byte-identical to pre-428 (asserted).
             REMAINING here: nothing. Mount topology moved to order 437.
     - order: 429
+      packet_id: forge-delegation-result-retrieval
       desired_release: v0.4
       title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
       status: in_progress
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
-      depends_on: [427]
+      depends_on: [forge-delegation-instance-names]
       pickup_role: linux
       owner_host: linux
       capability_tags: [linux, forge, delegation, observability, blocker]
@@ -17623,6 +17631,7 @@ plan_index:
             forge container. Unit tests prove the classification rules; they do
             not prove the wiring fires correctly against a real run.
     - order: 430
+      packet_id: codex-lane-api-key-env
       desired_release: v0.4
       title: "Codex lane is unauthenticated by construction: OPENAI_API_KEY does not authenticate Codex AND injecting it suppresses the vault OAuth restore"
       status: done
@@ -17683,12 +17692,13 @@ plan_index:
             ./build.sh --check passes; workspace tests 187/188 with the single
             failure pre-existing and environment-dependent (see order 433).
     - order: 431
+      packet_id: opencode-vault-auth-content
       desired_release: v0.4
       title: "OpenCode vault provider: inject credentials via OPENCODE_AUTH_CONTENT so no auth.json ever touches disk"
       status: blocked
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
-      depends_on: [430]
+      depends_on: [codex-lane-api-key-env]
       pickup_role: linux
       owner_host: linux
       capability_tags: [linux, forge, opencode, vault, credentials]
@@ -17765,6 +17775,7 @@ plan_index:
             for is complete in
             plan/issues/forge-agent-delegation-research-2026-07-19.md.
     - order: 432
+      packet_id: forge-gc-auto-split-brain
       desired_release: v0.4
       title: "gc.auto split-brain: host repo and forge container share objects/ and refs/ but keep SEPARATE packed-refs — a host-side auto-gc can delete refs the container resolves through"
       status: ready
@@ -17799,6 +17810,7 @@ plan_index:
 
 
     - order: 433
+      packet_id: test-gpu-tier-hermeticity
       desired_release: v0.4
       title: "Unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi fails on any GPU host — ./build.sh --test is red on the CUDA machine"
       status: done
@@ -17869,6 +17881,7 @@ plan_index:
             init_build_state_persists_to_cache_directory did NOT reproduce in
             those runs; that packet stays open.
     - order: 434
+      packet_id: test-init-build-state-hermeticity
       desired_release: v0.4
       title: "Flaky test: init_build_state_persists_to_cache_directory fails intermittently under the parallel runner (shared cache-directory state)"
       status: done
@@ -17935,6 +17948,7 @@ plan_index:
             Suite: 210/210 across three consecutive runs; full ./build.sh --test
             passes.
     - order: 435
+      packet_id: forge-credential-spec-reconciliation
       desired_release: v0.5
       title: "Spec reconciliation: forge-offline says 'forge containers carry ZERO credentials' but the Codex/brew lane legitimately needs a GitHub token — decide, do not silently drift"
       status: ready
@@ -17983,6 +17997,7 @@ plan_index:
             a dead hack but a genuine spec-vs-need conflict requiring a decision.
 
     - order: 436
+      packet_id: git-service-alias-unification
       desired_release: v0.5
       title: "Unify the git-service / tillandsias-git dual network alias — a rename migration, not a deletion (both names have live consumers)"
       status: ready
@@ -18020,12 +18035,13 @@ plan_index:
             have live consumers, so this is a migration rather than a deletion.
 
     - order: 437
+      packet_id: forge-src-tmpfs-topology
       desired_release: v0.5
       title: "/home/forge/src is a host bind mount, but BOTH active specs forbid that — forge-hot-cold-split requires tmpfs and forge-offline requires clone-only"
       status: ready
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
-      depends_on: [427, 428]
+      depends_on: [forge-delegation-instance-names, forge-delegation-worker-state-isolation]
       pickup_role: linux
       owner_host: linux
       capability_tags: [linux, forge, tmpfs, topology, data-loss, operator-visible]
@@ -18071,12 +18087,13 @@ plan_index:
             other while the implementation diverges from both.
 
     - order: 438
+      packet_id: test-transient-state-audit
       desired_release: v0.5
       title: "Audit the suite for tests that encode transient project state as an invariant — completing work should never break a test"
-      status: ready
+      status: done
       kind: fix
       deliverable: plan/issues (audit report) + test fixes
-      depends_on: [433]
+      depends_on: [test-gpu-tier-hermeticity]
       pickup_role: any
       owner_host: any
       capability_tags: [testing, hermeticity, ci, methodology]
@@ -18114,7 +18131,59 @@ plan_index:
             Filed after fixing two instances of the same shape while closing
             order 433.
 
+
+        - type: completed
+          ts: "2026-07-19T09:00:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Swept the whole suite. Twelve findings; the five HIGH ones fixed,
+            plus three MEDIUM. Categories A (host-environment assumptions) and E
+            (date/version pinning) came back EMPTY — the GPU-tier bug was the
+            only instance of A, and the shell suite already gates properly with
+            `command -v ... || SKIP` and derives the host column at runtime.
+            Four of the five HIGH findings were in ONE module:
+            crates/tillandsias-plan/src/lib.rs's tests, which built everything
+            on live_ledger() reading the real plan/index.yaml. Three of its
+            assertions went red specifically when work COMPLETED — it pinned
+            reference warnings as non-empty "until the debt filing is drained",
+            required two named packets to still be downstream of order 392, and
+            required some live packet to still carry a provisional_id. All three
+            now run against a synthetic ledger the test owns; the one genuine
+            live invariant (violations.is_empty()) is kept, and warnings are
+            printed rather than asserted.
+            THE BIG FIND was self-inflicted and only surfaced because the
+            synthetic fixture forced me to learn how depends_on actually
+            resolves: ALL 18 packets I filed tonight lacked `packet_id`. They
+            were the only 18 in the corpus missing it. Ledger::parse indexes by
+            packet_id, so a packet without one enters NEITHER by_id NOR
+            by_order — `tillandsias-plan status 422` answered "no packet
+            matches '422'" while pre-existing 392 resolved fine. Eighteen
+            packets that parsed, loaded, validated, and were completely
+            invisible to the plan engine. Same signature as everything else
+            tonight: looks filed, reports success, is not there. Also converted
+            7 integer depends_on to packet_id strings — str_list filter_maps on
+            as_str, so integer deps were silently dropped even where the packet
+            was otherwise visible.
+            Also: schema.yaml listed 8 statuses while the corpus uses 11, so
+            `check` emitted drift advisories for 66 packets — noise that trains
+            people to ignore the advisory channel. Recorded the 6 missing ones
+            (order 440 filed for the duplicate-vocabulary decision, since
+            completed/done/success are semantically the same and recording
+            usage is not endorsing it).
+            Judgement call worth recording: the sweep flagged test-inference.sh
+            for using the real $HOME model cache and recommended sandboxing it
+            like its siblings. Declined — the cache holds multi-GB blobs and
+            redirecting it would force a full re-download every run, so the test
+            would simply stop being run. Documented the trade in-place and fixed
+            the genuine defect it sat next to: a fixed /tmp log path that
+            collides between concurrent runs and between users.
+            Evidence: ./build.sh --check and --test both pass; plan check
+            reports "ok: 318 packets, ids unique, live references sound" with no
+            schema-drift advisories; instant litmus 151/154 with the same 3
+            pre-existing unrelated failures.
     - order: 439
+      packet_id: harness-contract-verification
       desired_release: v0.4
       title: "Harness liveness probe cannot detect BEHAVIOURAL drift — a working @latest that changed an undocumented contract passes it"
       status: done
@@ -18197,3 +18266,41 @@ plan_index:
             Evidence: contract fixture 5/5; harness rollback fixture 6/6;
             litmus:harness-contract-probe 3/3; instant gate 151/154 with the
             same 3 pre-existing unrelated failures.
+
+    - order: 440
+      packet_id: plan-status-vocabulary-normalisation
+      desired_release: v0.5
+      title: "Plan ledger uses 11 status values with three semantic duplicate pairs — normalise the vocabulary"
+      status: ready
+      kind: cleanup
+      deliverable: plan/schema.yaml + plan/index.yaml status migration
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [plan, schema, consistency]
+      estimated_hours: 3
+      outcome: >
+        The corpus uses 11 distinct statuses, and several mean the same thing:
+        done (144) vs completed (55) vs success (2) vs implemented (1); claimed
+        (2) vs in_progress (7) vs active (1). plan/index.yaml's own
+        default_status_values lists a DIFFERENT set again (it includes
+        needs_clarification and obsoleted, and omits done/claimed/provisional),
+        so the ledger disagrees with itself about its own vocabulary.
+        Consequence: every consumer must special-case synonyms, and any query
+        like "what is finished" silently under-reports depending on which
+        synonym a packet happened to use. Order 438 recorded the missing values
+        in schema.yaml to silence 66 drift advisories, because a noisy advisory
+        channel gets ignored — but recording usage is NOT endorsing it.
+        Pick one value per meaning, migrate, and make
+        plan/index.yaml.default_status_values and plan/schema.yaml.statuses the
+        SAME list so they cannot drift apart again.
+      exit_criteria:
+        - "one status value per distinct meaning; synonyms migrated"
+        - "plan/index.yaml default_status_values and plan/schema.yaml statuses are identical"
+        - "a check fails if the two lists diverge, so this cannot silently recur"
+      events:
+        - type: filed
+          ts: "2026-07-19T09:00:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: Filed while closing order 438's schema-drift advisories.
