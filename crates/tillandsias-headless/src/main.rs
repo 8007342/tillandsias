@@ -10886,16 +10886,39 @@ mod tests {
         );
         // Order 392: the EFFECTIVE tier is what agents/startup-context are
         // told — it must match what the container actually runs, not just
-        // hardware. On a host with no GPU (this one), both agree on `cpu`.
+        // hardware.
+        //
+        // Order 433: this previously asserted `effective == tier`
+        // unconditionally, with the comment "on a host with no GPU (this one)".
+        // That baked the CI machine's hardware into the assertion, so the test
+        // failed on any CUDA host — reporting a defect where the gating was
+        // working exactly as designed (hardware gpu-cuda, no CDI spec, so
+        // delivery correctly downgrades to cpu). A test that only passes on one
+        // machine's hardware makes `./build.sh --test` permanently red for
+        // everyone else, which trains people to ignore the suite.
+        //
+        // Assert the actual RULE instead, which holds on every host: the
+        // effective tier equals the hardware tier UNLESS delivery is gated —
+        // gpu-cuda without a CDI spec must downgrade to cpu, never silently
+        // launch a cpu-only "GPU tier".
         let effective = effective_inference_tier();
         assert!(
             ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&effective),
             "effective tier grammar violated: {effective}"
         );
-        assert_eq!(
-            effective, tier,
-            "with no GPU present, effective tier must equal hardware tier"
-        );
+        if tier == "gpu-cuda" && !nvidia_cdi_available() {
+            assert_eq!(
+                effective, "cpu",
+                "gpu-cuda hardware without a CDI spec must downgrade to cpu, \
+                 not report a GPU tier the container cannot deliver"
+            );
+        } else {
+            assert_eq!(
+                effective, tier,
+                "with delivery available (or no cuda hardware), the effective \
+                 tier must equal the hardware tier"
+            );
+        }
         let window = source_window(source, "fn build_inference_run_args(");
         assert!(
             window.contains("nvidia_cdi_available()")

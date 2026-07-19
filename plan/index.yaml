@@ -17756,7 +17756,7 @@ plan_index:
     - order: 433
       desired_release: v0.4
       title: "Unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi fails on any GPU host — ./build.sh --test is red on the CUDA machine"
-      status: ready
+      status: done
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (test hermeticity)
       depends_on: []
@@ -17789,6 +17789,40 @@ plan_index:
             Found while validating order 430. Isolated as pre-existing by
             stashing the working tree and re-running the single test.
 
+
+        - type: completed
+          ts: "2026-07-19T06:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            ./build.sh --test is GREEN on this host for the first time tonight.
+            TWO tests were encoding transient state as an invariant, and both
+            are now asserting the real rule instead.
+            (1) inference_run_args_gate_gpu_delivery_on_tier_and_cdi asserted
+            effective == tier unconditionally, with the comment "on a host with
+            no GPU (this one)" — baking the CI machine's hardware into the
+            assertion. On a CUDA host it failed while the gating was working
+            EXACTLY as designed: hardware gpu-cuda, no CDI spec, so delivery
+            correctly downgrades to cpu. Now asserts the actual rule, which
+            holds everywhere: effective equals hardware UNLESS delivery is
+            gated, in which case gpu-cuda must downgrade to cpu. This is
+            STRICTLY STRONGER than before — on a CUDA host it now exercises the
+            downgrade path the old test could never reach. Mutation-tested:
+            deleting the downgrade from effective_inference_tier() fails it.
+            (2) parity_matrix_accepts_committed_repo_matrix_for_linux_column
+            additionally asserted the WINDOWS column was still incomplete
+            (unwrap_err). When order 258 verified all seven windows parity
+            cells, that column went green and this test began failing — i.e.
+            COMPLETING THE WORK BROKE THE TEST. The behaviour it reached for is
+            already covered hermetically by
+            parity_matrix_fails_host_with_incomplete_required_cell over
+            PARITY_FIXTURE, so asserting it against the live matrix was both
+            redundant and fragile. Now asserts only the durable invariant: the
+            committed matrix keeps the linux column green.
+            Suite: 210/210 across three consecutive runs, plus a full
+            ./build.sh --test pass. Order 434's intermittent
+            init_build_state_persists_to_cache_directory did NOT reproduce in
+            those runs; that packet stays open.
     - order: 434
       desired_release: v0.4
       title: "Flaky test: init_build_state_persists_to_cache_directory fails intermittently under the parallel runner (shared cache-directory state)"
@@ -17961,3 +17995,47 @@ plan_index:
             Split out of order 428. Re-read both specs directly rather than
             trusting the earlier audit summary, and found they agree with each
             other while the implementation diverges from both.
+
+    - order: 438
+      desired_release: v0.5
+      title: "Audit the suite for tests that encode transient project state as an invariant — completing work should never break a test"
+      status: ready
+      kind: fix
+      deliverable: plan/issues (audit report) + test fixes
+      depends_on: [433]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [testing, hermeticity, ci, methodology]
+      estimated_hours: 4
+      outcome: >
+        Two independent instances surfaced within one cycle, so this is a
+        pattern rather than a coincidence.
+        (a) a test baked the CI host's GPU hardware into an assertion, so it
+        failed on any CUDA machine while the code was behaving correctly;
+        (b) a test asserted the windows parity column was still INCOMPLETE, so
+        finishing the windows lane (order 258) broke it.
+        Both share a shape: asserting a SNAPSHOT of the world rather than a rule
+        that should always hold. The failure mode is uniquely corrosive because
+        the test goes red when nothing is wrong — or worse, when something went
+        RIGHT — which trains agents and humans to re-run until green or to
+        ignore the suite, and that is exactly how a real regression later slips
+        through.
+        Sweep the workspace for the same shape. Candidate smells: assertions
+        over live repo documents that expect a particular incomplete state;
+        comments of the form "on this host"/"currently"/"until X lands";
+        unwrap_err() against a moving document; hardcoded counts of items in a
+        growing ledger. Prefer asserting invariants, and cover
+        state-dependent behaviour with synthetic fixtures (as PARITY_FIXTURE
+        already does correctly).
+      exit_criteria:
+        - "every test asserting against a live repo document is reviewed for transient-state assumptions"
+        - "state-dependent behaviour is covered by synthetic fixtures rather than the live document"
+        - "no test in the suite fails as a consequence of work being COMPLETED"
+      events:
+        - type: filed
+          ts: "2026-07-19T06:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed after fixing two instances of the same shape while closing
+            order 433.

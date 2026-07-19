@@ -5056,18 +5056,27 @@ mod tests {
     #[test]
     fn parity_matrix_accepts_committed_repo_matrix_for_linux_column() {
         // The real matrix must stay green for the linux column (its done
-        // column per plan/issues/tray-feature-parity-matrix-2026-06-28.md)
-        // and red for windows/macos until their attended passes (by design).
+        // column per plan/issues/tray-feature-parity-matrix-2026-06-28.md).
+        //
+        // Order 433 class: this used to ALSO assert that the windows column was
+        // still incomplete (`unwrap_err()`), which encoded a snapshot of
+        // project progress as an invariant. When order 258 verified all seven
+        // windows parity cells, the windows column went green — and this test
+        // started failing. Completing the work broke the test.
+        //
+        // The behaviour it was reaching for (an incomplete column produces
+        // "missing required:" failures) is already covered hermetically by
+        // parity_matrix_fails_host_with_incomplete_required_cell over
+        // PARITY_FIXTURE, so asserting it against the live matrix was both
+        // redundant and fragile. A test over a moving document must assert only
+        // what should never change.
         let text = std::fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../openspec/tray-parity-matrix.yaml"),
         )
         .expect("repo matrix readable");
-        assert!(parity_matrix_check(&text, "linux").is_ok());
-        let windows_failures = parity_matrix_check(&text, "windows").unwrap_err();
         assert!(
-            windows_failures
-                .iter()
-                .all(|line| line.contains("missing required:"))
+            parity_matrix_check(&text, "linux").is_ok(),
+            "the committed matrix must keep the linux column green"
         );
     }
 
