@@ -82,6 +82,7 @@ mod vault_bootstrap;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
 // Process-global VmPhase mirror gating container mutations (order 234, R6).
+mod agent_result;
 mod catalog;
 mod runtime_phase;
 
@@ -9265,19 +9266,75 @@ fn run_forge_agent_cli_mode(
             None
         };
 
-        let result = client
-            .run_container_attached_observed(
-                mode.slug(),
-                &forge_container_name_for_mode(project_name, mode),
-                &forge_args,
-                debug,
-            )
-            .await;
+        // Delegated runs get a deadline (order 429). A hung worker must not
+        // block a dispatcher forever, and "still running after N seconds" is a
+        // distinct outcome from success or failure — conflating it with either
+        // is how a stuck agent gets recorded as done. Interactive sessions are
+        // never deadlined: only a run that asked for machine-readable output
+        // and supplied a timeout is bounded.
+        let delegated = std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() == Ok("json");
+        let deadline_secs = std::env::var("TILLANDSIAS_AGENT_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .filter(|s| *s > 0);
+
+        let run_container_name = forge_container_name_for_mode(project_name, mode);
+        let run_fut = client.run_container_attached_observed(
+            mode.slug(),
+            &run_container_name,
+            &forge_args,
+            debug,
+        );
+        let mut timed_out_after: Option<u64> = None;
+        let result = match (delegated, deadline_secs) {
+            (true, Some(secs)) => {
+                match tokio::time::timeout(std::time::Duration::from_secs(secs), run_fut).await {
+                    Ok(r) => r,
+                    Err(_) => {
+                        timed_out_after = Some(secs);
+                        Err(format!("delegated run exceeded {secs}s deadline"))
+                    }
+                }
+            }
+            _ => run_fut.await,
+        };
         cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         if let Some(handle) = diag_emitter {
             handle.abort();
             let _ = handle.await;
+        }
+
+        // Delegated-run verdict (order 429). Only for runs that asked for
+        // machine-readable output — an interactive session must not be
+        // narrated at the operator.
+        //
+        // The verdict is deliberately conservative: with no transcript to read,
+        // classify_run reports INDETERMINATE even on a clean exit, because a
+        // CLI can exit 0 having done nothing. "Exited without error" is not
+        // evidence the delegated work happened, and a dispatcher that treats it
+        // as such silently marks abandoned runs as done.
+        if delegated {
+            let verdict = match timed_out_after {
+                Some(after_secs) => crate::agent_result::AgentOutcome::TimedOut { after_secs },
+                None => {
+                    let transcript = std::env::var("TILLANDSIAS_AGENT_RESULT_FILE")
+                        .ok()
+                        .and_then(|p| std::fs::read_to_string(p).ok())
+                        .unwrap_or_default();
+                    let exit_code = if result.is_ok() { Some(0) } else { None };
+                    crate::agent_result::classify_run(&transcript, exit_code)
+                }
+            };
+            // Non-success is stated loudly and separately, so a dispatcher
+            // scraping this line cannot mistake "ran" for "worked".
+            eprintln!("[forge-result] {} {}", mode.slug(), verdict.summary());
+            if !verdict.is_success() {
+                eprintln!(
+                    "[forge-result] {} DID NOT COMPLETE SUCCESSFULLY — do not treat this work as done",
+                    mode.slug()
+                );
+            }
         }
 
         result.map_err(|e| format!("[forge-launch] {} session exited: {e}", mode.slug()))

@@ -17546,6 +17546,42 @@ plan_index:
             delegating agent — with a litmus proving a FAILED delegated task is
             reported as failed rather than silently dropped. Emitting parseable
             output is not the same as knowing whether the work succeeded.
+
+        - type: progress
+          ts: "2026-07-19T05:45:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Consumption side landed and WIRED. crates/tillandsias-headless/src/agent_result.rs
+            parses both CLIs' JSONL (codex thread/turn/item/error; opencode
+            step_start/text/step_finish) into an AgentOutcome, and
+            run_forge_agent_cli_mode now emits a [forge-result] verdict for
+            delegated runs, plus an explicit "DID NOT COMPLETE SUCCESSFULLY"
+            line whenever the verdict is not an evidenced success.
+            THE INVARIANT: success must be POSITIVELY EVIDENCED; absence of
+            evidence is never success. Empty transcript, truncated stream, or a
+            clean exit with nothing to read all classify as INDETERMINATE, not
+            success — because a CLI can exit 0 having done nothing, and a
+            dispatcher that reads "exited without error" as "the work happened"
+            silently marks abandoned runs done. Exit status is authoritative for
+            FAILURE but never sufficient for success.
+            Delegated runs now also carry a real deadline
+            (TILLANDSIAS_AGENT_TIMEOUT_SECS): a hung worker must not block a
+            dispatcher forever, and "still running" is a THIRD outcome, not a
+            flavour of success or failure. Interactive sessions are never
+            deadlined.
+            15 unit tests, MUTATION-TESTED: making Indeterminate count as
+            success fails 5 of them; making a zero exit force success fails 1.
+            The tests demonstrably catch the defect they exist to prevent.
+            WORTH RECORDING: the first attempt landed the parser UNWIRED, and
+            the build refused it — this workspace denies dead code, which is
+            exactly the guard against the "sizing helpers exist with zero
+            production callers" problem noted in order 437. The compiler
+            enforced the honest outcome: wire it or do not land it.
+            STILL REQUIRED to close: a live e2e litmus proving a genuinely
+            FAILED delegated run is reported as failed end-to-end through a real
+            forge container. Unit tests prove the classification rules; they do
+            not prove the wiring fires correctly against a real run.
     - order: 430
       desired_release: v0.4
       title: "Codex lane is unauthenticated by construction: OPENAI_API_KEY does not authenticate Codex AND injecting it suppresses the vault OAuth restore"
