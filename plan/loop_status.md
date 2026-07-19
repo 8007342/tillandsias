@@ -19,9 +19,40 @@ merged; policy validator green) — criterion 2 (CI guard) stays with the
 linux coordinator. Detail:
 plan/issues/windows-crashloop-diagnosability-fixes-2026-07-18.md.
 BLOCKER at cycle time: no push credential on the Windows host (stale GCM
-token; operator `gh auth refresh` needed) — commits staged locally until
-auth returns, then: push windows-next → daily release → purge + curl-install
-e2e from the remote binary (operator-ordered).
+token; operator `gh auth refresh` needed) — RESOLVED mid-cycle by the
+operator; windows-next pushed (f0314ab9), then: drain 417/418 → daily
+release → purge + curl-install e2e from the remote binary
+(operator-ordered). NOTE: the 416 criterion-1 dup-key merge below was
+independently done by the linux coordinator in 83cfe606 (idempotent
+collision, both merges identical — reconciled in this merge commit).
+
+## Cycle 2026-07-18T05:00Z→06:25Z (linux_mutable macuahuitl — Windows crashloop packets + ephemerality + ownership)
+
+- **EPHEMERALITY INVARIANT (methodology, Tlatoāni 2026-07-18, `48004777`)**:
+  uncommitted work is throw-away, always; anything not committed is lost
+  forever BY DESIGN. Response to a dirty tree is COMMIT-or-WIPE, never
+  stash-as-durability. Filed in between-commits-work-discipline.yaml, pinned by
+  litmus:ephemerality-invariant-shape.
+- **Took full ownership of the host** (operator: "you're the only agent, use or
+  wipe, no stashing"): hard-reset linux-next to origin (wiped a finished
+  agent's redundant leftover — stale rustfmt + already-upstream packets),
+  removed 3 stale worktree-agent-* worktrees, cleared 9 old (May–June) stashes.
+  Clean.
+- **WINDOWS VM-LAUNCH CRASHLOOP (operator repro: iex install → Fedora download
+  → crashloop on VM launch, no Claude to debug)**: code-mapped and filed 4
+  packets (all v0.4, pickup_role windows): **417** (THE fix — bound the
+  unbounded `spawn_keepalive` respawn loop that re-invokes wsl.exe every 1s
+  forever, wsl_lifecycle.rs:156-185; cap+backoff+classified-fatal give-up),
+  **418** (health-probe a 'registered' distro before the re-import-skip fast
+  path — a partial import loops every launch), **419** (classify the still-
+  generic launch failures: import-exit, host-disk-at-import, kernel/WSL
+  mismatch, S2-healthy-on-paper + add the missing graceful-launch-failure spec
+  requirement), **420** (auto-capture a diagnostic bundle on terminal failure —
+  the "no Claude to troubleshoot" gap). Order 323/324 already handle the
+  install-time platform states; these close the launch-phase gaps.
+- **Ledger reconcile (coordinator)**: merged a duplicate `events:` key in order
+  413 (git-mirror-relay-fetch-before-push) that was dropping the b49b7776
+  progress evidence via YAML last-wins; plan-orders gate green.
 
 ## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
 

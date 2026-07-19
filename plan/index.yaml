@@ -16488,7 +16488,183 @@ plan_index:
             or lost; tillandsias-policy validate-yaml (which itself rejects
             duplicate keys) now passes on plan/index.yaml. Done from
             windows-next because the duplicate key blocked ALL ledger YAML
-            validation on this host's cycle. Remaining for the coordinator:
-            exit criterion 2, the durable duplicate-key CI/litmus guard
-            (criterion 3's js-yaml check equivalent is covered here by the
-            policy validator; wire the strict guard into CI to close).
+            validation on this host's cycle. The linux coordinator
+            independently performed the IDENTICAL merge in 83cfe606 (the
+            idempotent-collision case the lease protocol anticipates; both
+            sides converged on the same state). Remaining: exit criterion
+            2, the durable duplicate-key CI/litmus guard.
+
+    - packet_id: windows-vm-launch-keepalive-loop-bound
+      order: 417
+      desired_release: v0.4
+      title: "Windows crashloop fix: bound the keepalive wsl.exe respawn loop — cap + backoff + classified-fatal give-up instead of respawning every 1s forever"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs (spawn_keepalive) + terminal failed-state surfacing
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, wsl, vm-lifecycle, robustness, crashloop, rust]
+      estimated_hours: 5
+      outcome: >
+        THE crashloop the operator hit 2026-07-18: a user iex-installed the
+        latest release, the tray showed Fedora download progress, then
+        "crashlooped on launching the vm" — with no Claude present to
+        troubleshoot. Root cause (code-mapped): WslLifecycle::spawn_keepalive
+        (crates/tillandsias-windows-tray/src/wsl_lifecycle.rs:156-185) is an
+        UNBOUNDED `loop { spawn wsl.exe --exec sleep infinity; wait; warn
+        "Respawning in 1s"; sleep 1s }` — no max attempts, no backoff cap, no
+        give-up, no classified-fatal short-circuit. It is spawned during the
+        connect window (wsl_lifecycle.rs:342 and the registered fast-path
+        :247) and held after Ready (notify_icon.rs:2278). Against a distro that
+        will never come up (partial import, kernel/WSL mismatch, S2
+        healthy-on-paper), it re-invokes wsl.exe once per second FOREVER — each
+        spawn pokes the WSL2 VM create — which is the crashloop. Fix: bound the
+        respawn (max consecutive failures + exponential backoff with a ceiling)
+        and GIVE UP into a terminal failed state (tray Dried icon + the
+        classified/actionable message, Quit/Retry kept enabled) instead of
+        looping; short-circuit immediately when start() already returned a
+        classified-fatal WslPlatformVerdict. Keep every wsl.exe child on the
+        no_window path (spec:no-terminal-flicker) so bounded retries never
+        flash consoles.
+      exit_criteria:
+        - "spawn_keepalive caps consecutive respawns with exponential backoff (ceiling), and after the cap transitions to a TERMINAL failed state (no infinite 1s respawn); a distro that never comes up stops poking wsl.exe"
+        - "a classified-fatal verdict from start() short-circuits the keepalive (no respawn at all when the platform can never succeed)"
+        - "the terminal failure surfaces in the tray (Dried + actionable text, Quit/Retry enabled) — mirrors the order-323 classified surfacing; behavioral/unit test asserts the loop is bounded and gives up"
+      events:
+        - type: filed
+          ts: "2026-07-18T06:20:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed from the operator's live Windows crashloop repro (iex install
+            → Fedora download → crashloop on VM launch, no Claude to debug).
+            Code-mapped to the unbounded spawn_keepalive respawn loop. THE core
+            crashloop fix. Sibling packets: 418 (registered-distro integrity),
+            419 (launch-failure taxonomy + spec), 420 (diagnostics capture). No
+            existing packet covered this loop.
+
+    - packet_id: windows-registered-distro-integrity-probe
+      order: 418
+      desired_release: v0.4
+      title: "Windows: health-probe a 'registered' WSL distro before the re-import-skip fast path — a partial/corrupt import loops on every launch"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs (registered fast path) + crates/tillandsias-vm-layer/src/wsl.rs (is_registered integrity)
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, wsl, vm-lifecycle, robustness, rust]
+      estimated_hours: 4
+      outcome: >
+        Second crashloop vector (relaunch-driven). WslLifecycle::provision_via_recipe
+        (wsl_lifecycle.rs:242-265) trusts is_registered() (wsl.rs:393 — a bare
+        `wsl --list` NAME match) and, when true, SKIPS re-import and goes
+        straight to start() + spawn_keepalive + a 36x connect loop. A
+        partial/corrupt import (e.g. a first run that crashlooped mid-import,
+        or an interrupted download-then-import) still LISTS the distro, so every
+        subsequent tray (re)launch — including via the Startup shortcut — hits
+        this fast path and re-spins the keepalive against a distro that cannot
+        come up. Fix: before trusting registration, run a cheap health/integrity
+        probe (can the distro actually `wsl -d tillandsias --exec true`? is the
+        import marker/rootfs complete?); on a failed probe, re-import (or fail
+        loud with the classified verdict) instead of spinning the keepalive on a
+        dead distro.
+      exit_criteria:
+        - "the registered fast path runs an integrity/health probe before skipping re-import; a distro that lists but cannot exec is treated as NOT-ready (re-import or classified failure), not fed to keepalive"
+        - "a partial/corrupt import does not loop on relaunch — it either self-heals (re-import) once or fails terminally with an actionable message"
+        - "unit/behavioral test: is_registered()==true but exec-probe fails → provisioning does not enter the keepalive/connect loop"
+      events:
+        - type: filed
+          ts: "2026-07-18T06:20:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Second crashloop vector: the registered-but-corrupt fast path trusts
+            a name match with no integrity probe. Pairs with 417 (the loop bound)
+            — together they close the "crashloop on VM launch" class.
+
+    - packet_id: windows-vm-launch-failure-taxonomy-and-spec
+      order: 419
+      desired_release: v0.4
+      title: "Windows: classify the still-generic VM-launch failures (import failure, host-disk-at-import, kernel/WSL mismatch, S2 healthy-on-paper) + add the missing graceful-launch-failure spec requirement"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs (classifier extension to the launch/import phase) + openspec/specs/vm-provisioning-lifecycle/spec.md (new requirement) + litmus
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, wsl, vm-lifecycle, diagnostics, spec, rust]
+      estimated_hours: 6
+      outcome: >
+        Order 323/324 classified the INSTALL-time platform states
+        (wsl-absent/S1, virt-disabled/S3, reboot-pending/S2) with actionable
+        remediation — that half is done. But several LAUNCH/import-phase
+        failures still surface GENERICALLY and read as a crash: (a) `wsl --import`
+        failure → bare "wsl --import exited <status>" → generic "Provisioning
+        failed — Retry" (materialize/wsl.rs:80; tray notify_icon.rs:2394); (b)
+        HOST disk full during import (only GUEST root is checked, only AFTER
+        import — wsl.rs:262); (c) kernel/WSL version mismatch → unhandled,
+        surfaces as "WSL start poke failed after 5 attempts" (wsl.rs:944); (d)
+        the S2 "healthy-on-paper" corner where `wsl --status` exits 0 but
+        VM-create fails with no RebootPending key → classifier returns Ok
+        (wsl.rs:134-153) and the generic poke storm owns it. Extend the
+        order-323 classifier to the launch/import phase so each of these ends in
+        an actionable verdict, and add the MISSING requirement to
+        openspec/specs/vm-provisioning-lifecycle/spec.md: "the launch path fails
+        gracefully (bounded, classified, actionable) — never an unbounded loop"
+        (today the spec covers downloads/idempotency/status/drain but has no
+        graceful-launch-failure requirement), pinned by a litmus.
+      exit_criteria:
+        - "each named launch/import failure (import-exit, host-disk-at-import, kernel/WSL mismatch, S2-healthy-on-paper) maps to a classified actionable verdict, not a generic 'Provisioning failed'/'poke failed' chip"
+        - "host disk headroom is checked BEFORE `wsl --import` (not only guest root after), with an actionable message"
+        - "vm-provisioning-lifecycle/spec.md gains a graceful-launch-failure requirement (bounded + classified + actionable, no unbounded loop), pinned by a new litmus"
+      events:
+        - type: filed
+          ts: "2026-07-18T06:20:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            The taxonomy + spec half of "gracefully fail any scenarios". Extends
+            the order-323 classifier from install-time to the launch/import
+            phase and adds the missing lifecycle-spec requirement. Complements
+            417/418 (the loop mechanics).
+
+    - packet_id: windows-vm-launch-failure-diagnostics-capture
+      order: 420
+      desired_release: v0.4
+      title: "Windows: auto-capture a diagnostic bundle on terminal VM-launch failure so a remote user's crashloop is debuggable without a live agent"
+      status: ready
+      kind: enhancement
+      deliverable: crates/tillandsias-windows-tray (on-terminal-failure diagnostic dump) reusing scripts/diagnose-windows.ps1 facts + tray pointer to the bundle
+      depends_on: [windows-vm-launch-keepalive-loop-bound]
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, wsl, diagnostics, observability, ux]
+      estimated_hours: 4
+      outcome: >
+        The operator's core pain: "there was no Claude there to troubleshoot,
+        all the evidence is: iex install, pretty download progress, then
+        crashloop." Today the Windows diagnostics are MANUAL
+        (scripts/diagnose-windows.ps1, read-only). When the VM launch fails
+        TERMINALLY (after 417 bounds the loop), the tray should AUTO-WRITE a
+        diagnostic bundle to a known path (%LOCALAPPDATA%\tillandsias\logs\) —
+        the diagnose-windows.ps1 facts (WSL presence/version, distro
+        registration, cache/rootfs sizes, disk headroom), the classified
+        verdict, the last `wsl --import`/start stderr, and recent wsl logs — and
+        surface "diagnostics written to <path>; share it" in the tray. This
+        makes a remote user's crashloop diagnosable post-hoc with zero live
+        agent, and gives operators a paste-able artifact.
+      exit_criteria:
+        - "on a terminal VM-launch failure the tray writes a single diagnostic bundle (verdict + launch stderr + diagnose-windows.ps1 facts + wsl logs) to a known %LOCALAPPDATA% path"
+        - "the tray surfaces the bundle path (and a one-line 'share this') so a non-technical user can send it"
+        - "the bundle contains no secrets (vault tokens / github tokens redacted)"
+      events:
+        - type: filed
+          ts: "2026-07-18T06:20:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            The "no Claude to troubleshoot" gap: auto-capture diagnostics on
+            terminal launch failure so remote crashloops are debuggable without
+            a live agent. Depends on 417 (needs a terminal failed state to hook).
