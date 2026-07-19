@@ -1,4 +1,32 @@
 
+ephemerality_invariant:
+  decided_by: "The Tlatoāni, 2026-07-18"
+  principle: >
+    UNCOMMITTED WORK IS THROW-AWAY. ALWAYS. Anything not committed (and, for a
+    durable result, pushed) is lost forever — BY DESIGN, not by accident. Every
+    host, worktree, container, and forge is EPHEMERAL and may vanish between
+    turns; the ONLY durable state is a commit on a remote branch. This is a
+    load-bearing invariant, not a caveat: never treat a dirty worktree as a
+    place work accumulates safely, never expect uncommitted edits to survive a
+    pull / reset / relaunch, and never stash-and-hope. The correct response to
+    "there is uncommitted work" is ALWAYS to either COMMIT it (own it) or WIPE
+    it (discard it) — cleanly, without ceremony.
+  consequences:
+    - "A `git reset --hard` / `git clean` / `git checkout -- .` that discards uncommitted work is a SANCTIONED first-class operation when the work is not worth committing — not a destructive act to be feared. (Still avoid clobbering another LIVE agent's in-flight worktree without cause.)"
+    - "Do NOT stash to 'preserve' work across a pull/reset. Stashing hides ephemeral state that should either be committed or discarded, and it accretes cruft (live example: a 9-stash pile-up discovered 2026-07-18). Commit-or-wipe, never stash-as-durability."
+    - "Before pulling with a dirty tree, decide PER FILE: is the diff unique unpushed work (→ commit it) or redundant / stale / regenerated / superseded-upstream (→ wipe it)? Uncommitted == discardable is the DEFAULT; keeping requires a reason, and the reason is expressed as a commit."
+    - "This is WHY the meta-orchestration Non-Negotiable Exit Contract exists: local state is volatile, so every meaningful result must be committed + pushed before exit. The exit contract is the operational form of this invariant."
+  operator_source: >
+    The Tlatoāni, 2026-07-18, verbatim: "Everything is ephemeral, uncommitted
+    work is throw-away. Always. … anything not committed is lost forever :) by
+    design." Companion directive the same day: "take ownership of all changes,
+    either use them or wipe them, no stashing."
+  trace: >
+    meta-orchestration Non-Negotiable Exit Contract; checkpoint_and_push_policy
+    (below); scratch_notes_policy (plan/localwork is the ONLY sanctioned
+    ephemeral scratch surface, and even it may be evicted). Pinned by
+    litmus:ephemerality-invariant-shape.
+
 ephemeral_work_problem:
   scenario: >
     Agent A is assigned: "Fix 50 broken specs across browser-isolation capability.
