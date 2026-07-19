@@ -1,0 +1,73 @@
+# @trace spec:vm-provisioning-lifecycle
+#
+# Order 419 (windows-vm-launch-failure-taxonomy-and-spec): structural
+# pins for the graceful-launch-failure requirement
+# (vm-provisioning-lifecycle.launch.graceful-failure@v1) added after the
+# 2026-07-18 field crash loop. The requirement mandates that every
+# launch/import retry loop is BOUNDED (cap + backoff + terminal state)
+# and that confident failure signatures classify to actionable verdicts.
+#
+# Pinned surfaces:
+# - classify_launch_stderr (vm-layer wsl.rs): stderr-signature →
+#   remediation map for kernel-out-of-date / 0x80370102 / disk-full.
+# - evaluate_host_import_headroom (vm-layer materialize/wsl.rs): host
+#   disk gate BEFORE `wsl --import` (2x tar + 2 GiB floor).
+# - KeepaliveSupervisor bound (windows-tray wsl_lifecycle.rs, order
+#   417): KEEPALIVE_MAX_CONSECUTIVE_FAILURES cap — the unbounded 1s
+#   respawn loop must never return.
+# - The spec requirement + invariant text itself.
+#
+# Behavioral verification lives in the cargo unit pins
+# (classify_launch_stderr_names_kernel_disk_and_virtualization,
+# host_import_headroom_requires_double_tar_plus_floor,
+# keepalive_supervisor_gives_up_after_cap_with_backoff); this instant
+# grep litmus fires pre-build if any surface is dropped or renamed.
+name: litmus:vm-launch-graceful-failure-shape
+spec: vm-provisioning-lifecycle
+phase: pre-build
+description: >
+  Pin the graceful-launch-failure surfaces: launch stderr classifier,
+  pre-import host disk gate, bounded keepalive supervisor, and the
+  spec requirement + no-unbounded-loop invariant.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-vm-layer/src/wsl.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "launch stderr classifier exists and is spec-traced"
+    command: "grep -F 'pub fn classify_launch_stderr' crates/tillandsias-vm-layer/src/wsl.rs"
+    timeout_ms: 3000
+    expected_behavior: "pub fn classify_launch_stderr"
+
+  - step: "classifier names the three confident signatures"
+    command: "grep -F 'wsl --update' crates/tillandsias-vm-layer/src/wsl.rs && grep -F '0x80370102' crates/tillandsias-vm-layer/src/wsl.rs && grep -F 'not enough space on the disk' crates/tillandsias-vm-layer/src/wsl.rs"
+    timeout_ms: 3000
+    expected_behavior: "not enough space on the disk"
+
+  - step: "host disk gate precedes wsl --import"
+    command: "grep -F 'evaluate_host_import_headroom' crates/tillandsias-vm-layer/src/materialize/wsl.rs"
+    timeout_ms: 3000
+    expected_behavior: "evaluate_host_import_headroom"
+
+  - step: "import failure carries stderr, never a bare status"
+    command: "grep -F 'wsl --import failed' crates/tillandsias-vm-layer/src/materialize/wsl.rs"
+    timeout_ms: 3000
+    expected_behavior: "wsl --import failed"
+
+  - step: "keepalive respawn loop is bounded (order 417)"
+    command: "grep -F 'KEEPALIVE_MAX_CONSECUTIVE_FAILURES' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs"
+    timeout_ms: 3000
+    expected_behavior: "KEEPALIVE_MAX_CONSECUTIVE_FAILURES"
+
+  - step: "spec carries the graceful-launch-failure requirement"
+    command: "grep -F 'vm-provisioning-lifecycle.launch.graceful-failure@v1' openspec/specs/vm-provisioning-lifecycle/spec.md"
+    timeout_ms: 3000
+    expected_behavior: "graceful-failure@v1"
+
+  - step: "no-unbounded-loop invariant present"
+    command: "grep -F 'vm-provisioning-lifecycle.invariant.launch-no-unbounded-loop' openspec/specs/vm-provisioning-lifecycle/spec.md"
+    timeout_ms: 3000
+    expected_behavior: "launch-no-unbounded-loop"

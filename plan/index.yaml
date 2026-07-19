@@ -16722,7 +16722,7 @@ plan_index:
       order: 419
       desired_release: v0.4
       title: "Windows: classify the still-generic VM-launch failures (import failure, host-disk-at-import, kernel/WSL mismatch, S2 healthy-on-paper) + add the missing graceful-launch-failure spec requirement"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs (classifier extension to the launch/import phase) + openspec/specs/vm-provisioning-lifecycle/spec.md (new requirement) + litmus
       depends_on: []
@@ -16763,12 +16763,36 @@ plan_index:
             the order-323 classifier from install-time to the launch/import
             phase and adds the missing lifecycle-spec requirement. Complements
             417/418 (the loop mechanics).
+        - type: completed
+          ts: "2026-07-19T03:30:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Implemented on windows-next (ledger lease). (a)+(c): start pokes
+            and `wsl --import` now capture stderr (WSL_UTF8, NUL-stripped) —
+            never a bare status; new pure classify_launch_stderr maps the
+            confident signatures (`wsl --update`/kernel-not-found,
+            0x80370102 virtualization, 0x80070070/disk-full) to actionable
+            remediations and SHORT-CIRCUITS remaining retries;
+            classified_short_status extended so tray chips render each. (b):
+            evaluate_host_import_headroom (2x tar + 2 GiB floor) gates
+            BEFORE wsl --import via fs2::available_space. (d): the S2
+            healthy-on-paper post-exhaustion re-probe was already present;
+            unclassified exhaustion now carries the last stderr. Spec:
+            vm-provisioning-lifecycle gains launch.graceful-failure@v1 +
+            launch-no-unbounded-loop invariant; new
+            litmus:vm-launch-graceful-failure-shape (PASS) pins classifier,
+            disk gate, keepalive bound, and spec text; binding added
+            (vm-provisioning-lifecycle had NO bindings entry before). Unit
+            pins: classify_launch_stderr_names_kernel_disk_and_
+            virtualization, host_import_headroom_requires_double_tar_plus_
+            floor. vm-layer all-features suite 96 green.
 
     - packet_id: windows-vm-launch-failure-diagnostics-capture
       order: 420
       desired_release: v0.4
       title: "Windows: auto-capture a diagnostic bundle on terminal VM-launch failure so a remote user's crashloop is debuggable without a live agent"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: crates/tillandsias-windows-tray (on-terminal-failure diagnostic dump) reusing scripts/diagnose-windows.ps1 facts + tray pointer to the bundle
       depends_on: [windows-vm-launch-keepalive-loop-bound]
@@ -16802,6 +16826,27 @@ plan_index:
             The "no Claude to troubleshoot" gap: auto-capture diagnostics on
             terminal launch failure so remote crashloops are debuggable without
             a live agent. Depends on 417 (needs a terminal failed state to hook).
+        - type: completed
+          ts: "2026-07-19T03:35:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Implemented on windows-next (ledger lease).
+            write_failure_diagnostics_bundle writes ONE shareable JSON at
+            %LOCALAPPDATA%\tillandsias\logs\launch-failure-diagnostics.json
+            (schema tillandsias-launch-failure-bundle/v1): redacted failure
+            reason, the full --diagnose DiagnoseReport (WSL version, distro
+            registration, wire probe, manifest pin, ...), and a redacted
+            200-line tray.log tail. Hooked at BOTH terminal paths: the
+            provisioning Err branch (with a follow-up "diagnostics saved —
+            share this file" toast) and the 417 keepalive give-up. Secrets
+            masked by redact_secret_tokens (GitHub ghp_/gho_/ghu_/ghs_/
+            ghr_/github_pat_ + Vault hvs./hvb./s. prefixes, anywhere in a
+            word, length-guarded; over-masking bias). The bundle path is
+            logged at ERROR so it reaches the Windows Event Log. Pins:
+            redaction_masks_github_and_vault_tokens_only,
+            failure_bundle_writes_redacted_json (writes + parses a real
+            bundle under a temp LOCALAPPDATA). Tray suite 65 green.
 
     - packet_id: macos-curl-installer-gatekeeper-overwarn
       order: 421

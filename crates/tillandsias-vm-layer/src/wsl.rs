@@ -190,6 +190,7 @@ pub fn classify_remediation_for_token(token: &str) -> Option<&'static str> {
 /// remediations and return the short status-chip text for the tray's
 /// length-limited menu status line (the toast carries the full string).
 /// `None` = not a classified failure; keep the generic chip.
+/// Order 419 extends the map to the launch/import-phase verdicts.
 pub fn classified_short_status(err: &str) -> Option<&'static str> {
     if err.contains("WSL2 requires a restart") {
         Some("WSL2 requires a restart \u{2014} reboot Windows")
@@ -197,9 +198,51 @@ pub fn classified_short_status(err: &str) -> Option<&'static str> {
         Some("WSL is not installed \u{2014} run `wsl --install`")
     } else if err.contains("hardware virtualization is disabled") {
         Some("Virtualization disabled \u{2014} enable in BIOS/UEFI")
+    } else if err.contains("WSL kernel/runtime needs an update") {
+        Some("WSL needs an update \u{2014} run `wsl --update`")
+    } else if err.contains("host drive is low on space") {
+        Some("Host disk low \u{2014} free space, then Retry")
+    } else if err.contains("wsl --import failed") {
+        Some("VM import failed \u{2014} see log, then Retry")
     } else {
         None
     }
+}
+
+/// Order 419 (launch-phase taxonomy): map confident `wsl.exe` stderr
+/// signatures from the LAUNCH/import phase to actionable remediations.
+/// Conservative like [`classify_wsl_platform`]: only unambiguous
+/// signatures classify; unknown stderr returns `None` and the generic
+/// bounded-retry machinery keeps ownership. Pure for unit pinning.
+/// @trace spec:vm-provisioning-lifecycle
+pub fn classify_launch_stderr(stderr: &str) -> Option<&'static str> {
+    let s = stderr.to_ascii_lowercase();
+    // Kernel/runtime out of date: WSL prints an explicit `wsl --update`
+    // instruction (locale-stable command token) or the 0x8037010a /
+    // WSL_E_KERNEL_NOT_FOUND family.
+    if s.contains("wsl --update") || s.contains("kernel file is not found") {
+        return Some(
+            "The WSL kernel/runtime needs an update. Run `wsl --update` from \
+             PowerShell, then Retry.",
+        );
+    }
+    // 0x80370102: the HCS rejected VM creation — virtualization off (or
+    // nested-virt unavailable). Locale-stable HRESULT token.
+    if s.contains("0x80370102") {
+        return Some(
+            "The virtual machine could not start because hardware \
+             virtualization is disabled. Enable VT-x/AMD-V in BIOS/UEFI, \
+             then Retry.",
+        );
+    }
+    // 0x80070070: ERROR_DISK_FULL surfaced by wsl --import / VHDX growth.
+    if s.contains("0x80070070") || s.contains("not enough space on the disk") {
+        return Some(
+            "The host drive is low on space \u{2014} the VM import/start could \
+             not complete. Free disk space, then Retry.",
+        );
+    }
+    None
 }
 
 /// WSL2-backed VM runtime.
@@ -861,6 +904,7 @@ impl VmRuntime for WslRuntime {
 
         // 2. Retry start poke with backoff
         let mut backoff = Duration::from_millis(500);
+        let mut last_poke_stderr = String::new();
         for attempt in 1..=5 {
             tracing::info!("WSL start poke: attempt {}/5", attempt);
 
@@ -873,7 +917,7 @@ impl VmRuntime for WslRuntime {
                 let _ = Self::perform_wsl_shutdown_recovery().await;
             }
 
-            let status_res = tokio::time::timeout(
+            let output_res = tokio::time::timeout(
                 Duration::from_secs(10),
                 wsl_cmd()
                     .arg("--distribution")
@@ -881,23 +925,40 @@ impl VmRuntime for WslRuntime {
                     .arg("--exec")
                     .arg("echo")
                     .arg("ready")
-                    .status(),
+                    .env("WSL_UTF8", "1")
+                    .output(),
             )
             .await;
 
-            match status_res {
-                Ok(Ok(status)) => {
-                    if status.success() {
+            match output_res {
+                Ok(Ok(output)) => {
+                    if output.status.success() {
                         tracing::info!("WSL start poke succeeded");
                         return Ok(());
                     } else {
+                        // Order 419: keep the stderr — a GUI tray otherwise
+                        // discards the only text naming the real launch
+                        // failure (kernel out of date, HCS refusal, disk).
+                        let stderr = String::from_utf8_lossy(&output.stderr)
+                            .replace('\u{0}', "")
+                            .trim()
+                            .to_string();
                         tracing::warn!(
-                            "WSL start poke attempt {} failed with status: {}",
                             attempt,
-                            status
+                            status = %output.status,
+                            stderr = %stderr,
+                            "WSL start poke attempt failed"
                         );
+                        if let Some(remediation) = classify_launch_stderr(&stderr) {
+                            // A confident classified verdict never improves
+                            // with retries — surface it immediately.
+                            return Err(format!(
+                                "WSL start failed (classified). {remediation}"
+                            ));
+                        }
+                        last_poke_stderr = stderr;
                         // If E_UNEXPECTED (-1) or similar error occurs, try to recover
-                        if status.code() == Some(-1) {
+                        if output.status.code() == Some(-1) {
                             let _ = Self::perform_wsl_shutdown_recovery().await;
                         }
                     }
@@ -941,7 +1002,15 @@ impl VmRuntime for WslRuntime {
                     .unwrap_or_default()
             ));
         }
-        Err("WSL start poke failed after 5 attempts".to_string())
+        // Unclassified: at least carry the last stderr so the failure is
+        // attributable from the log/Event Log instead of a bare count.
+        if last_poke_stderr.is_empty() {
+            Err("WSL start poke failed after 5 attempts".to_string())
+        } else {
+            Err(format!(
+                "WSL start poke failed after 5 attempts; last wsl.exe stderr: {last_poke_stderr}"
+            ))
+        }
     }
 
     async fn stop(&self, _drain_timeout: Duration) -> Result<(), VmError> {
@@ -1314,6 +1383,46 @@ mod tests {
             );
         }
         assert_eq!(classified_short_status("some generic poke failure"), None);
+    }
+
+    /// Order 419: launch-phase stderr signatures classify to actionable
+    /// remediations; unknown stderr stays unclassified (generic machinery
+    /// keeps ownership); and every launch remediation round-trips through
+    /// the tray chip lookup.
+    #[test]
+    fn classify_launch_stderr_names_kernel_disk_and_virtualization() {
+        let kernel = classify_launch_stderr(
+            "The WSL 2 kernel file is not found. Please run 'wsl --update'.",
+        )
+        .expect("kernel signature must classify");
+        assert!(kernel.contains("wsl --update"));
+
+        let virt = classify_launch_stderr(
+            "The virtual machine could not be started ... Error code: Wsl/Service/CreateInstance/0x80370102",
+        )
+        .expect("0x80370102 must classify");
+        assert!(virt.contains("virtualization"));
+
+        let disk = classify_launch_stderr("There is not enough space on the disk.")
+            .expect("disk-full signature must classify");
+        assert!(disk.contains("Free disk space"));
+
+        assert_eq!(classify_launch_stderr("catastrophic mystery"), None);
+        assert_eq!(classify_launch_stderr(""), None);
+
+        // Chip parity: each classified launch failure has a short chip.
+        for stderr in [
+            "run 'wsl --update' please",
+            "0x80370102",
+            "not enough space on the disk",
+        ] {
+            let remediation = classify_launch_stderr(stderr).unwrap();
+            let err = format!("WSL start failed (classified). {remediation}");
+            assert!(
+                classified_short_status(&err).is_some(),
+                "chip lookup must recognize the launch remediation for {stderr:?}"
+            );
+        }
     }
 
     /// Order 366: the arg-delivered root-shell path REJECTS multi-line

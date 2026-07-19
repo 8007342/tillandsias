@@ -956,6 +956,12 @@ specs:
   - litmus:host-guest-no-cfg-transport-selection
   coverage_ratio: 67
   last_verified: '2026-07-06'
+- spec_id: vm-provisioning-lifecycle
+  status: active
+  litmus_tests:
+  - litmus:vm-launch-graceful-failure-shape
+  coverage_ratio: 20
+  last_verified: '2026-07-18'
 - spec_id: vsock-transport
   status: active
   litmus_tests:

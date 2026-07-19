@@ -208,7 +208,52 @@ unseal key, or any credential material.
 - **WHEN** the user clicks `Open log` from a failed provisioning menu
 - **THEN** the host's default text editor SHALL open `<host-data-dir>/provision.log`
 
+### Requirement: Launch failures are graceful — bounded, classified, actionable
+- **ID**: vm-provisioning-lifecycle.launch.graceful-failure@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [vm-provisioning-lifecycle.invariant.launch-no-unbounded-loop]
+
+The VM launch/import phase MUST fail gracefully: every retrying operation is
+BOUNDED (a cap plus exponential backoff, then a terminal failed state — never
+an unbounded respawn/poke loop), and confident failure signatures map to a
+CLASSIFIED, actionable verdict rather than a generic error. Named
+launch-phase classifications (order 419, extending the order-323 install-time
+classifier):
+
+- `wsl --import` exit — stderr captured and surfaced (never a bare status)
+- host drive too small for import — checked BEFORE `wsl --import`
+  (`evaluate_host_import_headroom`: ~2x rootfs tar + 2 GiB floor)
+- WSL kernel/runtime out of date — `wsl --update` remediation
+  (`classify_launch_stderr`)
+- virtualization refused at VM create (`0x80370102`) — BIOS/UEFI remediation
+- S2 healthy-on-paper — post-exhaustion platform re-probe names RebootPending
+
+A classified verdict short-circuits remaining retries (retrying cannot fix
+it); the tray chip lookup (`classified_short_status`) recognizes every launch
+remediation. Unclassified failures keep the last stderr attached so the log /
+Windows Event Log names the real cause.
+
+@trace spec:vm-provisioning-lifecycle
+
+#### Scenario: Kernel out of date classifies immediately
+- **WHEN** `wsl.exe` stderr instructs `wsl --update` during a start poke
+- **THEN** the poke loop SHALL stop retrying and surface the update remediation
+
+#### Scenario: Host disk gate precedes import
+- **WHEN** the host drive has less than 2x the rootfs tar + 2 GiB available
+- **THEN** provisioning SHALL fail with the actionable low-space message BEFORE invoking `wsl --import`
+
+#### Scenario: Unknown failures stay bounded and attributable
+- **WHEN** an unclassified launch failure repeats
+- **THEN** retries SHALL back off exponentially to a cap and end in a terminal failed state carrying the last stderr
+
 ## Invariants
+
+### Invariant: Launch has no unbounded loop
+- **ID**: vm-provisioning-lifecycle.invariant.launch-no-unbounded-loop
+- **Expression**: `launch_retry_loops ALL HAVE (max_attempts AND backoff AND terminal_state)`
+- **Measurable**: true
 
 ### Invariant: Rootfs comes from the Fedora mirror
 - **ID**: vm-provisioning-lifecycle.invariant.rootfs-from-fedora-mirror

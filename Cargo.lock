@@ -3369,6 +3369,7 @@ dependencies = [
  "async-trait",
  "block2",
  "flate2",
+ "fs2",
  "objc2",
  "objc2-foundation",
  "objc2-virtualization",
