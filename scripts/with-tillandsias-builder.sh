@@ -101,9 +101,15 @@ _toolbox_exists() {
     toolbox list --containers 2>/dev/null | awk 'NR > 1 { print $2 }' | grep -qxF "$TOOLBOX_NAME"
 }
 
-# ── Helper: rustup installed inside the toolbox ──────────────────────────
-_toolbox_has_rustup() {
-    toolbox run --container "$TOOLBOX_NAME" command -v rustup &>/dev/null 2>&1
+# ── Helper: full build toolchain initialized inside the toolbox ──────────
+# Gates the (idempotent) init block on the ACTUAL tool set ./build.sh needs
+# (gcc, pkg-config, ruby, rustup + the musl targets), not merely on rustup.
+# A toolbox with only rustup present but missing gcc/pkg-config must re-run
+# init so `./build.sh --check` does not fail with "Missing host build tools".
+_toolbox_initialized() {
+    toolbox run --container "$TOOLBOX_NAME" \
+        bash -c 'command -v gcc && command -v pkg-config && command -v ruby && command -v rustup && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl' \
+        &>/dev/null 2>&1
 }
 
 # ── Ensure toolbox exists and is initialized ──────────────────────────────
@@ -114,7 +120,7 @@ if ! _toolbox_exists; then
     toolbox create --assumeyes --container "$TOOLBOX_NAME"
 fi
 
-if ! _toolbox_has_rustup; then
+if ! _toolbox_initialized; then
     echo "[tillandsias-builder] Initializing '$TOOLBOX_NAME' with build tools..."
 
     toolbox run --container "$TOOLBOX_NAME" \

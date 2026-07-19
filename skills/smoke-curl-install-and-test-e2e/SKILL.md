@@ -118,7 +118,9 @@ macOS:
 ```bash
 curl -fsSL "${SMOKE_BASE}/install-macos.sh" | TILLANDSIAS_RELEASE_BASE="${SMOKE_BASE}" bash 2>&1 \
   | tee target/smoke-e2e/01-install-macos.log
-"$HOME/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --version 2>&1 \
+# install-macos.sh extracts to /Applications (NOT ~/Applications; a stale
+# copy there would "verify" the wrong binary — live mixup 2026-07-16).
+"/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --version 2>&1 \
   | tee target/smoke-e2e/01-version.txt || true
 ```
 

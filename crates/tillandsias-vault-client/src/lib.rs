@@ -340,6 +340,154 @@ impl VaultClient {
         }
     }
 
+    /// Validate this client's token against `GET /v1/auth/token/lookup-self`.
+    ///
+    /// `Ok(())` proves the token is accepted by the server's token store.
+    /// A stale/rotated cached root token surfaces as
+    /// [`VaultError::Unauthorized`] — the detect half of the order-383
+    /// stale-root-token heal seam.
+    pub async fn token_lookup_self(&self) -> Result<(), VaultError> {
+        let resp = self
+            .client
+            .get(self.url("auth/token/lookup-self"))
+            .header("X-Vault-Token", &self.token)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() {
+            Ok(())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
+    }
+
+    /// List AppRole role names (`LIST /v1/auth/approle/role`).
+    ///
+    /// An empty backend returns 404 from Vault; that is mapped to
+    /// `Ok(vec![])` — only permission problems and transport failures are
+    /// errors. Used by the post-heal reachability probe (order 383): a
+    /// healed root token that still gets `Unauthorized` here means the
+    /// token/storage skew is deeper than the root token.
+    pub async fn list_approle_roles(&self) -> Result<Vec<String>, VaultError> {
+        let url = format!("{}?list=true", self.url("auth/approle/role"));
+        let resp = self
+            .client
+            .get(&url)
+            .header("X-Vault-Token", &self.token)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status == StatusCode::NOT_FOUND {
+            return Ok(Vec::new());
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(Self::map_status(status, body));
+        }
+        let v: Value = resp.json().await?;
+        Ok(v.pointer("/data/keys")
+            .and_then(Value::as_array)
+            .map(|keys| {
+                keys.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    /// Cancel any in-progress root-token generation attempt
+    /// (`DELETE /v1/sys/generate-root/attempt`). Idempotent; needs no
+    /// token. Always call before [`Self::generate_root_start`] — a stale
+    /// half-finished attempt keeps its nonce but never re-reveals its OTP,
+    /// so resuming one is impossible.
+    pub async fn generate_root_cancel(&self) -> Result<(), VaultError> {
+        let resp = self
+            .client
+            .delete(self.url("sys/generate-root/attempt"))
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::NO_CONTENT {
+            Ok(())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
+    }
+
+    /// Start a root-token generation attempt
+    /// (`POST /v1/sys/generate-root/attempt`). Vault generates the OTP
+    /// server-side and reveals it ONLY in this response. Needs no token —
+    /// the flow is authenticated by possession of unseal key shares.
+    pub async fn generate_root_start(&self) -> Result<GenerateRootAttempt, VaultError> {
+        let resp = self
+            .client
+            .post(self.url("sys/generate-root/attempt"))
+            .json(&serde_json::json!({}))
+            .send()
+            .await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(Self::map_status(status, body));
+        }
+        let v: Value = resp.json().await?;
+        let nonce = v
+            .get("nonce")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| VaultError::Other(format!("missing nonce in response: {v}")))?;
+        let otp = v
+            .get("otp")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| VaultError::Other(format!("missing otp in response: {v}")))?;
+        Ok(GenerateRootAttempt {
+            nonce,
+            otp,
+            required: v.get("required").and_then(Value::as_u64).unwrap_or(1),
+        })
+    }
+
+    /// Feed one unseal key share into the active generate-root attempt
+    /// (`PUT /v1/sys/generate-root/update`). `key` accepts the share as
+    /// base64 or hex — the same encoding `vault operator unseal` takes.
+    pub async fn generate_root_update(
+        &self,
+        key: &str,
+        nonce: &str,
+    ) -> Result<GenerateRootProgress, VaultError> {
+        let resp = self
+            .client
+            .put(self.url("sys/generate-root/update"))
+            .json(&serde_json::json!({ "key": key, "nonce": nonce }))
+            .send()
+            .await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(Self::map_status(status, body));
+        }
+        let v: Value = resp.json().await?;
+        let encoded_token = v
+            .get("encoded_token")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            // Pre-1.0 servers used encoded_root_token; accept both.
+            .or_else(|| {
+                v.get("encoded_root_token")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.is_empty())
+            })
+            .map(str::to_string);
+        Ok(GenerateRootProgress {
+            complete: v.get("complete").and_then(Value::as_bool).unwrap_or(false),
+            encoded_token,
+        })
+    }
+
     /// Revoke the supplied token (lease + accessor + children).
     pub async fn revoke_token(&self, token: &str) -> Result<(), VaultError> {
         let url = self.url("auth/token/revoke");
@@ -384,6 +532,53 @@ impl VaultClient {
                 .to_string(),
         })
     }
+}
+
+/// A started root-token generation attempt (`sys/generate-root/attempt`).
+/// The OTP is revealed only in this response and is required to decode
+/// the final encoded token.
+#[derive(Debug, Clone)]
+pub struct GenerateRootAttempt {
+    pub nonce: String,
+    pub otp: String,
+    /// Number of unseal key shares required to complete the attempt.
+    pub required: u64,
+}
+
+/// Progress of a generate-root attempt after feeding in a key share.
+#[derive(Debug, Clone)]
+pub struct GenerateRootProgress {
+    pub complete: bool,
+    /// Present once `complete`; decode with
+    /// [`decode_generated_root_token`].
+    pub encoded_token: Option<String>,
+}
+
+/// Decode the `encoded_token` returned by a completed generate-root
+/// attempt: base64 (raw, standard alphabet) decode, then XOR with the
+/// attempt's OTP bytes — the same transform `vault operator
+/// generate-root -decode` performs. Pure; pinned by unit test.
+pub fn decode_generated_root_token(encoded: &str, otp: &str) -> Result<String, VaultError> {
+    use base64::Engine;
+    let trimmed = encoded.trim_end_matches('=');
+    let token_xor = base64::engine::general_purpose::STANDARD_NO_PAD
+        .decode(trimmed)
+        .map_err(|e| VaultError::Other(format!("encoded root token is not base64: {e}")))?;
+    let otp_bytes = otp.as_bytes();
+    if token_xor.len() != otp_bytes.len() {
+        return Err(VaultError::Other(format!(
+            "encoded root token length {} does not match OTP length {} — cannot XOR-decode",
+            token_xor.len(),
+            otp_bytes.len()
+        )));
+    }
+    let decoded: Vec<u8> = token_xor
+        .iter()
+        .zip(otp_bytes)
+        .map(|(a, b)| a ^ b)
+        .collect();
+    String::from_utf8(decoded)
+        .map_err(|e| VaultError::Other(format!("decoded root token is not UTF-8: {e}")))
 }
 
 /// Normalize a KV-v2 path by inserting the `data/` infix between the
@@ -436,6 +631,42 @@ mod tests {
         assert_eq!(c.url("sys/health"), "https://vault:8200/v1/sys/health");
         let c2 = VaultClient::new("https://vault:8200/", "root");
         assert_eq!(c2.url("/sys/health"), "https://vault:8200/v1/sys/health");
+    }
+
+    #[test]
+    fn decode_generated_root_token_round_trips() {
+        use base64::Engine;
+        // Order 383: mirror Vault's encode side (token XOR otp, base64
+        // raw-std) and assert the decoder recovers the token exactly.
+        let token = "hvs.fixture-root-token-for-decode";
+        let otp = "0123456789abcdefghijklmnopqrstuvw";
+        assert_eq!(token.len(), otp.len(), "fixture lengths must match");
+        let xored: Vec<u8> = token
+            .as_bytes()
+            .iter()
+            .zip(otp.as_bytes())
+            .map(|(a, b)| a ^ b)
+            .collect();
+        let encoded = base64::engine::general_purpose::STANDARD_NO_PAD.encode(&xored);
+        assert_eq!(
+            decode_generated_root_token(&encoded, otp).expect("decode"),
+            token
+        );
+        // Padded input (some Vault builds emit padding) must also decode.
+        let padded = base64::engine::general_purpose::STANDARD.encode(&xored);
+        assert_eq!(
+            decode_generated_root_token(&padded, otp).expect("padded decode"),
+            token
+        );
+    }
+
+    #[test]
+    fn decode_generated_root_token_rejects_bad_inputs() {
+        // Length mismatch: OTP shorter than the encoded token.
+        decode_generated_root_token("aGVsbG8", "xy").expect_err("length mismatch must fail");
+        // Not base64 at all.
+        decode_generated_root_token("!!!not-base64!!!", "irrelevant")
+            .expect_err("invalid base64 must fail");
     }
 
     #[test]

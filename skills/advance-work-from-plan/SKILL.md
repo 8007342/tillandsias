@@ -26,12 +26,16 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | macOS           | `macos`       | `osx-next`       |
     | Windows         | `windows`     | `windows-next`   |
 4.  **Create Agent ID**: Compose a unique ID: `<platform>-<workstation>-<backend>-<utc-timestamp>`.
-5.  **Read Authoritative Ledgers**: Read:
-    -   `methodology.yaml`
-    -   `methodology/distributed-work.yaml`
-    -   `plan.yaml`
-    -   `plan/index.yaml`
-    -   `plan/loop_status.md`
+ 5.  **Read Authoritative Ledgers**: Read:
+     -   `methodology.yaml`
+     -   `methodology/distributed-work.yaml`
+     -   `plan.yaml`
+     -   `plan/index.yaml`
+     -   `plan/loop_status.md`
+     -   **Read the `## Direction` section of `plan/loop_status.md`** (operator-owned
+         thematic direction). Reduce your packet selection against that theme
+         rather than inventing new direction; cite the direction in your work-queue
+         ledger entry (order 381).
 
 ---
 
@@ -55,8 +59,12 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     -   **Spec gap fills**: `openspec/specs/<spec>/spec.md` requirements without implementation coverage. Focus on `headless-mode`, `podman-idiomatic-patterns`, `runtime-diagnostics-stream`, `logging-accountability`, `observability-metrics`.
     -   **Drift-protection litmus**: instant-phase tests pinning surfaces that recent work added (formatter literals, env-var contracts, public API names, unit-test names).
     -   **Clippy / idiomatic-podman hardening**.
+    -   **Version-aware release ordering** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `version_aware_release_planning`). Releases are sequential numbered bundles (v0.3 → v0.4 → …), stability-gated not time-gated; "release X" is the CalVer Minor. Every open packet should carry `desired_release: vX.Y` (its ship-bucket, distinct from the milestone `release_target`). After the milestone preference, prefer packets targeting the **ACTIVE release** (see `plan/loop_status.md`) over later-release ones — concentrate effort on shipping the current bundle. Cross-platform deps are gated by release order (dependent's `desired_release` >= its upstream's). A packet that must slip to a later release: file a `progress` note proposing the slip; the coordinator ratifies. Unmarked open packets default to the active release.
+    -   **In-forge self-service** (canonical: `methodology/distributed-work.yaml` → `in_forge_agent_self_service`): if you are running INSIDE the forge and hit a missing tool/capability/fix, unblock your FUTURE launches by filing in the SHARED CHECKOUT (the forge is rebuilt from sources each launch): a capability/tool proposal → `plan/forge-improvements/proposals/<date>-<slug>.md`; a forge bug → a `plan/issues/` packet `capability_tags: [forge, …]` `owner_host: linux|any`. If the packet is `forge`-tagged/`any` and fits the forge budget, just do it. Always shaped + verifiable + pushed (a finding that dies with the container is lost).
+    -   **A LARGE packet is ELIGIBLE — size is not a skip reason** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `large_packet_is_eligible_work`). Do NOT scan a queue of big packets, judge them all "too large", and reach for an old, small, near-obsolete task instead — that inverts the queue's value order and churns work that later specs will supersede. Rank by VALUE and RELEVANCE, never by smallness: a large, fresh, release-targeted packet OUTRANKS a small, stale one. When you claim a packet you cannot finish this cycle, end in ONE of three valid outcomes, each a complete successful cycle: **(a) partial slice** — smallest vertical slice under a verifiable constraint + a `progress` event with `partial_artifact_refs` and an updated `next_action`; **(b) split** — decompose into smaller `ready` child packets at ownership/dependency/evidence boundaries (`split_into`), the shaping commit IS the cycle's output (this generalizes the forge-only order-264 split rule to every host); **(c) audit-dispose** — if it is stale/superseded, retire it (obsolete/tombstone) per the freshness class. A near-obsolete-looking packet is a signal to AUDIT it, not to implement it as busywork.
 4.  **Long-running packets** (`multi_cycle: true`): claims are CYCLE-SCOPED — you claim one session's slice, not the packet. A `ready` multi_cycle packet with prior progress events is claimable (that's the design, not a stale lease). Canonical rules: `methodology/distributed-work.yaml` → `long_running_packets`.
 5.  **Constraint**: ONE logical commit per cycle. If a slice estimates >2h, split it and ship the first half. (Forge-hosted sessions (`TILLANDSIAS_HOST_KIND=forge`) are stricter, not looser: **at most ONE packet per session**, and if the packet will not fit the launch envelope — litmus-launched sessions live inside a 600s step budget — **split it into smaller ready packets instead of implementing**. The shaping commit is the session's output. Decided by The Tlatoāni 2026-07-10, order 264; canonical: `methodology/distributed-work.yaml` `worker_agent_protocol.forge_cycle_budget`.)
+6.  **Standing FRESHNESS audit class** (order 372, methodology `component_freshness`): each cycle, after worker drain, pick ONE component the `freshness-advisory` CI phase flagged as stale (or any unstamped component) and re-validate it against the audit question — *last properly looked at and confirmed still meaningful, useful, efficient, sound, and complete?* End in exactly one disposition: **refreshed** (re-validated, update its `# freshness:` stamp), **updated** (fixed/tuned, update stamp), or **obsoleted** (delete/tombstone with a same-commit removal of dependents). Apply the **discard-over-repair bias**: discard a stale component rather than repair it when a fresh implementation would be better. Record a `# freshness: auditor=<id> date=<ISO> verdict=<...> scope=<one-line>` stamp (grammar in methodology.yaml). `scripts/freshness-inventory.sh` emits the coverage report + the top stale components each `./build.sh --ci` run.
 6.  **Delegate Parallelizable Research**: Use sub-agents for file inventories, grep searches, etc., but keep ownership of specs, verification, and commits.
 
 ---

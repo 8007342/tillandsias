@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer
+# freshness: auditor=linux-tlatoani-opencode-20260717T0920Z date=2026-07-17 verdict=refreshed scope=audited via freshness-audit class; still functional, surfaces MISSING_DATE + age for all cheatsheets
 # Check for stale cheatsheets older than 90 days.
 # Usage: ./check-cheatsheet-staleness.sh [--days 90] [--check-urls]
 #

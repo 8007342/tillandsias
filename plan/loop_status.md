@@ -1,22 +1,436 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-16T09:15:00Z
+LastExecutionTime: 2026-07-19T02:35:00Z
+
+## WINDOWS LANE 2026-07-18/19 (operator-directed crash-loop cycle)
+
+Field report: the latest release CRASH-LOOPED on startup on an end-user
+Windows machine (tray reached "Downloading Fedora" — first field sighting of
+the download UX — then looped, flashing terminals, zero diagnostics).
+Landed on windows-next (packet windows-260718-1, done):
+`windows-event-logging` spec REACTIVATED with a REAL Event Log relay (the
+archived Tauri impl never called ReportEventW; all INFO/WARN/ERROR now relay
+— live write/readback verified), singleton fs2 contention misclassification
++ unbounded-blocking fixes in tillandsias-core (one pre-existing test was
+failing at HEAD on Windows), CREATE_NO_WINDOW on the three unflagged
+diagnose spawns, control-wire connect retries now capped-exponential.
+Ledger repair: order 416 criterion 1 done (order-413 duplicate `events:`
+merged; policy validator green) — criterion 2 (CI guard) stays with the
+linux coordinator. Detail:
+plan/issues/windows-crashloop-diagnosability-fixes-2026-07-18.md.
+BLOCKER at cycle time: no push credential on the Windows host (stale GCM
+token; operator `gh auth refresh` needed) — RESOLVED mid-cycle by the
+operator; windows-next pushed (f0314ab9), then: drain 417/418 → daily
+release → purge + curl-install e2e from the remote binary
+(operator-ordered). NOTE: the 416 criterion-1 dup-key merge below was
+independently done by the linux coordinator in 83cfe606 (idempotent
+collision, both merges identical — reconciled in this merge commit).
+UPDATE 02:35Z: orders 417+418 DRAINED on windows-next (aeb2ba91) — the
+keepalive respawn loop is bounded (backoff + give-up + tray surfacing)
+and the registered fast path exec-probes before trusting registration
+(one-shot ephemeral self-heal). 419/420 remain open for the windows lane.
+Next: daily release, then purge + curl-install e2e verifying 417/418
+live.
+
+## Cycle 2026-07-18T06:40Z→07:00Z (linux_mutable macuahuitl — orchestration: FULL release backfill + macOS signing answer)
+
+- **RELEASE BACKFILL (order 407, operator directive "split into releases to
+  plan the following ones")**: assigned `desired_release` to all 97 open
+  packets → v0.4=36, v0.5=47, v0.6=11, v0.7=3. Full roadmap in the ACTIVE
+  RELEASE section below; cross-platform gating respected. plan-orders gate
+  green.
+- **macOS signing (operator question: would curl users hit the DMG's
+  Gatekeeper block?)**: NO. The DMG fails because a browser download is
+  quarantined + the `.app` is only ad-hoc signed → Gatekeeper "unidentified
+  developer". The CURL installer (scripts/install-macos.sh) fetches a tar.gz
+  via `curl` + extracts with `tar` + `open -a` — curl downloads are NOT
+  quarantined, so Gatekeeper never gates it; the app launches cleanly. Both
+  artifacts are the same ad-hoc-signed `.app`; only delivery differs. The real
+  cross-path fix (Developer ID + notarization) is scoped but UNIMPLEMENTED in
+  `openspec/changes/macos-app-signing-2026-07-07/` (deferred to v0.0.2+, gated
+  on an Apple Developer ID cert — operator action). Filed order 421 (v0.5) for
+  the small win: the curl installer over-warns about a Gatekeeper block that
+  does not apply to its own path. **Recommend curl-install as the macOS path
+  until notarization lands.**
+
+## Cycle 2026-07-18T05:00Z→06:25Z (linux_mutable macuahuitl — Windows crashloop packets + ephemerality + ownership)
+
+- **EPHEMERALITY INVARIANT (methodology, Tlatoāni 2026-07-18, `48004777`)**:
+  uncommitted work is throw-away, always; anything not committed is lost
+  forever BY DESIGN. Response to a dirty tree is COMMIT-or-WIPE, never
+  stash-as-durability. Filed in between-commits-work-discipline.yaml, pinned by
+  litmus:ephemerality-invariant-shape.
+- **Took full ownership of the host** (operator: "you're the only agent, use or
+  wipe, no stashing"): hard-reset linux-next to origin (wiped a finished
+  agent's redundant leftover — stale rustfmt + already-upstream packets),
+  removed 3 stale worktree-agent-* worktrees, cleared 9 old (May–June) stashes.
+  Clean.
+- **WINDOWS VM-LAUNCH CRASHLOOP (operator repro: iex install → Fedora download
+  → crashloop on VM launch, no Claude to debug)**: code-mapped and filed 4
+  packets (all v0.4, pickup_role windows): **417** (THE fix — bound the
+  unbounded `spawn_keepalive` respawn loop that re-invokes wsl.exe every 1s
+  forever, wsl_lifecycle.rs:156-185; cap+backoff+classified-fatal give-up),
+  **418** (health-probe a 'registered' distro before the re-import-skip fast
+  path — a partial import loops every launch), **419** (classify the still-
+  generic launch failures: import-exit, host-disk-at-import, kernel/WSL
+  mismatch, S2-healthy-on-paper + add the missing graceful-launch-failure spec
+  requirement), **420** (auto-capture a diagnostic bundle on terminal failure —
+  the "no Claude to troubleshoot" gap). Order 323/324 already handle the
+  install-time platform states; these close the launch-phase gaps.
+- **Ledger reconcile (coordinator)**: merged a duplicate `events:` key in order
+  413 (git-mirror-relay-fetch-before-push) that was dropping the b49b7776
+  progress evidence via YAML last-wins; plan-orders gate green.
+
+## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
+
+Releases are sequential, stability-gated bundles (versioning.yaml Minor;
+methodology `version_aware_release_planning`). Current shipped line is v0.3
+(v0.3.260716.7). The **active release-in-progress is v0.4**: make the
+forge-local EXPERTS / local-inference architecture work END-TO-END on the fat
+GPU host (RTX A5000, tier:gpu-cuda). Cross-platform + modest-hardware tiering
+is gated to **v0.5** (orders 397 tiered-backends, 401 macOS tier, 402 Windows
+tier) so v0.4 can ship the capable-host architecture without waiting on the
+portability half.
+
+### Release roadmap (FULL backfill 2026-07-18 — all 97 open packets bucketed; order 407)
+
+Every open packet now carries `desired_release`. The following releases are
+sequential and stability-gated; the coordinator may slip individual packets
+with a reason event.
+
+- **v0.4 — ACTIVE (36 packets): "local inference works end-to-end on the
+  capable host + the product doesn't crashloop or lose work."** EXPERTS
+  fat-host core (391 milestone, 392–400, 406, 408), the in-flight
+  agent-workflow bugs/robustness (270, 273, 281, 313, 326, 328, 382, 384, the
+  git-mirror credential fixes 412/413/415/416, the mirror-no-credential P1),
+  the Windows crashloop (417–420), codex smoke (404/405), and the operator-
+  gated verifications (306/307). Ship when this bundle is stable → bump Minor
+  0.3 → 0.4.
+- **v0.5 (47): "cross-platform parity + streams/transport + security channel
+  + audits."** Tiered/modest-hardware inference (397, 401 macOS, 402 Windows,
+  409 VM-image GPU, 410 AMD research), the observable-streams/transport
+  refactor cluster (147, 151, 153–158, 161, 333), the encrypted vsock control
+  channel + auth (137, 141, 142, 145), the architecture audits (245–251), the
+  facade conformance (125/128/130/132), macOS/Windows lane parity (279, 348,
+  349, 350, 280), and macOS install polish (421). Cross-platform deps are
+  release-gated (the v0.5 macOS/Windows inference tiers depend on the v0.4
+  linux core).
+- **v0.6 (11): "web-share / publish-locally."** The web-container milestone
+  (373) + children (353, 360, 361, 375–379), Cloudflare tunnel/DNS/WARP
+  (377/378/388), and the API-key-entry track (143).
+- **v0.7 (3): "deploy lifecycle + advanced," Tlatoani-gated.** Evidence-gated
+  deploy ladder research (389), GitHub App research (390), and the zeroclaw
+  reintroduction roadmap (403).
+- **Fat-host ground truth 2026-07-17**: RTX A5000 24GB, driver 595.80,
+  `scripts/inference-tier-probe.sh` → `tier:gpu-cuda`. `tillandsias-inference`
+  currently Exited(137) on a stale pre-392 image (v0.3.260716.4) — order 406
+  brings it up with GPU passthrough.
+- **BUILD+LAUNCH 2026-07-17 (operator directive)**: built + installed
+  `v0.3.260717.2` (musl-static, tray) and launched the tray (`--tray`, PID
+  live). Stack rebuilt fresh at the new version: vault healthy (real secrets
+  PRESERVED — Shamir share recovered from keychain, data volume kept), proxy
+  up, git-mirror loaded 23 cloud projects (transparent vault-token push path
+  works). NON-destructive — no podman reset.
+- **GPU inference gate (operator/sudo action needed)**: order 392's GPU
+  DELIVERY CODE IS ALREADY IMPLEMENTED (build_inference_run_args gates
+  `--device nvidia.com/gpu=all` on tier:gpu-cuda + nvidia_cdi_available; 392
+  still status:ready → needs verification/reconciliation, not fresh impl). The
+  ONLY thing between this fat host and GPU-accelerated local models is HOST
+  CDI SETUP: `nvidia-container-toolkit` is NOT installed and
+  `/etc/cdi/nvidia.yaml` is absent. Remedy (sudo): install the toolkit +
+  `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`. Until then
+  local models serve CPU-ONLY (loud warning). Tracked in order 406.
+- **GPU as a PRODUCT concern (operator directive 2026-07-17)**: "if the host
+  supports gpu passthrough then we shall also pass it through to the
+  containers" — and this hits end users too. Fedora 44 wrinkle:
+  `nvidia-container-toolkit` is NOT in the default repos (needs NVIDIA's
+  libnvidia-container repo). 41c2bde2 fixed the misleading remedy (it said
+  `sudo nvidia-ctk cdi generate`, which fails "command not found" when the
+  toolkit is absent) + made `nvidia_cdi_available()` honor the rootless user
+  CDI dir (~/.config/cdi) so passthrough can auto-enable without a second sudo.
+  New packets: **408** (auto-enable — generate + wire the user CDI spec, guided
+  init/preflight remedy; v0.4), **409** (Fedora VM guest-image GPU awareness
+  for nested host→VM→container passthrough; v0.5), **410** (AMD/ROCm
+  passthrough research — likely custom; v0.5).
+
+## Cycle 2026-07-18T05:09Z→06:00Z (forge — orders 412+413: CLI utils + relay fetch-before-push)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260718T0509Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.bQ5AAM` clean (1 pre-existing dirty path:
+  `.opencode/package-lock.json`, sibling work).
+- **Sibling heads**: main 2d3c9095, linux-next 00f15dff, windows-next
+  91900d68, osx-next 7491dff2.
+- **Order 412 (forge-base-cli-utils-gap) — progress**: added `diffutils patch
+  file gettext diffstat` to `images/default/Containerfile.base` microdnf
+  install line. Extended `litmus:forge-lsp-availability-shape` with a step
+  verifying the packages are pinned. Image rebuild needed for availability.
+- **Order 413 (git-mirror-relay-fetch-before-push) — progress**: added
+  pre-push fetch (plain `git fetch`, no custom refspec) before the atomic
+  push in `relay-refs.sh`. Post-failure reconcile also switched from
+  dangerous `refs/heads/*:refs/heads/*` to plain fetch. Running mirror
+  container still has old code — fix takes effect on next container restart.
+- **Prior cycle note**: order 399 (OpenCode LSP wiring) completed this
+  session: `"lsp": true` in config overlay, litmus extended to 3 steps,
+  cargo fmt + clippy clean.
+- **Worker drain**: two packets (412+413), above the single-packet budget
+  because both were small and independent.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped.
+- **Next**: order 412 needs image rebuild to take effect; order 413 needs
+  mirror container restart. Both committed on linux-next.
+
+## Cycle 2026-07-18T05:09Z→05:25Z (forge — order 399: OpenCode LSP wiring)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260718T0509Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.bQ5AAM` clean (1 pre-existing dirty path:
+  `.opencode/package-lock.json`, sibling work).
+- **Sibling heads**: main 2d3c9095, linux-next 00f15dff, windows-next
+  91900d68, osx-next 7491dff2.
+- **Order 399 (forge-lsp-by-default) — progress**: OpenCode config overlay
+  now has `"lsp": true` (schema-validated; enables built-in LSP auto-detection
+  of rust-analyzer from PATH). rust-analyzer was already in forge-base
+  (Containerfile.base line 16; zero image-size delta). Litmus extended to 3
+  steps (binary + startup-context + config flag), all PASS. cargo fmt + clippy
+  clean. Exit criterion 1 (live go-to-definition) remains for live session
+  verification; criterion 2 (image size delta) is zero by construction.
+- **Prior cycle note**: order 392 (inference-startup-cleanup) implementation
+  complete, committed as f7701ffd, push blocked on GitHub upstream credential
+  (blocker filed). Local mirror has the commits.
+- **Worker drain**: one packet (399), per recurrent-loop budget.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped.
+
+## Cycle 2026-07-17T17:47Z→(open) (linux_mutable macuahuitl — order 383 vault heal; WINDOWS UNBLOCKED)
+
+- **Host**: linux_mutable (macuahuitl), `linux-next`, agent
+  `linux-macuahuitl-fable5-20260717T1747Z`. Operator-directed priority:
+  unblock the Windows host (blocked by order 383).
+- **Coordination**: fast-forwarded `linux-next` to `origin/windows-next`
+  (90f371f5 — order 383 extended criteria + agent-fleet roadmap). osx-next
+  already merged; main behind.
+- **Order 383 COMPLETED (072f6efb)**: generate-root detect-and-heal seam
+  (validated_root_token) on both vault bring-up paths, approle/KV post-heal
+  verification (the 2026-07-17 Windows wrinkle), handover persist guard.
+  ROOT CAUSE found: mocked-podman litmus wrote `mock-exec-output` over the
+  operator's REAL keychain credentials (isolation ask filed:
+  litmus-mock-podman-keychain-pollution-2026-07-17.md). Macuahuitl's live
+  skew HEALED with real secrets: fresh hvs. token minted+verified, real KV
+  github token readable again (23 remote projects listed).
+- **WINDOWS — DONE, ground truth captured (windows-bullo-fable5-20260717)**:
+  rebuilt guest to 072f6efb (v0.3.260716.7) and reran the BigPickle goal
+  lane. The 383 seam WORKED on the deep-skew path: it detected the stale
+  root token, ran generate-root from the stored share, the share FAILED
+  auth (`cipher: message authentication failed`), and it emitted the
+  designed **OPERATOR ACTION REQUIRED** verdict, storage untouched — the
+  approle/KV-wrinkle escalation, live-verified. verified-by event on order
+  383. Deploying via binary hot-swap ALSO exposed a separate P1
+  (windows-260717-2): re-ensure regenerated a non-matching vault unseal
+  secret, crash-looping the barrier; recovered live from the intact
+  fallback share (vault healthy, wire Reachable). NET: the transparent
+  in-forge push is now blocked on ATTENDED vault recovery (deep root-key
+  skew) + windows-260717-2, NOT on any push-chain code (all confirmed
+  working). Recommend a storage-preserving attended vault re-init before
+  the next rerun. Also filed the operator's CODE EXPERT temporal/convergence
+  directive (order 400 extended) + Hy3/Zen-fleet + zeroclaw roadmap.
+- **RUNTIME CRASH-LOOP INCIDENT + ephemeral-reset directive**: after a
+  Quit (wsl --terminate) + relaunch, windows-260717-2 re-wedged the vault
+  barrier, cascading to a headless/tray restart loop that flashed terminal
+  windows. Operator confirmed this can hit END USERS at runtime
+  (updates/crashes/restarts) and ruled: ephemeral all the way — guest+vault
+  disposable, cloud-backed, worst case one re-auth; destructive reset OK.
+  RECOVERED via destructive reprovision from scratch (wsl --unregister +
+  tray relaunch) -> fresh guest v0.3.260712.1 (tray-matched, wire Reachable,
+  clean vault-on-first-login, no loop). Filed the resilience layer:
+  windows-260717-3 (crash-loop DETECTION, falsifiable diagnose+tray grammar)
+  + windows-260717-4 (intentional one-click EPHEMERAL RESET). windows-260717-2
+  elevated to runtime/end-user severity (root fix). Shape:
+  plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md.
+- **Order 386 COMPLETED (32ce69ae)**: teardown straggler probe adopted +
+  hardened, wired post-reset into the Linux smoke lane (fails loud);
+  positive + negative live evidence on macuahuitl.
+- **Order 385 follow-through (ff4954a5)**: tray-feature-only unused-mut
+  warning removed from the spawn_terminal_and_reap shim.
+- **FRESHNESS audit**: scripts/test-support/podman-mock.sh → **updated**
+  (exec branch no longer fabricates a vault handover — the order-383
+  keychain-pollution poison source; isolation reduction ask stays open in
+  litmus-mock-podman-keychain-pollution-2026-07-17.md).
+- **Ledger hygiene**: a windows-next push (a5da4899) had GLUED the zeroclaw
+  roadmap packet into the windows-inference-tier-verification (order 402)
+  mapping with no `- packet_id:` separator (duplicate order/title/status
+  keys), failing litmus:plan-index-order-uniqueness — the whole instant
+  pre-build suite was red (144/145). Split zeroclaw into its own list item
+  (order 403). Known class: order 263 (ledger-YAML gate before sibling
+  push) — live datapoint.
+- **METHODOLOGY (operator directive 2026-07-17, Hy3 size-aversion)**: new
+  `large_packet_is_eligible_work` rule in distributed-work.yaml — a large
+  packet is eligible work; size is never a skip reason; three valid
+  outcomes (partial slice / split / audit-dispose); rank by value+relevance
+  not smallness; near-obsolete = audit signal not busywork. Wired into
+  select_shaped_work + /advance-work-from-plan, pinned by
+  litmus:large-packet-eligibility-doctrine-shape (5/5). Commit 579acf5b.
+- **CODEX non-interactive forge lane (operator directive 2026-07-17)**:
+  landed `tillandsias --codex <proj> --prompt` → `codex exec` headless with
+  forge-gated bypass (3c2ae51e). Verified the Codex OAuth token is already
+  persisted in vault (secret/data/codex/oauth, 2026-07-15) + restored by
+  the entrypoint; bypass posture is order 171 (already done). Remaining
+  work SPLIT (per the new rule) into ready packets: order 404 (codex e2e
+  smoke launcher + rate-limit/MO-SMOKE verdict parity) and order 405
+  (live codex-vs-opencode divergence comparison, multi_cycle).
 
 ## Direction — what are we all doing today
 
-<!-- Operator-owned thematic direction (The Tlatoāni, 2026-07-16). One theme,
-     no packet ids: agents REDUCE the theme against ./plan using ./methodology
-     (selection policy still applies — release-targeted first). Cycles cite
-     the direction in their ledger entries. Order 381 tracks skill wiring. -->
+<!-- Operator-owned thematic direction (The Tlatoāni, updated 2026-07-17).
+     One theme, no packet ids: agents REDUCE the theme against ./plan using
+     ./methodology (selection policy still applies — release-targeted first).
+     Cycles cite the direction in their ledger entries. Order 381 tracks
+     skill wiring. -->
 
-**We're supporting web containers.** Every host works toward: a harness agent
-in the forge launches a web container for a real project (../visual-chess),
-discovers the publish tools organically, and — as rungs land — multi-service
-entries (WordPress+DB), then one-prompt public share over a Cloudflare tunnel
-at a clearly-ephemeral URL. Use iterations on this theme to also clean up
-remaining work on YOUR active packets: major feature iterations double as
-test/refinement runs for what's already in flight. Milestone:
-web-share-release-milestone (order 373).
+**We're giving forge agents local EXPERTS.** Every host works toward: agents
+in the forge querying ephemeral tiny local models — built at launch from the
+freshly mounted checkout, refreshed on commit, dead on shutdown — instead of
+browsing files. The construction decision is SIGNED (see
+experts-construction-decision-2026-07-17.md); the deterministic compiled
+YAML engine, LSP-by-default, and hot-path RAM placement are part of the same
+blazing-fast local-knowledge story. macOS and Windows lanes: your inference
+TIER verification packets are filed and release-targeted — probe your guest,
+measure the ground-truth set, record your lane's backend decision.
+Web-share work (milestone 373) continues as the secondary theme.
+Milestone: forge-local-experts-milestone (order 391).
+
+*(Previous theme, 2026-07-16: web containers — largely landed; see the
+release ledger row for v0.3.260716.7.)*
+
+## Cycle 2026-07-17T09:05Z→10:35Z (linux_immutable — toolbox-awareness + FRESHNESS rungs drain)
+
+- **Host**: linux_immutable (Fedora Silverblue), `linux-next`, agent
+  `linux-tlatoani-opencode-20260717T0920Z`. Direction cited: EXPERTS /
+  blazing-fast local-knowledge + fleet-on-immutable-hosts.
+- **Toolbox-awareness fix (unblocks the whole fleet on immutable hosts)**:
+  `scripts/local-ci.sh` now sources `with-tillandsias-builder.sh` (was NOT
+  toolbox-aware — only `build.sh` was), so `--ci`/`--ci-full` re-exec inside
+  the builder toolbox. Fixed the wrapper's init gate to check the FULL
+  toolchain (gcc/pkg-config/ruby/rustup + musl targets) instead of rustup
+  alone, so a builder toolbox missing host build tools re-runs dnf init
+  instead of leaving `./build.sh --check` failing. Verified end-to-end:
+  `./build.sh --check` re-execs into `tillandsias-builder` and exits 0 on
+  this Silverblue host (commit c2cffb59; record on order 239).
+- **FRESHNESS rungs 370/371/372 DONE** (operator directive 2026-07-15):
+  `scripts/freshness-inventory.sh` (pinned report grammar + exit-code
+  contract), `litmus:freshness-inventory-shape` (instant/pre-build, PASS
+  6/6), `local-ci.sh` CHECK 0 advisory flagging (top-5 stale, never gates),
+  both worker skills gain the standing freshness-audit class; live audit
+  evidence: `check-cheatsheet-staleness.sh` REFRESHED + stamped. Commit
+  15ab8768.
+- **Order 381 DONE**: worker skills (advance-work-from-plan,
+  coordinate-multihost-work) wired to read the operator-owned `## Direction`
+  section during selection and cite it in ledger entries (commit 3d4cdee4).
+- **Verification**: `./build.sh --check` green inside toolbox; spec-
+  traceability instant litmus suite 6/6 PASS. No live forge/podman work
+  (immutable host without rootless daemon this cycle).
+- **Next**: continue draining verifiable `ready` packets; keep pulling
+  frequently — mutable integration host is landing release-targeted
+  experts work.
+
+## Cycle 2026-07-16T18:07Z→19:00Z (linux_immutable — operator-directed reduction + web-container drain: order 362 sign-off closed)
+
+- **Host**: linux_immutable, `linux-next`, agent
+  linux-tlatoani-claude-20260716T0725Z. Interactive operator (The Tlatoāni)
+  session. Startup boundary clean; branch current with `origin/linux-next`
+  (c82c22a6, 0/0).
+- **Credential guard**: started `missing:no-credential-channel` — `gh` keyring
+  token was invalid; Claude Code `/login` authenticates Anthropic, NOT
+  git→GitHub, so it did not restore push. Operator ran `gh auth login`;
+  re-check → `ok:gh-keyring` (scopes repo, workflow). All committable work was
+  deferred until the channel was restored (no local-only commits).
+- **Reduction (operator-directed, off the web-container theme by explicit
+  directive)**:
+  - Orders **385/386** filed: tray leaks `[ptyxis] <defunct>` zombies —
+    unreaped terminal-launcher `Child` at two spawn sites (`launch_in_terminal`
+    tray/mod.rs:1862, `launch_forge_agent` main.rs:8955); Rust `Child` does not
+    reap on `Drop` and Ptyxis's GApplication client exits in ms. Fix = shared
+    spawn-and-reap helper + behavioral test; 386 = teardown-straggler probe.
+    Issue: `plan/issues/optimization/tray-terminal-spawn-zombie-ptyxis-stragglers-2026-07-16.md`.
+  - Order **387** filed: extend order-314 `--replace` idempotency to the
+    sibling stack containers (proxy/git/router/vault) — inference already has
+    it; the siblings' `build_*_run_args` do not, which is the real
+    "crashes-and-fails-to-restart" durable fix.
+  - **Methodology**: `fedora_silverblue_immutable_builders` now documents
+    immutable-is-flexible (standing toolbox `dnf install` pre-authorization,
+    no operator permission needed) + an idempotency expectation (don't gate a
+    whole tool-install on a single sentinel like rustup).
+  - **Tooling**: installed `ruby` into the `tools` toolbox to run the
+    sanctioned `ruby -ryaml` validator (absent from the bare immutable host —
+    now understood as toolbox-solvable, not a gap).
+- **Worker drain (web-container direction, operator drain-selection)**: pushed
+  the reduction batch (`45377dd6` + `36875da4`), then drained **order 362**
+  `cloudflare-login-and-public-deploy` (research roadmap, `multi_cycle`, no
+  verification gate). Strengthened the roadmap's security-boundary section,
+  mapped the rung tree to ledger orders 377/378/379, and obtained the
+  **Tlatoāni sign-off** (exit-criterion #3) → order 362 **done**; rung 1
+  (order 377 `--cloudflare-login`) unblocked. The sign-off spun out three
+  research packets per operator direction: **388** (tunnel/WARP/TLS in the
+  proxy/router), **389** (evidence-gated deploy-lifecycle ladder, `multi_cycle`),
+  **390** (GitHub App for fine-grained interactions + temporary elevated
+  tokens). Scope for now: ephemeral `dev`/`test`.<domain-we-own> via tunnel,
+  ~1h TTL + refresh-while-live.
+- **Next action**: order 377 (`--cloudflare-login` → vault) is ready for a
+  build-capable host (this immutable host can't run the cold full build
+  cheaply); research 388/389/390 are docs-eligible for any host. Curl-install
+  e2e (`v0.3.260716.7`) deferred — host is interactively in use, a destructive
+  podman reset would wipe the operator's live stack; run it on a dedicated
+  smoke host.
+
+## Cycle 2026-07-16T17:55Z (forge — worker defer no-op)
+
+- **Host**: forge, `linux-next`. Credential guard `ok:forge-git-mirror`;
+  startup boundary clean; branch already current with `origin/linux-next`.
+- **Worker drain**: no-op — the latest integration cycle timestamp was
+  2026-07-16T17:46Z, inside the worker skill's 10-minute settle window. No
+  packet was claimed and no implementation or e2e gate was started.
+- **Next action**: resume normal release-targeted selection after the settle
+  window expires; current direction remains web-container support under the
+  web-share-release-milestone (order 373).
+- **Finalization blocker**: boundary guard `verify` could not run because the
+  forge image lacks `cmp`; it emitted a false worktree-difference verdict after
+  the pushed checkout was clean. Recurrence appended to
+  `plan/issues/forge-build-check-tooling-gap-2026-07-08.md`; owner Linux
+  image/guard tooling, smallest action: add and test the comparator fallback.
+
+## Cycle 2026-07-16T17:26Z→17:5xZ (forge — meta-orchestration: order 369 CLOSED — auto-reconcile litmus, hermetic fixture fix; order 384 deploy residual filed)
+
+- **Host**: forge, `linux-next`, agent forge-chaparrita-fable5-20260716T1726Z.
+  Credential guard `ok:forge-git-mirror`. Worktree clean at start.
+- **Sync anomaly (live repro of the order-368/369 read-path gap)**: the forge
+  mirror served `linux-next` at 5343c856 (2026-07-08 vintage) while its own
+  `refs/remotes/origin/linux-next` held 44a45c24 — the real GitHub head, 516
+  commits ahead (today's whole coordination window). Recovered by fetching
+  the mirror's tracking refs explicitly and fast-forwarding; the running
+  mirror image predates the 10c0c9b3 reconcile hook. First push of the cycle
+  (461f6bc2) healed the serving head. Deployment residual filed as ready
+  order 384 (podman host: rebuild tillandsias-git, restart, live-verify).
+- **Worker drain (one packet, forge_cycle_budget)**: order 369
+  `git-mirror-pre-reconcile-impl` — expired-lease takeover (code had landed
+  2026-07-15 in 10c0c9b3 with no litmus/closure). Added relay-verified-ack
+  fixture case 4 driving the REAL hooks: stale-push rejection auto-reconciles
+  exported heads, stranded same-named head survives the non-forced fetch,
+  plain fetch/rebase/retry converges (efa54b5c). Suite 5/5 PASS. Packet done.
+- **Bycatch**: the ack fixture was RED in-forge on the committed tree — the
+  forge's global core.hooksPath redirection (GIT_CONFIG_GLOBAL) silently
+  disabled the fixture upstream's reject hook (case 3 never rejected).
+  Fixture now pins hermetic git config scopes.
+- **E2E gates**: `e2e-preflight eligibility` = `skip:no-podman-binary` —
+  local-build gate skipped, verdict recorded once.
+- **Direction (web containers)**: theme core packet 375 needs podman
+  (pickup_role linux) — not forge-eligible; this cycle instead cleared the
+  mirror-transparency blocker class that stalls every in-forge theme agent.
+- **Filed**: forge-image-sanctioned-yaml-validator-gap-2026-07-16 (no
+  tillandsias-policy/ruby in forge; yq/yamllint unblessed),
+  forge-stale-skill-snapshot-at-launch-2026-07-16 (session ran on skill text
+  516 commits stale until post-sync re-read; greedy-drain note was already
+  superseded by order 264), addendum on
+  git-mirror-pre-reconcile-research-2026-07-15 (live repro + closure).
 
 ## Cycle 2026-07-16T08:24Z→08:30Z (forge — meta-orchestration: order 374 DONE — MCP discoverability litmus + spec tool-surface requirement)
 
@@ -213,6 +627,118 @@ web-share-release-milestone (order 373).
 - **Build**: `./build.sh --check` green; 249+ headless tests pass (0 failures).
   Commit `5dda534f`, pushed to `linux-next`.
 - **Worker drain**: one packet drained (364), per recurrent-loop budget.
+
+## Cycle 2026-07-16T12:24Z→12:40Z (macos — meta-orchestration: LOOP WINDOW CLOSE — 6-cycle summary; goal one credential from done)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T1224Z
+  (operator /loop iteration 6 of 6; window 07:30→12:30Z). Guard
+  `ok:gh-keyring`; boundary clean; no new sibling commits (all host
+  windows now closed).
+- **Window summary (macOS lane, operator goal: BigPickle/Hy3 in-forge
+  /meta-orchestration)**:
+  1. Root-caused week-stale install; fresh stack + findings (1db61fac).
+  2. Vault backoff panic FIXED (c40db47a); crash-skew wedge recovered +
+     filed (promoted to order 383 with Linux repro).
+  3. FIRST macOS in-forge smoke PASS — big-pickle, MO-SMOKE grammar
+     honored (08:27Z).
+  4. Transparent-push chain LIVE: ForgeLaunch vault edge + opencode-lane
+     ensure (35253356), lib-common `git -C` + bare-gated insteadOf
+     (559190c3), mirror rewrite verified in-lane, push --dry-run clean.
+     Order 349 blocked→ready, criteria 1+2 PASS live.
+  5. v0.3.260716.7 curl-install e2e from WIPED substrate: release carries
+     the whole chain unattended; installer bash-3.2 bug found+fixed
+     (e15d34fe) with litmus closure (e2b6bf06); embed-integrity green on
+     macOS; 5 packets filed, 2 closed same-day.
+  6. Token rechecked every cycle: 404 throughout — the operator
+     --github-login never happened during the window (overnight hours).
+- **Single residual**: operator `--github-login`, then the one-command
+  closing gate — runbook appended to
+  plan/issues/macos-inforge-transparent-push-chain-live-2026-07-16.md
+  (Operator handoff section).
+
+## Cycle 2026-07-16T11:24Z→11:55Z (macos — meta-orchestration: installer-safety litmus landed; guest-binary embed-integrity green on macOS; token still pending)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T1124Z
+  (operator /loop iteration 5). Guard `ok:gh-keyring`; boundary clean; merged
+  origin/linux-next 44a45c24 (coordinator final heartbeat — their window
+  closed, lanes converged).
+- **Worker drain (one packet, e2b6bf06)**: closed
+  smoke-finding/install-macos-bash32-ellipsis-unbound with its verifiable
+  closure — litmus:installer-ascii-expansion-safety (bash -n + perl
+  byte-level guard against non-ASCII abutting $VAR; BSD grep locale
+  classes proved unreliable for this, documented in the litmus). Same
+  commit: build-macos-tray.sh mirrors zigbuilt guest binaries into
+  target-guest/, closing the macOS half of
+  litmus:guest-binary-embed-integrity (failed on every macOS sweep incl.
+  both in-forge smokes; the version-stamp check caught a live .5-vs-.7
+  staleness during bring-up — the litmus works). ci-release suite 5/5.
+- **Goal state**: vault github token still 404 (rechecked 11:27Z). Loop
+  window ends ~12:30Z; one iteration remains.
+
+## Cycle 2026-07-16T10:24Z→11:30Z (macos — meta-orchestration: v0.3.260716.7 curl-install e2e — release carries the goal chain from a WIPED substrate; installer bash-3.2 bug hot-fixed; in-forge litmus grading triaged)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T1024Z
+  (operator /loop iteration 4). Guard `ok:gh-keyring`; boundary clean; merged
+  origin/linux-next d25c4598 (coordinator merged our chain evidence; release
+  v0.3.260716.7 cut, containing 35253356 + 559190c3 + windows fixes).
+- **Curl-install e2e (channel daily, tag v0.3.260716.7)** — report:
+  plan/issues/smoke-e2e-findings-v0.3.260716.7-2026-07-16.md.
+  - Step 1 install: PASS to /Applications (sha256 ok, release build
+    2d3c9095) with TWO findings: installer died post-install on a
+    bash-3.2 multibyte-ellipsis unbound variable (HOT-FIXED e15d34fe,
+    ships next release) and the smoke skill verified ~/Applications while
+    the installer targets /Applications (skill fixed same commit). Plus a
+    resolver race: the release workflow was still in_progress — macOS
+    assets landed ~9 min after Linux published the tag (packet filed).
+  - Steps 2-3: destructive reset (17G) + pristine --provision: PASS.
+  - Step 4: **harness PASS — the published release carries the full goal
+    chain from nothing, unattended**: five images built from release
+    assets, lane launched with no vault refusal (shipped ForgeLaunch
+    ensure), big-pickle ran the smoke runbook, well-formed verdict, clean
+    teardown exit 0. The verdict content was FAIL (10 litmus: cheatsheet
+    trio, guest-binary-embed, default-image-shape, onboarding,
+    standalone-runtime, dirty-tree-safety, diagnostics-stream,
+    podman-path) — triaged as mostly forge-context-INELIGIBLE tests +
+    known debt; packet
+    smoke-finding/inforge-litmus-context-eligibility-and-verdict-grammar
+    files the two-slice fix (host-kind gates; verdict grammar must define
+    known-failure handling — same state graded PASS at 08:27Z and FAIL at
+    11:15Z).
+- **Goal state**: unchanged residual — operator `--github-login` (token
+  404 rechecked 10:28Z). Everything else now ships in the public release.
+- **Worker drain**: curl-install e2e gate + two hot fixes (installer,
+  skill doc), per recurrent-loop budget.
+
+## Cycle 2026-07-16T09:24Z→10:30Z (macos — meta-orchestration: TRANSPARENT-PUSH CHAIN LIVE on the macOS forge lane — push --dry-run clean through the mirror; only the operator credential remains)
+
+- **Host**: macos, `osx-next`, agent macos-Tlatoanis-MacBook-Air-fable5-20260716T0924Z
+  (operator /loop iteration 3). Guard `ok:gh-keyring`; boundary clean; merged
+  origin/linux-next 4383ea9b (FF; brings windows-260716-2 mint-fails-loud +
+  parse_gitdir_origin_url + the Linux GOAL-cycle close).
+- **Fixed (35253356)**: (a) ForgeLaunch lacked a Vault edge in the order-227
+  dependency graph and run_opencode_mode (ad-hoc, pre-model) never ensured
+  vault — windows-260716-2's fail-loud correctly refused the fresh-boot lane
+  with "Vault container is not running"; graph edge added + lane ensures
+  vault via spawn_blocking. (b) quiet-PTY heartbeat test sourced the
+  operator's ~/.profile through the allowlisted -lc shell (flaked on macOS);
+  hermetic empty HOME via the test's controlled env. 227/227 bin tests.
+- **Probe series (unattended one-shot --opencode)**: refusal → vault
+  self-bootstrap + mirror rewrite LIVE (parse_gitdir_origin_url works on the
+  VZ guest) → after purging stale guest images (three coexisting tag
+  generations!) and on-demand rebuild from fresh embedded assets:
+  `remote.origin.url` = clean GitHub HTTPS, insteadOf resolves fetch+push to
+  `git://tillandsias-git/tillandsias`, and **`git push --dry-run` is CLEAN
+  through the mirror**. Report:
+  plan/issues/macos-inforge-transparent-push-chain-live-2026-07-16.md.
+- **Order 349**: criteria 1+2 PASS live, 3 partial (dry-run clean; real push
+  token-gated) — packet blocked→ready; clone-lane misalignment issue
+  RESOLVED (addendum in file). FRESHNESS datum: on-demand ensure rebuilds
+  missing tags but never retires stale ones (fed to 334/370-372 burndown).
+- **Goal state (operator)**: macOS lane has NO remaining code gaps as
+  measured — a full in-forge /meta-orchestration with real push needs only
+  `--github-login` (token 404 rechecked 09:25Z).
+- **Worker drain**: one packet (order 349 + the two lane fixes), per
+  recurrent-loop budget.
 
 ## Cycle 2026-07-16T08:24Z→08:50Z (macos — meta-orchestration: GOAL SMOKE RUNG DONE — first in-forge /meta-orchestration smoke PASS on macOS (big-pickle); clone-lane origin fix landed)
 

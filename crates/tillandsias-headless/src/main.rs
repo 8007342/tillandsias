@@ -59,8 +59,9 @@ use tillandsias_core::image_builder::{
 };
 use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_podman::{
-    ContainerSpec, MountMode, PodmanClient, current_runtime_lane, detect_gpu_devices,
-    podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
+    ContainerSpec, MountMode, OperationKind, PodmanClient, current_runtime_lane,
+    detect_gpu_devices, podman_cmd_sync, require_desktop_user_session,
+    require_headless_service_account,
 };
 use tracing::{debug, error, info, warn};
 
@@ -130,6 +131,7 @@ fn main() {
     let init = user_args.iter().any(|a| a == "--init");
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
+    let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let with_token = user_args.iter().any(|a| a == "--with-token");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
@@ -284,6 +286,7 @@ fn main() {
         "--diagnostics",
         "--force",
         "--init",
+        "--inference-tier",
         "--status-check",
         "--github-login",
         "--with-token",
@@ -504,6 +507,16 @@ fn main() {
             }
         }
 
+        if inference_tier {
+            // Order 392: the launch-authoritative tier verdict, in the
+            // pinned falsifiable grammar. scripts/inference-tier-probe.sh
+            // defers to this when the binary is installed so the two
+            // detection surfaces can never drift; the sibling lanes
+            // (orders 401/402) grade their guests against it.
+            println!("tier:{}", detect_inference_tier());
+            std::process::exit(0);
+        }
+
         if status_check {
             if let Err(e) = run_status_check(debug) {
                 eprintln!("Error: {}", e);
@@ -580,7 +593,9 @@ fn main() {
             (ForgeAgentMode::Maintenance, "--bash")
         };
         if let Some(project_path) = config_path {
-            if let Err(e) = run_forge_agent_cli_mode(&project_path, mode, flag, debug) {
+            if let Err(e) =
+                run_forge_agent_cli_mode(&project_path, mode, flag, prompt.as_deref(), debug)
+            {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -1642,7 +1657,7 @@ fn capture_containerfile_mtime(root: &Path, image_name: &str) -> Result<(), Stri
     InitBuildState::save_containerfile_mtime(image_name, mtime)
 }
 
-fn ensure_image_exists(
+pub(crate) fn ensure_image_exists(
     root: &Path,
     image_name: &str,
     image_tag: &str,
@@ -2256,6 +2271,10 @@ fn build_catalog_service_run_args(
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     vec![
         "--detach".into(),
+        // Order 387: a crashed/exited container holding the name must not
+        // block relaunch with exit-125; --replace atomically removes it
+        // (mirrors order 314's inference fix and order 378's forge-agent fix).
+        "--replace".into(),
         "--name".into(),
         "tillandsias-proxy".into(),
         "--hostname".into(),
@@ -2520,6 +2539,9 @@ fn build_git_run_args(
     let mut args = vec![
         "--detach".into(),
         "--rm".into(),
+        // Order 387: relaunch a mirror container while an exited one still
+        // holds the name must not fail with exit-125 (mirrors order 314/378).
+        "--replace".into(),
         "--name".into(),
         format!("tillandsias-git-{project_name}"),
         "--hostname".into(),
@@ -2589,6 +2611,154 @@ fn build_git_run_args(
     args
 }
 
+/// Order 392: classify this host's inference hardware tier.
+///
+/// Pinned falsifiable grammar (shared with
+/// scripts/inference-tier-probe.sh, which defers to `--inference-tier`
+/// when the binary is installed): `gpu-cuda | gpu-rocm | metal | cpu`.
+/// The tier is HARDWARE TRUTH only — whether the container runtime can
+/// actually hand the GPU to the container (CDI spec present) is checked
+/// separately at launch, with a loud remedy when it cannot.
+///
+/// Presence of a tool is never enough: Fedora ships rocm-smi on hosts
+/// with no AMD GPU, so each probe must observe actual hardware
+/// (nvidia-smi -L must list a device; rocminfo must report a gfx agent).
+fn detect_inference_tier() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        return "metal";
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let nvidia = std::process::Command::new("nvidia-smi")
+            .arg("-L")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+            .unwrap_or(false);
+        if nvidia {
+            return "gpu-cuda";
+        }
+        let rocm = std::process::Command::new("rocminfo")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("gfx"))
+            .unwrap_or(false);
+        if rocm {
+            return "gpu-rocm";
+        }
+        "cpu"
+    }
+}
+
+/// Order 392: the tier agents are TOLD must match what the container ACTUALLY
+/// runs, not just the hardware. A `gpu-cuda` host with no CDI spec (order 408
+/// automates generation once the toolkit package is present) silently runs
+/// CPU-only — reporting `gpu-cuda` there is a lie that makes agents expect a
+/// GPU that is not delivered. The effective tier downgrades `gpu-cuda` to
+/// `cpu` when podman cannot hand the GPU to the container, while `gpu-rocm`
+/// (explicit --device) and `metal` are delivered as-is. Keeps the pinned
+/// grammar: `gpu-cuda | gpu-rocm | metal | cpu`.
+fn effective_inference_tier() -> &'static str {
+    let hardware = detect_inference_tier();
+    match hardware {
+        "gpu-cuda" if !nvidia_cdi_available() => "cpu",
+        other => other,
+    }
+}
+
+/// Order 392: can rootless podman actually deliver the NVIDIA GPU to a
+/// container? Requires a CDI spec (`nvidia-ctk cdi generate`). Hardware
+/// without CDI is reported loudly with the exact remedy instead of
+/// silently launching a CPU-only "GPU tier".
+///
+/// Checks the system CDI dirs (`/etc/cdi`, `/var/run/cdi`) AND the rootless
+/// USER CDI dir (`$HOME/.config/cdi`) — a user-level spec needs no root to
+/// generate, so honoring it lets the auto-enablement path (order 408) wire
+/// GPU passthrough without a second sudo once the toolkit package is present.
+fn nvidia_cdi_available() -> bool {
+    let mut dirs: Vec<PathBuf> = vec![PathBuf::from("/etc/cdi"), PathBuf::from("/var/run/cdi")];
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(Path::new(&home).join(".config/cdi"));
+    }
+    dirs.iter().any(|dir| {
+        dir.read_dir()
+            .map(|entries| {
+                entries.filter_map(Result::ok).any(|e| {
+                    let name = e.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("nvidia")
+                        && (name.ends_with(".yaml") || name.ends_with(".json"))
+                })
+            })
+            .unwrap_or(false)
+    })
+}
+
+/// Order 392: deterministic inference readiness probe. Polls the ollama API
+/// from inside the `tillandsias-inference` container (where `127.0.0.1:11434`
+/// is reachable regardless of enclave DNS) until `/api/version` answers. This
+/// replaces the old non-blocking, indeterminate "may still be starting" posture
+/// so a forge agent never boots before the endpoint is live. Models may still
+/// be pulling in the background — the API is ready the instant `ollama serve`
+/// is listening, which is all an agent needs to query it.
+///
+/// Returns `Ok(())` once ready, or `Err` after a bounded wait with a truthful
+/// reason (container not running, ollama not yet up, or API error).
+async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<(), String> {
+    use std::time::Duration;
+    const MAX_ATTEMPTS: u32 = 60; // 60 * 1s = 60s budget for a cold ollama boot
+    let mut last = String::from("no probe attempted");
+    for attempt in 1..=MAX_ATTEMPTS {
+        // Probes from inside the container so we don't depend on the enclave
+        // DNS alias resolving from the host launcher.
+        match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    "tillandsias-inference".into(),
+                    "curl".into(),
+                    "-fsS".into(),
+                    "--max-time".into(),
+                    "2".into(),
+                    "http://127.0.0.1:11434/api/version".into(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [forge-launch] inference ready on attempt {attempt}/{MAX_ATTEMPTS}"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(out) => {
+                last = format!("api not ready (exit {})", out.status.unwrap_or(-1));
+            }
+            Err(e) => {
+                last = format!("probe failed: {e}");
+            }
+        }
+        if debug {
+            eprintln!(
+                "[tillandsias] [forge-launch] inference not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    Err(format!(
+        "inference did not become ready within {MAX_ATTEMPTS}s. Last probe: {last}. \
+         Inspect `podman logs tillandsias-inference` for ollama startup errors \
+         (common: ollama binary self-install failed, or model cache volume missing)."
+    ))
+}
+
 fn build_inference_run_args(
     certs_dir: &Path,
     image: &str,
@@ -2619,6 +2789,58 @@ fn build_inference_run_args(
         "--env".into(),
         "OLLAMA_KEEP_ALIVE=24h".into(),
     ];
+
+    // Order 392: tier-appropriate GPU delivery. Hardware truth comes from
+    // detect_inference_tier(); deliverability is gated separately (CDI for
+    // cuda), and a GPU host without CDI degrades to CPU with a LOUD remedy
+    // rather than a silent cpu-tier-in-gpu-clothing.
+    let tier = detect_inference_tier();
+    match tier {
+        "gpu-cuda" => {
+            if nvidia_cdi_available() {
+                args.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
+            } else {
+                // The old remedy ("sudo nvidia-ctk cdi generate …") misleads on
+                // any host without the toolkit installed: nvidia-ctk does not
+                // exist yet, so the command fails "command not found" (operator
+                // repro, Fedora 44, 2026-07-17). The toolkit PACKAGE must be
+                // installed first — and on Fedora/RHEL that needs NVIDIA's repo,
+                // which the default repos do not carry. Order 408 automates the
+                // CDI-spec generation once the package is present.
+                eprintln!(
+                    "[tillandsias] WARNING: NVIDIA GPU detected but no CDI spec — \
+                     inference will run CPU-ONLY. Remedy (Fedora/RHEL): install the \
+                     NVIDIA container toolkit, then generate a CDI spec:\n\
+                     \x20 curl -fsSL https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo\n\
+                     \x20 sudo dnf install -y nvidia-container-toolkit\n\
+                     \x20 sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml\n\
+                     (Debian/Ubuntu: apt-get install nvidia-container-toolkit.) See order 408."
+                );
+            }
+        }
+        "gpu-rocm" => {
+            args.extend([
+                "--device".into(),
+                "/dev/kfd".into(),
+                "--device".into(),
+                "/dev/dri".into(),
+            ]);
+        }
+        _ => {}
+    }
+    args.extend(["--env".into(), format!("TILLANDSIAS_INFERENCE_TIER={tier}")]);
+    // The tier reported to the container must reflect DELIVERABILITY, not just
+    // hardware: a gpu-cuda host without a CDI spec runs CPU-only. The container
+    // entrypoint re-detects actual device access at startup, but agents should
+    // not be promised a GPU that podman cannot hand them. Downgrade here so the
+    // whole enclave agrees on the effective tier (order 392).
+    let effective_tier = effective_inference_tier();
+    if effective_tier != tier {
+        args.extend([
+            "--env".into(),
+            format!("TILLANDSIAS_INFERENCE_TIER={effective_tier}"),
+        ]);
+    }
     args.extend(proxy_env_args());
     args.extend([
         "-v".into(),
@@ -2714,6 +2936,9 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
     vec![
         "--detach".into(),
         "--rm".into(),
+        // Order 387: relaunch while an exited container holds the name must
+        // not fail with exit-125 (mirrors order 314/378).
+        "--replace".into(),
         "--name".into(),
         "tillandsias-router".into(),
         "--hostname".into(),
@@ -8390,6 +8615,16 @@ pub(crate) fn ensure_enclave_for_project(
             )
             .await
             .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+
+        // Order 392: deterministic inference readiness. The forge agent must
+        // not boot into an indeterminate "inference may still be starting"
+        // state. Block until the ollama API answers inside the enclave (the
+        // probe runs from the container's own network namespace where
+        // 127.0.0.1:11434 is reachable), with a truthful bounded wait and a
+        // loud reason on timeout. Models may still be pulling in the
+        // background — the API is up the moment ollama `serve` is listening,
+        // which is all the agent needs to query it.
+        wait_for_inference_ready(&client, debug).await?;
         Ok::<(), String>(())
     })?;
 
@@ -8437,9 +8672,13 @@ pub(crate) fn build_forge_agent_run_args(
         mode,
         debug,
         None,
+        None,
     )
 }
 
+// All arguments are distinct, named forge-launch inputs; bundling them into a
+// struct would add indirection without clarifying the call sites.
+#[allow(clippy::too_many_arguments)]
 fn build_forge_agent_run_args_with_vault(
     project_path: &Path,
     project_name: &str,
@@ -8448,15 +8687,23 @@ fn build_forge_agent_run_args_with_vault(
     mode: ForgeAgentMode,
     debug: bool,
     vault_secret: Option<&str>,
+    prompt: Option<&str>,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
-    let spec = ContainerSpec::new(image)
+    // A prompt-driven Codex run is non-interactive (`codex exec "<prompt>"`):
+    // like the OpenCode CLI prompt path, it must NOT claim a TTY, or podman
+    // refuses with "input device is not a TTY" / the child stops (T-state)
+    // when the parent is a background/e2e harness rather than a live terminal.
+    let non_interactive_prompt = prompt.is_some();
+    let mut spec = ContainerSpec::new(image)
         .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
-        .pids_limit(512)
-        .interactive()
-        .tty()
+        .pids_limit(512);
+    if !non_interactive_prompt {
+        spec = spec.interactive().tty();
+    }
+    let spec = spec
         // Project workspace at /home/forge/src/<project>/ — matches the
         // forge entrypoint clone path and the `$TILLANDSIAS_PROJECT_PATH`
         // contract every agent expects.
@@ -8485,6 +8732,10 @@ fn build_forge_agent_run_args_with_vault(
         .env("PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
+        // Order 392: agents (and the startup context) learn the host's
+        // EFFECTIVE inference tier (hardware truth AND podman deliverability)
+        // without probing hardware they cannot see.
+        .env("TILLANDSIAS_INFERENCE_TIER", effective_inference_tier())
         .tmpfs("/tmp:size=256m,mode=1777")
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
@@ -8515,6 +8766,17 @@ fn build_forge_agent_run_args_with_vault(
     }
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");
+    }
+
+    // Non-interactive Codex prompt (e.g. e2e smoke launching
+    // `/meta-orchestration`): the codex entrypoint reads this env and execs
+    // `codex exec --dangerously-bypass-approvals-and-sandbox "<prompt>"`
+    // instead of the interactive TUI. Codex-only (guarded at the CLI seam
+    // in run_forge_agent_cli_mode); other lanes never receive a prompt.
+    if let Some(prompt) = prompt
+        && matches!(mode, ForgeAgentMode::Codex)
+    {
+        spec = spec.env("TILLANDSIAS_CODEX_PROMPT", prompt);
     }
 
     for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
@@ -8648,6 +8910,13 @@ pub(crate) fn build_forge_agent_run_argv(
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
+    // Order 314 class (order 378): relaunching a forge-agent lane (incl. the
+    // `--bash` maintenance terminal) while an exited container still holds the
+    // name must not die 125 "name already in use". `--replace` atomically
+    // removes the exited container and creates a fresh one — mirrors the
+    // inference-container ensure fix. Applies to every agent mode since all
+    // share the `tillandsias-<project>-forge-<mode>` name.
+    argv.push("--replace".to_string());
     argv.extend(build_forge_agent_run_args(
         project_path,
         project_name,
@@ -8736,8 +9005,19 @@ fn run_forge_agent_cli_mode(
     project_path: &str,
     mode: ForgeAgentMode,
     flag: &str,
+    prompt: Option<&str>,
     debug: bool,
 ) -> Result<(), String> {
+    // A non-interactive prompt is only honored by the Codex lane today
+    // (`codex exec "<prompt>"`); other agent CLIs ignore it. Fail loud
+    // rather than silently drop it so an operator/e2e harness learns the
+    // lane it targeted does not yet support headless prompting.
+    if prompt.is_some() && !matches!(mode, ForgeAgentMode::Codex) {
+        return Err(format!(
+            "{flag} does not support --prompt (non-interactive prompting is Codex-only today); \
+             use --codex --prompt or --opencode --prompt"
+        ));
+    }
     require_desktop_user_session(&format!("tillandsias {flag}"))?;
     report_runtime_lane(flag, debug);
 
@@ -8798,6 +9078,7 @@ fn run_forge_agent_cli_mode(
         mode,
         debug,
         provider_vault_secret,
+        prompt,
     );
 
     let rt = podman_runtime()?;
@@ -8952,23 +9233,18 @@ pub(crate) fn launch_forge_agent(
     // Window title hint for terminals that honor it via env (e.g. foot).
     child.env("TILLANDSIAS_WINDOW_TITLE", mode.window_title(project_name));
 
-    match child.spawn() {
-        Ok(_) => {
-            // Always log spawn success so silent menu clicks are
-            // distinguishable from silent failures. Single line, not gated on
-            // debug — at this level the tray has emitted one click-receipt
-            // line and one spawn-receipt line, no more.
-            // @trace spec:tray-ux
-            eprintln!(
-                "[tillandsias] launch_forge_agent: spawned {} for project '{}' via {}",
-                mode.slug(),
-                project_name,
-                executable
-            );
-            Ok(())
-        }
-        Err(e) => Err(format!("failed to spawn host terminal '{executable}': {e}")),
-    }
+    // Order 385: spawn on a detached thread that waits() so the fast-exiting
+    // Ptyxis GApplication client is reaped instead of leaking a <defunct>
+    // zombie under the tray process. Log spawn intent up-front (single line,
+    // not gated on debug) so silent menu clicks stay distinguishable from
+    // silent failures. @trace spec:tray-ux
+    eprintln!(
+        "[tillandsias] launch_forge_agent: spawned {} for project '{}' via {}",
+        mode.slug(),
+        project_name,
+        executable
+    );
+    crate::spawn_terminal_and_reap(child)
 }
 
 // Module declarations for Phase 4+
@@ -8976,6 +9252,29 @@ mod metrics_server;
 
 #[cfg(feature = "tray")]
 mod tray;
+
+/// Spawn a terminal-launcher child and reap it on a detached thread.
+///
+/// Order 385: Ptyxis's GApplication client exits in milliseconds after
+/// delegating the window to the resident `--gapplication-service`, but
+/// `std::process::Child` does NOT reap on `Drop` — so a bare `.spawn()`-and-drop
+/// leaks a `<defunct>` zombie parented to the tray process, one per terminal
+/// launch. Move the `Child` into a detached thread that calls `wait()` so the
+/// OS reclaims it. Both terminal-launch sites (`launch_forge_agent` here and
+/// `launch_in_terminal` in `tray/mod.rs`) route through this helper. Defined
+/// ungated (binary root) so the non-`tray`-feature build still links.
+pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> {
+    match child.spawn() {
+        Ok(handle) => {
+            std::thread::spawn(move || {
+                let mut handle = handle;
+                let _ = handle.wait();
+            });
+            Ok(())
+        }
+        Err(e) => Err(format!("failed to spawn terminal launcher: {e}")),
+    }
+}
 
 #[cfg(all(feature = "listen-vsock", unix))]
 mod pty_handler;
@@ -10327,6 +10626,95 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn nvidia_cdi_available_honors_user_config_dir() {
+        // Order 408: a user-level ~/.config/cdi/nvidia.yaml (generatable with
+        // NO sudo once the toolkit is installed) must count as "CDI available",
+        // so GPU passthrough can be auto-enabled without a second root step.
+        let _guard = env_lock();
+        let tmp = std::env::temp_dir().join(format!("tilland-cdi-{}", std::process::id()));
+        let cdi = tmp.join(".config/cdi");
+        std::fs::create_dir_all(&cdi).expect("mk temp cdi dir");
+        let prev = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", &tmp);
+        }
+        std::fs::write(cdi.join("nvidia.yaml"), "cdiVersion: 0.6.0\n").expect("write spec");
+        let seen = nvidia_cdi_available();
+        // Restore HOME before asserting so a failure can't leak env state.
+        unsafe {
+            match prev {
+                Some(h) => std::env::set_var("HOME", h),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert!(
+            seen,
+            "a user-level ~/.config/cdi/nvidia.yaml must be honored"
+        );
+    }
+
+    #[test]
+    fn inference_run_args_gate_gpu_delivery_on_tier_and_cdi() {
+        // Order 392: hardware truth (detect_inference_tier) decides the
+        // tier; DELIVERY is gated separately — cuda needs a CDI spec and
+        // the absence path warns with the exact operator remedy instead
+        // of silently launching a cpu-only "gpu tier". The tier is also
+        // exported to the container and the forge env so agents and the
+        // startup context report it without probing hardware.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let tier = detect_inference_tier();
+        assert!(
+            ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&tier),
+            "tier grammar violated: {tier}"
+        );
+        // Order 392: the EFFECTIVE tier is what agents/startup-context are
+        // told — it must match what the container actually runs, not just
+        // hardware. On a host with no GPU (this one), both agree on `cpu`.
+        let effective = effective_inference_tier();
+        assert!(
+            ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&effective),
+            "effective tier grammar violated: {effective}"
+        );
+        assert_eq!(
+            effective, tier,
+            "with no GPU present, effective tier must equal hardware tier"
+        );
+        let window = source_window(source, "fn build_inference_run_args(");
+        assert!(
+            window.contains("nvidia_cdi_available()")
+                && window.contains("nvidia.com/gpu=all")
+                && window.contains("nvidia-ctk cdi generate"),
+            "cuda delivery must be CDI-gated with the remedy named"
+        );
+        // The remedy must tell the operator to INSTALL THE TOOLKIT PACKAGE
+        // first — `nvidia-ctk cdi generate` alone fails "command not found" on
+        // any host without it (operator repro Fedora 44, 2026-07-17). Order 408.
+        assert!(
+            window.contains("nvidia-container-toolkit"),
+            "the CDI remedy must name the toolkit package install, not just nvidia-ctk"
+        );
+        let cdi_window = source_window(source, "fn nvidia_cdi_available(");
+        assert!(
+            cdi_window.contains(".config/cdi"),
+            "nvidia_cdi_available must also honor the rootless user CDI dir (~/.config/cdi)"
+        );
+        // The container env must export the EFFECTIVE tier (downgraded when a
+        // gpu-cuda host has no CDI spec, so it never lies about GPU delivery).
+        assert!(
+            window.contains("TILLANDSIAS_INFERENCE_TIER")
+                && window.contains("effective_inference_tier()"),
+            "effective tier must be exported into the inference container env"
+        );
+        let forge = source_window(source, "fn build_forge_agent_run_args_with_vault(");
+        assert!(
+            forge.contains("TILLANDSIAS_INFERENCE_TIER")
+                && forge.contains("effective_inference_tier()"),
+            "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    #[test]
     fn git_mirror_relay_credential_mint_fails_loud_not_silent() {
         // windows-260716-2: a mint failure used to return None behind a
         // debug-gated message, and the ensure launched the mirror WITHOUT
@@ -10906,6 +11294,38 @@ mod tests {
         );
         assert!(has_arg(&argv, "--interactive"));
         assert!(has_arg(&argv, "--tty"));
+    }
+
+    /// Order 378 (order-314 class): relaunching any forge-agent lane — incl. the
+    /// `--bash` maintenance terminal — while an exited container still holds the
+    /// `tillandsias-<project>-forge-<mode>` name must not die 125 "name already
+    /// in use". `--replace` on `podman run` atomically removes the exited
+    /// container and creates a fresh one.
+    #[test]
+    fn forge_agent_run_args_use_replace_for_idempotent_relaunch() {
+        for mode in [
+            ForgeAgentMode::Maintenance,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Antigravity,
+        ] {
+            let argv = build_forge_agent_run_argv(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+            );
+            assert!(
+                has_arg(&argv, "--replace"),
+                "{:?} run args must include --replace so an exited container \
+                 does not block the next launch with a Permanent exit-125 \
+                 (order 378): {argv:?}",
+                mode
+            );
+        }
     }
 
     // @trace spec:tray-ux, spec:browser-isolation-tray-integration
@@ -11690,6 +12110,33 @@ mod tests {
         }
     }
 
+    /// Order 387: extend order 314's idempotent-relaunch pattern to the sibling
+    /// stack containers. A crashed/exited proxy, git-mirror, or router container
+    /// holding the name must not block the next ensure with a Permanent exit-125
+    /// — `--replace` atomically removes the exited container.
+    #[test]
+    fn stack_run_args_use_replace_for_idempotency() {
+        let certs = PathBuf::from("/tmp/ca");
+
+        let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
+        assert!(
+            has_arg(&proxy, "--replace"),
+            "proxy args must include --replace (order 387): {proxy:?}"
+        );
+
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        assert!(
+            has_arg(&git, "--replace"),
+            "git-mirror args must include --replace (order 387): {git:?}"
+        );
+
+        let router = build_router_run_args(&certs, "tillandsias-router:v1", 8080);
+        assert!(
+            has_arg(&router, "--replace"),
+            "router args must include --replace (order 387): {router:?}"
+        );
+    }
+
     // Regression: the egress network must be ensured on every enclave-bootstrap
     // path (including the early-return-when-enclave-exists case), or the
     // dual-home leg cannot resolve on a clean runtime.
@@ -12077,6 +12524,7 @@ mod tests {
                 mode,
                 false,
                 Some("provider-forge-lease"),
+                None,
             );
             assert!(
                 has_arg(&args, "--secret"),
@@ -12098,12 +12546,88 @@ mod tests {
                 mode,
                 false,
                 Some("must-not-mount"),
+                None,
             );
             assert!(
                 !args.iter().any(|arg| arg.contains("must-not-mount")),
                 "{mode:?} must not mount a provider lease"
             );
         }
+    }
+
+    /// A prompt-driven Codex lane launches NON-INTERACTIVELY: it injects
+    /// TILLANDSIAS_CODEX_PROMPT for the entrypoint's `codex exec` path and
+    /// drops --interactive/--tty so a background e2e harness never wedges in
+    /// T-state (mirrors the OpenCode CLI prompt path). Without a prompt it
+    /// stays the interactive TUI. This is the seam that lets a forge smoke
+    /// agent run /meta-orchestration as Codex alongside OpenCode.
+    #[test]
+    fn codex_prompt_run_is_non_interactive_and_injects_prompt_env() {
+        let prompt = "Use the /meta-orchestration skill";
+        let with_prompt = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            Some("codex-forge-lease"),
+            Some(prompt),
+        );
+        assert!(
+            has_arg(&with_prompt, &format!("TILLANDSIAS_CODEX_PROMPT={prompt}")),
+            "codex prompt run must inject TILLANDSIAS_CODEX_PROMPT; args={with_prompt:?}"
+        );
+        assert!(
+            !has_arg(&with_prompt, "--tty") && !has_arg(&with_prompt, "--interactive"),
+            "codex prompt run must be non-interactive (no --tty/--interactive); args={with_prompt:?}"
+        );
+
+        // No prompt → interactive TUI, no prompt env.
+        let no_prompt = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            Some("codex-forge-lease"),
+            None,
+        );
+        assert!(
+            has_arg(&no_prompt, "--tty") && has_arg(&no_prompt, "--interactive"),
+            "codex without a prompt stays the interactive TUI; args={no_prompt:?}"
+        );
+        assert!(
+            !no_prompt
+                .iter()
+                .any(|a| a.starts_with("TILLANDSIAS_CODEX_PROMPT=")),
+            "codex without a prompt must not inject a prompt env; args={no_prompt:?}"
+        );
+    }
+
+    /// The Codex forge entrypoint must run the non-interactive `codex exec`
+    /// path when (and only when) TILLANDSIAS_CODEX_PROMPT is set, keeping the
+    /// forge-gated bypass flag. Source-shape pin so the headless-prompt seam
+    /// cannot silently regress to TUI-only.
+    #[test]
+    fn codex_entrypoint_has_non_interactive_exec_path() {
+        let entry = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/default/entrypoint-forge-codex.sh"
+        ));
+        assert!(
+            entry.contains("TILLANDSIAS_CODEX_PROMPT"),
+            "codex entrypoint must branch on TILLANDSIAS_CODEX_PROMPT"
+        );
+        assert!(
+            entry.contains("codex exec"),
+            "codex entrypoint must exec `codex exec` for the non-interactive prompt path"
+        );
+        assert!(
+            entry.contains("--dangerously-bypass-approvals-and-sandbox"),
+            "codex entrypoint must keep the forge-gated bypass flag"
+        );
     }
 
     #[test]

@@ -1905,6 +1905,19 @@ inject_startup_context() {
     [[ -d "$project_dir" ]] || return 0
 
     local ctx_file="$project_dir/.forge-startup-context.md"
+    # Order 392: truthful inference readiness — probe the endpoint once
+    # (1s budget) instead of the old indeterminate "may still be starting".
+    # The forge-launch path already blocks until /api/version answers, so this
+    # probe is the authoritative live check; it reports READY or a concrete
+    # not-ready reason, never an ambiguous "may be starting".
+    local _inference_status="NOT-READY"
+    local _inference_reason=""
+    if _probe_out="$(curl -fsS --max-time 1 http://inference:11434/api/tags 2>&1)"; then
+        _inference_status="READY"
+    else
+        _inference_reason="${_probe_out:-connection refused}"
+        _inference_status="NOT-READY (${_inference_reason})"
+    fi
     local branch version agent_name
     branch="$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
     version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
@@ -1926,7 +1939,7 @@ inject_startup_context() {
 
 - **Git**: push/fetch route through the enclave git mirror; GitHub token is handled automatically.
 - **HTTPS proxy**: outbound traffic is cached; CA is trusted at startup.
-- **Inference**: available at \`http://inference:11434\` (Ollama); may still be starting up.
+- **Inference**: \`http://inference:11434\` (Ollama) — ${_inference_status}, tier: ${TILLANDSIAS_INFERENCE_TIER:-unknown}.
 - **Vault**: secrets are available at \`http://vault:8200\`; token is injected automatically.
 
 You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA certs.
@@ -1943,6 +1956,12 @@ Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-pla
 
 Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).
 Key skills: \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
+
+## Code navigation — LSP is available (order 399)
+
+\`rust-analyzer\` ships in this forge. OpenCode's built-in LSP picks it up
+from PATH — prefer structural queries (go-to-definition, references,
+symbol search) over grepping source when resolving code questions.
 
 ## Web servers — you are in a FORGE container (read before starting one)
 

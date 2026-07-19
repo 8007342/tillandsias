@@ -1,0 +1,43 @@
+name: litmus:freshness-inventory-shape
+spec: spec-traceability
+description: >
+  Pin the FRESHNESS rung-2 inventory report grammar (methodology.yaml
+  component_freshness.freshness_record_grammar) and prove the 2026-07-15
+  incident components carry first freshness stamps. The report is advisory;
+  this litmus only asserts the grammar contract and the seed stamps.
+severity: medium
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/freshness-inventory.sh
+  - workspace contains scripts/run-litmus-test.sh
+
+critical_path:
+  - step: "Req: inventory script exists and is executable"
+    command: "mf_file_exists scripts/freshness-inventory.sh && test -x scripts/freshness-inventory.sh && echo 'ok: freshness-inventory.sh present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: freshness-inventory.sh present"
+
+  - step: "Req: report emits the pinned header grammar"
+    command: "scripts/freshness-inventory.sh >/tmp/freshness-report.txt 2>&1; grep -qE '^freshness-inventory: [0-9]+ components, [0-9]+ stamped, [0-9]+ unstamped$' /tmp/freshness-report.txt && grep -qE '^freshness-coverage: [0-9]+%$' /tmp/freshness-report.txt && echo 'ok: header grammar pinned'"
+    timeout_ms: 15000
+    expected_behavior: "ok: header grammar pinned"
+
+  - step: "Req: incident component stamps present (run-litmus-test.sh, tls-test-server.c, environment-isolation)"
+    command: "grep -qE '^#? freshness: auditor=.* date=.* verdict=(refreshed|updated|obsoleted) scope=.*' scripts/run-litmus-test.sh && grep -qE '^// freshness: auditor=.* date=.* verdict=(refreshed|updated|obsoleted) scope=.*' scripts/tls-test-server.c && grep -qE '^# freshness: auditor=.* date=.* verdict=(refreshed|updated|obsoleted) scope=.*' openspec/litmus-tests/litmus-environment-isolation.yaml && echo 'ok: 2026-07-15 incident components stamped'"
+    timeout_ms: 3000
+    expected_behavior: "ok: 2026-07-15 incident components stamped"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "freshness inventory report grammar + incident seed stamps intact"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-freshness-inventory-shape"
+    artifact: "scripts/freshness-inventory.sh + freshness stamps"
+
+rollback:
+  on_failure: "inspect scripts/freshness-inventory.sh output grammar and the # freshness: record lines in the three incident components"
+  command: "scripts/freshness-inventory.sh | head -5"

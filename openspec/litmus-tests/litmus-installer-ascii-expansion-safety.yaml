@@ -1,0 +1,45 @@
+name: litmus:installer-ascii-expansion-safety
+spec: ci-release
+description: >
+  Pin that the curl-install entry scripts stay parseable by macOS system
+  bash 3.2: syntax-clean under bash -n, and no non-ASCII byte directly
+  abuts a $VAR expansion. Bash 3.2 folds a multibyte character adjoining
+  an expansion into the variable NAME, and under set -u the script dies
+  "VAR…: unbound variable" AFTER a successful install (live:
+  v0.3.260716.7 macOS curl-install smoke, 2026-07-16 — packet
+  smoke-finding/install-macos-bash32-ellipsis-unbound).
+severity: high
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/install-macos.sh
+  - workspace contains scripts/install.sh
+
+critical_path:
+  - step: "Req: installer scripts are syntax-clean (bash -n)"
+    command: "for f in scripts/install-macos.sh scripts/install.sh scripts/uninstall.sh; do [ -f \"$f\" ] || continue; bash -n \"$f\" || { echo \"FAIL: bash -n $f\"; exit 1; }; done && echo 'ok: installers syntax-clean'"
+    timeout_ms: 5000
+    expected_behavior: "ok: installers syntax-clean"
+
+  - step: "Req: no non-ASCII byte abuts a $VAR expansion (bash-3.2 name-folding hazard)"
+    command: "perl -ne 'if (/\\$[A-Za-z_]\\w*[^\\x00-\\x7F]/) { print \"$ARGV:$.:$_\"; $bad=1 } END { exit($bad ? 1 : 0) }' scripts/install-macos.sh scripts/install.sh scripts/uninstall.sh && echo 'ok: no multibyte-adjacent expansions'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no multibyte-adjacent expansions"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "installer entry scripts remain bash-3.2 safe"
+  log_fields:
+    spec: "ci-release"
+    test: "installer-ascii-expansion-safety"
+    artifact: "scripts/install-macos.sh + scripts/install.sh + scripts/uninstall.sh"
+
+rollback:
+  on_failure: >
+    A reported line has a multibyte character (ellipsis, em-dash, curly
+    quote) directly after a $expansion — brace the expansion and replace
+    the character with ASCII, e.g. ${VAR}... — comments may keep Unicode;
+    only expansion-adjacent bytes are load-bearing.
+  command: "perl -ne 'print if /[^\\x00-\\x7F]/' scripts/install-macos.sh | head -5"

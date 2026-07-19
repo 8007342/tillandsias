@@ -27,6 +27,9 @@ tracing = { workspace = true }
 # Running. No cycle: control-wire does NOT depend on vm-layer.
 # @trace spec:vsock-transport
 tillandsias-control-wire = { workspace = true }
+# Host free-space probe for the pre-import headroom gate (order 419,
+# tar_to_wsl_import). Same version tillandsias-core pins.
+fs2 = "0.4.3"
 # Behind the `download` feature only (see [features]).
 reqwest = { workspace = true, optional = true }
 sha2 = { workspace = true }

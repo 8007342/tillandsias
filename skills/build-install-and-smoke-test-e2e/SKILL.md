@@ -180,7 +180,26 @@ CONTAINERS="$(podman ps -aq)"; VOLUMES="$(podman volume ls -q)"; IMAGES="$(podma
 printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES" "$IMAGES" \
   | tee "$LOG_DIR/02-empty-store.txt"
 test -z "$CONTAINERS"; test -z "$VOLUMES"; test -z "$IMAGES"
+# Order 386: teardown must leave zero straggling host processes.
+scripts/container-teardown-straggler-probe.sh 2>&1 | tee "$LOG_DIR/02-straggler-probe.log"
+test "${PIPESTATUS[0]}" -eq 0
 ```
+
+(`scripts/e2e-step2-linux.sh` runs this same sequence including the probe.)
+
+#### Teardown straggler guard (order 386)
+
+The straggler probe asserts the operator invariant "tearing down containers
+leaves no straggling host processes": after the full stack teardown it must
+find **zero tray-parented Z-state (zombie) processes** and **zero orphaned
+host-side terminal-launcher processes** (ptyxis/gnome-terminal/kgx/konsole/
+xterm reparented to PID 1 or a dead parent). One line of output, exit 0
+clean / 1 stragglers — the lane fails loud on any straggler. Terminal
+windows opened INTO a container (`podman exec … ptyxis`, e.g. a `tools …
+btop` session) are covered by the orphan half: their host-side launcher is a
+child of the spawning process and is reaped by the order-385
+`spawn_terminal_and_reap` helper when the tray spawned it; terminals the
+OPERATOR opened by hand are operator-owned and only flagged if they orphan.
 
 #### Opt-in fast-iteration mode (Linux only): selective reset
 

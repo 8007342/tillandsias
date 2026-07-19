@@ -187,7 +187,11 @@ if [[ -x "$TRAY_BIN" ]]; then
     if command -v jq >/dev/null 2>&1; then
         DIAG_VERSION="$(echo "$DIAG_JSON" | jq -r '.version' 2>/dev/null || echo '?')"
         DIAG_PIN="$(echo "$DIAG_JSON" | jq -r '.manifest_pin_aarch64_qcow2 // "?"' 2>/dev/null)"
-        say "installed: version=$DIAG_VERSION pin=$DIAG_PIN…"
+        # ASCII only next to expansions: macOS system bash 3.2 folds a
+        # multibyte char abutting $VAR into the variable NAME, and under
+        # set -u the script dies "DIAG_PIN…: unbound variable" AFTER a
+        # successful install (live: v0.3.260716.7 smoke, 2026-07-16).
+        say "installed: version=${DIAG_VERSION} pin=${DIAG_PIN}"
     fi
 else
     die "$TRAY_BIN missing or not executable; tarball extracted but binary is broken"

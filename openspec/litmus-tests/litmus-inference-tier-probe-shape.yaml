@@ -1,0 +1,40 @@
+# @trace spec:inference-container
+name: litmus:inference-tier-probe-shape
+spec: inference-container
+phase: pre-build
+description: Verify the inference hardware-tier probe emits the pinned falsifiable grammar, agrees with hardware truth, and degrades honestly
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/inference-tier-probe.sh
+  - bash is available in PATH
+
+critical_path:
+  - step: "probe exists, is executable, and documents the grammar"
+    command: "test -x scripts/inference-tier-probe.sh && grep -Fq 'tier:(gpu-cuda|gpu-rocm|metal|cpu)' scripts/inference-tier-probe.sh"
+    timeout_ms: 3000
+
+  - step: "probe emits exactly one line in the pinned grammar"
+    command: "out=$(scripts/inference-tier-probe.sh); echo \"$out\"; [ \"$(printf '%s' \"$out\" | wc -l)\" -le 1 ] && printf '%s' \"$out\" | grep -qE '^tier:(gpu-cuda|gpu-rocm|metal|cpu)$'"
+    timeout_ms: 10000
+
+  - step: "falsifiability: with GPU tools shadowed by failing stubs, a linux host degrades to tier:cpu (darwin stays tier:metal)"
+    command: "d=$(mktemp -d); for t in nvidia-smi rocminfo tillandsias; do printf '#!/bin/sh\\nexit 1\\n' > \"$d/$t\"; chmod +x \"$d/$t\"; done; out=$(PATH=\"$d:$PATH\" scripts/inference-tier-probe.sh); rm -rf \"$d\"; echo \"$out\"; if [ \"$(uname -s)\" = Darwin ]; then [ \"$out\" = tier:metal ]; else [ \"$out\" = tier:cpu ]; fi"
+    timeout_ms: 10000
+
+  - step: "runtime device gating: cuda tier requires a CDI spec and warns with the remedy when absent (source pin)"
+    command: "grep -Fq 'nvidia_cdi_available' crates/tillandsias-headless/src/main.rs && grep -Fq 'nvidia-ctk cdi generate' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+  expected_log: "tier probe emits hardware truth in the pinned grammar; GPU delivery is gated on CDI with a loud remedy"
+  log_fields:
+    spec: "inference-container"
+    test: "inference-tier-probe-shape"
+
+rollback:
+  on_failure: "inspect scripts/inference-tier-probe.sh and detect_inference_tier()/build_inference_run_args in crates/tillandsias-headless/src/main.rs"
+  command: "sed -n '1,60p' scripts/inference-tier-probe.sh"

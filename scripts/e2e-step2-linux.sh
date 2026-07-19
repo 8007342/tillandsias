@@ -11,3 +11,8 @@ CONTAINERS="$(podman ps -aq)"; VOLUMES="$(podman volume ls -q)"; IMAGES="$(podma
 printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES" "$IMAGES" \
   | tee "$LOG_DIR/02-empty-store.txt"
 test -z "$CONTAINERS"; test -z "$VOLUMES"; test -z "$IMAGES"
+# Order 386: the full stack teardown above must leave zero straggling host
+# processes — no tray-parented zombies, no orphaned terminal launchers. The
+# probe exits nonzero on any straggler and fails the lane loud.
+"$SCRIPT_DIR/container-teardown-straggler-probe.sh" 2>&1 | tee "$LOG_DIR/02-straggler-probe.log"
+test "${PIPESTATUS[0]}" -eq 0

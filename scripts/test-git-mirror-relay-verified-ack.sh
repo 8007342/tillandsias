@@ -13,6 +13,15 @@ export GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@example.invalid
 export HOME="$WORK/home"
 mkdir -p "$HOME"
 
+# Hermetic git config: the forge exports GIT_CONFIG_GLOBAL with a global
+# core.hooksPath redirection, which silently disables every fixture repo's
+# own hooks (the upstream reject hook in case 3 never fired in-forge).
+# Point both non-local scopes at fixture-owned empty files so hook
+# resolution, insteadOf rewrites, and credential helpers cannot leak in.
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL="$WORK/gitconfig"
+: > "$WORK/gitconfig"
+
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 UPSTREAM="$WORK/upstream.git"
@@ -91,4 +100,49 @@ grep -Fq 'git push --atomic "$PUSH_URL" $REFSPECS' "$ROOT/images/git/relay-refs.
     || fail "relay invoked an unsafe broad push"
 echo "case 3 ok: rejected multi-ref relay is atomic on both repositories"
 
-echo "PASS: git mirror relay-verified acknowledgement fixture (order 318)"
+# Case 4: order-369 auto-reconcile. When upstream advanced independently and
+# the relay rejects a stale push, the failure path must fast-forward the
+# mirror's exported heads from upstream — so the client's ordinary
+# fetch/rebase/retry loop converges through the mirror alone — while a
+# locally stranded same-named head survives the non-forced fetch untouched.
+rm -f "$UPSTREAM/hooks/pre-receive"
+
+SCOUT="$WORK/scout"
+git clone -q -b main "$UPSTREAM" "$SCOUT"
+git -C "$SCOUT" config core.hooksPath ""
+echo upstream-advance > "$SCOUT/file"
+git -C "$SCOUT" commit -qam upstream-advance
+git -C "$SCOUT" push -q origin HEAD:refs/heads/main
+UPSTREAM_NEW="$(git -C "$UPSTREAM" rev-parse refs/heads/main)"
+MIRROR_STALE="$(git -C "$MIRROR" rev-parse refs/heads/main)"
+[ "$UPSTREAM_NEW" != "$MIRROR_STALE" ] || fail "case4 setup: upstream did not advance beyond the mirror"
+
+git -C "$CLIENT" push -q mirror accepted
+BASE_ACCEPTED="$(git -C "$MIRROR" rev-parse refs/heads/accepted)"
+STRANDED="$(git -C "$MIRROR" commit-tree "refs/heads/accepted^{tree}" -p "$BASE_ACCEPTED" -m stranded </dev/null)"
+git -C "$MIRROR" update-ref refs/heads/accepted "$STRANDED"
+
+echo stale-work > "$CLIENT/file2"
+git -C "$CLIENT" add file2
+git -C "$CLIENT" commit -qm stale-work
+if git -C "$CLIENT" push mirror HEAD:refs/heads/main >"$WORK/stale.log" 2>&1; then
+    fail "case4: stale push succeeded despite upstream divergence"
+fi
+grep -Fq "Reconcile fetch" "$WORK/stale.log" \
+    || fail "case4: rejected relay did not attempt the reconcile fetch"
+RECONCILED="$(git -C "$MIRROR" rev-parse refs/heads/main)"
+[ "$RECONCILED" = "$UPSTREAM_NEW" ] \
+    || fail "case4: mirror main $RECONCILED did not fast-forward to upstream $UPSTREAM_NEW"
+KEPT="$(git -C "$MIRROR" rev-parse refs/heads/accepted)"
+[ "$KEPT" = "$STRANDED" ] || fail "case4: reconcile clobbered the stranded mirror head"
+
+git -C "$CLIENT" fetch -q mirror main
+git -C "$CLIENT" rebase -q "$(git -C "$CLIENT" rev-parse FETCH_HEAD)" >/dev/null 2>&1 \
+    || fail "case4: client rebase onto the reconciled mirror head failed"
+git -C "$CLIENT" push mirror HEAD:refs/heads/main >"$WORK/retry.log" 2>&1 \
+    || { cat "$WORK/retry.log" >&2; fail "case4: rebased retry push was rejected"; }
+[ "$(git -C "$MIRROR" rev-parse refs/heads/main)" = "$(git -C "$UPSTREAM" rev-parse refs/heads/main)" ] \
+    || fail "case4: retry did not converge mirror and upstream"
+echo "case 4 ok: rejected stale push auto-reconciles the mirror and the retry loop converges"
+
+echo "PASS: git mirror relay-verified acknowledgement fixture (orders 318+369)"

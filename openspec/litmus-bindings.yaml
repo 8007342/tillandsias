@@ -307,6 +307,7 @@ specs:
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
+  - litmus:forge-lsp-availability-shape
   coverage_ratio: 80
   last_verified: '2026-07-16'
 - spec_id: forge-forward-compat
@@ -422,6 +423,7 @@ specs:
   - litmus:inference-deferred-model-pulls
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
+  - litmus:inference-tier-probe-shape
   coverage_ratio: 80
   last_verified: '2026-07-04'
 - spec_id: inference-host-side-pull
@@ -495,8 +497,11 @@ specs:
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
   - litmus:idiomatic-layers-doctrine-shape
+  - litmus:large-packet-eligibility-doctrine-shape
+  - litmus:version-release-and-forge-selfservice-shape
+  - litmus:ephemerality-invariant-shape
   coverage_ratio: 100
-  last_verified: '2026-07-10'
+  last_verified: '2026-07-18'
 - spec_id: meta-orchestration
   status: active
   litmus_tests:
@@ -711,8 +716,10 @@ specs:
   - litmus:litmus-runner-backslash-escaping-shape
   - litmus:litmus-stdlib-portability-shape
   - litmus:litmus-name-filter-fail-loud-shape
-  coverage_ratio: 77
-  last_verified: '2026-07-12'
+  - litmus:plan-engine-invariants-shape
+  - litmus:freshness-inventory-shape
+  coverage_ratio: 83
+  last_verified: '2026-07-17'
 - spec_id: subdomain-naming-flip
   status: active
   litmus_tests:
@@ -949,6 +956,12 @@ specs:
   - litmus:host-guest-no-cfg-transport-selection
   coverage_ratio: 67
   last_verified: '2026-07-06'
+- spec_id: vm-provisioning-lifecycle
+  status: active
+  litmus_tests:
+  - litmus:vm-launch-graceful-failure-shape
+  coverage_ratio: 20
+  last_verified: '2026-07-18'
 - spec_id: vsock-transport
   status: active
   litmus_tests:

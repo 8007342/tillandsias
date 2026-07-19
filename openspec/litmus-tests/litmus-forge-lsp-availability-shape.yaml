@@ -1,0 +1,39 @@
+# @trace spec:forge-environment-discoverability
+name: litmus:forge-lsp-availability-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: Verify rust-analyzer ships in the forge image and the bootstrap surfaces the LSP affordance to agents
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/Containerfile.base
+
+critical_path:
+  - step: "rust-analyzer is pinned in the forge-base package layer"
+    command: "grep -E 'rust-analyzer' images/default/Containerfile.base"
+    timeout_ms: 3000
+
+  - step: "the startup context tells agents LSP is available (organic affordance, order 399)"
+    command: "grep -F 'rust-analyzer' images/default/lib-common.sh"
+    timeout_ms: 3000
+
+  - step: "OpenCode config overlay enables LSP (order 399)"
+    command: "grep -q '\"lsp\": true' images/default/config-overlay/opencode/config.json"
+    timeout_ms: 3000
+
+  - step: "forge-base includes diffutils, patch, file, gettext, diffstat (order 412)"
+    command: "grep -q 'diffutils patch file gettext diffstat' images/default/Containerfile.base"
+    timeout_ms: 3000
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "rust-analyzer in image + affordance line in startup context"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-lsp-availability-shape"
+
+rollback:
+  on_failure: "inspect images/default/Containerfile.base package list and inject_startup_context in images/default/lib-common.sh"
+  command: "grep -n 'rust' images/default/Containerfile.base"

@@ -1,0 +1,71 @@
+# @trace spec:methodology-accountability
+#
+# Pins two doctrines decided by The Tlatoāni 2026-07-17:
+#   1. version_aware_release_planning — sequential numbered release buckets
+#      (v0.3 → v0.4 → …), stability-gated not time-gated; every open packet
+#      carries `desired_release: vX.Y`; cross-platform deps gated by release
+#      order.
+#   2. in_forge_agent_self_service — in-forge agents unblock future launches by
+#      filing durable, verifiable requests in the shared checkout
+#      (plan/forge-improvements/proposals or a forge-tagged plan/issues packet).
+# Falsifies drift in the canonical methodology blocks, the work_item_schema
+# `desired_release` field, and the /advance-work-from-plan cross-references so
+# unattended agents keep inheriting both rules.
+name: litmus:version-release-and-forge-selfservice-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin methodology/distributed-work.yaml version_aware_release_planning +
+  in_forge_agent_self_service + the desired_release schema field, and their
+  grepable cross-references in skills/advance-work-from-plan.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains methodology/distributed-work.yaml
+  - workspace contains skills/advance-work-from-plan/SKILL.md
+
+critical_path:
+  - step: "version-aware release planning block exists with its load-bearing sub-rules"
+    command: "grep -q 'version_aware_release_planning:' methodology/distributed-work.yaml && grep -q 'the_release_number_is_the_minor:' methodology/distributed-work.yaml && grep -q 'cross_platform_gating:' methodology/distributed-work.yaml && grep -q 'release_readiness:' methodology/distributed-work.yaml && echo 'ok: release-block'"
+    timeout_ms: 3000
+    expected_behavior: "ok: release-block"
+
+  - step: "work_item_schema carries the desired_release field"
+    command: "grep -q 'desired_release:' methodology/distributed-work.yaml && echo 'ok: desired-release-field'"
+    timeout_ms: 3000
+    expected_behavior: "ok: desired-release-field"
+
+  - step: "in-forge self-service block exists with the loop + where-to-file"
+    command: "grep -q 'in_forge_agent_self_service:' methodology/distributed-work.yaml && grep -q 'the_loop:' methodology/distributed-work.yaml && grep -q 'where_to_file:' methodology/distributed-work.yaml && echo 'ok: selfservice-block'"
+    timeout_ms: 3000
+    expected_behavior: "ok: selfservice-block"
+
+  - step: "worker skill references both doctrines"
+    command: "grep -q 'version_aware_release_planning' skills/advance-work-from-plan/SKILL.md && grep -q 'in_forge_agent_self_service' skills/advance-work-from-plan/SKILL.md && echo 'ok: worker-skill-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: worker-skill-wired"
+
+  - step: "methodology file still parses as YAML"
+    command: "if command -v cargo >/dev/null 2>&1; then cargo run -q -p tillandsias-policy -- validate-yaml methodology/distributed-work.yaml >/dev/null && echo 'ok: yaml-parses'; else ruby -ryaml -e 'YAML.load_file(%q(methodology/distributed-work.yaml)); puts %q(ok: yaml-parses)'; fi"
+    timeout_ms: 120000
+    expected_behavior: "ok: yaml-parses"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "version-aware-release + in-forge-self-service doctrines pinned (blocks + desired_release field + worker-skill wiring + parseable)"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "version-release-and-forge-selfservice-shape"
+    artifact: "methodology/distributed-work.yaml + advance-work-from-plan SKILL.md cross-refs"
+
+rollback:
+  on_failure: >
+    A 2026-07-17 planning doctrine drifted. Restore
+    version_aware_release_planning (sequential release buckets, desired_release
+    field, cross-platform gating, release_readiness) and/or
+    in_forge_agent_self_service (the shared-checkout filing loop + where_to_file)
+    in methodology/distributed-work.yaml, and keep both grepable
+    cross-references in skills/advance-work-from-plan/SKILL.md.
+  command: "grep -n 'version_aware_release_planning\\|in_forge_agent_self_service\\|desired_release' methodology/distributed-work.yaml skills/advance-work-from-plan/SKILL.md"

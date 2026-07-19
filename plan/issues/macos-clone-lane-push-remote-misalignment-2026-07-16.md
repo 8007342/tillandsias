@@ -49,3 +49,14 @@ push to an RO path.
 - Live: order-349 gate rerun on macOS records an in-forge `git push --dry-run`
   reaching the mirror (or failing with the honest diagnosis), never
   `remote unpack failed`/RO-filesystem errors against src-host.
+
+## RESOLVED 2026-07-16 (same day, live verification)
+
+Both halves landed and verified in-lane on macOS (probe series in
+plan/issues/macos-inforge-transparent-push-chain-live-2026-07-16.md):
+`git -C` origin resolution + bare-gated insteadOf (559190c3) in
+lib-common, windows' `parse_gitdir_origin_url` fallback for the gitconfig
+rewrite, and the order-227 Vault edge + opencode-lane vault ensure
+(35253356). After an on-demand image rebuild from fresh embedded assets,
+in-forge `git remote -v` resolves fetch+push to the enclave mirror and
+`git push --dry-run` is clean. Residual is only the operator credential.

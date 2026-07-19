@@ -164,9 +164,17 @@ impl TrayProgress {
 
 impl ProvisionProgress for TrayProgress {
     fn report_phase(&self, phase: ProvisionPhase) {
+        // Mirror every UX phase transition into tracing: the INFO relays to
+        // tray.log AND the Windows Event Log, so a power user can reconstruct
+        // how far provisioning got even when the tray UI is gone.
+        // @trace spec:windows-event-logging
+        tracing::info!(phase = phase.status_text(), "provisioning phase");
         update_status_text(phase.status_text(), self.hwnd.0);
     }
     fn report_message(&self, message: &str) {
+        // High-frequency progress refinements (download % ticks) stay at
+        // DEBUG: file-visible under RUST_LOG=debug, never Event Log spam.
+        tracing::debug!(message, "provisioning progress");
         // Sub-messages refine the current phase chip in-place — e.g. the
         // recipe path streams "Downloading rootfs N / M MB (P%)" through here
         // during materialization, mirroring the macOS fetch-progress chip
@@ -502,19 +510,105 @@ fn maybe_rotate_log(dir: &std::path::Path) {
 /// Before opening the appender, [`maybe_rotate_log`] rotates the existing
 /// `tray.log` to `tray.log.bak` if it exceeds [`TRAY_LOG_MAX_BYTES`] so the
 /// log directory's disk footprint stays bounded at ~10 MiB.
-fn init_tracing() {
+///
+/// Alongside the file layer, [`crate::eventlog::try_layer`] relays
+/// INFO/WARN/ERROR to the Windows Application Event Log (source
+/// "Tillandsias") so failures are discoverable in Event Viewer even when
+/// the file log is unreachable — e.g. mid crash loop on an end-user
+/// machine. @trace spec:windows-event-logging
+pub(crate) fn init_tracing() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
     maybe_rotate_log(&dir);
     let appender = tracing_appender::rolling::never(&dir, "tray.log");
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    let _ = tracing_subscriber::fmt()
+    let fmt_layer = tracing_subscriber::fmt::layer()
         .with_writer(appender)
         .with_ansi(false)
-        .with_target(false)
-        .with_env_filter(filter)
+        .with_target(false);
+    let _ = tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt_layer)
+        .with(crate::eventlog::try_layer())
         .try_init();
+}
+
+/// Order 420 (windows-vm-launch-failure-diagnostics-capture): on a TERMINAL
+/// VM-launch failure the tray auto-writes one diagnostic bundle a
+/// non-technical user can share — the "no Claude there to troubleshoot" gap.
+/// Fixed path (latest failure wins, no unbounded growth):
+/// `%LOCALAPPDATA%\tillandsias\logs\launch-failure-diagnostics.json`.
+/// Contents: the failure reason, the full `--diagnose` report (WSL version,
+/// distro registration, wire probe, manifest pin, …), and a redacted tail of
+/// tray.log. Secrets are redacted (`redact_secret_tokens`); the bundle path
+/// is logged at ERROR so it also lands in the Windows Event Log.
+/// @trace spec:windows-event-logging
+fn write_failure_diagnostics_bundle(reason: &str) -> Option<std::path::PathBuf> {
+    let dir = log_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("launch-failure-diagnostics.json");
+    let report = collect_report();
+    let log_tail: Vec<String> = std::fs::read_to_string(log_file_path())
+        .map(|c| {
+            let lines: Vec<&str> = c.lines().collect();
+            lines
+                .iter()
+                .rev()
+                .take(200)
+                .rev()
+                .map(|l| redact_secret_tokens(l))
+                .collect()
+        })
+        .unwrap_or_default();
+    let bundle = serde_json::json!({
+        "schema": "tillandsias-launch-failure-bundle/v1",
+        "reason": redact_secret_tokens(reason),
+        "diagnose": report,
+        "tray_log_tail": log_tail,
+    });
+    let bytes = serde_json::to_vec_pretty(&bundle).ok()?;
+    std::fs::write(&path, bytes).ok()?;
+    tracing::error!(bundle = %path.display(), "launch-failure diagnostics bundle written");
+    Some(path)
+}
+
+/// Mask credential-shaped words so the shareable bundle can never leak a
+/// token: GitHub token prefixes (ghp_/gho_/ghu_/ghs_/ghr_/github_pat_) and
+/// Vault token prefixes (hvs./hvb./s.). Whitespace-delimited, conservative —
+/// masks the whole word on a prefix hit. Pure for unit pinning.
+fn redact_secret_tokens(line: &str) -> String {
+    const PREFIXES: [&str; 9] = [
+        "ghp_",
+        "gho_",
+        "ghu_",
+        "ghs_",
+        "ghr_",
+        "github_pat_",
+        "hvs.",
+        "hvb.",
+        "s.",
+    ];
+    line.split_whitespace()
+        .map(|word| {
+            // Match the prefix ANYWHERE in the word (`token=ghp_…`,
+            // `Authorization:ghp_…`) and require a plausible secret length
+            // after it so short prose ("2.5 s.") survives. Over-masking is
+            // the correct bias for a shareable bundle.
+            let leaked = PREFIXES.iter().any(|p| {
+                word.find(p)
+                    .is_some_and(|idx| word.len() - idx > p.len() + 8)
+            });
+            if leaked {
+                "[REDACTED]".to_string()
+            } else {
+                word.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Reveal the tray log file in Explorer (`/select,` highlights it in its
@@ -1901,10 +1995,12 @@ fn distro_running() -> bool {
 /// version payload (`"10.0.26200.8524"`) is locale-neutral so the whole
 /// line is safe to surface as-is.
 fn sniff_windows_version() -> Option<String> {
-    let output = std::process::Command::new("cmd")
-        .args(["/c", "ver"])
-        .output()
-        .ok()?;
+    let mut cmd = std::process::Command::new("cmd");
+    cmd.args(["/c", "ver"]);
+    // CREATE_NO_WINDOW: a console child spawned from the GUI tray otherwise
+    // flashes a blank terminal (keepalive-terminal-visibility class).
+    tillandsias_vm_layer::no_window_sync(&mut cmd);
+    let output = cmd.output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -1920,26 +2016,29 @@ fn collect_report() -> DiagnoseReport {
     let log = log_file_path();
     let log_exists = log.exists();
 
-    let wt_present = std::process::Command::new("where.exe")
-        .arg("wt.exe")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let wt_present = {
+        let mut cmd = std::process::Command::new("where.exe");
+        cmd.arg("wt.exe");
+        tillandsias_vm_layer::no_window_sync(&mut cmd);
+        cmd.output().map(|o| o.status.success()).unwrap_or(false)
+    };
 
     // `wsl.exe -l -q` emits UTF-16LE with a BOM by default; `WSL_UTF8=1` forces
     // plain UTF-8 so `String::from_utf8_lossy` actually sees readable lines.
     // Without this, `lines().any(eq DISTRO_NAME)` returned false even on a
     // registered distro — the bytes parsed as mojibake.
-    let distro_registered = std::process::Command::new("wsl.exe")
-        .env("WSL_UTF8", "1")
-        .args(["-l", "-q"])
-        .output()
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .any(|l| l.trim() == crate::wsl_lifecycle::DISTRO_NAME)
-        })
-        .unwrap_or(false);
+    let distro_registered = {
+        let mut cmd = std::process::Command::new("wsl.exe");
+        cmd.env("WSL_UTF8", "1").args(["-l", "-q"]);
+        tillandsias_vm_layer::no_window_sync(&mut cmd);
+        cmd.output()
+            .map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .any(|l| l.trim() == crate::wsl_lifecycle::DISTRO_NAME)
+            })
+            .unwrap_or(false)
+    };
 
     let manifest_pin =
         parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.oci.tar.xz");
@@ -2278,6 +2377,36 @@ fn spawn_provisioning(hwnd: HWND) {
                 match lifecycle.spawn_keepalive(is_debug) {
                     Ok(_keepalive) => {
                         tracing::info!("VM keepalive holding the control wire warm");
+                        // Order 417: if the bounded keepalive supervisor gives
+                        // up (terminal failed state), flip the tray out of
+                        // Ready into an actionable failed chip + error toast,
+                        // and re-arm Retry. Without this the menu would keep
+                        // claiming Ready while nothing holds the VM open.
+                        let mut terminal_rx = _keepalive.terminal_rx();
+                        tokio::task::spawn_local(async move {
+                            while terminal_rx.changed().await.is_ok() {
+                                let reason = terminal_rx.borrow_and_update().clone();
+                                if let Some(reason) = reason {
+                                    update_status_text("\u{1F534} VM connection lost — Retry", hwnd);
+                                    show_balloon(
+                                        hwnd,
+                                        "Tillandsias — VM connection lost",
+                                        &reason,
+                                        BalloonSeverity::Error,
+                                    );
+                                    // Order 420: keepalive give-up is a
+                                    // terminal failure too — capture the
+                                    // bundle.
+                                    let _ = tokio::task::spawn_blocking(move || {
+                                        write_failure_diagnostics_bundle(&reason)
+                                    })
+                                    .await;
+                                    PROVISIONING_ACTIVE
+                                        .store(false, std::sync::atomic::Ordering::SeqCst);
+                                    break;
+                                }
+                            }
+                        });
                         // Live status, push-first (order 154 slices 1-3): a
                         // dedicated reader task subscribes to all four push
                         // topics (VmStatus + LoginState + CloudProjects +
@@ -2394,6 +2523,25 @@ fn spawn_provisioning(hwnd: HWND) {
                 } else {
                     update_status_text("\u{1F534} Provisioning failed — Retry", hwnd);
                 }
+                // Order 420: terminal launch failure — auto-capture the
+                // shareable diagnostics bundle and tell the user where it
+                // is, so a remote crash is debuggable with zero live help.
+                let reason = err_text.clone();
+                tokio::task::spawn_local(async move {
+                    let written =
+                        tokio::task::spawn_blocking(move || write_failure_diagnostics_bundle(&reason))
+                            .await
+                            .ok()
+                            .flatten();
+                    if let Some(path) = written {
+                        show_balloon(
+                            hwnd,
+                            "Tillandsias — diagnostics saved",
+                            &format!("Share this file when reporting the problem:\n{}", path.display()),
+                            BalloonSeverity::Info,
+                        );
+                    }
+                });
                 // Re-enable Retry.
                 PROVISIONING_ACTIVE.store(false, SeqCst);
             }
@@ -2874,6 +3022,52 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 420: credential-shaped words never survive into the shareable
+    /// diagnostics bundle; ordinary text passes through untouched.
+    #[test]
+    fn redaction_masks_github_and_vault_tokens_only() {
+        let line = "auth ok token=ghp_16C7e42F292c6912E7710c838347Ae178B4a done";
+        let out = redact_secret_tokens(line);
+        assert!(out.contains("[REDACTED]"), "gh token must be masked: {out}");
+        assert!(!out.contains("ghp_16C7"), "raw token must be gone");
+        assert!(out.starts_with("auth ok"), "context words survive");
+
+        let vault = "vault login hvs.CAESIJlU2v3AbCdEfGh1234567890 succeeded";
+        let vout = redact_secret_tokens(vault);
+        assert!(vout.contains("[REDACTED]"));
+        assert!(!vout.contains("hvs.CAESI"));
+
+        // Innocent text with dots and underscores is untouched, including
+        // short "s." words (the length guard prevents false positives).
+        let plain = "phase fedora-download attempt 3 took 2.5 s. wsl_lifecycle ok";
+        assert_eq!(redact_secret_tokens(plain), plain);
+    }
+
+    /// Order 420: the bundle lands at the fixed shareable path with the
+    /// schema marker, redacted reason, and the diagnose report embedded.
+    #[test]
+    fn failure_bundle_writes_redacted_json() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // SAFETY: single-process test env mutation, as sibling tests do.
+        unsafe {
+            std::env::set_var("LOCALAPPDATA", tmp.path());
+        }
+        let path = write_failure_diagnostics_bundle(
+            "start failed; token ghp_16C7e42F292c6912E7710c838347Ae178B4a leaked",
+        )
+        .expect("bundle should be written");
+        assert!(path.ends_with("launch-failure-diagnostics.json"));
+        let content = std::fs::read_to_string(&path).expect("bundle readable");
+        let json: serde_json::Value = serde_json::from_str(&content).expect("valid JSON");
+        assert_eq!(
+            json["schema"],
+            "tillandsias-launch-failure-bundle/v1"
+        );
+        assert!(json["reason"].as_str().unwrap().contains("[REDACTED]"));
+        assert!(!content.contains("ghp_16C7"), "no raw token in the bundle");
+        assert!(json["diagnose"]["version"].is_string(), "diagnose embedded");
+    }
 
     /// Order 154 slices 2+3: with the headless push sources landed (orders
     /// 230/231 for login/cloud, order 260 for local projects) the listener

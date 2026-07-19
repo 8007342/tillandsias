@@ -24,7 +24,7 @@ use std::time::Duration;
 use keyring::Entry;
 
 use tillandsias_podman::{PodmanClient, podman_cmd_sync};
-use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, auto_unseal};
+use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, VaultError, auto_unseal};
 use zeroize::Zeroize;
 
 const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
@@ -456,7 +456,7 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                         h.version
                     );
                 }
-                let root_token = read_and_handover_root_token(debug)?;
+                let root_token = validated_root_token(&rt, &base_url, debug)?;
                 let client = vault_client(&base_url, &root_token, debug)?;
                 // Sentinel must be the NEWEST provisioned role, not the oldest:
                 // probing an older role lets vaults provisioned before a Policy
@@ -1729,6 +1729,10 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let mut run_args: Vec<String> = vec![
         "run".into(),
         "-d".into(),
+        // Order 387: a crashed/exited vault container holding the name must
+        // not block relaunch with exit-125; --replace atomically removes it
+        // (mirrors order 314/378/387 across the enclave stack).
+        "--replace".into(),
         "--name".into(),
         VAULT_CONTAINER_NAME.into(),
         "--hostname".into(),
@@ -1895,7 +1899,7 @@ fn wait_for_vault_ready(
                     h.initialized, h.sealed, h.version
                 );
             }
-            read_and_handover_root_token(debug)
+            validated_root_token(rt, base_url, debug)
         }
         Err(e) => Err(format!("vault podman health is healthy but {e}")),
     }
@@ -2023,6 +2027,341 @@ fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
     }
 }
 
+/// Outcome of one post-heal reachability probe, collapsed from
+/// [`VaultError`] for the order-383 classifier.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ProbeOutcome {
+    /// The path answered with the token — reachable and permitted.
+    Reachable,
+    /// 404 — the path is permitted but holds nothing yet (empty AppRole
+    /// backend, github token not stored). Healthy for a fresh vault.
+    Absent,
+    /// 401/403 — the token/storage skew is deeper than the root token
+    /// (the 2026-07-17 Windows wrinkle).
+    Denied,
+    /// Transport/sealed/other — reachability could not be proven.
+    Failed(String),
+}
+
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn probe_outcome<T>(res: Result<T, VaultError>) -> ProbeOutcome {
+    match res {
+        Ok(_) => ProbeOutcome::Reachable,
+        Err(VaultError::NotFound(_)) => ProbeOutcome::Absent,
+        Err(VaultError::Unauthorized(_)) => ProbeOutcome::Denied,
+        Err(e) => ProbeOutcome::Failed(e.to_string()),
+    }
+}
+
+/// Order 383 post-heal verdict: a generate-root heal may only report
+/// success when the fresh root token demonstrably reaches the token
+/// store, the AppRole backend, AND the KV mount. The third live repro
+/// (Windows, 2026-07-17) minted a fresh root token whose `policy list`
+/// worked while approle list + KV get still 403'd — reporting success on
+/// lookup-self alone would have hidden exactly that skew.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn classify_post_heal(
+    lookup: &ProbeOutcome,
+    approle: &ProbeOutcome,
+    kv: &ProbeOutcome,
+) -> Result<(), String> {
+    let mut failures = Vec::new();
+    if *lookup != ProbeOutcome::Reachable {
+        failures.push(format!("token lookup-self: {lookup:?}"));
+    }
+    for (name, outcome) in [("approle role list", approle), ("KV secret read", kv)] {
+        match outcome {
+            ProbeOutcome::Reachable | ProbeOutcome::Absent => {}
+            other => failures.push(format!("{name}: {other:?}")),
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
+    }
+}
+
+/// A first-boot handover pair may be persisted to the host keychain only
+/// when it is structurally plausible: a Vault service token (`hvs.` — or
+/// legacy `s.` — prefix) plus a base64 32-byte Shamir share. Live repro
+/// 2026-07-17 (macuahuitl): a litmus run with a mocked podman backend fed
+/// `mock-exec-output` through this path and OVERWROTE the operator's real
+/// keychain credentials, wedging the real vault (order 383's linux
+/// variant). Garbage must fail loud here, never be persisted.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn handover_pair_is_persistable(token: &str, share_b64: &str) -> bool {
+    use base64::Engine;
+    let token = token.trim();
+    let token_ok = token.starts_with("hvs.") || token.starts_with("s.");
+    let share_ok = base64::engine::general_purpose::STANDARD
+        .decode(share_b64.trim())
+        .map(|v| v.len() == 32)
+        .unwrap_or(false);
+    token_ok && share_ok
+}
+
+/// Read the stored Shamir unseal share (base64, 32 bytes decoded) from
+/// host-delivered VM credentials, the OS keychain, or the fallback file —
+/// the same precedence `ensure_unseal_key` uses, but failing loud instead
+/// of deriving a machine-id dummy: the heal path must never feed a
+/// fabricated share into `generate-root`.
+#[cfg(feature = "vault")]
+fn read_shamir_share_b64(debug: bool) -> Result<String, String> {
+    use base64::Engine;
+    let valid = |encoded: &str| {
+        !encoded.is_empty()
+            && base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map(|v| v.len() == 32)
+                .unwrap_or(false)
+    };
+
+    if is_running_in_vm()
+        && let Some(cell) = IN_VM_CREDENTIALS.get()
+        && let Ok(guard) = cell.lock()
+        && let Some(creds) = &*guard
+        && let Some(encoded) = &creds.unseal_share_b64
+    {
+        let encoded = encoded.trim().to_string();
+        if valid(&encoded) {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] heal: using Shamir share from host-delivered credentials"
+                );
+            }
+            return Ok(encoded);
+        }
+    }
+
+    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+        && let Ok(encoded) = with_keyring_timeout(move || entry.get_password())
+    {
+        let encoded = encoded.trim().to_string();
+        if valid(&encoded) {
+            if debug {
+                eprintln!("[tillandsias-vault] heal: using Shamir share from host keychain");
+            }
+            return Ok(encoded);
+        }
+    }
+
+    if let Ok(cache_dir) = crate::init_cache_dir()
+        && let Ok(encoded) =
+            fs::read_to_string(cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")))
+    {
+        let encoded = encoded.trim().to_string();
+        if valid(&encoded) {
+            if debug {
+                eprintln!("[tillandsias-vault] heal: using Shamir share from fallback file");
+            }
+            return Ok(encoded);
+        }
+    }
+
+    Err(
+        "no valid 32-byte base64 Shamir share in VM credentials, host keychain, or fallback file"
+            .to_string(),
+    )
+}
+
+/// Persist a freshly minted (healed) root token to the same stores the
+/// first-boot handover uses, so every later `read_and_handover_root_token`
+/// sees the healed value.
+#[cfg(feature = "vault")]
+fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Result<(), String> {
+    if is_running_in_vm() {
+        let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
+        if let Ok(mut guard) = cell.lock() {
+            *guard = Some(PendingHandover {
+                unseal_share_b64: Some(share_b64.to_string()),
+                root_token: Some(token.to_string()),
+            });
+        }
+        let creds_cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
+        if let Ok(mut guard) = creds_cell.lock() {
+            if let Some(creds) = guard.as_mut() {
+                creds.root_token = Some(token.to_string());
+            } else {
+                *guard = Some(InVmCredentials {
+                    unseal_share_b64: Some(share_b64.to_string()),
+                    installation_uuid: String::new(),
+                    root_token: Some(token.to_string()),
+                });
+            }
+        }
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        fs::write(&fallback_file, token).map_err(|err| format!("write fallback file: {err}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&fallback_file, fs::Permissions::from_mode(0o600));
+        }
+        if debug {
+            eprintln!("[tillandsias-vault] heal: persisted fresh root token to VM stores");
+        }
+        return Ok(());
+    }
+    keychain_set_blocking("vault-root-token-v1", token)?;
+    if debug {
+        eprintln!("[tillandsias-vault] heal: persisted fresh root token to host keychain");
+    }
+    Ok(())
+}
+
+/// Order 383: mint a fresh root token from the stored Shamir share via
+/// `vault operator generate-root` — healing a stale/rotated cached root
+/// token WITHOUT touching vault storage, which may hold real operator
+/// secrets. Three live repros (macOS, linux/macuahuitl, Windows) hit this
+/// skew: the data volume is healthy but every cached-root-token write
+/// path fails `permission denied`.
+///
+/// This function NEVER wipes or re-initializes storage. Every failure
+/// path surfaces a loud OPERATOR ACTION REQUIRED verdict and leaves the
+/// vault-data volume untouched.
+#[cfg(feature = "vault")]
+fn heal_stale_root_token(
+    rt: &crate::RuntimeOrHandle,
+    base_url: &str,
+    debug: bool,
+) -> Result<String, String> {
+    let share_b64 = read_shamir_share_b64(debug).map_err(|e| {
+        format!(
+            "OPERATOR ACTION REQUIRED: vault rejects the cached root token and no valid \
+             Shamir share is available to self-heal ({e}). Vault storage was left untouched — \
+             it may hold real secrets. Recover the share, or perform an attended \
+             storage-preserving re-init. Do NOT wipe the vault-data volume."
+        )
+    })?;
+
+    eprintln!(
+        "[tillandsias-vault] running `generate-root` self-heal from the stored Shamir share (order 383)"
+    );
+    let anon = vault_client(base_url, "", debug)?;
+    // A stale half-finished attempt keeps its nonce but never re-reveals
+    // its OTP; cancel unconditionally so we always own a fresh attempt.
+    let _ = rt.block_on(anon.generate_root_cancel());
+    let attempt = rt
+        .block_on(anon.generate_root_start())
+        .map_err(|e| format!("generate-root start failed: {e}"))?;
+    if attempt.required > 1 {
+        return Err(format!(
+            "OPERATOR ACTION REQUIRED: this vault needs {} unseal key shares for generate-root \
+             but the host stores exactly one. Complete `vault operator generate-root` manually \
+             with the remaining shares. Storage untouched.",
+            attempt.required
+        ));
+    }
+    let progress = rt
+        .block_on(anon.generate_root_update(&share_b64, &attempt.nonce))
+        .map_err(|e| {
+            format!(
+                "OPERATOR ACTION REQUIRED: generate-root rejected the stored Shamir share ({e}). \
+                 The share no longer matches vault storage. Storage was left untouched — recover \
+                 the correct share or perform an attended storage-preserving re-init. Do NOT wipe \
+                 the vault-data volume."
+            )
+        })?;
+    if !progress.complete {
+        return Err(
+            "OPERATOR ACTION REQUIRED: generate-root accepted the share but did not complete \
+             (more shares required than the host stores). Storage untouched."
+                .to_string(),
+        );
+    }
+    let encoded = progress
+        .encoded_token
+        .ok_or("generate-root completed but returned no encoded token")?;
+    let token = tillandsias_vault_client::decode_generated_root_token(&encoded, &attempt.otp)
+        .map_err(|e| format!("generate-root token decode failed: {e}"))?;
+
+    // The 2026-07-17 Windows wrinkle: a fresh root token whose `policy
+    // list` works can still 403 on approle + KV. Verify actual
+    // reachability before reporting success.
+    let healed = vault_client(base_url, &token, debug)?;
+    let lookup = probe_outcome(rt.block_on(healed.token_lookup_self()));
+    let approle = probe_outcome(rt.block_on(healed.list_approle_roles()));
+    let kv = probe_outcome(rt.block_on(healed.read_secret("secret/github/token")));
+    classify_post_heal(&lookup, &approle, &kv).map_err(|reason| {
+        format!(
+            "OPERATOR ACTION REQUIRED: generate-root minted a fresh root token but the vault is \
+             still not fully reachable ({reason}). The token/storage skew is deeper than the \
+             root token. Storage was left untouched — KV data (including any operator github \
+             token) is intact but unreadable until an attended storage-preserving re-init. \
+             Do NOT wipe the vault-data volume."
+        )
+    })?;
+
+    persist_healed_root_token(&token, &share_b64, debug)?;
+    eprintln!(
+        "[tillandsias-vault] generate-root self-heal succeeded: fresh root token minted, \
+         verified (lookup-self + approle + KV), and persisted"
+    );
+    Ok(token)
+}
+
+#[cfg(not(feature = "vault"))]
+fn heal_stale_root_token(
+    _rt: &crate::RuntimeOrHandle,
+    _base_url: &str,
+    _debug: bool,
+) -> Result<String, String> {
+    Err("vault feature not compiled".into())
+}
+
+/// Order 383 detect-and-heal seam: resolve the root token, prove the
+/// token store actually accepts it, and self-heal via
+/// [`heal_stale_root_token`] when it is stale. Both vault bring-up paths
+/// (already-running probe and post-launch readiness) route through here
+/// so a token/storage skew can never wedge the bootstrap silently again.
+fn validated_root_token(
+    rt: &crate::RuntimeOrHandle,
+    base_url: &str,
+    debug: bool,
+) -> Result<String, String> {
+    match read_and_handover_root_token(debug) {
+        Ok(token) => {
+            let client = vault_client(base_url, &token, debug)?;
+            match rt.block_on(client.token_lookup_self()) {
+                Ok(()) => Ok(token),
+                Err(VaultError::Unauthorized(detail)) => {
+                    eprintln!(
+                        "[tillandsias-vault] cached root token rejected by the token store \
+                         ({detail}); attempting generate-root self-heal (order 383)"
+                    );
+                    heal_stale_root_token(rt, base_url, debug)
+                }
+                Err(e) => {
+                    // Transport/sealed failures are not evidence of a stale
+                    // token — do not mint a new root over a network blip;
+                    // the first real use will surface the true error.
+                    if debug {
+                        eprintln!(
+                            "[tillandsias-vault] token lookup-self probe inconclusive ({e}); \
+                             proceeding with cached token"
+                        );
+                    }
+                    Ok(token)
+                }
+            }
+        }
+        Err(read_err) => {
+            // No usable cached token at all. A valid share can still mint
+            // one without touching storage — strictly better than the old
+            // "reset the volume" guidance.
+            eprintln!(
+                "[tillandsias-vault] no usable cached root token ({read_err}); attempting \
+                 generate-root self-heal (order 383)"
+            );
+            heal_stale_root_token(rt, base_url, debug).map_err(|heal_err| {
+                format!("{read_err}; generate-root self-heal also failed: {heal_err}")
+            })
+        }
+    }
+}
+
 /// Read the root token, capturing a fresh first-boot handover when present.
 ///
 /// CRITICAL ORDERING: the container tmpfs handover (`/run/vault-handover/`) is
@@ -2044,6 +2383,20 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             "vault wrote a handover root token but no Shamir share — refusing to \
              persist an unusable keychain pairing",
         )?;
+        if !handover_pair_is_persistable(&token, &share_b64) {
+            // Live repro 2026-07-17 (macuahuitl): a mocked-podman litmus fed
+            // `mock-exec-output` through this path and overwrote the
+            // operator's REAL keychain credentials. Malformed handover
+            // artifacts must fail loud, never be persisted.
+            return Err(format!(
+                "vault handover files are present but malformed (token prefix {:?}, share \
+                 {} chars) — refusing to overwrite possibly-good keychain credentials. If \
+                 this run used a mocked podman backend, the harness must isolate the \
+                 keychain too.",
+                token.chars().take(4).collect::<String>(),
+                share_b64.len()
+            ));
+        }
         if debug {
             eprintln!(
                 "[tillandsias-vault] fresh-init handover present; capturing root token + Shamir share into keychain (overwriting any stale entries)"
@@ -2440,6 +2793,134 @@ mod tests {
             assert!(
                 !window.contains("[\"secret\", \"rm\""),
                 "{func} must NOT do a racy `secret rm` before `secret create` — use --replace"
+            );
+        }
+    }
+
+    /// Order 387: the vault container `podman run` must include `--replace` so a
+    /// crashed/exited vault holding the name does not block relaunch with a
+    /// Permanent exit-125 (mirrors the proxy/git/router/inference builders).
+    #[test]
+    fn vault_run_args_use_replace_for_idempotency() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn launch_vault_container(")
+            .nth(1)
+            .expect("launch_vault_container source must exist");
+        assert!(
+            window.contains("\"--replace\""),
+            "vault container run args must include --replace so relaunch is \
+             idempotent (order 387): launch_vault_container body missing --replace"
+        );
+    }
+
+    /// Order 383: the post-heal classifier may report success only when
+    /// lookup-self is reachable AND approle + KV are reachable-or-absent.
+    /// A Denied on approle/KV with a working lookup-self is exactly the
+    /// 2026-07-17 Windows wrinkle and must escalate.
+    #[test]
+    fn post_heal_classifier_escalates_deep_skew() {
+        use ProbeOutcome::{Absent, Denied, Failed, Reachable};
+        // Fully reachable — healed.
+        assert!(classify_post_heal(&Reachable, &Reachable, &Reachable).is_ok());
+        // Fresh-but-empty vault: absent approle roles + absent KV is healthy.
+        assert!(classify_post_heal(&Reachable, &Absent, &Absent).is_ok());
+        // The Windows wrinkle: lookup-self fine, approle/KV denied → escalate.
+        let err =
+            classify_post_heal(&Reachable, &Denied, &Denied).expect_err("deep skew must escalate");
+        assert!(err.contains("approle"), "reason must name the probe: {err}");
+        // KV alone denied → escalate.
+        assert!(classify_post_heal(&Reachable, &Reachable, &Denied).is_err());
+        // Fresh token that itself fails lookup-self → escalate.
+        assert!(classify_post_heal(&Denied, &Reachable, &Reachable).is_err());
+        // Unverifiable (transport failure) is not success.
+        assert!(classify_post_heal(&Reachable, &Failed("timeout".into()), &Reachable).is_err());
+    }
+
+    /// Order 383 (macuahuitl live repro): a mocked-podman litmus returned
+    /// `mock-exec-output` for the handover files and this path persisted it
+    /// over the operator's REAL keychain credentials. The persist guard
+    /// must reject anything that is not a vault service token + 32-byte
+    /// base64 share pair.
+    #[test]
+    fn handover_persist_guard_rejects_garbage() {
+        use base64::Engine;
+        let real_share = base64::engine::general_purpose::STANDARD.encode([7u8; 32]);
+        // The exact live-repro garbage.
+        assert!(!handover_pair_is_persistable(
+            "mock-exec-output",
+            "mock-exec-output"
+        ));
+        // Plausible token, garbage share.
+        assert!(!handover_pair_is_persistable("hvs.abc123", "not-base64!"));
+        // Wrong share length (16 bytes).
+        let short = base64::engine::general_purpose::STANDARD.encode([7u8; 16]);
+        assert!(!handover_pair_is_persistable("hvs.abc123", &short));
+        // Garbage token, real share.
+        assert!(!handover_pair_is_persistable(
+            "mock-exec-output",
+            &real_share
+        ));
+        // Real-shaped pairs pass (current hvs. and legacy s. prefixes).
+        assert!(handover_pair_is_persistable("hvs.abc123", &real_share));
+        assert!(handover_pair_is_persistable("s.abc123", &real_share));
+    }
+
+    /// Order 383: the heal path must NEVER wipe or re-initialize vault
+    /// storage — it may hold real operator secrets. Source-shape pin: no
+    /// volume removal, system reset, or re-init inside the heal seam.
+    #[test]
+    fn root_token_heal_never_wipes_storage() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        for func in ["fn heal_stale_root_token(", "fn validated_root_token("] {
+            let after = source
+                .split(func)
+                .nth(1)
+                .unwrap_or_else(|| panic!("{func} must exist"));
+            // Truncate at the next fn OR the next doc comment — the
+            // following function's doc prose may legitimately mention
+            // storage commands it exists to prevent.
+            let window = after.split("\nfn ").next().unwrap_or(after);
+            let window = window.split("\n///").next().unwrap_or(window);
+            for forbidden in [
+                "volume\", \"rm",
+                "volume rm",
+                "system reset",
+                "operator init",
+            ] {
+                assert!(
+                    !window.contains(forbidden),
+                    "{func} must never touch vault storage (found {forbidden:?})"
+                );
+            }
+        }
+    }
+
+    /// Order 383: both vault bring-up paths must route their root token
+    /// through the detect-and-heal seam, not the raw keychain read — a
+    /// stale token must trigger generate-root instead of wedging every
+    /// downstream write with `permission denied`.
+    #[test]
+    fn vault_bringup_routes_through_root_token_heal_seam() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        for func in ["fn ensure_vault_running(", "fn wait_for_vault_ready("] {
+            let after = source
+                .split(func)
+                .nth(1)
+                .unwrap_or_else(|| panic!("{func} must exist"));
+            let window = after.split("\nfn ").next().unwrap_or(after);
+            assert!(
+                window.contains("validated_root_token("),
+                "{func} must resolve its root token via validated_root_token (order 383)"
             );
         }
     }

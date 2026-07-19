@@ -69,16 +69,57 @@ pub async fn tar_to_wsl_import(
             tar.display()
         ));
     }
+    // Order 419: check HOST drive headroom BEFORE `wsl --import` writes the
+    // VHDX. The import materializes roughly the tar's expanded content into
+    // ext4-on-VHDX; running the host drive dry mid-import used to yield a
+    // bare "wsl --import exited <status>" that read as a crash. Fail loud
+    // and actionable up-front instead.
+    let tar_len = std::fs::metadata(tar).map(|m| m.len()).unwrap_or(0);
+    let avail = fs2::available_space(install_dir).unwrap_or(u64::MAX);
+    if let Err(msg) = evaluate_host_import_headroom(avail, tar_len) {
+        return Err(msg);
+    }
     let args = wsl_import_args(distro, install_dir, rootfs);
     let mut cmd = tokio::process::Command::new("wsl");
-    cmd.args(&args);
+    cmd.args(&args).env("WSL_UTF8", "1");
     crate::no_window_async(&mut cmd);
-    let status = cmd
-        .status()
+    let output = cmd
+        .output()
         .await
         .map_err(|e| format!("wsl --import failed to spawn: {e}"))?;
-    if !status.success() {
-        return Err(format!("wsl --import exited {status}"));
+    if !output.status.success() {
+        // Keep the child's stderr — for a GUI tray this is the only text
+        // naming the real failure (order 419).
+        let stderr = String::from_utf8_lossy(&output.stderr)
+            .replace('\u{0}', "")
+            .trim()
+            .to_string();
+        if let Some(remediation) = crate::wsl::classify_launch_stderr(&stderr) {
+            return Err(format!("wsl --import failed (classified). {remediation}"));
+        }
+        return Err(format!(
+            "wsl --import failed: exited {}; stderr: {}",
+            output.status,
+            if stderr.is_empty() { "(empty)" } else { &stderr }
+        ));
+    }
+    Ok(())
+}
+
+/// Pure host-headroom verdict for `wsl --import` (order 419): require space
+/// for ~2x the rootfs tar (VHDX materialization + ext4 overhead) plus a
+/// 2 GiB safety floor. `Err` carries the actionable operator message.
+pub fn evaluate_host_import_headroom(avail_bytes: u64, tar_bytes: u64) -> Result<(), String> {
+    const SAFETY_FLOOR_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+    let needed = tar_bytes.saturating_mul(2).saturating_add(SAFETY_FLOOR_BYTES);
+    if avail_bytes < needed {
+        return Err(format!(
+            "the host drive is low on space: {} MiB available, but importing the \
+             VM needs roughly {} MiB (2x the rootfs image + safety floor). Free \
+             disk space, then Retry.",
+            avail_bytes / (1024 * 1024),
+            needed / (1024 * 1024)
+        ));
     }
     Ok(())
 }
@@ -87,6 +128,21 @@ pub async fn tar_to_wsl_import(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    /// Order 419: the pre-import gate needs 2x tar + 2 GiB; boundary cases
+    /// pinned so the arithmetic can't silently regress.
+    #[test]
+    fn host_import_headroom_requires_double_tar_plus_floor() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        // 1 GiB tar → needs 4 GiB.
+        assert!(evaluate_host_import_headroom(4 * GIB, GIB).is_ok());
+        let err = evaluate_host_import_headroom(4 * GIB - 1, GIB).unwrap_err();
+        assert!(err.contains("host drive is low on space"));
+        assert!(err.contains("Free disk space"));
+        // Unknown tar size (0) still enforces the 2 GiB floor.
+        assert!(evaluate_host_import_headroom(2 * GIB, 0).is_ok());
+        assert!(evaluate_host_import_headroom(GIB, 0).is_err());
+    }
 
     #[test]
     fn import_args_match_wslruntime_provision_shape() {

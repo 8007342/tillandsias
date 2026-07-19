@@ -1,0 +1,52 @@
+# @trace spec:methodology-accountability
+#
+# Pins the ephemerality invariant (The Tlatoāni 2026-07-18): uncommitted work is
+# throw-away, always; anything not committed (+ pushed for durability) is lost
+# forever, BY DESIGN. The correct response to a dirty tree is commit-or-wipe,
+# never stash-as-durability. Falsifies drift in the canonical methodology block
+# so unattended agents keep inheriting the rule instead of hoarding uncommitted
+# state.
+name: litmus:ephemerality-invariant-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin methodology/between-commits-work-discipline.yaml ephemerality_invariant
+  (the principle + consequences: commit-or-wipe, no stash-as-durability).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains methodology/between-commits-work-discipline.yaml
+
+critical_path:
+  - step: "ephemerality invariant block exists with the principle + consequences"
+    command: "grep -q 'ephemerality_invariant:' methodology/between-commits-work-discipline.yaml && grep -q 'principle:' methodology/between-commits-work-discipline.yaml && grep -q 'consequences:' methodology/between-commits-work-discipline.yaml && echo 'ok: invariant-block'"
+    timeout_ms: 3000
+    expected_behavior: "ok: invariant-block"
+
+  - step: "states throw-away/lost-forever-by-design and commit-or-wipe/no-stash"
+    command: "grep -qi 'THROW-AWAY' methodology/between-commits-work-discipline.yaml && grep -qi 'lost forever' methodology/between-commits-work-discipline.yaml && grep -qi 'COMMIT it' methodology/between-commits-work-discipline.yaml && grep -qi 'never stash' methodology/between-commits-work-discipline.yaml && echo 'ok: commit-or-wipe'"
+    timeout_ms: 3000
+    expected_behavior: "ok: commit-or-wipe"
+
+  - step: "methodology file still parses as YAML"
+    command: "if command -v cargo >/dev/null 2>&1; then cargo run -q -p tillandsias-policy -- validate-yaml methodology/between-commits-work-discipline.yaml >/dev/null && echo 'ok: yaml-parses'; else ruby -ryaml -e 'YAML.load_file(%q(methodology/between-commits-work-discipline.yaml)); puts %q(ok: yaml-parses)'; fi"
+    timeout_ms: 120000
+    expected_behavior: "ok: yaml-parses"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "ephemerality invariant pinned (throw-away-by-design + commit-or-wipe + no-stash-as-durability + parseable)"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "ephemerality-invariant-shape"
+    artifact: "methodology/between-commits-work-discipline.yaml"
+
+rollback:
+  on_failure: >
+    The ephemerality invariant drifted. Restore the ephemerality_invariant block
+    in methodology/between-commits-work-discipline.yaml: uncommitted work is
+    throw-away/lost-forever-by-design; the response to a dirty tree is
+    commit-or-wipe, never stash-as-durability.
+  command: "grep -n 'ephemerality_invariant' methodology/between-commits-work-discipline.yaml"

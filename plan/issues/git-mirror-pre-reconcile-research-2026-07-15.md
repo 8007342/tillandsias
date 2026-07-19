@@ -63,3 +63,34 @@ exit 1
 - **Zero Client Config Changes**: Forge agents continue to run `git fetch origin` seamlessly.
 - **Safe Recovery**: Automatically fast-forwards the mirror exactly when it matters (on push conflict), breaking the deadlock so the agent's retry loop works.
 - **Data Integrity**: Enforces fast-forward-only reconciliation, completely avoiding the destructive clobbering detailed in order 301.
+
+## Addendum 2026-07-16 — implementation closed (order 369) + live staleness repro
+
+Agent forge-chaparrita-fable5-20260716T1726Z, in-forge cycle.
+
+- **Code**: the blueprint above landed verbatim in `images/git/relay-refs.sh`
+  (10c0c9b3, 2026-07-15) under the prior lease, which expired without litmus
+  or ledger closure. This cycle closed both (efa54b5c).
+- **Litmus**: `scripts/test-git-mirror-relay-verified-ack.sh` case 4 now
+  drives the real hooks: upstream advances independently, a stale client push
+  is rejected, the failure path fast-forwards the mirror's exported heads
+  (a stranded same-named head survives the non-forced fetch), and the
+  client's plain fetch/rebase/retry loop converges. Pinned in
+  `litmus:git-mirror-relay-verified-ack` (5/5 PASS in-forge).
+- **Live repro of the read-path gap this research predicted**: at
+  2026-07-16T17:26Z this forge's mirror served `linux-next` at `5343c856`
+  (2026-07-08 vintage) while its own `refs/remotes/origin/linux-next` held
+  `44a45c24` — the current GitHub head, 516 commits ahead. A pull-only agent
+  saw week-old state; recovery required explicitly fetching the mirror's
+  tracking refs (`+refs/remotes/origin/*:refs/mirror-upstream/*`). The
+  running mirror image predates 10c0c9b3, so the startup retry-push failure
+  could not reconcile. Deployment split to **order 384**
+  (`git-mirror-reconcile-deploy-and-verify`), same shape as orders 301/302.
+- **Bycatch (fixed in efa54b5c)**: the ack fixture was RED in-forge on the
+  committed tree — the forge's global `core.hooksPath` redirection
+  (`GIT_CONFIG_GLOBAL`) silently disabled the fixture upstream's reject hook,
+  so case 3's atomic rejection never fired. The fixture now pins
+  `GIT_CONFIG_NOSYSTEM=1` and a fixture-owned `GIT_CONFIG_GLOBAL`. Fixtures
+  that install hooks in scratch repos must be hermetic against inherited git
+  config scopes (`test-git-mirror-ref-convergence.sh` already neutralized
+  this per-repo; the ack fixture had only done so for the mirror repo).

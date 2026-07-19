@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# freshness: auditor=linux-forge-20260718T0334Z date=2026-07-18 verdict=refreshed scope=re-validated; still used by run-litmus-test.sh and remote_projects.rs command-shape litmus; verdict from 2026-07-17 (exec branch no longer fabricates vault handover) still holds; keychain isolation ask still open
 
 # Minimal Podman test backend for command-shape litmus runs.
 # It records the invocation and returns canned success outputs for the
@@ -218,6 +219,15 @@ case "$subcommand" in
         if [[ "$*" == *"gh api user"* ]]; then
             printf '%s\n' "${LITMUS_FAKE_GITHUB_USER:-mock-user}"
             exit 0
+        fi
+        # Never fabricate a vault first-boot handover: answering
+        # `cat /run/vault-handover/*` with canned output made the real
+        # binary persist `mock-exec-output` over the operator's REAL
+        # keychain credentials (order 383 root cause, 2026-07-17 —
+        # plan/issues/litmus-mock-podman-keychain-pollution-2026-07-17.md).
+        # A mocked vault container has no handover files; behave like it.
+        if [[ "$*" == *"/run/vault-handover/"* ]]; then
+            exit 1
         fi
         printf 'mock-exec-output\n'
         ;;

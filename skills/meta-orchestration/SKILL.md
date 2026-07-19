@@ -187,6 +187,20 @@ never let an observed problem evaporate.
 Any time a worker notices "welp, this isn't great" — an inefficiency, a rough
 edge, a fragile assumption, an advisory-only guard, a repeated manual step, a
 log warning, a deprecation notice — it MUST be filed before the cycle exits.
+
+### Standing FRESHNESS audit class (order 372, methodology `component_freshness`)
+Each cycle, after worker drain, treat the top component the `freshness-advisory`
+CI phase flagged as a claimable audit source. Re-validate ONE component against
+the audit question — *last properly looked at and confirmed still meaningful,
+useful, efficient, sound, and complete?* — and end in exactly one disposition:
+**refreshed** (re-validated, update its `# freshness:` stamp), **updated**
+(fixed/tuned, update stamp), or **obsoleted** (delete/tombstone with same-commit
+removal of dependents). Apply the **discard-over-repair bias**: discard a stale
+component rather than repair it when a fresh implementation would be better.
+`scripts/freshness-inventory.sh` emits the coverage report + top stale
+components each `./build.sh --ci` run; the report grammar is pinned by
+`litmus:freshness-inventory-shape`. A freshness audit is a valid reduction step
+on its own and counts toward burndown.
 This is mandatory, not optional (`methodology.yaml` →
 `cooperative_work_discipline`; Non-Negotiable Exit Contract → "Explicitly log
 things that make you slower"). File it as a dated issue in `plan/issues/`,

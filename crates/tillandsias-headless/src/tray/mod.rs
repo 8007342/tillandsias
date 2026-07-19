@@ -1823,6 +1823,20 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
 // Candidate order prefers the modern GNOME/Fedora default (ptyxis) and GNOME
 // Console (kgx) ahead of the legacy emulators so Silverblue hosts get a real
 // window instead of the inline prompt.
+/// Spawn a terminal-launcher child and reap it on a detached thread.
+///
+/// Order 385: Ptyxis's GApplication client exits in milliseconds after
+/// delegating the window to the resident `--gapplication-service`, but
+/// `std::process::Child` does NOT reap on `Drop` — so a bare `.spawn()`-and-drop
+/// leaks a `<defunct>` zombie parented to the tray process, one per terminal
+/// launch. Move the `Child` into a detached thread that calls `wait()` so the
+/// OS reclaims it. Both terminal-launch sites (`launch_in_terminal` here and
+/// `launch_forge_agent` in `main.rs`) route through this helper, defined
+/// ungated in `main.rs` so the non-`tray`-feature build still links.
+pub(crate) fn spawn_terminal_and_reap(child: Command) -> Result<(), String> {
+    crate::spawn_terminal_and_reap(child)
+}
+
 fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<(), String> {
     for candidate in ["ptyxis", "gnome-terminal", "kgx", "konsole", "xterm"] {
         if terminal_present(candidate) {
@@ -1859,10 +1873,7 @@ fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<
                 }
                 _ => {}
             }
-            child
-                .spawn()
-                .map_err(|e| format!("failed to launch {candidate}: {e}"))?;
-            return Ok(());
+            return spawn_terminal_and_reap(child);
         }
     }
 
@@ -2013,6 +2024,54 @@ fn recheck_environment_if_stale(
     (podman_ready, forge_ready)
 }
 
+/// Order 411: the actionable message shown when the forge image for the
+/// running binary's version is genuinely missing and on-demand build failed.
+/// It names the exact version and the remedy (`tillandsias --init`) and never
+/// claims initialization is "in progress" when nothing is building.
+fn forge_missing_actionable_message(version: &str, project_name: &str) -> String {
+    format!(
+        "forge image v{version} for project '{project_name}' is missing; run `tillandsias --init` to build it"
+    )
+}
+
+/// Attempt to build the forge image for the running binary's version on
+/// demand, so a tray launched after a `--install` version bump can recover
+/// without a manual `tillandsias --init`. Order 411: the missing-image branch
+/// must never claim initialization is "in progress" unless something is
+/// actually building; this returns the real build result, and the caller
+/// surfaces an actionable message only on failure.
+fn try_build_forge_image_on_demand(service: &Arc<TrayService>, snapshot: &TrayUiState) -> bool {
+    let msg = format!(
+        "building forge image v{} (this can take several minutes)...",
+        snapshot.version
+    );
+    eprintln!("[tillandsias] tray: {msg}");
+    let _ = futures::executor::block_on(service.set_status(
+        format!("🔨 {msg}"),
+        TrayIconState::Building,
+        None,
+    ));
+
+    let forge_tag = format!("tillandsias-forge:v{}", snapshot.version);
+    let build_result =
+        crate::ensure_image_exists(&snapshot.root, "forge", &forge_tag, snapshot.debug);
+
+    match build_result {
+        Ok(()) => {
+            let _ = futures::executor::block_on(service.set_status(
+                status_label(&TrayStatusStage::AllReady),
+                enclave_status_to_icon(EnclaveStatus::AllHealthy),
+                Some(true),
+            ));
+            true
+        }
+        Err(err) => {
+            eprintln!("error: forge image build failed: {err}");
+            false
+        }
+    }
+}
+
 fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
     let snapshot = service.snapshot();
     let version = snapshot.version.clone();
@@ -2050,12 +2109,15 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
     // the snapshot says no (see recheck_environment_if_stale — a tray
     // started during a version handover cached false forever and every
     // launch died silently; operator dead-on-arrival repro 2026-07-16).
-    let (podman_ready, forge_ready) = recheck_environment_if_stale(&service, &snapshot);
+    let (podman_ready, mut forge_ready) = recheck_environment_if_stale(&service, &snapshot);
     if !forge_ready {
-        let msg = format!(
-            "forge image not available for project '{}'; initialization may be in progress",
-            project.name
-        );
+        // Order 411: a missing forge image after a `--install` version bump is
+        // NOT "initialization in progress" — nothing is building on its own.
+        // Try to build it on demand before refusing with an actionable message.
+        forge_ready = try_build_forge_image_on_demand(&service, &snapshot);
+    }
+    if !forge_ready {
+        let msg = forge_missing_actionable_message(&snapshot.version, &project.name);
         eprintln!("error: {msg}");
         // Refusals must be visible in the tray, not just the journal.
         // @trace spec:menu-action-error-handling, spec:tray-ux
@@ -2135,7 +2197,7 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
     let snapshot = service.snapshot();
     // Live re-probe on a stale-negative snapshot (same dead-on-arrival class
     // as handle_launch_project; see recheck_environment_if_stale).
-    let (podman_ready, forge_ready) = recheck_environment_if_stale(&service, &snapshot);
+    let (podman_ready, mut forge_ready) = recheck_environment_if_stale(&service, &snapshot);
     if !podman_ready {
         let msg = format!(
             "podman unavailable; cannot launch cloud project '{}'",
@@ -2150,10 +2212,12 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
         return;
     }
     if !forge_ready {
-        let msg = format!(
-            "forge image not ready; cannot launch cloud project '{}'",
-            cloud.name
-        );
+        // Order 411: build the forge image on demand rather than claiming init
+        // is in progress; only refuse with an actionable message on failure.
+        forge_ready = try_build_forge_image_on_demand(&service, &snapshot);
+    }
+    if !forge_ready {
+        let msg = forge_missing_actionable_message(&snapshot.version, &cloud.name);
         eprintln!("error: {msg}");
         let _ = futures::executor::block_on(service.set_status(
             format!("🥀 {msg}"),
@@ -3927,6 +3991,67 @@ mod tests {
         );
     }
 
+    /// Order 385: a fast-exiting terminal-launcher child (the Ptyxis
+    /// GApplication client pattern) must be reaped — not left as a `<defunct>`
+    /// zombie under the tray process. The helper moves the `Child` into a
+    /// detached `wait()` thread; after the child exits, no Z-state child of
+    /// this process should remain.
+    #[test]
+    fn spawn_terminal_and_reap_does_not_leave_zombies() {
+        use std::process::Command;
+
+        // Find any Z-state (zombie) children currently parented to us.
+        fn has_zombie_children() -> bool {
+            let me = std::process::id();
+            let Ok(entries) = std::fs::read_dir("/proc") else {
+                return false;
+            };
+            for entry in entries.flatten() {
+                let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+                    continue;
+                };
+                if pid == me {
+                    continue;
+                }
+                let stat = std::fs::read_to_string(entry.path().join("stat")).unwrap_or_default();
+                // /proc/<pid>/stat: "pid (comm) state ..." — state is char 3.
+                if let Some(state) = stat.split_whitespace().nth(2) {
+                    if state.starts_with('Z') {
+                        // Confirm it is actually our child via /proc/<pid>/status PPid.
+                        let status = std::fs::read_to_string(entry.path().join("status"))
+                            .unwrap_or_default();
+                        for line in status.lines() {
+                            if line.starts_with("PPid:") {
+                                if line.split_whitespace().nth(1) == Some(&me.to_string()) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        }
+
+        // Precondition: a clean slate.
+        assert!(
+            !has_zombie_children(),
+            "test harness started with stray zombies"
+        );
+
+        for _ in 0..8 {
+            let cmd = Command::new("/bin/true");
+            spawn_terminal_and_reap(cmd).expect("spawn must succeed");
+        }
+
+        // Give the reaping threads time to wait() the exited children.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        assert!(
+            !has_zombie_children(),
+            "fast-exiting children must be reaped, not left as zombies"
+        );
+    }
+
     /// Short labels pass through unchanged (no truncation regression on the
     /// normal emoji status stack).
     #[test]
@@ -3935,6 +4060,27 @@ mod tests {
         assert_eq!(
             sanitize_status_text("🥀 Launch failed: image missing"),
             "🥀 Launch failed: image missing"
+        );
+    }
+
+    /// Order 411: the missing-forge-image path must surface an actionable
+    /// message (names the version + `tillandsias --init`) and must NEVER claim
+    /// initialization "may be in progress" — that wording implies silent
+    /// progress that, post `--install` version bump, never happens.
+    #[test]
+    fn forge_missing_message_is_actionable_not_in_progress() {
+        let msg = forge_missing_actionable_message("v0.3.260717.1", "myproj");
+        assert!(
+            msg.contains("v0.3.260717.1"),
+            "message must name the exact version: {msg}"
+        );
+        assert!(
+            msg.contains("tillandsias --init"),
+            "message must name the remedy: {msg}"
+        );
+        assert!(
+            !msg.to_lowercase().contains("may be in progress"),
+            "must not imply silent in-progress init: {msg}"
         );
     }
 
