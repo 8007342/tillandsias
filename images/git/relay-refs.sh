@@ -93,8 +93,30 @@ case "$REMOTE_URL" in
             fi
             exit 1
         fi
-        BARE_URL="$(echo "$REMOTE_URL" | sed -E 's#https://[^@/]+@#https://#')"
-        PUSH_URL="https://oauth2:${TOKEN}@${BARE_URL#https://}"
+        # Order 424: the URL stays CLEAN. The token used to be interpolated
+        # here and passed as an argv element to git push/fetch, which put it in
+        # /proc/<pid>/cmdline and contradicted this repo's own stated invariant
+        # ("never appears in process argv", vault-cli.sh). Git's credential
+        # protocol hands it over on stdin instead.
+        PUSH_URL="$(echo "$REMOTE_URL" | sed -E 's#https://[^@/]+@#https://#')"
+        # Configure the helper via the ENVIRONMENT, not `git -c`, so the
+        # relay's command shape stays exactly as pinned by
+        # litmus:git-mirror-relay-verified-ack — that grep proves the push is
+        # --atomic with explicit refspecs and never --mirror/--all, which is
+        # the invariant that stops a repack from deleting upstream branches.
+        # Credential wiring must not cost us that proof.
+        #
+        # GIT_CONFIG_COUNT/KEY/VALUE is git's documented env form. The empty
+        # first helper RESETS inherited ones: credential.helper is ADDITIVE and
+        # a leftover helper would otherwise be consulted first
+        # (gitcredentials(7)).
+        GIT_CONFIG_COUNT=2
+        GIT_CONFIG_KEY_0=credential.helper
+        GIT_CONFIG_VALUE_0=""
+        GIT_CONFIG_KEY_1=credential.helper
+        GIT_CONFIG_VALUE_1=/usr/local/bin/git-credential-tillandsias
+        export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 \
+               GIT_CONFIG_KEY_1 GIT_CONFIG_VALUE_1
         ;;
 esac
 

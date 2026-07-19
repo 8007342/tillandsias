@@ -17219,7 +17219,7 @@ plan_index:
       packet_id: git-mirror-credential-lifecycle
       desired_release: v0.4
       title: "Mirror credential lifecycle: replace read-token-once-at-startup with a git credential.helper, and the AppRole token with Vault Agent auto-auth"
-      status: ready
+      status: in_progress
       kind: fix
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: [git-mirror-image-deploy-gate]
@@ -17253,6 +17253,49 @@ plan_index:
             Filed from the 2026-07-19 mirror research. Satisfies the research
             gate on order 319 rung B.
 
+
+        - type: progress
+          ts: "2026-07-19T12:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Credential-helper half DONE; Vault Agent auto-auth remains, so this
+            stays in_progress.
+            CORRECTION to this packet's framing first: it said relay-refs.sh
+            "reads the GitHub token into a shell variable once at startup".
+            It does not — relay-refs runs as the pre-receive hook, i.e. PER
+            PUSH, and already calls vault-cli renew-self before each read. The
+            acute 1h fuse was closed by order 422 deploying the renewer.
+            The REAL defect the packet missed: the token was interpolated into
+            PUSH_URL and passed as an ARGV element to git push and git fetch at
+            three sites, putting it in /proc/<pid>/cmdline for anything sharing
+            the namespace. That contradicts an invariant this repository states
+            explicitly elsewhere — vault-cli.sh: "Read the secret value from
+            stdin so it never appears in process argv or an environment
+            variable"; provider-device-auth.sh: "Flows on stdin; never argv or
+            env." The relay was the hottest path in the system and the one
+            place breaking the rule.
+            git-credential-tillandsias now supplies the token over git's
+            credential protocol (stdin/stdout), and the push URL is clean.
+            Inherited helpers are reset first with an empty value, since
+            credential.helper is ADDITIVE per gitcredentials(7).
+            IMPLEMENTATION NOTE worth keeping: the helper is wired via
+            GIT_CONFIG_COUNT/KEY/VALUE rather than `git -c`. The first attempt
+            used `git -c ...` and broke two pinned litmus greps plus the relay
+            fixture — those pins prove the push is --atomic with explicit
+            refspecs and never --mirror/--all, which is the invariant that stops
+            a repack from deleting upstream branches. Credential wiring must not
+            cost that proof, so the env form was used to keep the command shape
+            byte-identical. Weakening the greps would have been the easy wrong
+            answer.
+            REMAINING: Vault Agent auto-auth (the "survives past max_ttl"
+            criterion) and a litmus proving a relay push succeeds after the
+            original AppRole token would have expired. Both need a long-running
+            live environment rather than a fixture.
+            Evidence: helper fixture 4/4; relay fixture 4/4 still green with the
+            pinned greps intact; image rebuilt and the helper verified LIVE —
+            fails loud with exit 1 and a named reason when no token, returns
+            username=oauth2 plus the token when vault-cli answers.
     - order: 425
       packet_id: forge-mirror-fail-loud-invariant
       desired_release: v0.4

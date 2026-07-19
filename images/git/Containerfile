@@ -58,6 +58,9 @@ COPY relay-refs.sh /usr/local/share/git-service/relay-refs.sh
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
 
+# @trace spec:secrets-management — order 424: keeps the upstream token off argv.
+COPY git-credential-tillandsias.sh /usr/local/bin/git-credential-tillandsias
+
 # @trace spec:observability-convergence, spec:external-logs-layer
 # Log manifest: lists all files this image writes to syslog/stdout.
 # Tray auditor checks this every 60s; unlisted files trigger LEAK events.
@@ -70,6 +73,7 @@ COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh \
               /usr/local/bin/vault-cli.sh \
               /usr/local/bin/vault-cli \
+              /usr/local/bin/git-credential-tillandsias \
               /usr/local/share/git-service/post-receive-hook.sh \
               /usr/local/share/git-service/pre-receive-hook.sh \
               /usr/local/share/git-service/relay-refs.sh
