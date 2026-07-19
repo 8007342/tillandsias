@@ -17685,7 +17685,7 @@ plan_index:
     - order: 431
       desired_release: v0.4
       title: "OpenCode vault provider: inject credentials via OPENCODE_AUTH_CONTENT so no auth.json ever touches disk"
-      status: ready
+      status: blocked
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: [430]
@@ -17719,6 +17719,51 @@ plan_index:
           host: linux
           summary: Filed from the 2026-07-19 forge delegation research.
 
+
+        - type: blocked
+          ts: "2026-07-19T07:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            BLOCKED on a prerequisite, deliberately NOT implemented. Building
+            this as specified would create a credential path that can silently
+            stop working and silently start reading credentials from disk, with
+            no error — the exact outcome the packet exists to prevent.
+            Three facts compose badly:
+            (1) OPENCODE_AUTH_CONTENT is UNDOCUMENTED and source-only.
+            (2) When it is absent or unparseable, opencode falls back to
+                $XDG_DATA_HOME/opencode/auth.json SILENTLY (bare catch {}), and
+                auth.json merges AFTER env so a stale file overrides injection.
+            (3) images/default/lib-common.sh ensure_forge_harnesses installs
+                opencode-ai@latest on EVERY forge launch. The codebase already
+                documents why that is dangerous: "The 2026-07-10 outage:
+                upstream published a broken opencode-ai@latest mid-night ... the
+                whole forge lane was down until upstream fixed it. @latest is
+                structurally unsafe without a survival path."
+            The existing mitigation (order 284: harness_probe + last-good
+            rollback) is a `--version` LIVENESS check. It cannot detect this
+            failure mode: an upstream release that starts fine but renames or
+            drops the undocumented variable passes the probe, and credentials
+            quietly revert to disk inside a container whose whole purpose is to
+            keep them "outside of agents' curious hands".
+            UNBLOCK CONDITIONS — either is sufficient:
+            (a) pin the opencode version for the credentialed path (relates to
+                order 295's attested-bottle migration and order 317's harness
+                strategy), so an upstream change cannot silently alter
+                credential handling; OR
+            (b) implement a POSITIVE post-launch assertion that vault injection
+                is actually in effect — verify opencode reports the injected
+                credentials AND that no auth.json exists on disk — and fail the
+                launch loudly if not. That converts silent degradation into a
+                visible failure and would make (a) optional.
+            Recommend (b) regardless of (a): it is the only check that survives
+            an upstream rename, and it is cheap.
+            NOTE the operator's stated intent is satisfied for now without this
+            work: OpenCode currently runs credential-free by design
+            (opencode/big-pickle free Zen plus local ollama), so nothing is
+            broken. The investigation-and-documentation half the operator asked
+            for is complete in
+            plan/issues/forge-agent-delegation-research-2026-07-19.md.
     - order: 432
       desired_release: v0.4
       title: "gc.auto split-brain: host repo and forge container share objects/ and refs/ but keep SEPARATE packed-refs — a host-side auto-gc can delete refs the container resolves through"
@@ -18039,3 +18084,47 @@ plan_index:
           summary: >
             Filed after fixing two instances of the same shape while closing
             order 433.
+
+    - order: 439
+      desired_release: v0.4
+      title: "Harness liveness probe cannot detect BEHAVIOURAL drift — a working @latest that changed an undocumented contract passes it"
+      status: ready
+      kind: fix
+      deliverable: images/default/lib-common.sh (harness_probe) + per-harness contract checks
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, harness, supply-chain, reliability]
+      estimated_hours: 4
+      outcome: >
+        Order 284 added harness_probe + last-good rollback after the 2026-07-10
+        outage in which a broken opencode-ai@latest took the forge lane down.
+        The probe is `--version` within a timeout — a LIVENESS check. It proves
+        the binary starts; it proves nothing about the contracts we depend on.
+        Concrete gap found while scoping order 431: we depend on the
+        UNDOCUMENTED OPENCODE_AUTH_CONTENT env var for keeping credentials off
+        disk. An upstream release that starts cleanly but renames or drops that
+        variable passes the liveness probe, and opencode then silently falls
+        back to reading auth.json from disk — a credential landing in the one
+        place the design exists to keep it out of, with no error anywhere.
+        The same shape applies to every flag we pass: order 429 found the forge
+        had been passing --dangerously-skip-permissions to opencode, a flag it
+        does not have, silently swallowed for an unknown length of time.
+        Extend the probe from "does it start" to "does it still honour the
+        contracts we rely on": assert the flags we pass exist in --help, and
+        assert any env-var-driven behaviour we depend on actually takes effect.
+        Roll back to last-good on contract failure, exactly as for a crash.
+      exit_criteria:
+        - "harness_probe verifies per-harness CONTRACTS, not just liveness"
+        - "a flag we pass that no longer exists upstream triggers rollback, not silent acceptance"
+        - "env-var-driven behaviour we depend on is positively asserted post-install"
+        - "a fixture proves a contract-broken-but-starting harness is rejected"
+      events:
+        - type: filed
+          ts: "2026-07-19T07:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed while scoping order 431. Generalises the order-429 phantom
+            flag finding: liveness probes cannot see behavioural drift, and we
+            consume several undocumented or unverified upstream contracts.
