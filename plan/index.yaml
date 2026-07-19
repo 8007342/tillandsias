@@ -338,6 +338,7 @@ plan_index:
 
     - packet_id: host-guest-transport-conformance-harness
       order: 128
+      desired_release: v0.5
       title: "Shared conformance fixtures for GuestTransport backends (host-guest-transport.conformance.shared-fixtures@v1)"
       status: pending
       kind: enhancement
@@ -405,6 +406,7 @@ plan_index:
 
     - packet_id: host-guest-transport-linux
       order: 125
+      desired_release: v0.5
       title: "Conform Linux backend to host<->guest facade; collapse 5 exec variants"
       status: pending
       kind: enhancement
@@ -735,6 +737,7 @@ plan_index:
 
     - packet_id: agent-services-egress-allowlist-impl
       order: 130
+      desired_release: v0.5
       title: "Impl: apply agent egress allowlist delta + wire antigravity agent"
       status: pending
       kind: enhancement
@@ -755,6 +758,7 @@ plan_index:
 
     - packet_id: agent-login-flows-impl
       order: 132
+      desired_release: v0.5
       title: "Impl: OAuth --claude-login / --codex-login / --antigravity-login via run_provider_login"
       status: pending
       kind: enhancement
@@ -785,6 +789,7 @@ plan_index:
 
     - packet_id: agent-api-key-login-flows
       order: 143
+      desired_release: v0.6
       title: "Impl (later): API-key entry flow for the autonomous track"
       status: pending
       kind: enhancement
@@ -813,6 +818,7 @@ plan_index:
 
     - packet_id: forge-harness-icap-proxy
       order: 278
+      desired_release: v0.5
       renumbered_from: 144
       title: "Phase 2: ICAP proxy header injection for forge harness auth"
       status: ready
@@ -932,6 +938,7 @@ plan_index:
 
     - packet_id: vsock-exec-chain-authn-authz
       order: 137
+      desired_release: v0.5
       title: "Security P0: authenticate the vsock host->guest->podman-exec chain failure-closed"
       status: ready
       kind: security
@@ -989,6 +996,7 @@ plan_index:
 
     - packet_id: encrypted-control-channel-impl
       order: 141
+      desired_release: v0.5
       title: "Security: implement the encrypted, version-bound control channel + argv allowlist (both hops)"
       status: ready
       kind: enhancement
@@ -1062,6 +1070,7 @@ plan_index:
 
     - packet_id: encrypted-channel-vsock-cutover
       order: 145
+      desired_release: v0.5
       title: "Security: coordinated vsock cutover to the encrypted channel (slice 4) + container hop (slice 6)"
       status: ready
       kind: enhancement
@@ -1093,6 +1102,7 @@ plan_index:
 
     - packet_id: encrypted-channel-perboot-key-hardening
       order: 142
+      desired_release: v0.5
       title: "Security hardening: mix a per-boot secret into the control-channel PSK derivation"
       status: pending
       kind: optimization
@@ -1152,6 +1162,7 @@ plan_index:
 
     - packet_id: transport-negligible-overhead-audit
       order: 147
+      desired_release: v0.5
       title: "Audit: transport layer must add negligible overhead (wire oscillation root cause)"
       status: ready
       kind: audit+enhancement
@@ -1176,6 +1187,7 @@ plan_index:
 
     - packet_id: wire-oscillation-root-cause
       order: 148
+      desired_release: v0.4
       title: "Investigate: headless crash causing wire degraded/recovered oscillations"
       status: ready
       kind: investigation+bug-fix
@@ -1244,6 +1256,7 @@ plan_index:
 
     - packet_id: post-login-cloud-refresh
       order: 150
+      desired_release: v0.4
       title: "Investigate: token storage + cloud refresh not triggering after GitHub Login"
       status: ready
       kind: investigation+enhancement
@@ -1272,6 +1285,7 @@ plan_index:
 
     - packet_id: socket-audit-master
       order: 151
+      desired_release: v0.5
       title: "MASTER AUDIT: Observable streams at all transport boundaries (4-agent ratification)"
       status: ready
       kind: audit+refactor
@@ -1362,6 +1376,7 @@ plan_index:
 
     - packet_id: vm-headless-persistent-listener
       order: 153
+      desired_release: v0.5
       title: "VM Headless: persistent vsock listener + server-push event stream"
       status: ready
       multi_cycle: true
@@ -1511,6 +1526,7 @@ plan_index:
 
     - packet_id: windows-tray-stream-refactor
       order: 154
+      desired_release: v0.5
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
       status: ready
       events:
@@ -1771,6 +1787,7 @@ plan_index:
 
     - packet_id: macos-tray-stream-refactor
       order: 155
+      desired_release: v0.5
       title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
       status: ready
       kind: refactor
@@ -1960,6 +1977,7 @@ plan_index:
 
     - packet_id: linux-native-stream-audit
       order: 156
+      desired_release: v0.5
       title: "Linux Native Tray/Host: audit and fix any polling in tillandsias-headless local path"
       status: ready
       kind: audit+refactor
@@ -2030,6 +2048,7 @@ plan_index:
 
     - packet_id: macos-tray-state-code-status-ux
       order: 161
+      desired_release: v0.5
       title: "macOS Tray: 37-char curated state messages from stable codes"
       status: pending
       kind: enhancement+refactor
@@ -2073,6 +2092,7 @@ plan_index:
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
     - packet_id: headless-podman-unix-streams
       order: 157
+      desired_release: v0.5
       title: "Headless ↔ Podman: Unix socket async streams (replace podman exec + HTTP poll)"
       status: ready
       kind: refactor+implementation
@@ -2101,6 +2121,7 @@ plan_index:
 
     - packet_id: vault-blocking-watch
       order: 158
+      desired_release: v0.5
       title: "Vault: replace periodic token poll with blocking-watch HTTP stream"
       status: ready
       kind: refactor
@@ -2262,6 +2283,7 @@ plan_index:
 
     - packet_id: host-lifecycle-race-safeguards
       order: 279
+      desired_release: v0.5
       renumbered_from: 161
       title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
       status: ready
@@ -2799,6 +2821,7 @@ plan_index:
 
     - packet_id: microsoft-linux-guest-migration
       order: 280
+      desired_release: v0.5
       renumbered_from: 161
       title: "Migrate WSL2 guest base from Fedora 44 Container Base to Azure Linux 4.0 (post-GA)"
       status: pending
@@ -6279,6 +6302,7 @@ plan_index:
 
     - packet_id: network-architecture-audit
       order: 245
+      desired_release: v0.5
       title: "Network Architecture Audit — Runtime Taxonomy & End-to-End Design"
       status: ready
       kind: audit+design
@@ -6384,6 +6408,7 @@ plan_index:
 
     - packet_id: credential-secrets-architecture-audit
       order: 246
+      desired_release: v0.5
       title: "Credential & Secrets Architecture Audit"
       status: ready
       kind: audit+security+design
@@ -6421,6 +6446,7 @@ plan_index:
 
     - packet_id: proxy-git-mirror-configuration-audit
       order: 247
+      desired_release: v0.5
       title: "Proxy & Git Mirror Configuration Audit"
       status: ready
       kind: audit+bug-fix
@@ -6455,6 +6481,7 @@ plan_index:
 
     - packet_id: spec-cheatsheet-contradiction-audit
       order: 248
+      desired_release: v0.5
       title: "Spec & Cheatsheet Organic Growth Contradiction Audit"
       status: ready
       kind: audit+documentation
@@ -6490,6 +6517,7 @@ plan_index:
 
     - packet_id: event-push-architecture
       order: 249
+      desired_release: v0.5
       title: "Event Push Architecture — Container & Git Lifecycle Events to Tray"
       status: ready
       events:
@@ -6546,6 +6574,7 @@ plan_index:
 
     - packet_id: ultra-minimalistic-tray-ux
       order: 250
+      desired_release: v0.5
       title: "Ultra-Minimalistic Tray UX — Most Important Notification in Status Line"
       status: ready
       kind: ux+design
@@ -6582,6 +6611,7 @@ plan_index:
 
     - packet_id: long-running-work-packet-methodology
       order: 251
+      desired_release: v0.5
       title: "Meta: Long-Running Work Packet Methodology + Multi-Agent Verification Ledger"
       status: ready
       kind: methodology
@@ -8085,6 +8115,7 @@ plan_index:
 
     - packet_id: macos-attach-first-use-materialization-blackout
       order: 270
+      desired_release: v0.4
       title: "First-use attach: forge-image materialization has no progress feedback and the build dies with the attach process (guest-side)"
       status: ready
       kind: bug
@@ -8269,6 +8300,7 @@ plan_index:
 
     - packet_id: guest-agent-attach-runs-login-flow
       order: 273
+      desired_release: v0.4
       title: "Guest headless: agent-attach argv (--cloud <p> --opencode) runs the github-login flow and exits 0 — agent never launches"
       status: ready
       kind: bug
@@ -8694,6 +8726,7 @@ plan_index:
 
     - packet_id: guest-podman-overlay-corruption-selfheal
       order: 281
+      desired_release: v0.4
       title: "Guest image build: self-heal once from corrupt overlay store instead of permanent 125"
       status: ready
       kind: bug
@@ -9192,6 +9225,7 @@ plan_index:
 
     - packet_id: brew-opencode-harness-migration
       order: 295
+      desired_release: v0.5
       title: "Migrate the opencode harness install to an attested homebrew-core bottle behind the migration ladder (npm fallback retained)"
       status: ready
       kind: enhancement
@@ -10062,6 +10096,7 @@ plan_index:
 
     - packet_id: opencode-tray-tui-spill-verify
       order: 306
+      desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
       status: blocked
@@ -10106,6 +10141,7 @@ plan_index:
 
     - packet_id: antigravity-launch-crash
       order: 307
+      desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
       status: blocked
@@ -10229,6 +10265,7 @@ plan_index:
 
     - packet_id: headless-least-privilege-split
       order: 309
+      desired_release: v0.5
       title: "Reintroduce headless least-privilege correctly: split vsock listener from podman orchestrator (or delegate via podman socket); audit macOS vz unit for the same directives"
       status: ready
       kind: enhancement
@@ -10520,6 +10557,7 @@ plan_index:
 
     - packet_id: inference-firstrun-install-resilience
       order: 313
+      desired_release: v0.4
       title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
       status: in_progress
       kind: bug
@@ -10843,6 +10881,7 @@ plan_index:
 
     - packet_id: brew-aarch64-harness-strategy
       order: 317
+      desired_release: v0.5
       title: "Brew harness strategy: keep brew only for officially-brew-documented tools; per-arch policy for aarch64 Linux (Tier 2, no bottles)"
       status: ready
       kind: enhancement
@@ -10950,6 +10989,7 @@ plan_index:
 
     - packet_id: mirror-credential-helper-broker
       order: 319
+      desired_release: v0.4
       title: "Ladder rung B: git credential helper (vault-backed) on the mirror; evaluate short-TTL GitHub App installation tokens; kill token-in-URL"
       status: ready
       kind: architecture
@@ -10978,6 +11018,7 @@ plan_index:
 
     - packet_id: forge-gitconfig-single-injection
       order: 320
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "Ladder rung C: one standard gitconfig injection point and system-default runtime CA trust on all platforms"
       status: pending
@@ -11160,6 +11201,7 @@ plan_index:
 
     - packet_id: forge-config-trust-cross-platform-parity
       order: 348
+      desired_release: v0.5
       provisional_id: linux-260714-4
       release_target: stable-milestone-v1
       title: "Forge Git/trust parity: Linux, macOS-guest, and Windows-guest fixtures converge on the same injection path"
@@ -11227,6 +11269,7 @@ plan_index:
 
     - packet_id: macos-forge-config-trust-live-parity
       order: 349
+      desired_release: v0.5
       provisional_id: linux-260714-5
       release_target: stable-milestone-v1
       title: "macOS current-build forge live config, mirror, and TLS parity gate"
@@ -11353,6 +11396,7 @@ plan_index:
 
     - packet_id: windows-forge-config-trust-live-parity
       order: 350
+      desired_release: v0.5
       provisional_id: linux-260714-6
       release_target: stable-milestone-v1
       title: "Windows current-build forge live config, mirror, and TLS parity gate"
@@ -11522,6 +11566,7 @@ plan_index:
 
     - packet_id: mirror-authenticated-push-transport
       order: 322
+      desired_release: v0.5
       title: "Ladder rung E (research-first): forge pushes to the mirror over authenticated smart-HTTP/SSH; git:// demoted to fetch-only"
       status: ready
       kind: research
@@ -11749,6 +11794,7 @@ plan_index:
 
     - packet_id: wsl-guest-forge-user-src-ownership
       order: 326
+      desired_release: v0.4
       release_target: stable-milestone-v1
       title: "WSL2 guest provisioning: no forge user + root-owned /home/forge/src — every containerized cloud clone fails EACCES"
       status: in_progress
@@ -11899,6 +11945,7 @@ plan_index:
             - "cargo test -p tillandsias-headless on_demand_image_build_error_names_image_and_recovery_command (PASS)"
     - packet_id: guest-container-metrics-over-control-wire
       order: 333
+      desired_release: v0.5
       title: "Guest/container metrics over the control wire (per-container + per-mount I/O) — no VM-boundary hacks"
       status: ready
       kind: enhancement
@@ -11933,6 +11980,7 @@ plan_index:
 
     - packet_id: forge-hot-path-placement-metrics
       order: 329
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       # Promoted 2026-07-17 (operator): 'making sure that the checkout from
       # the git mirror into the forge happens in RAMDISK as we expected' —
@@ -11972,6 +12020,7 @@ plan_index:
 
     - packet_id: git-mirror-observability-and-managed-alternatives
       order: 330
+      desired_release: v0.5
       title: "Git-mirror: mirror-as-a-service observability + build-vs-adopt evaluation of off-the-shelf mirror containers (Forgejo/Gitea et al.)"
       status: ready
       kind: research
@@ -12209,6 +12258,7 @@ plan_index:
 
     - packet_id: forge-shared-checkout-destructive-clean
       order: 328
+      desired_release: v0.4
       title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
       status: pending
       kind: bugfix
@@ -12375,6 +12425,7 @@ plan_index:
 
     - packet_id: stable-milestone-v1
       order: 334
+      desired_release: v0.5
       title: "STABLE MILESTONE v1: per-platform must-land set for the first stable-labeled release beyond v0.3.260712.1"
       status: ready
       kind: milestone
@@ -12463,6 +12514,7 @@ plan_index:
 
     - packet_id: collaborative-work-scheduling-research
       order: 335
+      desired_release: v0.5
       title: "Research: collaborative triage/scheduling/queueing for distributed agents — beyond the flat release_target marker"
       status: ready
       kind: research
@@ -12883,6 +12935,7 @@ plan_index:
 
     - packet_id: enclave-service-catalog-milestone
       order: 353
+      desired_release: v0.6
       title: "MILESTONE: enclave service catalog — 'publish it locally' with hand-curated allowlisted containers at https://www.<project>.localhost"
       status: ready
       kind: milestone
@@ -13234,6 +13287,7 @@ plan_index:
 
     - packet_id: transparent-https-localhost
       order: 360
+      desired_release: v0.6
       title: "Transparent HTTPS for www.<project>.localhost — Caddy internal CA + host trust so localhost services get real https with zero prompts"
       status: claimed
       release_target: enclave-service-catalog-milestone
@@ -13272,6 +13326,7 @@ plan_index:
 
     - packet_id: container-share-policy-and-debug-ports
       order: 361
+      desired_release: v0.6
       title: "Per-container share policy (ro/rw source or published-artifact mount) + exposed debug ports for local web dev"
       status: claimed
       release_target: enclave-service-catalog-milestone
@@ -13832,6 +13887,7 @@ plan_index:
 
     - packet_id: git-mirror-reconcile-deploy-and-verify
       order: 384
+      desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Deploy: rebuild tillandsias-git image and live-verify order-369 auto-reconcile"
       status: ready
@@ -13967,6 +14023,7 @@ plan_index:
 
     - packet_id: web-share-release-milestone
       order: 373
+      desired_release: v0.6
       title: "MILESTONE: harnesses launch web containers (../visual-chess) — through public one-prompt share"
       status: ready
       kind: milestone
@@ -14125,6 +14182,7 @@ plan_index:
 
     - packet_id: visual-chess-harness-publish-e2e
       order: 375
+      desired_release: v0.6
       release_target: web-share-release-milestone
       title: "E2E: in-forge harness agent publishes ../visual-chess to a clickable local URL"
       status: ready
@@ -14146,6 +14204,7 @@ plan_index:
 
     - packet_id: catalog-multi-service-compose
       order: 376
+      desired_release: v0.6
       release_target: web-share-release-milestone
       title: "Catalog multi-service entries: WordPress+DB for ../inat-observations-wp (podman-pod compose-like, transparent into the enclave)"
       status: ready
@@ -14173,6 +14232,7 @@ plan_index:
 
     - packet_id: cloudflare-login-implementation
       order: 377
+      desired_release: v0.6
       release_target: web-share-release-milestone
       title: "--cloudflare-login: device/API login to vault (same shape as provider logins)"
       status: ready
@@ -14197,6 +14257,7 @@ plan_index:
 
     - packet_id: warp-tunnel-ephemeral-public-serve
       order: 378
+      desired_release: v0.6
       release_target: web-share-release-milestone
       title: "Cloudflare tunnel + DNS: serve a published container at https://www.<ephemeral-ns>.<operator-domain> without exposing the host"
       status: ready
@@ -14223,6 +14284,7 @@ plan_index:
 
     - packet_id: one-prompt-public-share-flow
       order: 379
+      desired_release: v0.6
       release_target: web-share-release-milestone
       title: "'Share this project with <person>' — one prompt to a clickable public URL (publish_public MCP tool)"
       status: ready
@@ -14247,6 +14309,7 @@ plan_index:
 
     - packet_id: readme-release-ledger-wiring
       order: 380
+      desired_release: v0.5
       title: "README release ledger: skill wiring + distillation policy (ledger itself lands 2026-07-16)"
       status: ready
       kind: enhancement
@@ -14366,6 +14429,7 @@ plan_index:
 
     - packet_id: guest-staged-gitdir-root-owned
       order: 382
+      desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: guest-staged forge gitdir is root-owned/700 on WSL2 — forge user cannot read git metadata; credential guard fail-closes every in-forge cycle"
       status: ready
@@ -14461,6 +14525,7 @@ plan_index:
     - packet_id: windows-inforge-meta-orchestration-transparent-push
       provisional_id: windows-260716-1
       order: provisional
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "GOAL: BigPickle/Hy3-class agent completes a full /meta-orchestration inside the Windows forge with a transparent verified push to GitHub"
       status: in_progress
@@ -14562,6 +14627,7 @@ plan_index:
     - packet_id: git-mirror-container-created-without-relay-credential
       provisional_id: windows-260716-2
       order: provisional
+      desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: per-project mirror container created WITHOUT the vault-token secret — relay fail-closes every in-forge push; mint/mount failure is silent"
       status: ready
@@ -14908,6 +14974,7 @@ plan_index:
 
     - packet_id: cloudflare-tunnel-tls-in-proxy-router-research
       order: 388
+      desired_release: v0.6
       release_target: web-share-release-milestone
       title: "Research: co-locate Cloudflare tunnel + WARP + transparent HTTPS/TLS termination in the proxy/router container"
       status: ready
@@ -14942,6 +15009,7 @@ plan_index:
 
     - packet_id: deploy-lifecycle-evidence-gating-research
       order: 389
+      desired_release: v0.7
       release_target: web-share-release-milestone
       title: "Research: evidence-gated deploy lifecycle ladder (local dev -> daily -> staging -> prod -> canary)"
       status: ready
@@ -14975,6 +15043,7 @@ plan_index:
 
     - packet_id: github-app-fine-grained-interaction-research
       order: 390
+      desired_release: v0.7
       release_target: web-share-release-milestone
       title: "Research: GitHub App for fine-grained user<->GitHub interactions + temporary elevated tokens for promotions/releases"
       status: ready
@@ -15221,6 +15290,7 @@ plan_index:
 
     - packet_id: experts-refresh-on-commit
       order: 396
+      desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Expert refresh on commit/push — answers track the working tree"
       status: ready
@@ -15267,6 +15337,7 @@ plan_index:
 
     - packet_id: plan-yaml-compiled-editor
       order: 398
+      desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Compiled deterministic YAML query/edit engine for ./plan + ./methodology — one engine for agents (CLI) and the PLAN EXPERT (library)"
       status: ready
@@ -15305,6 +15376,7 @@ plan_index:
 
     - packet_id: forge-lsp-by-default
       order: 399
+      desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "LSP available by default in the forge — agents query code structurally (OpenCode LSP wiring; rust-analyzer first)"
       status: ready
@@ -15347,6 +15419,7 @@ plan_index:
 
     - packet_id: code-spec-cheatsheet-expert
       order: 400
+      desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "CODE EXPERT (+ SPEC/CHEATSHEET expert) — structural code + spec + cheatsheet knowledge, commit-fresh, audit-capable"
       status: ready
@@ -15476,6 +15549,7 @@ plan_index:
 
     - packet_id: zeroclaw-reintroduction-roadmap
       order: 403
+      desired_release: v0.7
       provisional_id: windows-260717-1
       title: "ROADMAP (Tlatoani-gated, NOT YET): reintroduce zeroclaw as a local-only enclave container — main consumer of the experts"
       status: pending
@@ -15738,6 +15812,7 @@ plan_index:
 
     - packet_id: codex-e2e-smoke-launcher-and-verdict-parity
       order: 404
+      desired_release: v0.4
       title: "Codex e2e smoke launcher: launch codex non-interactively in the forge smoke lane with rate-limit + MO-SMOKE verdict parity"
       status: ready
       kind: implementation
@@ -15781,6 +15856,7 @@ plan_index:
 
     - packet_id: codex-opencode-smoke-divergence-comparison
       order: 405
+      desired_release: v0.4
       title: "Live codex-vs-opencode forge smoke comparison — run both on /meta-orchestration, capture + file divergences"
       status: ready
       kind: verification
@@ -16012,6 +16088,26 @@ plan_index:
         - "plan/loop_status.md names the ACTIVE release-in-progress and its remaining open-packet count each coordinator cycle"
         - "cross-platform/cross-host deps are release-ordered (dependent's desired_release >= upstream's); any exception is noted"
       events:
+        - type: progress
+          ts: "2026-07-18T07:00:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            FULL BACKFILL PASS (operator directive: split the backlog into
+            releases to plan the following ones). Every one of the 97 OPEN
+            packets now carries a desired_release: v0.4=36 (EXPERTS fat-host
+            local-inference core + in-flight agent-workflow bugs/robustness +
+            Windows crashloop + git-mirror credential fixes), v0.5=47
+            (cross-platform parity + streams/transport refactors + security
+            control channel + architecture audits + macOS/Windows lanes +
+            macOS install polish), v0.6=11 (web-share / publish-locally
+            milestone family + Cloudflare), v0.7=3 (deploy-lifecycle + GitHub
+            App research + zeroclaw, Tlatoani-gated). Cross-platform gating
+            respected (e.g. macOS/Windows inference tiers v0.5 depend on the
+            v0.4 linux core; VM-image GPU v0.5 depends on v0.4 CDI). Remaining
+            standing scope: keep tagging NEW packets as filed, and the
+            coordinator may slip individual packets between releases with a
+            reason event. plan-orders gate green after the pass.
         - type: filed
           ts: "2026-07-17T19:20:00Z"
           agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
@@ -16706,3 +16802,51 @@ plan_index:
             The "no Claude to troubleshoot" gap: auto-capture diagnostics on
             terminal launch failure so remote crashloops are debuggable without
             a live agent. Depends on 417 (needs a terminal failed state to hook).
+
+    - packet_id: macos-curl-installer-gatekeeper-overwarn
+      order: 421
+      desired_release: v0.5
+      title: "macOS curl installer over-warns about Gatekeeper: the curl+tar+open path is NOT quarantined, so the 'unidentified developer' warning it prints is unnecessary/misleading"
+      status: ready
+      kind: enhancement
+      deliverable: scripts/install-macos.sh (conditional Gatekeeper messaging)
+      depends_on: []
+      pickup_role: macos
+      owner_host: macos
+      capability_tags: [macos, install, gatekeeper, ux, distribution]
+      estimated_hours: 2
+      outcome: >
+        Operator question 2026-07-18: a user could not open the DMG (Gatekeeper
+        "unidentified developer", because a browser-downloaded DMG is
+        quarantined + the .app is only ad-hoc signed). CONFIRMED by code audit:
+        the CURL installer does NOT hit that block — scripts/install-macos.sh
+        fetches a tar.gz via `curl` (:89), extracts with `tar` into
+        /Applications (:132), and launches with `open -a` (:201); files fetched
+        by curl never get `com.apple.quarantine`, so Gatekeeper's first-launch
+        assessment does not fire. YET install-macos.sh:148-160 UNCONDITIONALLY
+        prints "macOS Gatekeeper may block it with 'unidentified developer' …
+        right-click → Open" — which is unnecessary and scary for the curl path
+        (the app launches cleanly). Fix: make the warning conditional (only
+        emit when the artifact actually carries a quarantine xattr, or drop it
+        for the curl path), so the curl installer stops over-warning. The REAL
+        cross-path fix (Developer ID + notarization, which fixes the DMG too)
+        is separately scoped in openspec/changes/macos-app-signing-2026-07-07/
+        (unimplemented, deferred to v0.0.2+, gated on the operator obtaining an
+        Apple Developer ID cert) — NOT this packet.
+      exit_criteria:
+        - "install-macos.sh only prints the Gatekeeper right-click-Open guidance when the installed app actually has a com.apple.quarantine xattr (curl path: no warning, since it launches cleanly)"
+        - "the message, when shown, is accurate for the path that produced it (DMG vs curl)"
+        - "no change to the signing posture (that is the separate notarization OpenSpec change); curl-install remains the recommended macOS path until notarization lands"
+      events:
+        - type: filed
+          ts: "2026-07-18T07:00:00Z"
+          agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
+          host: linux
+          summary: >
+            Filed from the operator's macOS DMG-signing question. Answer:
+            curl-install does NOT face the DMG's Gatekeeper block (curl
+            downloads aren't quarantined). Small UX fix: stop the curl
+            installer over-warning. Real fix (Developer ID + notarization for
+            BOTH paths) stays in the pending macos-app-signing-2026-07-07
+            OpenSpec change, operator-gated on a Developer ID cert. v0.5
+            (macOS distribution polish).
