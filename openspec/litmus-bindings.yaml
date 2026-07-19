@@ -148,6 +148,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:codex-forge-yolo-shape
+  - litmus:forge-agent-result-format
   coverage_ratio: 100
   last_verified: '2026-07-04'
 - spec_id: cli-bash-mode

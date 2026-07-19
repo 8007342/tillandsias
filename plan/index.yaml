@@ -17477,7 +17477,7 @@ plan_index:
     - order: 429
       desired_release: v0.4
       title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
-      status: ready
+      status: in_progress
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: [427]
@@ -17506,6 +17506,46 @@ plan_index:
           host: linux
           summary: Filed from the 2026-07-19 forge delegation research.
 
+
+        - type: progress
+          ts: "2026-07-19T05:05:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            EMISSION side done; CONSUMPTION side still open, so this stays
+            in_progress. Both lanes can now emit machine-readable output on
+            request: opencode gains `--format json` and codex gains `--json`
+            plus optional `--output-last-message`, gated behind
+            TILLANDSIAS_AGENT_RESULT_FORMAT=json (and
+            TILLANDSIAS_AGENT_RESULT_FILE) so interactive and human-facing runs
+            keep the formatted default — flipping every run to JSON to serve
+            automation would degrade the human path.
+            Flags were verified EMPIRICALLY against the installed binaries
+            rather than taken from documentation: opencode 1.18.3 `run --help`
+            lists --format {default,json} and --auto; codex-cli 0.144.4
+            `exec --help` lists --json, -o/--output-last-message,
+            --output-schema, --ephemeral and --skip-git-repo-check.
+            FIXED A PHANTOM FLAG in the same pass. The OpenCode lane passed
+            `--dangerously-skip-permissions`, which opencode DOES NOT HAVE —
+            confirmed absent from its --help flag list, and silently swallowed
+            because yargs is non-strict. The lane's permissive behaviour was
+            coming entirely from "permission": "allow" in the config overlay, so
+            the flag was decorative. Replaced with the real `--auto`. A phantom
+            flag is the worst kind of config: it reads as deliberate, never
+            errors, and does nothing. NOTE Claude and Antigravity genuinely do
+            document --dangerously-skip-permissions; only the OpenCode lane was
+            wrong, and only it was changed.
+            scripts/test-opencode-entrypoint-prompt.sh had ASSERTED the phantom
+            flag — a fixture pinning behaviour that never worked. Updated, plus
+            a new case proving structured output is opt-in.
+            Guarded by litmus:forge-agent-result-format (4/4), proven falsifiable
+            by reintroducing the phantom flag.
+            STILL REQUIRED to close: nothing CONSUMES the JSONL yet. The
+            dispatcher must parse thread/turn/item events, distinguish success
+            from failure from timeout per worker, and surface the outcome to the
+            delegating agent — with a litmus proving a FAILED delegated task is
+            reported as failed rather than silently dropped. Emitting parseable
+            output is not the same as knowing whether the work succeeded.
     - order: 430
       desired_release: v0.4
       title: "Codex lane is unauthenticated by construction: OPENAI_API_KEY does not authenticate Codex AND injecting it suppresses the vault OAuth restore"

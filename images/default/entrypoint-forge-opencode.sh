@@ -158,15 +158,34 @@ for arg in "$@"; do
     fi
 done
 
+# Permission bypass flag (order 429). This passed
+# `--dangerously-skip-permissions` for a long time — a flag opencode DOES NOT
+# HAVE. Verified against the installed opencode 1.18.3: it is absent from
+# `opencode run --help`, and yargs is non-strict so unknown flags are silently
+# swallowed. The lane's permissive behaviour has therefore been coming entirely
+# from `"permission": "allow"` in the config overlay, not from this flag. The
+# real flag is `--auto` ("auto-approve permissions that are not explicitly
+# denied"), so pass that and make the intent actual rather than accidental.
+oc_auto_args=(--auto)
+
+# Structured output (order 429), opt-in. Delegated runs need a machine-readable
+# transcript so the dispatcher can tell success from failure from timeout;
+# interactive/human runs must keep the formatted default. `--format json` emits
+# raw JSON events (step_start / text / step_finish), each carrying sessionID.
+oc_format_args=()
+if [ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]; then
+    oc_format_args=(--format json)
+fi
+
 if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
     trace_lifecycle "exec" "launching prompted opencode run"
-    exec "$OC_BIN" run --dangerously-skip-permissions "$TILLANDSIAS_OPENCODE_PROMPT"
+    exec "$OC_BIN" run "${oc_auto_args[@]}" "${oc_format_args[@]}" "$TILLANDSIAS_OPENCODE_PROMPT"
 elif [ "$IS_DIAGNOSTICS" = "true" ]; then
     trace_lifecycle "exec" "launching unattended opencode run"
     # Execute the unattended loop run command.
     # We ignore the other passed arguments (--print, --output-format, json) as they are intended for the orchestrator,
     # and instead run opencode unattended using the synthetic prompt or command.
-    exec "$OC_BIN" run --dangerously-skip-permissions "run /startup"
+    exec "$OC_BIN" run "${oc_auto_args[@]}" "${oc_format_args[@]}" "run /startup"
 else
     trace_lifecycle "exec" "launching opencode ($OC_BIN)"
     exec "$OC_BIN" "$@"

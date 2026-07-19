@@ -71,7 +71,7 @@ rm -f "$CALLS_FILE"
 OPENCODE_CALLS_FILE="$CALLS_FILE" \
 TILLANDSIAS_OPENCODE_PROMPT="Use the /forge-continuous-enhancement skill" \
 "$ENTRYPOINT_UNDER_TEST"
-assert_call "[run][--dangerously-skip-permissions][Use the /forge-continuous-enhancement skill]"
+assert_call "[run][--auto][Use the /forge-continuous-enhancement skill]"
 
 rm -f "$CALLS_FILE"
 set +e
@@ -85,7 +85,17 @@ if [[ "$status" -ne 37 ]]; then
     printf 'FAIL: expected prompted OpenCode run to propagate exit 37, got %s\n' "$status" >&2
     exit 1
 fi
-assert_call "[run][--dangerously-skip-permissions][exit propagation probe]"
+assert_call "[run][--auto][exit propagation probe]"
+
+# Order 429: structured output is OPT-IN. Without the env var the lane must
+# keep the human-facing formatted default; with it, --format json must be
+# passed so a dispatcher can parse the run.
+rm -f "$CALLS_FILE"
+OPENCODE_CALLS_FILE="$CALLS_FILE" \
+TILLANDSIAS_AGENT_RESULT_FORMAT=json \
+TILLANDSIAS_OPENCODE_PROMPT="structured probe" \
+"$ENTRYPOINT_UNDER_TEST"
+assert_call "[run][--auto][--format][json][structured probe]"
 
 rm -f "$CALLS_FILE"
 OPENCODE_CALLS_FILE="$CALLS_FILE" "$ENTRYPOINT_UNDER_TEST"

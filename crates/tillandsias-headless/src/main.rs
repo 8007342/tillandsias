@@ -3929,8 +3929,9 @@ fn build_opencode_forge_args(
     match mode {
         ForgeMode::Cli => {
             // When a prompt is provided, the entrypoint execs
-            // `opencode run --dangerously-skip-permissions "<prompt>"` which is
-            // non-interactive.  Skip --interactive --tty so podman does not
+            // `opencode run --auto "<prompt>"` which is non-interactive.
+            // (It passed --dangerously-skip-permissions until order 429; that
+            // flag does not exist in opencode and was silently swallowed.)  Skip --interactive --tty so podman does not
             // attempt to claim the terminal (which causes SIGTTIN/SIGTTOU /
             // stopped T state when the parent is in a harness PTY).
             // @trace plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
