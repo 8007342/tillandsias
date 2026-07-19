@@ -60,26 +60,15 @@ impl Ledger {
     pub fn load(path: &Path) -> Result<Self, String> {
         let raw =
             std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-        let doc: Value =
-            serde_yaml::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
+        let archived_ids = Self::collect_archived_ids(path);
+        Self::parse(&raw, archived_ids).map_err(|e| format!("{}: {e}", path.display()))
+    }
 
-        let mut packets = Vec::new();
-        collect_packets(&doc, &mut packets);
-
-        let mut by_id = BTreeMap::new();
-        let mut by_order = BTreeMap::new();
-        for (idx, p) in packets.iter().enumerate() {
-            if let Some(id) = str_field(p, "packet_id") {
-                by_id.insert(id.to_string(), idx);
-                if let Some(order) = p.get("order").and_then(Value::as_u64) {
-                    by_order.insert(order, id.to_string());
-                }
-            }
-        }
-        // Archive awareness: sibling plan/archive/*.yaml holds completed
-        // packets. Their ids resolve dependencies (done work) but never
-        // enter the active packet list. Best-effort — a missing archive
-        // dir just means no archived ids.
+    /// Archive awareness: sibling plan/archive/*.yaml holds completed
+    /// packets. Their ids resolve dependencies (done work) but never enter
+    /// the active packet list. Best-effort — a missing archive dir just
+    /// means no archived ids.
+    fn collect_archived_ids(path: &Path) -> BTreeSet<String> {
         let mut archived_ids = BTreeSet::new();
         if let Some(archive_dir) = path.parent().map(|d| d.join("archive"))
             && let Ok(entries) = std::fs::read_dir(&archive_dir)
@@ -100,13 +89,41 @@ impl Ledger {
                 }
             }
         }
+        archived_ids
+    }
 
+    /// Parse a raw ledger string with a known archived-id set — NO file IO.
+    /// Used by `load` and, crucially, to validate a CANDIDATE edit before it
+    /// is flushed: `serde_yaml::from_str` REJECTS duplicate mapping keys, so
+    /// a candidate that would create the order-263 broken-ledger class (a
+    /// second `events:`/`title:`/`order:` on one packet) fails HERE, before
+    /// any bytes hit disk.
+    pub fn parse(raw: &str, archived_ids: BTreeSet<String>) -> Result<Self, String> {
+        let doc: Value = serde_yaml::from_str(raw).map_err(|e| format!("parse: {e}"))?;
+        let mut packets = Vec::new();
+        collect_packets(&doc, &mut packets);
+        let mut by_id = BTreeMap::new();
+        let mut by_order = BTreeMap::new();
+        for (idx, p) in packets.iter().enumerate() {
+            if let Some(id) = str_field(p, "packet_id") {
+                by_id.insert(id.to_string(), idx);
+                if let Some(order) = p.get("order").and_then(Value::as_u64) {
+                    by_order.insert(order, id.to_string());
+                }
+            }
+        }
         Ok(Self {
             packets,
             by_id,
             by_order,
             archived_ids,
         })
+    }
+
+    /// The active ∪ archived id space, so a candidate edit can be validated
+    /// for referential soundness against the same universe `load` used.
+    pub fn archived_ids(&self) -> BTreeSet<String> {
+        self.archived_ids.clone()
     }
 
     /// A reference resolves if it names an active OR an archived packet.
@@ -358,6 +375,79 @@ impl Schema {
     }
 }
 
+/// Slice 2: format-preserving, VALIDATED ledger edits. serde_yaml round-trip
+/// is lossy (drops comments + layout) and we OWN the format, so edits are
+/// SURGICAL text insertions — everything outside the touched lines stays
+/// byte-identical — gated by a re-parse + integrity check so a broken ledger
+/// can never reach disk. This retires the order-263 broken-ledger class (the
+/// duplicate-key / glued-packet corruption that keeps biting hand edits) BY
+/// CONSTRUCTION for every edit routed through the tool.
+pub mod edit {
+    use super::Ledger;
+    use std::collections::BTreeSet;
+
+    /// Insert `event_block` as the FIRST entry under the target packet's
+    /// `events:` list, preserving all surrounding formatting. `event_block`
+    /// is the event's already-8-space-indented lines, newline-terminated
+    /// (see [`event_block`]). Creates the `events:` block if the packet has
+    /// none. Does NOT validate — the caller flushes only after
+    /// [`validate_candidate`] returns no violations.
+    pub fn append_event(raw: &str, target_id: &str, event_block: &str) -> Result<String, String> {
+        let mut lines: Vec<String> = raw.lines().map(String::from).collect();
+        let want = format!("- packet_id: {target_id}");
+        let start = lines
+            .iter()
+            .position(|l| l.trim() == want)
+            .ok_or_else(|| format!("packet_id '{target_id}' not found"))?;
+        // The packet span ends at the next top-level packet list item or EOF.
+        let end = (start + 1..lines.len())
+            .find(|&i| lines[i].starts_with("    - packet_id:"))
+            .unwrap_or(lines.len());
+        let block: Vec<String> = event_block.lines().map(String::from).collect();
+        if block.is_empty() {
+            return Err("empty event block".to_string());
+        }
+        match (start..end).find(|&i| lines[i] == "      events:") {
+            Some(ei) => {
+                for (k, bl) in block.iter().enumerate() {
+                    lines.insert(ei + 1 + k, bl.clone());
+                }
+            }
+            None => {
+                let mut ins = vec!["      events:".to_string()];
+                ins.extend(block);
+                for (k, bl) in ins.iter().enumerate() {
+                    lines.insert(end + k, bl.clone());
+                }
+            }
+        }
+        Ok(lines.join("\n") + "\n")
+    }
+
+    /// The FLUSH GUARD. Returns the violations that would make `candidate` a
+    /// broken ledger (empty = safe to write). Catches malformed YAML +
+    /// DUPLICATE KEYS (via `Ledger::parse`, which serde_yaml rejects) and
+    /// duplicate packet_ids + dangling LIVE references (via integrity).
+    /// Nothing is written here.
+    pub fn validate_candidate(
+        candidate: &str,
+        archived_ids: BTreeSet<String>,
+        reference_fields: &[String],
+    ) -> Vec<String> {
+        match Ledger::parse(candidate, archived_ids) {
+            Err(e) => vec![e],
+            Ok(l) => l.check_integrity(reference_fields).violations,
+        }
+    }
+
+    /// Build a well-formed 8-space-indented event list entry.
+    pub fn event_block(etype: &str, ts: &str, agent_id: &str, host: &str, summary: &str) -> String {
+        format!(
+            "        - type: {etype}\n          ts: \"{ts}\"\n          agent_id: \"{agent_id}\"\n          host: {host}\n          summary: >\n            {summary}\n"
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,6 +521,81 @@ mod tests {
                 .iter()
                 .any(|p| p.get("provisional_id").is_some()),
             "organically-grown fields must be visible on raw packets"
+        );
+    }
+
+    #[test]
+    fn append_event_inserts_and_flush_guard_accepts() {
+        // Slice 2: a well-formed surgical event append on the REAL ledger
+        // inserts the event and passes the flush guard (parseable, ids
+        // unique, references sound, packet count unchanged).
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        let raw = std::fs::read_to_string(&path).expect("read live ledger");
+        let ledger = live_ledger();
+        let block = edit::event_block(
+            "progress",
+            "2026-07-18T09:00:00Z",
+            "test-agent",
+            "linux",
+            "unit-test appended event marker XYZ",
+        );
+        let out = edit::append_event(&raw, "plan-yaml-compiled-editor", &block)
+            .expect("append to a real packet");
+        assert!(
+            out.contains("unit-test appended event marker XYZ"),
+            "the event was inserted into the text"
+        );
+        let violations = edit::validate_candidate(
+            &out,
+            ledger.archived_ids(),
+            &Schema::minimal().reference_fields,
+        );
+        assert!(
+            violations.is_empty(),
+            "a well-formed append must pass the flush guard: {violations:?}"
+        );
+        let recheck = Ledger::parse(&out, ledger.archived_ids()).expect("candidate parses");
+        assert_eq!(
+            recheck.packets.len(),
+            ledger.packets.len(),
+            "an event append adds/loses no packet"
+        );
+    }
+
+    #[test]
+    fn flush_guard_rejects_the_order_263_duplicate_key_class() {
+        // A packet mapping with two `events:` keys is EXACTLY the corruption
+        // sibling pushes produced (orders 413/416, and the glued windows
+        // packet). serde_yaml rejects duplicate mapping keys, so the flush
+        // guard refuses it — a broken ledger can never reach disk through the
+        // tool. This is the order-263 class retired by construction.
+        let broken = "steps:\n  - packet_id: foo\n    status: ready\n    \
+                      events:\n      - type: filed\n    events:\n      - type: progress\n";
+        let violations =
+            edit::validate_candidate(broken, Default::default(), &["depends_on".to_string()]);
+        assert!(
+            !violations.is_empty(),
+            "a duplicate-key ledger must be rejected by the flush guard"
+        );
+        assert!(
+            violations
+                .iter()
+                .any(|s| s.contains("duplicate") || s.to_lowercase().contains("parse")),
+            "the refusal names the parse/duplicate-key failure: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn flush_guard_rejects_a_dangling_live_reference() {
+        // Referential soundness: a LIVE packet depending on a nonexistent id
+        // is a hard violation — the flush guard refuses it.
+        let broken = "steps:\n  - packet_id: foo\n    status: ready\n    \
+                      depends_on: [does-not-exist]\n";
+        let violations =
+            edit::validate_candidate(broken, Default::default(), &["depends_on".to_string()]);
+        assert!(
+            violations.iter().any(|s| s.contains("does-not-exist")),
+            "a dangling live reference must be a violation: {violations:?}"
         );
     }
 }
