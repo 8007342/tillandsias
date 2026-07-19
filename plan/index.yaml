@@ -17902,7 +17902,7 @@ plan_index:
       packet_id: forge-gc-auto-split-brain
       desired_release: v0.4
       title: "gc.auto split-brain: host repo and forge container share objects/ and refs/ but keep SEPARATE packed-refs — a host-side auto-gc can delete refs the container resolves through"
-      status: ready
+      status: done
       kind: fix
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: []
@@ -17933,6 +17933,50 @@ plan_index:
             in ~/src/tillandsias.
 
 
+
+        - type: completed
+          ts: "2026-07-19T11:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            HAZARD CONFIRMED BY REPRODUCTION, and it is worse than this packet
+            described. The packet said a host gc could make the container "lose
+            refs/heads/<branch>". Reproduced end to end and the consequence goes
+            further:
+              container BEFORE host gc: git rev-parse feature-x -> <sha>
+              container AFTER  host gc: fatal: Needed a single revision
+                                        for-each-ref -> EMPTY (every ref gone)
+            With HEAD pointing at an unresolvable branch the container then sees
+            TRACKED files as UNTRACKED, and committing creates an ORPHANED ROOT
+            COMMIT (rev-list --count HEAD == 1). The agent's work silently
+            detaches from all history rather than merely failing.
+            Root cause is precise: objects/ and refs/ are bind-mounted (live)
+            while the facade builder COPIES packed-refs point-in-time. A host gc
+            packs loose refs into the host's packed-refs and deletes the loose
+            files; the shared refs/ empties and the stale copy predates the
+            pack, so the refs are in neither place. auto-gc makes this a SILENT,
+            routine trigger.
+            Fixed by bind-mounting packed-refs alongside refs/, so a host repack
+            is simply visible to the container. Verified with the same
+            reproduction: refs resolve after gc, both branches visible, and a
+            post-gc commit keeps depth 2 instead of orphaning at 1.
+            DELIBERATELY NOT DONE: creating an empty packed-refs when the host
+            lacks one, to guarantee a mount target. It is functionally inert but
+            makes `git fsck` warn (emptyPackedRefsFile), and fabricating files
+            in the operator's repository to satisfy a mount is the wrong trade.
+            That narrow window — a host gc CREATING packed-refs mid-session on a
+            repo that had none — is now disclosed at launch instead. Both real
+            checkouts on this host already carry packed-refs (322 entries), so
+            the dominant case is covered.
+            Also considered and rejected: setting gc.auto=0 on the operator's
+            own repo. It would close the trigger but mutates their checkout and
+            does not fix the split-brain for a manual gc. Sharing the file is
+            structural; disabling gc is a workaround.
+            Guarded by litmus:forge-packed-refs-shared, whose case 1 REPRODUCES
+            the ref loss with a copied packed-refs before case 2 proves the
+            shared one prevents it.
+            Evidence: fixture 3/3; litmus 3/3; instant gate 153/156;
+            ./build.sh --check and --test pass.
     - order: 433
       packet_id: test-gpu-tier-hermeticity
       desired_release: v0.4

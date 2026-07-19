@@ -6731,6 +6731,58 @@ fn append_forge_repo_gitdir_mount_args(
             ),
         ]);
     }
+
+    // Order 432: packed-refs must be LIVE, not a point-in-time copy.
+    //
+    // objects/ and refs/ are bind-mounted (shared, live) while the facade
+    // builder COPIES packed-refs. That split is a data-loss hazard, reproduced
+    // end to end:
+    //
+    //   host `git gc` packs every loose ref into the host's packed-refs and
+    //   DELETES the loose ref files. refs/ is shared, so the container's view
+    //   empties. Its packed-refs is a stale copy that predates the gc, so the
+    //   refs are in neither place:
+    //
+    //     container, before host gc:  git rev-parse feature-x  -> <sha>
+    //     container, after  host gc:  fatal: Needed a single revision
+    //                                 for-each-ref -> EMPTY
+    //
+    //   It gets worse than "lost refs". With HEAD pointing at an unresolvable
+    //   branch the container sees tracked files as UNTRACKED, and a commit
+    //   creates an ORPHANED ROOT COMMIT (rev-list --count HEAD == 1) — the
+    //   agent's work silently detaches from all history.
+    //
+    // auto-gc makes this a SILENT, routine trigger, not an exotic one.
+    // Mounting packed-refs alongside refs/ gives the container the same view
+    // the host has, so a host-side repack is simply visible.
+    let host_packed_refs = gitdir.root.parent().map(|_| ()).and_then(|_| {
+        // The facade's own copy lives at root/packed-refs; the live file is in
+        // the host gitdir next to the refs/ we already share.
+        let live = gitdir.refs.parent()?.join("packed-refs");
+        live.is_file().then_some(live)
+    });
+    match host_packed_refs {
+        Some(live) => args.extend([
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target={target}/packed-refs",
+                live.display()
+            ),
+        ]),
+        None => {
+            // No packed-refs yet. Deliberately NOT created here: an empty
+            // packed-refs makes `git fsck` warn (emptyPackedRefsFile), and
+            // fabricating files in the operator's repository to satisfy a
+            // mount is the wrong trade. The window is real but narrow — it
+            // opens only if a host gc creates packed-refs mid-session — so
+            // say so rather than paper over it.
+            eprintln!(
+                "[tillandsias] note: {} has no packed-refs; if a host-side `git gc` runs \
+                 during this session the forge can lose its refs (order 432).",
+                project_path.display()
+            );
+        }
+    }
 }
 
 /// Extract a named `[section]` (including its key=value lines) from a gitconfig string.

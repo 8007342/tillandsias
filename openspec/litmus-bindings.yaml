@@ -384,6 +384,7 @@ specs:
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:forge-git-index-materialization
+  - litmus:forge-packed-refs-shared
   - litmus:enclave-isolation
   - litmus:git-mirror-safe-refspec-push
   - litmus:git-mirror-ref-convergence
