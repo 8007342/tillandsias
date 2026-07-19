@@ -105,3 +105,45 @@ substrate: install (after one transient verify flake, filed above),
 from-scratch provision to wire-Ready, Event Log relay live, import marker +
 fast-path relaunch verified. The crash-loop-class fixes (417/418) rode the
 exact flow the 2026-07-18 field failure took and behaved as specified.
+
+## Post-PASS operator finding (2026-07-19T03:00Z live session)
+
+### Work Packet: smoke-finding/cloud-attach-unauthenticated-raw-vault-404
+
+- id: `smoke-finding/cloud-attach-unauthenticated-raw-vault-404`
+- owner_host: any
+- capability_tags: [ux, auth, vault, headless, tray, fail-loud]
+- status: ready
+- discovered_by: operator (The Tlatoāni) on release `v0.3.260719.1`, fresh
+  post-wipe guest, minutes after the PASS verdict
+- evidence:
+  - Cloud attach terminal: `Error: containerized gh repo clone exited with
+    status exit status: 2: vault-cli: HTTP error reading
+    secret/data/github/token: curl: (22) The requested URL returned error: 404`
+    then `[processus terminé avec le code 1]` — a dead terminal, no guidance.
+  - Guest journal: git containers (`tillandsias-git:v0.3.260712.1`) churn on
+    the same 404 every list/attach poll (spawn → 404 → die → secret remove).
+  - Tray log: GitHub Login PTY opened 02:51:52Z (`--github-login`), cloud
+    attach clicked 02:59:07Z; login flow starts with an interactive
+    `Git author name [...]:` prompt and only writes the token AFTER the
+    device flow completes — the 02:51 login was evidently not completed, so
+    no token existed. Write/read paths agree (`secret/github/token`); this
+    is NOT version skew.
+- repro:
+  - Fresh guest, skip/abandon GitHub Login, click a cloud project attach.
+- next_action: >
+    Fail-loud-but-actionable at the auth boundary: (1) headless cloud
+    attach/clone should classify the missing-token 404 into "Not signed in
+    to GitHub — run GitHub Login first" (and exit once, not a bare curl
+    error); (2) the tray should gate cloud-project attach entries on login
+    state (disabled + "Sign in first" hint, or auto-open the login flow);
+    (3) the remote-projects list poll should back off / stop respawning git
+    containers while unauthenticated (container churn every poll cycle);
+    (4) the login PTY should make clear the flow is incomplete if closed
+    early. Also relay this classified error at ERROR so it reaches the
+    Windows Event Log.
+- events:
+  - type: discovered
+    ts: "2026-07-19T03:00:00Z"
+    agent_id: windows-bullo-fable5-20260719T0043Z
+    host: windows
