@@ -135,13 +135,48 @@ log_msg "Atomic push to $REMOTE_URL_REDACTED FAILED: $OUTPUT_REDACTED"
 
 if [ -n "$PUSH_URL" ]; then
     log_msg "Attempting non-forced reconcile fetch from upstream..."
-    # Escape quarantine so fetched objects are persisted to the main database
-    if FETCH_OUTPUT="$(env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
-        git fetch "$PUSH_URL" 2>&1)"; then
-        log_msg "Reconcile fetch succeeded. Mirror is now up to date."
+    # Fetch upstream heads into a temporary tracking namespace so we can
+    # fast-forward exported refs/heads/* from them only when safe (ancestor
+    # check). Use a forced refspec so the refs are written. The ext transport
+    # inherits the current environment (including quarantine) — that's fine
+    # because the pushed objects are already in the mirror's object store
+    # (they arrived via the client's push) and the reconcile reads FROM
+    # upstream, so upstream's objects arrive into the mirror's main database
+    # via git-fetch-pack.
+    TRACK_PREFIX="refs/remotes/tillandsias-reconcile-tmp"
+    RECONCILE_FETCH_OUTPUT="$(git fetch --no-tags "$PUSH_URL" "+refs/heads/*:${TRACK_PREFIX}/*" 2>&1)" || RECONCILE_FETCH_EXIT=$?
+    if [ "${RECONCILE_FETCH_EXIT:-0}" -eq 0 ]; then
+        log_msg "Reconcile fetch succeeded. Fast-forwarding exported heads..."
+        # Fast-forward each exported refs/heads/<b> from the tracking ref,
+        # but ONLY when the current local head is a strict ancestor of the
+        # upstream head (git merge-base --is-ancestor). A locally stranded
+        # non-ancestor head is preserved untouched — never forced.
+        git for-each-ref --format='%(refname) %(objectname)' "${TRACK_PREFIX}/" | \
+        while read -r TREF UPSTREAM_SHA; do
+            [ -z "$TREF" ] && continue
+            BRANCH="${TREF#${TRACK_PREFIX}/}"
+            LOCAL_REF="refs/heads/$BRANCH"
+            if LOCAL_SHA="$(git rev-parse --quiet --verify "$LOCAL_REF" 2>/dev/null)"; then
+                if [ "$LOCAL_SHA" != "$UPSTREAM_SHA" ]; then
+                    if git merge-base --is-ancestor "$LOCAL_SHA" "$UPSTREAM_SHA" 2>/dev/null; then
+                        git update-ref "$LOCAL_REF" "$UPSTREAM_SHA" "$LOCAL_SHA"
+                        log_msg "  Fast-forwarded $BRANCH"
+                    else
+                        log_msg "  Preserved stranded non-ancestor $BRANCH"
+                    fi
+                fi
+            else
+                git update-ref "$LOCAL_REF" "$UPSTREAM_SHA"
+                log_msg "  Created new branch $BRANCH"
+            fi
+        done
+        # Clean up temporary tracking refs
+        git for-each-ref --format='%(refname)' "${TRACK_PREFIX}/" | \
+            while read -r T; do [ -n "$T" ] && git update-ref -d "$T"; done
+        log_msg "Reconcile complete — mirror exported heads are up-to-date where safe."
     else
-        FETCH_OUTPUT_REDACTED="$(redact_output "$FETCH_OUTPUT")"
-        log_msg "Reconcile fetch non-fast-forward (expected if locally stranded): $FETCH_OUTPUT_REDACTED"
+        FETCH_REDACTED="$(redact_output "$RECONCILE_FETCH_OUTPUT")"
+        log_msg "Reconcile fetch exited $RECONCILE_FETCH_EXIT: $FETCH_REDACTED"
     fi
 fi
 
