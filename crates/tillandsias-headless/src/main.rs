@@ -6673,11 +6673,48 @@ fn append_forge_repo_gitdir_mount_args(
         // MB .git into 8m, which dies at container start with
         // `crun: write: No space left on device` (live repro 2026-07-15).
         // A fail-closed mask must be EMPTY by definition.
-        if project_path.join(".git").is_dir() {
+        // Order 425: the mask itself is CORRECT and verified — with an empty
+        // .git every git command fails "not a git repository", and a linked
+        // worktree whose gitdir is unmounted fails "not a git repository:
+        // (null)". Both are genuinely fail-closed: no data loss, no silent
+        // wrong behaviour. Do NOT "fix" this into something that falls back to
+        // the host .git.
+        //
+        // What was missing is DIAGNOSIS. The container started and the agent
+        // hit a bare "not a git repository" with no way to learn why, which
+        // reads as a broken forge rather than a refused one. Say it at launch.
+        let dot_git = project_path.join(".git");
+        if dot_git.is_dir() {
+            eprintln!(
+                "[tillandsias] WARNING: could not build the git facade for '{project_name}'; \
+                 masking {target} so git FAILS CLOSED rather than touching the host .git."
+            );
+            eprintln!(
+                "[tillandsias]   In-container git will report \"not a git repository\". That is \
+                 deliberate refusal, not a broken image."
+            );
             args.extend([
                 "--tmpfs".into(),
                 format!("{target}:size=8m,mode=0700,notmpcopyup"),
             ]);
+        } else if dot_git.exists() {
+            // `.git` is a FILE — a linked worktree. write_forge_repo_gitdir
+            // only handles a real .git directory, so no facade and no mask:
+            // the container sees a gitdir pointer at a host path that is not
+            // mounted. Also fail-closed ("not a git repository: (null)"), but
+            // entirely unexplained without this.
+            eprintln!(
+                "[tillandsias] WARNING: '{project_name}' is a LINKED WORKTREE (.git is a file, \
+                 not a directory)."
+            );
+            eprintln!(
+                "[tillandsias]   The forge git facade does not support linked worktrees, so \
+                 in-container git will fail \"not a git repository: (null)\"."
+            );
+            eprintln!(
+                "[tillandsias]   Launch the forge against the main checkout instead, or convert \
+                 this worktree to a standalone clone."
+            );
         }
         return;
     };

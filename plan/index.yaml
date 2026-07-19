@@ -17257,7 +17257,7 @@ plan_index:
       packet_id: forge-mirror-fail-loud-invariant
       desired_release: v0.4
       title: "Fail-loud invariant for the mirror redirect / gitdir facade / forge index — three subsystems silently degrade to no-ops and 3 of 5 live forge gitconfigs have NO mirror redirect"
-      status: ready
+      status: done
       kind: fix
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: []
@@ -17376,6 +17376,47 @@ plan_index:
             returning None into the empty 8MB tmpfs mask). The index and
             mirror-redirect arms are closed.
             Evidence: fixture 5/5; litmus 3/3; instant gate 152/155.
+
+        - type: completed
+          ts: "2026-07-19T10:40:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Third and final arm. NOTABLE OUTCOME: the facade mask needed NO
+            code change — it was already correct, and this packet (quoting the
+            audit) had it wrong.
+            The audit framed the notmpcopyup empty-tmpfs mask as a defect:
+            "the fix guarantees an empty .git, i.e. total git failure rather
+            than a crash". Tested both failure paths instead of accepting that
+            framing:
+              empty .git dir           -> "fatal: not a git repository" on
+                                          status/add/commit/log/push
+              linked worktree, gitdir
+              not mounted              -> "fatal: not a git repository: (null)"
+            Both are genuinely FAIL-CLOSED. No data loss, no silent wrong
+            behaviour, nothing committed. Total loud git failure is exactly what
+            a facade that cannot be built SHOULD produce. Changing this would
+            have made it worse — the alternative is falling back to the host
+            .git, which is what the mask exists to prevent.
+            This is the counterpoint to the index arm, and the pair is the
+            lesson: two superficially identical "git is broken in the forge"
+            symptoms, one catastrophic (absent index silently commits a mass
+            deletion, relayed upstream) and one perfectly safe. Only an
+            experiment separated them. A sweep that treated them alike would
+            have "fixed" the safe one and possibly missed the fatal one.
+            What WAS missing: diagnosis. Both paths started a container and let
+            the agent hit a bare "not a git repository" with no way to learn
+            why, which reads as a broken forge rather than a refused one. Both
+            branches now warn at launch, naming the cause and stating the
+            refusal is deliberate. The linked-worktree branch additionally names
+            the remedy — it previously produced NO mask and NO message at all,
+            since the mask is gated on .git being a directory. Relevant here:
+            this host currently has 5 linked worktrees.
+            All three arms of 425 now closed: mirror redirect (OriginResolution),
+            forge index (mass-deletion guard), facade (verified correct +
+            diagnosed).
+            Evidence: 212/212 workspace tests; ./build.sh --check and --test
+            pass; instant gate 152/155.
     - order: 426
       packet_id: git-hack-obsolescence
       desired_release: v0.4
