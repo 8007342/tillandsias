@@ -50,7 +50,12 @@ clone-fresh() {
         return 1
     fi
 
-    local git_service="${GIT_SERVICE_HOST:-git-service}"
+    # Order 436: canonical host is `tillandsias-git` — it is what the launcher
+    # injects as url.insteadOf (git://tillandsias-git/<project>) and what the
+    # container is named. `git-service` remains a NETWORK ALIAS for one release
+    # so an explicit GIT_SERVICE_HOST=git-service keeps working; it is scheduled
+    # for removal once no consumer names it.
+    local git_service="${GIT_SERVICE_HOST:-tillandsias-git}"
     local git_port="${GIT_SERVICE_PORT:-9418}"
 
     echo "Cloning $project from git://$git_service/$project ..."

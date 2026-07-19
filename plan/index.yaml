@@ -18168,7 +18168,7 @@ plan_index:
       packet_id: git-service-alias-unification
       desired_release: v0.5
       title: "Unify the git-service / tillandsias-git dual network alias — a rename migration, not a deletion (both names have live consumers)"
-      status: ready
+      status: done
       kind: cleanup
       deliverable: images/default/config-overlay/shell-helpers.sh, forge-welcome.sh, container_profile.rs, main.rs
       depends_on: []
@@ -18202,6 +18202,40 @@ plan_index:
             Split out of order 426 after re-verification showed both alias names
             have live consumers, so this is a migration rather than a deletion.
 
+
+        - type: completed
+          ts: "2026-07-19T11:45:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Canonical name is now `tillandsias-git` everywhere a consumer
+            actually resolves a host. That is what the launcher injects as
+            url.insteadOf (git://tillandsias-git/<project>) and what the
+            container is named, so the transport was always the source of truth;
+            `git-service` was the outlier.
+            Migrated: config-overlay/shell-helpers.sh (clone default — it clones
+            over git://$git_service/, so this was real transport, not cosmetics)
+            and forge-welcome.sh (both the description and the label the
+            operator reads). GIT_SERVICE_HOST still overrides, and the
+            `git-service` NETWORK ALIAS is retained for one release so an
+            explicit override keeps resolving — removal is the follow-up, not
+            this pass.
+            FOUND WHILE MIGRATING: TILLANDSIAS_GIT_SERVICE is a PRESENCE FLAG
+            masquerading as a hostname. lib-common.sh only tests
+            `-n "${TILLANDSIAS_GIT_SERVICE:-}"` to decide network transport is
+            available; the clone URL is hardcoded to git://tillandsias-git/, so
+            the value was never resolved as a host at all. It read as
+            configuration and was a boolean. Value set to the canonical name and
+            the semantics documented at both definition sites, so a future
+            reader cannot mistake it for a host selector — the confusion that
+            produced the dual alias in the first place.
+            Left alone deliberately: the NO_PROXY literals keep BOTH names,
+            which is correct during deprecation; and the "git-service" strings
+            in tillandsias-logging/src/aggregator.rs are log SOURCE names in
+            test fixtures, unrelated to the network alias. Renaming those would
+            have been churn with no consumer.
+            Evidence: ./build.sh --check and --test pass; instant gate 153/156
+            with the same 3 pre-existing unrelated failures.
     - order: 437
       packet_id: forge-src-tmpfs-topology
       desired_release: v0.5
