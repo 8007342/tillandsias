@@ -13936,8 +13936,7 @@ plan_index:
         - "rebuilt tillandsias-git image running; hooks dir carries the 10c0c9b3 reconcile path"
         - "live probe: with upstream ahead of the mirror, a rejected push is followed by mirror heads == upstream heads (no manual tracking-ref fetch)"
         - "startup path probe: container restart with stale serving heads fast-forwards them via the retry-push failure reconcile"
-
-
+      events:
         - type: progress
           ts: "2026-07-19T12:50:00Z"
           agent_id: "linux-tillandsias-opus48-20260719T0000Z"
