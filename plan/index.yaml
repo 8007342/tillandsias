@@ -17310,7 +17310,7 @@ plan_index:
     - order: 427
       desired_release: v0.4
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
-      status: ready
+      status: in_progress
       kind: fix
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: []
@@ -17336,6 +17336,41 @@ plan_index:
           host: linux
           summary: Filed from the 2026-07-19 forge delegation research.
 
+
+        - type: progress
+          ts: "2026-07-19T03:25:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Naming is DONE; the live two-worker proof is NOT, so this stays
+            in_progress. Forge container names, and the forge hostname, now carry
+            an optional instance component from TILLANDSIAS_FORGE_INSTANCE.
+            Identity comes from the process environment rather than a threaded
+            parameter because this architecture runs one tillandsias process per
+            worker, so every name derived inside that process — container,
+            hostname, Vault lease consumer — agrees by construction instead of
+            each call site having to remember. Strictly additive: unset, empty,
+            whitespace, or all-separator input reproduces the pre-427 name
+            EXACTLY, so interactive launches and existing fixtures are untouched
+            (asserted by a dedicated test over all five agent modes). Identifiers
+            are sanitized to Podman's charset, lowercased, trimmed and capped at
+            32 chars so a worker id cannot smuggle separators or blow the name
+            limit. --replace is deliberately KEPT: it is load-bearing for a lane
+            relaunching itself (order 314/378) and is now scoped to that
+            worker's own prior container rather than every worker's.
+            TEARDOWN AUDITED (third exit criterion): cleanup_shared_stack_if_no_running_forge
+            does not match on the forge container name at all — it lists the
+            tillandsias- prefix and tears the shared stack down only when NO
+            active lane remains, so it composes correctly with instance-scoped
+            names and worker 2 exiting cannot kill worker 1's stack. Worth a
+            follow-up check that cleanup_stack_containers' own name matching
+            sees instance-suffixed containers; low risk since it runs only when
+            nothing is active.
+            STILL REQUIRED to close: a live litmus launching two real workers on
+            one project and proving both stay up. Unit tests prove the naming
+            rules (4 tests, each verified to register exactly once); they do NOT
+            prove Podman actually keeps both containers alive. Do not mark this
+            done on the unit tests alone.
     - order: 428
       desired_release: v0.4
       title: "Forge delegation rung 2: per-worker in-RAM checkout and state isolation (tmpfs /home/forge/src, per-worker XDG_* and CODEX_HOME)"
@@ -17570,3 +17605,40 @@ plan_index:
           summary: >
             Found while validating order 430. Isolated as pre-existing by
             stashing the working tree and re-running the single test.
+
+    - order: 434
+      desired_release: v0.4
+      title: "Flaky test: init_build_state_persists_to_cache_directory fails intermittently under the parallel runner (shared cache-directory state)"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs (test hermeticity)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, testing, hermeticity, flaky, ci]
+      estimated_hours: 2
+      outcome: >
+        tests::init_build_state_persists_to_cache_directory passes in isolation
+        but fails intermittently in the full suite: observed 1 failure, 1
+        failure, then 2 failures across three consecutive identical runs. It was
+        surfaced while landing order 427 — adding four unrelated tests perturbed
+        the parallel schedule enough to expose it — and is NOT caused by that
+        change: on a stashed clean tree the suite showed only the order-433 GPU
+        failure. Root cause is almost certainly shared cache-directory state
+        between tests rather than per-test temp dirs. Same hermeticity class as
+        order 433. Flaky tests are corrosive: they teach agents and humans to
+        re-run until green, which is exactly how a real regression gets waved
+        through.
+      exit_criteria:
+        - "the test uses an isolated per-test cache directory, not shared process/user state"
+        - "100 consecutive full-suite runs show zero failures of this test"
+        - "audit sibling tests for the same shared-cache-directory pattern"
+      events:
+        - type: filed
+          ts: "2026-07-19T03:25:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Found while landing order 427. Isolated as pre-existing and
+            intermittent by running the suite three times with the change and
+            once on a stashed clean tree.

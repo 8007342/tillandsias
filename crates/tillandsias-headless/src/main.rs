@@ -3535,20 +3535,115 @@ fn resolve_cloud_project_checkout(_nwo: &str, _debug: bool) -> Result<String, St
     Err("--cloud requires a build with the tray or listen-vsock feature".to_string())
 }
 
-fn forge_container_name(project_name: &str) -> String {
-    format!("tillandsias-{project_name}-forge")
+/// Sanitize a worker/instance identifier into something Podman accepts inside a
+/// container name (`[a-zA-Z0-9][a-zA-Z0-9_.-]*`). Anything else collapses to
+/// `-`, and the result is lowercased and length-capped so a caller cannot blow
+/// past Podman's name limits or smuggle separators.
+fn sanitize_forge_instance(raw: &str) -> String {
+    let cleaned: String = raw
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    cleaned
+        .trim_matches('-')
+        .chars()
+        .take(32)
+        .collect::<String>()
+        .trim_end_matches('-')
+        .to_string()
 }
 
-fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> String {
-    if matches!(mode, ForgeAgentMode::OpenCode) {
-        forge_container_name(project_name)
-    } else {
-        format!("tillandsias-{project_name}-forge-{}", mode.slug())
+/// Optional worker/instance component for forge container names (order 427).
+///
+/// WHY THIS EXISTS. Forge container names were
+/// `tillandsias-<project>-forge[-<mode>]` with no instance component, while the
+/// launcher passes `--replace`. `--replace` is correct and load-bearing for a
+/// lane relaunching *itself* — order 314/378, otherwise Podman dies 125 "name
+/// already in use" against a stale exited container — but it meant a SECOND
+/// worker on the same project silently DESTROYED the first. Two agents could
+/// not work a project concurrently, which blocks delegation entirely.
+///
+/// Identity comes from the environment rather than a threaded parameter because
+/// this architecture runs one `tillandsias` process per worker: the dispatcher
+/// spawns a process with `TILLANDSIAS_FORGE_INSTANCE` set, and every name
+/// derived inside that process — container, hostname, Vault lease consumer —
+/// must agree. Reading it at the single naming boundary makes that agreement
+/// structural instead of something each call site has to remember.
+///
+/// Unset or empty preserves today's behaviour EXACTLY, so interactive launches
+/// and every existing fixture are unaffected.
+/// Turn a raw instance identifier into the name suffix. Pure so the naming
+/// rules are unit-testable without mutating process environment, which is
+/// racy under the parallel test runner.
+fn forge_instance_suffix_from(raw: Option<&str>) -> String {
+    match raw {
+        Some(raw) => {
+            let clean = sanitize_forge_instance(raw);
+            if clean.is_empty() {
+                String::new()
+            } else {
+                format!("-{clean}")
+            }
+        }
+        None => String::new(),
     }
 }
 
+fn forge_instance_suffix() -> String {
+    forge_instance_suffix_from(std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok().as_deref())
+}
+
+fn forge_container_name_with_instance(project_name: &str, instance: Option<&str>) -> String {
+    format!(
+        "tillandsias-{project_name}-forge{}",
+        forge_instance_suffix_from(instance)
+    )
+}
+
+fn forge_container_name(project_name: &str) -> String {
+    format!(
+        "tillandsias-{project_name}-forge{}",
+        forge_instance_suffix()
+    )
+}
+
+fn forge_container_name_for_mode_with_instance(
+    project_name: &str,
+    mode: ForgeAgentMode,
+    instance: Option<&str>,
+) -> String {
+    if matches!(mode, ForgeAgentMode::OpenCode) {
+        forge_container_name_with_instance(project_name, instance)
+    } else {
+        format!(
+            "tillandsias-{project_name}-forge-{}{}",
+            mode.slug(),
+            forge_instance_suffix_from(instance)
+        )
+    }
+}
+
+fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> String {
+    forge_container_name_for_mode_with_instance(
+        project_name,
+        mode,
+        std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok().as_deref(),
+    )
+}
+
+/// Instance-scoped so two concurrent workers do not collide on the enclave
+/// network's DNS. Sharing a hostname would make container-to-container
+/// resolution non-deterministic between workers.
 fn forge_hostname(project_name: &str) -> String {
-    sanitize_hostname(&format!("forge-{project_name}"))
+    sanitize_hostname(&format!("forge-{project_name}{}", forge_instance_suffix()))
 }
 
 fn build_forge_common_args(
@@ -11294,6 +11389,101 @@ mod tests {
         );
         assert!(has_arg(&argv, "--interactive"));
         assert!(has_arg(&argv, "--tty"));
+    }
+
+    /// Order 427: two workers on one project must not collide. Before the
+    /// instance component existed, both got `tillandsias-<project>-forge-<mode>`
+    /// and `--replace` made worker 2 destroy worker 1.
+    #[test]
+    fn forge_container_names_are_instance_scoped_so_workers_coexist() {
+        for mode in [
+            ForgeAgentMode::Maintenance,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Antigravity,
+        ] {
+            let w1 = forge_container_name_for_mode_with_instance("proj", mode, Some("w1"));
+            let w2 = forge_container_name_for_mode_with_instance("proj", mode, Some("w2"));
+            assert_ne!(
+                w1, w2,
+                "{mode:?}: distinct workers must get distinct container names, \
+                 otherwise --replace makes one destroy the other"
+            );
+            assert!(w1.ends_with("-w1"), "{mode:?}: unexpected name {w1}");
+            assert!(w2.ends_with("-w2"), "{mode:?}: unexpected name {w2}");
+        }
+    }
+
+    /// The instance component must be strictly additive: absent or empty
+    /// reproduces the pre-427 name exactly, so interactive launches and every
+    /// existing fixture are untouched.
+    #[test]
+    fn absent_or_empty_forge_instance_preserves_legacy_names() {
+        for mode in [
+            ForgeAgentMode::Maintenance,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Antigravity,
+        ] {
+            let legacy = if matches!(mode, ForgeAgentMode::OpenCode) {
+                "tillandsias-proj-forge".to_string()
+            } else {
+                format!("tillandsias-proj-forge-{}", mode.slug())
+            };
+            for raw in [None, Some(""), Some("   "), Some("---")] {
+                assert_eq!(
+                    forge_container_name_for_mode_with_instance("proj", mode, raw),
+                    legacy,
+                    "{mode:?} with instance {raw:?} must reproduce the legacy name"
+                );
+            }
+        }
+    }
+
+    /// A worker id reaching a container name must not be able to smuggle
+    /// separators, whitespace, or unbounded length past Podman.
+    #[test]
+    fn forge_instance_identifiers_are_sanitized() {
+        assert_eq!(sanitize_forge_instance("w1"), "w1");
+        assert_eq!(sanitize_forge_instance("  W1  "), "w1");
+        assert_eq!(sanitize_forge_instance("worker/1"), "worker-1");
+        assert_eq!(sanitize_forge_instance("a b:c"), "a-b-c");
+        assert_eq!(sanitize_forge_instance("--lead--"), "lead");
+        assert_eq!(sanitize_forge_instance(""), "");
+        assert_eq!(sanitize_forge_instance("///"), "");
+        assert!(
+            sanitize_forge_instance(&"x".repeat(200)).len() <= 32,
+            "instance ids must be length-capped"
+        );
+        // A sanitized id must still be a legal Podman name component.
+        let s = sanitize_forge_instance("Worker #3 (alpha)");
+        assert!(
+            s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-'),
+            "sanitized id {s} contains characters Podman rejects"
+        );
+    }
+
+    /// Hostnames must be instance-scoped too — two workers sharing a hostname
+    /// would make enclave-network DNS resolution non-deterministic.
+    #[test]
+    fn forge_hostname_is_instance_scoped() {
+        let a = sanitize_hostname(&format!(
+            "forge-proj{}",
+            forge_instance_suffix_from(Some("w1"))
+        ));
+        let b = sanitize_hostname(&format!(
+            "forge-proj{}",
+            forge_instance_suffix_from(Some("w2"))
+        ));
+        assert_ne!(a, b, "distinct workers must get distinct hostnames");
+        assert_eq!(
+            sanitize_hostname(&format!("forge-proj{}", forge_instance_suffix_from(None))),
+            sanitize_hostname("forge-proj"),
+            "no instance must reproduce the legacy hostname"
+        );
     }
 
     /// Order 378 (order-314 class): relaunching any forge-agent lane — incl. the
