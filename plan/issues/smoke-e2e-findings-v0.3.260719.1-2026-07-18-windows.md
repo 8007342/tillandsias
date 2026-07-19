@@ -234,3 +234,17 @@ Also filed from the same operator pass:
 Agent-lane crash class (inference name collision et al.) is EXPECTED FIXED
 by a source-matched guest (the fixes are in 260719.1 code); verification
 rides the next source-matched install.
+
+### Addendum (2026-07-19T06:35Z): embedded-guest verification gap — version pin passes on a capability-broken binary
+
+While producing the local source-matched build, a guest headless compiled
+WITHOUT `--features listen-vsock` (plain `cargo build`, bypassing
+scripts/build-guest-binaries.sh) was staged and embedded. It carried the
+CORRECT version string — `embedded_guest_headless_matches_workspace_version`
+passed — but the guest service printed "--listen-vsock requires the binary
+to be built with --features listen-vsock" and never listened; the tray's
+(bounded, backoff-logged) connect loop timed out. The embed verification
+must assert the capability, not just the version: e.g. include the feature
+set in the `--version` line (`Tillandsias vX (features: listen-vsock,vault)`)
+and pin it in the embed test + build-guest-binaries.sh --verify. Small
+order-282-family follow-up for the linux lane; noted here as the repro.
