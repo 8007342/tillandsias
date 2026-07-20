@@ -18750,7 +18750,7 @@ plan_index:
       order: 442
       desired_release: v0.4
       title: "Destructive e2e gate can wipe a live operator/agent forge — eligibility probe is blind to concurrent forges"
-      status: ready
+      status: completed
       capability_tags: [linux, e2e, safety, data-loss, operator-interactive]
       operator_note: "operator awareness: the destructive smoke reset defaults to proceed and cannot see a live forge; confirm the fail-safe default is acceptable"
       kind: enhancement
@@ -18785,6 +18785,25 @@ plan_index:
             Filed from the attended 2026-07-20 cycle after the eligibility probe
             returned eligible with BigPickle's forge live. Tagged
             operator-interactive: the fail-safe default is an operator call.
+        - type: progress
+          ts: "2026-07-20T04:25:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            CLOSED. Added live_runtime_is_present() to scripts/e2e-preflight.sh
+            that detects a running tillandsias forge / shared stack
+            (tillandsias-*-forge, tillandsias-git, tillandsias-vault,
+            tillandsias-proxy, tillandsias-router, tillandsias-inference) via
+            `podman ps` and emits skip:live-runtime-present from all three host
+            branches (Windows/MacOS/Linux) BEFORE the eligible verdict. The
+            default fails safe; an explicit per-invocation
+            TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 still forces the reset. Added
+            scripts/test-e2e-preflight-live-runtime.sh (offline, injects a fake
+            podman) covering live-forge -> skip, shared-stack -> skip, clean
+            host -> eligible, empty ps -> eligible, and override=1 -> eligible.
+            Extended litmus:e2e-eligibility-probe-shape with the
+            skip:live-runtime-present case and the wired-guard assertion. Exit
+            criteria 1-3 satisfied (override honoured per criterion 2).
 
     - packet_id: concurrent-forges-shared-stack-safety
       order: 443

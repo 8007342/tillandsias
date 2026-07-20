@@ -46,6 +46,28 @@ smoke_lock_is_held() {
   [ -d "$lock_dir" ]
 }
 
+# Detect a live Tillandsias runtime (forge + shared stack) that THIS smoke run
+# did not itself launch. A destructive e2e gate's first step is
+# `podman system reset --force`, which would wipe a live operator/agent forge
+# and any in-flight cycles inside it. The smoke-lock probe only sees competing
+# SMOKE runs, not a human- or agent-launched forge, so we must look for the
+# stack containers directly. Returns 0 (present) / 1 (absent).
+#
+# Matches: any container whose name looks like a Tillandsias forge or a shared
+# service (git-mirror, vault, proxy, router, inference). The operator may force
+# the reset with TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 for a THIS-invocation only.
+live_runtime_is_present() {
+  local ps_out
+  if ! command -v podman >/dev/null 2>&1; then
+    return 1
+  fi
+  ps_out="$(podman ps --format '{{.Names}}' 2>/dev/null)" || return 1
+  [ -z "$ps_out" ] && return 1
+  # A forge itself, or any of the shared-stack services the forge brings up.
+  printf '%s\n' "$ps_out" | grep -qiE 'tillandsias-.*forge|tillandsias-git|tillandsias-vault|tillandsias-proxy|tillandsias-router|tillandsias-inference|git-service|tillandsias-git-mirror' && return 0
+  return 1
+}
+
 e2e_eligibility_verdict() {
   # Windows (Git Bash / MSYS): the local-build e2e substrate is the WSL2
   # distro — podman lives INSIDE it, so probing for a host podman binary is
@@ -75,6 +97,12 @@ e2e_eligibility_verdict() {
         echo "skip:no-wsl"
         return 0
       fi
+      # Fail safe: refuse to wipe a live forge/shared stack the smoke run
+      # did not launch, unless the operator FORCES it for THIS invocation.
+      if live_runtime_is_present && [ "${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-}" != "1" ]; then
+        echo "skip:live-runtime-present"
+        return 0
+      fi
       echo "eligible"
       return 0
       ;;
@@ -98,6 +126,12 @@ e2e_eligibility_verdict() {
       echo "skip:no-macos-hypervisor"
       return 0
     fi
+    # Fail safe: refuse to wipe a live forge/shared stack the smoke run
+    # did not launch, unless the operator FORCES it for THIS invocation.
+    if live_runtime_is_present && [ "${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-}" != "1" ]; then
+      echo "skip:live-runtime-present"
+      return 0
+    fi
     echo "eligible"
     return 0
   fi
@@ -118,6 +152,12 @@ e2e_eligibility_verdict() {
   fi
   if ! podman info >/dev/null 2>&1; then
     echo "skip:podman-not-functional"
+    return 0
+  fi
+  # Fail safe: refuse to wipe a live forge/shared stack the smoke run
+  # did not launch, unless the operator FORCES it for THIS invocation.
+  if live_runtime_is_present && [ "${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-}" != "1" ]; then
+    echo "skip:live-runtime-present"
     return 0
   fi
   echo "eligible"
