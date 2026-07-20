@@ -7,9 +7,9 @@ Auto-generated metrics tracking the build performance and size of the forge imag
 ```mermaid
 xychart-beta
     title "Forge Build Duration (seconds)"
-    x-axis "Builds" 1 -> 5
+    x-axis "Builds" 1 -> 6
     y-axis "Seconds"
-    line [10,12,93,105,65]
+    line [10,12,93,105,65,20]
 ```
 
 ## Image Size Over Time
@@ -17,9 +17,9 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "Forge Image Size (MB)"
-    x-axis "Builds" 1 -> 5
+    x-axis "Builds" 1 -> 6
     y-axis "MB"
-    bar [6053,2960,2960,2955,2957]
+    bar [6053,2960,2960,2955,2957,2973]
 ```
 
 ## Download Size Over Time
@@ -27,17 +27,17 @@ xychart-beta
 ```mermaid
 xychart-beta
     title "Forge Build Download Size (MB)"
-    x-axis "Builds" 1 -> 5
+    x-axis "Builds" 1 -> 6
     y-axis "MB"
-    bar [0,0,0,0,0]
+    bar [0,0,0,0,0,0]
 ```
 
 ## Latest Build Summary
 
 | Metric | Value |
 |---|---|
-| Duration | 65s |
-| Image Size | 2957 MB |
+| Duration | 20s |
+| Image Size | 2973 MB |
 | Bytes Downloaded | 0 MB |
 | Cache Hits (steps) | 0 |
 
