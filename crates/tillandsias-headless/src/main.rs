@@ -9186,36 +9186,61 @@ pub(crate) fn ensure_enclave_for_project(
         // ad-hoc proxy container start that duplicated ensure_proxy_running.
         // @trace plan/issues/launch-paths-route-through-dependency-model
 
+        // Order 443: the git mirror is STATEFUL — it serves clones and holds a
+        // Vault lease. Do NOT --replace a running mirror on a forge launch: a
+        // concurrent second forge would destroy the mirror out from under a
+        // sibling mid-clone (the observed 2026-07-20 bounce, which combined with
+        // the daemon-startup window of order 446 crashed forges on clone).
+        // Ensure-if-running: reuse a live mirror; a clean relaunch (stack torn
+        // down) still recreates it fresh with the current image. Only mint a new
+        // Vault token when actually creating the container.
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
-        client
-            .run_container_observed(
-                "forge-launch-git",
-                &git_container_name,
-                &build_git_run_args(
-                    project_name,
-                    &certs_dir,
-                    &versioned_image_tag("git", version),
-                    project_remote_url.as_deref(),
-                    git_vault_secret.as_deref(),
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
-        client
-            .run_container_observed(
-                "forge-launch-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(
-                    &certs_dir,
-                    &versioned_image_tag("inference", version),
-                    false,
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+        if crate::vault_bootstrap::container_running(&git_container_name) {
+            if debug {
+                eprintln!(
+                    "[tillandsias] git mirror {git_container_name} already running; reusing (order 443)"
+                );
+            }
+        } else {
+            let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+            client
+                .run_container_observed(
+                    "forge-launch-git",
+                    &git_container_name,
+                    &build_git_run_args(
+                        project_name,
+                        &certs_dir,
+                        &versioned_image_tag("git", version),
+                        project_remote_url.as_deref(),
+                        git_vault_secret.as_deref(),
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
+        }
+        // Order 443: inference is nearly stateless but --replacing it on every
+        // launch drops loaded models and interrupts a sibling's inference.
+        // Recreate-if-not-running (ephemerality/idempotency), not always.
+        if crate::vault_bootstrap::container_running("tillandsias-inference") {
+            if debug {
+                eprintln!("[tillandsias] inference already running; reusing (order 443)");
+            }
+        } else {
+            client
+                .run_container_observed(
+                    "forge-launch-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(
+                        &certs_dir,
+                        &versioned_image_tag("inference", version),
+                        false,
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+        }
 
         // Order 392: deterministic inference readiness. The forge agent must
         // not boot into an indeterminate "inference may still be starting"

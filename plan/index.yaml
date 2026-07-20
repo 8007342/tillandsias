@@ -18953,6 +18953,32 @@ plan_index:
             2026-07-20 (vault SIGKILL, proxy segfault) was resource contention
             under concurrent forges + inference + a release build; slice 1 plus
             fewer concurrent forges reduces it, full closure needs the refcount.
+        - type: progress
+          ts: "2026-07-20T05:45:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            SLICE 2 done — the PRIMARY bounce mechanism is fixed. Root cause was
+            NOT the teardown (slice 1) but the ENSURE: ensure_enclave_for_project
+            created the git mirror and inference via run_container_observed with
+            --replace and NO container_running guard (run_container_observed does
+            not check running; only proxy/router had explicit guards). So EVERY
+            forge launch --replaced the running git mirror, destroying it under a
+            sibling mid-clone — the observed 2026-07-20 bounce, which combined
+            with the 446 daemon-startup window crashed forges on clone. Fix per
+            the operator's per-component rule: git mirror is STATEFUL ->
+            ensure-if-running (reuse a live mirror; only mint a fresh Vault token
+            when actually creating). Inference is nearly stateless but --replace
+            drops loaded models and interrupts a sibling, so it too is now
+            recreate-if-not-running. A clean relaunch (stack torn down) still
+            recreates both fresh with the current image. Tests 221/221, clippy
+            clean.
+            REMAINING (slice 3, refinements, not on the critical path): per-
+            project reference counting so teardown fires only on the LAST forge
+            exit; a launch-in-flight marker for the pre-create window; running-
+            AND-HEALTHY (not just running) so a crashed-but-running mirror is
+            replaced; tray terminal isolation. The two main bounce triggers
+            (ensure --replace + teardown-under-starting-sibling) are now closed.
     - packet_id: forge-launch-artifacts-not-tracked
       order: 444
       desired_release: v0.4
