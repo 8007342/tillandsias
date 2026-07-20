@@ -12,6 +12,22 @@
 # Run: scripts/test-git-daemon-no-anon-write.sh   (exit 0 = pass)
 set -uo pipefail
 
+# This fixture needs `git daemon`, which is absent on immutable forge /
+# CI-minimal hosts. Skip cleanly there (the closure is proven on hosts that
+# ship git-daemon and by litmus:git-mirror-no-anonymous-daemon-write); do NOT
+# emit a false PASS when the daemon can't even start.
+if ! git daemon --help >/dev/null 2>&1 && ! command -v git-daemon >/dev/null 2>&1; then
+    if ! git --exec-path >/dev/null 2>&1; then
+        echo "SKIP: git daemon not available on this host"
+        exit 0
+    fi
+    daemon_candidate="$(git --exec-path)/git-daemon"
+    if [ ! -x "$daemon_candidate" ]; then
+        echo "SKIP: git daemon not available on this host"
+        exit 0
+    fi
+fi
+
 WORK="$(mktemp -d)"
 trap 'kill "$DAEMON_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
 
