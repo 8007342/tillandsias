@@ -1,6 +1,40 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-20T03:55:00Z
+LastExecutionTime: 2026-07-20T05:00:00Z
+
+## Cycle 2026-07-20T04:05Z (forge — v0.4 drain: git-mirror security + forge-safety)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260720T0351Z.
+  Credential guard `ok:forge-git-mirror`; boundary clean.
+- **Sibling heads**: main 7914f2ea, linux-next ffb97bba → +this cycle's 5 commits.
+- **Drained 4 v0.4 packets** (all forge-verifiable: shell + Rust unit tests +
+  litmus, no podman required):
+  - **order 423** git-mirror-unauthenticated-write-paths — CLOSED the remaining
+    anon write path: removed `git daemon --enable=receive-pack` (Decision 4
+    path 1); keep `--export-all` for agent read clones. Added
+    `test-git-daemon-no-anon-write.sh` (skips where git daemon absent) +
+    `litmus:git-mirror-no-anonymous-daemon-write`. Both anon write paths now
+    closed (lighttpd via 502823b7).
+  - **order 442** e2e-gate-refuses-live-runtime — `live_runtime_is_present()`
+    detects a live forge/shared stack and emits `skip:live-runtime-present`
+    from all three host branches; `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1` still
+    forces. Added `test-e2e-preflight-live-runtime.sh` (fake podman) + extended
+    `litmus:e2e-eligibility-probe-shape`.
+  - **order 441** mirror-startup-sweep-per-ref-tolerant — startup retry-push
+    now relays PER REF (stranded ref logged by name, fast-forwardable ref
+    still flushes); LIVE `git push --atomic` path untouched. Added
+    `test-git-mirror-startup-per-ref.sh` + `litmus:git-mirror-startup-per-ref-tolerance`.
+  - **order 426** git-hack-obsolescence — VERIFIED complete: lighttpd (423) and
+    curl -k (4017c4bf) removals in tree; non-dead items split to 435/436.
+- **Fixtures**: `test-git-daemon-no-anon-write.sh` SKIPs on this daemon-less
+  forge (honest, not false-PASS); the other two fixtures PASS here.
+- **E2E gates**: `skip:no-podman-binary` (forge has no podman) — unchanged.
+- **Next**: remaining v0.4 forge-eligible packets include order 443
+  (concurrent-forges shared-stack refcount — large Rust change, needs podman
+  e2e to verify safely), order 148/150 (wire oscillation — needs live VM),
+  order 270/273 (attach flows — needs live VM), order 412 (forge-base CLI
+  utils — needs image rebuild). These need a mutable-Linux / podman host or
+  live VM to verify, so they are intentionally left for the next host.
 
 ## Cycle 2026-07-20T03:51Z (forge — meta-orchestration: order 281 overlay self-heal)
 
