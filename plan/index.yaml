@@ -18713,7 +18713,7 @@ plan_index:
       order: 441
       desired_release: v0.4
       title: "Mirror startup retry-push is atomic over ALL refs — one stale ref blocks the whole recovery sweep"
-      status: ready
+      status: completed
       capability_tags: [linux, git-mirror, robustness, self-healing]
       kind: optimization
       deliverable: images/git/entrypoint.sh (startup sweep) + fixture
@@ -18745,6 +18745,22 @@ plan_index:
             Filed from a live observation during the attended 2026-07-20
             meta-orchestration cycle. Promoted from
             plan/issues/mirror-startup-retry-push-atomic-all-refs-2026-07-20.md.
+        - type: progress
+          ts: "2026-07-20T04:40:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            CLOSED. Rewrote the startup retry-push sweep in images/git/entrypoint.sh
+            to relay PER REF (order 441): each local ref is fed to its own atomic
+            relay transaction via an overridable RELAY_REF, so a fast-forwardable
+            ref flushes even when a sibling ref is stranded, and a stranded ref is
+            logged BY NAME (not silently failing the whole sweep). The LIVE
+            single-push path (relay-refs.sh `git push --atomic`) and the
+            never-`--mirror`/`--all` invariant are untouched. Added
+            scripts/test-git-mirror-startup-per-ref.sh (offline, mock relay) and
+            litmus:git-mirror-startup-per-ref-tolerance bound to git-mirror-service.
+            Exit criteria 1-4 satisfied (per-ref relay, stranded-by-name log, live
+            path invariant preserved, fixture reproduces + proves tolerance).
 
     - packet_id: e2e-gate-refuses-live-runtime
       order: 442

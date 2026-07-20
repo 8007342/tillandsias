@@ -226,11 +226,32 @@ for mirror in /srv/git/*; do
         retry_msg "[git-mirror] Startup retry-push fetch output: $FETCH_OUTPUT"
     fi
 
-    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refs=$REF_COUNT)"
-    if OUTPUT="$(printf '%s' "$UPDATE_RECORDS" | (cd "$mirror" && hooks/tillandsias-relay-refs) 2>&1)"; then
-        retry_msg "[git-mirror] Startup retry-push OK"
-    else
-        retry_msg "[git-mirror] Startup retry-push FAILED: $OUTPUT"
+    # Per-ref relay (order 441): the OLD sweep fed ALL refs to one
+    # `git push --atomic` call, so a single stranded (non-fast-forward) ref
+    # rejected the ENTIRE transaction and no fast-forwardable ref was flushed.
+    # We now relay each ref as its own atomic transaction: a fast-forwardable
+    # ref reaches upstream even when a sibling ref is stranded, and a stranded
+    # ref is logged BY NAME rather than silently failing the whole sweep. The
+    # LIVE single-push path (relay-refs.sh) keeps its own `git push --atomic`
+    # and the never-`--mirror`/`--all` invariant untouched.
+    #
+    # RELAY_REF is overridable (fixtures point it at a mock) so the per-ref
+    # loop can be exercised offline.
+    RELAY_REF="${RELAY_REF:-hooks/tillandsias-relay-refs}"
+    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refs=$REF_COUNT, per-ref)"
+    stranded=""
+    for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
+        NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
+        RECORD="${ZERO_SHA} ${NEWSHA} ${ref}"
+        if OUTPUT="$(printf '%s\n' "$RECORD" | (cd "$mirror" && "${RELAY_REF}") 2>&1)"; then
+            retry_msg "[git-mirror] Startup retry-push OK: $ref"
+        else
+            retry_msg "[git-mirror] Startup retry-push STRANDED (logged by name): $ref — $OUTPUT"
+            stranded="${stranded:+$stranded }$ref"
+        fi
+    done
+    if [ -n "$stranded" ]; then
+        retry_msg "[git-mirror] Startup retry-push: $REF_COUNT ref(s) attempted; stranded=$stranded"
     fi
 done
 
