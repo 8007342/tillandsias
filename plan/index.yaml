@@ -18423,7 +18423,7 @@ plan_index:
       packet_id: forge-src-tmpfs-topology
       desired_release: v0.5
       title: "/home/forge/src is a host bind mount, but BOTH active specs forbid that — forge-hot-cold-split requires tmpfs and forge-offline requires clone-only"
-      status: ready
+      status: in_progress
       operator_note: "operator workflow decision: /home/forge/src tmpfs+clone changes how edits reach the host"
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
@@ -18509,6 +18509,31 @@ plan_index:
             isolated clone too. Operator has chosen isolation over live-edit
             visibility universally, matching forge-offline (clone-only) and
             forge-hot-cold-split (tmpfs).
+        - type: progress
+          ts: "2026-07-20T04:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            MINIMAL TOGGLE-FLIP IMPLEMENTED (operator-approved). Both forge-
+            session launch paths (build_opencode_forge_args and
+            build_forge_agent_run_args_with_vault) now default to CLONE-ONLY: no
+            host-checkout bind mount, no gitdir facade/mask, and the
+            TILLANDSIAS_GIT_SERVICE presence flag set so the entrypoint's
+            clone_project_from_mirror clones a fresh tree from the mirror. The
+            legacy shared host-mount is opt-in via TILLANDSIAS_FORGE_HOST_MOUNT=1
+            (escape hatch — restores old behaviour with no rebuild). New helper
+            forge_host_mount_enabled is pure/unit-tested; the facade+mask block
+            is gated so a clone's real .git is never masked. Tests: 213/213
+            across 3 runs; the two host-mount/facade tests now run in the opt-in
+            mode; clone-only default asserted by forge_host_mount_is_opt_in_only
+            + flipped shape assertions + the source-window structure test. Bonus:
+            unified the crate's two env_lock mutexes into one (a latent race the
+            order-434 fix had left, since set_var is process-global).
+            NOT YET LIVE-VERIFIED: needs one real forge launch that clones
+            successfully from the mirror end to end — happens on the operator's
+            next reinstall. Facade retirement (deleting the now-dead
+            write_forge_repo_gitdir / notmpcopyup / index / packed-refs code) is
+            the clean follow-on once clone-only is live-proven.
     - order: 438
       packet_id: test-transient-state-audit
       desired_release: v0.5

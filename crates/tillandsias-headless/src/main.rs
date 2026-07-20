@@ -3741,6 +3741,28 @@ fn sanitize_forge_instance(raw: &str) -> String {
 ///
 /// Unset or empty preserves today's behaviour EXACTLY, so interactive launches
 /// and every existing fixture are unaffected.
+/// Whether a forge launch shares the operator's host checkout (legacy) or
+/// clones a fresh tree from the mirror (order 437, default).
+///
+/// Pure over its input so it is unit-testable without env mutation; the
+/// process-env reader `forge_uses_host_mount()` is the thin wrapper.
+///
+/// DEFAULT is clone-only. The shared host-mount is opt-in via
+/// `TILLANDSIAS_FORGE_HOST_MOUNT=1` for the solo live-edit workflow, and is an
+/// escape hatch: if clone-only ever misbehaves, setting the var restores the
+/// old behaviour with no rebuild.
+fn forge_host_mount_enabled(raw: Option<&str>) -> bool {
+    matches!(raw, Some("1"))
+}
+
+fn forge_uses_host_mount() -> bool {
+    forge_host_mount_enabled(
+        std::env::var("TILLANDSIAS_FORGE_HOST_MOUNT")
+            .ok()
+            .as_deref(),
+    )
+}
+
 /// Turn a raw instance identifier into the name suffix. Pure so the naming
 /// rules are unit-testable without mutating process environment, which is
 /// racy under the parallel test runner.
@@ -4182,7 +4204,11 @@ fn build_opencode_forge_args(
             "--env".into(),
             format!("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
         ]);
-    } else {
+    } else if forge_uses_host_mount() {
+        // Opt-in legacy shared host-mount (TILLANDSIAS_FORGE_HOST_MOUNT=1):
+        // bind-mounts the operator's real checkout rw and installs the gitdir
+        // facade. Retained for the solo live-edit workflow where a single user
+        // wants their edits visible on the host without a commit+relay.
         args.extend([
             "--env".into(),
             "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
@@ -4193,6 +4219,20 @@ fn build_opencode_forge_args(
             ),
         ]);
         append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
+    } else {
+        // Clone-only (order 437, DEFAULT): the entrypoint's
+        // clone_project_from_mirror clones a FRESH checkout from the enclave
+        // mirror over git://. No host-checkout bind mount and no gitdir facade —
+        // the working tree is forge-owned by construction, so concurrent forges
+        // never share a tree and never land on a dirty checkout, and the whole
+        // facade data-loss surface (notmpcopyup mask, index materialisation
+        // [425], packed-refs live-mount [432]) is simply not in play. Set the
+        // presence flag that selects the network-clone transport in
+        // clone_project_from_mirror.
+        args.extend([
+            "--env".into(),
+            "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
+        ]);
     }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
@@ -9251,15 +9291,20 @@ fn build_forge_agent_run_args_with_vault(
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
     }
-    let spec = spec
-        // Project workspace at /home/forge/src/<project>/ — matches the
-        // forge entrypoint clone path and the `$TILLANDSIAS_PROJECT_PATH`
-        // contract every agent expects.
-        .volume(
+    // Order 437: clone-only by default. The host-checkout bind mount at
+    // /home/forge/src/<project> is the OPT-IN legacy shared-mount path; without
+    // it the entrypoint's clone_project_from_mirror clones a fresh tree there.
+    let host_mount = forge_uses_host_mount();
+    let spec = if host_mount {
+        spec.volume(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),
             MountMode::ReadWrite,
         )
+    } else {
+        spec
+    };
+    let spec = spec
         // Persistent per-project tool/package cache (order 179). lib-common points
         // $CARGO_HOME and $NPM_CONFIG_PREFIX at /home/forge/.cache/tillandsias-project;
         // without a persistent backing this lives in the --rm overlay and is lost
@@ -9279,7 +9324,6 @@ fn build_forge_agent_run_args_with_vault(
         .env("USER", "forge")
         .env("PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT", project_name)
-        .env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
         // Order 392: agents (and the startup context) learn the host's
         // EFFECTIVE inference tier (hardware truth AND podman deliverability)
         // without probing hardware they cannot see.
@@ -9300,6 +9344,15 @@ fn build_forge_agent_run_args_with_vault(
         .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
+    // Order 437: clone-only (default) selects the mirror network-clone
+    // transport via the GIT_SERVICE presence flag; the opt-in host-mount path
+    // sets HOST_MOUNT instead so clone_project_from_mirror uses the bind-mounted
+    // tree.
+    spec = if host_mount {
+        spec.env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
+    } else {
+        spec.env("TILLANDSIAS_GIT_SERVICE", "tillandsias-git")
+    };
     // Every credentialed agent lane (Codex/Claude/Antigravity) mounts a
     // scoped Vault token so its entrypoint can restore the opaque OAuth
     // document from Vault. Gating this on Codex alone (the original
@@ -9331,31 +9384,37 @@ fn build_forge_agent_run_args_with_vault(
         spec = spec.env(name, value);
     }
 
-    let repo_gitdir_target = format!("/home/forge/src/{project_name}/.git");
-    if let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) {
-        spec = spec
-            .bind_mount(
-                gitdir.root.display().to_string(),
-                &repo_gitdir_target,
-                false,
-            )
-            .bind_mount(
-                gitdir.objects.display().to_string(),
-                format!("{repo_gitdir_target}/objects"),
-                false,
-            )
-            .bind_mount(
-                gitdir.refs.display().to_string(),
-                format!("{repo_gitdir_target}/refs"),
-                false,
-            );
-    } else if project_path.join(".git").is_dir() {
-        // Match the raw OpenCode path's fail-closed fallback. notmpcopyup is
-        // load-bearing — see append_forge_repo_gitdir_mount_args (tmpcopyup
-        // over a real host .git = crun ENOSPC at launch, 2026-07-15).
-        spec = spec.tmpfs(format!(
-            "{repo_gitdir_target}:size=8m,mode=0700,notmpcopyup"
-        ));
+    // Order 437: the gitdir facade + fail-closed mask exist ONLY to quarantine a
+    // shared host .git under the host-mount. Clone-only forges have their own
+    // fresh .git from the mirror clone, so none of this applies — skip it
+    // entirely rather than masking a clone's real .git.
+    if host_mount {
+        let repo_gitdir_target = format!("/home/forge/src/{project_name}/.git");
+        if let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) {
+            spec = spec
+                .bind_mount(
+                    gitdir.root.display().to_string(),
+                    &repo_gitdir_target,
+                    false,
+                )
+                .bind_mount(
+                    gitdir.objects.display().to_string(),
+                    format!("{repo_gitdir_target}/objects"),
+                    false,
+                )
+                .bind_mount(
+                    gitdir.refs.display().to_string(),
+                    format!("{repo_gitdir_target}/refs"),
+                    false,
+                );
+        } else if project_path.join(".git").is_dir() {
+            // Match the raw OpenCode path's fail-closed fallback. notmpcopyup is
+            // load-bearing — see append_forge_repo_gitdir_mount_args (tmpcopyup
+            // over a real host .git = crun ENOSPC at launch, 2026-07-15).
+            spec = spec.tmpfs(format!(
+                "{repo_gitdir_target}:size=8m,mode=0700,notmpcopyup"
+            ));
+        }
     }
 
     let ca_cert = certs_dir.join("intermediate.crt");
@@ -11730,18 +11789,43 @@ mod tests {
         assert!(content.contains("pasta_options = [\"--something-else\"]"));
         assert!(!content.contains("pasta_options = [\"--ipv4-only\"]"));
     }
-    use std::sync::{Mutex, OnceLock};
 
     fn has_arg(args: &[String], needle: &str) -> bool {
         args.iter().any(|arg| arg == needle)
     }
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        // ONE process-wide lock for every env-mutating test in this crate.
+        // std::env::set_var is process-global, so main.rs and runtime_assets
+        // tests must serialise on the SAME mutex — two independent locks
+        // serialise nothing. Delegates to the canonical lock (order 434 unified
+        // this after that fix pointed one test at a different mutex).
+        crate::runtime_assets::env_lock()
+    }
+
+    /// Order 437: run a test in the OPT-IN shared host-mount mode by setting
+    /// TILLANDSIAS_FORGE_HOST_MOUNT=1 for the guard's lifetime, restoring the
+    /// prior value on drop (panic path included). Acquire `env_lock()` first —
+    /// this mutates process env.
+    struct HostMountEnvGuard(Option<std::ffi::OsString>);
+    impl HostMountEnvGuard {
+        fn enable() -> Self {
+            let prev = std::env::var_os("TILLANDSIAS_FORGE_HOST_MOUNT");
+            unsafe {
+                std::env::set_var("TILLANDSIAS_FORGE_HOST_MOUNT", "1");
+            }
+            HostMountEnvGuard(prev)
+        }
+    }
+    impl Drop for HostMountEnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match self.0.take() {
+                    Some(v) => std::env::set_var("TILLANDSIAS_FORGE_HOST_MOUNT", v),
+                    None => std::env::remove_var("TILLANDSIAS_FORGE_HOST_MOUNT"),
+                }
+            }
+        }
     }
 
     #[test]
@@ -11994,6 +12078,33 @@ mod tests {
                 "instance {raw:?} must emit no state overrides"
             );
         }
+    }
+
+    /// Order 437: clone-only is the default; the shared host-mount is opt-in
+    /// only via TILLANDSIAS_FORGE_HOST_MOUNT=1. Pure over the raw value so it is
+    /// testable without env mutation.
+    #[test]
+    fn forge_host_mount_is_opt_in_only() {
+        assert!(
+            !forge_host_mount_enabled(None),
+            "no env => clone-only default"
+        );
+        assert!(
+            !forge_host_mount_enabled(Some("")),
+            "empty => clone-only default"
+        );
+        assert!(
+            !forge_host_mount_enabled(Some("0")),
+            "0 => clone-only default"
+        );
+        assert!(
+            !forge_host_mount_enabled(Some("true")),
+            "only the literal 1 opts in"
+        );
+        assert!(
+            forge_host_mount_enabled(Some("1")),
+            "1 opts into the legacy shared host-mount"
+        );
     }
 
     /// Order 427: two workers on one project must not collide. Before the
@@ -13127,6 +13238,12 @@ mod tests {
 
     #[test]
     fn opencode_args_mount_workspace_and_prompt() {
+        // Order 437: this test validates the shared host-mount workspace mount,
+        // which is now opt-in. Run it in host-mount mode; the clone-only default
+        // is covered by forge_host_mount_is_opt_in_only + the flipped shape
+        // assertions elsewhere.
+        let _env = env_lock();
+        let _hm = HostMountEnvGuard::enable();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -13149,6 +13266,8 @@ mod tests {
         assert!(!has_arg(&args, "/bin/bash"));
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_PROMPT=hello"));
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT=alpha"));
+        // Order 437: this test runs in the OPT-IN host-mount mode (guard at the
+        // top), so the host-mount claim IS present here.
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
         assert!(
@@ -13264,7 +13383,10 @@ mod tests {
         ));
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_PROMPT=hello"));
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT=alpha"));
-        assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        // Order 437: clone-only by default — no host-checkout mount; the mirror
+        // presence flag selects the network clone.
+        assert!(!has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        assert!(has_arg(&args, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
     }
 
@@ -13296,7 +13418,9 @@ mod tests {
 
         assert!(has_arg(&argv, "PROJECT=alpha"));
         assert!(has_arg(&argv, "TILLANDSIAS_PROJECT=alpha"));
-        assert!(has_arg(&argv, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        // Order 437: clone-only by default.
+        assert!(!has_arg(&argv, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        assert!(has_arg(&argv, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
     }
 
     #[test]
@@ -13454,7 +13578,10 @@ mod tests {
         assert_eq!(args.first().map(|s| s.as_str()), Some("--rm"));
         assert!(!has_arg(&args, "podman"));
         assert!(!has_arg(&args, "run"));
-        assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        // Order 437: clone-only by default — no host-checkout mount; the mirror
+        // presence flag selects the network clone.
+        assert!(!has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        assert!(has_arg(&args, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
     }
 
@@ -13797,6 +13924,9 @@ mod tests {
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
         let _guard = env_lock();
+        // Order 437: the gitdir facade/quarantine is the OPT-IN host-mount
+        // feature; exercise it in host-mount mode.
+        let _hm = HostMountEnvGuard::enable();
         let tmp = tempfile::tempdir().expect("temp dir");
         let project_path = tmp.path().join("project");
         std::fs::create_dir_all(&project_path).expect("create project");
@@ -14285,20 +14415,28 @@ mod tests {
             window.contains("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
             "isolated branch must route through the entrypoint filesystem clone transport"
         );
-        // The host-mount claim and the gitdir facade/mask belong ONLY to the
-        // shared-tree branch: assert they appear after the else.
-        let else_idx = window
-            .find("} else {")
-            .expect("isolation must have a default else branch");
+        // Order 437: clone-only is the DEFAULT. The host-mount claim and the
+        // gitdir facade/mask now belong ONLY to the OPT-IN
+        // `else if forge_uses_host_mount()` branch; the final else clones a
+        // fresh tree from the mirror (GIT_SERVICE presence flag) with no host
+        // mount and no facade.
+        let optin_idx = window
+            .find("else if forge_uses_host_mount()")
+            .expect("host-mount must be opt-in behind forge_uses_host_mount()");
         let host_mount_idx = window
             .find("TILLANDSIAS_PROJECT_HOST_MOUNT=1")
-            .expect("default branch keeps the host-mount claim");
+            .expect("opt-in branch keeps the host-mount claim");
         let mask_idx = window
             .find("append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);")
-            .expect("default branch keeps the gitdir facade/mask");
+            .expect("opt-in branch keeps the gitdir facade/mask");
         assert!(
-            host_mount_idx > else_idx && mask_idx > else_idx,
-            "host-mount claim + gitdir mask must be confined to the non-isolated branch"
+            host_mount_idx > optin_idx && mask_idx > optin_idx,
+            "host-mount claim + gitdir mask must be confined to the opt-in \
+             forge_uses_host_mount() branch"
+        );
+        assert!(
+            window.contains("TILLANDSIAS_GIT_SERVICE=tillandsias-git"),
+            "clone-only default must set the mirror network-clone presence flag"
         );
     }
 
