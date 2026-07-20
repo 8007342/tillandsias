@@ -19243,7 +19243,7 @@ plan_index:
       order: 450
       desired_release: v0.4
       title: "REGRESSION: order 423 disabled git daemon receive-pack before order 322 shipped — ALL forge pushes rejected"
-      status: blocked
+      status: done
       capability_tags: [linux, git-mirror, transport, regression, release-blocker, p0]
       operator_note: "operator decision made 2026-07-20: option 1 (restore receive-pack on the internal-only enclave daemon); order 322 authenticated smart-HTTP remains the proper long-term fix"
       kind: fix
@@ -19285,3 +19285,27 @@ plan_index:
             host coordinator. The receive-pack regression blocking all forge
             pushes. Renumbered from Hy3's provisional 447 (collided with the
             host's guest-binary packet).
+        - type: completed
+          ts: "2026-07-19T00:00:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            RESOLVED (option 1, operator-directed via Hy3's recommendation).
+            Restored `--enable=receive-pack` on the tillandsias-git daemon
+            (images/git/entrypoint.sh) with an inline security rationale: the
+            daemon is enclave-INTERNAL (--internal, no internet route), so order
+            423's internet-anonymous-write threat does not apply here; the REAL
+            GitHub-auth boundary is the pre-receive relay (Vault token, no
+            --mirror/--all, bulk-delete guard), which is unchanged. Order 423's
+            lighttpd/HTTP anonymous path stays removed; only the live daemon push
+            path is restored. Rebuilt the git image (receive-pack verified present
+            in the built entrypoint). Reconciled the now-inverted invariant:
+            rewrote litmus:git-mirror-no-anonymous-daemon-write to pin the RELAY
+            boundary (no anon write reaches GITHUB) instead of the wrong
+            "daemon refuses pushes" claim, and retired the superseded offline
+            fixture scripts/test-git-daemon-no-anon-write.sh (it only passed by
+            launching a non-production receive-pack-less daemon). All 11 executed
+            git-mirror-service litmus pass, 0 fail. Order 322 (per-agent
+            authenticated smart HTTP) remains the proper multi-tenant fix.
+            Exit criteria 1 + 3 satisfied; criterion 2 (live end-to-end forge
+            push) verifies when a forge next pushes through the rebuilt mirror.

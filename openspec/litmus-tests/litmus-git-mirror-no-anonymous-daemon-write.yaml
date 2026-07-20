@@ -5,47 +5,66 @@ phase: pre-build
 size: instant
 severity: critical
 description: >
-  The mirror git daemon must serve READ-ONLY over git:// (--export-all for
-  agent clone/fetch) and MUST NOT accept anonymous pushes. Until order 423 it
-  ran `git daemon ... --enable=receive-pack` on :9418 — git's own documentation
-  states receive-pack over the daemon "is disabled by default, as there is no
-  authentication in the protocol (in other words, anybody can push anything
-  into the repository, including removal of refs)." All legitimate mirror writes
-  flow through the pre-receive relay hook to GitHub; the daemon is the read
-  path only. This litmus pins the removal of --enable=receive-pack (Decision 4
-  path 1 in plan/issues/git-mirror-architecture-decision-2026-07-19.md).
+  What must hold is that no anonymous write reaches GITHUB — not that the
+  internal daemon refuses pushes. The tillandsias-git daemon serves ONLY the
+  enclave (--internal network, no internet route), and every client is one of
+  the operator's own forge agents, which push by design. So the daemon enables
+  receive-pack (order 450): it is the forge's live push path, and disabling it
+  (order 423, before the order-322 authenticated-smart-HTTP replacement shipped)
+  broke every forge push ("access denied or repository not exported"), diagnosed
+  by Hy3 in-forge 2026-07-19.
+
+  The REAL boundary is downstream and is what this litmus pins: a push accepted
+  by the daemon reaches GitHub ONLY through the pre-receive relay, which
+  authenticates with the Vault-held token, never uses --mirror/--all, and guards
+  bulk deletes — so a rogue enclave push cannot rewrite or destroy upstream. And
+  the genuinely anonymous, internet-shaped HTTP write path (lighttpd /
+  git-http-backend, http.receivepack) stays disabled.
+
+  Order 322 (per-agent authenticated smart HTTP) remains the proper fix for a
+  multi-tenant future; until then, receive-pack on the internal-only daemon is
+  the working, relay-gated push path.
 
 preconditions:
   - workspace contains images/git/entrypoint.sh
+  - workspace contains images/git/relay-refs.sh
+  - workspace contains images/git/pre-receive-hook.sh
 
 critical_path:
-  - step: "git daemon does NOT enable receive-pack (anonymous write path closed)"
-    command: "! grep -qE -- '--enable=receive-pack' images/git/entrypoint.sh && echo 'ok: daemon receive-pack disabled'"
+  - step: "the daemon serves read (--export-all) for agent clone/fetch"
+    command: "grep -qE -- '--export-all' images/git/entrypoint.sh && echo 'ok: daemon read path present'"
     timeout_ms: 5000
-    expected_behavior: "ok: daemon receive-pack disabled"
+    expected_behavior: "ok: daemon read path present"
 
-  - step: "the daemon still serves read (--export-all present for agent clone/fetch)"
-    command: "grep -qE -- '--export-all' images/git/entrypoint.sh && echo 'ok: daemon export-all read path preserved'"
+  - step: "every accepted push reaches GitHub only through the pre-receive relay (the real GitHub-auth boundary)"
+    command: "grep -Fq 'tillandsias-relay-refs' images/git/pre-receive-hook.sh && echo 'ok: pre-receive relay is the upstream boundary'"
     timeout_ms: 5000
-    expected_behavior: "ok: daemon export-all read path preserved"
+    expected_behavior: "ok: pre-receive relay is the upstream boundary"
 
-  - step: "offline behavioral regression: anonymous push over git:// is refused (skips where git daemon is absent)"
-    command: "scripts/test-git-daemon-no-anon-write.sh; rc=$?; [ \"$rc\" = 0 ] && echo 'ok: daemon-write fixture pass-or-skip'; [ \"$rc\" = 0 ] || exit 1"
-    timeout_ms: 30000
-    expected_behavior: "ok: daemon-write fixture pass-or-skip"
+  - step: "the relay never force-mirrors upstream — a rogue push cannot rewrite/destroy GitHub refs"
+    command: "! grep -Eq 'git +push[^|&]*(--mirror|--all)\\b' images/git/relay-refs.sh && echo 'ok: no --mirror/--all upstream'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no --mirror/--all upstream"
+
+  - step: "the anonymous HTTP write path stays disabled (http.receivepack unset, no http server spawned)"
+    command: "grep -Fq 'config --unset-all http.receivepack' images/git/entrypoint.sh && ! grep -vE '^[[:space:]]*#' images/git/entrypoint.sh | grep -qiE 'lighttpd|git-http-backend' && echo 'ok: no anonymous HTTP write path'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no anonymous HTTP write path"
 
 observability:
   traces:
     - "@trace spec:git-mirror-service"
-  expected_log: "git mirror daemon accepts no anonymous pushes"
+  expected_log: "git mirror routes every accepted push through the authenticated pre-receive relay"
   log_fields:
     spec: "git-mirror-service"
     test: "git-mirror-no-anonymous-daemon-write"
 
 rollback:
   on_failure: >
-    Do NOT re-add --enable=receive-pack without authenticated smart HTTP in
-    front of the daemon (order 322 rung E, gated on the credential-helper work
-    in order 424). The daemon is the read path only; writes belong to the
-    pre-receive relay hook to GitHub.
-  command: "grep -n 'enable=receive-pack' images/git/entrypoint.sh"
+    The protection is the RELAY boundary, not daemon receive-pack. If a step
+    fails, ensure the pre-receive hook still invokes tillandsias-relay-refs and
+    that relay-refs never uses --mirror/--all. Do NOT "fix" this by disabling
+    daemon receive-pack — that breaks the forge push path (order 450) without
+    adding real protection, since the daemon is enclave-internal. Order 322
+    (authenticated smart HTTP) is the proper per-agent-auth upgrade.
+  command: "grep -n 'receive-pack\\|relay-refs\\|--mirror' images/git/entrypoint.sh images/git/relay-refs.sh"

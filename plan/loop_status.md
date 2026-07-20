@@ -12,9 +12,11 @@ LastExecutionTime: 2026-07-20T05:00:00Z
   - **order 423** git-mirror-unauthenticated-write-paths — CLOSED the remaining
     anon write path: removed `git daemon --enable=receive-pack` (Decision 4
     path 1); keep `--export-all` for agent read clones. Added
-    `test-git-daemon-no-anon-write.sh` (skips where git daemon absent) +
     `litmus:git-mirror-no-anonymous-daemon-write`. Both anon write paths now
-    closed (lighttpd via 502823b7).
+    closed (lighttpd via 502823b7). NOTE: order 450 later REVERSED the daemon
+    receive-pack removal (it broke every forge push before order 322 shipped) and
+    retired the `test-git-daemon-no-anon-write.sh` fixture; the litmus now pins
+    the pre-receive RELAY boundary instead. The lighttpd removal stands.
   - **order 442** e2e-gate-refuses-live-runtime — `live_runtime_is_present()`
     detects a live forge/shared stack and emits `skip:live-runtime-present`
     from all three host branches; `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1` still
@@ -26,8 +28,8 @@ LastExecutionTime: 2026-07-20T05:00:00Z
     `test-git-mirror-startup-per-ref.sh` + `litmus:git-mirror-startup-per-ref-tolerance`.
   - **order 426** git-hack-obsolescence — VERIFIED complete: lighttpd (423) and
     curl -k (4017c4bf) removals in tree; non-dead items split to 435/436.
-- **Fixtures**: `test-git-daemon-no-anon-write.sh` SKIPs on this daemon-less
-  forge (honest, not false-PASS); the other two fixtures PASS here.
+- **Fixtures**: the daemon-no-anon-write fixture was retired by order 450 (its
+  invariant was reversed); the other two fixtures PASS here.
 - **E2E gates**: `skip:no-podman-binary` (forge has no podman) — unchanged.
 - **Next**: remaining v0.4 forge-eligible packets include order 443
   (concurrent-forges shared-stack refcount — large Rust change, needs podman

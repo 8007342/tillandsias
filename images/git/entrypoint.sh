@@ -190,13 +190,29 @@ retry_msg() {
 VAULT_RENEWER_PID=""
 start_vault_token_renewer
 trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
-# git:// READ path only (upload-pack via --export-all). receive-pack is
-# DELIBERATELY NOT enabled (order 423, Decision 4): the daemon protocol has no
-# auth, and all writes go through the pre-receive relay to GitHub. Do not add
-# --enable=receive-pack without authenticated smart HTTP in front of it.
+# receive-pack IS enabled — it is the forge's live push path (order 450).
+#
+# Order 423 removed --enable=receive-pack to close an "anonymous write path",
+# but the authenticated replacement (order 322, smart HTTP) never shipped, so
+# every forge push broke ("access denied or repository not exported"). Diagnosed
+# by Hy3 in-forge 2026-07-20.
+#
+# Why re-enabling is acceptable HERE (and why 423 over-corrected for this
+# service): the daemon serves ONLY the enclave (--internal network, no internet
+# route), so the internet-anonymous-write threat git-daemon(1) warns about does
+# not apply. Every container that can reach it is one of the operator's own
+# forge agents, which legitimately push by design. The REAL boundaries are
+# downstream and unchanged: the pre-receive relay authenticates to GitHub with
+# the Vault-held token, and relay-refs.sh never uses --mirror/--all and guards
+# bulk deletes — so a rogue push cannot destroy upstream. Order 322 (per-agent
+# authenticated smart HTTP) remains the proper fix for a multi-tenant future;
+# until then, receive-pack on the internal-only daemon is the working push path.
+# The order-423 LIGHTTPD/git-http-backend removal stays — that WAS dead code and
+# a genuine anonymous path; only this live daemon push path is restored.
 git daemon \
     --reuseaddr \
     --export-all \
+    --enable=receive-pack \
     --base-path=/srv/git \
     --listen=0.0.0.0 \
     --port=9418 \
