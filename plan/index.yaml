@@ -18423,7 +18423,7 @@ plan_index:
       packet_id: forge-src-tmpfs-topology
       desired_release: v0.5
       title: "/home/forge/src is a host bind mount, but BOTH active specs forbid that — forge-hot-cold-split requires tmpfs and forge-offline requires clone-only"
-      status: in_progress
+      status: done
       operator_note: "operator workflow decision: /home/forge/src tmpfs+clone changes how edits reach the host"
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
@@ -18534,6 +18534,17 @@ plan_index:
             next reinstall. Facade retirement (deleting the now-dead
             write_forge_repo_gitdir / notmpcopyup / index / packed-refs code) is
             the clean follow-on once clone-only is live-proven.
+        - type: verified
+          ts: "2026-07-20T06:00:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            LIVE-VERIFIED by the operator 2026-07-20: after the fresh install,
+            forges clone cleanly from the mirror ("Cloning into
+            /home/forge/src/tillandsias") instead of bind-mounting a shared host
+            checkout. No dirty-worktree contamination. The clone-only keystone is
+            confirmed working end to end. (The clone-vs-daemon-startup race it
+            exposed was fixed as order 446.)
     - order: 438
       packet_id: test-transient-state-audit
       desired_release: v0.5
