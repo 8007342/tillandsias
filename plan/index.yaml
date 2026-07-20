@@ -17583,7 +17583,7 @@ plan_index:
       packet_id: git-hack-obsolescence
       desired_release: v0.4
       title: "Obsolete dead git hacks: remove orphaned lighttpd HTTP path, the GitHub token injected into forge lanes, the dual git-service/tillandsias-git alias, and curl -k in vault-cli"
-      status: ready
+      status: completed
       kind: cleanup
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: [git-mirror-unauthenticated-write-paths]
@@ -17676,6 +17676,25 @@ plan_index:
             git-service:9418, and both appear in NO_PROXY in container_profile.rs
             and main.rs. This is a rename migration, not a deletion. Split out
             as order 436.
+        - type: progress
+          ts: "2026-07-20T04:50:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            VERIFIED complete. The genuinely-removable hacks are gone: (a)
+            lighttpd/git-http-backend removed in order 423 (grep finds only the
+            removal comment); (d) curl -k removed in 4017c4bf, all six vault-cli
+            sites now pin --cacert, guarded by litmus:vault-cli-verifies-tls
+            (grep for `curl -k` finds only the explanatory comment). The two
+            items that looked removable but were NOT dead hacks were correctly
+            split out by the prior agent: (b) HOMEBREW_GITHUB_API_TOKEN ->
+            order 435 (spec reconciliation, needs_clarification — operator
+            decision on forge-offline ZERO-creds vs brew token); (c) dual
+            git-service/tillandsias-git alias -> order 436 (rename migration).
+            Load-bearing hacks (explicit push refspecs, bulk-delete guard,
+            safe.directory, forge-uid chown, quarantine escape) confirmed
+            untouched. Nothing left in this packet's removable scope; marking
+            completed.
     - order: 427
       packet_id: forge-delegation-instance-names
       desired_release: v0.4
