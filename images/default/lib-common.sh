@@ -586,6 +586,29 @@ clone_project_from_mirror() {
         local max_retries=5
         for i in $(seq 1 $max_retries); do
             if git clone "git://tillandsias-git/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
+                # @trace spec:git-mirror-service
+                # A git daemon serving a mid-seed (still-empty) bare repo returns
+                # a SUCCESSFUL clone of an EMPTY repository — git only prints
+                # "warning: You appear to have cloned an empty repository" and
+                # exits 0. That silently drops the agent into a checkout with no
+                # HEAD and no files (the "forge had no checkout" symptom,
+                # 2026-07-20). Assert ground truth: the clone MUST have a
+                # resolvable HEAD. If not, the mirror has not finished seeding
+                # from upstream — treat it like a not-ready mirror and RETRY
+                # rather than proceeding, and FAIL LOUD (never launch on an empty
+                # tree) once retries are exhausted.
+                if ! git -C "$clone_dir" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
+                    rm -rf "$clone_dir" 2>/dev/null || true
+                    if [[ $i -lt $max_retries ]]; then
+                        trace_lifecycle "git-mirror" "clone returned an EMPTY tree (mirror still seeding), retrying ($i/$max_retries)..."
+                        sleep 1
+                        continue
+                    fi
+                    echo "[forge] FATAL: git clone from git://tillandsias-git/${TILLANDSIAS_PROJECT} produced an EMPTY checkout (no HEAD) after $max_retries attempts." >&2
+                    echo "[forge] The mirror is reachable but advertised no cloneable refs — it has not finished seeding from upstream (or upstream is empty)." >&2
+                    echo "[forge] Refusing to launch an agent on an empty working tree." >&2
+                    exit 1
+                fi
                 trace_lifecycle "git-mirror" "clone successful"
                 cd "$clone_dir" || return 1
                 git remote set-url --push origin "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || \

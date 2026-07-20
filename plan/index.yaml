@@ -19378,3 +19378,61 @@ plan_index:
             forge writes and eliminate the order-450 interim unauthenticated
             daemon receive-pack path. Blocked on order 322's research decision
             record (authenticated transport + per-forge identity). v0.5 target.
+
+    - packet_id: concurrent-mirror-forges-current-checkout-and-coherence
+      order: 452
+      desired_release: v0.4
+      title: "Concurrent mirror-based forges: every launch clones a CURRENT, non-empty checkout from the git-mirror, all push transparently and coherently"
+      status: in-progress
+      capability_tags: [linux, git-mirror, forge, concurrency, coherence, idempotency, release-blocker]
+      operator_note: "operator 2026-07-20: the v0.4-blocking regression was forges INCONSISTENTLY sourcing the tree (some host-mounted the checkout, some cloned the mirror) -> .git credential collisions. Host checkout separated to 2src/tillandsias; project default stays ~/src/<project>. Goal: ALL forges clone from the mirror, concurrently, each own tree, all pushing transparently + coherently. Fix the coherence issues Hy3 and the host hit."
+      kind: fix
+      deliverable: images/git/entrypoint.sh + images/default/lib-common.sh + crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 8
+      outcome: >
+        Root cause (verified 2026-07-20): in the DEFAULT clone-only mode (order
+        437) the forge clones its tree from the enclave MIRROR over git://; the
+        host checkout is NOT the forge's content source. Three defects broke it:
+        (1) COHERENCE — the mirror's startup sweep pushed mirror->GitHub but
+        never advanced the mirror's EXPORTED refs/heads/* FROM GitHub, so a
+        mirror left behind upstream (host pushed direct to origin, order 449)
+        served STALE heads; a forge then cloned stale and its push was rejected
+        non-fast-forward (Hy3's coherence break). (2) EMPTY-CLONE RACE / no
+        fail-loud — a git daemon serving a mid-seed empty bare repo returns a
+        SUCCESSFUL clone of an empty repository, and clone_project_from_mirror
+        treated that as success, silently dropping the agent into an empty tree
+        (the "forge had no checkout" symptom). (3) reused-running mirror is never
+        re-validated/advanced (main.rs:9198) and there is no mirror-readiness
+        gate before the forge clones. Full map + fix plan:
+        plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md
+        Related: order 449 (mirror divergence — this implements its startup-
+        coherence half), the concurrent-forge shared-stack bounce packet
+        (teardown race / terminal steal — the OTHER half of concurrency).
+      exit_criteria:
+        - "SLICE 1 (done): mirror advances exported heads from upstream (non-forced) at every start so clones are CURRENT; clone_project_from_mirror asserts a resolvable HEAD and FAILS LOUD (never launches on an empty tree)"
+        - "SLICE 2: a host-side wait_for_git_mirror_ready gate (mirroring wait_for_inference_ready) blocks the launch until the mirror advertises the expected ref, and a reused running mirror is re-reconciled to upstream at launch (main.rs ensure_enclave_for_project)"
+        - "SLICE 3: two forges launched concurrently each clone their own current tree and both push transparently through the relay (fixture/live)"
+      events:
+        - type: progress
+          ts: "2026-07-20T00:00:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            SLICE 1 landed + verified. Fix 1 (coherence): images/git/entrypoint.sh
+            startup sweep now runs a NON-forced `git fetch origin
+            refs/heads/*:refs/heads/*` so the mirror's cloneable heads fast-forward
+            to upstream where safe (diverged heads still relay UP via the per-ref
+            push); a forge cloning the mirror gets CURRENT code and its push
+            fast-forwards. Fix 3 (fail-loud): images/default/lib-common.sh
+            clone_project_from_mirror asserts `git rev-parse HEAD` after clone —
+            an empty (mid-seed) clone RETRIES through the seed window and then
+            exits 1 loud instead of dropping the agent into an empty tree. Both
+            verified in the rebuilt images (git: coherence fetch present; forge:
+            fail-loud guard present at /usr/local/lib/tillandsias/lib-common.sh).
+            All 11 git-mirror-service litmus pass (safe-refspec + startup-per-ref
+            included — the coherence fetch uses an explicit refs/heads/* refspec,
+            never --mirror/--all). Slices 2 + 3 remain (readiness gate + reused-
+            mirror currenting + concurrent-push live proof).

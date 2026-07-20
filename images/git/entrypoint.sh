@@ -269,6 +269,27 @@ for mirror in /srv/git/*; do
         retry_msg "[git-mirror] Startup retry-push fetch output: $FETCH_OUTPUT"
     fi
 
+    # @trace spec:git-mirror-service
+    # Coherence (order 449): advance this mirror's EXPORTED heads to upstream
+    # where fast-forwardable, so a forge cloning over git:// gets CURRENT code.
+    # The fetch above only populates refs/remotes/origin/* (tracking refs); the
+    # cloneable refs/heads/* are NOT advanced by it. Without this step a mirror
+    # left behind GitHub — e.g. the host pushed DIRECT to origin (order 449) —
+    # keeps serving STALE heads; a forge then commits on stale and its push is
+    # rejected non-fast-forward. That is the coherence break Hy3 hit 2026-07-20
+    # and the reason concurrent forges could not push transparently.
+    # NON-forced (NO leading '+'): a head carrying local un-relayed commits that
+    # would need a rewind is LEFT ALONE (fetch reports "[rejected] non-fast-
+    # forward") and is relayed UP by the per-ref push below. This is the
+    # GitHub->mirror direction; the per-ref retry-push below is mirror->GitHub —
+    # together they keep the mirror coherent both ways. Never --mirror/--all:
+    # only the explicit exported refs/heads/* set (same sparse-mirror invariant
+    # as the seed and relay paths).
+    FF_OUTPUT="$(git -C "$mirror" fetch origin 'refs/heads/*:refs/heads/*' 2>&1)" || retry_msg "[git-mirror] Startup exported-head fast-forward (non-fatal; diverged heads relay UP below): $FF_OUTPUT"
+    if [ -n "$FF_OUTPUT" ]; then
+        retry_msg "[git-mirror] Startup exported-head fast-forward: $FF_OUTPUT"
+    fi
+
     # Per-ref relay (order 441): the OLD sweep fed ALL refs to one
     # `git push --atomic` call, so a single stranded (non-fast-forward) ref
     # rejected the ENTIRE transaction and no fast-forwardable ref was flushed.
