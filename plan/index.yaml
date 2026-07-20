@@ -19179,3 +19179,62 @@ plan_index:
           summary: >
             Filed while owning the cheatsheet-sync litmus failure — the manual
             sync fixes the instance; this prevents recurrence.
+
+        - type: correction
+          ts: "2026-07-20T06:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            CORRECTION: images/default/cheatsheets/ is GITIGNORED (build-
+            generated), not committed — the design is already "generated, not
+            committed". So this is the SAME class as order 447: the litmus fails
+            on a STALE LOCAL generated copy (a prior build + subsequent host
+            edits), and would pass in CI where the copy is freshly generated. The
+            fix is therefore identical to 447: regenerate-before-check (or skip
+            cleanly on stale local state), not "make it generated" (it already
+            is). Consider folding 448 into 447 as one "litmus must regenerate
+            generated artifacts before asserting freshness" packet.
+
+    - packet_id: host-direct-push-bypasses-mirror-strands-agents
+      order: 449
+      desired_release: v0.4
+      title: "Host direct-pushes to origin bypass the mirror, stranding forge agents on a stale base"
+      status: ready
+      capability_tags: [linux, git-mirror, coordination, multi-writer, automation, p1]
+      kind: enhancement
+      deliverable: coordination policy + mirror continuous-reconcile OR host-pushes-through-mirror
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        LIVE 2026-07-20, and self-inflicted. The host coordinator (this agent)
+        pushed commits DIRECTLY to origin/linux-next all session, bypassing the
+        mirror. The mirror only reconciles with upstream on a push FAILURE, so
+        between pushes its exported heads went stale (mirror linux-next a109b0b3
+        while upstream was ed9f91d4). A forge agent (Hy3) cloned the stale mirror,
+        committed on that base, and its push diverged from upstream -> declined.
+        The agent then tried to reach /run/secrets to get a token directly (a
+        curiosity workaround the operator correctly denied) — the real need was a
+        current base to rebase onto. Unblocked live by manually fast-forwarding
+        the mirror's linux-next to upstream, after which the agent can
+        fetch+rebase+push. But the pattern is the bug: in a multi-writer world
+        (host coordinator + N forge agents), a writer that bypasses the mirror
+        strands everyone cloning FROM it. Options: (a) the host coordinator
+        ALSO pushes through the mirror (single source of truth); (b) the mirror
+        CONTINUOUSLY reconciles with upstream (a periodic ff of exported heads),
+        not only on push failure; (c) both. Ties into order 445 (forge<->host
+        lifecycle) and the delegation direction.
+      exit_criteria:
+        - "a forge agent's push is not stranded by a concurrent host direct-push — the mirror reflects current upstream within a bounded window"
+        - "either the host coordinator pushes through the mirror, or the mirror periodically fast-forwards exported heads from upstream"
+        - "a litmus/fixture reproduces the stranding (host pushes direct; mirror goes stale; agent clone diverges) and proves the chosen mechanism resolves it"
+      events:
+        - type: filed
+          ts: "2026-07-20T06:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed as the root cause of Hy3's push failure. Self-inflicted by the
+            host pushing direct to origin while agents work through the mirror.
+            Unblocked live by fast-forwarding the mirror; the pattern needs a fix.
