@@ -11649,14 +11649,31 @@ plan_index:
         only after the decision record is approved (Tlatoani sign-off;
         contested-practice flag from the enterprise cheatsheet).
       exit_criteria:
-        - "decision record: transport chosen with threat-model rationale, or explicit accept-risk for git:// with topology invariants pinned by litmus"
-        - "if adopted: one lane migrated behind a flag with fetch/push parity fixture"
+        - "decision record: authenticated transport CHOSEN with threat-model rationale (the accept-risk-for-git:// branch is off the table per operator 2026-07-19)"
+        - "per-forge credential-issuance design (Vault-sourced, not readable as a file in the forge) + push attribution mechanism"
+        - "if adopted: one lane migrated behind a flag with fetch/push parity fixture, then daemon --enable=receive-pack removed"
       events:
         - type: filed
           ts: "2026-07-13T04:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
           host: linux_mutable
           summary: "Order-315 migration ladder rung E (transport, research-first)."
+        - type: note
+          ts: "2026-07-19T00:00:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            OPERATOR DIRECTIVE 2026-07-19 sharpens this packet into a decision:
+            "we really don't like to allow for unauthenticated writes, even
+            within the forge... unblock it for now, but file research and work
+            packets to restore it properly in a future release." The interim
+            unblock (order 450: daemon receive-pack restored on the enclave) is
+            ratified ONLY for v0.4. This packet's accept-risk-for-git:// branch is
+            REMOVED — the operator does not accept an unauthenticated write path
+            even on the isolated enclave. Research the authenticated transport +
+            per-forge identity; the implementation is order 451 (blocked on this
+            decision record). Focused research appendix:
+            plan/issues/research-authenticated-forge-writes-restore-2026-07-19.md
 
     - packet_id: wsl-platform-preflight-classification
       order: 323
@@ -19309,3 +19326,55 @@ plan_index:
             authenticated smart HTTP) remains the proper multi-tenant fix.
             Exit criteria 1 + 3 satisfied; criterion 2 (live end-to-end forge
             push) verifies when a forge next pushes through the rebuilt mirror.
+        - type: note
+          ts: "2026-07-19T00:01:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            Operator RATIFIED the interim unblock 2026-07-19 AND set the end
+            state: "we really don't like to allow for unauthenticated writes,
+            even within the forge... restore it properly in a future release."
+            This unblock is v0.4-only. The proper restoration is tracked by the
+            research (order 322, sharpened today) and the implementation (order
+            451, blocked on that decision record). When 451 lands, this daemon
+            receive-pack path is removed again in favour of authenticated writes.
+
+    - packet_id: authenticated-forge-write-transport-impl
+      order: 451
+      desired_release: v0.5
+      title: "Restore authenticated forge->mirror writes: migrate pushes to an authenticated transport with per-forge identity, then remove the daemon receive-pack unauthenticated path (order 450 interim)"
+      status: blocked
+      blocked_on: "order 322 decision record (authenticated transport + per-forge identity design, Tlatoani sign-off)"
+      capability_tags: [linux, git-mirror, transport, security, release-blocker-v0.5]
+      operator_note: "operator 2026-07-19: unauthenticated writes are not acceptable even within the forge; the order-450 daemon receive-pack unblock is v0.4-only and must be replaced by authenticated writes in v0.5"
+      kind: fix
+      deliverable: images/git/entrypoint.sh + images/git/pre-receive-hook.sh + forge gitconfig injection + credential issuance
+      depends_on: ["322"]
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 12
+      outcome: >
+        The order-450 unblock restored `git daemon --enable=receive-pack` on the
+        enclave-internal mirror as the v0.4 forge push path. The operator has
+        decided (2026-07-19) that an unauthenticated write path is not acceptable
+        even on the isolated enclave, so this packet restores the authenticated
+        transport chosen by order 322's decision record and REMOVES the daemon
+        receive-pack path once parity is proven. Per the operator standing rule,
+        MANDATORY research (order 322) must produce a Tlatoani-signed decision
+        record first; this packet stays blocked until then. Design space and the
+        accepted-interim-risk being closed:
+        plan/issues/research-authenticated-forge-writes-restore-2026-07-19.md
+      exit_criteria:
+        - "forge pushes authenticate at the transport with a per-forge identity (Vault-sourced, not readable as a plain file in the forge); the pre-receive relay logs which forge pushed which refs"
+        - "one lane migrated behind a flag with a fetch/push parity fixture (authenticated push reaches upstream through the relay exactly as git:// did)"
+        - "default flipped and `--enable=receive-pack` removed from the daemon; git:// remains fetch/upload-pack-only (--export-all); litmus:git-mirror-no-anonymous-daemon-write updated to assert the write path is authenticated"
+      events:
+        - type: filed
+          ts: "2026-07-19T00:01:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            Filed per operator directive 2026-07-19 to restore authenticated
+            forge writes and eliminate the order-450 interim unauthenticated
+            daemon receive-pack path. Blocked on order 322's research decision
+            record (authenticated transport + per-forge identity). v0.5 target.

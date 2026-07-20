@@ -21,9 +21,13 @@ description: >
   the genuinely anonymous, internet-shaped HTTP write path (lighttpd /
   git-http-backend, http.receivepack) stays disabled.
 
-  Order 322 (per-agent authenticated smart HTTP) remains the proper fix for a
-  multi-tenant future; until then, receive-pack on the internal-only daemon is
-  the working, relay-gated push path.
+  The daemon receive-pack path is EXPLICITLY INTERIM (v0.4 only). Operator
+  2026-07-19: unauthenticated writes are not acceptable even within the forge.
+  The authenticated replacement is tracked by order 322 (research) + order 451
+  (impl), which will remove --enable=receive-pack once authenticated per-forge
+  writes land; see plan/issues/research-authenticated-forge-writes-restore-2026-07-19.md.
+  Until then, receive-pack on the internal-only daemon is the working,
+  relay-gated push path.
 
 preconditions:
   - workspace contains images/git/entrypoint.sh
