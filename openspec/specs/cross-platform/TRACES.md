@@ -50,7 +50,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/lib-common.sh#L194](../../../images/default/lib-common.sh#L194)
 - [images/default/lib-common.sh#L460](../../../images/default/lib-common.sh#L460)
 - [images/default/lib-common.sh#L525](../../../images/default/lib-common.sh#L525)
-- [images/default/lib-common.sh#L1201](../../../images/default/lib-common.sh#L1201)
+- [images/default/lib-common.sh#L1224](../../../images/default/lib-common.sh#L1224)
 - [images/git/post-receive-hook.sh#L2](../../../images/git/post-receive-hook.sh#L2)
 - [images/git/pre-receive-hook.sh#L2](../../../images/git/pre-receive-hook.sh#L2)
 - [scripts/build-sidecar.sh#L73](../../../scripts/build-sidecar.sh#L73)

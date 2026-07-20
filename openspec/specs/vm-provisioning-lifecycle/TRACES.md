@@ -7,7 +7,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-control-wire/src/lib.rs#L169](../../../crates/tillandsias-control-wire/src/lib.rs#L169)
 - [crates/tillandsias-control-wire/src/lib.rs#L349](../../../crates/tillandsias-control-wire/src/lib.rs#L349)
-- [crates/tillandsias-headless/src/main.rs#L10035](../../../crates/tillandsias-headless/src/main.rs#L10035)
+- [crates/tillandsias-headless/src/main.rs#L10019](../../../crates/tillandsias-headless/src/main.rs#L10019)
 - [crates/tillandsias-headless/src/tray/mod.rs#L4](../../../crates/tillandsias-headless/src/tray/mod.rs#L4)
 - [crates/tillandsias-headless/src/tray/mod.rs#L560](../../../crates/tillandsias-headless/src/tray/mod.rs#L560)
 - [crates/tillandsias-headless/src/tray/mod.rs#L613](../../../crates/tillandsias-headless/src/tray/mod.rs#L613)

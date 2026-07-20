@@ -12,4 +12,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode.sh#L47](../../../images/default/entrypoint-forge-opencode.sh#L47)
 - [images/default/entrypoint-terminal.sh#L34](../../../images/default/entrypoint-terminal.sh#L34)
 - [images/default/forge-welcome.sh#L180](../../../images/default/forge-welcome.sh#L180)
-- [images/default/lib-common.sh#L1407](../../../images/default/lib-common.sh#L1407)
+- [images/default/lib-common.sh#L1430](../../../images/default/lib-common.sh#L1430)
