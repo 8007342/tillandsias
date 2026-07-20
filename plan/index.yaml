@@ -18958,3 +18958,48 @@ plan_index:
             Untracked + gitignored .opencode/package-lock.json (the launch
             artifact the operator flagged). Audit clean except flake.lock (legit).
             Remaining: a fail-loud check that no harness launch writes a tracked path.
+
+    - packet_id: forge-host-lifecycle-control-channel
+      order: 445
+      desired_release: v0.4
+      title: "RESEARCH: forge->host lifecycle-control channel — agent signals 'refresh me' (rebuild+relaunch) and 'I'm done' (safe to destroy)"
+      status: ready
+      capability_tags: [linux, research, forge, mcp, automation, lifecycle]
+      kind: research
+      deliverable: plan/issues/research-forge-host-lifecycle-control-channel-2026-07-20.md (decision record + rung split)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        Operator ask 2026-07-20: agents in a forge need to tell the host (a) they
+        need a fresh tillandsias environment — rebuild + relaunch so their
+        committed changes load — and (b) that they are done, so the forge can be
+        safely destroyed. Research-first per the operator's standing rule. The
+        forge->host MCP socket already exposes publish_local/service_status/
+        service_stop; the natural extension is request_refresh + signal_done
+        verbs, a thin forge-local CLI wrapper, and a sentinel-file fallback for a
+        dying agent. Key safety constraint: REFRESH must verify the forge's work
+        is committed AND relayed upstream before tearing down (no destroying
+        unpushed work); clone-only forges (order 437) make destroy+re-clone
+        cheap. DONE composes with order 443's shared-stack refcount. This is the
+        forge->host reverse of the host->forge delegation research
+        (forge-agent-delegation-research-2026-07-19); together they are the full
+        duplex the automation direction needs. NOT ZeroClaw (order 403), not
+        agent<->agent — one-directional lifecycle control only. Full brief:
+        plan/issues/research-forge-host-lifecycle-control-channel-2026-07-20.md
+      exit_criteria:
+        - "decision record: transport (MCP verb + CLI wrapper + sentinel fallback), chosen with reasons"
+        - "REFRESH pre-destroy verification defined (pushed-before-destroy) and DONE<->443-refcount composition specified"
+        - "pause-vs-recreate and rebuild-failure fallback (last-good) decided"
+        - "split into smallest implementable rungs (e.g. signal_done+refcount, then request_refresh queued for dailies, then immediate rebuild-relaunch-resume)"
+      events:
+        - type: filed
+          ts: "2026-07-20T04:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the operator's 2026-07-20 automation directive. The
+            forge->host lifecycle-control channel — the reverse of the
+            host->forge delegation research — needed for hands-off rebuild/
+            relaunch/resume and safe forge destruction.
