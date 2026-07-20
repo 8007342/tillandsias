@@ -1771,6 +1771,71 @@ fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
     )
 }
 
+/// Order 281: classify podman overlay corruption — a killed-build leaves a
+/// layer reference pointing at a missing diff dir, causing every subsequent
+/// build to fail with exit 125 and `Stat .../overlay/<hash>/diff: no such file
+/// or directory`. A blanket retry would mask non-corruption failures, so the
+/// classifier checks for BOTH the overlay path AND the missing-file signal.
+fn is_overlay_corruption_error(error: &str) -> bool {
+    let lower = error.to_lowercase();
+    lower.contains("overlay") && lower.contains("no such file")
+}
+
+/// Trait seam for `podman system reset --force` so the one-shot self-heal can
+/// be unit-tested without touching real podman state.
+trait OverlayHeal {
+    fn podman_system_reset_force(&self) -> Result<(), String>;
+}
+
+struct RealSystemReset;
+
+impl OverlayHeal for RealSystemReset {
+    fn podman_system_reset_force(&self) -> Result<(), String> {
+        let status = podman_command()
+            .args(["system", "reset", "--force"])
+            .status()
+            .map_err(|e| format!("Failed to spawn podman system reset: {e}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("podman system reset --force exited with {status}"))
+        }
+    }
+}
+
+/// Order 281: one-shot overlay self-heal. On overlay corruption, run
+/// `podman system reset --force` ONCE and return `Ok(true)` so the caller
+/// can retry the build exactly once. Returns `Ok(false)` when the error is
+/// not overlay corruption (caller should not retry). The `healed` flag
+/// prevents double-heal within a single build invocation — if the caller
+/// already healed and the retry still fails, it returns `Err` immediately.
+fn try_overlay_self_heal<H: OverlayHeal>(
+    error: &str,
+    healed: &mut bool,
+    healer: &H,
+    debug: bool,
+) -> Result<bool, String> {
+    if !is_overlay_corruption_error(error) {
+        return Ok(false);
+    }
+    if *healed {
+        return Err(format!(
+            "Overlay corruption self-heal already attempted; second build also failed: {error}"
+        ));
+    }
+    if debug {
+        eprintln!(
+            "[tillandsias] overlay corruption detected; running one-shot podman system reset --force"
+        );
+    }
+    // Set healed BEFORE the reset: even if reset fails, the flag prevents
+    // infinite retry loops. A failed reset + failed retry both mean the
+    // operator must intervene; the healed flag ensures we stop.
+    *healed = true;
+    healer.podman_system_reset_force()?;
+    Ok(true)
+}
+
 fn ensure_versioned_images(
     root: &Path,
     image_names: &[&str],
@@ -4708,6 +4773,10 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let client = PodmanClient::new();
     let mut failed_images = Vec::new();
     let mut identities = HashMap::<String, ImageBuildIdentity>::new();
+    // Order 281: one-shot overlay corruption self-heal flag. At most one
+    // `podman system reset --force` per init invocation — a second corruption
+    // after heal means a deeper problem that needs operator intervention.
+    let mut overlay_healed = false;
 
     for image in &images {
         let (build_args, dependency_digests) = match image_build_inputs(image, &identities) {
@@ -4849,16 +4918,121 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         let duration_ms = build_started.elapsed().as_millis() as u64;
 
         if let Err(e) = result {
-            if debug {
-                eprintln!("FAILED {}: {}", image, e);
-            }
-            let failed =
-                image_build_event("image.build.failed", &build_id, image, &identity, &decision)
+            // Order 281: overlay corruption self-heal — a killed-build leaves
+            // a dangling layer ref. One-shot podman system reset --force, then
+            // retry exactly once. Non-overlay failures are NOT retried.
+            match try_overlay_self_heal(&e, &mut overlay_healed, &RealSystemReset, debug) {
+                Ok(true) => {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias] overlay heal succeeded; retrying build of {image}"
+                        );
+                    }
+                    let retry_result = build_image_with_logging(
+                        &root,
+                        image,
+                        &identity,
+                        &build_args,
+                        &log_file,
+                        debug,
+                    );
+                    let retry_duration_ms = build_started.elapsed().as_millis() as u64;
+                    if let Err(retry_e) = retry_result {
+                        if debug {
+                            eprintln!("RETRY FAILED {}: {}", image, retry_e);
+                        }
+                        let failed = image_build_event(
+                            "image.build.failed",
+                            &build_id,
+                            image,
+                            &identity,
+                            &decision,
+                        )
+                        .with_outcome("failure", retry_duration_ms, 1)
+                        .with_redacted_error("overlay_heal_retry_failed", &retry_e);
+                        emit_image_build_event(&failed, debug);
+                        state.mark_failed(image);
+                        failed_images.push((image.to_string(), retry_e));
+                    } else {
+                        let alias_result = rt.block_on(apply_image_aliases(&client, &identity));
+                        if let Err(alias_e) = alias_result {
+                            let failed = image_build_event(
+                                "image.build.failed",
+                                &build_id,
+                                image,
+                                &identity,
+                                &decision,
+                            )
+                            .with_outcome("failure", retry_duration_ms, 1)
+                            .with_redacted_error("alias_update_failed", &alias_e);
+                            emit_image_build_event(&failed, debug);
+                            state.mark_failed(image);
+                            failed_images.push((image.to_string(), alias_e));
+                        } else {
+                            let image_id = rt
+                                .block_on(client.image_inspect(&identity.canonical_tag))
+                                .ok()
+                                .and_then(|json| image_inspect_metadata(&json).ok())
+                                .and_then(|(image_id, _)| image_id);
+                            let mut completed = image_build_event(
+                                "image.build.completed",
+                                &build_id,
+                                image,
+                                &identity,
+                                &decision,
+                            )
+                            .with_outcome(
+                                "success_after_heal",
+                                retry_duration_ms,
+                                0,
+                            );
+                            completed.image_id = image_id.clone();
+                            emit_image_build_event(&completed, debug);
+                            state.mark_success(image);
+                            state.set_image_identity(image, &decision, image_id);
+                            if debug {
+                                println!("SUCCESS {} (after overlay heal)", image);
+                            }
+                        }
+                    }
+                }
+                Ok(false) => {
+                    // Not overlay corruption — record failure as before.
+                    if debug {
+                        eprintln!("FAILED {}: {}", image, e);
+                    }
+                    let failed = image_build_event(
+                        "image.build.failed",
+                        &build_id,
+                        image,
+                        &identity,
+                        &decision,
+                    )
                     .with_outcome("failure", duration_ms, 1)
                     .with_redacted_error("podman_build_failed", &e);
-            emit_image_build_event(&failed, debug);
-            state.mark_failed(image);
-            failed_images.push((image.to_string(), e));
+                    emit_image_build_event(&failed, debug);
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), e));
+                }
+                Err(heal_err) => {
+                    // Heal itself failed or already healed once.
+                    if debug {
+                        eprintln!("FAILED {}: {} (heal: {})", image, e, heal_err);
+                    }
+                    let failed = image_build_event(
+                        "image.build.failed",
+                        &build_id,
+                        image,
+                        &identity,
+                        &decision,
+                    )
+                    .with_outcome("failure", duration_ms, 1)
+                    .with_redacted_error("overlay_heal_failed", &heal_err);
+                    emit_image_build_event(&failed, debug);
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), heal_err));
+                }
+            }
         } else {
             let alias_result = rt.block_on(apply_image_aliases(&client, &identity));
             if let Err(e) = alias_result {
@@ -15083,5 +15257,163 @@ mod tests {
 
         rt.block_on(service_stop("WEB", "test-publish-e2e", false))
             .expect("service_stop should succeed");
+    }
+
+    // Order 281: overlay corruption classifier + self-heal tests
+
+    #[test]
+    fn overlay_corruption_classifier_matches_known_signatures() {
+        // Positive cases: the exact error podman emits when a killed-build
+        // leaves a dangling layer reference.
+        assert!(is_overlay_corruption_error(
+            "Error: creating read-write layer: Stat /var/lib/containers/storage/overlay/abc123/diff: no such file or directory"
+        ));
+        assert!(is_overlay_corruption_error(
+            "error building at STEP: creating read-write layer: Stat /var/lib/containers/storage/overlay/def456/diff: no such file or directory"
+        ));
+        // Case-insensitive check (podman may emit mixed case).
+        assert!(is_overlay_corruption_error(
+            "Error: creating read-write layer: stat /var/lib/containers/storage/overlay/abc123/diff: No Such File Or Directory"
+        ));
+    }
+
+    #[test]
+    fn overlay_corruption_classifier_rejects_non_corruption() {
+        // Non-overlay errors must NOT trigger self-heal.
+        assert!(!is_overlay_corruption_error(
+            "Error: build process exited with status 1"
+        ));
+        assert!(!is_overlay_corruption_error(
+            "error: could not pull base image"
+        ));
+        // Overlay present but not a missing-file error.
+        assert!(!is_overlay_corruption_error(
+            "Error: overlay mount failed: permission denied"
+        ));
+        // Missing-file but not overlay-related.
+        assert!(!is_overlay_corruption_error(
+            "Error: no such file or directory: /tmp/something"
+        ));
+    }
+
+    /// Mock healer that records calls and can be configured to fail.
+    struct MockHealer {
+        fail: bool,
+        call_count: std::cell::Cell<u32>,
+    }
+
+    impl MockHealer {
+        fn new(fail: bool) -> Self {
+            Self {
+                fail,
+                call_count: std::cell::Cell::new(0),
+            }
+        }
+    }
+
+    impl OverlayHeal for MockHealer {
+        fn podman_system_reset_force(&self) -> Result<(), String> {
+            let n = self.call_count.get() + 1;
+            self.call_count.set(n);
+            if self.fail {
+                Err("mock reset failed".to_string())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn self_heal_not_triggered_for_non_overlay_error() {
+        let healer = MockHealer::new(false);
+        let mut healed = false;
+        let result =
+            try_overlay_self_heal("Build exited with status 1", &mut healed, &healer, false);
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "non-overlay must not trigger heal");
+        assert!(!healed);
+        assert_eq!(healer.call_count.get(), 0, "healer must not be called");
+    }
+
+    #[test]
+    fn self_heal_triggered_once_for_overlay_error() {
+        let healer = MockHealer::new(false);
+        let mut healed = false;
+        let result = try_overlay_self_heal(
+            "Error: creating read-write layer: Stat /var/lib/containers/storage/overlay/abc123/diff: no such file or directory",
+            &mut healed,
+            &healer,
+            false,
+        );
+        assert!(result.is_ok());
+        assert!(result.unwrap(), "overlay error must trigger heal");
+        assert!(healed, "healed flag must be set");
+        assert_eq!(healer.call_count.get(), 1, "reset called exactly once");
+    }
+
+    #[test]
+    fn self_heal_refuses_second_attempt() {
+        let healer = MockHealer::new(false);
+        let mut healed = true; // already healed
+        let result = try_overlay_self_heal(
+            "Error: overlay ... no such file or directory",
+            &mut healed,
+            &healer,
+            false,
+        );
+        assert!(result.is_err(), "second heal attempt must fail");
+        assert_eq!(healer.call_count.get(), 0, "no additional reset calls");
+    }
+
+    #[test]
+    fn self_heal_propagates_reset_failure() {
+        let healer = MockHealer::new(true); // reset will fail
+        let mut healed = false;
+        let result = try_overlay_self_heal(
+            "Error: overlay ... no such file or directory",
+            &mut healed,
+            &healer,
+            false,
+        );
+        assert!(result.is_err(), "reset failure must propagate");
+        assert!(
+            healed,
+            "healed flag must be set even on reset failure to prevent retry loops"
+        );
+    }
+
+    /// Source-shape pin: the build error path in run_init MUST call
+    /// try_overlay_self_heal before recording the failure.
+    #[test]
+    fn run_init_build_loop_calls_overlay_self_heal() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_init(");
+        assert!(
+            window.contains("try_overlay_self_heal"),
+            "run_init build loop must call try_overlay_self_heal before marking failure"
+        );
+        assert!(
+            window.contains("overlay_healed"),
+            "run_init must maintain an overlay_healed flag across the build loop"
+        );
+    }
+
+    /// Source-shape pin: is_overlay_corruption_error must check both
+    /// "overlay" AND "no such file" to avoid false positives on
+    /// unrelated overlay mount errors.
+    #[test]
+    fn overlay_classifier_checks_both_conditions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let func_body = source
+            .split("fn is_overlay_corruption_error(")
+            .nth(1)
+            .expect("is_overlay_corruption_error must exist")
+            .split("\nfn ")
+            .next()
+            .unwrap();
+        assert!(
+            func_body.contains("overlay") && func_body.contains("no such file"),
+            "classifier must check both overlay path and no-such-file signal"
+        );
     }
 }

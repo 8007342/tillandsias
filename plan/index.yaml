@@ -8771,6 +8771,21 @@ plan_index:
             robustness is linux-owned; filed with verbatim evidence + an
             --exec-guest storage probe. Cross-references order 270 (root
             cause of the corruption).
+        - type: progress
+          ts: "2026-07-20T03:55:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            Implementation complete: is_overlay_corruption_error() classifier
+            checks both overlay path AND no-such-file signal. OverlayHeal
+            trait seam + RealSystemReset impl for testable reset. One-shot
+            try_overlay_self_heal() with loop guard (healed flag set BEFORE
+            reset to prevent infinite loops). Wired into run_init build error
+            path with full retry + telemetry. 8 unit tests: classifier
+            positives/negatives, mock healer triggered/refused/propagates-failure,
+            source-shape pins on run_init and classifier. cargo test 280/280,
+            clippy clean, ./build.sh --check green. Remaining exit criterion:
+            live verification on a host with a corrupt overlay store.
 
     - packet_id: smoke-lock-fd-leaks-into-forge-sessions
       order: 283

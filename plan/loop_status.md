@@ -1,6 +1,25 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-20T02:55:00Z
+LastExecutionTime: 2026-07-20T03:55:00Z
+
+## Cycle 2026-07-20T03:51Z (forge — meta-orchestration: order 281 overlay self-heal)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260720T0351Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.sM8Tv4` clean.
+- **Sibling heads**: main 7914f2ea, linux-next 0324b15b.
+- **Order 281 (guest-podman-overlay-corruption-selfheal) — IMPLEMENTATION
+  COMPLETE**: added `is_overlay_corruption_error()` classifier (checks both
+  overlay path AND no-such-file signal), `OverlayHeal` trait seam +
+  `RealSystemReset`, one-shot `try_overlay_self_heal()` with loop guard
+  (healed flag set BEFORE reset). Wired into `run_init` build error path
+  with full retry + telemetry. 8 unit tests all green. cargo test 280/280,
+  clippy clean, `./build.sh --check` green. Remaining exit criterion: live
+  verification on a host with a corrupt overlay store.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped (forge container has no podman).
+- **Next**: order 281 needs live verification. Forge falls back to the next
+  ready packet on next cycle.
 
 ## Cycle 2026-07-20 (forge — meta-orchestration: order 382 guest-lane litmus)
 
