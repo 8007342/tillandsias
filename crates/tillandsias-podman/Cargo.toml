@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-podman"
-version = "0.3.260716"
+version = "0.3.260720"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
