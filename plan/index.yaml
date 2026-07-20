@@ -14571,6 +14571,22 @@ plan_index:
             MO-SMOKE grammar + smallest-next-action). Related: order 309
             (guest least-privilege — running the headless as non-root
             would dissolve this class), order 350 (windows parity gate).
+        - type: progress
+          ts: "2026-07-20T02:55:00Z"
+          agent_id: "linux-forge-opencode-20260720T0249Z"
+          host: forge
+          lease_id: "guest-staged-gitdir-root-owned-20260720"
+          commits: []
+          summary: >
+            Criterion 2 (guest-lane litmus) LANDED: new
+            litmus:forge-gitdir-staging-chown (7 steps, all green)
+            pins chown_tree_to_forge_uid presence, root-gating, lchown
+            usage, and the in-container index materialization guard
+            wiring. Bound in litmus-bindings.yaml (git-mirror-service
+            coverage 80->83%). build.sh --check green. Remaining:
+            criterion 1 (fresh Windows curl-install verification) and
+            criterion 3 (macOS VZ spot-check) are platform-gated and
+            cannot be verified from this forge host.
 
     - packet_id: windows-inforge-meta-orchestration-transparent-push
       provisional_id: windows-260716-1

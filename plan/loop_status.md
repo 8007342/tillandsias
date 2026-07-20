@@ -1,6 +1,27 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-19T02:35:00Z
+LastExecutionTime: 2026-07-20T02:55:00Z
+
+## Cycle 2026-07-20 (forge — meta-orchestration: order 382 guest-lane litmus)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260720T0249Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.gNNeuW` clean (1 pre-existing dirty path:
+  `.opencode/package-lock.json`, sibling work).
+- **Sibling heads**: main 7914f2ea, linux-next aac7bcfa, windows-next
+  2b7321ee, osx-next 66ccfa70.
+- **Order 382 (guest-staged-gitdir-root-owned) — criterion 2 LANDED**: new
+  `litmus:forge-gitdir-staging-chown` (7 source-analysis steps, all green)
+  pins chown_tree_to_forge_uid presence, root-gating via geteuid(), lchown
+  (no symlink following), and the in-container index materialization guard
+  wiring. Bound in litmus-bindings.yaml (git-mirror-service coverage 80→83%).
+  build.sh --check green. Remaining: criterion 1 (fresh Windows curl-install
+  verification) and criterion 3 (macOS VZ spot-check) are platform-gated.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped.
+- **Next**: order 382 criterion 1 needs a Windows curl-install of a release
+  carrying the chown fix; criterion 3 needs a macOS VZ spot-check. Both are
+  platform-gated. Forge falls back to the next ready packet on next cycle.
 
 ## Cycle 2026-07-18 (linux_mutable macuahuitl — meta-orchestration toward v0.4)
 

@@ -393,8 +393,9 @@ specs:
   - litmus:forge-gitconfig-bidirectional-quarantine
   - litmus:forge-standard-gitconfig-path
   - litmus:forge-config-trust-cross-platform-parity
-  coverage_ratio: 80
-  last_verified: '2026-07-14'
+  - litmus:forge-gitdir-staging-chown
+  coverage_ratio: 83
+  last_verified: '2026-07-20'
 - spec_id: github-credential-health
   status: active
   litmus_tests:
