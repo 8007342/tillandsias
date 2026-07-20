@@ -18603,3 +18603,79 @@ plan_index:
           agent_id: "linux-tillandsias-opus48-20260719T0000Z"
           host: linux
           summary: Filed while closing order 438's schema-drift advisories.
+    - packet_id: mirror-startup-sweep-per-ref-tolerant
+      order: 441
+      desired_release: v0.4
+      title: "Mirror startup retry-push is atomic over ALL refs — one stale ref blocks the whole recovery sweep"
+      status: ready
+      capability_tags: [linux, git-mirror, robustness, self-healing]
+      kind: optimization
+      deliverable: images/git/entrypoint.sh (startup sweep) + fixture
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 3
+      outcome: >
+        LIVE-OBSERVED 2026-07-20 on the running tillandsias-git-tillandsias mirror.
+        The startup retry-push fabricates synthetic receive records for EVERY ref
+        and relays them with git push --atomic, so a single non-fast-forward ref
+        (stale release/* branches the mirror retained on its persistent named
+        volume) rejects the entire transaction and no fast-forwardable ref is
+        flushed either. Not on the live push path — targeted single-ref agent
+        pushes succeed independently — so this degrades startup self-healing, not
+        active development. Full analysis:
+        plan/issues/mirror-startup-retry-push-atomic-all-refs-2026-07-20.md
+      exit_criteria:
+        - "the STARTUP recovery sweep relays per-ref (or per-independent-group) so a fast-forwardable ref reaches upstream even when a sibling ref is stranded"
+        - "a stranded ref is logged by NAME rather than silently failing the whole sweep"
+        - "the LIVE single-push path keeps git push --atomic and the non-mirror/all explicit-refspec invariant untouched"
+        - "a fixture reproduces the current all-atomic failure, then proves per-ref tolerance (fail-loud style)"
+      events:
+        - type: filed
+          ts: "2026-07-20T02:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from a live observation during the attended 2026-07-20
+            meta-orchestration cycle. Promoted from
+            plan/issues/mirror-startup-retry-push-atomic-all-refs-2026-07-20.md.
+
+    - packet_id: e2e-gate-refuses-live-runtime
+      order: 442
+      desired_release: v0.4
+      title: "Destructive e2e gate can wipe a live operator/agent forge — eligibility probe is blind to concurrent forges"
+      status: ready
+      capability_tags: [linux, e2e, safety, data-loss, operator-interactive]
+      operator_note: "operator awareness: the destructive smoke reset defaults to proceed and cannot see a live forge; confirm the fail-safe default is acceptable"
+      kind: enhancement
+      deliverable: scripts/e2e-preflight.sh + fixture
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        LIVE 2026-07-20: e2e-preflight.sh eligibility returned `eligible` while a
+        forge (BigPickle mid-cycle), its mirror, vault, proxy, router and
+        inference were all running. /build-install-and-smoke-test-e2e's first
+        step is podman system reset --force; following the verdict literally
+        would have DESTROYED the operator's live forge and BigPickle's in-flight
+        cycle with no warning. This cycle overrode the probe by hand. The probe
+        only skips on smoke-lock-held; an operator/agent forge holds no smoke
+        lock, so it is invisible, and TILLANDSIAS_DESTRUCTIVE_RESET_OK defaults
+        to proceed. As operators and agents increasingly run forges on the same
+        hosts as unattended smoke cycles, this is a substrate-level data-loss
+        path. Full analysis:
+        plan/issues/e2e-destructive-gate-can-wipe-a-live-operator-forge-2026-07-20.md
+      exit_criteria:
+        - "e2e-preflight.sh eligibility emits skip:live-runtime-present when a tillandsias forge/shared stack it did not itself launch is running"
+        - "an explicit per-invocation TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 may still force the reset; the DEFAULT fails safe"
+        - "a fixture asserts skip:live-runtime-present with a marker forge container present and eligible once removed, reproducing the current unsafe eligible-despite-live-forge behaviour first"
+      events:
+        - type: filed
+          ts: "2026-07-20T02:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the attended 2026-07-20 cycle after the eligibility probe
+            returned eligible with BigPickle's forge live. Tagged
+            operator-interactive: the fail-safe default is an operator call.
