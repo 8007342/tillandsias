@@ -114,7 +114,7 @@ critical_path:
     # helper (reused by other enclave containers) instead of inlining
     # the literals in build_inference_run_args itself — assert the
     # call site plus the helper's env vars.
-    command: "B=$(grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs); echo \"$B\" | grep -Fq 'proxy_env_args()' || exit 1; H=$(grep -A 20 'fn proxy_env_args' crates/tillandsias-headless/src/main.rs); echo \"$H\" | grep -Fq 'HTTP_PROXY=http://proxy:3128' || exit 1; echo \"$H\" | grep -Fq 'HTTPS_PROXY=http://proxy:3128' || exit 1; echo \"$H\" | grep -Fq 'NO_PROXY={no_proxy}' || exit 1; echo \"$H\" | grep -Fq 'no_proxy={no_proxy}' || exit 1; echo 'ok: proxy + NO_PROXY env vars present'"
+    command: "B=$(awk '/fn build_inference_run_args\\(/,/^}/' crates/tillandsias-headless/src/main.rs); echo \"$B\" | grep -Fq 'proxy_env_args()' || exit 1; H=$(awk '/fn proxy_env_args\\(/,/^}/' crates/tillandsias-headless/src/main.rs); echo \"$H\" | grep -Fq 'HTTP_PROXY=http://proxy:3128' || exit 1; echo \"$H\" | grep -Fq 'HTTPS_PROXY=http://proxy:3128' || exit 1; echo \"$H\" | grep -Fq 'NO_PROXY={no_proxy}' || exit 1; echo \"$H\" | grep -Fq 'no_proxy={no_proxy}' || exit 1; echo 'ok: proxy + NO_PROXY env vars present'"
     timeout_ms: 3000
     expected_behavior: "ok: proxy + NO_PROXY env vars present"
 

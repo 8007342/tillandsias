@@ -19109,3 +19109,73 @@ plan_index:
             Fixed the 437+441 interaction: daemon-first startup so clone-only
             forges do not race the minutes-long per-ref sweep. Found live when
             the operator's Codex and OpenCode forges crashed on clone.
+
+    - packet_id: guest-binary-embed-litmus-hermeticity
+      order: 447
+      desired_release: v0.4
+      title: "litmus:guest-binary-embed-integrity fails on STALE LOCAL staging (host-state), not a real regression"
+      status: ready
+      capability_tags: [linux, testing, hermeticity, ci-release, guest-binary]
+      kind: fix
+      deliverable: scripts/build-guest-binaries.sh --verify + litmus
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 2
+      outcome: >
+        Owned per methodology (not-mine is not an excuse). The check fails
+        because target-guest/ holds a guest binary stamped v0.3.260714.1 while
+        VERSION is v0.3.260720.2 — a STALE staged artifact from an old build, not
+        a code regression. Same class as order 433/422 (artifact older than
+        checkout). In CI the guest binary is built fresh so it matches; the
+        litmus fails only on a host with stale local staging. Fix: --verify
+        should REBUILD-or-skip-cleanly when the staged binary is stale/absent
+        (fail loud only on a genuine content/embed mismatch of a FRESH build),
+        rather than failing on host staging state. Reproduce the current
+        stale-fail first, per the fail-loud discipline.
+      exit_criteria:
+        - "a stale/absent staged guest binary triggers a rebuild (or a clean skip), not a hard FAIL"
+        - "a genuine embed/content mismatch of a freshly built binary still fails loud"
+        - "the litmus is green on a host whose target-guest/ predates the current VERSION"
+      events:
+        - type: filed
+          ts: "2026-07-20T06:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed after the operator's methodology reminder to own the 3 red
+            litmus rather than dismiss them. Diagnosed as stale local staging.
+
+    - packet_id: cheatsheet-image-copy-drift-prevention
+      order: 448
+      desired_release: v0.5
+      title: "Forge-image cheatsheet copy re-drifts from host whenever cheatsheets are edited — the committed copy is build-generated"
+      status: ready
+      capability_tags: [linux, cheatsheets, drift, generated-artifact]
+      kind: enhancement
+      deliverable: images/default/cheatsheets sync mechanism
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 3
+      outcome: >
+        The immediate drift was fixed 2026-07-20 (synced host cheatsheets/ ->
+        images/default/cheatsheets/, litmus green), but the ROOT is that
+        images/default/cheatsheets/ is a COMMITTED copy that build-image.sh
+        regenerates from the canonical host cheatsheets/ — so any host cheatsheet
+        edit that is not accompanied by a manual re-sync re-diverges, and
+        litmus:cheatsheet-host-image-sync only catches it at test time. Decide:
+        make the image copy a build-generated (gitignored) artifact, or add a
+        fail-loud pre-commit/CI guard that re-syncs, so it cannot silently drift
+        again.
+      exit_criteria:
+        - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
+        - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
+      events:
+        - type: filed
+          ts: "2026-07-20T06:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed while owning the cheatsheet-sync litmus failure — the manual
+            sync fixes the instance; this prevents recurrence.

@@ -2,7 +2,7 @@
 tags: [windows, event-viewer, logs, runtime, troubleshooting]
 languages: [powershell]
 since: 2026-05-06
-last_verified: 2026-05-06
+last_verified: 2026-07-18
 sources:
   - https://learn.microsoft.com/en-us/windows/win32/eventlog/event-logging
   - https://learn.microsoft.com/en-us/windows/win32/wes/windows-event-service
@@ -25,7 +25,9 @@ committed_for_project: false
 
 ## Overview
 
-Tillandsias writes errors, warnings, and accountability events to the Windows Event Log via the "Tillandsias" event source. Events appear in **Event Viewer > Windows Logs > Application** under the source name **Tillandsias**.
+Tillandsias writes every INFO, WARNING, and ERROR event (including provisioning phase transitions and failures) to the Windows Event Log via the "Tillandsias" event source. Events appear in **Event Viewer > Windows Logs > Application** under the source name **Tillandsias**.
+
+On a default per-user install the source is usually NOT registered in the registry; events still arrive, but Event Viewer wraps them in "The description for Event ID '1' in Source 'Tillandsias' cannot be found… The following information was included with the event: `<the actual message>`". Registering the source (see below) removes the wrapper.
 
 Unlike file-based logs, Event Log entries are:
 - Visible to all users (not stored in user-only directories)
@@ -86,7 +88,7 @@ Get-EventLog -LogName Application -Source Tillandsias | Export-Csv -Path "C:\til
 |-------|------|---------|---------------------|
 | **Error** | Red X | A serious problem — operation failed or security violation | Always; check logs for root cause |
 | **Warning** | Yellow ! | Potential issue — may impact functionality | Yes; understand the condition |
-| **Information** | Blue i | Accountability event — high-signal operational event | Rarely; used for compliance audits |
+| **Information** | Blue i | Operational event (provisioning phases, lifecycle, accountability) | Rarely; use to reconstruct how far a run got |
 
 ## Event Message Format
 
@@ -128,9 +130,11 @@ Should include an "Application" entry.
 
 ### Events not appearing
 
-1. **Event source not registered**: Run `New-EventLog -LogName Application -Source Tillandsias` in PowerShell admin
+1. **Using `Get-WinEvent -FilterHashtable @{ProviderName='Tillandsias'}`**: that filter only matches REGISTERED providers and errors out otherwise — use `Get-EventLog -LogName Application -Source Tillandsias` (works either way)
 2. **Tillandsias running as SYSTEM**: Events may appear under a different source name; check all sources in Application log
 3. **Older event log retention**: Old events are removed after 30 days by default; check Event Viewer > Application Properties
+
+(An unregistered source does NOT prevent events from appearing — they just render inside the generic wrapper text.)
 
 ### "Access Denied" when filtering
 
