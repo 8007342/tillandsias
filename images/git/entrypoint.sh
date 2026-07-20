@@ -252,10 +252,19 @@ trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT
 # plan/issues/git-mirror-architecture-decision-2026-07-19.md Decision 4.
 
 # Run git daemon on port 9418 in background.
+#
+# IMPORTANT (order 423, Decision 4 path 1): receive-pack is DELIBERATELY NOT
+# enabled. git daemon's receive-pack "is disabled by default, as there is no
+# authentication in the protocol (in other words, anybody can push anything
+# into the repository, including removal of refs)." All legitimate mirror
+# writes go through the pre-receive relay hook to GitHub (git:// is the read
+# path agents clone/fetch over). Enabling receive-pack here would reopen the
+# anonymous write path order 423/426 closed. Do not add --enable=receive-pack
+# without authenticated smart HTTP in front of it. See
+# plan/issues/git-mirror-architecture-decision-2026-07-19.md Decision 4.
 git daemon \
     --reuseaddr \
     --export-all \
-    --enable=receive-pack \
     --base-path=/srv/git \
     --listen=0.0.0.0 \
     --port=9418 \

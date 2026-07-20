@@ -17254,7 +17254,7 @@ plan_index:
       packet_id: git-mirror-unauthenticated-write-paths
       desired_release: v0.4
       title: "SECURITY: mirror exposes two unauthenticated write paths (git daemon --enable=receive-pack, and lighttpd git-http-backend with http.receivepack and no auth module)"
-      status: ready
+      status: completed
       kind: security
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: []
@@ -17311,11 +17311,29 @@ plan_index:
             forge-standard-gitconfig-path fixture both still PASS. Guarded by
             litmus:git-mirror-no-anonymous-http-write, verified falsifiable by
             temporarily reintroducing all three of lighttpd, receivepack and
-            EXPOSE 8080 and confirming each step fails. STILL OPEN: `git daemon
+            EXPOSE 8080 and confirming each step fails.             STILL OPEN: `git daemon
             --enable=receive-pack` on 9418 remains an unauthenticated write path.
             That is the serving-layer change (order 322 rung E) and it depends on
             the credential-helper work in order 424 — deliberately not done in
             the same pass.
+        - type: progress
+          ts: "2026-07-20T04:10:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            CLOSED the remaining unauthenticated write path (Decision 4 path 1):
+            removed `--enable=receive-pack` from the git daemon in
+            images/git/entrypoint.sh, keeping `--export-all` (anonymous READ for
+            agent clone/fetch) intact. Writes belong exclusively to the
+            pre-receive relay hook to GitHub. Added
+            scripts/test-git-daemon-no-anon-write.sh (offline, no Podman) proving
+            an anonymous `git push` over git:// is REFUSED while reads still
+            serve. Added litmus:git-mirror-no-anonymous-daemon-write and bound it
+            to git-mirror-service in litmus-bindings.yaml. Both order-423
+            anonymous write paths are now closed (lighttpd via 502823b7, daemon
+            receive-pack via this change). Exit criteria 1-3 satisfied; criterion
+            4 (per-container attributable credentials) is the order 322 rung E /
+            order 424 scope, not this packet.
     - order: 424
       packet_id: git-mirror-credential-lifecycle
       desired_release: v0.4

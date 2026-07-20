@@ -383,6 +383,7 @@ specs:
   - litmus:git-mirror-fetch-reconcile
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
+  - litmus:git-mirror-no-anonymous-daemon-write
   - litmus:forge-git-index-materialization
   - litmus:forge-packed-refs-shared
   - litmus:enclave-isolation
