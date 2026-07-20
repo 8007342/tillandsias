@@ -15183,7 +15183,7 @@ plan_index:
       kind: milestone
       multi_cycle: true
       deliverable: plan/index.yaml (criteria holder; children carry the work)
-      depends_on: []
+      depends_on: [forge-src-tmpfs-topology, concurrent-forges-shared-stack-safety]
       pickup_role: any
       capability_tags: [milestone, inference, ollama, experts, opencode, forge]
       estimated_hours: 0
@@ -18386,7 +18386,7 @@ plan_index:
       packet_id: forge-src-tmpfs-topology
       desired_release: v0.5
       title: "/home/forge/src is a host bind mount, but BOTH active specs forbid that — forge-hot-cold-split requires tmpfs and forge-offline requires clone-only"
-      status: needs_clarification
+      status: ready
       operator_note: "operator workflow decision: /home/forge/src tmpfs+clone changes how edits reach the host"
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
@@ -18435,6 +18435,43 @@ plan_index:
             trusting the earlier audit summary, and found they agree with each
             other while the implementation diverges from both.
 
+        - type: operator-approved
+          ts: "2026-07-20T03:35:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            OPERATOR APPROVED + STRENGTHENED 2026-07-20, and gated concern
+            resolved. Live evidence: the forge bind-mounts the shared host
+            checkout /home/tlatoani/src/tillandsias rw at /home/forge/src/<proj>
+            (TILLANDSIAS_PROJECT_HOST_MOUNT=1, hardcoded), so every forge for a
+            project shares ONE working tree — Antigravity saw OpenCode's dirt,
+            and agents dirty a real host checkout (64 dirty files observed).
+            Operator requirement: "Each forge launch should have a clean fresh
+            checkout from the latest at the mirror and do a fresh pull from
+            remote. There should be absolutely no circumstances on which an
+            agent would land on a dirty forge." The earlier workflow-change
+            concern (edits reach host only via commit+relay) is ACCEPTED — that
+            is the intended behaviour.
+            IMPLEMENTATION LEVER (cheap): clone_project_from_mirror already
+            clones fresh when HOST_MOUNT is unset — it only skips-and-uses the
+            mount when HOST_MOUNT=1. So the core change is: stop setting
+            TILLANDSIAS_PROJECT_HOST_MOUNT=1 and stop bind-mounting the host
+            checkout, letting the existing clone path run. Ideally clone onto
+            tmpfs (forge-hot-cold-split) and fresh-pull.
+            ARCHITECTURAL INSIGHT (obsoletes hacks): the ENTIRE gitdir-facade
+            machinery — write_forge_repo_gitdir, the notmpcopyup empty-tmpfs
+            mask, ensure_forge_git_index materialisation (order 425), the
+            packed-refs live-mount (order 432) — exists ONLY to make the shared
+            HOST-MOUNT safe. A fresh clone has a normal .git and needs none of
+            it. Clone-only therefore RETIRES the whole data-loss surface hardened
+            2026-07-19, which is exactly the operator's original "obsolete the
+            no-longer-needed git hacks" directive. Facade retirement is a
+            same-milestone follow-on once clone-only lands and is proven.
+            TRADEOFF to record: HOST_MOUNT was a deliberate solo-tray UX choice
+            so a single user sees edits live. Clone-only gives the tray forge an
+            isolated clone too. Operator has chosen isolation over live-edit
+            visibility universally, matching forge-offline (clone-only) and
+            forge-hot-cold-split (tmpfs).
     - order: 438
       packet_id: test-transient-state-audit
       desired_release: v0.5
@@ -18740,7 +18777,7 @@ plan_index:
       operator_note: "operator requirement 2026-07-20: concurrent forges/harnesses (even same type, same project) must be safe — independent checkouts + own containers"
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/main.rs (shared-stack ensure + teardown refcount) + fixtures
-      depends_on: [forge-delegation-instance-names]
+      depends_on: [forge-delegation-instance-names, forge-src-tmpfs-topology]
       pickup_role: linux
       owner_host: linux
       estimated_hours: 8
@@ -18775,3 +18812,52 @@ plan_index:
             a running OpenCode forge and bounced the shared stack. Anchors the
             operator's concurrent-forge requirement; completes the shared-stack
             half of the 427/428/437 concurrency ladder.
+
+        - type: refinement
+          ts: "2026-07-20T03:35:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            OPERATOR REFINEMENT 2026-07-20 — the shared-stack idempotency is NOT
+            uniform: the INFERENCE container is nearly stateless and may keep
+            --replace (recreate freely). The git-mirror/vault/proxy/router are
+            stateful and must be ensure-if-healthy (never --replace a healthy
+            one in use by a sibling). Forge-local EXPERTS follow the same
+            ephemerality+idempotency principle as inference: recreate-if-absent,
+            recreate freely if unhealthy. So the fix is per-component:
+            stateless (inference, experts) -> recreate/replace fine;
+            stateful (mirror, vault, proxy) -> idempotent ensure + refcount.
+
+    - packet_id: forge-launch-artifacts-not-tracked
+      order: 444
+      desired_release: v0.4
+      title: "Launch-generated artifacts must not dirty the checkout (.opencode/package-lock.json et al.)"
+      status: in_progress
+      capability_tags: [linux, forge, isolation, gitignore]
+      kind: optimization
+      deliverable: .gitignore + audit of harness launch writes
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 1
+      outcome: >
+        OpenCode regenerates .opencode/package-lock.json via npm install at every
+        launch; it was TRACKED, so every forge start dirtied the shared checkout
+        (contributing to the cross-forge dirt the operator observed 2026-07-20).
+        Untracked and gitignored (.opencode/package-lock.json + node_modules/).
+        Audited tracked lock/node_modules: only flake.lock remains, which is a
+        legitimate Nix lockfile, not launch-generated. Complementary to order 437
+        (fresh clone) — even a fresh clone would re-dirty on a tracked
+        launch-artifact, so both are needed.
+      exit_criteria:
+        - "no agent-harness launch write lands on a TRACKED path (.opencode/package-lock.json untracked + gitignored — DONE)"
+        - "a check greps the harness entrypoints for writes into tracked paths and fails loud if any is found"
+      events:
+        - type: progress
+          ts: "2026-07-20T03:35:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Untracked + gitignored .opencode/package-lock.json (the launch
+            artifact the operator flagged). Audit clean except flake.lock (legit).
+            Remaining: a fail-loud check that no harness launch writes a tracked path.
