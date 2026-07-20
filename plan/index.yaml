@@ -19436,3 +19436,49 @@ plan_index:
             included — the coherence fetch uses an explicit refs/heads/* refspec,
             never --mirror/--all). Slices 2 + 3 remain (readiness gate + reused-
             mirror currenting + concurrent-push live proof).
+
+    - packet_id: diagnostics-stream-not-in-interactive-agent-terminal
+      order: 453
+      desired_release: v0.4
+      title: "The --debug/--diagnostics container-log stream must not spill into the interactive forge agent terminal (it corrupts the TUI)"
+      status: in-progress
+      capability_tags: [linux, diagnostics, forge, tray, ux]
+      operator_note: "operator 2026-07-20 (--debug --tray, Claude forge): the container-log stream is valid --debug output but must go to the LAUNCHING terminal, not spill into the agent's terminal. Fine-tune log levels later; for now stop the spillage."
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 3
+      outcome: >
+        Root cause: the interactive forge-agent lanes (run_forge_agent_cli_mode
+        for Claude/Codex/Antigravity, run_opencode_mode for OpenCode) started a
+        `podman logs -f` typed-event stderr tail
+        (DiagnosticsHandle::start_typed_event_stream) on the SUPPORT containers
+        (router/proxy/git/inference) whenever debug was set. The tray propagates
+        --debug into the popup-terminal re-exec, so that tail ran in the SAME
+        terminal that then hosts the interactive agent TUI — squid TCP_TUNNEL
+        access lines and git-mirror startup retry-push lines staircased over the
+        Claude/OpenCode UI (the '\n'-only lines hitting the raw-mode PTY produce
+        the staircase). SLICE 1 (done): removed the typed-event stderr tail from
+        both interactive agent lanes; the low-volume lifecycle diag_emitter
+        (event:container_launch, which the diagnostics annex + litmus rely on) is
+        kept. The diagnostics litmus pin the event FORMAT (client.rs) and a
+        SEPARATE annex capture, not the interactive lane's tail, so removal is
+        litmus-safe (type-check clean).
+      exit_criteria:
+        - "SLICE 1 (done): interactive Claude/Codex/Antigravity/OpenCode terminals no longer show the enclave container-log stream; the agent TUI is clean"
+        - "SLICE 2 (operator 'later'): route the container-log stream to the LAUNCHING terminal (or a separate --diagnostics observer) so the observability is not lost, and fine-tune squid/git-mirror log levels"
+      events:
+        - type: progress
+          ts: "2026-07-20T00:00:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            SLICE 1 landed. Removed DiagnosticsHandle::start_typed_event_stream
+            from run_forge_agent_cli_mode and run_opencode_mode (the container-log
+            tail that corrupted the interactive agent terminal); kept the
+            lifecycle diag_emitter. Type-check + fmt clean. The running forge keeps
+            the old behaviour — a relaunch on the rebuilt binary is required to get
+            the clean terminal. Slice 2 (route the stream to the launcher terminal
+            + log-level tuning) is the operator's deferred 'later' work.

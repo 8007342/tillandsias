@@ -7729,33 +7729,19 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .await
             .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
 
-        // gap-3 phase-2g: start the typed-event stderr tail on the
-        // SUPPORT containers (router/proxy/git/inference). The
-        // foreground forge is intentionally NOT in this list — it's
-        // served attached to the user's terminal by
-        // `run_container_attached_observed` below and tailing it here
-        // would double-print every line.
-        //
-        // DiagnosticsHandle::Drop aborts every spawned `podman logs -f`
-        // task, so dropping `_diag_logs_handle` at the end of the
-        // block_on closure cleanly tears the tail tasks down — no
-        // explicit abort needed.
-        //
+        // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
+        // terminal (run_container_attached_observed below). Tailing the SUPPORT
+        // containers' logs (router/proxy/git/inference) into the same terminal
+        // corrupts the agent session — the operator saw squid TCP_TUNNEL and
+        // git-mirror retry-push lines staircasing over the interactive UI
+        // (2026-07-20). The typed-event stderr tail therefore does NOT belong in
+        // an interactive agent terminal; container-log observation belongs to the
+        // LAUNCHING terminal / a separate --diagnostics observer (routing tracked
+        // by order 453). The lifecycle diag_emitter above (event:container_launch,
+        // low-volume — one line per container start) is kept: the diagnostics
+        // annex + litmus rely on it, and it does not stream continuously.
         // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
-        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2g)
-        let _diag_logs_handle = if debug {
-            Some(
-                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
-                    "tillandsias-router".to_string(),
-                    "tillandsias-proxy".to_string(),
-                    git_container_name.clone(),
-                    "tillandsias-inference".to_string(),
-                ])
-                .await,
-            )
-        } else {
-            None
-        };
+        let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
         let diagnostics = std::env::args().any(|a| a == "--diagnostics");
         let opencode_args = build_opencode_forge_args(
@@ -9760,20 +9746,18 @@ fn run_forge_agent_cli_mode(
                 "tillandsias-",
             );
 
+        // The forge-agent CLI lane runs the interactive agent (Claude/Codex/
+        // Antigravity) ATTACHED to THIS terminal. Tailing the support
+        // containers' logs (router/proxy/git/inference) into the same terminal
+        // corrupts the agent TUI — the operator saw squid TCP_TUNNEL and
+        // git-mirror retry-push lines staircasing over the Claude UI
+        // (2026-07-20). The typed-event stderr tail does NOT belong in an
+        // interactive agent terminal; container-log observation belongs to the
+        // LAUNCHING terminal / a separate --diagnostics observer (routing tracked
+        // by order 453). The lifecycle diag_emitter above (event:container_launch,
+        // low-volume) is kept — the diagnostics annex + litmus rely on it.
         // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
-        let _diag_logs_handle = if debug {
-            Some(
-                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
-                    "tillandsias-router".to_string(),
-                    "tillandsias-proxy".to_string(),
-                    format!("tillandsias-git-{project_name}"),
-                    "tillandsias-inference".to_string(),
-                ])
-                .await,
-            )
-        } else {
-            None
-        };
+        let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
         // Delegated runs get a deadline (order 429). A hung worker must not
         // block a dispatcher forever, and "still running after N seconds" is a
