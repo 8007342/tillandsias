@@ -177,6 +177,33 @@ retry_msg() {
     fi
     echo "$1"
 }
+
+# ── Order 437/441: START THE DAEMON FIRST ──────────────────────────────
+# Clone-only forges (order 437) clone from git://tillandsias-git the instant
+# they launch, and the per-ref startup retry-push (order 441) can take minutes
+# over a large ref set. When the daemon started only AFTER that sweep, every
+# forge launched during the sweep failed its clone with "connection refused"
+# and crashed (live 2026-07-20: Codex and OpenCode both died on clone). The
+# sweep is a BACKGROUND recovery task and must not gate the daemon that serves
+# clones. So: renewer + trap + daemon come up here; the sweep runs afterwards
+# while the daemon already serves.
+VAULT_RENEWER_PID=""
+start_vault_token_renewer
+trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
+# git:// READ path only (upload-pack via --export-all). receive-pack is
+# DELIBERATELY NOT enabled (order 423, Decision 4): the daemon protocol has no
+# auth, and all writes go through the pre-receive relay to GitHub. Do not add
+# --enable=receive-pack without authenticated smart HTTP in front of it.
+git daemon \
+    --reuseaddr \
+    --export-all \
+    --base-path=/srv/git \
+    --listen=0.0.0.0 \
+    --port=9418 \
+    --verbose &
+GIT_DAEMON_PID=$!
+echo "$(date -Is) [git-service] daemon listening on 9418 (clones available; startup sweep runs in background)" >> "$SLOG"
+
 # Only do this on a real mirror tree (skip empty/init'ing service).
 #
 # Safety: build an explicit refspec list from this mirror's local refs.
@@ -255,42 +282,11 @@ for mirror in /srv/git/*; do
     fi
 done
 
-echo "$(date -Is) [git-service] daemon ready" >> "$SLOG"
+echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"
 
-# @trace spec:tillandsias-vault, spec:git-mirror-service
-# Start the token-renewer heartbeat (order 414) so a forge session past 1h
-# keeps its Vault access and can still relay pushes upstream.
-VAULT_RENEWER_PID=""
-start_vault_token_renewer
+# The git daemon, vault renewer, and shutdown trap were all started ABOVE, before
+# the startup sweep, so clones are served the instant the container is up (order
+# 437/441). Nothing to start here — just wait on the daemon we already launched.
 
-# Propagate shutdown signals (SIGTERM, SIGINT) to child processes
-trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
-
-# lighttpd + git-http-backend were removed in order 423/426. Nothing in the
-# launcher or the forge ever spoke HTTP to the mirror — every injected remote is
-# git://tillandsias-git/<project> — so the HTTP listener was dead code that also
-# accepted anonymous pushes. Do not reintroduce it without authentication; see
-# plan/issues/git-mirror-architecture-decision-2026-07-19.md Decision 4.
-
-# Run git daemon on port 9418 in background.
-#
-# IMPORTANT (order 423, Decision 4 path 1): receive-pack is DELIBERATELY NOT
-# enabled. git daemon's receive-pack "is disabled by default, as there is no
-# authentication in the protocol (in other words, anybody can push anything
-# into the repository, including removal of refs)." All legitimate mirror
-# writes go through the pre-receive relay hook to GitHub (git:// is the read
-# path agents clone/fetch over). Enabling receive-pack here would reopen the
-# anonymous write path order 423/426 closed. Do not add --enable=receive-pack
-# without authenticated smart HTTP in front of it. See
-# plan/issues/git-mirror-architecture-decision-2026-07-19.md Decision 4.
-git daemon \
-    --reuseaddr \
-    --export-all \
-    --base-path=/srv/git \
-    --listen=0.0.0.0 \
-    --port=9418 \
-    --verbose &
-GIT_DAEMON_PID=$!
-
-# Wait for background services to complete
+# Wait for the daemon (started before the sweep) to exit.
 wait "$GIT_DAEMON_PID"

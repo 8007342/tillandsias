@@ -19031,3 +19031,44 @@ plan_index:
             forge->host lifecycle-control channel — the reverse of the
             host->forge delegation research — needed for hands-off rebuild/
             relaunch/resume and safe forge destruction.
+
+    - packet_id: mirror-daemon-first-startup
+      order: 446
+      desired_release: v0.4
+      title: "Git daemon must start BEFORE the startup sweep — clone-only forges crash on 'connection refused' during the minutes-long per-ref sweep"
+      status: done
+      capability_tags: [linux, git-mirror, startup, readiness, forge, p1]
+      kind: fix
+      deliverable: images/git/entrypoint.sh (daemon-first ordering)
+      depends_on: [forge-src-tmpfs-topology]
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 1
+      outcome: >
+        LIVE 2026-07-20: a bad interaction between two of the same night's fixes.
+        437 (clone-only) makes a forge clone from git://tillandsias-git the
+        instant it launches. 441 (per-ref startup sweep) relays refs one at a
+        time — minutes over a ~216-ref set. The daemon started only AFTER that
+        sweep, so every forge launched during the window failed its clone with
+        'connection refused' and crashed (Codex and OpenCode both died). Fix:
+        move the git daemon start (plus vault renewer + shutdown trap) to BEFORE
+        the sweep loop, so clones are served the instant the container is up; the
+        sweep is a background recovery task and no longer gates the daemon.
+        Verified: relay-verified-ack fixture still 4/4; entrypoint has exactly
+        one daemon start + one renewer call; git image rebuilt. Needs the running
+        mirror recreated (or a relaunch) to take effect — the same
+        running-image-vs-checkout deployment gap order 422's freshness gate
+        exists to catch.
+      exit_criteria:
+        - "git daemon starts before the startup sweep loop (clones available immediately)"
+        - "exactly one daemon start and one renewer call in the entrypoint"
+        - "relay-verified-ack fixture stays green"
+      events:
+        - type: completed
+          ts: "2026-07-20T05:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Fixed the 437+441 interaction: daemon-first startup so clone-only
+            forges do not race the minutes-long per-ref sweep. Found live when
+            the operator's Codex and OpenCode forges crashed on clone.
