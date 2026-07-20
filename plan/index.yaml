@@ -10169,7 +10169,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
-      status: blocked
+      status: done
       operator_note: "operator-interactive: reproduce the Antigravity instant-crash at the tray"
       retryable: true
       blocked_on: antigravity-device-auth-capability
