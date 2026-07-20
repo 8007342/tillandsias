@@ -16558,7 +16558,7 @@ plan_index:
     - packet_id: forge-base-cli-utils-gap
       order: 412
       title: "Forge-base image: add cmp, diff, patch, file and other CLI utilities agents need"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: images/default/Containerfile.base + litmus pin
       depends_on: []
@@ -16604,7 +16604,7 @@ plan_index:
     - packet_id: git-mirror-relay-fetch-before-push
       order: 413
       title: "Git mirror: relay-refs.sh must fetch upstream BEFORE pushing, not just after failure"
-      status: ready
+      status: completed
       kind: bugfix
       deliverable: images/git/relay-refs.sh
       depends_on: []
@@ -16662,7 +16662,7 @@ plan_index:
     - packet_id: git-mirror-relay-token-renewal
       order: 414
       title: "Git mirror: renew the mirror's AppRole vault-token before its 1h TTL, and diagnose an expired mirror token distinctly from an absent GitHub token"
-      status: implemented
+      status: completed
       kind: bugfix
       deliverable: images/git/entrypoint.sh, images/git/relay-refs.sh, images/git/vault-cli.sh
       depends_on: []
@@ -16730,7 +16730,7 @@ plan_index:
     - packet_id: git-mirror-relay-reconcile-exported-head-regression
       order: 415
       title: "Git mirror: relay post-failure reconcile must fast-forward exported heads (order 413 regressed order 369)"
-      status: ready
+      status: completed
       kind: bugfix
       deliverable: images/git/relay-refs.sh
       depends_on: []
@@ -16768,7 +16768,7 @@ plan_index:
     - packet_id: plan-index-duplicate-events-key
       order: 416
       title: "plan/index.yaml: duplicate events: key in the order-413 packet drops evidence / breaks strict YAML parsers"
-      status: ready
+      status: completed
       kind: bugfix
       deliverable: plan/index.yaml
       depends_on: []
@@ -19238,3 +19238,50 @@ plan_index:
             Filed as the root cause of Hy3's push failure. Self-inflicted by the
             host pushing direct to origin while agents work through the mirror.
             Unblocked live by fast-forwarding the mirror; the pattern needs a fix.
+
+    - packet_id: git-daemon-receive-pack-regression
+      order: 450
+      desired_release: v0.4
+      title: "REGRESSION: order 423 disabled git daemon receive-pack before order 322 shipped — ALL forge pushes rejected"
+      status: blocked
+      capability_tags: [linux, git-mirror, transport, regression, release-blocker, p0]
+      operator_note: "operator decision made 2026-07-20: option 1 (restore receive-pack on the internal-only enclave daemon); order 322 authenticated smart-HTTP remains the proper long-term fix"
+      kind: fix
+      deliverable: images/git/entrypoint.sh (restore --enable=receive-pack)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 1
+      outcome: >
+        DIAGNOSED BY Hy3 (forge meta-orchestration agent) 2026-07-20, recovered
+        from its stranded forge commits. Order 423 (a59cfb9d) removed
+        --enable=receive-pack from the tillandsias-git daemon to close the
+        anonymous write path (Decision 4), but the authenticated replacement
+        (order 322, smart HTTP on 8080) was never deployed. The forge pushes over
+        git:// receive-pack; with it disabled every forge push fails at the
+        transport layer ("access denied or repository not exported"). Fetches
+        still work (upload-pack). This blocks the ENTIRE v0.4 push workflow —
+        agents cannot deliver their work. Full analysis:
+        plan/issues/blocker-git-mirror-push-receive-pack-disabled-2026-07-20.md
+        RESOLUTION (option 1, operator-directed): restore receive-pack on the
+        daemon. The enclave mirror is INTERNAL-ONLY (--internal network, no
+        internet); the threat order 423 addressed (internet-anonymous write) does
+        not apply, and the real GitHub-auth boundary is the pre-receive relay +
+        the upstream token + the non-mirror/non-all + bulk-delete guards. Order
+        423's LIGHTTPD removal stays (genuinely dead + anonymous); only the
+        DAEMON receive-pack — the live push path — is restored. Order 322
+        (per-agent authenticated smart HTTP) remains the proper multi-tenant fix.
+      exit_criteria:
+        - "the git daemon serves receive-pack again so forge git:// pushes reach the pre-receive relay"
+        - "a forge push relays to GitHub end to end"
+        - "the security rationale (enclave-internal; relay is the real boundary) is documented inline, and order 322 is referenced as the proper fix"
+      events:
+        - type: filed
+          ts: "2026-07-20T06:45:00Z"
+          agent_id: "linux-forge-opencode-metaorch-20260720T0530Z"
+          host: forge
+          summary: >
+            Diagnosed by Hy3 in-forge; recovered from its stranded commits by the
+            host coordinator. The receive-pack regression blocking all forge
+            pushes. Renumbered from Hy3's provisional 447 (collided with the
+            host's guest-binary packet).
