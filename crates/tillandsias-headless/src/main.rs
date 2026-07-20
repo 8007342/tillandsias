@@ -3936,8 +3936,21 @@ async fn remove_shared_stack_containers(client: &PodmanClient) {
 /// through the proxy — tearing it down under them breaks every curl with
 /// "Could not resolve proxy: proxy" (operator repro 2026-07-11).
 fn is_active_lane_container(name: &str, state: &str) -> bool {
-    let running = matches!(state.to_ascii_lowercase().as_str(), "running" | "up");
-    running
+    // Order 443: count a lane that is ALIVE OR STARTING, not only "running".
+    // A sibling forge mid-launch — podman "created" / "configured" /
+    // "initializing", e.g. still installing its agent harness or cloning from
+    // the mirror — is an active lane. Counting only "running" let an exiting
+    // sibling observe "no active lanes" and tear the shared stack down under a
+    // forge that was seconds from ready (observed live 2026-07-20: launching a
+    // second forge bounced proxy/git/inference under the first). Exclude only
+    // TERMINAL/dead states; everything else means the lane is alive or coming
+    // alive.
+    let s = state.to_ascii_lowercase();
+    let alive = !matches!(
+        s.as_str(),
+        "exited" | "stopped" | "dead" | "removing" | "removed" | ""
+    );
+    alive
         && (name.contains("-forge")
             || name.contains("-login-")
             || name.starts_with("tillandsias-browser-"))
@@ -12912,10 +12925,21 @@ mod tests {
                 is_active_lane_container(name, "running"),
                 "{name} (running) must keep the shared stack alive"
             );
-            assert!(
-                !is_active_lane_container(name, "exited"),
-                "{name} (exited) must NOT keep the shared stack alive"
-            );
+            // Order 443: a lane mid-launch is alive and must keep the stack up,
+            // or an exiting sibling tears it down under a starting forge.
+            for starting in ["created", "configured", "initializing", "paused", "up"] {
+                assert!(
+                    is_active_lane_container(name, starting),
+                    "{name} ({starting}) is starting/alive and must keep the shared stack alive"
+                );
+            }
+            // Terminal/dead states must NOT keep the stack alive.
+            for terminal in ["exited", "stopped", "dead", "removing", ""] {
+                assert!(
+                    !is_active_lane_container(name, terminal),
+                    "{name} ({terminal:?}) is terminal and must NOT keep the shared stack alive"
+                );
+            }
         }
         for name in [
             "tillandsias-proxy",

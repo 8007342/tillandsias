@@ -18869,7 +18869,7 @@ plan_index:
       order: 443
       desired_release: v0.4
       title: "Concurrent forges are unsafe: a second launch bounces the shared stack and can tear it down under a live sibling"
-      status: ready
+      status: in_progress
       capability_tags: [linux, forge, concurrency, shared-stack, delegation, p1]
       operator_note: "operator requirement 2026-07-20: concurrent forges/harnesses (even same type, same project) must be safe — independent checkouts + own containers"
       kind: enhancement
@@ -18925,6 +18925,34 @@ plan_index:
             stateless (inference, experts) -> recreate/replace fine;
             stateful (mirror, vault, proxy) -> idempotent ensure + refcount.
 
+        - type: progress
+          ts: "2026-07-20T05:00:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            SLICE 1 done — the teardown-under-starting-sibling race is closed.
+            Root cause was precise: is_active_lane_container counted only
+            "running"/"up", so a sibling forge mid-launch (podman created/
+            configured/initializing — installing its agent, cloning from the
+            mirror) was invisible, and an exiting sibling saw "no active lanes"
+            and tore the shared stack down under it. Fixed: the predicate now
+            counts any ALIVE-or-STARTING state and excludes only terminal/dead
+            (exited/stopped/dead/removing/""). Unit-tested over all five lane
+            names across starting and terminal states. Note: ensure_proxy_running
+            is already idempotent (checks container_running before create), so
+            the observed proxy bounce came from the TEARDOWN, not a
+            non-idempotent ensure — this slice targets the real cause.
+            REMAINING (slices 2-3): (a) a launch-in-flight marker / grace-recheck
+            to also cover the pre-create window (before podman run, no container
+            exists yet); (b) per-project reference counting so teardown fires
+            only when the LAST forge exits; (c) audit the stateful shared-stack
+            ensures (git-mirror/vault/router) for the same running-before-replace
+            idempotency proxy already has, applying the operator's rule
+            (inference/experts may --replace freely; stateful ensure-if-healthy);
+            (d) tray terminal isolation (each forge its own terminal). Live crash
+            2026-07-20 (vault SIGKILL, proxy segfault) was resource contention
+            under concurrent forges + inference + a release build; slice 1 plus
+            fewer concurrent forges reduces it, full closure needs the refcount.
     - packet_id: forge-launch-artifacts-not-tracked
       order: 444
       desired_release: v0.4
