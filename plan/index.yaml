@@ -10099,7 +10099,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
-      status: blocked
+      status: done
       operator_note: "operator-interactive: watch the tray OpenCode TUI after background installer"
       retryable: true
       blocked_on: operator-attended-tray-visual-verification
@@ -10140,6 +10140,15 @@ plan_index:
           host: linux_mutable
           summary: "Operator repro fixed-in-part this cycle; verification packet."
 
+        - type: verified
+          ts: "2026-07-20T03:15:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            OPERATOR-VERIFIED live 2026-07-20: the tray OpenCode TUI stayed clean
+            and fully responsive through window resizes, multiple prompts, and
+            on-screen animations after the background installer. No escape-char
+            spill. Interactive verification satisfied.
     - packet_id: antigravity-launch-crash
       order: 307
       desired_release: v0.4
@@ -10221,6 +10230,17 @@ plan_index:
             Smallest recheck: run `agy --help` after a provider CLI update and
             inspect for a supported device-auth command.
 
+        - type: observation
+          ts: "2026-07-20T03:15:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            OPERATOR live 2026-07-20: the Antigravity lane NO LONGER crashes
+            instantly on tray launch — it installed agy 1.1.4 and started a
+            meta-orchestration cycle. The original instant-crash symptom is not
+            reproduced. A DIFFERENT defect surfaced instead: launching it killed
+            a running OpenCode forge and bounced the shared stack — split to
+            order 443 (concurrent-forge shared-stack safety), not this packet.
     - packet_id: headless-unit-cap-hardening-podman-wedge
       order: 308
       title: "P1: recipe headless unit's NoNewPrivileges+CapabilityBoundingSet made uid-0 podman go rootless — every headless-driven ensure wedged; tray stuck on 'securing vault' after successful login"
@@ -18695,3 +18715,48 @@ plan_index:
             Filed from the attended 2026-07-20 cycle after the eligibility probe
             returned eligible with BigPickle's forge live. Tagged
             operator-interactive: the fail-safe default is an operator call.
+
+    - packet_id: concurrent-forges-shared-stack-safety
+      order: 443
+      desired_release: v0.4
+      title: "Concurrent forges are unsafe: a second launch bounces the shared stack and can tear it down under a live sibling"
+      status: ready
+      capability_tags: [linux, forge, concurrency, shared-stack, delegation, p1]
+      operator_note: "operator requirement 2026-07-20: concurrent forges/harnesses (even same type, same project) must be safe — independent checkouts + own containers"
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/main.rs (shared-stack ensure + teardown refcount) + fixtures
+      depends_on: [forge-delegation-instance-names]
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 8
+      outcome: >
+        LIVE 2026-07-20: with an OpenCode forge running clean, launching
+        Antigravity KILLED the OpenCode session and bounced proxy/git-mirror/
+        inference (restarted under the live sibling), also bouncing BigPickle's
+        mirror. Two mechanisms, one cause — the shared vault/proxy/router/
+        git-mirror/inference stack has no concurrency model: (1) a launch
+        re-ensures the stack and at least git-mirror uses --replace, restarting
+        shared containers the first forge is using; (2)
+        cleanup_shared_stack_if_no_running_forge tears the stack down on any
+        session exit with no refcount and no launch-in-flight lock, racing a
+        sibling still in a non-running created/installing state. Instance-scoped
+        NAMES (order 427) let forge containers coexist but do not give the SHARED
+        stack a concurrency model. This blocks the whole concurrent-delegation
+        direction. Full analysis:
+        plan/issues/concurrent-forges-unsafe-shared-stack-bounce-and-teardown-race-2026-07-20.md
+      exit_criteria:
+        - "launch-time shared-stack ensure is idempotent: a healthy shared container in use by another forge is NOT --replace-restarted"
+        - "the shared stack is reference-counted per project; teardown fires only when the LAST forge exits AND no launch is in flight (grace window absorbs create/install)"
+        - "each forge launch keeps its own terminal; never reuses or kills a sibling's"
+        - "fixture: second-forge ensure leaves shared container IDs unchanged (reproduce the current bounce first)"
+        - "fixture: an exiting sibling does NOT tear down the stack while another lane is in a non-running created state (reproduce the current teardown-under-sibling first)"
+      events:
+        - type: filed
+          ts: "2026-07-20T03:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from a live attended observation: launching Antigravity killed
+            a running OpenCode forge and bounced the shared stack. Anchors the
+            operator's concurrent-forge requirement; completes the shared-stack
+            half of the 427/428/437 concurrency ladder.
