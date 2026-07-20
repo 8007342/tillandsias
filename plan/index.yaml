@@ -10100,13 +10100,14 @@ plan_index:
       release_target: stable-milestone-v1
       title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
       status: blocked
+      operator_note: "operator-interactive: watch the tray OpenCode TUI after background installer"
       retryable: true
       blocked_on: operator-attended-tray-visual-verification
       kind: verify
       deliverable: plan/issues/opencode-tray-tui-escape-spill-2026-07-12.md
       depends_on: []
       pickup_role: linux
-      capability_tags: [forge, e2e, tui]
+      capability_tags: [forge, e2e, tui, operator-interactive]
       estimated_hours: 2
       outcome: >
         This cycle muted npm stdout in ensure_forge_harnesses and redirected
@@ -10145,13 +10146,14 @@ plan_index:
       release_target: stable-milestone-v1
       title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
       status: blocked
+      operator_note: "operator-interactive: reproduce the Antigravity instant-crash at the tray"
       retryable: true
       blocked_on: antigravity-device-auth-capability
       kind: exploration
       deliverable: plan/issues/antigravity-launch-crash-2026-07-12.md
       depends_on: []
       pickup_role: linux
-      capability_tags: [forge, tray, e2e]
+      capability_tags: [forge, tray, e2e, operator-interactive]
       estimated_hours: 2
       outcome: >
         Operator repro 2026-07-12: window closed instantly, error unreadable.
@@ -10992,11 +10994,12 @@ plan_index:
       desired_release: v0.4
       title: "Ladder rung B: git credential helper (vault-backed) on the mirror; evaluate short-TTL GitHub App installation tokens; kill token-in-URL"
       status: ready
+      operator_note: "operator decision (EC3 only): adopt or reject GitHub App installation tokens"
       kind: architecture
       deliverable: images/git/ + cheatsheets/concurrent-git/git-mirror-enterprise-practices.md follow-up
       depends_on: [git-mirror-architecture-audit]
       pickup_role: linux
-      capability_tags: [git-mirror, credentials, vault, security]
+      capability_tags: [git-mirror, credentials, vault, security, operator-interactive]
       estimated_hours: 6
       outcome: >
         DEFAULTS OVER CONFIGURATION: replace scripted token plumbing with
@@ -17910,12 +17913,13 @@ plan_index:
       desired_release: v0.4
       title: "OpenCode vault provider: inject credentials via OPENCODE_AUTH_CONTENT so no auth.json ever touches disk"
       status: blocked
+      operator_note: "operator decision to unblock: pin opencode version OR assert post-launch injection"
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: [codex-lane-api-key-env]
       pickup_role: linux
       owner_host: linux
-      capability_tags: [linux, forge, opencode, vault, credentials]
+      capability_tags: [linux, forge, opencode, vault, credentials, operator-interactive]
       estimated_hours: 4
       outcome: >
         RESEARCH GATE SATISFIED, empirically verified against opencode 1.18.3.
@@ -18209,13 +18213,14 @@ plan_index:
       packet_id: forge-credential-spec-reconciliation
       desired_release: v0.5
       title: "Spec reconciliation: forge-offline says 'forge containers carry ZERO credentials' but the Codex/brew lane legitimately needs a GitHub token — decide, do not silently drift"
-      status: ready
+      status: needs_clarification
+      operator_note: "operator spec decision: forge credential policy (forge-offline ZERO-creds vs brew token)"
       kind: spec
       deliverable: openspec change proposal reconciling forge-offline + git-mirror-service R5 with order 359
       depends_on: []
       pickup_role: linux
       owner_host: linux
-      capability_tags: [linux, openspec, security, forge, spec-drift, operator-decision]
+      capability_tags: [linux, openspec, security, forge, spec-drift, operator-decision, operator-interactive]
       estimated_hours: 3
       outcome: >
         Two invariants are false as written. openspec/specs/forge-offline states
@@ -18330,13 +18335,14 @@ plan_index:
       packet_id: forge-src-tmpfs-topology
       desired_release: v0.5
       title: "/home/forge/src is a host bind mount, but BOTH active specs forbid that — forge-hot-cold-split requires tmpfs and forge-offline requires clone-only"
-      status: ready
+      status: needs_clarification
+      operator_note: "operator workflow decision: /home/forge/src tmpfs+clone changes how edits reach the host"
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
       depends_on: [forge-delegation-instance-names, forge-delegation-worker-state-isolation]
       pickup_role: linux
       owner_host: linux
-      capability_tags: [linux, forge, tmpfs, topology, data-loss, operator-visible]
+      capability_tags: [linux, forge, tmpfs, topology, data-loss, operator-visible, operator-interactive]
       estimated_hours: 10
       outcome: >
         CORRECTION to an earlier audit note that called these two specs
@@ -18564,12 +18570,13 @@ plan_index:
       desired_release: v0.5
       title: "Plan ledger uses 11 status values with three semantic duplicate pairs — normalise the vocabulary"
       status: ready
+      operator_note: "operator preference: canonical status vocabulary"
       kind: cleanup
       deliverable: plan/schema.yaml + plan/index.yaml status migration
       depends_on: []
       pickup_role: any
       owner_host: any
-      capability_tags: [plan, schema, consistency]
+      capability_tags: [plan, schema, consistency, operator-interactive]
       estimated_hours: 3
       outcome: >
         The corpus uses 11 distinct statuses, and several mean the same thing:
