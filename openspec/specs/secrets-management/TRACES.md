@@ -30,7 +30,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/lib-common.sh#L298](../../../images/default/lib-common.sh#L298)
 - [images/default/vault-cli.sh#L2](../../../images/default/vault-cli.sh#L2)
 - [images/git/Containerfile#L18](../../../images/git/Containerfile#L18)
-- [images/git/Containerfile#L61](../../../images/git/Containerfile#L61)
+- [images/git/Containerfile#L68](../../../images/git/Containerfile#L68)
 - [images/git/git-credential-tillandsias.sh#L2](../../../images/git/git-credential-tillandsias.sh#L2)
 - [images/git/relay-refs.sh#L2](../../../images/git/relay-refs.sh#L2)
 - [images/git/vault-cli.sh#L2](../../../images/git/vault-cli.sh#L2)

@@ -18,7 +18,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/runtime_assets.rs#L1](../../../crates/tillandsias-headless/src/runtime_assets.rs#L1)
 - [images/git/Containerfile#L1](../../../images/git/Containerfile#L1)
 - [images/git/Containerfile#L48](../../../images/git/Containerfile#L48)
-- [images/git/Containerfile#L71](../../../images/git/Containerfile#L71)
+- [images/git/Containerfile#L78](../../../images/git/Containerfile#L78)
 - [scripts/build-image.sh#L305](../../../scripts/build-image.sh#L305)
 - [scripts/build-image.sh#L311](../../../scripts/build-image.sh#L311)
 - [scripts/build-image.sh#L341](../../../scripts/build-image.sh#L341)

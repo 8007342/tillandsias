@@ -13,7 +13,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-logging/src/logger.rs#L1](../../../crates/tillandsias-logging/src/logger.rs#L1)
 - [crates/tillandsias-logging/src/rotation.rs#L1](../../../crates/tillandsias-logging/src/rotation.rs#L1)
 - [images/default/lib-common.sh#L150](../../../images/default/lib-common.sh#L150)
-- [images/git/Containerfile#L64](../../../images/git/Containerfile#L64)
+- [images/git/Containerfile#L71](../../../images/git/Containerfile#L71)
 - [images/inference/Containerfile#L50](../../../images/inference/Containerfile#L50)
 - [images/proxy/Containerfile#L27](../../../images/proxy/Containerfile#L27)
 - [images/router/Containerfile#L87](../../../images/router/Containerfile#L87)

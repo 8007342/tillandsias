@@ -5,10 +5,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-headless/src/main.rs#L5631](../../../crates/tillandsias-headless/src/main.rs#L5631)
-- [crates/tillandsias-headless/src/main.rs#L10535](../../../crates/tillandsias-headless/src/main.rs#L10535)
+- [crates/tillandsias-headless/src/main.rs#L5859](../../../crates/tillandsias-headless/src/main.rs#L5859)
+- [crates/tillandsias-headless/src/main.rs#L10877](../../../crates/tillandsias-headless/src/main.rs#L10877)
 - [crates/tillandsias-metrics/src/dashboard.rs#L8](../../../crates/tillandsias-metrics/src/dashboard.rs#L8)
-- [images/git/Containerfile#L64](../../../images/git/Containerfile#L64)
+- [images/git/Containerfile#L71](../../../images/git/Containerfile#L71)
 - [scripts/check-convergence-velocity.sh#L5](../../../scripts/check-convergence-velocity.sh#L5)
 - [scripts/generate-evidence-bundle.sh#L25](../../../scripts/generate-evidence-bundle.sh#L25)
 - [scripts/hooks/post-commit-dashboard-refresh.sh#L3](../../../scripts/hooks/post-commit-dashboard-refresh.sh#L3)

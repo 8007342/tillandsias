@@ -55,7 +55,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L34](../../../images/default/entrypoint-terminal.sh#L34)
 - [images/default/forge-welcome.sh#L150](../../../images/default/forge-welcome.sh#L150)
 - [images/default/lib-common.sh#L244](../../../images/default/lib-common.sh#L244)
-- [images/default/lib-common.sh#L1430](../../../images/default/lib-common.sh#L1430)
+- [images/default/lib-common.sh#L1455](../../../images/default/lib-common.sh#L1455)
 - [scripts/test-forge-git-index-materialization.sh#L2](../../../scripts/test-forge-git-index-materialization.sh#L2)
 - [scripts/test-forge-packed-refs-split-brain.sh#L2](../../../scripts/test-forge-packed-refs-split-brain.sh#L2)
 - [scripts/test-harness-contract-probe.sh#L2](../../../scripts/test-harness-contract-probe.sh#L2)
