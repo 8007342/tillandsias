@@ -1,6 +1,36 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-21T19:30:00Z
+LastExecutionTime: 2026-07-21T23:45:00Z
+
+## Cycle 2026-07-21T23:45Z (linux coordinator — wave-1 drain integrated; order 459 curl-install channel)
+
+- **Wave-1 drain (operator-directed planner->workers orchestration)**: a
+  Sonnet planner sequenced the TRUE eligible set — of 79 ready packets only
+  6 v0.4/unset were linux-drainable after the EXPERTS re-scope; 4 became
+  wave 1, all landed done and cherry-picked after full gates
+  (./build.sh --check green; default-image 7/7, git-mirror 13/13,
+  guest-crashloop 1/1; workspace tests green minus the two known
+  environmental flakes):
+  - vault-unseal-secret-regenerated-on-reensure (Fable, cdd43e57): ensure
+    gates secret creation on existence; one-shot loud rejection recovery;
+    proven-failing keys never written/kept.
+  - guest-crashloop-detection (Opus, cf67e3e9): clock-injected detector in
+    control-wire + Windows tray fully wired + macOS --diagnose read; NEW
+    litmus + spec binding. Follow-up: macOS live feed/toast
+    (status_item.rs/action_host.rs) out of wave scope.
+  - git-mirror-container-created-without-relay-credential (Sonnet,
+    57478c57): residual closed test-only (None -> no vault-token mount).
+  - codex-lane-device-oauth-login (Sonnet, 7a5d5161): doc-only cheatsheet
+    Authentication section; runtime was already correct + pinned.
+- **Planner hygiene findings**: order 281 flipped ready->completed (all
+  criteria verified implemented at HEAD; status was stale). Backlog
+  sequenced: guest-crashloop -> guest-intentional-ephemeral-reset ->
+  login-transitive-states (tray-file collisions force serialization).
+  Order 384 needs a live-stack window; 407 is coordinator-owned.
+- **Order 459 (same day, coordinator)**: Claude+OpenCode now curl-install
+  from official vendors at container launch (cache-persisted, ephemeral,
+  idempotent; npm updater shrunk to codex+openspec; .claude.ai
+  allowlisted). Live proof rides the next forge smoke.
 
 ## Cycle 2026-07-21T19:30Z (linux coordinator — repair broken handshake push; CI gate born)
 

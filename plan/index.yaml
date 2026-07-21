@@ -8766,7 +8766,7 @@ plan_index:
       order: 281
       desired_release: v0.4
       title: "Guest image build: self-heal once from corrupt overlay store instead of permanent 125"
-      status: ready
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -8824,6 +8824,12 @@ plan_index:
             source-shape pins on run_init and classifier. cargo test 280/280,
             clippy clean, ./build.sh --check green. Remaining exit criterion:
             live verification on a host with a corrupt overlay store.
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Coordinator flip 2026-07-21: wave-1 planner verified ALL THREE exit criteria already implemented at HEAD (is_overlay_corruption_error, OverlayHeal trait + RealSystemReset, one-shot try_overlay_self_heal wired into run_init; 8 unit tests) — the 2026-07-20 progress event says the same; only an OPTIONAL live corrupt-overlay repro remains, which is not a stated criterion. Status was stale ready.
 
     - packet_id: smoke-lock-fd-leaks-into-forge-sessions
       order: 283
@@ -14822,7 +14828,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: per-project mirror container created WITHOUT the vault-token secret — relay fail-closes every in-forge push; mint/mount failure is silent"
-      status: ready
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs (mint_git_mirror_vault_token + ensure/recreate path) + images/git evidence
       depends_on: []
@@ -14866,6 +14872,12 @@ plan_index:
             §4. Linux builder window active — highest-value pickup: this
             is the LAST blocker between BigPickle/Hy3 and transparent
             in-forge pushes on Windows.
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Wave-1 Sonnet worker, commit 57478c57 (cherry-picked). Criteria 2+3 (fail-loud mint via Result + ? at all 3 ensure sites; loud status-check tolerance) verified already correct + pinned; real residual closed: negative-case test git_run_args_omit_vault_secret_when_none (None -> NO vault-token secret/env), proven against an injected regression. Test-only +25 lines.
 
     - packet_id: vault-root-token-rederivation
       order: 383
@@ -15811,7 +15823,7 @@ plan_index:
       order: provisional
       release_target: stable-milestone-v1
       title: "P1: headless re-ensure regenerates a non-matching vault unseal secret on restart — barrier orphaned, crash-loop (restart self-wedge)"
-      status: ready
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs (ensure_vault_running unseal-secret create path)
       depends_on: []
@@ -15877,13 +15889,19 @@ plan_index:
             still need attended recovery (deep key skew, layer 2 in the
             issue doc). Contributing factor: binary hot-swap deploy exposed
             it, but a version-matched restart could hit the same path.
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Wave-1 Fable worker, commit cdd43e57 (cherry-picked to linux-next). ensure_vault_running now gates unseal-secret creation on prior existence (reproduce-first test); rejection recovery is one-shot, loud, storage-untouched (pinned by seam test); a proven-failing key is never written/kept (pure write-decision gate + restore). 21 vault_bootstrap tests + 225 bin tests green.
 
     - packet_id: guest-crashloop-detection
       provisional_id: windows-260717-3
       order: provisional
       release_target: stable-milestone-v1
       title: "Guest crash-loop DETECTION — bounded restart/unseal/handshake counter surfaced as a falsifiable diagnose+tray verdict"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-headless (liveness/diagnose) + tray status + litmus
       depends_on: []
@@ -15916,6 +15934,12 @@ plan_index:
             Filed from the live Windows crash-loop incident + the operator's
             ephemeral-resilience directive. Detection is the trigger for
             both auto-recovery backoff and the manual reset (windows-260717-4).
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Wave-1 Opus worker, commit cf67e3e9 (cherry-picked). Pure clock-injected crashloop module in tillandsias-control-wire (3 events/180s over phase regressions, unseal failures, handshake timeouts; grammar ^(healthy|starting|crash-loop:[a-z0-9-]+)$); Windows tray fully wired (apply_vm_status feed, --diagnose line, Error balloon + chip); macOS --diagnose reads persisted verdict. litmus:guest-crashloop-detection PASS. FOLLOW-UP filed in event: macOS LIVE feed/toast needs status_item.rs+action_host.rs wiring (out of wave scope); guest-intentional-ephemeral-reset can consume GuestHealth::is_crash_loop as its trigger.
 
     - packet_id: guest-intentional-ephemeral-reset
       provisional_id: windows-260717-4
@@ -16013,7 +16037,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Codex agent lane: device/oauth login flow — never a raw token prompt"
-      status: ready
+      status: completed
       kind: bug
       deliverable: forge lane codex bootstrap (images/ + headless agent-launch env)
       depends_on: []
@@ -16040,6 +16064,12 @@ plan_index:
             (v0.3.260719.1 tray over a — skewed — v0.3.260712.1 guest;
             the token prompt is auth-flow shape, not skew, so it stands
             regardless).
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Wave-1 Sonnet worker, commit 7a5d5161 (cherry-picked). Criterion 1 (no raw-token prompt; Vault restore or device flow) verified already implemented + pinned; criterion 2 closed doc-only: codex-agent-entrypoints cheatsheet gains Authentication section (--codex-login, CODEX_API_KEY-vs-OPENAI_API_KEY order-430 footgun, harvest wrapper) + sources of truth.
 
     - packet_id: guest-tray-build-version-handshake
       provisional_id: windows-260719-4
