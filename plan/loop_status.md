@@ -1,6 +1,59 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-20T05:00:00Z
+LastExecutionTime: 2026-07-21T01:45:00Z
+
+## Cycle 2026-07-21T01:45Z (linux coordinator — v0.4: checkout crash root-caused + fixed; knowledge distribution; delegation)
+
+- **Host**: linux_mutable coordinator (`2src/tillandsias`), `linux-next` from
+  c5708f79. Sibling heads: main 7914f2ea, windows-next 2b7321ee, osx-next 66ccfa70.
+- **Order 454 (NEW, completed): the "all harnesses crash at checkout" root
+  cause** — the mirror bare repo's HEAD was unborn (`git init --bare` →
+  master; upstream has no master), so every git:// clone exited 0 with an
+  EMPTY tree and 452's assert crashed every launch. Reproduced offline,
+  fixed via images/git/ensure-mirror-head.sh (init/seed/ff/no-origin repair,
+  prefers launcher-passed TILLANDSIAS_PROJECT_DEFAULT_BRANCH = host
+  checkout's branch), pinned by litmus:git-mirror-unborn-head-repair.
+  Live-host corroboration: empty tillandsias-mirror-tillandsias volume + no
+  git container after the 15:21→15:24 PDT stack bounce.
+- **Order 452 slice 2 (done)**: launcher gate wait_for_git_mirror_ready
+  (bounded 300s, after the inference gate, only when an upstream remote
+  exists) + reused-mirror re-reconcile (non-forced exported-head ff + HEAD
+  repair via podman exec). Guest clone backstop widened to ~60s backoff with
+  split diagnostics. Both cloud chokepoints now do ground-truth checkout
+  validation + quarantine-aside (never delete). Slice 3 (concurrent live
+  proof, folds in order 450 criterion 2) remains.
+- **Knowledge distribution (delegated to Codex/Terra, reviewed+integrated)**:
+  committed AGENTS.md (+ GEMINI.md / .github/copilot-instructions.md
+  symlinks) so ALL harnesses get the methodology/versioning/release
+  bootstrap; repaired 9 broken skills-farm entries (forge-quick-intro into
+  all 5 farms, forge-continuous-enhancement into 4, stale real copies →
+  symlinks, 2 text-files-as-links → real symlinks); registered
+  merge-to-main-and-release + multihost-orchestration alias in
+  methodology.yaml; added versioning/release_runbook entrypoints; added
+  agent_fleet_naming (BigPickle/Hy3/Terra/Sol/Tlatoāni/macuahuitl) to
+  distributed-work.yaml.
+- **Launcher fixes (delegated to BigPickle, reviewed+integrated)**: plan.yaml
+  `--repeat`→`--times` template bug; ./repeat opencode lane dead
+  `--dangerously-skip-permissions`→`--auto`; new `--model` passthrough for
+  codex/opencode lanes.
+- **Ledger hygiene (delegated to Codex/Sol, reviewed+integrated)**:
+  receive-pack blocker CLOSED with resolution note (order 450, b581de3d);
+  new packets: vault approle re-provision ERROR idempotency, stray empty
+  .git in data root; live stack-bounce observation appended to the
+  concurrent-forges packet. Coordinator filed
+  flaky-zombie-reap-test-precondition (reproduced on pristine c5708f79).
+- **Delegation note**: Hy3 (`opencode/hy3-free`) is currently UNUSABLE — Zen
+  pool returned 403 "account balance is insufficient"; rerouted its packet
+  to Codex/Sol. Direct-CLI delegation shapes recorded in
+  plan/issues/forge-agent-delegation-research-2026-07-19.md remain valid.
+- **Verification**: cargo clippy clean; 334/336 headless tests pass (2
+  environmental flakes, both reproduced on pristine HEAD, one newly filed);
+  scripts/test-git-mirror-unborn-head.sh PASS; YAML validated (ruby).
+- **Next**: rebuild git+forge images and live-verify a fresh-volume forge
+  launch (452 slice 3 + 450 c2), then the v0.4 drain-or-slip triage over the
+  36 open packets (EXPERTS bring-up vs slip is operator-gated), VERSION
+  conflict pre-resolution (merge main into linux-next keeping 0.3.260720.4),
+  then the destructive e2e gate for the release-evidence PASS record.
 
 ## Cycle 2026-07-20T04:05Z (forge — v0.4 drain: git-mirror security + forge-safety)
 

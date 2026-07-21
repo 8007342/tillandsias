@@ -90,3 +90,25 @@ transparent-push outage, not a security improvement.
 - `git push origin linux-next` from a forge succeeds (relay fires, GitHub advances).
 - `scripts/test-git-mirror-relay-verified-ack.sh` still 4/4 (relay hooks untouched).
 - Receive-pack probe returns a capability advertisement instead of empty.
+
+## Resolution (2026-07-20)
+
+**Status: CLOSED.** Commit `b581de3d` completed order 450, option 1, as
+operator-ratified on 2026-07-20. `images/git/entrypoint.sh:212-219` now starts
+the enclave-internal daemon with `--enable=receive-pack`; the inline rationale
+at lines 193-211 records that the synchronous pre-receive relay remains the
+GitHub credential and policy boundary. The
+`litmus:git-mirror-no-anonymous-daemon-write` invariant was reconciled to pin
+that relay boundary instead of incorrectly requiring the internal daemon to
+reject all writes.
+
+Order 450's completed event records 11/11 passing git-mirror-service litmus
+checks. The git image was rebuilt as `7bddbbd5`.
+
+This interim is explicitly v0.4-only. The authenticated replacement remains
+tracked by research order 322 and implementation order 451, with
+`desired_release: v0.5`; it must replace the unauthenticated daemon write path.
+
+One live end-to-end forge push observation remains outstanding. That residual
+verification is tracked by order 450 exit criterion 2 and order 452 slice 3,
+not by this closed blocker.

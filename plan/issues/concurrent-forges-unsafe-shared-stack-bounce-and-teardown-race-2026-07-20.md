@@ -89,3 +89,20 @@ Verifiable closure (fixtures, fail-loud style — reproduce the break first):
 
 Do not weaken the single-forge teardown (a genuinely last-forge exit must still
 clean up). Do not touch the mirror push-path invariants (orders 413/415/424).
+
+## Live observation 2026-07-20 15:21-15:24 PDT (coordinator host)
+
+The support stack started at 15:21 (vault, proxy, and inference) and was torn
+down at 15:24. Podman recorded exit 137 for vault, exit 137 for inference, and
+exit 139 for proxy. Squid itself logged the graceful sequence `Preparing for
+shutdown ... Exiting normally`, so the proxy's 139 is evidence that the
+entrypoint or certificate helper died on the teardown signal, not that Squid
+crashed.
+
+No `tillandsias-git` container existed at teardown time, and the persistent
+mirror volume was completely empty: it contained no bare repository. This is
+consistent with launch failing during checkout (see
+`mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md`) and then taking
+down the shared support stack on its exit path while no reference count or
+launch-in-flight guard protected the stack. This is direct live evidence for
+slice 3 of this packet's shared-stack teardown race.
