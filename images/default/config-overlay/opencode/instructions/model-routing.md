@@ -38,7 +38,10 @@ current setup. Tool calling stays with the Zen models.
 
 Coordination ledgers name in-forge agents after their Zen model:
 **BigPickle** is `opencode/big-pickle` (the default above); **Hy3** is
-BigPickle's bigger Zen sibling, selected for heavier in-forge work.
+BigPickle's bigger Zen sibling, `opencode/hy3-free`, selected for heavier
+in-forge work. This identifier was resolved on 2026-07-20 from the live
+opencode models catalog; re-verify it on opencode upgrades because the Zen
+catalog is upstream-controlled.
 Other free Zen models may be trialed over time (operator, 2026-07-17);
 identify yourself in plan ledger entries by the model you actually ran
 as (e.g. `linux-bigpickle-opencode-<ts>`). As local experts mature,

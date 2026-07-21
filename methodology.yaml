@@ -11,6 +11,7 @@ methodology:
   bootstrap:
     command: "/skills bootstrap"
     first_step: "Read plan.yaml, plan/index.yaml, and methodology/bootstrap/router.yaml."
+    active_release: "Declared in plan/loop_status.md under '## ACTIVE RELEASE'."
     selection_rule: "Choose exactly one intent from bootstrap_router.intent_options. The intent defines your required reading set."
     receipt_required_before_source_edits: true
     autonomous_loop: "After bootstrap, iterate via methodology/bootstrap/router.yaml and methodology/convergence.yaml until the selected residual obligation stops decreasing or the spec itself needs refinement."
@@ -22,6 +23,8 @@ methodology:
     forge_diagnostics: methodology/forge-diagnostics.yaml
     multi_host_development: methodology/multi-host-development.yaml
     distributed_work: methodology/distributed-work.yaml
+    versioning: methodology/versioning.yaml
+    release_runbook: docs/RELEASING.md
     markdown_distillation: methodology/markdown-distillation.yaml
     plan_root: plan.yaml
     plan_index: plan/index.yaml
@@ -79,6 +82,18 @@ methodology:
         purpose: >
           Canonical mutable-Linux multi-host coordination pass. The
           multihost-orchestration skill name is a compatibility alias.
+        steerable: true
+      multihost-orchestration:
+        alias_of: coordinate-multihost-work
+      merge-to-main-and-release:
+        path: skills/merge-to-main-and-release/SKILL.md
+        tier: orchestrator
+        authoritative_spec:
+          - docs/RELEASING.md
+          - methodology/versioning.yaml
+        purpose: >
+          Open or update the linux-next-to-main PR, bump VERSION on main only,
+          tag the release, and dispatch the workflow_dispatch release.
         steerable: true
       forge-continuous-enhancement:
         path: skills/forge-continuous-enhancement/SKILL.md
