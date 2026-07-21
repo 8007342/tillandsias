@@ -1,4 +1,6 @@
 
+# freshness: auditor=forge-antigravity-20260721 date=2026-07-21 verdict=refreshed scope=core_principle+runtime_ephemerality
+
 philosophy:
   core_principle: >
     Monotonic reduction of uncertainty under verifiable constraints.

@@ -15944,6 +15944,7 @@ plan_index:
     - packet_id: guest-intentional-ephemeral-reset
       provisional_id: windows-260717-4
       order: provisional
+      desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Intentional EPHEMERAL RESET — one-click wipe+reprovision of the guest (destructive-by-design; re-auth is the only cost)"
       status: ready
@@ -16290,6 +16291,7 @@ plan_index:
     - packet_id: ephemeral-runtime-destroy-recreate-sweep
       provisional_id: windows-260717-5
       order: provisional
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "MILESTONE: make ALL skills, scripts, and error messages follow destroy-and-recreate (runtime ephemerality) — never fix-forward borked substrate"
       status: ready
@@ -16481,6 +16483,14 @@ plan_index:
         - "plan/loop_status.md names the ACTIVE release-in-progress and its remaining open-packet count each coordinator cycle"
         - "cross-platform/cross-host deps are release-ordered (dependent's desired_release >= upstream's); any exception is noted"
       events:
+        - type: progress
+          ts: "2026-07-21T23:13:00Z"
+          agent_id: "forge-antigravity-20260721T2312Z"
+          host: forge
+          summary: >
+            Backfilled desired_release on guest-intentional-ephemeral-reset (v0.4)
+            and ephemeral-runtime-destroy-recreate-sweep (v0.5), completing
+            100% desired_release coverage across all open packets in plan/index.yaml.
         - type: progress
           ts: "2026-07-18T07:00:00Z"
           agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
