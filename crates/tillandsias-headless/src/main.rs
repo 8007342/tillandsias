@@ -13583,6 +13583,31 @@ mod tests {
     }
 
     #[test]
+    fn git_run_args_omit_vault_secret_when_none() {
+        // Companion negative case to git_run_args_mount_vault_token_when_supplied
+        // (windows-260716-2, exit criterion 1). Without this pin a regression
+        // could hardcode/always-mount a stale vault-token secret name (or the
+        // VAULT_ADDR/VAULT_ROLE envs) regardless of what — if anything — the
+        // caller actually minted, silently defeating the fail-loud mint
+        // discipline enforced upstream by `?` propagation.
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+
+        assert!(
+            !args.iter().any(|a| a.contains("target=vault-token")),
+            "vault_token_secret was None — must not mount any vault-token secret: {args:?}"
+        );
+        assert!(
+            !has_arg(&args, "VAULT_ADDR=https://vault:8200"),
+            "vault_token_secret was None — must not set VAULT_ADDR: {args:?}"
+        );
+        assert!(
+            !has_arg(&args, "VAULT_ROLE=git-mirror"),
+            "vault_token_secret was None — must not set VAULT_ROLE: {args:?}"
+        );
+    }
+
+    #[test]
     fn status_check_args_probe_proxy_git_and_inference_from_forge() {
         let args = build_status_check_forge_args(
             &PathBuf::from("/tmp/workspace"),
