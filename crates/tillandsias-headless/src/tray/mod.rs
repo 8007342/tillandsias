@@ -2245,6 +2245,33 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                 cloud.path.clone()
             };
 
+            // Ground-truth gate (fresh-checkout invariant, 2026-07-20): a
+            // bare `exists()` accepted empty/partial/broken checkouts — the
+            // operator deleted ~/src/<project>, relaunched from the cloud
+            // icon, and the agent landed on an invalid tree
+            // (plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md).
+            // Quarantine anything invalid (rename aside, never delete — the
+            // dir may hold user data) so the clone below re-materializes a
+            // real checkout; refuse the launch loudly if even that fails.
+            if target_path.exists() && !crate::is_valid_git_checkout(&target_path) {
+                match crate::quarantine_invalid_checkout(&target_path) {
+                    Ok(aside) => eprintln!(
+                        "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
+                        target_path.display(),
+                        aside.display()
+                    ),
+                    Err(err) => {
+                        eprintln!("error: cloud launch refused for '{}': {err}", cloud.name);
+                        let _ = futures::executor::block_on(service_for_emit.set_status(
+                            format!("🥀 Invalid checkout for {}: cannot repair", cloud.name),
+                            TrayIconState::Dried,
+                            None,
+                        ));
+                        return;
+                    }
+                }
+            }
+
             // Step 1: clone if missing, fetch if present.
             if !target_path.exists() {
                 // The cloud entry doesn't carry the owner directly — discover

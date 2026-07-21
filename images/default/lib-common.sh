@@ -583,8 +583,17 @@ clone_project_from_mirror() {
     # Network transport (Linux/podman).
     if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]]; then
         trace_lifecycle "git-mirror" "cloning from git://tillandsias-git/${TILLANDSIAS_PROJECT}"
-        local max_retries=5
+        # Retry budget: the launcher-side wait_for_git_mirror_ready gate
+        # (order 452 slice 2) blocks the launch until the mirror advertises a
+        # resolvable HEAD, so this loop is the fail-loud BACKSTOP, not the
+        # primary wait. Still, a first seed is a full-repo fetch from GitHub
+        # through the proxy (~minutes on slow links, and the gate can be
+        # skipped on lanes without a remote), so back off to ~60s instead of
+        # the old 5x1s that guaranteed a crash during any real seed window.
+        local max_retries=12
+        local backoff
         for i in $(seq 1 $max_retries); do
+            if [[ $i -le 6 ]]; then backoff=2; else backoff=5; fi
             if git clone "git://tillandsias-git/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
                 # @trace spec:git-mirror-service
                 # A git daemon serving a mid-seed (still-empty) bare repo returns
@@ -600,12 +609,28 @@ clone_project_from_mirror() {
                 if ! git -C "$clone_dir" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
                     rm -rf "$clone_dir" 2>/dev/null || true
                     if [[ $i -lt $max_retries ]]; then
-                        trace_lifecycle "git-mirror" "clone returned an EMPTY tree (mirror still seeding), retrying ($i/$max_retries)..."
-                        sleep 1
+                        trace_lifecycle "git-mirror" "clone returned an EMPTY tree (mirror still seeding), retrying ($i/$max_retries, ${backoff}s)..."
+                        sleep "$backoff"
                         continue
                     fi
                     echo "[forge] FATAL: git clone from git://tillandsias-git/${TILLANDSIAS_PROJECT} produced an EMPTY checkout (no HEAD) after $max_retries attempts." >&2
-                    echo "[forge] The mirror is reachable but advertised no cloneable refs — it has not finished seeding from upstream (or upstream is empty)." >&2
+                    # Distinguish the two failure classes so the operator fixes
+                    # the right thing (they previously shared one misleading
+                    # message that blamed seeding for a mirror-side defect):
+                    #   - refs advertised but no HEAD line -> the mirror's HEAD
+                    #     is unset/unborn (mirror defect; ensure-mirror-head in
+                    #     the git image repairs this — the running container is
+                    #     probably an OLD image);
+                    #   - no refs at all -> the mirror has not finished seeding
+                    #     from upstream, or upstream is genuinely empty.
+                    local advertised
+                    advertised="$(git ls-remote "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || true)"
+                    if [[ -n "$advertised" ]] && ! echo "$advertised" | grep -q $'\tHEAD$'; then
+                        echo "[forge] The mirror ADVERTISES refs but its HEAD is unset (unborn-HEAD mirror defect)." >&2
+                        echo "[forge] Restart/rebuild the tillandsias-git container so ensure-mirror-head repairs it (images/git/ensure-mirror-head.sh)." >&2
+                    else
+                        echo "[forge] The mirror is reachable but advertised no cloneable refs — it has not finished seeding from upstream (or upstream is empty)." >&2
+                    fi
                     echo "[forge] Refusing to launch an agent on an empty working tree." >&2
                     exit 1
                 fi
@@ -619,8 +644,8 @@ clone_project_from_mirror() {
                 return 0
             fi
             if [[ $i -lt $max_retries ]]; then
-                trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$max_retries)..."
-                sleep 1
+                trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$max_retries, ${backoff}s)..."
+                sleep "$backoff"
             else
                 trace_lifecycle "git-mirror" "clone failed after $max_retries attempts"
             fi

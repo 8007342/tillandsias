@@ -1,0 +1,53 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-unborn-head-repair
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: high
+description: >
+  A bare mirror's HEAD must always name a real, cloneable head (unborn-HEAD
+  defect, 2026-07-20). `git init --bare` leaves HEAD -> refs/heads/master; the
+  seed fetch writes refs/heads/main + work branches but nothing repointed
+  HEAD, and upstream had no master — so every `git clone` of the seeded mirror
+  exited 0 with "remote HEAD refers to nonexistent ref" and an EMPTY working
+  tree, which the order-452 guest assert escalated into a deterministic crash
+  of EVERY clone-only forge launch. The git image now ships
+  ensure-mirror-head (repair at init/seed/fast-forward, preferring the
+  launcher-declared host branch via TILLANDSIAS_PROJECT_DEFAULT_BRANCH), and
+  the launcher blocks on wait_for_git_mirror_ready before starting a forge.
+  plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md
+preconditions:
+  - workspace contains images/git/ensure-mirror-head.sh
+
+critical_path:
+  - step: "the repair helper ships in the git image and the entrypoint runs it"
+    command: "test -x images/git/ensure-mirror-head.sh && grep -q 'ensure-mirror-head' images/git/Containerfile && grep -q 'ENSURE_HEAD=' images/git/entrypoint.sh && echo 'ok: repair-helper-wired'"
+    timeout_ms: 5000
+    expected_behavior: "ok: repair-helper-wired"
+
+  - step: "the launcher passes the host branch and gates on mirror readiness"
+    command: "grep -q 'TILLANDSIAS_PROJECT_DEFAULT_BRANCH' crates/tillandsias-headless/src/main.rs && grep -q 'wait_for_git_mirror_ready' crates/tillandsias-headless/src/main.rs && echo 'ok: launcher-branch-and-gate'"
+    timeout_ms: 5000
+    expected_behavior: "ok: launcher-branch-and-gate"
+
+  - step: "offline fixture reproduces the empty-clone break and proves the repair (preferred branch + upstream-default fallback + unseeded no-op)"
+    command: "scripts/test-git-mirror-unborn-head.sh >/dev/null && echo 'ok: unborn-head-fixture-pass'"
+    timeout_ms: 30000
+    expected_behavior: "ok: unborn-head-fixture-pass"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "ensure-mirror-head repairs unborn HEAD; clones check out a real branch"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-unborn-head-repair"
+
+rollback:
+  on_failure: >
+    Do NOT weaken the order-452 guest assert (empty clones must stay loud) and
+    do NOT hardcode a branch name in the image. HEAD resolution order is:
+    launcher-declared host branch, upstream symref default, main, first local
+    head — all inside images/git/ensure-mirror-head.sh, which is the single
+    implementation the entrypoint and this fixture both run.
+  command: "grep -n 'ensure_mirror_head' images/git/entrypoint.sh"

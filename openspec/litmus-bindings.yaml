@@ -385,6 +385,7 @@ specs:
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write
   - litmus:git-mirror-startup-per-ref-tolerance
+  - litmus:git-mirror-unborn-head-repair
   - litmus:forge-git-index-materialization
   - litmus:forge-packed-refs-shared
   - litmus:enclave-isolation

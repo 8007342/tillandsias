@@ -55,6 +55,13 @@ COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
 COPY pre-receive-hook.sh /usr/local/share/git-service/pre-receive-hook.sh
 COPY relay-refs.sh /usr/local/share/git-service/relay-refs.sh
 
+# @trace spec:git-mirror-service
+# Unborn-HEAD repair helper (2026-07-20): a bare mirror's HEAD must always
+# name a cloneable head; the entrypoint runs this at init/seed/fast-forward
+# and offline fixtures exec the same file (ENSURE_HEAD override).
+COPY ensure-mirror-head.sh /usr/local/share/git-service/ensure-mirror-head
+RUN chmod +x /usr/local/share/git-service/ensure-mirror-head
+
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
 

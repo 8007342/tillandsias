@@ -2614,6 +2614,63 @@ fn parse_gitdir_origin_url(project_path: &Path) -> Option<String> {
     None
 }
 
+/// The branch a forge agent should land on: the host checkout's currently
+/// checked-out branch. Passed to the git-mirror container as
+/// `TILLANDSIAS_PROJECT_DEFAULT_BRANCH` so the bare mirror's HEAD symref names
+/// the operator's working branch — not `master` (the `git init --bare`
+/// default, which upstream may not even have: the unborn-HEAD defect that made
+/// every clone-only launch check out an EMPTY tree,
+/// plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md)
+/// and not GitHub's default branch (which strands agents off the coordination
+/// branch, e.g. `main` instead of `linux-next`).
+///
+/// Uses `git symbolic-ref --short HEAD` when a git binary exists, falling back
+/// to parsing `.git/HEAD` directly (git-less hosts — same rationale as
+/// [`parse_gitdir_origin_url`]). Detached HEAD → `None`; the mirror then falls
+/// back to upstream's default via ensure-mirror-head. The value flows into
+/// container env and an in-container reconcile command, so anything outside
+/// git's safe ref charset is rejected here instead of playing quoting games.
+fn read_host_project_current_branch(project_path: &Path) -> Option<String> {
+    fn sanitize(branch: &str) -> Option<String> {
+        let b = branch.trim();
+        if b.is_empty()
+            || !b
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/'))
+        {
+            return None;
+        }
+        Some(b.to_string())
+    }
+    if let Ok(output) = std::process::Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args(["symbolic-ref", "--short", "HEAD"])
+        .output()
+        && output.status.success()
+        && let Ok(name) = String::from_utf8(output.stdout)
+        && let Some(clean) = sanitize(&name)
+    {
+        return Some(clean);
+    }
+    // `.git` dir, or `.git` pointer file (`gitdir: …`) followed one hop.
+    let dot_git = project_path.join(".git");
+    let head_path = if dot_git.is_dir() {
+        dot_git.join("HEAD")
+    } else {
+        let pointer = std::fs::read_to_string(&dot_git).ok()?;
+        let target = pointer.strip_prefix("gitdir:")?.trim();
+        let gitdir = if Path::new(target).is_absolute() {
+            PathBuf::from(target)
+        } else {
+            project_path.join(target)
+        };
+        gitdir.join("HEAD")
+    };
+    let head = std::fs::read_to_string(head_path).ok()?;
+    sanitize(head.trim().strip_prefix("ref: refs/heads/")?)
+}
+
 /// Best-effort mint of a Vault AppRole token for a git-mirror container.
 ///
 /// Returns `Some(secret_name)` when Vault is up and the AppRole login
@@ -2690,6 +2747,7 @@ fn build_git_run_args(
     certs_dir: &Path,
     image: &str,
     project_remote_url: Option<&str>,
+    project_default_branch: Option<&str>,
     vault_token_secret: Option<&str>,
 ) -> Vec<String> {
     // Named podman volume for the bare repo. Persists across container
@@ -2737,6 +2795,19 @@ fn build_git_run_args(
     {
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_PROJECT_REMOTE_URL={url}"));
+    }
+    // @trace spec:git-mirror-service
+    // The mirror's HEAD symref must name the branch agents should land on
+    // (the host checkout's current branch). Without it `git init --bare`
+    // leaves HEAD -> refs/heads/master, upstream may have no master, and a
+    // clone of the seeded mirror checks out an EMPTY tree (unborn-HEAD
+    // defect, 2026-07-20). The entrypoint consumes this at init/seed time
+    // via ensure-mirror-head.
+    if let Some(branch) = project_default_branch
+        && !branch.is_empty()
+    {
+        args.push("--env".into());
+        args.push(format!("TILLANDSIAS_PROJECT_DEFAULT_BRANCH={branch}"));
     }
     if let Some(secret_name) = vault_token_secret {
         // @trace spec:tillandsias-vault — git-mirror reads the GitHub token
@@ -2917,6 +2988,94 @@ async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<
         "inference did not become ready within {MAX_ATTEMPTS}s. Last probe: {last}. \
          Inspect `podman logs tillandsias-inference` for ollama startup errors \
          (common: ollama binary self-install failed, or model cache volume missing)."
+    ))
+}
+
+/// Order 452 slice 2: launcher-side git-mirror readiness gate.
+///
+/// A clone-only forge (order 437) clones `git://tillandsias-git/<project>` the
+/// moment its entrypoint runs, but a FRESH mirror volume seeds in a background
+/// sweep — a full-repo fetch from upstream through the proxy that can take
+/// minutes — while the guest's clone backstop only waits ~60s. Block the
+/// launch until the mirror's bare repo has a resolvable HEAD (the exact ground
+/// truth `clone_project_from_mirror` asserts after its clone), mirroring the
+/// [`wait_for_inference_ready`] pattern: bounded, truthful, loud on timeout.
+///
+/// Probes via `podman exec` inside the mirror container so readiness is
+/// measured on the served repo itself, not on network reachability.
+/// @trace spec:git-mirror-service
+async fn wait_for_git_mirror_ready(
+    client: &PodmanClient,
+    container_name: &str,
+    project_name: &str,
+    debug: bool,
+) -> Result<(), String> {
+    use std::time::Duration;
+    // First seed is a full-repo fetch through the proxy: minutes, not seconds
+    // (this workspace's pack alone is >100 MiB). Bounded so a dead upstream
+    // still fails the launch loudly instead of hanging forever.
+    const MAX_ATTEMPTS: u32 = 300;
+    let repo_path = format!("/srv/git/{project_name}");
+    let mut last = String::from("no probe attempted");
+    for attempt in 1..=MAX_ATTEMPTS {
+        match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    container_name.into(),
+                    "git".into(),
+                    "-C".into(),
+                    repo_path.clone(),
+                    "rev-parse".into(),
+                    "--quiet".into(),
+                    "--verify".into(),
+                    "HEAD".into(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [forge-launch] git mirror ready on attempt {attempt}/{MAX_ATTEMPTS}"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(out) => {
+                last = format!(
+                    "mirror HEAD not resolvable yet (exit {})",
+                    out.status.unwrap_or(-1)
+                );
+            }
+            Err(e) => {
+                last = format!("probe failed: {e}");
+            }
+        }
+        if attempt == 5 {
+            // One non-debug notice so an operator watching a first launch
+            // knows the wait is the mirror seed, not a hang.
+            eprintln!(
+                "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {MAX_ATTEMPTS}s max)..."
+            );
+        }
+        if debug {
+            eprintln!(
+                "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    Err(format!(
+        "git mirror {container_name} did not become cloneable within {MAX_ATTEMPTS}s: {last}. \
+         A forge launched now would land on an empty tree, so the launch is refused \
+         (fresh-checkout invariant, \
+         plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
+         Inspect `podman logs {container_name}` — common causes: the upstream seed fetch \
+         is still running or failed (network/proxy), upstream is empty, or the mirror's \
+         HEAD is unborn on an old image (ensure-mirror-head repairs it on container start)."
     ))
 }
 
@@ -3652,6 +3811,63 @@ fn projects_root() -> PathBuf {
     PathBuf::from(home).join("src")
 }
 
+/// Ground-truth checkout validation (fresh-checkout invariant, 2026-07-20):
+/// a path counts as a valid checkout only when it is a git worktree whose
+/// HEAD resolves to a commit. A bare `path.exists()` gate accepted empty,
+/// partial, and broken dirs — the operator's deleted-checkout relaunch landed
+/// an agent on an empty tree
+/// (plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md).
+///
+/// On git-less hosts (the VM rootfs deliberately ships no `git`) this
+/// degrades to the presence of `.git` — the strongest signal available there,
+/// and exactly the old behavior for that lane.
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+pub(crate) fn is_valid_git_checkout(path: &Path) -> bool {
+    if !path.join(".git").exists() {
+        return false;
+    }
+    match std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["rev-parse", "--quiet", "--verify", "HEAD"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+    {
+        Ok(status) => status.success(),
+        // No git binary on this host: `.git` presence is the best available
+        // ground truth (git-less VM lane).
+        Err(_) => true,
+    }
+}
+
+/// Move an invalid checkout ASIDE — never delete it — so a fresh clone can
+/// materialize at the canonical path. The dir may contain user data (an
+/// aborted clone can coexist with unrelated files); renaming preserves every
+/// byte while keeping repeated launches idempotent (each quarantine gets a
+/// unique timestamped name).
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+pub(crate) fn quarantine_invalid_checkout(path: &Path) -> Result<PathBuf, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("checkout");
+    let aside = path.with_file_name(format!("{name}.invalid-{stamp}"));
+    std::fs::rename(path, &aside).map_err(|e| {
+        format!(
+            "cannot move invalid checkout {} aside to {}: {e}",
+            path.display(),
+            aside.display()
+        )
+    })?;
+    Ok(aside)
+}
+
 /// Resolve `--cloud owner/repo` to an on-disk checkout under
 /// [`projects_root`], cloning through the containerized `gh` flow on first
 /// use. 1:1 with the Linux tray's `handle_launch_cloud_project`: idempotent
@@ -3670,6 +3886,18 @@ fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, Stri
         .filter(|s| !s.is_empty())
         .ok_or_else(|| format!("--cloud value has no repo name: {nwo}"))?;
     let target = projects_root().join(short_name);
+    // Ground-truth gate (fresh-checkout invariant, 2026-07-20): bare
+    // `exists()` accepted empty/partial/broken checkouts and launched agents
+    // onto them. Quarantine anything invalid (rename aside, never delete —
+    // the dir may hold user data), then materialize fresh below.
+    if target.exists() && !is_valid_git_checkout(&target) {
+        let aside = quarantine_invalid_checkout(&target)?;
+        eprintln!(
+            "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
+            target.display(),
+            aside.display()
+        );
+    }
     if !target.exists() {
         eprintln!(
             "[tillandsias] cloud: cloning {} into {} ...",
@@ -5696,11 +5924,13 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 "status-git",
                 &git_container_name,
                 // Status-check has no real project — there is no host origin
-                // URL to forward and the bare repo is throwaway.
+                // URL to forward, no branch to pin, and the bare repo is
+                // throwaway.
                 &build_git_run_args(
                     project_name,
                     &certs_dir,
                     &git_image,
+                    None,
                     None,
                     git_vault_secret.as_deref(),
                 ),
@@ -7709,6 +7939,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
+                    read_host_project_current_branch(&project_path_resolved).as_deref(),
                     git_vault_secret.as_deref(),
                 ),
                 debug,
@@ -8749,6 +8980,7 @@ pub(crate) fn run_opencode_web_mode(
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
+                    read_host_project_current_branch(&project_path_resolved).as_deref(),
                     git_vault_secret.as_deref(),
                 ),
                 debug,
@@ -9141,6 +9373,20 @@ pub(crate) fn ensure_enclave_for_project(
             None => eprintln!("[tillandsias] [forge-launch] No host origin URL configured"),
         }
     }
+    // The branch the mirror's HEAD should name (unborn-HEAD fix): the host
+    // checkout's current branch, so agents land on the operator's working
+    // branch instead of `master`/GitHub-default. None (missing checkout,
+    // detached HEAD, git-less host) falls back to upstream's default inside
+    // ensure-mirror-head.
+    let project_default_branch = project_path.and_then(read_host_project_current_branch);
+    if debug {
+        match &project_default_branch {
+            Some(b) => eprintln!("[tillandsias] [forge-launch] Host checkout branch: {b}"),
+            None => eprintln!(
+                "[tillandsias] [forge-launch] No host checkout branch (mirror falls back to upstream default)"
+            ),
+        }
+    }
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -9187,6 +9433,89 @@ pub(crate) fn ensure_enclave_for_project(
                     "[tillandsias] git mirror {git_container_name} already running; reusing (order 443)"
                 );
             }
+            // Order 452 slice 2 (reused-mirror re-reconcile) + order 449: the
+            // mirror only fast-forwards its EXPORTED heads at container START,
+            // so reusing a long-lived one (order 443) serves increasingly
+            // stale heads — a forge then clones stale and its push rejects
+            // non-fast-forward. Re-run the same NON-forced exported-head
+            // fast-forward, then repair an unborn HEAD (old-image container),
+            // before any forge clones. Non-fatal by design: a diverged head
+            // is left for the relay to push UP, an offline upstream still
+            // serves the last-known-good tree, and the readiness gate below
+            // still enforces a resolvable HEAD.
+            if project_remote_url.is_some() {
+                let ff = client
+                    .execute(
+                        OperationKind::Container,
+                        &[
+                            "exec".into(),
+                            "-i".into(),
+                            git_container_name.clone(),
+                            "git".into(),
+                            "-C".into(),
+                            format!("/srv/git/{project_name}"),
+                            "fetch".into(),
+                            "origin".into(),
+                            "refs/heads/*:refs/heads/*".into(),
+                        ],
+                    )
+                    .await;
+                match ff {
+                    Ok(out) if out.success() => {
+                        if debug {
+                            eprintln!(
+                                "[tillandsias] [forge-launch] reused mirror re-reconciled to upstream"
+                            );
+                        }
+                    }
+                    Ok(out) => eprintln!(
+                        "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile fetch exited {} (serving last-known-good heads; diverged heads relay up on push)",
+                        out.status.unwrap_or(-1)
+                    ),
+                    Err(e) => eprintln!(
+                        "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile failed: {e}"
+                    ),
+                }
+            }
+            // HEAD repair on a reused container. New images carry
+            // ensure-mirror-head; on an old image fall back to an inline
+            // conditional symbolic-ref when the launcher knows the branch.
+            // project_name is container-name-safe and the branch is charset-
+            // sanitized by read_host_project_current_branch, so the
+            // interpolation below cannot escape the sh -c word.
+            let repair = match project_default_branch.as_deref() {
+                Some(branch) => format!(
+                    "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
+                       /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name} {branch}; \
+                     elif ! git -C /srv/git/{project_name} rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
+                       && git -C /srv/git/{project_name} show-ref --verify --quiet refs/heads/{branch}; then \
+                       git -C /srv/git/{project_name} symbolic-ref HEAD refs/heads/{branch}; \
+                     fi"
+                ),
+                None => format!(
+                    "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
+                       /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name}; \
+                     fi"
+                ),
+            };
+            if let Err(e) = client
+                .execute(
+                    OperationKind::Container,
+                    &[
+                        "exec".into(),
+                        "-i".into(),
+                        git_container_name.clone(),
+                        "sh".into(),
+                        "-c".into(),
+                        repair,
+                    ],
+                )
+                .await
+            {
+                eprintln!(
+                    "[tillandsias] [forge-launch] WARNING: reused-mirror HEAD repair failed: {e}"
+                );
+            }
         } else {
             let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
             client
@@ -9198,6 +9527,7 @@ pub(crate) fn ensure_enclave_for_project(
                         &certs_dir,
                         &versioned_image_tag("git", version),
                         project_remote_url.as_deref(),
+                        project_default_branch.as_deref(),
                         git_vault_secret.as_deref(),
                     ),
                     debug,
@@ -9237,6 +9567,18 @@ pub(crate) fn ensure_enclave_for_project(
         // background — the API is up the moment ollama `serve` is listening,
         // which is all the agent needs to query it.
         wait_for_inference_ready(&client, debug).await?;
+
+        // Order 452 slice 2: the clone-only forge clones from the mirror the
+        // instant it boots — block until the mirror actually serves a
+        // cloneable HEAD, or refuse the launch loudly (fresh-checkout
+        // invariant). Runs AFTER the inference wait so the mirror's
+        // background seed overlaps it. Skipped for projects with no upstream
+        // remote: their mirror fills from forge pushes, not an origin seed,
+        // so an empty mirror there is a legitimate cold state the guest
+        // handles fail-loud rather than a seed-in-progress worth waiting on.
+        if project_remote_url.is_some() {
+            wait_for_git_mirror_ready(&client, &git_container_name, project_name, debug).await?;
+        }
         Ok::<(), String>(())
     })?;
 
@@ -12551,7 +12893,7 @@ mod tests {
     fn enclave_egress_dual_home_targets_managed_egress_network() {
         let certs = PathBuf::from("/tmp/ca");
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
 
         for (name, args) in [("proxy", &proxy), ("git", &git)] {
             assert!(
@@ -13063,7 +13405,7 @@ mod tests {
             "proxy args must include --replace (order 387): {proxy:?}"
         );
 
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
         assert!(
             has_arg(&git, "--replace"),
             "git-mirror args must include --replace (order 387): {git:?}"
@@ -13099,7 +13441,7 @@ mod tests {
     fn stack_service_args_do_not_pin_static_ips() {
         let certs = PathBuf::from("/tmp/ca");
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
         let inference = build_inference_run_args(&certs, "tillandsias-inference:v1", false);
         let router = build_router_run_args(&certs, "tillandsias-router:v1", 8080);
 
@@ -13133,7 +13475,7 @@ mod tests {
         // /srv/git must be writable (named volume) so the bare repo persists
         // and the post-receive hook can be installed.
         let certs = PathBuf::from("/tmp/ca");
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
 
         // No `--base-path=...` override appended after the image — confirms
         // we let the image entrypoint take over.
@@ -13154,7 +13496,8 @@ mod tests {
     fn git_run_args_forward_project_remote_url_when_present() {
         let certs = PathBuf::from("/tmp/ca");
         let url = "https://github.com/example/repo.git";
-        let with_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None);
+        let with_url =
+            build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None, None);
         assert!(
             with_url
                 .iter()
@@ -13162,7 +13505,8 @@ mod tests {
             "expected upstream URL env var: {with_url:?}"
         );
 
-        let without_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let without_url =
+            build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
         assert!(
             !without_url
                 .iter()
@@ -13176,7 +13520,14 @@ mod tests {
         // @trace spec:tillandsias-vault — Phase 6 default flow
         let certs = PathBuf::from("/tmp/ca");
         let secret = "tillandsias-vault-token-git-mirror-alpha-1234";
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, Some(secret));
+        let args = build_git_run_args(
+            "alpha",
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            Some(secret),
+        );
 
         // The vault token secret MUST be mounted at the stable path
         // /run/secrets/vault-token, owned by the git user (uid 1000) so the

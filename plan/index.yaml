@@ -19413,9 +19413,43 @@ plan_index:
         (teardown race / terminal steal — the OTHER half of concurrency).
       exit_criteria:
         - "SLICE 1 (done): mirror advances exported heads from upstream (non-forced) at every start so clones are CURRENT; clone_project_from_mirror asserts a resolvable HEAD and FAILS LOUD (never launches on an empty tree)"
-        - "SLICE 2: a host-side wait_for_git_mirror_ready gate (mirroring wait_for_inference_ready) blocks the launch until the mirror advertises the expected ref, and a reused running mirror is re-reconciled to upstream at launch (main.rs ensure_enclave_for_project)"
+        - "SLICE 2 (done): a host-side wait_for_git_mirror_ready gate (mirroring wait_for_inference_ready) blocks the launch until the mirror advertises the expected ref, and a reused running mirror is re-reconciled to upstream at launch (main.rs ensure_enclave_for_project)"
         - "SLICE 3: two forges launched concurrently each clone their own current tree and both push transparently through the relay (fixture/live)"
       events:
+        - type: progress
+          ts: "2026-07-21T01:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            SLICE 2 landed. wait_for_git_mirror_ready (main.rs, modeled on
+            wait_for_inference_ready) blocks the launch after the inference
+            gate until the mirror's bare repo has a resolvable HEAD (bounded
+            300s — first seed is a full-repo fetch through the proxy), loud
+            refusal on timeout; runs only when the project has an upstream
+            remote (no-origin mirrors fill from forge pushes and stay
+            guest-guarded). ensure_enclave_for_project's reuse branch (order
+            443) now re-reconciles a reused running mirror: NON-forced
+            exported-head fast-forward via podman exec + unborn-HEAD repair
+            (ensure-mirror-head on new images, inline conditional
+            symbolic-ref fallback on old ones). ALSO in this batch, the true
+            root cause of "every harness crashed at checkout" was found,
+            reproduced, and fixed as order 454 (mirror unborn HEAD — see
+            plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md):
+            452's slice-1 assert had made that permanent defect crash every
+            launch. Guest clone backstop widened to ~60s exponential-ish
+            backoff with split diagnostics (still-seeding vs unborn-HEAD
+            mirror defect). Both cloud-launch chokepoints (tray/mod.rs
+            handle_launch_cloud_project, main.rs
+            resolve_cloud_project_checkout) replaced their bare path.exists()
+            gates with ground-truth validation (is_valid_git_checkout) +
+            quarantine-aside of invalid checkouts (rename, never delete).
+            Evidence: scripts/test-git-mirror-unborn-head.sh PASS
+            (litmus:git-mirror-unborn-head-repair), cargo clippy clean,
+            334/336 headless tests pass (2 environmental flakes, one filed as
+            plan/issues/flaky-zombie-reap-test-precondition-2026-07-20.md and
+            reproduced on pristine c5708f79). Slice 3 (concurrent two-forge
+            clone+push live proof) remains, and folds in order 450 exit
+            criterion 2 (one live e2e forge push).
         - type: progress
           ts: "2026-07-20T00:00:00Z"
           agent_id: "linux-host-coordinator"
@@ -19482,3 +19516,52 @@ plan_index:
             the old behaviour — a relaunch on the rebuilt binary is required to get
             the clean terminal. Slice 2 (route the stream to the launcher terminal
             + log-level tuning) is the operator's deferred 'later' work.
+
+    - packet_id: mirror-bare-repo-unborn-head
+      order: 454
+      desired_release: v0.4
+      title: "Mirror bare repo HEAD is unborn (init --bare -> master; upstream has no master) — every clone-only forge checkout was empty, and the 452 assert made that a deterministic crash of every harness launch"
+      status: completed
+      capability_tags: [linux, git-mirror, forge, idempotency, release-blocker]
+      kind: fix
+      deliverable: plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        Root cause of "all harnesses crashed, nobody can checkout anything"
+        at c5708f79, reproduced offline over the same upload-pack transport
+        git:// uses: images/git/entrypoint.sh `git init --bare` leaves
+        HEAD -> refs/heads/master; the seed fetch writes refs/heads/main +
+        linux-next but nothing repoints HEAD; upstream has no master, so a
+        clone exits 0 with "remote HEAD refers to nonexistent ref" and an
+        EMPTY working tree — which order 452's fail-loud assert escalates to
+        exit 1 on EVERY launch. Live-host corroboration: the coordinator's
+        tillandsias-mirror-tillandsias volume sat completely EMPTY with no
+        git container running after the 15:21->15:24 PDT stack bounce.
+      exit_criteria:
+        - "images/git/ensure-mirror-head.sh ships in the git image; the entrypoint repairs HEAD after init, after the empty-mirror seed, after the startup fast-forward, and for no-origin mirrors (done)"
+        - "the launcher passes TILLANDSIAS_PROJECT_DEFAULT_BRANCH (host checkout's current branch, charset-sanitized) so agents land on the operator's working branch, with fallback to upstream's symref default (done)"
+        - "offline fixture reproduces the empty-clone break and proves repair + fallback + unseeded no-op: scripts/test-git-mirror-unborn-head.sh, pinned by litmus:git-mirror-unborn-head-repair (done)"
+        - "live proof on a rebuilt image: a fresh-volume forge launch lands on a valid current checkout (folds into order 452 slice 3's concurrent live proof)"
+      events:
+        - type: completed
+          ts: "2026-07-21T01:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Implemented + verified offline in the same batch as order 452
+            slice 2. New images/git/ensure-mirror-head.sh (single
+            implementation; entrypoint runs it via ENSURE_HEAD override —
+            same offline-fixture pattern as RELAY_REF), Containerfile
+            installs it, entrypoint sets HEAD from
+            TILLANDSIAS_PROJECT_DEFAULT_BRANCH at init and repairs at
+            seed/ff/no-origin points, build_git_run_args passes the env from
+            read_host_project_current_branch (new; symbolic-ref with
+            .git/HEAD fallback, charset-sanitized). Fixture
+            scripts/test-git-mirror-unborn-head.sh PASS: reproduces the
+            empty clone on an init-master mirror, proves preferred-branch
+            repair (clone lands on linux-next with content), upstream-symref
+            fallback (main), and unseeded exit-3 no-op. Residual live proof
+            rides order 452 slice 3.

@@ -103,6 +103,20 @@ if [ -n "$PROJECT" ]; then
         # before this sparse mirror accepts the same transaction.
         git -C "$PROJECT_REPO" config receive.denyNonFastforwards false
         git -C "$PROJECT_REPO" config receive.denyDeletes false
+        # @trace spec:git-mirror-service
+        # Unborn-HEAD fix (2026-07-20): `git init --bare` points HEAD at
+        # refs/heads/master (Alpine default). Upstream may have NO master, so
+        # a clone of the seeded mirror exits 0 with "remote HEAD refers to
+        # nonexistent ref" and an EMPTY working tree — which the order-452
+        # guest assert then escalates to a deterministic crash of EVERY
+        # harness launch. Point HEAD at the launcher-declared branch NOW
+        # (symbolic-ref accepts unborn branches); the seed fetch below makes
+        # it cloneable, and ensure-mirror-head repairs volumes created before
+        # this fix. plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md
+        if [ -n "$TILLANDSIAS_PROJECT_DEFAULT_BRANCH" ]; then
+            git -C "$PROJECT_REPO" symbolic-ref HEAD "refs/heads/$TILLANDSIAS_PROJECT_DEFAULT_BRANCH"
+            echo "[git-service] HEAD -> refs/heads/$TILLANDSIAS_PROJECT_DEFAULT_BRANCH (launcher default branch)"
+        fi
     fi
     # http.receivepack is deliberately NOT enabled (order 423/426). Git
     # documents it as enabling push "for all users, including anonymous users",
@@ -178,6 +192,20 @@ retry_msg() {
     echo "$1"
 }
 
+# @trace spec:git-mirror-service
+# ensure-mirror-head repairs an unborn HEAD (see the script's header and
+# plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md).
+# ENSURE_HEAD is overridable so offline fixtures exercise the exact same
+# implementation this entrypoint runs (same pattern as RELAY_REF below).
+# Exit 3 (no heads yet — still seeding) is expected and non-fatal.
+ENSURE_HEAD="${ENSURE_HEAD:-/usr/local/share/git-service/ensure-mirror-head}"
+ensure_mirror_head() {
+    OUT="$("$ENSURE_HEAD" "$1" 2>&1)" && rc=0 || rc=$?
+    [ -n "$OUT" ] && retry_msg "[git-mirror] $OUT"
+    [ "$rc" -eq 3 ] && return 0
+    return "$rc"
+}
+
 # ── Order 437/441: START THE DAEMON FIRST ──────────────────────────────
 # Clone-only forges (order 437) clone from git://tillandsias-git the instant
 # they launch, and the per-ref startup retry-push (order 441) can take minutes
@@ -227,6 +255,10 @@ echo "$(date -Is) [git-service] daemon listening on 9418 (clones available; star
 # pass `--mirror` or `--all` here because the mirror is sparse by design.
 for mirror in /srv/git/*; do
     [ -d "$mirror" ] || continue
+    # Repair an unborn HEAD on ANY mirror before transport work — including
+    # local-only mirrors (no origin) that skip the fetch paths below but
+    # already hold forge-pushed heads a clone must be able to check out.
+    ensure_mirror_head "$mirror" || true
     REMOTE="$(git -C "$mirror" remote get-url origin 2>/dev/null || true)"
     [ -n "$REMOTE" ] || continue
 
@@ -241,6 +273,10 @@ for mirror in /srv/git/*; do
         # writes local heads and tags directly so clones over the git daemon see
         # them; subsequent reconcile fetches use the safe tracking refspec.
         FETCH_OUTPUT="$(git -C "$mirror" fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' 2>&1)" || retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
+        # The seed just wrote refs/heads/* into a repo whose HEAD may still
+        # point at a branch upstream never had (unborn-HEAD defect). Repoint
+        # HEAD now so the very first clone checks out a real branch.
+        ensure_mirror_head "$mirror" || true
         continue
     fi
 
@@ -289,6 +325,9 @@ for mirror in /srv/git/*; do
     if [ -n "$FF_OUTPUT" ]; then
         retry_msg "[git-mirror] Startup exported-head fast-forward: $FF_OUTPUT"
     fi
+    # New heads may have just arrived (e.g. an existing volume whose seed
+    # predates the unborn-HEAD fix); make sure HEAD names a cloneable one.
+    ensure_mirror_head "$mirror" || true
 
     # Per-ref relay (order 441): the OLD sweep fed ALL refs to one
     # `git push --atomic` call, so a single stranded (non-fast-forward) ref
