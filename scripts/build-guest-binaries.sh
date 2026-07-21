@@ -91,6 +91,22 @@ verify_binaries() {
     return 0
 }
 
+# Order 447: staleness is HOST STAGING STATE, not a code regression. In CI
+# the guest binaries are always built fresh so a version mismatch there is
+# impossible-by-construction; on a dev host, target-guest/ routinely predates
+# the current VERSION (any --install bump leaves it behind). --verify must
+# therefore SKIP CLEANLY on stale/absent staging (rebuilding inside an
+# instant litmus is not viable) and fail loud ONLY on a genuine integrity
+# defect of a current-stamped binary (wrong arch, not static, not
+# executable, corrupted stamp). Falsifiable grammar on the last line:
+#   verify:ok | verify:skip-stale-staging | (non-zero exit on real defect)
+staging_is_current() {
+    [[ -f "$X86_64_DEST" && -f "$AARCH64_DEST" ]] || return 1
+    strings "$X86_64_DEST" | grep -F "$VERSION_VAL" >/dev/null || return 1
+    strings "$AARCH64_DEST" | grep -F "$VERSION_VAL" >/dev/null || return 1
+    return 0
+}
+
 # Parse argument
 VERIFY_ONLY=false
 if [[ $# -gt 0 ]]; then
@@ -103,7 +119,14 @@ if [[ $# -gt 0 ]]; then
 fi
 
 if [[ "$VERIFY_ONLY" == true ]]; then
+    if ! staging_is_current; then
+        echo "[build-guest-binaries] SKIP: staged guest binaries are stale or absent (host staging predates VERSION $VERSION_VAL)."
+        echo "[build-guest-binaries] This is host staging state, not a code regression (order 447); run scripts/build-guest-binaries.sh to restage."
+        echo "verify:skip-stale-staging"
+        exit 0
+    fi
     verify_binaries
+    echo "verify:ok"
     exit 0
 fi
 

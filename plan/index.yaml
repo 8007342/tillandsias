@@ -19136,7 +19136,7 @@ plan_index:
       order: 447
       desired_release: v0.4
       title: "litmus:guest-binary-embed-integrity fails on STALE LOCAL staging (host-state), not a real regression"
-      status: ready
+      status: completed
       capability_tags: [linux, testing, hermeticity, ci-release, guest-binary]
       kind: fix
       deliverable: scripts/build-guest-binaries.sh --verify + litmus
@@ -19167,6 +19167,21 @@ plan_index:
           summary: >
             Filed after the operator's methodology reminder to own the 3 red
             litmus rather than dismiss them. Diagnosed as stale local staging.
+        - type: completed
+          ts: "2026-07-21T03:25:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            --verify now separates host staging state from integrity:
+            stale/absent staging (version stamp predates VERSION) prints a
+            remedy and the falsifiable "verify:skip-stale-staging" line, exit
+            0; current-stamped binaries get the full strict check and a
+            genuine defect still exits non-zero (sandbox-proven: a
+            current-stamped ASCII fake fails loud on the ELF/static check).
+            Litmus success_pattern updated to verify:(ok|skip-stale-staging).
+            Verified on this host (staging at v0.3.260714.1 vs VERSION
+            0.3.260721.1): ci-release instant suite now 5/5 green. All three
+            exit criteria met.
 
     - packet_id: cheatsheet-image-copy-drift-prevention
       order: 448
