@@ -1145,12 +1145,14 @@ ensure_forge_harnesses() {
     # Update each harness to latest. We use `npm install` (not `npm update`) so
     # a missing or removed package is installed rather than silently skipped.
     # Uses $NPM_CONFIG_PREFIX (persistent cache, set in lib-common.sh).
+    # opencode and claude-code left this list 2026-07-21 (order 459): they
+    # are curl-managed at every launch by require_opencode/require_claude
+    # (official vendor installers, persistent-cache backed). Only the
+    # npm-channel harnesses remain here.
     local pkg bin lg
-    for pkg in opencode-ai "@fission-ai/openspec" "@anthropic-ai/claude-code" "@openai/codex"; do
+    for pkg in "@fission-ai/openspec" "@openai/codex"; do
         case "$pkg" in
-            opencode-ai) bin=opencode ;;
             "@fission-ai/openspec") bin=openspec ;;
-            "@anthropic-ai/claude-code") bin=claude ;;
             "@openai/codex") bin=codex ;;
         esac
         # stdout MUST be muted too: this function is backgrounded by the agent
@@ -1202,6 +1204,15 @@ ensure_forge_harnesses() {
             break
         fi
     done
+    # Curl-managed harnesses (order 459) satisfy the floor from their own
+    # persistent cache locations. Default-expanded so fixtures that extract
+    # this function alone (test-harness-rollback.sh) stay set -u clean.
+    local floor_curl_root="${HARNESS_CURL_ROOT:-$HOME/.cache/tillandsias-project/harness-curl}"
+    if [ "$any_harness" = "0" ]; then
+        if [ -x "$floor_curl_root/opencode/bin/opencode" ] || [ -x "$floor_curl_root/claude/bin/claude" ]; then
+            any_harness=1
+        fi
+    fi
     if [ "$any_harness" = "0" ]; then
         rm -f "$update_stamp" 2>/dev/null || true
         trace_lifecycle "harness" "FIRST-RUN FLOOR: zero harnesses present after install attempt"
@@ -1285,7 +1296,7 @@ _require_harness() {
     # $1=friendly-name  $2=npm-package  $3=bin-name  → echoes resolved path
     local name="$1" pkg="$2" bin="$3" path errlog
     path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
-    [ -x "$path" ] || path="/usr/local/bin/$bin"
+    [ -x "$path" ] || path="${TILLANDSIAS_HARNESS_FALLBACK_DIR:-/usr/local/bin}/$bin"
     # Updater race (2026-07-11 gate incident): a SIBLING container's
     # background ensure_forge_harnesses replaces the shared prefix's bin
     # symlinks non-atomically, so a launch landing in that window sees the
@@ -1300,7 +1311,7 @@ _require_harness() {
             sleep 2
             waited=$((waited + 2))
             path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
-            [ -x "$path" ] || path="/usr/local/bin/$bin"
+            [ -x "$path" ] || path="${TILLANDSIAS_HARNESS_FALLBACK_DIR:-/usr/local/bin}/$bin"
             [ -x "$path" ] && break
         done
         [ -x "$path" ] && trace_lifecycle "harness" "$name appeared after ${waited}s (sibling updater)"
@@ -1341,12 +1352,107 @@ harness_missing_fatal() {
     exit 1
 }
 
+# ── Curl-installed harnesses (order 459) ───────────────────────────────
+# @trace spec:default-image
+# Operator directive 2026-07-21: Claude Code and OpenCode come from their
+# OFFICIAL vendor curl installers at CONTAINER LAUNCH — not npm@latest (the
+# order-284 rollback class: the npm channel repeatedly broke or lagged the
+# real releases, which is why order 431 wanted a pin) and not brew (Linux is
+# caskless for the siblings; attestation needs a token injection that drifts
+# the credential-free spec, order 435). IMAGE BUILD time cannot curl — the
+# enclave network/proxy does not exist during `podman build` (the original
+# reason these installers "failed in the Containerfile") — so the install
+# runs at LAUNCH with ephemerality + idempotency semantics:
+#   - the official installer runs every launch and is itself the idempotency
+#     layer: it resolves the current release and replaces the cached binary
+#     only when a NEWER one exists (warm restarts reuse instantly);
+#   - installs land on the PERSISTENT tool-cache volume
+#     ($HOME/.cache/tillandsias-project), surviving container restarts;
+#   - offline / proxy-down: fall back to the cached binary silently
+#     (fail-soft), fatal only when no cached binary exists either — same
+#     posture as the npm channel it replaces.
+# Codex/Antigravity stay on npm for now (operator: "maybe later").
+HARNESS_CURL_ROOT="$HOME/.cache/tillandsias-project/harness-curl"
+
+curl_install_opencode() {
+    OC_BIN=""
+    local dir="$HARNESS_CURL_ROOT/opencode/bin" tmp errlog
+    mkdir -p "$dir" 2>/dev/null || true
+    tmp="$(mktemp /tmp/opencode-install.XXXXXX 2>/dev/null || echo /tmp/opencode-install.sh)"
+    errlog="$(mktemp /tmp/opencode-install-log.XXXXXX 2>/dev/null || echo /tmp/opencode-install.err)"
+    # OPENCODE_INSTALL_DIR is the installer's documented target override; the
+    # binary downloads from GitHub releases (opencode.ai + github.com are
+    # both in the egress allowlist).
+    if curl -fsSL --max-time 60 https://opencode.ai/install -o "$tmp" 2>"$errlog" \
+       && OPENCODE_INSTALL_DIR="$dir" bash "$tmp" >>"$errlog" 2>&1 \
+       && [ -x "$dir/opencode" ]; then
+        trace_lifecycle "harness" "opencode curl-install OK ($("$dir/opencode" --version 2>/dev/null || echo '?'))"
+        rm -f "$tmp" "$errlog" 2>/dev/null || true
+    elif [ -x "$dir/opencode" ]; then
+        trace_lifecycle "harness" "opencode curl-install unreachable — reusing cached ($("$dir/opencode" --version 2>/dev/null || echo '?'))"
+        rm -f "$tmp" 2>/dev/null || true
+    else
+        trace_lifecycle "harness" "opencode curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+        rm -f "$tmp" 2>/dev/null || true
+        return 1
+    fi
+    OC_BIN="$dir/opencode"
+    return 0
+}
+
+curl_install_claude() {
+    CC_BIN=""
+    local share="$HARNESS_CURL_ROOT/claude/share" bindir="$HARNESS_CURL_ROOT/claude/bin"
+    local tmp errlog resolved launcher="$HOME/.local/bin/claude"
+    mkdir -p "$share" "$bindir" "$HOME/.local/bin" "$HOME/.local/share" 2>/dev/null || true
+    # The native installer writes versioned dists into ~/.local/share/claude
+    # and a launcher at ~/.local/bin/claude. Point the share dir at the
+    # persistent volume BEFORE the installer runs so every version it lays
+    # down survives the container.
+    if [ ! -L "$HOME/.local/share/claude" ]; then
+        rm -rf "$HOME/.local/share/claude" 2>/dev/null || true
+        ln -sfn "$share" "$HOME/.local/share/claude" 2>/dev/null || true
+    fi
+    tmp="$(mktemp /tmp/claude-install.XXXXXX 2>/dev/null || echo /tmp/claude-install.sh)"
+    errlog="$(mktemp /tmp/claude-install-log.XXXXXX 2>/dev/null || echo /tmp/claude-install.err)"
+    if curl -fsSL --max-time 60 https://claude.ai/install.sh -o "$tmp" 2>"$errlog" \
+       && bash "$tmp" >>"$errlog" 2>&1 \
+       && [ -x "$launcher" ]; then
+        trace_lifecycle "harness" "claude curl-install OK ($("$launcher" --version 2>/dev/null || echo '?'))"
+        # Cache the resolved launcher for offline restarts (it may be a
+        # binary or a symlink into the share dir — resolve, then copy).
+        resolved="$(readlink -f "$launcher" 2>/dev/null || echo "$launcher")"
+        install -m 0755 "$resolved" "$bindir/claude" 2>/dev/null || true
+        rm -f "$tmp" "$errlog" 2>/dev/null || true
+        CC_BIN="$launcher"
+        return 0
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+    if [ -x "$bindir/claude" ]; then
+        trace_lifecycle "harness" "claude curl-install unreachable — reusing cached ($("$bindir/claude" --version 2>/dev/null || echo '?'))"
+        install -m 0755 "$bindir/claude" "$launcher" 2>/dev/null || true
+        CC_BIN="$launcher"
+        [ -x "$CC_BIN" ] || CC_BIN="$bindir/claude"
+        return 0
+    fi
+    trace_lifecycle "harness" "claude curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+    return 1
+}
+
 require_opencode() {
+    # Curl channel first (order 459); legacy npm as the transition fallback
+    # so a half-warm cache from the old channel still launches.
+    if curl_install_opencode && [ -n "${OC_BIN:-}" ] && [ -x "$OC_BIN" ]; then
+        return 0
+    fi
     OC_BIN="$(_require_harness opencode opencode-ai opencode)"
     return 0
 }
 
 require_claude() {
+    if curl_install_claude && [ -n "${CC_BIN:-}" ] && [ -x "$CC_BIN" ]; then
+        return 0
+    fi
     CC_BIN="$(_require_harness claude-code "@anthropic-ai/claude-code" claude)"
     return 0
 }

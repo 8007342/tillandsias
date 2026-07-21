@@ -19849,3 +19849,53 @@ plan_index:
       exit_criteria:
         - "new agents see a 'Forge Startup Context' message upon launch"
         - "the context correctly lists the active milestone, MCP Plan Query tool, and CHEATSHEET EXPERT"
+
+    - packet_id: harness-curl-install-launch-time
+      order: 459
+      desired_release: v0.4
+      title: "Claude + OpenCode install via OFFICIAL curl installers at container launch — cache-persisted, ephemeral, idempotent (operator directive 2026-07-21)"
+      status: in_progress
+      capability_tags: [linux, forge, harness, ephemerality, idempotency]
+      operator_note: >
+        The Tlatoani 2026-07-21: image build could never curl (no enclave
+        network during podman build) which forced the npm/brew detours that
+        kept breaking (orders 284/431 npm@latest; order 435 brew token
+        drift). Now that image-creation vs first-run vs every-run are
+        distinct, curl-install the OFFICIAL OpenCode and Claude at container
+        launch: persist on the mounted cache for quick restarts, reuse the
+        existing binary transparently when no newer exists, load any newer
+        version every time. Ephemerality all the way. Codex/Antigravity may
+        follow later.
+      kind: enhancement
+      deliverable: images/default/lib-common.sh + images/proxy/allowlist.txt
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        require_opencode/require_claude now run the vendor curl installers
+        first (OPENCODE_INSTALL_DIR onto the persistent tool-cache volume;
+        Claude's ~/.local/share/claude symlinked onto it with a cached
+        launcher for offline restarts), falling back to the cached binary
+        when egress is down, then to the legacy npm channel during the
+        transition, and only then harness_missing_fatal. The 6h npm
+        background updater no longer manages these two; the first-run floor
+        counts the curl caches. .claude.ai added to the egress allowlist
+        (.opencode.ai/.github.com/.googleapis.com already present).
+      exit_criteria:
+        - "launch-time curl install for both harnesses, persisted on the tool-cache volume (done — code landed)"
+        - "offline/proxy-down launches reuse the cached binary silently; fatal only when nothing is cached (done — code landed, fixture-untestable without egress; verified by shape litmus + code review)"
+        - "npm updater no longer churns opencode-ai/@anthropic-ai/claude-code; first-run floor counts curl caches (done)"
+        - "litmus:harness-curl-install-shape green (done)"
+        - "LIVE: a rebuilt-image forge launch logs 'curl-install OK' for the lane harness, and a warm restart logs reuse — rides the next forge smoke alongside 452 slice 3"
+      events:
+        - type: in_progress
+          ts: "2026-07-21T21:15:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721"
+          host: linux
+          summary: >
+            Implementation landed (lib-common curl channel + allowlist +
+            updater shrink + floor extension), pinned by
+            litmus:harness-curl-install-shape. Residual: live launch proof
+            on a rebuilt forge image. Related: order 431's pin-or-assert
+            concern narrows to the codex/openspec npm remainder.

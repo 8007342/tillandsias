@@ -20,15 +20,17 @@ mkdir -p "$NPM_CONFIG_PREFIX/bin"
 # on stdout inside a command substitution, so stdout traces would corrupt it.
 trace_lifecycle() { echo "[lifecycle] $1 | ${*:2}" >&2; }
 
-# Stub npm: @latest installs a BROKEN opencode (exit 1); @1.2.3 installs a
-# working one. Other packages no-op successfully.
+# Stub npm: @latest installs a BROKEN codex (exit 1); @1.2.3 installs a
+# working one. Other packages no-op successfully. (Retargeted opencode ->
+# codex 2026-07-21: order 459 moved opencode/claude to the launch-time curl
+# channel, so codex is the npm-managed harness this rollback protects.)
 cat > npm <<'NPM'
 #!/bin/bash
-if [[ "$*" == *"ls -g"* ]]; then echo "opencode-ai@9.9.9-broken"; exit 0; fi
+if [[ "$*" == *"ls -g"* ]]; then echo "@openai/codex@9.9.9-broken"; exit 0; fi
 for a in "$@"; do
   case "$a" in
-    opencode-ai@latest) printf '#!/bin/bash\nexit 1\n' > "$NPM_CONFIG_PREFIX/bin/opencode"; chmod +x "$NPM_CONFIG_PREFIX/bin/opencode" ;;
-    opencode-ai@1.2.3) printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --auto"; echo "  --format"; exit 0;; esac\necho 1.2.3\n' > "$NPM_CONFIG_PREFIX/bin/opencode"; chmod +x "$NPM_CONFIG_PREFIX/bin/opencode" ;;
+    "@openai/codex@latest") printf '#!/bin/bash\nexit 1\n' > "$NPM_CONFIG_PREFIX/bin/codex"; chmod +x "$NPM_CONFIG_PREFIX/bin/codex" ;;
+    "@openai/codex@1.2.3") printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --json"; echo "  --output-last-message"; echo "  --dangerously-bypass-approvals-and-sandbox"; exit 0;; esac\necho 1.2.3\n' > "$NPM_CONFIG_PREFIX/bin/codex"; chmod +x "$NPM_CONFIG_PREFIX/bin/codex" ;;
   esac
 done
 exit 0
@@ -49,26 +51,26 @@ source funcs.sh
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # Fixture 1: broken @latest with a recorded last-good → rollback.
-echo "1.2.3" > "$(harness_last_good_file opencode)"
+echo "1.2.3" > "$(harness_last_good_file codex)"
 out="$(ensure_forge_harnesses 2>&1)"
 echo "$out" | grep -q "rolling back to last-good 1.2.3" || fail "no rollback attempt: $out"
 echo "$out" | grep -q "rollback to 1.2.3 OK" || fail "rollback did not verify: $out"
-[ "$("$NPM_CONFIG_PREFIX/bin/opencode" --version)" = "1.2.3" ] || fail "binary not rolled back"
+[ "$("$NPM_CONFIG_PREFIX/bin/codex" --version)" = "1.2.3" ] || fail "binary not rolled back"
 echo "fixture 1 ok: broken @latest rolled back to last-good"
 
 # Fixture 2: broken @latest with NO last-good → loud trace, no crash.
-rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock" "$NPM_CONFIG_PREFIX/bin/opencode"
-rm -f "$(harness_last_good_file opencode)" "$HOME/.cache/tillandsias-project/harness-update-stamp"
+rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock" "$NPM_CONFIG_PREFIX/bin/codex"
+rm -f "$(harness_last_good_file codex)" "$HOME/.cache/tillandsias-project/harness-update-stamp"
 out="$(ensure_forge_harnesses 2>&1)" || fail "updater must stay fail-soft"
 echo "$out" | grep -q "no last-good recorded" || fail "missing loud no-last-good trace: $out"
 echo "fixture 2 ok: no last-good is loud but non-fatal"
 
 # Fixture 3: healthy install records last-good.
 rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock"
-printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --auto"; echo "  --format"; exit 0;; esac\necho 9.9.9\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
-chmod +x "$NPM_CONFIG_PREFIX/bin/opencode"
-harness_record_last_good opencode opencode-ai || fail "record must succeed for a healthy binary"
-[ "$(cat "$(harness_last_good_file opencode)")" = "9.9.9-broken" ] || fail "last-good not recorded from npm ls"
+printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --json"; echo "  --output-last-message"; echo "  --dangerously-bypass-approvals-and-sandbox"; exit 0;; esac\necho 9.9.9\n' > "$NPM_CONFIG_PREFIX/bin/codex"
+chmod +x "$NPM_CONFIG_PREFIX/bin/codex"
+harness_record_last_good codex "@openai/codex" || fail "record must succeed for a healthy binary"
+[ "$(cat "$(harness_last_good_file codex)")" = "9.9.9-broken" ] || fail "last-good not recorded from npm ls"
 echo "fixture 3 ok: healthy install records last-good"
 
 # Fixture 4: sibling-updater race — harness invisible while the npm-update
@@ -77,16 +79,19 @@ echo "fixture 3 ok: healthy install records last-good"
 sed -n '/^_require_harness()/,/^}/p' "$ROOT/images/default/lib-common.sh" > req.sh
 # shellcheck disable=SC1091
 source req.sh
-rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
+rm -f "$NPM_CONFIG_PREFIX/bin/codex"
 mkdir -p "$HOME/.cache/tillandsias-project/npm-update.lock"
 (
     sleep 3
-    printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --auto"; echo "  --format"; exit 0;; esac\necho raced-ok\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
-    chmod +x "$NPM_CONFIG_PREFIX/bin/opencode"
+    printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --json"; echo "  --output-last-message"; echo "  --dangerously-bypass-approvals-and-sandbox"; exit 0;; esac\necho raced-ok\n' > "$NPM_CONFIG_PREFIX/bin/codex"
+    chmod +x "$NPM_CONFIG_PREFIX/bin/codex"
     sleep 1
     rmdir "$HOME/.cache/tillandsias-project/npm-update.lock"
 ) &
-resolved="$(_require_harness opencode opencode-ai opencode 2>/dev/null)"
+# Fallback override: a dev host's own /usr/local/bin/codex must not satisfy
+# the resolution under test (same hermeticity note as the floor check).
+mkdir -p "$WORK/empty-fallback-req"
+resolved="$(TILLANDSIAS_HARNESS_FALLBACK_DIR="$WORK/empty-fallback-req" _require_harness codex "@openai/codex" codex 2>/dev/null)"
 wait
 [ -x "$resolved" ] || fail "lock-wait did not resolve the sibling-installed harness (got: $resolved)"
 [ "$("$resolved")" = "raced-ok" ] || fail "resolved wrong binary"
@@ -111,8 +116,8 @@ echo "fixture 5 ok: pristine cache + dead egress fails LOUD and clears the caden
 # the order-181 fail-soft contract holds: silent fallback, no floor warning.
 rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock"
 rm -f "$HOME/.cache/tillandsias-project/harness-update-stamp"
-printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --auto"; echo "  --format"; exit 0;; esac\necho cached\n' > "$NPM_CONFIG_PREFIX/bin/opencode"
-chmod +x "$NPM_CONFIG_PREFIX/bin/opencode"
+printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --json"; echo "  --output-last-message"; echo "  --dangerously-bypass-approvals-and-sandbox"; exit 0;; esac\necho cached\n' > "$NPM_CONFIG_PREFIX/bin/codex"
+chmod +x "$NPM_CONFIG_PREFIX/bin/codex"
 out="$(PATH="$WORK/failnpm:$PATH" ensure_forge_harnesses 2>&1)" || fail "updater must stay fail-soft"
 echo "$out" | grep -q "WARNING: no agent harness is installed" \
     && fail "update path with a cached harness must stay silent: $out"

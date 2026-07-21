@@ -188,6 +188,7 @@ specs:
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
+  - litmus:harness-curl-install-shape
   - litmus:forge-firstrun-prebuilt-tools-arch-shape
   - litmus:brew-ondemand-tools-shape
   - litmus:harness-rollback-shape

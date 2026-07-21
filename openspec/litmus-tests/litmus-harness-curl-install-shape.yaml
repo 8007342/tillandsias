@@ -1,0 +1,54 @@
+# @trace spec:default-image
+name: litmus:harness-curl-install-shape
+spec: default-image
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Order 459 (operator directive 2026-07-21): Claude Code and OpenCode are
+  installed at CONTAINER LAUNCH via their OFFICIAL vendor curl installers
+  (image build cannot curl — the enclave network does not exist during
+  podman build), persisted on the tool-cache volume, with ephemerality +
+  idempotency semantics: the installer refreshes to newer versions every
+  launch, warm restarts reuse the cache instantly, offline falls back to
+  the cached binary. Replaces the npm@latest channel for these two (the
+  order-284 breakage class); codex/openspec remain npm-managed.
+preconditions:
+  - workspace contains images/default/lib-common.sh
+
+critical_path:
+  - step: "lib-common defines the curl channel and routes require_* through it"
+    command: "grep -q 'curl_install_opencode()' images/default/lib-common.sh && grep -q 'curl_install_claude()' images/default/lib-common.sh && grep -A3 'require_opencode()' images/default/lib-common.sh | grep -q curl_install_opencode && grep -A3 'require_claude()' images/default/lib-common.sh | grep -q curl_install_claude && echo 'ok: curl-channel-wired'"
+    timeout_ms: 5000
+    expected_behavior: "ok: curl-channel-wired"
+
+  - step: "the npm background updater no longer manages the curl-managed pair"
+    command: "! grep -E 'for pkg in' images/default/lib-common.sh | grep -E 'opencode-ai|claude-code' >/dev/null && echo 'ok: npm-loop-shrunk'"
+    timeout_ms: 5000
+    expected_behavior: "ok: npm-loop-shrunk"
+
+  - step: "egress allowlist covers both installer hosts"
+    command: "grep -q '^\\.opencode\\.ai$' images/proxy/allowlist.txt && grep -q '^\\.claude\\.ai$' images/proxy/allowlist.txt && echo 'ok: installer-egress-allowed'"
+    timeout_ms: 5000
+    expected_behavior: "ok: installer-egress-allowed"
+
+  - step: "lib-common parses"
+    command: "bash -n images/default/lib-common.sh && echo 'ok: lib-common-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: lib-common-parses"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "harness curl-install OK / reusing cached — never a silent missing harness"
+  log_fields:
+    spec: "default-image"
+    test: "harness-curl-install-shape"
+
+rollback:
+  on_failure: >
+    Do NOT revert to npm@latest for opencode/claude without operator sign-off
+    — the npm channel is the breakage class this replaces (orders 284/431).
+    Fail-soft ordering is: fresh curl install > cached curl binary > legacy
+    npm fallback > harness_missing_fatal.
+  command: "grep -n 'order 459' images/default/lib-common.sh"
