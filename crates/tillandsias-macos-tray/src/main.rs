@@ -310,6 +310,59 @@ mod tests {
         );
     }
 
+    /// Guest crash-loop LIVE-feed wiring pin (macOS write side — the follow-up
+    /// the wave-1 event named: "macOS LIVE feed/toast needs action_host.rs
+    /// wiring"). `action_host.rs` is `cfg(target_os = "macos")` and cannot be
+    /// type-checked on the Linux dev box, so this platform-independent
+    /// source-scan keeps the four load-bearing hooks from silently
+    /// regressing on any host — mirroring windows-tray's
+    /// `notify_icon_wires_in_crashloop_detection` pin.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn action_host_wires_in_crashloop_live_feed() {
+        let src = include_str!("action_host.rs");
+        // 1. The detector is fed from the single VM-status funnel — and LAST,
+        //    so the verdict overwrites the ordinary phase chip.
+        let apply_body = src
+            .split("fn apply_vm_status(")
+            .nth(1)
+            .expect("apply_vm_status must exist")
+            .split("\nasync fn ")
+            .next()
+            .unwrap();
+        let feed_at = apply_body
+            .find("note_crashloop_observation(")
+            .expect("apply_vm_status must feed the crash-loop detector");
+        let chip_at = apply_body
+            .rfind("apply_status_text_main_thread(")
+            .expect("apply_vm_status must write the chip");
+        assert!(
+            feed_at > chip_at,
+            "the crash-loop feed must run LAST (after the ordinary chip write)"
+        );
+        // 2. The detector is the shared control-wire one, seeded from and
+        //    persisted to the SAME state file --diagnose reads — the write
+        //    side that closes the wave-1 read-only gap.
+        assert!(
+            src.contains("CrashLoopDetector::load(") && src.contains("CRASH_LOOP_DETECTOR"),
+            "the live tray must seed the process-global detector from disk"
+        );
+        assert!(
+            src.contains(".save(&crate::diagnose::crashloop_state_path())"),
+            "every observation must persist state for --diagnose"
+        );
+        // 3. Edge-triggered banner via the osascript mechanism.
+        assert!(
+            src.contains("CRASH_LOOP_NOTIFIED"),
+            "the banner must be edge-triggered (once per trip)"
+        );
+        assert!(
+            src.contains("fn notify_crash_loop(") && src.contains("Guest crash-loop"),
+            "a trip must raise the Notification Center banner"
+        );
+    }
+
     /// Intentional EPHEMERAL RESET wiring pin (windows-260717-4). The macOS
     /// bodies are `cfg(target_os = "macos")` and cannot be type-checked on
     /// the Linux dev box, so this platform-independent source-scan keeps the

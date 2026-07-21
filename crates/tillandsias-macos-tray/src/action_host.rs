@@ -172,6 +172,34 @@ fn notify_provisioning_failed(reason: &str) {
     }
 }
 
+/// Fire the guest crash-loop Notification Center banner — the single
+/// most-important tray notification (order 250 ultra-minimal UX: "the
+/// guest is crash-looping, reset it"). Mirrors windows-tray's
+/// `show_balloon(..., BalloonSeverity::Error)` crash-loop toast in
+/// title/body framing, delivered through the SAME osascript mechanism
+/// as `notify_provisioning_failed` (a subprocess spawn — no AppKit, so
+/// no main-thread dispatch needed; safe from any thread). Best-effort:
+/// the chip carries the same verdict authoritatively.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn notify_crash_loop(reason: &str) {
+    let escaped = applescript_escape_single_quoted(reason);
+    let body = format!(
+        "display notification \"{escaped}\" with title \"Tillandsias\" \
+         subtitle \"Guest crash-loop\""
+    );
+    match std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&body)
+        .spawn()
+    {
+        Ok(_child) => {}
+        Err(err) => {
+            eprintln!("[tillandsias-tray] crash-loop notification: osascript spawn failed: {err}");
+        }
+    }
+}
+
 /// AppleScript double-quoted-string escaping: backslash + double-quote
 /// are the only metachars we need to handle inside `"..."`. Used by
 /// `notify_provisioning_failed` to embed a user-visible reason inside
@@ -1916,6 +1944,116 @@ fn apply_local_projects(
     true
 }
 
+/// Process-global live crash-loop detector, seeded once from the persisted
+/// state file (`crate::diagnose::crashloop_state_path()`) so a loop that
+/// tripped before the tray last restarted is still in view. std `Mutex` —
+/// observations are infrequent (per-phase-change, not per-frame). Mirrors
+/// windows-tray's `CRASH_LOOP_DETECTOR` (notify_icon.rs) byte-for-byte in
+/// spirit; the detector itself lives in control-wire so the two hosts
+/// cannot drift.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+static CRASH_LOOP_DETECTOR: std::sync::LazyLock<
+    Mutex<tillandsias_control_wire::crashloop::CrashLoopDetector>,
+> = std::sync::LazyLock::new(|| {
+    Mutex::new(
+        tillandsias_control_wire::crashloop::CrashLoopDetector::load(
+            &crate::diagnose::crashloop_state_path(),
+        ),
+    )
+});
+
+/// Edge-trigger guard so the crash-loop banner (the single most-important
+/// tray notification) fires once per trip, not on every subsequent push
+/// while the loop persists. Re-armed when the verdict clears. Mirrors
+/// windows-tray's `CRASH_LOOP_NOTIFIED`.
+static CRASH_LOOP_NOTIFIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Feed one live VM-status observation into the crash-loop detector, persist
+/// the updated state so a separate `--diagnose` process (static /
+/// filesystem-only on macOS) reads the SAME verdict the live tray just
+/// computed, and — on a NEW trip — surface the crash-loop as the single
+/// most-important notification: a Notification Center banner plus a chip
+/// overwrite with the pinned-grammar verdict (`🔴 crash-loop:<subsystem>`,
+/// matching windows' framing). Called LAST inside [`apply_vm_status`] so the
+/// verdict overwrites the ordinary phase chip, same as windows'
+/// chip-overwrite-last ordering. The terminal verdict clearing re-arms the
+/// edge trigger so a later recurrence toasts again.
+///
+/// This is the WRITE side that closes the wave-1 gap: `--diagnose` already
+/// knew how to READ `crashloop.state`, but the live tray never wrote it.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn note_crashloop_observation(
+    phase: tillandsias_control_wire::VmPhase,
+    last_event: Option<&str>,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_text: &Arc<Mutex<String>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use std::sync::atomic::Ordering::SeqCst;
+    let verdict = {
+        let Ok(mut det) = CRASH_LOOP_DETECTOR.lock() else {
+            return;
+        };
+        let v = det.observe_phase(phase, last_event, unix_now_secs());
+        if let Err(e) = det.save(&crate::diagnose::crashloop_state_path()) {
+            eprintln!("[tillandsias-tray] could not persist crash-loop state: {e}");
+        }
+        v
+    };
+    if verdict.is_crash_loop() {
+        // A crash-loop is THE single most-important state: overwrite the
+        // chip (and MenuState's status row, so a menu rebuild does not
+        // resurrect the ordinary phase text — same clobber class
+        // apply_vm_status fixes for the healthy path).
+        let chip = clamp_tray_status_chip(format!("\u{1F534} {}", verdict.verdict()));
+        {
+            let mut guard = menu_state.lock().unwrap();
+            if guard.status_text != chip {
+                guard.status_text = chip.clone();
+            }
+        }
+        let chip_for_dispatch = chip.clone();
+        let chip_status_text = status_text.clone();
+        let chip_status_item = status_item.clone();
+        let chip_status_menu_item = status_menu_item.clone();
+        dispatch_to_main_thread(move || {
+            *chip_status_text.lock().unwrap() = chip_for_dispatch.clone();
+            apply_status_text_main_thread(
+                &chip_for_dispatch,
+                &chip_status_item,
+                &chip_status_menu_item,
+            );
+        });
+        if !CRASH_LOOP_NOTIFIED.swap(true, SeqCst) {
+            eprintln!(
+                "[tillandsias-tray] guest crash-loop detected: {}",
+                verdict.verdict()
+            );
+            // osascript subprocess — no AppKit, so no main-thread dispatch
+            // needed (same as notify_provisioning_failed).
+            notify_crash_loop(&format!(
+                "The guest is crash-looping ({}) — it is not converging. \
+                 Reset the guest to recover; everything lives in the cloud, \
+                 you'll re-authenticate once.",
+                verdict.verdict()
+            ));
+        }
+    } else {
+        CRASH_LOOP_NOTIFIED.store(false, SeqCst);
+    }
+}
+
 /// Apply a live `VmStatus` observation — from a poll reply or an unrequested
 /// `VmStatusPush` frame — to the shared `MenuState` and status chip. Returns
 /// whether the menu needs a rebuild (podman_ready / login gating changed).
@@ -1985,6 +2123,18 @@ fn apply_vm_status(
             &chip_status_menu_item,
         );
     });
+    // Feed the same observation into the crash-loop detector LAST: on a trip
+    // it overwrites the chip set above with the crash-loop verdict (the
+    // single most-important surface) and persists state for `--diagnose`.
+    // Mirrors windows-tray's chip-overwrite-last ordering in apply_vm_status.
+    note_crashloop_observation(
+        phase,
+        last_event,
+        menu_state,
+        status_text,
+        status_item,
+        status_menu_item,
+    );
     rebuild_needed
 }
 
