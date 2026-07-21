@@ -19588,3 +19588,31 @@ plan_index:
             that wait_for_git_mirror_ready keys on. Remaining for 452 slice
             3: the CONCURRENT two-forge clone + transparent relay push proof
             on the full stack (vault + proxy), which needs a real launch.
+
+    - packet_id: v04-cross-platform-smoke-queue
+      order: 455
+      desired_release: v0.4
+      title: "Once v0.4 lands stable on Linux: smoke-test the macOS and Windows builds against it (operator directive 2026-07-20)"
+      status: pending
+      kind: verification
+      deliverable: plan/issues (dated PASS/FAIL smoke reports per platform)
+      depends_on: [concurrent-mirror-forges-current-checkout-and-coherence]
+      pickup_role: "windows + macos hosts"
+      capability_tags: [windows, macos, smoke, release-verification]
+      estimated_hours: 4
+      outcome: >
+        Operator directive 2026-07-20: "Our next aim will be to smoke test
+        the macos and windows versions, once we land this v0.4 stable for
+        linux." When the v0.4 tag exists and the Linux curl-install e2e has
+        a PASS record, the Windows host runs /build-install-and-smoke-test-e2e
+        (or /smoke-curl-install-and-test-e2e against the published v0.4
+        artifact — closes order 382 criterion 1 en route) and the macOS host
+        does the same (closes 382 criterion 3's VZ spot-check). Special
+        attention: the unborn-HEAD fix's FILESYSTEM-transport lane
+        (TILLANDSIAS_GIT_MIRROR_PATH, Windows/WSL + macOS staged clone) —
+        the git:// lane is live-proven on Linux, the filesystem lane is
+        fixture-only so far.
+      exit_criteria:
+        - "Windows: dated smoke report in plan/issues naming the v0.4 build; forge lands on a valid current checkout; findings filed as packets"
+        - "macOS: dated smoke report in plan/issues naming the v0.4 build; VZ lane checkout valid + current; findings filed as packets"
+        - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
