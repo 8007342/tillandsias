@@ -621,7 +621,11 @@ async fn handle_connection(
     }
 
     let (hello_from, client_capabilities) = match &first.body {
-        ControlMessage::Hello { from, capabilities, build_version: _ } => (from.clone(), capabilities.clone()),
+        ControlMessage::Hello {
+            from,
+            capabilities,
+            build_version: _,
+        } => (from.clone(), capabilities.clone()),
         other => {
             warn!(
                 spec = "vsock-transport",
@@ -647,7 +651,7 @@ async fn handle_connection(
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
-build_version: Some(env!(\"CARGO_PKG_VERSION\").to_string()),
+            build_version: Some(env!("CARGO_PKG_VERSION").to_string()),
         },
     };
     if let Err(err) = write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await {
@@ -1508,8 +1512,8 @@ mod tests {
                 body: ControlMessage::Hello {
                     from: from.to_string(),
                     capabilities: Vec::new(),
-                build_version: None,
-            },
+                    build_version: None,
+                },
             },
         )
         .await

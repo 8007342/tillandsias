@@ -135,8 +135,8 @@ async fn test_vsock_end_to_end_localhost() {
         body: ControlMessage::Hello {
             from: "vsock-e2e-test".to_string(),
             capabilities: vec!["VmStatusRequest".to_string()],
-                build_version: None,
-            },
+            build_version: None,
+        },
     };
     write_envelope(&mut stream, &hello)
         .await
@@ -149,6 +149,7 @@ async fn test_vsock_end_to_end_localhost() {
         ControlMessage::HelloAck {
             wire_version,
             ref server_caps,
+            ..
         } => {
             assert_eq!(wire_version, WIRE_VERSION, "wire version must match");
             assert!(

@@ -440,16 +440,13 @@ pub fn build(state: &MenuState) -> MenuStructure {
 
     let mut ver_str = format!("v{} \u{2014} By Tlatoa\u{0304}ni", state.version);
     if let Some(ref guest_ver) = state.guest_version
-        && guest_ver != &state.version {
-            ver_str.push_str(" (Update Pending)");
-        }
-    
+        && guest_ver != &state.version
+    {
+        ver_str.push_str(" (Update Pending)");
+    }
+
     // (4) Footer.
-    items.push(MenuItem::disabled(
-        ids::VERSION,
-        ver_str,
-        "informational",
-    ));
+    items.push(MenuItem::disabled(ids::VERSION, ver_str, "informational"));
     items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
 
     MenuStructure::Ready { items }
@@ -640,6 +637,7 @@ mod tests {
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: true,
             podman_ready: true,
+            guest_version: None,
             login_runtime_ready: true,
             target: TargetSurface::WindowsTray,
         };

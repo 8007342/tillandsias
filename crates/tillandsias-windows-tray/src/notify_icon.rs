@@ -2082,13 +2082,16 @@ fn collect_report() -> DiagnoseReport {
             {
                 Ok(s) => s,
                 Err(err) => {
-                    return WireReport {
-                        reachable: false,
-                        phase: None,
-                        podman_ready: None,
-                        last_event: None,
-                        error: Some(format!("hvsocket open: {err}")),
-                    };
+                    return (
+                        WireReport {
+                            reachable: false,
+                            phase: None,
+                            podman_ready: None,
+                            last_event: None,
+                            error: Some(format!("hvsocket open: {err}")),
+                        },
+                        guest_version,
+                    );
                 }
             };
             let mut client = Client::from_stream(
@@ -2101,13 +2104,17 @@ fn collect_report() -> DiagnoseReport {
             match client.handshake().await {
                 Ok((_, gv)) => guest_version = gv,
                 Err(err) => {
-                return WireReport {
-                    reachable: false,
-                    phase: None,
-                    podman_ready: None,
-                    last_event: None,
-                    error: Some(format!("handshake: {err}")),
-                };
+                    return (
+                        WireReport {
+                            reachable: false,
+                            phase: None,
+                            podman_ready: None,
+                            last_event: None,
+                            error: Some(format!("handshake: {err}")),
+                        },
+                        guest_version,
+                    );
+                }
             }
             if let Err(err) = crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await {
                 tracing::warn!(%err, "credentials delivery / handover check failed during monitor cycle");
@@ -2125,46 +2132,61 @@ fn collect_report() -> DiagnoseReport {
                         podman_ready,
                         last_event,
                         ..
-                    } => (WireReport {
-                        reachable: true,
-                        phase: Some(format!("{phase:?}, guest_version)")),
-                        podman_ready: Some(podman_ready),
-                        last_event,
-                        error: None,
-                    },
+                    } => (
+                        WireReport {
+                            reachable: true,
+                            phase: Some(format!("{phase:?}")),
+                            podman_ready: Some(podman_ready),
+                            last_event,
+                            error: None,
+                        },
+                        guest_version,
+                    ),
                     // Dispatcher returned Error (convergence packet item 2).
                     // Surface its code + message rather than just "unexpected reply".
-                    ControlMessage::Error { code, message, .. } => (WireReport {
-                        reachable: true,
+                    ControlMessage::Error { code, message, .. } => (
+                        WireReport {
+                            reachable: true,
+                            phase: None,
+                            podman_ready: None,
+                            last_event: None,
+                            error: Some(describe_wire_error(code, &message)),
+                        },
+                        guest_version,
+                    ),
+                    other => (
+                        WireReport {
+                            reachable: true,
+                            phase: None,
+                            podman_ready: None,
+                            last_event: None,
+                            error: Some(format!("unexpected reply: {}", other.kind())),
+                        },
+                        guest_version,
+                    ),
+                },
+                Err(err) => (
+                    WireReport {
+                        reachable: false,
                         phase: None,
                         podman_ready: None,
                         last_event: None,
-                        error: Some(describe_wire_error(code, &message)),
-                    }, guest_version),
-                    other => (WireReport {
-                        reachable: true,
-                        phase: None,
-                        podman_ready: None,
-                        last_event: None,
-                        error: Some(format!("unexpected reply: {}, guest_version)", other.kind())),
+                        error: Some(format!("VmStatusRequest: {err}")),
                     },
-                },
-                Err(err) => (WireReport {
-                    reachable: false,
-                    phase: None,
-                    podman_ready: None,
-                    last_event: None,
-                    error: Some(format!("VmStatusRequest: {err}, guest_version)")),
-                },
+                    guest_version,
+                ),
             }
         }),
-        Err(err) => (WireReport {
-            reachable: false,
-            phase: None,
-            podman_ready: None,
-            last_event: None,
-            error: Some(format!("tokio runtime build failed: {err}, guest_version)")),
-        },
+        Err(err) => (
+            WireReport {
+                reachable: false,
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some(format!("tokio runtime build failed: {err}")),
+            },
+            None,
+        ),
     };
 
     let recent_log_tail = std::fs::read_to_string(&log)

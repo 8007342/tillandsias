@@ -98,6 +98,7 @@ mod tests {
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: true,
             podman_ready: true,
+            guest_version: None,
             login_runtime_ready: true,
             target: TargetSurface::MacosTray,
         };
