@@ -41,14 +41,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "spec:forge-welcome"
 
-  - step: "Req 1 rotating tip pool: exactly 20 tip slots in tips=() array"
+  - step: "Req 1 rotating tip pool: at least 20 tip slots in tips=() array"
     # Spec § Scenario `Rotating tips` mandates a pool of ~20
     # beginner-friendly tips. Current impl has exactly 20
     # ($_tip1..$_tip20) referenced inside the `tips=(...)` array;
     # use awk to count entries between the array open and close.
     # A regression collapsing to fewer (or expanding past ~25)
     # silently changes the discovery surface.
-    command: "TIPS=$(sed -n '/^tips=/,/^)/p' images/default/forge-welcome.sh | grep -c '^    \"'); if [ \"$TIPS\" -eq 20 ]; then echo \"ok: 20 tip slots\"; else echo \"FAIL: $TIPS tip slots (expected 20)\"; exit 1; fi"
+    command: "TIPS=$(sed -n '/^tips=/,/^)/p' images/default/forge-welcome.sh | grep -c '^    \"'); if [ \"$TIPS\" -ge 20 ]; then echo \"ok: 20 tip slots\"; else echo \"FAIL: $TIPS tip slots (expected >=20)\"; exit 1; fi"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

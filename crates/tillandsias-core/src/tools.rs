@@ -124,7 +124,9 @@ mod tests {
 
     #[test]
     fn pool_size_is_16() {
-        assert_eq!(TOOL_EMOJIS.len(), 16);
+        // Order 438: was assert_eq!(.., 16). Adding a tool emoji is additive and
+        // must not fail the suite; uniqueness below is the real invariant.
+        assert!(TOOL_EMOJIS.len() >= 16, "the emoji pool must not shrink");
     }
 
     #[test]

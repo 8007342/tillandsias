@@ -1,0 +1,47 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-startup-per-ref-tolerance
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  The mirror startup retry-push must relay PER REF (order 441). Until this
+  change it fed every local ref to one `git push --atomic` call, so a single
+  stranded (non-fast-forward) ref rejected the whole transaction and no
+  fast-forwardable ref was flushed. Now each ref is its own atomic relay: a
+  fast-forwardable ref reaches upstream even when a sibling ref is stranded,
+  and a stranded ref is logged BY NAME. The LIVE single-push path (relay-refs.sh)
+  keeps its own `git push --atomic` and the never-`--mirror`/`--all` invariant.
+preconditions:
+  - workspace contains images/git/entrypoint.sh
+
+critical_path:
+  - step: "startup sweep does NOT feed all refs to one atomic push"
+    command: "grep -qE 'per-ref' images/git/entrypoint.sh && grep -q 'RELAY_REF=' images/git/entrypoint.sh && echo 'ok: per-ref-sweep-present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: per-ref-sweep-present"
+
+  - step: "stranded refs are logged by name, not silently swallowed"
+    command: "grep -q 'STRANDED (logged by name)' images/git/entrypoint.sh && echo 'ok: stranded-logged-by-name'"
+    timeout_ms: 5000
+    expected_behavior: "ok: stranded-logged-by-name"
+
+  - step: "offline fixture proves per-ref isolation (fast-forwardable flushes, stranded named)"
+    command: "scripts/test-git-mirror-startup-per-ref.sh && echo 'ok: per-ref-fixture-pass'"
+    timeout_ms: 30000
+    expected_behavior: "ok: per-ref-fixture-pass"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "startup retry-push relays per-ref; stranded refs reported by name"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-startup-per-ref-tolerance"
+
+rollback:
+  on_failure: >
+    Do NOT re-aggregate all refs into a single atomic push in the startup
+    sweep — that regresses order 441 (one stranded ref blocks every
+    fast-forwardable ref). Keep the per-ref loop and the stranded-by-name log.
+  command: "grep -n 'RELAY_REF=' images/git/entrypoint.sh"

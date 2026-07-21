@@ -93,8 +93,30 @@ case "$REMOTE_URL" in
             fi
             exit 1
         fi
-        BARE_URL="$(echo "$REMOTE_URL" | sed -E 's#https://[^@/]+@#https://#')"
-        PUSH_URL="https://oauth2:${TOKEN}@${BARE_URL#https://}"
+        # Order 424: the URL stays CLEAN. The token used to be interpolated
+        # here and passed as an argv element to git push/fetch, which put it in
+        # /proc/<pid>/cmdline and contradicted this repo's own stated invariant
+        # ("never appears in process argv", vault-cli.sh). Git's credential
+        # protocol hands it over on stdin instead.
+        PUSH_URL="$(echo "$REMOTE_URL" | sed -E 's#https://[^@/]+@#https://#')"
+        # Configure the helper via the ENVIRONMENT, not `git -c`, so the
+        # relay's command shape stays exactly as pinned by
+        # litmus:git-mirror-relay-verified-ack — that grep proves the push is
+        # --atomic with explicit refspecs and never --mirror/--all, which is
+        # the invariant that stops a repack from deleting upstream branches.
+        # Credential wiring must not cost us that proof.
+        #
+        # GIT_CONFIG_COUNT/KEY/VALUE is git's documented env form. The empty
+        # first helper RESETS inherited ones: credential.helper is ADDITIVE and
+        # a leftover helper would otherwise be consulted first
+        # (gitcredentials(7)).
+        GIT_CONFIG_COUNT=2
+        GIT_CONFIG_KEY_0=credential.helper
+        GIT_CONFIG_VALUE_0=""
+        GIT_CONFIG_KEY_1=credential.helper
+        GIT_CONFIG_VALUE_1=/usr/local/bin/git-credential-tillandsias
+        export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 \
+               GIT_CONFIG_KEY_1 GIT_CONFIG_VALUE_1
         ;;
 esac
 
@@ -102,16 +124,32 @@ REMOTE_URL_REDACTED="$(redact_url "$REMOTE_URL")"
 log_msg "Relaying $CREATE_UPDATE_COUNT update(s) and $DELETE_COUNT deletion(s) atomically to $REMOTE_URL_REDACTED"
 
 # Fetch upstream state BEFORE pushing so stale mirror tracking refs do not
-# cause a non-fast-forward rejection on a clean host. Use the safe tracking
-# refspec (refs/remotes/origin/*) so fetched heads never clobber the
-# mirror's exported refs/heads/*. A fetch failure is non-fatal — the push
-# will fail visibly and the post-failure reconcile will retry.
+# cause a non-fast-forward rejection on a clean host.
+#
+# Refspecs are MANDATORY and MUST be explicit. `git fetch <url>` with no
+# refspec ignores remote.origin.fetch entirely and updates ZERO refs (it only
+# writes FETCH_HEAD), while still reporting success — the mirror's exported
+# heads never advance, so an agent's fetch/rebase/retry loop reads the same
+# stale state forever and can never converge. See order 415.
+#
+# This pre-push fetch updates ONLY the tracking namespace
+# (refs/remotes/origin/*). It MUST NOT touch the mirror's exported
+# refs/heads/*: advancing an exported head before the relay decision would
+# pre-empt the rejection path, so a genuinely stale push would no longer be
+# refused and the post-failure reconcile (which is what teaches the agent to
+# rebase) would never fire. Fetching upstream into a separate namespace so it
+# can never clobber agent-pushed heads is the documented safe shape.
+# Exported heads are fast-forwarded only by the reconcile below, after a
+# rejection.
+#
+# A fetch failure is non-fatal — the push will fail visibly and the
+# post-failure reconcile will retry.
 # Escape quarantine so fetched objects are persisted to the main database.
 if [ "$CREATE_UPDATE_COUNT" -gt 0 ]; then
     log_msg "Pre-push fetch from upstream (staleness guard)..."
     # shellcheck disable=SC2086
     if PRE_FETCH="$(env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
-        git fetch "$PUSH_URL" 2>&1)"; then
+        git fetch "$PUSH_URL" '+refs/heads/*:refs/remotes/origin/*' 2>&1)"; then
         log_msg "Pre-push fetch succeeded"
     else
         PRE_FETCH_REDACTED="$(redact_output "$PRE_FETCH")"
@@ -135,10 +173,13 @@ log_msg "Atomic push to $REMOTE_URL_REDACTED FAILED: $OUTPUT_REDACTED"
 
 if [ -n "$PUSH_URL" ]; then
     log_msg "Attempting non-forced reconcile fetch from upstream..."
+    # Explicit non-forced refspecs are mandatory here for the same reason as the
+    # pre-push fetch above: a bare `git fetch <url>` updates zero refs while
+    # reporting success, which strands the agent's retry loop permanently.
     # Escape quarantine so fetched objects are persisted to the main database
     if FETCH_OUTPUT="$(env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
-        git fetch "$PUSH_URL" 2>&1)"; then
-        log_msg "Reconcile fetch succeeded. Mirror is now up to date."
+        git fetch "$PUSH_URL" 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*' '+refs/heads/*:refs/remotes/origin/*' 2>&1)"; then
+        log_msg "Reconcile fetch succeeded: exported heads fast-forwarded to upstream where possible."
     else
         FETCH_OUTPUT_REDACTED="$(redact_output "$FETCH_OUTPUT")"
         log_msg "Reconcile fetch non-fast-forward (expected if locally stranded): $FETCH_OUTPUT_REDACTED"

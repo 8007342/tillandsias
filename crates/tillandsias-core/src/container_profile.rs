@@ -369,9 +369,15 @@ pub fn terminal_profile() -> ContainerProfile {
                 value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
             },
             // @trace spec:git-mirror-service
+            // Order 436: PRESENCE FLAG, not a hostname. lib-common.sh only
+            // tests `-n "${TILLANDSIAS_GIT_SERVICE:-}"` to decide that network
+            // transport is available; the clone URL is hardcoded to
+            // git://tillandsias-git/. The old value "git-service" read as a
+            // host and was never resolved as one. Set to the canonical name so
+            // it cannot mislead a reader into thinking it selects a host.
             ProfileEnvVar {
                 name: "TILLANDSIAS_GIT_SERVICE",
-                value: EnvValue::Literal("git-service"),
+                value: EnvValue::Literal("tillandsias-git"),
             },
             // @trace spec:inference-container
             ProfileEnvVar {
@@ -651,9 +657,10 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
             value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
         },
         // @trace spec:git-mirror-service
+        // Order 436: presence flag, not a hostname — see the note above.
         ProfileEnvVar {
             name: "TILLANDSIAS_GIT_SERVICE",
-            value: EnvValue::Literal("git-service"),
+            value: EnvValue::Literal("tillandsias-git"),
         },
         // @trace spec:inference-container
         // Point forge containers to the inference service for local LLM access.

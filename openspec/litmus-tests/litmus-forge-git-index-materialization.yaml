@@ -1,0 +1,56 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-git-index-materialization
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  An absent .git/index in a forge container is a DATA-LOSS path, not an
+  inconvenience. The host-side facade builder cannot run `git read-tree` when
+  the launching host has no git binary (WSL2 and VZ guests ship none), so it
+  returned early leaving the index absent, with an in-code comment promising
+  "in-container materialization" that nothing ever implemented.
+
+  With no index, git reports every tracked file as BOTH staged-deleted and
+  untracked, and `git commit -am` commits the deletion of the entire tree. The
+  working tree still holds every file so nothing looks wrong locally — and the
+  mirror relays that commit straight to GitHub.
+
+  The fixture's case 3 reproduces the mass deletion WITHOUT the guard and proves
+  it is prevented WITH it. If that case cannot fail, the guard is decorative.
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains scripts/test-forge-git-index-materialization.sh
+
+critical_path:
+  - step: "absent index is materialised, and the mass-deletion commit is prevented"
+    command: "scripts/test-forge-git-index-materialization.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: forge git index materialization fixture (order 425)"
+
+  - step: "the guard runs on every lane via configure_git_identity"
+    command: "grep -Fq 'ensure_forge_git_index' images/default/lib-common.sh && sed -n '/^configure_git_identity()/,/^}/p' images/default/lib-common.sh | grep -Fq 'ensure_forge_git_index' && echo 'ok: wired for every lane'"
+    timeout_ms: 5000
+    expected_behavior: "ok: wired for every lane"
+
+  - step: "the guard refuses silently proceeding when it cannot rebuild"
+    command: "sed -n '/^ensure_forge_git_index()/,/^}/p' images/default/lib-common.sh | grep -Fq 'Refusing to continue silently' && echo 'ok: fails loud'"
+    timeout_ms: 5000
+    expected_behavior: "ok: fails loud"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "forge materialises an absent git index instead of allowing a mass-deletion commit"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "forge-git-index-materialization"
+
+rollback:
+  on_failure: >
+    Do NOT remove the guard to make this pass. If case 3a stops reproducing the
+    hazard, git's behaviour with an absent index has changed — verify that
+    directly before weakening anything, because the failure mode is a silently
+    emptied repository relayed upstream.
+  command: "sed -n '/^ensure_forge_git_index()/,/^}/p' images/default/lib-common.sh"

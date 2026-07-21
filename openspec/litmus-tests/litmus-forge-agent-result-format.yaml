@@ -1,0 +1,64 @@
+# @trace spec:codex-tray-launcher
+name: litmus:forge-agent-result-format
+spec: codex-tray-launcher
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  Two invariants for delegated agent runs (order 429).
+
+  1. The OpenCode lane must pass a permission flag that ACTUALLY EXISTS. It
+  passed `--dangerously-skip-permissions` for a long time — verified absent from
+  `opencode run --help` on the installed opencode 1.18.3, and silently swallowed
+  because yargs is non-strict. The lane's permissive behaviour was coming
+  entirely from `"permission": "allow"` in the config overlay, so the flag was
+  decorative. The real flag is `--auto`. A phantom flag is the worst kind of
+  configuration: it reads as deliberate, it never errors, and it does nothing.
+  Note Claude and Antigravity DO document --dangerously-skip-permissions; this
+  invariant is specific to the OpenCode lane.
+
+  2. Structured output must be OPT-IN. Delegated runs need machine-readable
+  JSONL so a dispatcher can distinguish success from failure from timeout, but
+  interactive and human-facing runs must keep the formatted default. Flipping
+  every run to JSON to serve automation would degrade the human path.
+
+preconditions:
+  - workspace contains images/default/entrypoint-forge-opencode.sh
+  - workspace contains images/default/entrypoint-forge-codex.sh
+
+critical_path:
+  - step: "the OpenCode lane never passes the phantom --dangerously-skip-permissions flag"
+    command: "! grep -qE '^[^#]*\\$OC_BIN.*dangerously-skip-permissions' images/default/entrypoint-forge-opencode.sh && echo 'ok: no phantom flag'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no phantom flag"
+
+  - step: "the OpenCode lane passes the real --auto permission flag"
+    command: "grep -Fq 'oc_auto_args=(--auto)' images/default/entrypoint-forge-opencode.sh && echo 'ok: real flag'"
+    timeout_ms: 5000
+    expected_behavior: "ok: real flag"
+
+  - step: "structured output is opt-in on both lanes, never unconditional"
+    command: "grep -Fq 'TILLANDSIAS_AGENT_RESULT_FORMAT' images/default/entrypoint-forge-opencode.sh && grep -Fq 'TILLANDSIAS_AGENT_RESULT_FORMAT' images/default/entrypoint-forge-codex.sh && echo 'ok: opt-in on both lanes'"
+    timeout_ms: 5000
+    expected_behavior: "ok: opt-in on both lanes"
+
+  - step: "the entrypoint prompt-routing fixture covers default and json shapes"
+    command: "scripts/test-opencode-entrypoint-prompt.sh"
+    timeout_ms: 120000
+    expected_behavior: "ok: opencode entrypoint prompt routing"
+
+observability:
+  traces:
+    - "@trace spec:codex-tray-launcher"
+  expected_log: "forge agent lanes pass real flags and emit structured output only on request"
+  log_fields:
+    spec: "codex-tray-launcher"
+    test: "forge-agent-result-format"
+
+rollback:
+  on_failure: >
+    Do NOT reintroduce --dangerously-skip-permissions on the OpenCode lane to
+    make this pass; confirm against `opencode run --help` for the pinned version
+    first. If opencode genuinely renamed --auto, update this litmus in the same
+    change as the entrypoint, citing the help output.
+  command: "grep -n 'auto\\|dangerously\\|RESULT_FORMAT' images/default/entrypoint-forge-opencode.sh"

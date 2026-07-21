@@ -23,6 +23,37 @@ set -eu
 VAULT_ADDR="${VAULT_ADDR:-https://vault:8200}"
 VAULT_TOKEN_FILE="${VAULT_TOKEN_FILE:-/run/secrets/vault-token}"
 
+# TLS verification against the Tillandsias intermediate CA (order 426).
+#
+# These calls used `curl -k` at six sites, which disabled verification on the
+# very requests that carry the Vault token — a MITM anywhere on the enclave
+# network could have harvested it. That predated a commit explicitly requiring
+# CA-authenticated HTTPS, and was unnecessary the whole time: the launcher
+# already bind-mounts the intermediate CA at /etc/tillandsias/ca.crt and sets
+# CURL_CA_BUNDLE to it whenever the Vault token secret is attached, which is
+# exactly when this shim runs.
+#
+# Verified empirically against the live Vault 1.18.5 listener: with --cacert the
+# health endpoint returns 200, and WITHOUT any CA it fails "curl failed to
+# verify the legitimacy of the server" — so verification is genuinely happening
+# rather than being silently skipped.
+#
+# We pass --cacert explicitly rather than relying on CURL_CA_BUNDLE being
+# exported, and we fail LOUD when the bundle is missing instead of degrading to
+# -k. A silent fall back to unverified TLS is the failure class this repo keeps
+# getting bitten by: it would keep working, look healthy, and quietly drop the
+# security property.
+VAULT_CACERT="${VAULT_CACERT:-${CURL_CA_BUNDLE:-/etc/tillandsias/ca.crt}}"
+
+require_cacert() {
+    if [ ! -r "$VAULT_CACERT" ]; then
+        echo "vault-cli: CA bundle not readable at $VAULT_CACERT" >&2
+        echo "vault-cli: refusing to talk to $VAULT_ADDR without TLS verification." >&2
+        echo "vault-cli: set VAULT_CACERT/CURL_CA_BUNDLE or mount the intermediate CA." >&2
+        exit 2
+    fi
+}
+
 usage() {
     cat <<EOF >&2
 Usage: vault-cli read [-field=<key>] <path>
@@ -88,7 +119,7 @@ cmd_read() {
             ;;
     esac
     token="$(read_token)"
-    if ! body="$(curl -k -fsS -H "X-Vault-Token: $token" \
+    if ! body="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
         "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
         echo "vault-cli: HTTP error reading $kv_path: $body" >&2
         exit 2
@@ -125,7 +156,7 @@ write_json() {
             ;;
     esac
     token="$(read_token)"
-    if ! response="$(curl -k -fsS -H "X-Vault-Token: $token" \
+    if ! response="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
         -d "$json_body" "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
         echo "vault-cli: HTTP error writing $kv_path: $response" >&2
         exit 2
@@ -165,7 +196,7 @@ cmd_write_stdin() {
 }
 
 cmd_health() {
-    curl -k -fsS "$VAULT_ADDR/v1/sys/health?sealedcode=200&uninitcode=200&standbyok=true" \
+    curl --cacert "$VAULT_CACERT" -fsS "$VAULT_ADDR/v1/sys/health?sealedcode=200&uninitcode=200&standbyok=true" \
         || { echo "vault-cli: health probe failed" >&2; exit 2; }
 }
 
@@ -185,13 +216,13 @@ cmd_renew_self() {
     fi
     token="$(read_token)"
     if [ -n "$body" ]; then
-        if ! response="$(curl -k -fsS -H "X-Vault-Token: $token" \
+        if ! response="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
             -d "$body" "$VAULT_ADDR/v1/auth/token/renew-self" 2>&1)"; then
             echo "vault-cli: HTTP error renewing token: $response" >&2
             exit 2
         fi
     else
-        if ! response="$(curl -k -fsS -H "X-Vault-Token: $token" \
+        if ! response="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
             -X POST "$VAULT_ADDR/v1/auth/token/renew-self" 2>&1)"; then
             echo "vault-cli: HTTP error renewing token: $response" >&2
             exit 2
@@ -219,7 +250,7 @@ cmd_lookup_self() {
         esac
     done
     token="$(read_token)"
-    if ! body="$(curl -k -fsS -H "X-Vault-Token: $token" \
+    if ! body="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
         "$VAULT_ADDR/v1/auth/token/lookup-self" 2>&1)"; then
         echo "vault-cli: HTTP error on lookup-self (token expired or invalid): $body" >&2
         exit 2
@@ -235,6 +266,13 @@ cmd_lookup_self() {
         printf '%s' "$body"
     fi
 }
+
+# Gate every network-touching subcommand on a readable CA bundle in ONE place,
+# so no future subcommand can silently reach Vault unverified by forgetting to
+# call require_cacert itself. usage/help do no I/O and are exempt.
+case "${1:-}" in
+    read|write|write-stdin|renew-self|lookup-self|health) require_cacert ;;
+esac
 
 case "${1:-}" in
     read) shift; cmd_read "$@" ;;

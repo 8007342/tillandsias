@@ -1,0 +1,69 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-gitdir-staging-chown
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  The guest headless (WSL2/VZ) runs as root, so everything
+  write_forge_repo_gitdir stages lands root-owned. The forge user (uid 1000,
+  no sudo) cannot read .git, git rev-parse fails, and the credential-channel
+  guard fail-closes every in-forge cycle (Windows curl-install live repro
+  2026-07-16: MO-SMOKE FAIL). Order 382 added chown_tree_to_forge_uid to
+  hand the staged facade and the bind-mounted host objects/refs trees to the
+  forge uid, gated on euid==0 so Linux native keep-id runs are a no-op.
+  This litmus pins that the chown code is present, root-gated, symlink-safe,
+  and that the in-container index materialization guard is wired into every
+  lane.
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains images/default/lib-common.sh
+
+critical_path:
+  - step: "staged facade gitdir is handed to the forge uid"
+    command: "src=$(cat crates/tillandsias-headless/src/main.rs); window=$(echo \"$src\" | sed -n '/^fn write_forge_repo_gitdir(/,/^fn /p'); echo \"$window\" | grep -q 'chown_tree_to_forge_uid(&root)' && echo 'ok: facade chown present' || { echo 'FAIL: facade not chowned'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: facade chown present"
+
+  - step: "bind-mounted host objects/refs trees are handed to the forge uid"
+    command: "src=$(cat crates/tillandsias-headless/src/main.rs); window=$(echo \"$src\" | sed -n '/^fn write_forge_repo_gitdir(/,/^fn /p'); echo \"$window\" | grep -q 'chown_tree_to_forge_uid(&host_gitdir.join(\"objects\"))' && echo \"$window\" | grep -q 'chown_tree_to_forge_uid(&host_gitdir.join(\"refs\"))' && echo 'ok: host trees chowned' || { echo 'FAIL: host objects/refs not chowned'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: host trees chowned"
+
+  - step: "chown is gated on running as root (guest lane only)"
+    command: "src=$(cat crates/tillandsias-headless/src/main.rs); helper=$(echo \"$src\" | sed -n '/^fn chown_tree_to_forge_uid(/,/^fn /p'); echo \"$helper\" | grep -q 'geteuid() } != 0' && echo 'ok: root-gated' || { echo 'FAIL: not gated on euid==0'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: root-gated"
+
+  - step: "chown uses lchown (no symlink following)"
+    command: "src=$(cat crates/tillandsias-headless/src/main.rs); helper=$(echo \"$src\" | sed -n '/^fn chown_tree_to_forge_uid(/,/^fn /p'); echo \"$helper\" | grep -q 'lchown' && echo 'ok: lchown used' || { echo 'FAIL: not using lchown'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: lchown used"
+
+  - step: "in-container index materialization guard is wired into configure_git_identity"
+    command: "grep -Fq 'ensure_forge_git_index' images/default/lib-common.sh && sed -n '/^configure_git_identity()/,/^}/p' images/default/lib-common.sh | grep -Fq 'ensure_forge_git_index' && echo 'ok: wired for every lane' || { echo 'FAIL: guard not wired'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: wired for every lane"
+
+  - step: "index materialization guard refuses silently proceeding when it cannot rebuild"
+    command: "sed -n '/^ensure_forge_git_index()/,/^}/p' images/default/lib-common.sh | grep -Fq 'Refusing to continue silently' && echo 'ok: fails loud' || { echo 'FAIL: guard does not fail loud'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: fails loud"
+
+  - step: "source-analysis unit test exists and passes"
+    command: "cargo test -p tillandsias-headless forge_gitdir_staging_hands_root_staged_trees_to_forge_uid 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "forge_gitdir_staging_hands_root_staged_trees_to_forge_uid ... ok"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "forge user can read .git after guest-lane staging"
+  log_fields:
+    spec: git-mirror-service
+    test: forge-gitdir-staging-chown
+
+rollback:
+  on_failure: "Do NOT remove the chown to make this pass. If the staging path no longer runs as root (order 309 least-privilege split lands), the chown becomes a no-op via the euid gate — verify that keep-id mapping still gives the forge uid access to .git before weakening anything."
+  command: "grep -A 20 'fn chown_tree_to_forge_uid' crates/tillandsias-headless/src/main.rs"

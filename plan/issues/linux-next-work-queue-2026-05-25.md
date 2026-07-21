@@ -58,3 +58,4 @@
 - 2026-07-17T10:35Z linux_immutable tlatoani-opencode: order 381 DONE (3d4cdee4) — advance-work-from-plan + coordinate-multihost-work wired to read loop_status ## Direction during selection.
 - 2026-07-17T09:45Z linux-macuahuitl-fable5 (advance-work): c7ce357c — order 385 reap tray-spawned terminal children; shared spawn_terminal_and_reap helper + behavioral zombie test; build.sh --check green.
 - 2026-07-17T10:25Z linux-macuahuitl-fable5 (advance-work): 89c97fc3 — order 387 extend --replace idempotency to proxy/git/router/vault; regression tests; build.sh --check green.
+- 2026-07-19T01:35Z  `c2b15d41`  Release v0.3.260719.1 — merged PR #77 to main (linux-next promotion incl. the full windows crash-loop drain 417-420 + Event Log relay), tagged, workflow_dispatch triggered (run 29668750741) from the WINDOWS host on operator order. Curl-install e2e verification runs same-session on the Windows lane.

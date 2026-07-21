@@ -148,6 +148,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:codex-forge-yolo-shape
+  - litmus:forge-agent-result-format
   coverage_ratio: 100
   last_verified: '2026-07-04'
 - spec_id: cli-bash-mode
@@ -319,6 +320,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-hot-cold-split-shape
+  - litmus:harness-contract-probe
   - litmus:forge-hot-cold-split-tmpfs-shape
   coverage_ratio: 92
   last_verified: '2026-05-30'
@@ -379,6 +381,13 @@ specs:
   status: active
   litmus_tests:
   - litmus:git-mirror-fetch-reconcile
+  - litmus:running-image-freshness
+  - litmus:git-mirror-no-anonymous-http-write
+  - litmus:git-mirror-no-anonymous-daemon-write
+  - litmus:git-mirror-startup-per-ref-tolerance
+  - litmus:git-mirror-unborn-head-repair
+  - litmus:forge-git-index-materialization
+  - litmus:forge-packed-refs-shared
   - litmus:enclave-isolation
   - litmus:git-mirror-safe-refspec-push
   - litmus:git-mirror-ref-convergence
@@ -387,8 +396,9 @@ specs:
   - litmus:forge-gitconfig-bidirectional-quarantine
   - litmus:forge-standard-gitconfig-path
   - litmus:forge-config-trust-cross-platform-parity
-  coverage_ratio: 80
-  last_verified: '2026-07-14'
+  - litmus:forge-gitdir-staging-chown
+  coverage_ratio: 83
+  last_verified: '2026-07-20'
 - spec_id: github-credential-health
   status: active
   litmus_tests:
@@ -914,6 +924,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:vault-auto-unseal-no-prompt
+  - litmus:codex-api-key-env-var
+  - litmus:vault-cli-verifies-tls
   - litmus:vault-policy-forge-cannot-read-github-token
   - litmus:git-mirror-safe-refspec-push
   - litmus:vault-github-token-capture-shape

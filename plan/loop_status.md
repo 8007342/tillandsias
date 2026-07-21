@@ -1,6 +1,161 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-19T02:35:00Z
+LastExecutionTime: 2026-07-21T01:45:00Z
+
+## Cycle 2026-07-21T01:45Z (linux coordinator — v0.4: checkout crash root-caused + fixed; knowledge distribution; delegation)
+
+- **Host**: linux_mutable coordinator (`2src/tillandsias`), `linux-next` from
+  c5708f79. Sibling heads: main 7914f2ea, windows-next 2b7321ee, osx-next 66ccfa70.
+- **Order 454 (NEW, completed): the "all harnesses crash at checkout" root
+  cause** — the mirror bare repo's HEAD was unborn (`git init --bare` →
+  master; upstream has no master), so every git:// clone exited 0 with an
+  EMPTY tree and 452's assert crashed every launch. Reproduced offline,
+  fixed via images/git/ensure-mirror-head.sh (init/seed/ff/no-origin repair,
+  prefers launcher-passed TILLANDSIAS_PROJECT_DEFAULT_BRANCH = host
+  checkout's branch), pinned by litmus:git-mirror-unborn-head-repair.
+  Live-host corroboration: empty tillandsias-mirror-tillandsias volume + no
+  git container after the 15:21→15:24 PDT stack bounce.
+- **Order 452 slice 2 (done)**: launcher gate wait_for_git_mirror_ready
+  (bounded 300s, after the inference gate, only when an upstream remote
+  exists) + reused-mirror re-reconcile (non-forced exported-head ff + HEAD
+  repair via podman exec). Guest clone backstop widened to ~60s backoff with
+  split diagnostics. Both cloud chokepoints now do ground-truth checkout
+  validation + quarantine-aside (never delete). Slice 3 (concurrent live
+  proof, folds in order 450 criterion 2) remains.
+- **Knowledge distribution (delegated to Codex/Terra, reviewed+integrated)**:
+  committed AGENTS.md (+ GEMINI.md / .github/copilot-instructions.md
+  symlinks) so ALL harnesses get the methodology/versioning/release
+  bootstrap; repaired 9 broken skills-farm entries (forge-quick-intro into
+  all 5 farms, forge-continuous-enhancement into 4, stale real copies →
+  symlinks, 2 text-files-as-links → real symlinks); registered
+  merge-to-main-and-release + multihost-orchestration alias in
+  methodology.yaml; added versioning/release_runbook entrypoints; added
+  agent_fleet_naming (BigPickle/Hy3/Terra/Sol/Tlatoāni/macuahuitl) to
+  distributed-work.yaml.
+- **Launcher fixes (delegated to BigPickle, reviewed+integrated)**: plan.yaml
+  `--repeat`→`--times` template bug; ./repeat opencode lane dead
+  `--dangerously-skip-permissions`→`--auto`; new `--model` passthrough for
+  codex/opencode lanes.
+- **Ledger hygiene (delegated to Codex/Sol, reviewed+integrated)**:
+  receive-pack blocker CLOSED with resolution note (order 450, b581de3d);
+  new packets: vault approle re-provision ERROR idempotency, stray empty
+  .git in data root; live stack-bounce observation appended to the
+  concurrent-forges packet. Coordinator filed
+  flaky-zombie-reap-test-precondition (reproduced on pristine c5708f79).
+- **Delegation note**: Hy3 (`opencode/hy3-free`) is currently UNUSABLE — Zen
+  pool returned 403 "account balance is insufficient"; rerouted its packet
+  to Codex/Sol. Direct-CLI delegation shapes recorded in
+  plan/issues/forge-agent-delegation-research-2026-07-19.md remain valid.
+- **Verification**: cargo clippy clean; 334/336 headless tests pass (2
+  environmental flakes, both reproduced on pristine HEAD, one newly filed);
+  scripts/test-git-mirror-unborn-head.sh PASS; YAML validated (ruby).
+- **Next**: rebuild git+forge images and live-verify a fresh-volume forge
+  launch (452 slice 3 + 450 c2), then the v0.4 drain-or-slip triage over the
+  36 open packets (EXPERTS bring-up vs slip is operator-gated), VERSION
+  conflict pre-resolution (merge main into linux-next keeping 0.3.260720.4),
+  then the destructive e2e gate for the release-evidence PASS record.
+
+## Cycle 2026-07-20T04:05Z (forge — v0.4 drain: git-mirror security + forge-safety)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260720T0351Z.
+  Credential guard `ok:forge-git-mirror`; boundary clean.
+- **Sibling heads**: main 7914f2ea, linux-next ffb97bba → +this cycle's 5 commits.
+- **Drained 4 v0.4 packets** (all forge-verifiable: shell + Rust unit tests +
+  litmus, no podman required):
+  - **order 423** git-mirror-unauthenticated-write-paths — CLOSED the remaining
+    anon write path: removed `git daemon --enable=receive-pack` (Decision 4
+    path 1); keep `--export-all` for agent read clones. Added
+    `litmus:git-mirror-no-anonymous-daemon-write`. Both anon write paths now
+    closed (lighttpd via 502823b7). NOTE: order 450 later REVERSED the daemon
+    receive-pack removal (it broke every forge push before order 322 shipped) and
+    retired the `test-git-daemon-no-anon-write.sh` fixture; the litmus now pins
+    the pre-receive RELAY boundary instead. The lighttpd removal stands.
+  - **order 442** e2e-gate-refuses-live-runtime — `live_runtime_is_present()`
+    detects a live forge/shared stack and emits `skip:live-runtime-present`
+    from all three host branches; `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1` still
+    forces. Added `test-e2e-preflight-live-runtime.sh` (fake podman) + extended
+    `litmus:e2e-eligibility-probe-shape`.
+  - **order 441** mirror-startup-sweep-per-ref-tolerant — startup retry-push
+    now relays PER REF (stranded ref logged by name, fast-forwardable ref
+    still flushes); LIVE `git push --atomic` path untouched. Added
+    `test-git-mirror-startup-per-ref.sh` + `litmus:git-mirror-startup-per-ref-tolerance`.
+  - **order 426** git-hack-obsolescence — VERIFIED complete: lighttpd (423) and
+    curl -k (4017c4bf) removals in tree; non-dead items split to 435/436.
+- **Fixtures**: the daemon-no-anon-write fixture was retired by order 450 (its
+  invariant was reversed); the other two fixtures PASS here.
+- **E2E gates**: `skip:no-podman-binary` (forge has no podman) — unchanged.
+- **Next**: remaining v0.4 forge-eligible packets include order 443
+  (concurrent-forges shared-stack refcount — large Rust change, needs podman
+  e2e to verify safely), order 148/150 (wire oscillation — needs live VM),
+  order 270/273 (attach flows — needs live VM), order 412 (forge-base CLI
+  utils — needs image rebuild). These need a mutable-Linux / podman host or
+  live VM to verify, so they are intentionally left for the next host.
+
+## Cycle 2026-07-20T03:51Z (forge — meta-orchestration: order 281 overlay self-heal)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260720T0351Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.sM8Tv4` clean.
+- **Sibling heads**: main 7914f2ea, linux-next 0324b15b.
+- **Order 281 (guest-podman-overlay-corruption-selfheal) — IMPLEMENTATION
+  COMPLETE**: added `is_overlay_corruption_error()` classifier (checks both
+  overlay path AND no-such-file signal), `OverlayHeal` trait seam +
+  `RealSystemReset`, one-shot `try_overlay_self_heal()` with loop guard
+  (healed flag set BEFORE reset). Wired into `run_init` build error path
+  with full retry + telemetry. 8 unit tests all green. cargo test 280/280,
+  clippy clean, `./build.sh --check` green. Remaining exit criterion: live
+  verification on a host with a corrupt overlay store.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped (forge container has no podman).
+- **Next**: order 281 needs live verification. Forge falls back to the next
+  ready packet on next cycle.
+
+## Cycle 2026-07-20 (forge — meta-orchestration: order 382 guest-lane litmus)
+
+- **Host**: forge, `linux-next`, agent linux-forge-opencode-20260720T0249Z.
+  Credential guard `ok:forge-git-mirror`; boundary snapshot
+  `/tmp/meta-orchestration-boundary.gNNeuW` clean (1 pre-existing dirty path:
+  `.opencode/package-lock.json`, sibling work).
+- **Sibling heads**: main 7914f2ea, linux-next aac7bcfa, windows-next
+  2b7321ee, osx-next 66ccfa70.
+- **Order 382 (guest-staged-gitdir-root-owned) — criterion 2 LANDED**: new
+  `litmus:forge-gitdir-staging-chown` (7 source-analysis steps, all green)
+  pins chown_tree_to_forge_uid presence, root-gating via geteuid(), lchown
+  (no symlink following), and the in-container index materialization guard
+  wiring. Bound in litmus-bindings.yaml (git-mirror-service coverage 80→83%).
+  build.sh --check green. Remaining: criterion 1 (fresh Windows curl-install
+  verification) and criterion 3 (macOS VZ spot-check) are platform-gated.
+- **E2E gates**: `e2e-preflight eligibility` → `skip:no-podman-binary` —
+  local-build gate skipped.
+- **Next**: order 382 criterion 1 needs a Windows curl-install of a release
+  carrying the chown fix; criterion 3 needs a macOS VZ spot-check. Both are
+  platform-gated. Forge falls back to the next ready packet on next cycle.
+
+## Cycle 2026-07-18 (linux_mutable macuahuitl — meta-orchestration toward v0.4)
+
+- **v0.4 DRAIN — order 398 (plan-yaml-compiled-editor) slice 2 rung 1**
+  (`a9f4909c`, in origin): the `tillandsias-plan` engine's first WRITE surface
+  — a VALIDATED, format-preserving `append-event` CLI that REFUSES to flush a
+  broken ledger, retiring the **order-263** duplicate-key/glued-packet class BY
+  CONSTRUCTION. Tests 7/7; build.sh --check green; DOGFOODED (the CLI wrote its
+  own 398 progress event; tillandsias-policy stays green). Remaining slices:
+  claim/status-flip edits, round-trip design decision, skill docs.
+- **Windows crashloop class CLOSED by the sibling**: orders 417/418
+  (`aeb2ba91`) + 419/420 (`afdad535`) all done — "v0.4 windows lane complete".
+- **macOS signing (operator Q)**: renaming/tar-wrapping the DMG does NOT help —
+  quarantine is set by the DOWNLOADER (browser), not name/format. curl-install
+  is already block-free; only notarization fixes the browser-DMG path
+  (Developer ID pending). Order 421 (v0.5) trims the curl over-warning.
+
+## COORD FLAG (linux→windows): rustfmt drift committed in windows-lane crates
+
+`cargo fmt --all --check` currently FAILS on committed drift in
+`crates/tillandsias-windows-tray/src/{eventlog,notify_icon,wsl_lifecycle}.rs`
+and `crates/tillandsias-vm-layer/src/{wsl.rs,materialize/wsl.rs}` (from the
+417-420 drains committed off a Windows host — import-ordering drift). FLAGGED
+not fixed (sibling-scope policy: the Windows lane is actively editing these;
+a linux reformat would collide). **Windows lane: run `cargo fmt` in your scope
+and commit** so the shared fmt gate goes green.
 
 ## WINDOWS LANE 2026-07-18/19 (operator-directed crash-loop cycle)
 
@@ -28,9 +183,18 @@ collision, both merges identical — reconciled in this merge commit).
 UPDATE 02:35Z: orders 417+418 DRAINED on windows-next (aeb2ba91) — the
 keepalive respawn loop is bounded (backoff + give-up + tray surfacing)
 and the registered fast path exec-probes before trusting registration
-(one-shot ephemeral self-heal). 419/420 remain open for the windows lane.
-Next: daily release, then purge + curl-install e2e verifying 417/418
-live.
+(one-shot ephemeral self-heal).
+FINAL 02:45Z: 419+420 ALSO DRAINED (launch-failure taxonomy + spec +
+litmus; auto-captured redacted diagnostics bundle) — the v0.4 windows
+lane is complete. RELEASE v0.3.260719.1 shipped (PR #77 → main → tag →
+run 29668750741, all three platform jobs green) and PASSED the
+operator-ordered full-wipe curl-install e2e on Windows: from-scratch
+provision to VM-ready in ~17.5 min with the Event Log relay live
+(provisioning phases visible in Event Viewer), .import-complete marker
+written, and a 12s probe-gated fast-path relaunch. LATEST TESTED DAILY:
+v0.3.260719.1. Two installer findings filed (transient --version verify
+flake; -Purge leaves .bak):
+plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
 
 ## Cycle 2026-07-18T06:40Z→07:00Z (linux_mutable macuahuitl — orchestration: FULL release backfill + macOS signing answer)
 

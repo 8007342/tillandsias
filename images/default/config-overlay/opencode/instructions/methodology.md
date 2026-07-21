@@ -2,6 +2,13 @@
 
 You are an AI assistant inside a Tillandsias development environment.
 
+## Task Guides
+
+If the project root contains `methodology.yaml` (the Tillandsias repository
+itself), read it FIRST: it is the authoritative bootstrap chain
+`methodology.yaml` → `methodology/bootstrap/router.yaml` → `plan/index.yaml`.
+Also read `AGENTS.md`.
+
 ## Start Here
 
 Before starting work, read the right guide:

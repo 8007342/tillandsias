@@ -82,6 +82,7 @@ mod vault_bootstrap;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
 // Process-global VmPhase mirror gating container mutations (order 234, R6).
+mod agent_result;
 mod catalog;
 mod runtime_phase;
 
@@ -1770,6 +1771,71 @@ fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
     )
 }
 
+/// Order 281: classify podman overlay corruption — a killed-build leaves a
+/// layer reference pointing at a missing diff dir, causing every subsequent
+/// build to fail with exit 125 and `Stat .../overlay/<hash>/diff: no such file
+/// or directory`. A blanket retry would mask non-corruption failures, so the
+/// classifier checks for BOTH the overlay path AND the missing-file signal.
+fn is_overlay_corruption_error(error: &str) -> bool {
+    let lower = error.to_lowercase();
+    lower.contains("overlay") && lower.contains("no such file")
+}
+
+/// Trait seam for `podman system reset --force` so the one-shot self-heal can
+/// be unit-tested without touching real podman state.
+trait OverlayHeal {
+    fn podman_system_reset_force(&self) -> Result<(), String>;
+}
+
+struct RealSystemReset;
+
+impl OverlayHeal for RealSystemReset {
+    fn podman_system_reset_force(&self) -> Result<(), String> {
+        let status = podman_command()
+            .args(["system", "reset", "--force"])
+            .status()
+            .map_err(|e| format!("Failed to spawn podman system reset: {e}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("podman system reset --force exited with {status}"))
+        }
+    }
+}
+
+/// Order 281: one-shot overlay self-heal. On overlay corruption, run
+/// `podman system reset --force` ONCE and return `Ok(true)` so the caller
+/// can retry the build exactly once. Returns `Ok(false)` when the error is
+/// not overlay corruption (caller should not retry). The `healed` flag
+/// prevents double-heal within a single build invocation — if the caller
+/// already healed and the retry still fails, it returns `Err` immediately.
+fn try_overlay_self_heal<H: OverlayHeal>(
+    error: &str,
+    healed: &mut bool,
+    healer: &H,
+    debug: bool,
+) -> Result<bool, String> {
+    if !is_overlay_corruption_error(error) {
+        return Ok(false);
+    }
+    if *healed {
+        return Err(format!(
+            "Overlay corruption self-heal already attempted; second build also failed: {error}"
+        ));
+    }
+    if debug {
+        eprintln!(
+            "[tillandsias] overlay corruption detected; running one-shot podman system reset --force"
+        );
+    }
+    // Set healed BEFORE the reset: even if reset fails, the flag prevents
+    // infinite retry loops. A failed reset + failed retry both mean the
+    // operator must intervene; the healed flag ensures we stop.
+    *healed = true;
+    healer.podman_system_reset_force()?;
+    Ok(true)
+}
+
 fn ensure_versioned_images(
     root: &Path,
     image_names: &[&str],
@@ -2383,6 +2449,101 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
 /// lane, severing the forge push channel (order 350 root cause).
 ///
 /// @trace spec:git-mirror-service, spec:enclave-network
+/// Why a project has no mirror redirect (order 425).
+///
+/// These three outcomes used to collapse into `Option::None`, which made a
+/// LOCAL-ONLY project and a BROKEN resolution produce byte-identical output:
+/// a forge gitconfig with no `[url]` block, and no signal anywhere about
+/// which had happened.
+///
+/// That matters because they need opposite responses. A project with no
+/// origin has nothing to redirect to and is perfectly healthy. A project
+/// whose origin exists but could not be READ (no git binary on the host, an
+/// unreadable `.git/config`) gets a forge whose pushes go straight at
+/// github.com and fail with "could not read Username" — while the launch
+/// banner cheerfully claims the mirror is wired.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum OriginResolution {
+    /// Origin configured and readable.
+    Found(String),
+    /// The repository is readable and genuinely has no origin remote.
+    /// A missing redirect is CORRECT here.
+    NoRemote,
+    /// We could not determine the origin. A missing redirect here is a
+    /// SILENT BREAKAGE and must be surfaced, never assumed benign.
+    Unresolvable(String),
+}
+
+/// Resolve the host origin, preserving WHY when there is none.
+pub(crate) fn resolve_host_project_origin(project_path: &Path) -> OriginResolution {
+    match std::process::Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args(["config", "--get", "remote.origin.url"])
+        .output()
+    {
+        Ok(output) => {
+            if output.status.success() {
+                let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if url.is_empty() {
+                    // git ran and reported success with no value.
+                    return OriginResolution::NoRemote;
+                }
+                return OriginResolution::Found(url);
+            }
+            // `git config --get` exits 1 for "key not found" — but it does so
+            // whether or not the path is a repository at all, so the exit code
+            // ALONE cannot tell "repo without an origin" from "not a repo".
+            // Confirm it is a work tree before calling the absence definitive;
+            // otherwise we would report a healthy NoRemote for a path we never
+            // actually interrogated.
+            if output.status.code() == Some(1) {
+                let is_repo = std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(project_path)
+                    .args(["rev-parse", "--is-inside-work-tree"])
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false);
+                if is_repo {
+                    OriginResolution::NoRemote
+                } else {
+                    OriginResolution::Unresolvable(format!(
+                        "{} is not a git work tree",
+                        project_path.display()
+                    ))
+                }
+            } else {
+                OriginResolution::Unresolvable(format!(
+                    "git config --get remote.origin.url exited {:?}",
+                    output.status.code()
+                ))
+            }
+        }
+        Err(e) => {
+            // No git binary (guest VMs ship none). Fall back to parsing
+            // .git/config directly; only if THAT also cannot answer is the
+            // origin genuinely unresolvable.
+            match parse_gitdir_origin_url(project_path) {
+                Some(url) => OriginResolution::Found(url),
+                None => {
+                    let git_dir = project_path.join(".git");
+                    if git_dir.exists() {
+                        // We could see the repo but not read an origin from
+                        // it — treat as absent rather than broken.
+                        OriginResolution::NoRemote
+                    } else {
+                        OriginResolution::Unresolvable(format!(
+                            "no git binary ({e}) and no readable .git at {}",
+                            project_path.display()
+                        ))
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
     if let Ok(output) = std::process::Command::new("git")
         .arg("-C")
@@ -2451,6 +2612,63 @@ fn parse_gitdir_origin_url(project_path: &Path) -> Option<String> {
         }
     }
     None
+}
+
+/// The branch a forge agent should land on: the host checkout's currently
+/// checked-out branch. Passed to the git-mirror container as
+/// `TILLANDSIAS_PROJECT_DEFAULT_BRANCH` so the bare mirror's HEAD symref names
+/// the operator's working branch — not `master` (the `git init --bare`
+/// default, which upstream may not even have: the unborn-HEAD defect that made
+/// every clone-only launch check out an EMPTY tree,
+/// plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md)
+/// and not GitHub's default branch (which strands agents off the coordination
+/// branch, e.g. `main` instead of `linux-next`).
+///
+/// Uses `git symbolic-ref --short HEAD` when a git binary exists, falling back
+/// to parsing `.git/HEAD` directly (git-less hosts — same rationale as
+/// [`parse_gitdir_origin_url`]). Detached HEAD → `None`; the mirror then falls
+/// back to upstream's default via ensure-mirror-head. The value flows into
+/// container env and an in-container reconcile command, so anything outside
+/// git's safe ref charset is rejected here instead of playing quoting games.
+fn read_host_project_current_branch(project_path: &Path) -> Option<String> {
+    fn sanitize(branch: &str) -> Option<String> {
+        let b = branch.trim();
+        if b.is_empty()
+            || !b
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/'))
+        {
+            return None;
+        }
+        Some(b.to_string())
+    }
+    if let Ok(output) = std::process::Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args(["symbolic-ref", "--short", "HEAD"])
+        .output()
+        && output.status.success()
+        && let Ok(name) = String::from_utf8(output.stdout)
+        && let Some(clean) = sanitize(&name)
+    {
+        return Some(clean);
+    }
+    // `.git` dir, or `.git` pointer file (`gitdir: …`) followed one hop.
+    let dot_git = project_path.join(".git");
+    let head_path = if dot_git.is_dir() {
+        dot_git.join("HEAD")
+    } else {
+        let pointer = std::fs::read_to_string(&dot_git).ok()?;
+        let target = pointer.strip_prefix("gitdir:")?.trim();
+        let gitdir = if Path::new(target).is_absolute() {
+            PathBuf::from(target)
+        } else {
+            project_path.join(target)
+        };
+        gitdir.join("HEAD")
+    };
+    let head = std::fs::read_to_string(head_path).ok()?;
+    sanitize(head.trim().strip_prefix("ref: refs/heads/")?)
 }
 
 /// Best-effort mint of a Vault AppRole token for a git-mirror container.
@@ -2529,6 +2747,7 @@ fn build_git_run_args(
     certs_dir: &Path,
     image: &str,
     project_remote_url: Option<&str>,
+    project_default_branch: Option<&str>,
     vault_token_secret: Option<&str>,
 ) -> Vec<String> {
     // Named podman volume for the bare repo. Persists across container
@@ -2576,6 +2795,19 @@ fn build_git_run_args(
     {
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_PROJECT_REMOTE_URL={url}"));
+    }
+    // @trace spec:git-mirror-service
+    // The mirror's HEAD symref must name the branch agents should land on
+    // (the host checkout's current branch). Without it `git init --bare`
+    // leaves HEAD -> refs/heads/master, upstream may have no master, and a
+    // clone of the seeded mirror checks out an EMPTY tree (unborn-HEAD
+    // defect, 2026-07-20). The entrypoint consumes this at init/seed time
+    // via ensure-mirror-head.
+    if let Some(branch) = project_default_branch
+        && !branch.is_empty()
+    {
+        args.push("--env".into());
+        args.push(format!("TILLANDSIAS_PROJECT_DEFAULT_BRANCH={branch}"));
     }
     if let Some(secret_name) = vault_token_secret {
         // @trace spec:tillandsias-vault — git-mirror reads the GitHub token
@@ -2756,6 +2988,94 @@ async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<
         "inference did not become ready within {MAX_ATTEMPTS}s. Last probe: {last}. \
          Inspect `podman logs tillandsias-inference` for ollama startup errors \
          (common: ollama binary self-install failed, or model cache volume missing)."
+    ))
+}
+
+/// Order 452 slice 2: launcher-side git-mirror readiness gate.
+///
+/// A clone-only forge (order 437) clones `git://tillandsias-git/<project>` the
+/// moment its entrypoint runs, but a FRESH mirror volume seeds in a background
+/// sweep — a full-repo fetch from upstream through the proxy that can take
+/// minutes — while the guest's clone backstop only waits ~60s. Block the
+/// launch until the mirror's bare repo has a resolvable HEAD (the exact ground
+/// truth `clone_project_from_mirror` asserts after its clone), mirroring the
+/// [`wait_for_inference_ready`] pattern: bounded, truthful, loud on timeout.
+///
+/// Probes via `podman exec` inside the mirror container so readiness is
+/// measured on the served repo itself, not on network reachability.
+/// @trace spec:git-mirror-service
+async fn wait_for_git_mirror_ready(
+    client: &PodmanClient,
+    container_name: &str,
+    project_name: &str,
+    debug: bool,
+) -> Result<(), String> {
+    use std::time::Duration;
+    // First seed is a full-repo fetch through the proxy: minutes, not seconds
+    // (this workspace's pack alone is >100 MiB). Bounded so a dead upstream
+    // still fails the launch loudly instead of hanging forever.
+    const MAX_ATTEMPTS: u32 = 300;
+    let repo_path = format!("/srv/git/{project_name}");
+    let mut last = String::from("no probe attempted");
+    for attempt in 1..=MAX_ATTEMPTS {
+        match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    container_name.into(),
+                    "git".into(),
+                    "-C".into(),
+                    repo_path.clone(),
+                    "rev-parse".into(),
+                    "--quiet".into(),
+                    "--verify".into(),
+                    "HEAD".into(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [forge-launch] git mirror ready on attempt {attempt}/{MAX_ATTEMPTS}"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(out) => {
+                last = format!(
+                    "mirror HEAD not resolvable yet (exit {})",
+                    out.status.unwrap_or(-1)
+                );
+            }
+            Err(e) => {
+                last = format!("probe failed: {e}");
+            }
+        }
+        if attempt == 5 {
+            // One non-debug notice so an operator watching a first launch
+            // knows the wait is the mirror seed, not a hang.
+            eprintln!(
+                "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {MAX_ATTEMPTS}s max)..."
+            );
+        }
+        if debug {
+            eprintln!(
+                "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+            );
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    Err(format!(
+        "git mirror {container_name} did not become cloneable within {MAX_ATTEMPTS}s: {last}. \
+         A forge launched now would land on an empty tree, so the launch is refused \
+         (fresh-checkout invariant, \
+         plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
+         Inspect `podman logs {container_name}` — common causes: the upstream seed fetch \
+         is still running or failed (network/proxy), upstream is empty, or the mirror's \
+         HEAD is unborn on an old image (ensure-mirror-head repairs it on container start)."
     ))
 }
 
@@ -3491,6 +3811,63 @@ fn projects_root() -> PathBuf {
     PathBuf::from(home).join("src")
 }
 
+/// Ground-truth checkout validation (fresh-checkout invariant, 2026-07-20):
+/// a path counts as a valid checkout only when it is a git worktree whose
+/// HEAD resolves to a commit. A bare `path.exists()` gate accepted empty,
+/// partial, and broken dirs — the operator's deleted-checkout relaunch landed
+/// an agent on an empty tree
+/// (plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md).
+///
+/// On git-less hosts (the VM rootfs deliberately ships no `git`) this
+/// degrades to the presence of `.git` — the strongest signal available there,
+/// and exactly the old behavior for that lane.
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+pub(crate) fn is_valid_git_checkout(path: &Path) -> bool {
+    if !path.join(".git").exists() {
+        return false;
+    }
+    match std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["rev-parse", "--quiet", "--verify", "HEAD"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+    {
+        Ok(status) => status.success(),
+        // No git binary on this host: `.git` presence is the best available
+        // ground truth (git-less VM lane).
+        Err(_) => true,
+    }
+}
+
+/// Move an invalid checkout ASIDE — never delete it — so a fresh clone can
+/// materialize at the canonical path. The dir may contain user data (an
+/// aborted clone can coexist with unrelated files); renaming preserves every
+/// byte while keeping repeated launches idempotent (each quarantine gets a
+/// unique timestamped name).
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+pub(crate) fn quarantine_invalid_checkout(path: &Path) -> Result<PathBuf, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("checkout");
+    let aside = path.with_file_name(format!("{name}.invalid-{stamp}"));
+    std::fs::rename(path, &aside).map_err(|e| {
+        format!(
+            "cannot move invalid checkout {} aside to {}: {e}",
+            path.display(),
+            aside.display()
+        )
+    })?;
+    Ok(aside)
+}
+
 /// Resolve `--cloud owner/repo` to an on-disk checkout under
 /// [`projects_root`], cloning through the containerized `gh` flow on first
 /// use. 1:1 with the Linux tray's `handle_launch_cloud_project`: idempotent
@@ -3509,6 +3886,18 @@ fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, Stri
         .filter(|s| !s.is_empty())
         .ok_or_else(|| format!("--cloud value has no repo name: {nwo}"))?;
     let target = projects_root().join(short_name);
+    // Ground-truth gate (fresh-checkout invariant, 2026-07-20): bare
+    // `exists()` accepted empty/partial/broken checkouts and launched agents
+    // onto them. Quarantine anything invalid (rename aside, never delete —
+    // the dir may hold user data), then materialize fresh below.
+    if target.exists() && !is_valid_git_checkout(&target) {
+        let aside = quarantine_invalid_checkout(&target)?;
+        eprintln!(
+            "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
+            target.display(),
+            aside.display()
+        );
+    }
     if !target.exists() {
         eprintln!(
             "[tillandsias] cloud: cloning {} into {} ...",
@@ -3535,20 +3924,176 @@ fn resolve_cloud_project_checkout(_nwo: &str, _debug: bool) -> Result<String, St
     Err("--cloud requires a build with the tray or listen-vsock feature".to_string())
 }
 
-fn forge_container_name(project_name: &str) -> String {
-    format!("tillandsias-{project_name}-forge")
+/// Sanitize a worker/instance identifier into something Podman accepts inside a
+/// container name (`[a-zA-Z0-9][a-zA-Z0-9_.-]*`). Anything else collapses to
+/// `-`, and the result is lowercased and length-capped so a caller cannot blow
+/// past Podman's name limits or smuggle separators.
+fn sanitize_forge_instance(raw: &str) -> String {
+    let cleaned: String = raw
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    cleaned
+        .trim_matches('-')
+        .chars()
+        .take(32)
+        .collect::<String>()
+        .trim_end_matches('-')
+        .to_string()
 }
 
-fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> String {
-    if matches!(mode, ForgeAgentMode::OpenCode) {
-        forge_container_name(project_name)
-    } else {
-        format!("tillandsias-{project_name}-forge-{}", mode.slug())
+/// Optional worker/instance component for forge container names (order 427).
+///
+/// WHY THIS EXISTS. Forge container names were
+/// `tillandsias-<project>-forge[-<mode>]` with no instance component, while the
+/// launcher passes `--replace`. `--replace` is correct and load-bearing for a
+/// lane relaunching *itself* — order 314/378, otherwise Podman dies 125 "name
+/// already in use" against a stale exited container — but it meant a SECOND
+/// worker on the same project silently DESTROYED the first. Two agents could
+/// not work a project concurrently, which blocks delegation entirely.
+///
+/// Identity comes from the environment rather than a threaded parameter because
+/// this architecture runs one `tillandsias` process per worker: the dispatcher
+/// spawns a process with `TILLANDSIAS_FORGE_INSTANCE` set, and every name
+/// derived inside that process — container, hostname, Vault lease consumer —
+/// must agree. Reading it at the single naming boundary makes that agreement
+/// structural instead of something each call site has to remember.
+///
+/// Unset or empty preserves today's behaviour EXACTLY, so interactive launches
+/// and every existing fixture are unaffected.
+/// Whether a forge launch shares the operator's host checkout (legacy) or
+/// clones a fresh tree from the mirror (order 437, default).
+///
+/// Pure over its input so it is unit-testable without env mutation; the
+/// process-env reader `forge_uses_host_mount()` is the thin wrapper.
+///
+/// DEFAULT is clone-only. The shared host-mount is opt-in via
+/// `TILLANDSIAS_FORGE_HOST_MOUNT=1` for the solo live-edit workflow, and is an
+/// escape hatch: if clone-only ever misbehaves, setting the var restores the
+/// old behaviour with no rebuild.
+fn forge_host_mount_enabled(raw: Option<&str>) -> bool {
+    matches!(raw, Some("1"))
+}
+
+fn forge_uses_host_mount() -> bool {
+    forge_host_mount_enabled(
+        std::env::var("TILLANDSIAS_FORGE_HOST_MOUNT")
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// Turn a raw instance identifier into the name suffix. Pure so the naming
+/// rules are unit-testable without mutating process environment, which is
+/// racy under the parallel test runner.
+fn forge_instance_suffix_from(raw: Option<&str>) -> String {
+    match raw {
+        Some(raw) => {
+            let clean = sanitize_forge_instance(raw);
+            if clean.is_empty() {
+                String::new()
+            } else {
+                format!("-{clean}")
+            }
+        }
+        None => String::new(),
     }
 }
 
+fn forge_instance_suffix() -> String {
+    forge_instance_suffix_from(std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok().as_deref())
+}
+
+fn forge_container_name_with_instance(project_name: &str, instance: Option<&str>) -> String {
+    format!(
+        "tillandsias-{project_name}-forge{}",
+        forge_instance_suffix_from(instance)
+    )
+}
+
+fn forge_container_name(project_name: &str) -> String {
+    format!(
+        "tillandsias-{project_name}-forge{}",
+        forge_instance_suffix()
+    )
+}
+
+fn forge_container_name_for_mode_with_instance(
+    project_name: &str,
+    mode: ForgeAgentMode,
+    instance: Option<&str>,
+) -> String {
+    if matches!(mode, ForgeAgentMode::OpenCode) {
+        forge_container_name_with_instance(project_name, instance)
+    } else {
+        format!(
+            "tillandsias-{project_name}-forge-{}{}",
+            mode.slug(),
+            forge_instance_suffix_from(instance)
+        )
+    }
+}
+
+fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> String {
+    forge_container_name_for_mode_with_instance(
+        project_name,
+        mode,
+        std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok().as_deref(),
+    )
+}
+
+/// Per-worker agent state directories (order 428). Pure so the rules are
+/// unit-testable without mutating process env, which is racy under the
+/// parallel test runner.
+///
+/// Returns an EMPTY vec when no instance is set, so single-worker launches keep
+/// the tools' own defaults byte-identically.
+///
+/// `XDG_CONFIG_HOME` is deliberately absent: the forge bakes OpenCode's
+/// permission overlay to `/home/forge/.config/opencode/config.json`, the
+/// standard config location, so redirecting it per worker would orphan that
+/// overlay and silently drop the lane's permissive defaults. Config is shared
+/// read-only input; the documented races are in mutable state (OpenCode's
+/// unlocked `auth.json`, Codex's truncate-then-write `auth.json` and SQLite).
+fn forge_worker_state_env(instance: Option<&str>) -> Vec<(String, String)> {
+    let worker = sanitize_forge_instance(instance.unwrap_or(""));
+    if worker.is_empty() {
+        return Vec::new();
+    }
+    vec![
+        (
+            "XDG_DATA_HOME".to_string(),
+            format!("/home/forge/.local/share/{worker}"),
+        ),
+        (
+            "XDG_STATE_HOME".to_string(),
+            format!("/home/forge/.local/state/{worker}"),
+        ),
+        // codex reads CODEX_HOME. The vault restore helpers were made
+        // CODEX_HOME-aware in the same change (they previously hardcoded
+        // $HOME/.codex/auth.json) so the restored credential lands where codex
+        // actually looks — otherwise this isolation would recreate order 430's
+        // "credential written where the tool never reads" defect.
+        (
+            "CODEX_HOME".to_string(),
+            format!("/home/forge/.codex-{worker}"),
+        ),
+    ]
+}
+
+/// Instance-scoped so two concurrent workers do not collide on the enclave
+/// network's DNS. Sharing a hostname would make container-to-container
+/// resolution non-deterministic between workers.
 fn forge_hostname(project_name: &str) -> String {
-    sanitize_hostname(&format!("forge-{project_name}"))
+    sanitize_hostname(&format!("forge-{project_name}{}", forge_instance_suffix()))
 }
 
 fn build_forge_common_args(
@@ -3619,8 +4164,21 @@ async fn remove_shared_stack_containers(client: &PodmanClient) {
 /// through the proxy — tearing it down under them breaks every curl with
 /// "Could not resolve proxy: proxy" (operator repro 2026-07-11).
 fn is_active_lane_container(name: &str, state: &str) -> bool {
-    let running = matches!(state.to_ascii_lowercase().as_str(), "running" | "up");
-    running
+    // Order 443: count a lane that is ALIVE OR STARTING, not only "running".
+    // A sibling forge mid-launch — podman "created" / "configured" /
+    // "initializing", e.g. still installing its agent harness or cloning from
+    // the mirror — is an active lane. Counting only "running" let an exiting
+    // sibling observe "no active lanes" and tear the shared stack down under a
+    // forge that was seconds from ready (observed live 2026-07-20: launching a
+    // second forge bounced proxy/git/inference under the first). Exclude only
+    // TERMINAL/dead states; everything else means the lane is alive or coming
+    // alive.
+    let s = state.to_ascii_lowercase();
+    let alive = !matches!(
+        s.as_str(),
+        "exited" | "stopped" | "dead" | "removing" | "removed" | ""
+    );
+    alive
         && (name.contains("-forge")
             || name.contains("-login-")
             || name.starts_with("tillandsias-browser-"))
@@ -3795,8 +4353,9 @@ fn build_opencode_forge_args(
     match mode {
         ForgeMode::Cli => {
             // When a prompt is provided, the entrypoint execs
-            // `opencode run --dangerously-skip-permissions "<prompt>"` which is
-            // non-interactive.  Skip --interactive --tty so podman does not
+            // `opencode run --auto "<prompt>"` which is non-interactive.
+            // (It passed --dangerously-skip-permissions until order 429; that
+            // flag does not exist in opencode and was silently swallowed.)  Skip --interactive --tty so podman does not
             // attempt to claim the terminal (which causes SIGTTIN/SIGTTOU /
             // stopped T state when the parent is in a harness PTY).
             // @trace plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
@@ -3886,7 +4445,11 @@ fn build_opencode_forge_args(
             "--env".into(),
             format!("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
         ]);
-    } else {
+    } else if forge_uses_host_mount() {
+        // Opt-in legacy shared host-mount (TILLANDSIAS_FORGE_HOST_MOUNT=1):
+        // bind-mounts the operator's real checkout rw and installs the gitdir
+        // facade. Retained for the solo live-edit workflow where a single user
+        // wants their edits visible on the host without a commit+relay.
         args.extend([
             "--env".into(),
             "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
@@ -3897,6 +4460,20 @@ fn build_opencode_forge_args(
             ),
         ]);
         append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);
+    } else {
+        // Clone-only (order 437, DEFAULT): the entrypoint's
+        // clone_project_from_mirror clones a FRESH checkout from the enclave
+        // mirror over git://. No host-checkout bind mount and no gitdir facade —
+        // the working tree is forge-owned by construction, so concurrent forges
+        // never share a tree and never land on a dirty checkout, and the whole
+        // facade data-loss surface (notmpcopyup mask, index materialisation
+        // [425], packed-refs live-mount [432]) is simply not in play. Set the
+        // presence flag that selects the network-clone transport in
+        // clone_project_from_mirror.
+        args.extend([
+            "--env".into(),
+            "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
+        ]);
     }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
@@ -4477,6 +5054,10 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let client = PodmanClient::new();
     let mut failed_images = Vec::new();
     let mut identities = HashMap::<String, ImageBuildIdentity>::new();
+    // Order 281: one-shot overlay corruption self-heal flag. At most one
+    // `podman system reset --force` per init invocation — a second corruption
+    // after heal means a deeper problem that needs operator intervention.
+    let mut overlay_healed = false;
 
     for image in &images {
         let (build_args, dependency_digests) = match image_build_inputs(image, &identities) {
@@ -4618,16 +5199,121 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         let duration_ms = build_started.elapsed().as_millis() as u64;
 
         if let Err(e) = result {
-            if debug {
-                eprintln!("FAILED {}: {}", image, e);
-            }
-            let failed =
-                image_build_event("image.build.failed", &build_id, image, &identity, &decision)
+            // Order 281: overlay corruption self-heal — a killed-build leaves
+            // a dangling layer ref. One-shot podman system reset --force, then
+            // retry exactly once. Non-overlay failures are NOT retried.
+            match try_overlay_self_heal(&e, &mut overlay_healed, &RealSystemReset, debug) {
+                Ok(true) => {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias] overlay heal succeeded; retrying build of {image}"
+                        );
+                    }
+                    let retry_result = build_image_with_logging(
+                        &root,
+                        image,
+                        &identity,
+                        &build_args,
+                        &log_file,
+                        debug,
+                    );
+                    let retry_duration_ms = build_started.elapsed().as_millis() as u64;
+                    if let Err(retry_e) = retry_result {
+                        if debug {
+                            eprintln!("RETRY FAILED {}: {}", image, retry_e);
+                        }
+                        let failed = image_build_event(
+                            "image.build.failed",
+                            &build_id,
+                            image,
+                            &identity,
+                            &decision,
+                        )
+                        .with_outcome("failure", retry_duration_ms, 1)
+                        .with_redacted_error("overlay_heal_retry_failed", &retry_e);
+                        emit_image_build_event(&failed, debug);
+                        state.mark_failed(image);
+                        failed_images.push((image.to_string(), retry_e));
+                    } else {
+                        let alias_result = rt.block_on(apply_image_aliases(&client, &identity));
+                        if let Err(alias_e) = alias_result {
+                            let failed = image_build_event(
+                                "image.build.failed",
+                                &build_id,
+                                image,
+                                &identity,
+                                &decision,
+                            )
+                            .with_outcome("failure", retry_duration_ms, 1)
+                            .with_redacted_error("alias_update_failed", &alias_e);
+                            emit_image_build_event(&failed, debug);
+                            state.mark_failed(image);
+                            failed_images.push((image.to_string(), alias_e));
+                        } else {
+                            let image_id = rt
+                                .block_on(client.image_inspect(&identity.canonical_tag))
+                                .ok()
+                                .and_then(|json| image_inspect_metadata(&json).ok())
+                                .and_then(|(image_id, _)| image_id);
+                            let mut completed = image_build_event(
+                                "image.build.completed",
+                                &build_id,
+                                image,
+                                &identity,
+                                &decision,
+                            )
+                            .with_outcome(
+                                "success_after_heal",
+                                retry_duration_ms,
+                                0,
+                            );
+                            completed.image_id = image_id.clone();
+                            emit_image_build_event(&completed, debug);
+                            state.mark_success(image);
+                            state.set_image_identity(image, &decision, image_id);
+                            if debug {
+                                println!("SUCCESS {} (after overlay heal)", image);
+                            }
+                        }
+                    }
+                }
+                Ok(false) => {
+                    // Not overlay corruption — record failure as before.
+                    if debug {
+                        eprintln!("FAILED {}: {}", image, e);
+                    }
+                    let failed = image_build_event(
+                        "image.build.failed",
+                        &build_id,
+                        image,
+                        &identity,
+                        &decision,
+                    )
                     .with_outcome("failure", duration_ms, 1)
                     .with_redacted_error("podman_build_failed", &e);
-            emit_image_build_event(&failed, debug);
-            state.mark_failed(image);
-            failed_images.push((image.to_string(), e));
+                    emit_image_build_event(&failed, debug);
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), e));
+                }
+                Err(heal_err) => {
+                    // Heal itself failed or already healed once.
+                    if debug {
+                        eprintln!("FAILED {}: {} (heal: {})", image, e, heal_err);
+                    }
+                    let failed = image_build_event(
+                        "image.build.failed",
+                        &build_id,
+                        image,
+                        &identity,
+                        &decision,
+                    )
+                    .with_outcome("failure", duration_ms, 1)
+                    .with_redacted_error("overlay_heal_failed", &heal_err);
+                    emit_image_build_event(&failed, debug);
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), heal_err));
+                }
+            }
         } else {
             let alias_result = rt.block_on(apply_image_aliases(&client, &identity));
             if let Err(e) = alias_result {
@@ -5238,11 +5924,13 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 "status-git",
                 &git_container_name,
                 // Status-check has no real project — there is no host origin
-                // URL to forward and the bare repo is throwaway.
+                // URL to forward, no branch to pin, and the bare repo is
+                // throwaway.
                 &build_git_run_args(
                     project_name,
                     &certs_dir,
                     &git_image,
+                    None,
                     None,
                     git_vault_secret.as_deref(),
                 ),
@@ -6124,10 +6812,33 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
 
     let config_path = forge_git_dir.join(format!("{}.config", project_name));
 
-    // Read the host origin URL for mirror redirect.
-    let origin_url = read_host_project_origin_url(project_path)
-        .as_deref()
-        .and_then(sanitize_forge_origin_url);
+    // Read the host origin URL for mirror redirect (order 425).
+    //
+    // Resolve WHY there is no origin rather than collapsing every reason into
+    // None. A local-only project legitimately has no redirect; a project whose
+    // origin could not be READ produces a forge that pushes at github.com and
+    // fails with "could not read Username" while the banner claims the mirror
+    // is wired. Those need opposite responses, so they must not look alike.
+    let resolution = resolve_host_project_origin(project_path);
+    let origin_url = match &resolution {
+        OriginResolution::Found(url) => sanitize_forge_origin_url(url),
+        OriginResolution::NoRemote => None,
+        OriginResolution::Unresolvable(reason) => {
+            eprintln!(
+                "[tillandsias] WARNING: cannot determine the git origin for project '{project_name}' \
+                 ({reason})."
+            );
+            eprintln!(
+                "[tillandsias]   The forge will launch WITHOUT a mirror redirect, so in-container \
+                 `git push` will target the upstream directly and fail on credentials."
+            );
+            eprintln!(
+                "[tillandsias]   This is NOT the same as a project with no remote — resolution \
+                 failed. Fix the checkout or install git on this host."
+            );
+            None
+        }
+    };
 
     let mut config = String::new();
     config.push_str("[safe]\n");
@@ -6158,6 +6869,37 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
                 .unwrap_or(origin.strip_prefix("git@github.com:").unwrap_or(""));
             let https_form = format!("https://github.com/{}.git", nwo);
             config.push_str(&format!("\tinsteadOf = {}\n", https_form));
+        }
+    } else {
+        // Order 425: state WHY there is no redirect, in the artifact itself.
+        // Reading a generated config and seeing no [url] block used to be
+        // ambiguous between "correct, local-only project" and "resolution
+        // broke" — the audit that found this initially mis-read three healthy
+        // local-only projects as defects for exactly that reason. A file that
+        // cannot be misread is worth three lines.
+        config.push('\n');
+        match &resolution {
+            OriginResolution::NoRemote => {
+                config.push_str(
+                    "# No mirror redirect: this project has no origin remote.\n\
+                     # This is CORRECT for a local-only checkout — there is no upstream to mirror.\n",
+                );
+            }
+            OriginResolution::Unresolvable(reason) => {
+                config.push_str(
+                    "# No mirror redirect: THE ORIGIN COULD NOT BE RESOLVED. This is a FAULT,\n\
+                     # not a local-only project. In-container `git push` will target the upstream\n\
+                     # directly and fail on credentials.\n",
+                );
+                config.push_str(&format!("# reason: {reason}\n"));
+            }
+            OriginResolution::Found(_) => {
+                // Origin found but rejected by sanitize_forge_origin_url.
+                config.push_str(
+                    "# No mirror redirect: an origin was found but was not a form this mirror\n\
+                     # can redirect (see sanitize_forge_origin_url). Pushes will not be relayed.\n",
+                );
+            }
         }
     }
 
@@ -6388,11 +7130,48 @@ fn append_forge_repo_gitdir_mount_args(
         // MB .git into 8m, which dies at container start with
         // `crun: write: No space left on device` (live repro 2026-07-15).
         // A fail-closed mask must be EMPTY by definition.
-        if project_path.join(".git").is_dir() {
+        // Order 425: the mask itself is CORRECT and verified — with an empty
+        // .git every git command fails "not a git repository", and a linked
+        // worktree whose gitdir is unmounted fails "not a git repository:
+        // (null)". Both are genuinely fail-closed: no data loss, no silent
+        // wrong behaviour. Do NOT "fix" this into something that falls back to
+        // the host .git.
+        //
+        // What was missing is DIAGNOSIS. The container started and the agent
+        // hit a bare "not a git repository" with no way to learn why, which
+        // reads as a broken forge rather than a refused one. Say it at launch.
+        let dot_git = project_path.join(".git");
+        if dot_git.is_dir() {
+            eprintln!(
+                "[tillandsias] WARNING: could not build the git facade for '{project_name}'; \
+                 masking {target} so git FAILS CLOSED rather than touching the host .git."
+            );
+            eprintln!(
+                "[tillandsias]   In-container git will report \"not a git repository\". That is \
+                 deliberate refusal, not a broken image."
+            );
             args.extend([
                 "--tmpfs".into(),
                 format!("{target}:size=8m,mode=0700,notmpcopyup"),
             ]);
+        } else if dot_git.exists() {
+            // `.git` is a FILE — a linked worktree. write_forge_repo_gitdir
+            // only handles a real .git directory, so no facade and no mask:
+            // the container sees a gitdir pointer at a host path that is not
+            // mounted. Also fail-closed ("not a git repository: (null)"), but
+            // entirely unexplained without this.
+            eprintln!(
+                "[tillandsias] WARNING: '{project_name}' is a LINKED WORKTREE (.git is a file, \
+                 not a directory)."
+            );
+            eprintln!(
+                "[tillandsias]   The forge git facade does not support linked worktrees, so \
+                 in-container git will fail \"not a git repository: (null)\"."
+            );
+            eprintln!(
+                "[tillandsias]   Launch the forge against the main checkout instead, or convert \
+                 this worktree to a standalone clone."
+            );
         }
         return;
     };
@@ -6408,6 +7187,58 @@ fn append_forge_repo_gitdir_mount_args(
                 source.display()
             ),
         ]);
+    }
+
+    // Order 432: packed-refs must be LIVE, not a point-in-time copy.
+    //
+    // objects/ and refs/ are bind-mounted (shared, live) while the facade
+    // builder COPIES packed-refs. That split is a data-loss hazard, reproduced
+    // end to end:
+    //
+    //   host `git gc` packs every loose ref into the host's packed-refs and
+    //   DELETES the loose ref files. refs/ is shared, so the container's view
+    //   empties. Its packed-refs is a stale copy that predates the gc, so the
+    //   refs are in neither place:
+    //
+    //     container, before host gc:  git rev-parse feature-x  -> <sha>
+    //     container, after  host gc:  fatal: Needed a single revision
+    //                                 for-each-ref -> EMPTY
+    //
+    //   It gets worse than "lost refs". With HEAD pointing at an unresolvable
+    //   branch the container sees tracked files as UNTRACKED, and a commit
+    //   creates an ORPHANED ROOT COMMIT (rev-list --count HEAD == 1) — the
+    //   agent's work silently detaches from all history.
+    //
+    // auto-gc makes this a SILENT, routine trigger, not an exotic one.
+    // Mounting packed-refs alongside refs/ gives the container the same view
+    // the host has, so a host-side repack is simply visible.
+    let host_packed_refs = gitdir.root.parent().map(|_| ()).and_then(|_| {
+        // The facade's own copy lives at root/packed-refs; the live file is in
+        // the host gitdir next to the refs/ we already share.
+        let live = gitdir.refs.parent()?.join("packed-refs");
+        live.is_file().then_some(live)
+    });
+    match host_packed_refs {
+        Some(live) => args.extend([
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target={target}/packed-refs",
+                live.display()
+            ),
+        ]),
+        None => {
+            // No packed-refs yet. Deliberately NOT created here: an empty
+            // packed-refs makes `git fsck` warn (emptyPackedRefsFile), and
+            // fabricating files in the operator's repository to satisfy a
+            // mount is the wrong trade. The window is real but narrow — it
+            // opens only if a host gc creates packed-refs mid-session — so
+            // say so rather than paper over it.
+            eprintln!(
+                "[tillandsias] note: {} has no packed-refs; if a host-side `git gc` runs \
+                 during this session the forge can lose its refs (order 432).",
+                project_path.display()
+            );
+        }
     }
 }
 
@@ -7108,6 +7939,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
+                    read_host_project_current_branch(&project_path_resolved).as_deref(),
                     git_vault_secret.as_deref(),
                 ),
                 debug,
@@ -7128,33 +7960,19 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .await
             .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
 
-        // gap-3 phase-2g: start the typed-event stderr tail on the
-        // SUPPORT containers (router/proxy/git/inference). The
-        // foreground forge is intentionally NOT in this list — it's
-        // served attached to the user's terminal by
-        // `run_container_attached_observed` below and tailing it here
-        // would double-print every line.
-        //
-        // DiagnosticsHandle::Drop aborts every spawned `podman logs -f`
-        // task, so dropping `_diag_logs_handle` at the end of the
-        // block_on closure cleanly tears the tail tasks down — no
-        // explicit abort needed.
-        //
+        // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
+        // terminal (run_container_attached_observed below). Tailing the SUPPORT
+        // containers' logs (router/proxy/git/inference) into the same terminal
+        // corrupts the agent session — the operator saw squid TCP_TUNNEL and
+        // git-mirror retry-push lines staircasing over the interactive UI
+        // (2026-07-20). The typed-event stderr tail therefore does NOT belong in
+        // an interactive agent terminal; container-log observation belongs to the
+        // LAUNCHING terminal / a separate --diagnostics observer (routing tracked
+        // by order 453). The lifecycle diag_emitter above (event:container_launch,
+        // low-volume — one line per container start) is kept: the diagnostics
+        // annex + litmus rely on it, and it does not stream continuously.
         // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
-        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2g)
-        let _diag_logs_handle = if debug {
-            Some(
-                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
-                    "tillandsias-router".to_string(),
-                    "tillandsias-proxy".to_string(),
-                    git_container_name.clone(),
-                    "tillandsias-inference".to_string(),
-                ])
-                .await,
-            )
-        } else {
-            None
-        };
+        let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
         let diagnostics = std::env::args().any(|a| a == "--diagnostics");
         let opencode_args = build_opencode_forge_args(
@@ -8162,6 +8980,7 @@ pub(crate) fn run_opencode_web_mode(
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
+                    read_host_project_current_branch(&project_path_resolved).as_deref(),
                     git_vault_secret.as_deref(),
                 ),
                 debug,
@@ -8554,6 +9373,20 @@ pub(crate) fn ensure_enclave_for_project(
             None => eprintln!("[tillandsias] [forge-launch] No host origin URL configured"),
         }
     }
+    // The branch the mirror's HEAD should name (unborn-HEAD fix): the host
+    // checkout's current branch, so agents land on the operator's working
+    // branch instead of `master`/GitHub-default. None (missing checkout,
+    // detached HEAD, git-less host) falls back to upstream's default inside
+    // ensure-mirror-head.
+    let project_default_branch = project_path.and_then(read_host_project_current_branch);
+    if debug {
+        match &project_default_branch {
+            Some(b) => eprintln!("[tillandsias] [forge-launch] Host checkout branch: {b}"),
+            None => eprintln!(
+                "[tillandsias] [forge-launch] No host checkout branch (mirror falls back to upstream default)"
+            ),
+        }
+    }
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -8585,36 +9418,145 @@ pub(crate) fn ensure_enclave_for_project(
         // ad-hoc proxy container start that duplicated ensure_proxy_running.
         // @trace plan/issues/launch-paths-route-through-dependency-model
 
+        // Order 443: the git mirror is STATEFUL — it serves clones and holds a
+        // Vault lease. Do NOT --replace a running mirror on a forge launch: a
+        // concurrent second forge would destroy the mirror out from under a
+        // sibling mid-clone (the observed 2026-07-20 bounce, which combined with
+        // the daemon-startup window of order 446 crashed forges on clone).
+        // Ensure-if-running: reuse a live mirror; a clean relaunch (stack torn
+        // down) still recreates it fresh with the current image. Only mint a new
+        // Vault token when actually creating the container.
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
-        client
-            .run_container_observed(
-                "forge-launch-git",
-                &git_container_name,
-                &build_git_run_args(
-                    project_name,
-                    &certs_dir,
-                    &versioned_image_tag("git", version),
-                    project_remote_url.as_deref(),
-                    git_vault_secret.as_deref(),
+        if crate::vault_bootstrap::container_running(&git_container_name) {
+            if debug {
+                eprintln!(
+                    "[tillandsias] git mirror {git_container_name} already running; reusing (order 443)"
+                );
+            }
+            // Order 452 slice 2 (reused-mirror re-reconcile) + order 449: the
+            // mirror only fast-forwards its EXPORTED heads at container START,
+            // so reusing a long-lived one (order 443) serves increasingly
+            // stale heads — a forge then clones stale and its push rejects
+            // non-fast-forward. Re-run the same NON-forced exported-head
+            // fast-forward, then repair an unborn HEAD (old-image container),
+            // before any forge clones. Non-fatal by design: a diverged head
+            // is left for the relay to push UP, an offline upstream still
+            // serves the last-known-good tree, and the readiness gate below
+            // still enforces a resolvable HEAD.
+            if project_remote_url.is_some() {
+                let ff = client
+                    .execute(
+                        OperationKind::Container,
+                        &[
+                            "exec".into(),
+                            "-i".into(),
+                            git_container_name.clone(),
+                            "git".into(),
+                            "-C".into(),
+                            format!("/srv/git/{project_name}"),
+                            "fetch".into(),
+                            "origin".into(),
+                            "refs/heads/*:refs/heads/*".into(),
+                        ],
+                    )
+                    .await;
+                match ff {
+                    Ok(out) if out.success() => {
+                        if debug {
+                            eprintln!(
+                                "[tillandsias] [forge-launch] reused mirror re-reconciled to upstream"
+                            );
+                        }
+                    }
+                    Ok(out) => eprintln!(
+                        "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile fetch exited {} (serving last-known-good heads; diverged heads relay up on push)",
+                        out.status.unwrap_or(-1)
+                    ),
+                    Err(e) => eprintln!(
+                        "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile failed: {e}"
+                    ),
+                }
+            }
+            // HEAD repair on a reused container. New images carry
+            // ensure-mirror-head; on an old image fall back to an inline
+            // conditional symbolic-ref when the launcher knows the branch.
+            // project_name is container-name-safe and the branch is charset-
+            // sanitized by read_host_project_current_branch, so the
+            // interpolation below cannot escape the sh -c word.
+            let repair = match project_default_branch.as_deref() {
+                Some(branch) => format!(
+                    "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
+                       /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name} {branch}; \
+                     elif ! git -C /srv/git/{project_name} rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
+                       && git -C /srv/git/{project_name} show-ref --verify --quiet refs/heads/{branch}; then \
+                       git -C /srv/git/{project_name} symbolic-ref HEAD refs/heads/{branch}; \
+                     fi"
                 ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
-        client
-            .run_container_observed(
-                "forge-launch-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(
-                    &certs_dir,
-                    &versioned_image_tag("inference", version),
-                    false,
+                None => format!(
+                    "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
+                       /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name}; \
+                     fi"
                 ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+            };
+            if let Err(e) = client
+                .execute(
+                    OperationKind::Container,
+                    &[
+                        "exec".into(),
+                        "-i".into(),
+                        git_container_name.clone(),
+                        "sh".into(),
+                        "-c".into(),
+                        repair,
+                    ],
+                )
+                .await
+            {
+                eprintln!(
+                    "[tillandsias] [forge-launch] WARNING: reused-mirror HEAD repair failed: {e}"
+                );
+            }
+        } else {
+            let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+            client
+                .run_container_observed(
+                    "forge-launch-git",
+                    &git_container_name,
+                    &build_git_run_args(
+                        project_name,
+                        &certs_dir,
+                        &versioned_image_tag("git", version),
+                        project_remote_url.as_deref(),
+                        project_default_branch.as_deref(),
+                        git_vault_secret.as_deref(),
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
+        }
+        // Order 443: inference is nearly stateless but --replacing it on every
+        // launch drops loaded models and interrupts a sibling's inference.
+        // Recreate-if-not-running (ephemerality/idempotency), not always.
+        if crate::vault_bootstrap::container_running("tillandsias-inference") {
+            if debug {
+                eprintln!("[tillandsias] inference already running; reusing (order 443)");
+            }
+        } else {
+            client
+                .run_container_observed(
+                    "forge-launch-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(
+                        &certs_dir,
+                        &versioned_image_tag("inference", version),
+                        false,
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+        }
 
         // Order 392: deterministic inference readiness. The forge agent must
         // not boot into an indeterminate "inference may still be starting"
@@ -8625,6 +9567,18 @@ pub(crate) fn ensure_enclave_for_project(
         // background — the API is up the moment ollama `serve` is listening,
         // which is all the agent needs to query it.
         wait_for_inference_ready(&client, debug).await?;
+
+        // Order 452 slice 2: the clone-only forge clones from the mirror the
+        // instant it boots — block until the mirror actually serves a
+        // cloneable HEAD, or refuse the launch loudly (fresh-checkout
+        // invariant). Runs AFTER the inference wait so the mirror's
+        // background seed overlaps it. Skipped for projects with no upstream
+        // remote: their mirror fills from forge pushes, not an origin seed,
+        // so an empty mirror there is a legitimate cold state the guest
+        // handles fail-loud rather than a seed-in-progress worth waiting on.
+        if project_remote_url.is_some() {
+            wait_for_git_mirror_ready(&client, &git_container_name, project_name, debug).await?;
+        }
         Ok::<(), String>(())
     })?;
 
@@ -8703,15 +9657,20 @@ fn build_forge_agent_run_args_with_vault(
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
     }
-    let spec = spec
-        // Project workspace at /home/forge/src/<project>/ — matches the
-        // forge entrypoint clone path and the `$TILLANDSIAS_PROJECT_PATH`
-        // contract every agent expects.
-        .volume(
+    // Order 437: clone-only by default. The host-checkout bind mount at
+    // /home/forge/src/<project> is the OPT-IN legacy shared-mount path; without
+    // it the entrypoint's clone_project_from_mirror clones a fresh tree there.
+    let host_mount = forge_uses_host_mount();
+    let spec = if host_mount {
+        spec.volume(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),
             MountMode::ReadWrite,
         )
+    } else {
+        spec
+    };
+    let spec = spec
         // Persistent per-project tool/package cache (order 179). lib-common points
         // $CARGO_HOME and $NPM_CONFIG_PREFIX at /home/forge/.cache/tillandsias-project;
         // without a persistent backing this lives in the --rm overlay and is lost
@@ -8731,7 +9690,6 @@ fn build_forge_agent_run_args_with_vault(
         .env("USER", "forge")
         .env("PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT", project_name)
-        .env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
         // Order 392: agents (and the startup context) learn the host's
         // EFFECTIVE inference tier (hardware truth AND podman deliverability)
         // without probing hardware they cannot see.
@@ -8752,6 +9710,15 @@ fn build_forge_agent_run_args_with_vault(
         .tmpfs("/home/forge/.config/gh:size=1m,mode=0700")
         .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
+    // Order 437: clone-only (default) selects the mirror network-clone
+    // transport via the GIT_SERVICE presence flag; the opt-in host-mount path
+    // sets HOST_MOUNT instead so clone_project_from_mirror uses the bind-mounted
+    // tree.
+    spec = if host_mount {
+        spec.env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
+    } else {
+        spec.env("TILLANDSIAS_GIT_SERVICE", "tillandsias-git")
+    };
     // Every credentialed agent lane (Codex/Claude/Antigravity) mounts a
     // scoped Vault token so its entrypoint can restore the opaque OAuth
     // document from Vault. Gating this on Codex alone (the original
@@ -8783,31 +9750,37 @@ fn build_forge_agent_run_args_with_vault(
         spec = spec.env(name, value);
     }
 
-    let repo_gitdir_target = format!("/home/forge/src/{project_name}/.git");
-    if let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) {
-        spec = spec
-            .bind_mount(
-                gitdir.root.display().to_string(),
-                &repo_gitdir_target,
-                false,
-            )
-            .bind_mount(
-                gitdir.objects.display().to_string(),
-                format!("{repo_gitdir_target}/objects"),
-                false,
-            )
-            .bind_mount(
-                gitdir.refs.display().to_string(),
-                format!("{repo_gitdir_target}/refs"),
-                false,
-            );
-    } else if project_path.join(".git").is_dir() {
-        // Match the raw OpenCode path's fail-closed fallback. notmpcopyup is
-        // load-bearing — see append_forge_repo_gitdir_mount_args (tmpcopyup
-        // over a real host .git = crun ENOSPC at launch, 2026-07-15).
-        spec = spec.tmpfs(format!(
-            "{repo_gitdir_target}:size=8m,mode=0700,notmpcopyup"
-        ));
+    // Order 437: the gitdir facade + fail-closed mask exist ONLY to quarantine a
+    // shared host .git under the host-mount. Clone-only forges have their own
+    // fresh .git from the mirror clone, so none of this applies — skip it
+    // entirely rather than masking a clone's real .git.
+    if host_mount {
+        let repo_gitdir_target = format!("/home/forge/src/{project_name}/.git");
+        if let Some(gitdir) = write_forge_repo_gitdir(project_name, project_path) {
+            spec = spec
+                .bind_mount(
+                    gitdir.root.display().to_string(),
+                    &repo_gitdir_target,
+                    false,
+                )
+                .bind_mount(
+                    gitdir.objects.display().to_string(),
+                    format!("{repo_gitdir_target}/objects"),
+                    false,
+                )
+                .bind_mount(
+                    gitdir.refs.display().to_string(),
+                    format!("{repo_gitdir_target}/refs"),
+                    false,
+                );
+        } else if project_path.join(".git").is_dir() {
+            // Match the raw OpenCode path's fail-closed fallback. notmpcopyup is
+            // load-bearing — see append_forge_repo_gitdir_mount_args (tmpcopyup
+            // over a real host .git = crun ENOSPC at launch, 2026-07-15).
+            spec = spec.tmpfs(format!(
+                "{repo_gitdir_target}:size=8m,mode=0700,notmpcopyup"
+            ));
+        }
     }
 
     let ca_cert = certs_dir.join("intermediate.crt");
@@ -8874,6 +9847,30 @@ fn build_forge_agent_run_args_with_vault(
         }
     }
 
+    // Per-worker agent state isolation (order 428), paired with the
+    // instance-scoped container names from order 427.
+    //
+    // Both agent CLIs have documented concurrency races on their credential
+    // files: OpenCode's auth.json is NOT lock-protected (its Flock utility
+    // covers only plugin/theme/MCP-auth), and Codex's is truncate-then-write
+    // with no advisory lock at all (upstream #11435 parallel-exec cross-talk,
+    // #20213 SQLite deadlock). Two workers sharing a state directory can lose
+    // credential updates and bleed sessions into each other. Per-worker state
+    // dirs are therefore mandatory for concurrency, not a nicety.
+    //
+    // DATA and STATE are isolated; CONFIG deliberately is NOT. The forge bakes
+    // OpenCode's permission overlay to /home/forge/.config/opencode/config.json
+    // — the standard XDG_CONFIG_HOME location — so redirecting CONFIG would
+    // orphan that overlay and silently drop the lane's permissive defaults.
+    // Config is shared read-only input; the races live in mutable state.
+    //
+    // No instance means no override, so the tools keep their own defaults and
+    // single-worker behaviour is byte-identical to before.
+    for (key, value) in
+        forge_worker_state_env(std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok().as_deref())
+    {
+        spec = spec.env(key, value);
+    }
     // GitHub token injection (order 359): forge tooling that talks to GitHub —
     // brew attestation verification (bottles + the GitHub API) and any direct
     // git-over-HTTPS — otherwise goes ANONYMOUS and gets rate-limited/blocked
@@ -9091,34 +10088,88 @@ fn run_forge_agent_cli_mode(
                 "tillandsias-",
             );
 
+        // The forge-agent CLI lane runs the interactive agent (Claude/Codex/
+        // Antigravity) ATTACHED to THIS terminal. Tailing the support
+        // containers' logs (router/proxy/git/inference) into the same terminal
+        // corrupts the agent TUI — the operator saw squid TCP_TUNNEL and
+        // git-mirror retry-push lines staircasing over the Claude UI
+        // (2026-07-20). The typed-event stderr tail does NOT belong in an
+        // interactive agent terminal; container-log observation belongs to the
+        // LAUNCHING terminal / a separate --diagnostics observer (routing tracked
+        // by order 453). The lifecycle diag_emitter above (event:container_launch,
+        // low-volume) is kept — the diagnostics annex + litmus rely on it.
         // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
-        let _diag_logs_handle = if debug {
-            Some(
-                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
-                    "tillandsias-router".to_string(),
-                    "tillandsias-proxy".to_string(),
-                    format!("tillandsias-git-{project_name}"),
-                    "tillandsias-inference".to_string(),
-                ])
-                .await,
-            )
-        } else {
-            None
-        };
+        let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
-        let result = client
-            .run_container_attached_observed(
-                mode.slug(),
-                &forge_container_name_for_mode(project_name, mode),
-                &forge_args,
-                debug,
-            )
-            .await;
+        // Delegated runs get a deadline (order 429). A hung worker must not
+        // block a dispatcher forever, and "still running after N seconds" is a
+        // distinct outcome from success or failure — conflating it with either
+        // is how a stuck agent gets recorded as done. Interactive sessions are
+        // never deadlined: only a run that asked for machine-readable output
+        // and supplied a timeout is bounded.
+        let delegated = std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() == Ok("json");
+        let deadline_secs = std::env::var("TILLANDSIAS_AGENT_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .filter(|s| *s > 0);
+
+        let run_container_name = forge_container_name_for_mode(project_name, mode);
+        let run_fut = client.run_container_attached_observed(
+            mode.slug(),
+            &run_container_name,
+            &forge_args,
+            debug,
+        );
+        let mut timed_out_after: Option<u64> = None;
+        let result = match (delegated, deadline_secs) {
+            (true, Some(secs)) => {
+                match tokio::time::timeout(std::time::Duration::from_secs(secs), run_fut).await {
+                    Ok(r) => r,
+                    Err(_) => {
+                        timed_out_after = Some(secs);
+                        Err(format!("delegated run exceeded {secs}s deadline"))
+                    }
+                }
+            }
+            _ => run_fut.await,
+        };
         cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
 
         if let Some(handle) = diag_emitter {
             handle.abort();
             let _ = handle.await;
+        }
+
+        // Delegated-run verdict (order 429). Only for runs that asked for
+        // machine-readable output — an interactive session must not be
+        // narrated at the operator.
+        //
+        // The verdict is deliberately conservative: with no transcript to read,
+        // classify_run reports INDETERMINATE even on a clean exit, because a
+        // CLI can exit 0 having done nothing. "Exited without error" is not
+        // evidence the delegated work happened, and a dispatcher that treats it
+        // as such silently marks abandoned runs as done.
+        if delegated {
+            let verdict = match timed_out_after {
+                Some(after_secs) => crate::agent_result::AgentOutcome::TimedOut { after_secs },
+                None => {
+                    let transcript = std::env::var("TILLANDSIAS_AGENT_RESULT_FILE")
+                        .ok()
+                        .and_then(|p| std::fs::read_to_string(p).ok())
+                        .unwrap_or_default();
+                    let exit_code = if result.is_ok() { Some(0) } else { None };
+                    crate::agent_result::classify_run(&transcript, exit_code)
+                }
+            };
+            // Non-success is stated loudly and separately, so a dispatcher
+            // scraping this line cannot mistake "ran" for "worked".
+            eprintln!("[forge-result] {} {}", mode.slug(), verdict.summary());
+            if !verdict.is_success() {
+                eprintln!(
+                    "[forge-result] {} DID NOT COMPLETE SUCCESSFULLY — do not treat this work as done",
+                    mode.slug()
+                );
+            }
         }
 
         result.map_err(|e| format!("[forge-launch] {} session exited: {e}", mode.slug()))
@@ -10670,16 +11721,39 @@ mod tests {
         );
         // Order 392: the EFFECTIVE tier is what agents/startup-context are
         // told — it must match what the container actually runs, not just
-        // hardware. On a host with no GPU (this one), both agree on `cpu`.
+        // hardware.
+        //
+        // Order 433: this previously asserted `effective == tier`
+        // unconditionally, with the comment "on a host with no GPU (this one)".
+        // That baked the CI machine's hardware into the assertion, so the test
+        // failed on any CUDA host — reporting a defect where the gating was
+        // working exactly as designed (hardware gpu-cuda, no CDI spec, so
+        // delivery correctly downgrades to cpu). A test that only passes on one
+        // machine's hardware makes `./build.sh --test` permanently red for
+        // everyone else, which trains people to ignore the suite.
+        //
+        // Assert the actual RULE instead, which holds on every host: the
+        // effective tier equals the hardware tier UNLESS delivery is gated —
+        // gpu-cuda without a CDI spec must downgrade to cpu, never silently
+        // launch a cpu-only "GPU tier".
         let effective = effective_inference_tier();
         assert!(
             ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&effective),
             "effective tier grammar violated: {effective}"
         );
-        assert_eq!(
-            effective, tier,
-            "with no GPU present, effective tier must equal hardware tier"
-        );
+        if tier == "gpu-cuda" && !nvidia_cdi_available() {
+            assert_eq!(
+                effective, "cpu",
+                "gpu-cuda hardware without a CDI spec must downgrade to cpu, \
+                 not report a GPU tier the container cannot deliver"
+            );
+        } else {
+            assert_eq!(
+                effective, tier,
+                "with delivery available (or no cuda hardware), the effective \
+                 tier must equal the hardware tier"
+            );
+        }
         let window = source_window(source, "fn build_inference_run_args(");
         assert!(
             window.contains("nvidia_cdi_available()")
@@ -11079,18 +12153,43 @@ mod tests {
         assert!(content.contains("pasta_options = [\"--something-else\"]"));
         assert!(!content.contains("pasta_options = [\"--ipv4-only\"]"));
     }
-    use std::sync::{Mutex, OnceLock};
 
     fn has_arg(args: &[String], needle: &str) -> bool {
         args.iter().any(|arg| arg == needle)
     }
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        // ONE process-wide lock for every env-mutating test in this crate.
+        // std::env::set_var is process-global, so main.rs and runtime_assets
+        // tests must serialise on the SAME mutex — two independent locks
+        // serialise nothing. Delegates to the canonical lock (order 434 unified
+        // this after that fix pointed one test at a different mutex).
+        crate::runtime_assets::env_lock()
+    }
+
+    /// Order 437: run a test in the OPT-IN shared host-mount mode by setting
+    /// TILLANDSIAS_FORGE_HOST_MOUNT=1 for the guard's lifetime, restoring the
+    /// prior value on drop (panic path included). Acquire `env_lock()` first —
+    /// this mutates process env.
+    struct HostMountEnvGuard(Option<std::ffi::OsString>);
+    impl HostMountEnvGuard {
+        fn enable() -> Self {
+            let prev = std::env::var_os("TILLANDSIAS_FORGE_HOST_MOUNT");
+            unsafe {
+                std::env::set_var("TILLANDSIAS_FORGE_HOST_MOUNT", "1");
+            }
+            HostMountEnvGuard(prev)
+        }
+    }
+    impl Drop for HostMountEnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match self.0.take() {
+                    Some(v) => std::env::set_var("TILLANDSIAS_FORGE_HOST_MOUNT", v),
+                    None => std::env::remove_var("TILLANDSIAS_FORGE_HOST_MOUNT"),
+                }
+            }
+        }
     }
 
     #[test]
@@ -11294,6 +12393,177 @@ mod tests {
         );
         assert!(has_arg(&argv, "--interactive"));
         assert!(has_arg(&argv, "--tty"));
+    }
+
+    /// Order 428: concurrent workers must not share agent state. Both CLIs have
+    /// documented races on their credential files (OpenCode's auth.json is
+    /// unlocked; Codex's is truncate-then-write, upstream #11435/#20213).
+    #[test]
+    fn forge_worker_state_dirs_are_isolated_per_worker() {
+        let w1 = forge_worker_state_env(Some("w1"));
+        let w2 = forge_worker_state_env(Some("w2"));
+        assert!(!w1.is_empty(), "an instance must produce state overrides");
+        for (k, v1) in &w1 {
+            let v2 = w2
+                .iter()
+                .find(|(k2, _)| k2 == k)
+                .map(|(_, v)| v)
+                .unwrap_or_else(|| panic!("{k} missing for worker 2"));
+            assert_ne!(v1, v2, "{k} must differ between workers, else they race");
+        }
+        let keys: Vec<&str> = w1.iter().map(|(k, _)| k.as_str()).collect();
+        assert!(keys.contains(&"XDG_DATA_HOME"));
+        assert!(keys.contains(&"XDG_STATE_HOME"));
+        assert!(keys.contains(&"CODEX_HOME"));
+    }
+
+    /// XDG_CONFIG_HOME must NOT be isolated: the forge bakes OpenCode's
+    /// permission overlay to /home/forge/.config/opencode/config.json, so
+    /// redirecting config per worker would orphan it and silently drop the
+    /// lane's permissive defaults.
+    #[test]
+    fn forge_worker_state_never_redirects_config_home() {
+        for inst in [Some("w1"), Some("lead"), Some("worker-9")] {
+            let pairs = forge_worker_state_env(inst);
+            assert!(
+                !pairs.iter().any(|(k, _)| k == "XDG_CONFIG_HOME"),
+                "redirecting XDG_CONFIG_HOME orphans the baked OpenCode permission overlay"
+            );
+        }
+    }
+
+    /// Strictly additive: no instance means no overrides at all, so a
+    /// single-worker launch is byte-identical to pre-428 behaviour.
+    #[test]
+    fn absent_forge_instance_emits_no_state_overrides() {
+        for raw in [None, Some(""), Some("   "), Some("---")] {
+            assert!(
+                forge_worker_state_env(raw).is_empty(),
+                "instance {raw:?} must emit no state overrides"
+            );
+        }
+    }
+
+    /// Order 437: clone-only is the default; the shared host-mount is opt-in
+    /// only via TILLANDSIAS_FORGE_HOST_MOUNT=1. Pure over the raw value so it is
+    /// testable without env mutation.
+    #[test]
+    fn forge_host_mount_is_opt_in_only() {
+        assert!(
+            !forge_host_mount_enabled(None),
+            "no env => clone-only default"
+        );
+        assert!(
+            !forge_host_mount_enabled(Some("")),
+            "empty => clone-only default"
+        );
+        assert!(
+            !forge_host_mount_enabled(Some("0")),
+            "0 => clone-only default"
+        );
+        assert!(
+            !forge_host_mount_enabled(Some("true")),
+            "only the literal 1 opts in"
+        );
+        assert!(
+            forge_host_mount_enabled(Some("1")),
+            "1 opts into the legacy shared host-mount"
+        );
+    }
+
+    /// Order 427: two workers on one project must not collide. Before the
+    /// instance component existed, both got `tillandsias-<project>-forge-<mode>`
+    /// and `--replace` made worker 2 destroy worker 1.
+    #[test]
+    fn forge_container_names_are_instance_scoped_so_workers_coexist() {
+        for mode in [
+            ForgeAgentMode::Maintenance,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Antigravity,
+        ] {
+            let w1 = forge_container_name_for_mode_with_instance("proj", mode, Some("w1"));
+            let w2 = forge_container_name_for_mode_with_instance("proj", mode, Some("w2"));
+            assert_ne!(
+                w1, w2,
+                "{mode:?}: distinct workers must get distinct container names, \
+                 otherwise --replace makes one destroy the other"
+            );
+            assert!(w1.ends_with("-w1"), "{mode:?}: unexpected name {w1}");
+            assert!(w2.ends_with("-w2"), "{mode:?}: unexpected name {w2}");
+        }
+    }
+
+    /// The instance component must be strictly additive: absent or empty
+    /// reproduces the pre-427 name exactly, so interactive launches and every
+    /// existing fixture are untouched.
+    #[test]
+    fn absent_or_empty_forge_instance_preserves_legacy_names() {
+        for mode in [
+            ForgeAgentMode::Maintenance,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Antigravity,
+        ] {
+            let legacy = if matches!(mode, ForgeAgentMode::OpenCode) {
+                "tillandsias-proj-forge".to_string()
+            } else {
+                format!("tillandsias-proj-forge-{}", mode.slug())
+            };
+            for raw in [None, Some(""), Some("   "), Some("---")] {
+                assert_eq!(
+                    forge_container_name_for_mode_with_instance("proj", mode, raw),
+                    legacy,
+                    "{mode:?} with instance {raw:?} must reproduce the legacy name"
+                );
+            }
+        }
+    }
+
+    /// A worker id reaching a container name must not be able to smuggle
+    /// separators, whitespace, or unbounded length past Podman.
+    #[test]
+    fn forge_instance_identifiers_are_sanitized() {
+        assert_eq!(sanitize_forge_instance("w1"), "w1");
+        assert_eq!(sanitize_forge_instance("  W1  "), "w1");
+        assert_eq!(sanitize_forge_instance("worker/1"), "worker-1");
+        assert_eq!(sanitize_forge_instance("a b:c"), "a-b-c");
+        assert_eq!(sanitize_forge_instance("--lead--"), "lead");
+        assert_eq!(sanitize_forge_instance(""), "");
+        assert_eq!(sanitize_forge_instance("///"), "");
+        assert!(
+            sanitize_forge_instance(&"x".repeat(200)).len() <= 32,
+            "instance ids must be length-capped"
+        );
+        // A sanitized id must still be a legal Podman name component.
+        let s = sanitize_forge_instance("Worker #3 (alpha)");
+        assert!(
+            s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-'),
+            "sanitized id {s} contains characters Podman rejects"
+        );
+    }
+
+    /// Hostnames must be instance-scoped too — two workers sharing a hostname
+    /// would make enclave-network DNS resolution non-deterministic.
+    #[test]
+    fn forge_hostname_is_instance_scoped() {
+        let a = sanitize_hostname(&format!(
+            "forge-proj{}",
+            forge_instance_suffix_from(Some("w1"))
+        ));
+        let b = sanitize_hostname(&format!(
+            "forge-proj{}",
+            forge_instance_suffix_from(Some("w2"))
+        ));
+        assert_ne!(a, b, "distinct workers must get distinct hostnames");
+        assert_eq!(
+            sanitize_hostname(&format!("forge-proj{}", forge_instance_suffix_from(None))),
+            sanitize_hostname("forge-proj"),
+            "no instance must reproduce the legacy hostname"
+        );
     }
 
     /// Order 378 (order-314 class): relaunching any forge-agent lane — incl. the
@@ -11623,7 +12893,7 @@ mod tests {
     fn enclave_egress_dual_home_targets_managed_egress_network() {
         let certs = PathBuf::from("/tmp/ca");
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
 
         for (name, args) in [("proxy", &proxy), ("git", &git)] {
             assert!(
@@ -12006,10 +13276,21 @@ mod tests {
                 is_active_lane_container(name, "running"),
                 "{name} (running) must keep the shared stack alive"
             );
-            assert!(
-                !is_active_lane_container(name, "exited"),
-                "{name} (exited) must NOT keep the shared stack alive"
-            );
+            // Order 443: a lane mid-launch is alive and must keep the stack up,
+            // or an exiting sibling tears it down under a starting forge.
+            for starting in ["created", "configured", "initializing", "paused", "up"] {
+                assert!(
+                    is_active_lane_container(name, starting),
+                    "{name} ({starting}) is starting/alive and must keep the shared stack alive"
+                );
+            }
+            // Terminal/dead states must NOT keep the stack alive.
+            for terminal in ["exited", "stopped", "dead", "removing", ""] {
+                assert!(
+                    !is_active_lane_container(name, terminal),
+                    "{name} ({terminal:?}) is terminal and must NOT keep the shared stack alive"
+                );
+            }
         }
         for name in [
             "tillandsias-proxy",
@@ -12124,7 +13405,7 @@ mod tests {
             "proxy args must include --replace (order 387): {proxy:?}"
         );
 
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
         assert!(
             has_arg(&git, "--replace"),
             "git-mirror args must include --replace (order 387): {git:?}"
@@ -12160,7 +13441,7 @@ mod tests {
     fn stack_service_args_do_not_pin_static_ips() {
         let certs = PathBuf::from("/tmp/ca");
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
         let inference = build_inference_run_args(&certs, "tillandsias-inference:v1", false);
         let router = build_router_run_args(&certs, "tillandsias-router:v1", 8080);
 
@@ -12194,7 +13475,7 @@ mod tests {
         // /srv/git must be writable (named volume) so the bare repo persists
         // and the post-receive hook can be installed.
         let certs = PathBuf::from("/tmp/ca");
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
 
         // No `--base-path=...` override appended after the image — confirms
         // we let the image entrypoint take over.
@@ -12215,7 +13496,8 @@ mod tests {
     fn git_run_args_forward_project_remote_url_when_present() {
         let certs = PathBuf::from("/tmp/ca");
         let url = "https://github.com/example/repo.git";
-        let with_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None);
+        let with_url =
+            build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None, None);
         assert!(
             with_url
                 .iter()
@@ -12223,7 +13505,8 @@ mod tests {
             "expected upstream URL env var: {with_url:?}"
         );
 
-        let without_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+        let without_url =
+            build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
         assert!(
             !without_url
                 .iter()
@@ -12237,7 +13520,14 @@ mod tests {
         // @trace spec:tillandsias-vault — Phase 6 default flow
         let certs = PathBuf::from("/tmp/ca");
         let secret = "tillandsias-vault-token-git-mirror-alpha-1234";
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, Some(secret));
+        let args = build_git_run_args(
+            "alpha",
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            Some(secret),
+        );
 
         // The vault token secret MUST be mounted at the stable path
         // /run/secrets/vault-token, owned by the git user (uid 1000) so the
@@ -12332,6 +13622,12 @@ mod tests {
 
     #[test]
     fn opencode_args_mount_workspace_and_prompt() {
+        // Order 437: this test validates the shared host-mount workspace mount,
+        // which is now opt-in. Run it in host-mount mode; the clone-only default
+        // is covered by forge_host_mount_is_opt_in_only + the flipped shape
+        // assertions elsewhere.
+        let _env = env_lock();
+        let _hm = HostMountEnvGuard::enable();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -12354,6 +13650,8 @@ mod tests {
         assert!(!has_arg(&args, "/bin/bash"));
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_PROMPT=hello"));
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT=alpha"));
+        // Order 437: this test runs in the OPT-IN host-mount mode (guard at the
+        // top), so the host-mount claim IS present here.
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
         assert!(
@@ -12469,7 +13767,10 @@ mod tests {
         ));
         assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_PROMPT=hello"));
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT=alpha"));
-        assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        // Order 437: clone-only by default — no host-checkout mount; the mirror
+        // presence flag selects the network clone.
+        assert!(!has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        assert!(has_arg(&args, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
     }
 
@@ -12501,7 +13802,9 @@ mod tests {
 
         assert!(has_arg(&argv, "PROJECT=alpha"));
         assert!(has_arg(&argv, "TILLANDSIAS_PROJECT=alpha"));
-        assert!(has_arg(&argv, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        // Order 437: clone-only by default.
+        assert!(!has_arg(&argv, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        assert!(has_arg(&argv, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
     }
 
     #[test]
@@ -12659,8 +13962,132 @@ mod tests {
         assert_eq!(args.first().map(|s| s.as_str()), Some("--rm"));
         assert!(!has_arg(&args, "podman"));
         assert!(!has_arg(&args, "run"));
-        assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        // Order 437: clone-only by default — no host-checkout mount; the mirror
+        // presence flag selects the network clone.
+        assert!(!has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        assert!(has_arg(&args, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
+    }
+
+    /// Order 425: a repo with NO origin and a repo whose origin cannot be
+    /// RESOLVED must not look alike. They used to both yield `None`, and a
+    /// generated config with no `[url]` block was ambiguous between "healthy
+    /// local-only project" and "silently broken" — an audit genuinely
+    /// mis-read three healthy local-only projects as defects because of it.
+    #[test]
+    fn origin_resolution_distinguishes_absent_from_unresolvable() {
+        let temp = tempfile::tempdir().expect("tempdir");
+
+        // A real git repo with no origin remote -> NoRemote (healthy).
+        let no_remote = temp.path().join("no-remote");
+        std::fs::create_dir_all(&no_remote).expect("mkdir");
+        let init = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&no_remote)
+            .status();
+        if init.map(|s| s.success()).unwrap_or(false) {
+            assert_eq!(
+                resolve_host_project_origin(&no_remote),
+                OriginResolution::NoRemote,
+                "a repo with no origin must report NoRemote, not Unresolvable"
+            );
+        }
+
+        // A path that is not a repo at all and has no .git -> Unresolvable
+        // whenever the git binary itself is unavailable. With git present,
+        // `git config --get` in a non-repo exits non-1, which is also
+        // Unresolvable. Either way it must NOT be NoRemote: we did not
+        // establish that there is no remote, we failed to look.
+        let bare = temp.path().join("not-a-repo");
+        std::fs::create_dir_all(&bare).expect("mkdir");
+        assert!(
+            matches!(
+                resolve_host_project_origin(&bare),
+                OriginResolution::Unresolvable(_)
+            ),
+            "a path we cannot interrogate must be Unresolvable, never a silent NoRemote"
+        );
+
+        // A repo WITH an origin -> Found.
+        let with_remote = temp.path().join("with-remote");
+        std::fs::create_dir_all(&with_remote).expect("mkdir");
+        let ok = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&with_remote)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if ok {
+            let _ = std::process::Command::new("git")
+                .args([
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://github.com/example/repo.git",
+                ])
+                .current_dir(&with_remote)
+                .status();
+            assert_eq!(
+                resolve_host_project_origin(&with_remote),
+                OriginResolution::Found("https://github.com/example/repo.git".to_string()),
+                "a configured origin must be Found"
+            );
+        }
+    }
+
+    /// Order 425: the generated config must SAY why there is no redirect.
+    /// A file with no [url] block used to be unreadable evidence — it could
+    /// mean "healthy local-only project" or "silently broken", and an audit
+    /// genuinely misread the former as the latter.
+    #[test]
+    fn write_forge_gitconfig_states_why_no_redirect_was_written() {
+        let _guard = crate::runtime_assets::env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let old_home = std::env::var_os("HOME");
+        unsafe {
+            std::env::set_var("HOME", temp.path());
+        }
+        struct RestoreHome(Option<std::ffi::OsString>);
+        impl Drop for RestoreHome {
+            fn drop(&mut self) {
+                unsafe {
+                    match self.0.take() {
+                        Some(v) => std::env::set_var("HOME", v),
+                        None => std::env::remove_var("HOME"),
+                    }
+                }
+            }
+        }
+        let _restore = RestoreHome(old_home);
+
+        // A real repo with no origin: the config must say so explicitly and
+        // must NOT read as a fault.
+        let proj = temp.path().join("local-only");
+        std::fs::create_dir_all(&proj).expect("mkdir");
+        let inited = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&proj)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !inited {
+            return; // no git binary on this host; the resolver test covers the rest
+        }
+
+        let path = write_forge_gitconfig("local-only", &proj).expect("config written");
+        let text = std::fs::read_to_string(&path).expect("read config");
+        assert!(
+            !text.contains("[url "),
+            "a project with no origin must get no redirect"
+        );
+        assert!(
+            text.contains("has no origin remote"),
+            "the config must state that absence is CORRECT here; got:\n{text}"
+        );
+        assert!(
+            !text.contains("FAULT"),
+            "a healthy local-only project must not be described as a fault; got:\n{text}"
+        );
     }
 
     #[test]
@@ -12881,6 +14308,9 @@ mod tests {
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
         let _guard = env_lock();
+        // Order 437: the gitdir facade/quarantine is the OPT-IN host-mount
+        // feature; exercise it in host-mount mode.
+        let _hm = HostMountEnvGuard::enable();
         let tmp = tempfile::tempdir().expect("temp dir");
         let project_path = tmp.path().join("project");
         std::fs::create_dir_all(&project_path).expect("create project");
@@ -13369,20 +14799,28 @@ mod tests {
             window.contains("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
             "isolated branch must route through the entrypoint filesystem clone transport"
         );
-        // The host-mount claim and the gitdir facade/mask belong ONLY to the
-        // shared-tree branch: assert they appear after the else.
-        let else_idx = window
-            .find("} else {")
-            .expect("isolation must have a default else branch");
+        // Order 437: clone-only is the DEFAULT. The host-mount claim and the
+        // gitdir facade/mask now belong ONLY to the OPT-IN
+        // `else if forge_uses_host_mount()` branch; the final else clones a
+        // fresh tree from the mirror (GIT_SERVICE presence flag) with no host
+        // mount and no facade.
+        let optin_idx = window
+            .find("else if forge_uses_host_mount()")
+            .expect("host-mount must be opt-in behind forge_uses_host_mount()");
         let host_mount_idx = window
             .find("TILLANDSIAS_PROJECT_HOST_MOUNT=1")
-            .expect("default branch keeps the host-mount claim");
+            .expect("opt-in branch keeps the host-mount claim");
         let mask_idx = window
             .find("append_forge_repo_gitdir_mount_args(&mut args, project_name, project_path);")
-            .expect("default branch keeps the gitdir facade/mask");
+            .expect("opt-in branch keeps the gitdir facade/mask");
         assert!(
-            host_mount_idx > else_idx && mask_idx > else_idx,
-            "host-mount claim + gitdir mask must be confined to the non-isolated branch"
+            host_mount_idx > optin_idx && mask_idx > optin_idx,
+            "host-mount claim + gitdir mask must be confined to the opt-in \
+             forge_uses_host_mount() branch"
+        );
+        assert!(
+            window.contains("TILLANDSIAS_GIT_SERVICE=tillandsias-git"),
+            "clone-only default must set the mirror network-clone presence flag"
         );
     }
 
@@ -13726,6 +15164,41 @@ mod tests {
     fn init_build_state_persists_to_cache_directory() {
         // Test that InitBuildState can be saved and loaded from the cache directory.
         // @trace spec:init-incremental-builds
+        //
+        // Order 434: this used to write into the REAL user cache directory,
+        // because init_cache_dir() falls back to $HOME/.cache/tillandsias when
+        // XDG_CACHE_HOME is unset. That is the same directory the actual
+        // application and the image build scripts use, so the test raced with
+        // anything else touching it — including a concurrent ./build-*.sh — and
+        // failed intermittently (observed 1, 1, then 2 failures across three
+        // identical suite runs). A test that mutates real user state is not a
+        // unit test; it is a coin flip that also litters the developer's cache.
+        //
+        // Redirect the cache to a temp dir for the duration. env mutation is
+        // process-global, so this serialises on the SAME lock every other
+        // env-mutating test in the crate uses — two independent mutexes would
+        // serialise nothing.
+        let _guard = crate::runtime_assets::env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let old_xdg = std::env::var_os("XDG_CACHE_HOME");
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", temp.path());
+        }
+        struct RestoreXdg(Option<std::ffi::OsString>);
+        impl Drop for RestoreXdg {
+            fn drop(&mut self) {
+                // Restore on the panic path too, or one failing assertion
+                // leaves every later test pointed at a deleted temp dir.
+                unsafe {
+                    match self.0.take() {
+                        Some(value) => std::env::set_var("XDG_CACHE_HOME", value),
+                        None => std::env::remove_var("XDG_CACHE_HOME"),
+                    }
+                }
+            }
+        }
+        let _restore = RestoreXdg(old_xdg);
+
         let mut state = InitBuildState::new();
         state.mark_success("proxy");
         state.mark_success("git");
@@ -14306,5 +15779,163 @@ mod tests {
 
         rt.block_on(service_stop("WEB", "test-publish-e2e", false))
             .expect("service_stop should succeed");
+    }
+
+    // Order 281: overlay corruption classifier + self-heal tests
+
+    #[test]
+    fn overlay_corruption_classifier_matches_known_signatures() {
+        // Positive cases: the exact error podman emits when a killed-build
+        // leaves a dangling layer reference.
+        assert!(is_overlay_corruption_error(
+            "Error: creating read-write layer: Stat /var/lib/containers/storage/overlay/abc123/diff: no such file or directory"
+        ));
+        assert!(is_overlay_corruption_error(
+            "error building at STEP: creating read-write layer: Stat /var/lib/containers/storage/overlay/def456/diff: no such file or directory"
+        ));
+        // Case-insensitive check (podman may emit mixed case).
+        assert!(is_overlay_corruption_error(
+            "Error: creating read-write layer: stat /var/lib/containers/storage/overlay/abc123/diff: No Such File Or Directory"
+        ));
+    }
+
+    #[test]
+    fn overlay_corruption_classifier_rejects_non_corruption() {
+        // Non-overlay errors must NOT trigger self-heal.
+        assert!(!is_overlay_corruption_error(
+            "Error: build process exited with status 1"
+        ));
+        assert!(!is_overlay_corruption_error(
+            "error: could not pull base image"
+        ));
+        // Overlay present but not a missing-file error.
+        assert!(!is_overlay_corruption_error(
+            "Error: overlay mount failed: permission denied"
+        ));
+        // Missing-file but not overlay-related.
+        assert!(!is_overlay_corruption_error(
+            "Error: no such file or directory: /tmp/something"
+        ));
+    }
+
+    /// Mock healer that records calls and can be configured to fail.
+    struct MockHealer {
+        fail: bool,
+        call_count: std::cell::Cell<u32>,
+    }
+
+    impl MockHealer {
+        fn new(fail: bool) -> Self {
+            Self {
+                fail,
+                call_count: std::cell::Cell::new(0),
+            }
+        }
+    }
+
+    impl OverlayHeal for MockHealer {
+        fn podman_system_reset_force(&self) -> Result<(), String> {
+            let n = self.call_count.get() + 1;
+            self.call_count.set(n);
+            if self.fail {
+                Err("mock reset failed".to_string())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn self_heal_not_triggered_for_non_overlay_error() {
+        let healer = MockHealer::new(false);
+        let mut healed = false;
+        let result =
+            try_overlay_self_heal("Build exited with status 1", &mut healed, &healer, false);
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "non-overlay must not trigger heal");
+        assert!(!healed);
+        assert_eq!(healer.call_count.get(), 0, "healer must not be called");
+    }
+
+    #[test]
+    fn self_heal_triggered_once_for_overlay_error() {
+        let healer = MockHealer::new(false);
+        let mut healed = false;
+        let result = try_overlay_self_heal(
+            "Error: creating read-write layer: Stat /var/lib/containers/storage/overlay/abc123/diff: no such file or directory",
+            &mut healed,
+            &healer,
+            false,
+        );
+        assert!(result.is_ok());
+        assert!(result.unwrap(), "overlay error must trigger heal");
+        assert!(healed, "healed flag must be set");
+        assert_eq!(healer.call_count.get(), 1, "reset called exactly once");
+    }
+
+    #[test]
+    fn self_heal_refuses_second_attempt() {
+        let healer = MockHealer::new(false);
+        let mut healed = true; // already healed
+        let result = try_overlay_self_heal(
+            "Error: overlay ... no such file or directory",
+            &mut healed,
+            &healer,
+            false,
+        );
+        assert!(result.is_err(), "second heal attempt must fail");
+        assert_eq!(healer.call_count.get(), 0, "no additional reset calls");
+    }
+
+    #[test]
+    fn self_heal_propagates_reset_failure() {
+        let healer = MockHealer::new(true); // reset will fail
+        let mut healed = false;
+        let result = try_overlay_self_heal(
+            "Error: overlay ... no such file or directory",
+            &mut healed,
+            &healer,
+            false,
+        );
+        assert!(result.is_err(), "reset failure must propagate");
+        assert!(
+            healed,
+            "healed flag must be set even on reset failure to prevent retry loops"
+        );
+    }
+
+    /// Source-shape pin: the build error path in run_init MUST call
+    /// try_overlay_self_heal before recording the failure.
+    #[test]
+    fn run_init_build_loop_calls_overlay_self_heal() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_init(");
+        assert!(
+            window.contains("try_overlay_self_heal"),
+            "run_init build loop must call try_overlay_self_heal before marking failure"
+        );
+        assert!(
+            window.contains("overlay_healed"),
+            "run_init must maintain an overlay_healed flag across the build loop"
+        );
+    }
+
+    /// Source-shape pin: is_overlay_corruption_error must check both
+    /// "overlay" AND "no such file" to avoid false positives on
+    /// unrelated overlay mount errors.
+    #[test]
+    fn overlay_classifier_checks_both_conditions() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let func_body = source
+            .split("fn is_overlay_corruption_error(")
+            .nth(1)
+            .expect("is_overlay_corruption_error must exist")
+            .split("\nfn ")
+            .next()
+            .unwrap();
+        assert!(
+            func_body.contains("overlay") && func_body.contains("no such file"),
+            "classifier must check both overlay path and no-such-file signal"
+        );
     }
 }

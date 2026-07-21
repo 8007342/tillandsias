@@ -1,0 +1,60 @@
+# @trace spec:git-mirror-service
+name: litmus:running-image-freshness
+spec: git-mirror-service
+phase: post-build
+size: small
+severity: critical
+description: >
+  Verify the running-image freshness gate actually DETECTS a container serving an
+  image older than the checkout, and does not merely report PASS. Three times a
+  fix landed, its litmus went green, and hours were then spent debugging the
+  already-fixed defect because the RUNNING container still served a pre-fix image
+  (orders 301->302, 369->384, 414->422). The 414 instance was the expensive one:
+  the mirror's Vault AppRole token has a ~1h TTL and the running image had no
+  renewer, so roughly one hour into every forge session the mirror silently lost
+  push while reporting a misleading "run GitHub Login" diagnostic.
+
+  The negative control is the load-bearing step: a freshness gate that cannot
+  detect staleness would reinforce the very false-success class this spec keeps
+  getting bitten by.
+
+preconditions:
+  - workspace contains scripts/check-running-image-freshness.sh
+  - workspace contains scripts/test-running-image-freshness.sh
+  - podman available (fixture SKIPs cleanly otherwise)
+
+critical_path:
+  - step: "gate detects a stale running image, skips when none runs, and passes on the current image"
+    command: "scripts/test-running-image-freshness.sh"
+    timeout_ms: 180000
+    expected_behavior: "PASS: running-image freshness gate fixture (order 422)"
+
+  - step: "the gate is content-hash based, not timestamp or heuristic based"
+    command: "grep -Fq 'hash-image-sources.sh' scripts/check-running-image-freshness.sh && ! grep -Eq 'date \\+%s|stat -c %Y' scripts/check-running-image-freshness.sh && echo 'ok: content-hash comparison'"
+    timeout_ms: 5000
+    expected_behavior: "ok: content-hash comparison"
+
+  - step: "drift fails loud with a non-zero exit and names the offending container"
+    command: "grep -Fq 'exit 1' scripts/check-running-image-freshness.sh && grep -Fq 'STALE' scripts/check-running-image-freshness.sh && echo 'ok: fails loud'"
+    timeout_ms: 5000
+    expected_behavior: "ok: fails loud"
+
+  - step: "the gate reports three states and never claims STALE without positive evidence"
+    command: "grep -Fq 'INDETERMINATE' scripts/check-running-image-freshness.sh && grep -Fq 'io.tillandsias.image.source-digest' scripts/check-running-image-freshness.sh && echo 'ok: three-state honesty'"
+    timeout_ms: 5000
+    expected_behavior: "ok: three-state honesty"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "running-image freshness gate detects a container older than the checkout"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "running-image-freshness"
+
+rollback:
+  on_failure: >
+    Do NOT weaken the negative control to make this pass. If case 3 fails, the
+    gate cannot detect staleness and is worse than absent. Inspect the container
+    image-tag resolution in scripts/check-running-image-freshness.sh.
+  command: "scripts/check-running-image-freshness.sh git"

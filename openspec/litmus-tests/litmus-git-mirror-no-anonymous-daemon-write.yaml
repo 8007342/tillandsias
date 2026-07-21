@@ -1,0 +1,74 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-no-anonymous-daemon-write
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  What must hold is that no anonymous write reaches GITHUB — not that the
+  internal daemon refuses pushes. The tillandsias-git daemon serves ONLY the
+  enclave (--internal network, no internet route), and every client is one of
+  the operator's own forge agents, which push by design. So the daemon enables
+  receive-pack (order 450): it is the forge's live push path, and disabling it
+  (order 423, before the order-322 authenticated-smart-HTTP replacement shipped)
+  broke every forge push ("access denied or repository not exported"), diagnosed
+  by Hy3 in-forge 2026-07-19.
+
+  The REAL boundary is downstream and is what this litmus pins: a push accepted
+  by the daemon reaches GitHub ONLY through the pre-receive relay, which
+  authenticates with the Vault-held token, never uses --mirror/--all, and guards
+  bulk deletes — so a rogue enclave push cannot rewrite or destroy upstream. And
+  the genuinely anonymous, internet-shaped HTTP write path (lighttpd /
+  git-http-backend, http.receivepack) stays disabled.
+
+  The daemon receive-pack path is EXPLICITLY INTERIM (v0.4 only). Operator
+  2026-07-19: unauthenticated writes are not acceptable even within the forge.
+  The authenticated replacement is tracked by order 322 (research) + order 451
+  (impl), which will remove --enable=receive-pack once authenticated per-forge
+  writes land; see plan/issues/research-authenticated-forge-writes-restore-2026-07-19.md.
+  Until then, receive-pack on the internal-only daemon is the working,
+  relay-gated push path.
+
+preconditions:
+  - workspace contains images/git/entrypoint.sh
+  - workspace contains images/git/relay-refs.sh
+  - workspace contains images/git/pre-receive-hook.sh
+
+critical_path:
+  - step: "the daemon serves read (--export-all) for agent clone/fetch"
+    command: "grep -qE -- '--export-all' images/git/entrypoint.sh && echo 'ok: daemon read path present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: daemon read path present"
+
+  - step: "every accepted push reaches GitHub only through the pre-receive relay (the real GitHub-auth boundary)"
+    command: "grep -Fq 'tillandsias-relay-refs' images/git/pre-receive-hook.sh && echo 'ok: pre-receive relay is the upstream boundary'"
+    timeout_ms: 5000
+    expected_behavior: "ok: pre-receive relay is the upstream boundary"
+
+  - step: "the relay never force-mirrors upstream — a rogue push cannot rewrite/destroy GitHub refs"
+    command: "! grep -Eq 'git +push[^|&]*(--mirror|--all)\\b' images/git/relay-refs.sh && echo 'ok: no --mirror/--all upstream'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no --mirror/--all upstream"
+
+  - step: "the anonymous HTTP write path stays disabled (http.receivepack unset, no http server spawned)"
+    command: "grep -Fq 'config --unset-all http.receivepack' images/git/entrypoint.sh && ! grep -vE '^[[:space:]]*#' images/git/entrypoint.sh | grep -qiE 'lighttpd|git-http-backend' && echo 'ok: no anonymous HTTP write path'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no anonymous HTTP write path"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "git mirror routes every accepted push through the authenticated pre-receive relay"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-no-anonymous-daemon-write"
+
+rollback:
+  on_failure: >
+    The protection is the RELAY boundary, not daemon receive-pack. If a step
+    fails, ensure the pre-receive hook still invokes tillandsias-relay-refs and
+    that relay-refs never uses --mirror/--all. Do NOT "fix" this by disabling
+    daemon receive-pack — that breaks the forge push path (order 450) without
+    adding real protection, since the daemon is enclave-internal. Order 322
+    (authenticated smart HTTP) is the proper per-agent-auth upgrade.
+  command: "grep -n 'receive-pack\\|relay-refs\\|--mirror' images/git/entrypoint.sh images/git/relay-refs.sh"

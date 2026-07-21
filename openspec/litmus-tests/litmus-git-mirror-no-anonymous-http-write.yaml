@@ -1,0 +1,60 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-no-anonymous-http-write
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  The mirror must expose no unauthenticated HTTP write path. Until order
+  423/426 it ran lighttpd + git-http-backend with `http.receivepack true` and NO
+  auth module loaded — which git documents as enabling push "for all users,
+  including anonymous users" — while nothing in the launcher or the forge ever
+  spoke HTTP to it. Every injected remote is git://tillandsias-git/<project>
+  (see write_forge_gitconfig). So it was simultaneously dead code and an
+  anonymous write path, and lib-common.sh advertised the port to operators as
+  though it carried traffic.
+
+  This litmus pins the removal. Reintroducing an HTTP listener is allowed ONLY
+  together with real authentication (that is order 322 rung E, gated on the
+  credential-helper work in order 424) — never as a bare listener.
+
+preconditions:
+  - workspace contains images/git/Containerfile and images/git/entrypoint.sh
+
+critical_path:
+  - step: "no lighttpd package, config, or process in the git image"
+    command: "! grep -qi 'lighttpd' images/git/Containerfile && ! test -f images/git/lighttpd.conf && ! grep -qE '^[^#]*lighttpd' images/git/entrypoint.sh && echo 'ok: no lighttpd'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no lighttpd"
+
+  - step: "http.receivepack is never enabled on the mirror repo"
+    command: "! grep -qE '^[^#]*config http\\.receivepack true' images/git/entrypoint.sh && echo 'ok: http.receivepack not enabled'"
+    timeout_ms: 5000
+    expected_behavior: "ok: http.receivepack not enabled"
+
+  - step: "the image exposes no HTTP port"
+    command: "! grep -qE '^EXPOSE .*8080' images/git/Containerfile && echo 'ok: no 8080 exposed'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no 8080 exposed"
+
+  - step: "operator-facing banner does not advertise an HTTP mirror endpoint"
+    command: "! grep -q 'tillandsias-git:8080' images/default/lib-common.sh && echo 'ok: banner does not advertise HTTP'"
+    timeout_ms: 5000
+    expected_behavior: "ok: banner does not advertise HTTP"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "git mirror exposes no unauthenticated HTTP write path"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-no-anonymous-http-write"
+
+rollback:
+  on_failure: >
+    Do NOT satisfy this by adding an HTTP listener without authentication. If
+    smart HTTP is being reintroduced deliberately, it must carry a real auth
+    module and per-container credentials (order 322 rung E, which depends on the
+    credential-helper work in order 424); update this litmus in the same change
+    to assert authentication rather than absence.
+  command: "grep -rn 'lighttpd\\|http.receivepack' images/git/"

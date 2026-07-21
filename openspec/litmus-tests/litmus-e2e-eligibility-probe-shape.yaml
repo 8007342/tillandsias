@@ -12,8 +12,10 @@ description: >
   Pin scripts/e2e-preflight.sh's e2e_eligibility_verdict probe: the
   `eligibility` standalone mode, the falsifiable verdict grammar
   ^(eligible|skip:[a-z0-9-]+)$, the deterministic no-user-session and
-  smoke-lock-held branches, and the meta-orchestration skill's consultation of
-  the probe in its E2E Gates.
+  smoke-lock-held branches, the order-442 live-runtime-present branch (a live
+  forge / shared stack it did not launch must refuse the destructive reset),
+  and the meta-orchestration skill's consultation of the probe in its E2E
+  Gates.
 severity: medium
 size: instant
 
@@ -48,6 +50,16 @@ critical_path:
     command: "grep -q 'e2e-preflight.sh eligibility' skills/meta-orchestration/SKILL.md && echo 'ok: skill-consults-probe'"
     timeout_ms: 3000
     expected_behavior: "ok: skill-consults-probe"
+
+  - step: "a live tillandsias forge / shared stack yields skip:live-runtime-present (order 442)"
+    command: "tmp=$(mktemp -d); fake=\"$tmp/bin\"; mkdir -p \"$fake\"; printf '#!/usr/bin/env bash\n[ \"$1\" = ps ] && printf \"%%s\\\\n\" \"tillandsias-tillandsias-forge\"\n' >\"$fake/podman\"; chmod +x \"$fake/podman\"; PATH=\"$fake:$PATH\" XDG_RUNTIME_DIR=\"$tmp\" bash scripts/e2e-preflight.sh eligibility; rc=$?; rm -rf \"$tmp\"; exit \"$rc\""
+    timeout_ms: 5000
+    expected_behavior: "skip:live-runtime-present"
+
+  - step: "the live-runtime guard is wired into all three host branches (order 442)"
+    command: "grep -c 'live_runtime_is_present' scripts/e2e-preflight.sh | grep -qE '^[3-9]|1[0-9]' && echo 'ok: live-runtime-guard-wired' || { echo 'FAIL: live_runtime_is_present not called in all branches'; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: live-runtime-guard-wired"
 
 observability:
   traces:

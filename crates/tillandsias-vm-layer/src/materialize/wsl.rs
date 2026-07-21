@@ -100,7 +100,11 @@ pub async fn tar_to_wsl_import(
         return Err(format!(
             "wsl --import failed: exited {}; stderr: {}",
             output.status,
-            if stderr.is_empty() { "(empty)" } else { &stderr }
+            if stderr.is_empty() {
+                "(empty)"
+            } else {
+                &stderr
+            }
         ));
     }
     Ok(())
@@ -111,7 +115,9 @@ pub async fn tar_to_wsl_import(
 /// 2 GiB safety floor. `Err` carries the actionable operator message.
 pub fn evaluate_host_import_headroom(avail_bytes: u64, tar_bytes: u64) -> Result<(), String> {
     const SAFETY_FLOOR_BYTES: u64 = 2 * 1024 * 1024 * 1024;
-    let needed = tar_bytes.saturating_mul(2).saturating_add(SAFETY_FLOOR_BYTES);
+    let needed = tar_bytes
+        .saturating_mul(2)
+        .saturating_add(SAFETY_FLOOR_BYTES);
     if avail_bytes < needed {
         return Err(format!(
             "the host drive is low on space: {} MiB available, but importing the \

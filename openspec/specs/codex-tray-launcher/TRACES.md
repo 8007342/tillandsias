@@ -7,3 +7,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-core/src/event.rs#L133](../../../crates/tillandsias-core/src/event.rs#L133)
 - [images/default/entrypoint-forge-codex.sh#L6](../../../images/default/entrypoint-forge-codex.sh#L6)
+- [images/default/entrypoint-forge-codex.sh#L122](../../../images/default/entrypoint-forge-codex.sh#L122)

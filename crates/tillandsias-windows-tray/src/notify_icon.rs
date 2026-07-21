@@ -1060,7 +1060,17 @@ fn mark_wire_unreachable(hwnd: HWND) {
     update_status_text(WIRE_UNREACHABLE_CHIP_TEXT, hwnd);
     // Edge-track the first transition for mark_wire_recovered's companion check.
     // Balloon suppressed — status chip in the menu carries the same information.
-    WIRE_DEGRADED_NOTIFIED.swap(true, std::sync::atomic::Ordering::SeqCst);
+    if !WIRE_DEGRADED_NOTIFIED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        // First transition into degraded: make it durable. Without this the
+        // wire loss was rendered on the chip only — tray.log and the Windows
+        // Event Log stayed silent, so a stale-menu episode was undiagnosable
+        // post-hoc (operator report 2026-07-19, fresh v0.3.260719.1 install).
+        // Change-gated: one WARN per degradation episode, not one per poll.
+        tracing::warn!(
+            "control wire unreachable — in-VM headless not answering; \
+             menu state may be stale until the wire recovers"
+        );
+    }
 }
 
 /// Companion to [`mark_wire_unreachable`]: called from the poll-success path
@@ -1068,7 +1078,10 @@ fn mark_wire_unreachable(hwnd: HWND) {
 /// edge-trigger flag so the next degradation can fire another edge. Status chip
 /// in the menu already reflects the recovered state via update_status_text.
 fn mark_wire_recovered(_hwnd: HWND) {
-    WIRE_DEGRADED_NOTIFIED.swap(false, std::sync::atomic::Ordering::SeqCst);
+    if WIRE_DEGRADED_NOTIFIED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        // Close the episode in the same durable channels the WARN opened it.
+        tracing::info!("control wire recovered");
+    }
 }
 
 /// Compose a one-line description of an `Error` reply the in-VM headless's
@@ -2387,7 +2400,10 @@ fn spawn_provisioning(hwnd: HWND) {
                             while terminal_rx.changed().await.is_ok() {
                                 let reason = terminal_rx.borrow_and_update().clone();
                                 if let Some(reason) = reason {
-                                    update_status_text("\u{1F534} VM connection lost — Retry", hwnd);
+                                    update_status_text(
+                                        "\u{1F534} VM connection lost — Retry",
+                                        hwnd,
+                                    );
                                     show_balloon(
                                         hwnd,
                                         "Tillandsias — VM connection lost",
@@ -2528,16 +2544,20 @@ fn spawn_provisioning(hwnd: HWND) {
                 // is, so a remote crash is debuggable with zero live help.
                 let reason = err_text.clone();
                 tokio::task::spawn_local(async move {
-                    let written =
-                        tokio::task::spawn_blocking(move || write_failure_diagnostics_bundle(&reason))
-                            .await
-                            .ok()
-                            .flatten();
+                    let written = tokio::task::spawn_blocking(move || {
+                        write_failure_diagnostics_bundle(&reason)
+                    })
+                    .await
+                    .ok()
+                    .flatten();
                     if let Some(path) = written {
                         show_balloon(
                             hwnd,
                             "Tillandsias — diagnostics saved",
-                            &format!("Share this file when reporting the problem:\n{}", path.display()),
+                            &format!(
+                                "Share this file when reporting the problem:\n{}",
+                                path.display()
+                            ),
                             BalloonSeverity::Info,
                         );
                     }
@@ -3060,10 +3080,7 @@ mod tests {
         assert!(path.ends_with("launch-failure-diagnostics.json"));
         let content = std::fs::read_to_string(&path).expect("bundle readable");
         let json: serde_json::Value = serde_json::from_str(&content).expect("valid JSON");
-        assert_eq!(
-            json["schema"],
-            "tillandsias-launch-failure-bundle/v1"
-        );
+        assert_eq!(json["schema"], "tillandsias-launch-failure-bundle/v1");
         assert!(json["reason"].as_str().unwrap().contains("[REDACTED]"));
         assert!(!content.contains("ghp_16C7"), "no raw token in the bundle");
         assert!(json["diagnose"]["version"].is_string(), "diagnose embedded");

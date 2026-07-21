@@ -241,11 +241,69 @@ export_pull_cache_path
 # Lifecycle tracing — function defined earlier in this file. See the forward
 # declaration block above.
 
+# @trace spec:git-mirror-service, spec:forge-hot-cold-split
+# Materialise the git index if the gitdir facade left it absent (order 425).
+#
+# THIS PREVENTS A MASS-DELETION COMMIT. The host-side facade builder
+# (write_forge_index) cannot run `git read-tree` when the launching host has no
+# git binary — WSL2 and VZ guests ship none — so it returns early, leaving
+# .git/index absent and a comment promising "in-container materialization".
+# Nothing implemented that promise; `grep -rn read-tree images/` returned zero.
+#
+# An absent index is NOT merely inconvenient. Verified empirically:
+#
+#   $ rm .git/index && git status --porcelain
+#   D  a.txt          <- every tracked file reads as STAGED-DELETED
+#   ?? a.txt          <- and simultaneously untracked
+#   $ git commit -am "work"
+#   3 files changed, 3 deletions(-)   <- HEAD is now EMPTY
+#
+# The working tree still holds every file, so nothing looks wrong locally — and
+# through the mirror relay that commit is pushed straight to GitHub. An agent
+# doing the most ordinary thing in the world, `git commit -am`, wipes the repo.
+#
+# Every forge image carries git, which is what the original comment assumed, so
+# keeping the promise is a one-liner. Fails LOUD rather than proceeding into the
+# dangerous state.
+ensure_forge_git_index() {
+    local dir="${1:-$PWD}"
+    git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+
+    local gitdir
+    gitdir="$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+    [ -n "$gitdir" ] || return 0
+    [ -e "$gitdir/index" ] && return 0
+
+    # No HEAD yet (freshly initialised repo) — an absent index is correct.
+    git -C "$dir" rev-parse --verify HEAD >/dev/null 2>&1 || return 0
+
+    trace_lifecycle "git" "index absent — materialising from HEAD (order 425)"
+    if git -C "$dir" read-tree HEAD 2>/dev/null; then
+        trace_lifecycle "git" "index materialised from HEAD"
+        return 0
+    fi
+
+    echo "" >&2
+    echo "ERROR: git index is absent and could not be rebuilt from HEAD." >&2
+    echo "  Repo: $dir" >&2
+    echo "  Committing in this state would record the DELETION of every tracked" >&2
+    echo "  file — 'git commit -am' would empty the repository and the mirror" >&2
+    echo "  would relay that upstream. Refusing to continue silently." >&2
+    echo "  Fix: run 'git read-tree HEAD' in the repo, or relaunch the forge." >&2
+    echo "" >&2
+    return 1
+}
+
 configure_git_identity() {
     # @trace spec:secrets-management, spec:git-mirror-service
     # GitHub Login stores identity on the host; launchers pass it in as env.
     # Write repo-local config too so `git config user.*` and tools that inspect
     # config see the same identity that Git uses for commits.
+    #
+    # Order 425: materialise the index FIRST. Every lane already calls this
+    # function after find_project_dir, so hooking here covers them all without
+    # touching five entrypoints.
+    ensure_forge_git_index "${PROJECT_DIR:-$PWD}" || true
     local name="${GIT_AUTHOR_NAME:-${GIT_COMMITTER_NAME:-}}"
     local email="${GIT_AUTHOR_EMAIL:-${GIT_COMMITTER_EMAIL:-}}"
 
@@ -396,7 +454,7 @@ rewrite_origin_for_enclave_push() {
     fi
 
     trace_lifecycle "git-mirror" "host-mount origin rewrite: ${original} -> ${mirror_url}"
-    echo "[forge] git push origin <branch> routes to the enclave mirror (tillandsias-git:8080); upstream is ${original}."
+    echo "[forge] git push origin <branch> routes to the enclave mirror (${mirror_url}); upstream is ${original}."
 }
 
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:forge-offline
@@ -525,9 +583,57 @@ clone_project_from_mirror() {
     # Network transport (Linux/podman).
     if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]]; then
         trace_lifecycle "git-mirror" "cloning from git://tillandsias-git/${TILLANDSIAS_PROJECT}"
-        local max_retries=5
+        # Retry budget: the launcher-side wait_for_git_mirror_ready gate
+        # (order 452 slice 2) blocks the launch until the mirror advertises a
+        # resolvable HEAD, so this loop is the fail-loud BACKSTOP, not the
+        # primary wait. Still, a first seed is a full-repo fetch from GitHub
+        # through the proxy (~minutes on slow links, and the gate can be
+        # skipped on lanes without a remote), so back off to ~60s instead of
+        # the old 5x1s that guaranteed a crash during any real seed window.
+        local max_retries=12
+        local backoff
         for i in $(seq 1 $max_retries); do
+            if [[ $i -le 6 ]]; then backoff=2; else backoff=5; fi
             if git clone "git://tillandsias-git/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
+                # @trace spec:git-mirror-service
+                # A git daemon serving a mid-seed (still-empty) bare repo returns
+                # a SUCCESSFUL clone of an EMPTY repository — git only prints
+                # "warning: You appear to have cloned an empty repository" and
+                # exits 0. That silently drops the agent into a checkout with no
+                # HEAD and no files (the "forge had no checkout" symptom,
+                # 2026-07-20). Assert ground truth: the clone MUST have a
+                # resolvable HEAD. If not, the mirror has not finished seeding
+                # from upstream — treat it like a not-ready mirror and RETRY
+                # rather than proceeding, and FAIL LOUD (never launch on an empty
+                # tree) once retries are exhausted.
+                if ! git -C "$clone_dir" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
+                    rm -rf "$clone_dir" 2>/dev/null || true
+                    if [[ $i -lt $max_retries ]]; then
+                        trace_lifecycle "git-mirror" "clone returned an EMPTY tree (mirror still seeding), retrying ($i/$max_retries, ${backoff}s)..."
+                        sleep "$backoff"
+                        continue
+                    fi
+                    echo "[forge] FATAL: git clone from git://tillandsias-git/${TILLANDSIAS_PROJECT} produced an EMPTY checkout (no HEAD) after $max_retries attempts." >&2
+                    # Distinguish the two failure classes so the operator fixes
+                    # the right thing (they previously shared one misleading
+                    # message that blamed seeding for a mirror-side defect):
+                    #   - refs advertised but no HEAD line -> the mirror's HEAD
+                    #     is unset/unborn (mirror defect; ensure-mirror-head in
+                    #     the git image repairs this — the running container is
+                    #     probably an OLD image);
+                    #   - no refs at all -> the mirror has not finished seeding
+                    #     from upstream, or upstream is genuinely empty.
+                    local advertised
+                    advertised="$(git ls-remote "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || true)"
+                    if [[ -n "$advertised" ]] && ! echo "$advertised" | grep -q $'\tHEAD$'; then
+                        echo "[forge] The mirror ADVERTISES refs but its HEAD is unset (unborn-HEAD mirror defect)." >&2
+                        echo "[forge] Restart/rebuild the tillandsias-git container so ensure-mirror-head repairs it (images/git/ensure-mirror-head.sh)." >&2
+                    else
+                        echo "[forge] The mirror is reachable but advertised no cloneable refs — it has not finished seeding from upstream (or upstream is empty)." >&2
+                    fi
+                    echo "[forge] Refusing to launch an agent on an empty working tree." >&2
+                    exit 1
+                fi
                 trace_lifecycle "git-mirror" "clone successful"
                 cd "$clone_dir" || return 1
                 git remote set-url --push origin "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
@@ -538,8 +644,8 @@ clone_project_from_mirror() {
                 return 0
             fi
             if [[ $i -lt $max_retries ]]; then
-                trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$max_retries)..."
-                sleep 1
+                trace_lifecycle "git-mirror" "git service not ready, retrying ($i/$max_retries, ${backoff}s)..."
+                sleep "$backoff"
             else
                 trace_lifecycle "git-mirror" "clone failed after $max_retries attempts"
             fi
@@ -889,10 +995,79 @@ ensure_forge_prebuilt_tools() {
 # without a survival path, so every update is now probed and a broken
 # fresh install rolls back to the last KNOWN-GOOD version recorded in the
 # persistent npm cache.
+# ── Harness CONTRACT verification (order 439) ───────────────
+# Liveness is not enough. An upstream release can start cleanly while having
+# renamed or dropped a flag we pass, and `--version` will happily report OK:
+#
+#   * order 429 found the forge passing `--dangerously-skip-permissions` to
+#     opencode — a flag it DOES NOT HAVE. yargs is non-strict, so it was
+#     silently swallowed for an unknown length of time while the lane's
+#     permissive behaviour actually came from the config overlay.
+#   * order 431 is blocked because we would depend on the UNDOCUMENTED
+#     OPENCODE_AUTH_CONTENT for keeping credentials off disk; a release that
+#     renames it passes a liveness probe while credentials silently revert to
+#     auth.json — inside the container built to keep them off disk.
+#
+# So the probe now asserts the contracts we actually rely on. A harness that
+# starts but no longer accepts a flag we pass is broken FOR US, and takes the
+# same last-good rollback path as a crashing one (order 284).
+#
+# Keep these lists in sync with the entrypoints that pass the flags. A flag
+# listed here and absent upstream is a LOUD failure by design — that is the
+# whole point.
+harness_contract_help_cmd() {
+    # Flags live on subcommands, so each harness needs its own help invocation.
+    case "$1" in
+        opencode) echo "run --help" ;;
+        codex)    echo "exec --help" ;;
+        *)        echo "" ;;
+    esac
+}
+
+harness_contract_flags() {
+    case "$1" in
+        # entrypoint-forge-opencode.sh: `opencode run --auto [--format json]`
+        opencode) echo "--auto --format" ;;
+        # entrypoint-forge-codex.sh: `codex exec --dangerously-bypass-approvals-and-sandbox [--json --output-last-message]`
+        codex)    echo "--json --output-last-message --dangerously-bypass-approvals-and-sandbox" ;;
+        *)        echo "" ;;
+    esac
+}
+
+harness_contract_ok() {
+    # $1 = binary name. Returns 0 when every flag we pass still exists, or when
+    # no contract is declared for this harness. Never fails merely because help
+    # output could not be captured (offline/slow): a contract check that fails
+    # open on infrastructure noise would cause spurious rollbacks, so ambiguity
+    # is treated as "not disproven" and only a POSITIVE absence fails.
+    local bin="$1"
+    local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+    local help_cmd flags help_out missing=""
+    help_cmd="$(harness_contract_help_cmd "$bin")"
+    flags="$(harness_contract_flags "$bin")"
+    [ -n "$help_cmd" ] && [ -n "$flags" ] || return 0
+
+    # shellcheck disable=SC2086
+    help_out="$(timeout 30 "$bin_path" $help_cmd 2>&1)" || return 0
+    [ -n "$help_out" ] || return 0
+
+    for f in $flags; do
+        printf '%s' "$help_out" | grep -qF -- "$f" || missing="$missing $f"
+    done
+    if [ -n "$missing" ]; then
+        trace_lifecycle "harness" "$bin CONTRACT BROKEN — flags we pass are absent upstream:$missing"
+        return 1
+    fi
+    return 0
+}
+
 harness_probe() {
-    # $1 = binary name. Cheap liveness: --version within a short timeout.
+    # $1 = binary name. Liveness (--version within a short timeout) AND the
+    # contracts we depend on (order 439). Both must hold: a harness that starts
+    # but silently ignores our flags is not usable, it just fails invisibly.
     local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1"
-    [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1
+    [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1 \
+        && harness_contract_ok "$1"
 }
 
 harness_last_good_file() {

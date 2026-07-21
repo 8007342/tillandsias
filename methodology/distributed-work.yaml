@@ -825,6 +825,29 @@ distributed_work:
           Self-assignment orientation, claiming leases, implementing code/specs/cheatsheets,
           emitting progress checkpoints, executing litmus tests, and publishing completed evidence.
 
+  agent_fleet_naming:
+    purpose: >
+      Define the agent, model, operator, and host names used by coordination
+      ledgers so cold-started agents interpret them consistently.
+    names:
+      BigPickle:
+        runtime: "opencode CLI model"
+        model: opencode/big-pickle
+      Hy3:
+        runtime: "opencode CLI model; BigPickle's larger Zen sibling"
+        model: opencode/hy3-free
+      Terra:
+        runtime: "codex CLI model"
+        model: gpt-5.6-terra
+      Sol:
+        runtime: "codex CLI model"
+        model: gpt-5.6-sol
+      "The Tlatoāni":
+        role: "human operator authority"
+      macuahuitl:
+        role: "mutable-Linux coordinator host nickname"
+    provenance: plan/issues/agent-fleet-and-zeroclaw-roadmap-2026-07-17.md
+
   worker_agent_protocol:
     purpose: >
       Detailed execution loop for worker agents to claim, execute, and complete shaped work

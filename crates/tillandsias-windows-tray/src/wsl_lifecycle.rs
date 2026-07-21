@@ -387,8 +387,9 @@ impl WslLifecycle {
                  guest as damaged and reprovisioning from scratch (one-shot \
                  self-heal; the guest is disposable by design)"
             );
-            progress
-                .report_message("\u{267B}\u{FE0F} Local VM is damaged — reprovisioning from scratch...");
+            progress.report_message(
+                "\u{267B}\u{FE0F} Local VM is damaged — reprovisioning from scratch...",
+            );
             self.unregister_distro().await?;
             let _ = tokio::fs::remove_file(&marker).await;
             // Fall through to the full download + import path below.
@@ -658,21 +659,32 @@ for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_se
                  fetch the latest release (version skew possible — stage via \
                  scripts/build-guest-binaries.sh before scripts/build-windows-tray.ps1)"
             );
-            // 1. fetch-headless.sh
-            let fetch_script = r#"#!/usr/bin/env bash
+            // 1. fetch-headless.sh — pinned to THIS tray's version, never
+            // `releases/latest` (= newest STABLE by GitHub semantics). The
+            // latest-URL fallback is how the v0.3.260719.1 field install got
+            // a v0.3.260712.1 guest: CI ships the tray without staged guest
+            // binaries, the guest fetched the stable, and every
+            // already-fixed guest bug (inference --replace collisions, lane
+            // crashes) resurfaced under a new tray. Version skew is worse
+            // than a failed fetch — a missing same-version asset must fail
+            // loud, not silently downgrade the wire.
+            let fetch_script = format!(
+                r#"#!/usr/bin/env bash
 set -euo pipefail
 DEST="/usr/local/bin/tillandsias-headless"
 if [[ -x "$DEST" ]]; then exit 0; fi
 ARCH="$(uname -m)"
-URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-${ARCH}-unknown-linux-musl"
+URL="https://github.com/8007342/tillandsias/releases/download/v{version}/tillandsias-headless-${{ARCH}}-unknown-linux-musl"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$TMP" "$URL"
 install -D -m 0755 "$TMP" "$DEST"
-"#;
+"#,
+                version = env!("WORKSPACE_VERSION")
+            );
             self.wsl_root_write(
                 "/usr/local/lib/tillandsias/fetch-headless.sh",
-                fetch_script,
+                &fetch_script,
                 true,
             )
             .await?;
@@ -1252,14 +1264,26 @@ mod tests {
     fn wsl_fetch_script_installs_download_via_temp_file() {
         let source = include_str!("wsl_lifecycle.rs");
         let fetch_script = source
-            .split("let fetch_script = r#\"")
+            .split("let fetch_script = format!(")
             .nth(1)
-            .and_then(|tail| tail.split("\"#;").next())
+            .and_then(|tail| tail.split("\"#,").next())
             .expect("fetch-headless script window");
 
         assert!(
             fetch_script.contains("TMP=\"$(mktemp)\""),
             "fetch script must create a temp file before downloading"
+        );
+        // Version-skew guard: the fetch URL must pin THIS tray's release —
+        // never `releases/latest`, which resolves to the newest STABLE and
+        // provisioned a v0.3.260712.1 guest under a v0.3.260719.1 tray
+        // (2026-07-19 field repro: every fixed guest bug resurfaced).
+        assert!(
+            fetch_script.contains("releases/download/v{version}/"),
+            "fetch URL must pin the tray's own version"
+        );
+        assert!(
+            !fetch_script.contains("releases/latest"),
+            "fetch URL must never use the stable-only latest alias"
         );
         assert!(
             fetch_script.contains("trap 'rm -f \"$TMP\"' EXIT"),

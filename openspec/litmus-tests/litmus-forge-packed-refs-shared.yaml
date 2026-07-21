@@ -1,0 +1,56 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-packed-refs-shared
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  The forge gitdir facade bind-mounts objects/ and refs/ live, but used to COPY
+  packed-refs. A host-side `git gc` — which auto-gc triggers routinely and
+  silently — packs loose refs into the host's packed-refs and deletes the loose
+  files. refs/ is shared so the container's view empties, and the stale copy
+  predates the gc, so refs exist in neither place.
+
+  Worse than lost refs: with HEAD unresolvable the container sees tracked files
+  as UNTRACKED, and a commit creates an ORPHANED ROOT COMMIT, silently
+  detaching the agent's work from all history.
+
+  The fixture's case 1 REPRODUCES the loss with a copied packed-refs before
+  case 2 proves a shared one prevents it. A guard that cannot demonstrate the
+  hazard is not evidence.
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains scripts/test-forge-packed-refs-split-brain.sh
+
+critical_path:
+  - step: "copied packed-refs loses refs on host gc; shared survives and keeps ancestry"
+    command: "scripts/test-forge-packed-refs-split-brain.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: forge packed-refs split-brain fixture (order 432)"
+
+  - step: "the facade bind-mounts packed-refs rather than relying on the copy"
+    command: "grep -Fq 'target={target}/packed-refs' crates/tillandsias-headless/src/main.rs && echo 'ok: packed-refs is mounted'"
+    timeout_ms: 5000
+    expected_behavior: "ok: packed-refs is mounted"
+
+  - step: "the absent-packed-refs window is stated, not silently ignored"
+    command: "grep -Fq 'has no packed-refs; if a host-side' crates/tillandsias-headless/src/main.rs && echo 'ok: window disclosed'"
+    timeout_ms: 5000
+    expected_behavior: "ok: window disclosed"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "forge shares packed-refs so a host repack cannot strip the container's refs"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "forge-packed-refs-shared"
+
+rollback:
+  on_failure: >
+    Do NOT revert to copying packed-refs. If case 1 stops reproducing the loss,
+    git's repack behaviour has changed — verify that directly before altering
+    anything, because the failure mode is an agent silently committing onto an
+    orphaned history.
+  command: "grep -n 'packed-refs' crates/tillandsias-headless/src/main.rs"

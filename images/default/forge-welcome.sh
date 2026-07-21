@@ -49,7 +49,7 @@ L_WELCOME_CODE="${L_WELCOME_CODE:-Code}"
 L_WELCOME_CODE_DESC="${L_WELCOME_CODE_DESC:-cloned from git mirror (uncommitted work is ephemeral)}"
 L_WELCOME_SERVICES="${L_WELCOME_SERVICES:-Services}"
 L_WELCOME_PROXY_DESC="${L_WELCOME_PROXY_DESC:-caching HTTP/S proxy (allowlisted domains)}"
-L_WELCOME_GIT_DESC="${L_WELCOME_GIT_DESC:-git mirror (git push origin routes through git-service:9418)}"
+L_WELCOME_GIT_DESC="${L_WELCOME_GIT_DESC:-git mirror (git push origin routes through tillandsias-git:9418)}"
 L_WELCOME_INFERENCE_DESC="${L_WELCOME_INFERENCE_DESC:-ollama (local LLM)}"
 
 # ── Environment ──────────────────────────────────────────────
@@ -137,7 +137,7 @@ printf "    ${B_GREEN}%s${RST}          ${DIM}%s${RST}\n" "$L_WELCOME_CODE" "$L_
 echo ""
 printf "  ${B_WHITE}%s${RST}\n" "$L_WELCOME_SERVICES"
 printf "    ${B_CYAN}proxy${RST}         ${DIM}%s${RST}\n" "$L_WELCOME_PROXY_DESC"
-printf "    ${B_CYAN}git-service${RST}   ${DIM}%s${RST}\n" "$L_WELCOME_GIT_DESC"
+printf "    ${B_CYAN}tillandsias-git${RST}   ${DIM}%s${RST}\n" "$L_WELCOME_GIT_DESC"
 # DISTRO: Forge is Fedora — curl available. Do NOT use wget for consistency.
 if curl -s "http://inference:11434/api/version" >/dev/null 2>&1; then
     printf "    ${B_CYAN}inference${RST}     ${DIM}%s${RST}\n" "$L_WELCOME_INFERENCE_DESC"

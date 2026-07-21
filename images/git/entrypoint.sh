@@ -103,9 +103,28 @@ if [ -n "$PROJECT" ]; then
         # before this sparse mirror accepts the same transaction.
         git -C "$PROJECT_REPO" config receive.denyNonFastforwards false
         git -C "$PROJECT_REPO" config receive.denyDeletes false
+        # @trace spec:git-mirror-service
+        # Unborn-HEAD fix (2026-07-20): `git init --bare` points HEAD at
+        # refs/heads/master (Alpine default). Upstream may have NO master, so
+        # a clone of the seeded mirror exits 0 with "remote HEAD refers to
+        # nonexistent ref" and an EMPTY working tree — which the order-452
+        # guest assert then escalates to a deterministic crash of EVERY
+        # harness launch. Point HEAD at the launcher-declared branch NOW
+        # (symbolic-ref accepts unborn branches); the seed fetch below makes
+        # it cloneable, and ensure-mirror-head repairs volumes created before
+        # this fix. plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md
+        if [ -n "$TILLANDSIAS_PROJECT_DEFAULT_BRANCH" ]; then
+            git -C "$PROJECT_REPO" symbolic-ref HEAD "refs/heads/$TILLANDSIAS_PROJECT_DEFAULT_BRANCH"
+            echo "[git-service] HEAD -> refs/heads/$TILLANDSIAS_PROJECT_DEFAULT_BRANCH (launcher default branch)"
+        fi
     fi
-    # Always ensure http.receivepack is enabled so we can push via HTTP
-    git -C "$PROJECT_REPO" config http.receivepack true
+    # http.receivepack is deliberately NOT enabled (order 423/426). Git
+    # documents it as enabling push "for all users, including anonymous users",
+    # and the mirror serves no authenticated HTTP. All forge transport is
+    # git:// (see write_forge_gitconfig, which injects
+    # url.git://tillandsias-git/<project>.insteadOf). Leaving it on gave the
+    # mirror a second anonymous write path with no consumer.
+    git -C "$PROJECT_REPO" config --unset-all http.receivepack 2>/dev/null || true
     if [ -n "$TILLANDSIAS_PROJECT_REMOTE_URL" ]; then
         # Redact any embedded credentials in the URL we log (defense in depth;
         # the launcher should pass a clean URL).
@@ -172,6 +191,63 @@ retry_msg() {
     fi
     echo "$1"
 }
+
+# @trace spec:git-mirror-service
+# ensure-mirror-head repairs an unborn HEAD (see the script's header and
+# plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md).
+# ENSURE_HEAD is overridable so offline fixtures exercise the exact same
+# implementation this entrypoint runs (same pattern as RELAY_REF below).
+# Exit 3 (no heads yet — still seeding) is expected and non-fatal.
+ENSURE_HEAD="${ENSURE_HEAD:-/usr/local/share/git-service/ensure-mirror-head}"
+ensure_mirror_head() {
+    OUT="$("$ENSURE_HEAD" "$1" 2>&1)" && rc=0 || rc=$?
+    [ -n "$OUT" ] && retry_msg "[git-mirror] $OUT"
+    [ "$rc" -eq 3 ] && return 0
+    return "$rc"
+}
+
+# ── Order 437/441: START THE DAEMON FIRST ──────────────────────────────
+# Clone-only forges (order 437) clone from git://tillandsias-git the instant
+# they launch, and the per-ref startup retry-push (order 441) can take minutes
+# over a large ref set. When the daemon started only AFTER that sweep, every
+# forge launched during the sweep failed its clone with "connection refused"
+# and crashed (live 2026-07-20: Codex and OpenCode both died on clone). The
+# sweep is a BACKGROUND recovery task and must not gate the daemon that serves
+# clones. So: renewer + trap + daemon come up here; the sweep runs afterwards
+# while the daemon already serves.
+VAULT_RENEWER_PID=""
+start_vault_token_renewer
+trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
+# receive-pack IS enabled — it is the forge's live push path (order 450).
+#
+# Order 423 removed --enable=receive-pack to close an "anonymous write path",
+# but the authenticated replacement (order 322, smart HTTP) never shipped, so
+# every forge push broke ("access denied or repository not exported"). Diagnosed
+# by Hy3 in-forge 2026-07-20.
+#
+# Why re-enabling is acceptable HERE (and why 423 over-corrected for this
+# service): the daemon serves ONLY the enclave (--internal network, no internet
+# route), so the internet-anonymous-write threat git-daemon(1) warns about does
+# not apply. Every container that can reach it is one of the operator's own
+# forge agents, which legitimately push by design. The REAL boundaries are
+# downstream and unchanged: the pre-receive relay authenticates to GitHub with
+# the Vault-held token, and relay-refs.sh never uses --mirror/--all and guards
+# bulk deletes — so a rogue push cannot destroy upstream. Order 322 (per-agent
+# authenticated smart HTTP) remains the proper fix for a multi-tenant future;
+# until then, receive-pack on the internal-only daemon is the working push path.
+# The order-423 LIGHTTPD/git-http-backend removal stays — that WAS dead code and
+# a genuine anonymous path; only this live daemon push path is restored.
+git daemon \
+    --reuseaddr \
+    --export-all \
+    --enable=receive-pack \
+    --base-path=/srv/git \
+    --listen=0.0.0.0 \
+    --port=9418 \
+    --verbose &
+GIT_DAEMON_PID=$!
+echo "$(date -Is) [git-service] daemon listening on 9418 (clones available; startup sweep runs in background)" >> "$SLOG"
+
 # Only do this on a real mirror tree (skip empty/init'ing service).
 #
 # Safety: build an explicit refspec list from this mirror's local refs.
@@ -179,6 +255,10 @@ retry_msg() {
 # pass `--mirror` or `--all` here because the mirror is sparse by design.
 for mirror in /srv/git/*; do
     [ -d "$mirror" ] || continue
+    # Repair an unborn HEAD on ANY mirror before transport work — including
+    # local-only mirrors (no origin) that skip the fetch paths below but
+    # already hold forge-pushed heads a clone must be able to check out.
+    ensure_mirror_head "$mirror" || true
     REMOTE="$(git -C "$mirror" remote get-url origin 2>/dev/null || true)"
     [ -n "$REMOTE" ] || continue
 
@@ -193,6 +273,10 @@ for mirror in /srv/git/*; do
         # writes local heads and tags directly so clones over the git daemon see
         # them; subsequent reconcile fetches use the safe tracking refspec.
         FETCH_OUTPUT="$(git -C "$mirror" fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' 2>&1)" || retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
+        # The seed just wrote refs/heads/* into a repo whose HEAD may still
+        # point at a branch upstream never had (unborn-HEAD defect). Repoint
+        # HEAD now so the very first clone checks out a real branch.
+        ensure_mirror_head "$mirror" || true
         continue
     fi
 
@@ -221,40 +305,64 @@ for mirror in /srv/git/*; do
         retry_msg "[git-mirror] Startup retry-push fetch output: $FETCH_OUTPUT"
     fi
 
-    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refs=$REF_COUNT)"
-    if OUTPUT="$(printf '%s' "$UPDATE_RECORDS" | (cd "$mirror" && hooks/tillandsias-relay-refs) 2>&1)"; then
-        retry_msg "[git-mirror] Startup retry-push OK"
-    else
-        retry_msg "[git-mirror] Startup retry-push FAILED: $OUTPUT"
+    # @trace spec:git-mirror-service
+    # Coherence (order 449): advance this mirror's EXPORTED heads to upstream
+    # where fast-forwardable, so a forge cloning over git:// gets CURRENT code.
+    # The fetch above only populates refs/remotes/origin/* (tracking refs); the
+    # cloneable refs/heads/* are NOT advanced by it. Without this step a mirror
+    # left behind GitHub — e.g. the host pushed DIRECT to origin (order 449) —
+    # keeps serving STALE heads; a forge then commits on stale and its push is
+    # rejected non-fast-forward. That is the coherence break Hy3 hit 2026-07-20
+    # and the reason concurrent forges could not push transparently.
+    # NON-forced (NO leading '+'): a head carrying local un-relayed commits that
+    # would need a rewind is LEFT ALONE (fetch reports "[rejected] non-fast-
+    # forward") and is relayed UP by the per-ref push below. This is the
+    # GitHub->mirror direction; the per-ref retry-push below is mirror->GitHub —
+    # together they keep the mirror coherent both ways. Never --mirror/--all:
+    # only the explicit exported refs/heads/* set (same sparse-mirror invariant
+    # as the seed and relay paths).
+    FF_OUTPUT="$(git -C "$mirror" fetch origin 'refs/heads/*:refs/heads/*' 2>&1)" || retry_msg "[git-mirror] Startup exported-head fast-forward (non-fatal; diverged heads relay UP below): $FF_OUTPUT"
+    if [ -n "$FF_OUTPUT" ]; then
+        retry_msg "[git-mirror] Startup exported-head fast-forward: $FF_OUTPUT"
+    fi
+    # New heads may have just arrived (e.g. an existing volume whose seed
+    # predates the unborn-HEAD fix); make sure HEAD names a cloneable one.
+    ensure_mirror_head "$mirror" || true
+
+    # Per-ref relay (order 441): the OLD sweep fed ALL refs to one
+    # `git push --atomic` call, so a single stranded (non-fast-forward) ref
+    # rejected the ENTIRE transaction and no fast-forwardable ref was flushed.
+    # We now relay each ref as its own atomic transaction: a fast-forwardable
+    # ref reaches upstream even when a sibling ref is stranded, and a stranded
+    # ref is logged BY NAME rather than silently failing the whole sweep. The
+    # LIVE single-push path (relay-refs.sh) keeps its own `git push --atomic`
+    # and the never-`--mirror`/`--all` invariant untouched.
+    #
+    # RELAY_REF is overridable (fixtures point it at a mock) so the per-ref
+    # loop can be exercised offline.
+    RELAY_REF="${RELAY_REF:-hooks/tillandsias-relay-refs}"
+    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refs=$REF_COUNT, per-ref)"
+    stranded=""
+    for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
+        NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
+        RECORD="${ZERO_SHA} ${NEWSHA} ${ref}"
+        if OUTPUT="$(printf '%s\n' "$RECORD" | (cd "$mirror" && "${RELAY_REF}") 2>&1)"; then
+            retry_msg "[git-mirror] Startup retry-push OK: $ref"
+        else
+            retry_msg "[git-mirror] Startup retry-push STRANDED (logged by name): $ref — $OUTPUT"
+            stranded="${stranded:+$stranded }$ref"
+        fi
+    done
+    if [ -n "$stranded" ]; then
+        retry_msg "[git-mirror] Startup retry-push: $REF_COUNT ref(s) attempted; stranded=$stranded"
     fi
 done
 
-echo "$(date -Is) [git-service] daemon ready" >> "$SLOG"
+echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"
 
-# @trace spec:tillandsias-vault, spec:git-mirror-service
-# Start the token-renewer heartbeat (order 414) so a forge session past 1h
-# keeps its Vault access and can still relay pushes upstream.
-VAULT_RENEWER_PID=""
-start_vault_token_renewer
+# The git daemon, vault renewer, and shutdown trap were all started ABOVE, before
+# the startup sweep, so clones are served the instant the container is up (order
+# 437/441). Nothing to start here — just wait on the daemon we already launched.
 
-# Propagate shutdown signals (SIGTERM, SIGINT) to child processes
-trap 'echo "[git-service] shutting down..."; kill -TERM "$LIGHTTPD_PID" "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
-
-# Start lighttpd for git HTTP smart protocol support.
-echo "[git-service] starting lighttpd on port 8080"
-lighttpd -D -f /usr/local/share/git-service/lighttpd.conf &
-LIGHTTPD_PID=$!
-
-# Run git daemon on port 9418 in background.
-git daemon \
-    --reuseaddr \
-    --export-all \
-    --enable=receive-pack \
-    --base-path=/srv/git \
-    --listen=0.0.0.0 \
-    --port=9418 \
-    --verbose &
-GIT_DAEMON_PID=$!
-
-# Wait for background services to complete
-wait "$LIGHTTPD_PID" "$GIT_DAEMON_PID"
+# Wait for the daemon (started before the sweep) to exit.
+wait "$GIT_DAEMON_PID"

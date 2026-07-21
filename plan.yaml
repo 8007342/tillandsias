@@ -7,7 +7,7 @@ plan:
     wrapper: ./repeat
     default_profile: tillandsias
     current_directory: true
-    prompt_template: './repeat --repeat 1 --prompt "Use the /advance-work-from-plan skill"'
+    prompt_template: './repeat --times 1 --prompt "Use the /advance-work-from-plan skill"'
     repeat_template: './repeat --prompt "Use the /meta-orchestration skill"'
     big_pickle_template: './repeat --agent opencode --wait 45m --prompt "Use the /diagnose-forge skill"'
 
@@ -138,10 +138,10 @@ plan:
     - "If a step becomes stale because another step obsoleted its dependency, mark it obsoleted rather than completing it."
     - "Local work is ephemeral; remote origin is the durable copy."
     - "The `./repeat --prompt \"Use the /meta-orchestration skill\"` wrapper contract is the default autonomous entrypoint."
-    - "Use `./repeat --agent codex --repeat <times> --wait <duration> --prompt \"...\"` for bounded Codex cycles, or omit `--repeat` to run forever."
+    - "Use `./repeat --agent codex --times <times> --wait <duration> --prompt \"...\"` for bounded Codex cycles, or omit `--times` to run forever."
     - "The repeat interval is the sleep between sessions; each session should show live agent-work updates while running."
     - "Repeat-mode dashboards should show only active work and repaint when the running agent emits a new update."
-    - "The repeat-mode dashboard is rendered by the compiled Rust helper at `crates/tillandsias-repeat-graph`."
+    - "The compiled Rust helper at `crates/tillandsias-repeat-graph` exists but is not wired into `./repeat`. ./repeat's per-cycle output capture is deleted after byte-counting, so stdout redirection is the only capture path for external consumers."
     - "The quiet repeat supervisor is tokio-driven and should wake on child stdout, note-file changes, and a low-frequency heartbeat instead of shell polling."
     - "Anonymous stream events may advance the current focus bar, but they must not create standalone tasks in the tree."
     - "When a task uncovers ambiguity or a useful refinement, file an immediate bootstrap note in `./plan/issues/` or `./methodology/events/` before edits begin, then refresh it after each meaningful substep so future agents can pick up the thread without chat history."

@@ -29,7 +29,7 @@ trap cleanup EXIT
 config="$tmp/gitconfig"
 git config --file "$config" safe.directory '/home/forge/src/*'
 git config --file "$config" credential.helper ''
-git config --file "$config" url.http://tillandsias-git:8080/.insteadOf \
+git config --file "$config" url.git://tillandsias-git/.insteadOf \
     https://github.com/example/
 
 podman run --rm \

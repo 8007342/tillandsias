@@ -55,3 +55,17 @@ Beyond the VERSION collateral, real/known items observed:
 - `litmus:smoke-lock-fd-isolation-shape` STEP 2 (orphan retains lock,
   rc=75) — flock orphan semantics differ on Windows/MSYS; needs a
   windows-specific implementation or skip with reason.
+
+## ESCALATION 2026-07-19T05:00Z: the residue got COMMITTED and crossed branches
+
+The same cycle that filed this issue then COMMITTED the residue: a
+background litmus rerun mutated VERSION to `0.0.0-test-retag` concurrently
+with a `git add -A` commit (afdad535, the 419/420 drain), and the value
+rode windows-next → linux-next unnoticed (git status was clean because the
+mutation was already staged+committed). It then poisoned a WSL2 guest
+build, which baked `Tillandsias v0.0.0-test-retag`. main and the release
+tag were unaffected only because the release flow overwrites VERSION in
+its own bump commit. Restored to 0.3.260716.7 in the fixing commit.
+Consequence: exit criteria 1-3 above are no longer hygiene — an
+unconditional restore trap + runner lock + porcelain self-check are
+correctness requirements for the ledger branches. Raise priority.

@@ -454,6 +454,27 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved Windows release version: v${VERSION}"
 
+      - name: Stage guest headless binaries (source-matched embed)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Order 282 / 2026-07-19 field skew: this job previously built the
+          # tray with NO target-guest staging, so the released tray shipped an
+          # empty guest embed and the in-VM fetch script provisioned whatever
+          # release it could reach — a version-skewed guest under a fresh
+          # tray, resurrecting already-fixed guest bugs in the field. The
+          # `release` job (needs:) has already uploaded the source-matched
+          # musl guest binaries to THIS version's release; download them so
+          # build-windows-tray.ps1 embeds them. Fail the job if absent —
+          # shipping a skewed tray is worse than shipping late.
+          mkdir -p target-guest
+          gh release download "v${{ steps.version.outputs.version }}" \
+            --pattern 'tillandsias-headless-*-unknown-linux-musl' \
+            --dir target-guest
+          ls -la target-guest
+          test -s target-guest/tillandsias-headless-x86_64-unknown-linux-musl
+
       - name: Build + package the Windows tray (windows-owned build script)
         shell: pwsh
         run: |

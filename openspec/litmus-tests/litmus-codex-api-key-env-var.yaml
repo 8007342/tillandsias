@@ -1,0 +1,63 @@
+# @trace spec:tillandsias-vault
+name: litmus:codex-api-key-env-var
+spec: tillandsias-vault
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  The Codex lane must receive CODEX_API_KEY, and its Vault OAuth restore must be
+  gated on that same variable (order 430).
+
+  Codex IGNORES OPENAI_API_KEY as an environment variable — verified empirically
+  against codex-cli 0.144.4 with bogus keys and an empty CODEX_HOME:
+
+    OPENAI_API_KEY -> "Missing bearer or basic authentication in header"
+                      (no auth header sent at all — the key is discarded)
+    CODEX_API_KEY  -> "Incorrect API key provided: sk-bogus*****-111"
+                      (the key is used)
+
+  OPENAI_API_KEY is only a FIELD NAME inside ~/.codex/auth.json, written by
+  `codex login --with-api-key`. Conflating the field with the env var made the
+  lane unauthenticated by construction: injecting OPENAI_API_KEY supplied no
+  usable credential AND suppressed the entrypoint's Vault OAuth restore, which
+  was gated on that variable being empty.
+
+  This litmus exists because the mistake is natural to re-make — "OpenAI
+  provider therefore OPENAI_API_KEY" reads as obviously correct.
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/vault_bootstrap.rs
+  - workspace contains images/default/entrypoint-forge-codex.sh
+
+critical_path:
+  - step: "the OpenAI provider maps to CODEX_API_KEY, not OPENAI_API_KEY"
+    command: "grep -Fq 'ProviderId::Openai => \"CODEX_API_KEY\"' crates/tillandsias-headless/src/vault_bootstrap.rs && ! grep -Fq 'ProviderId::Openai => \"OPENAI_API_KEY\"' crates/tillandsias-headless/src/vault_bootstrap.rs && echo 'ok: OpenAI provider maps to CODEX_API_KEY'"
+    timeout_ms: 5000
+    expected_behavior: "ok: OpenAI provider maps to CODEX_API_KEY"
+
+  - step: "the Codex entrypoint gates its Vault OAuth restore on CODEX_API_KEY"
+    command: "grep -Fq 'if [ -z \"${CODEX_API_KEY:-}\" ]; then' images/default/entrypoint-forge-codex.sh && ! grep -Fq 'if [ -z \"${OPENAI_API_KEY:-}\" ]; then' images/default/entrypoint-forge-codex.sh && echo 'ok: restore gated on CODEX_API_KEY'"
+    timeout_ms: 5000
+    expected_behavior: "ok: restore gated on CODEX_API_KEY"
+
+  - step: "the empirical rationale is recorded next to the mapping so it is not reverted"
+    command: "grep -Fq 'order 430' crates/tillandsias-headless/src/vault_bootstrap.rs && echo 'ok: rationale recorded'"
+    timeout_ms: 5000
+    expected_behavior: "ok: rationale recorded"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "Codex lane receives CODEX_API_KEY and gates OAuth restore on it"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "codex-api-key-env-var"
+
+rollback:
+  on_failure: >
+    Do NOT revert to OPENAI_API_KEY to make this pass. If you believe the
+    variable changed upstream, re-run the falsification experiment first: with an
+    empty CODEX_HOME, invoke `codex exec` with a bogus key under each variable
+    and compare the error. Only a "key is used" error proves the variable is
+    honoured.
+  command: "grep -n 'CODEX_API_KEY\\|OPENAI_API_KEY' crates/tillandsias-headless/src/vault_bootstrap.rs images/default/entrypoint-forge-codex.sh"

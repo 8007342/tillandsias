@@ -85,7 +85,13 @@ require_codex
 # API-key launches need no OAuth state. Otherwise restore the complete opaque
 # Codex credential document from the scoped Vault lease mounted only for this
 # agent mode; failure is loud before the TUI starts.
-if [ -z "${OPENAI_API_KEY:-}" ]; then
+#
+# Gate on CODEX_API_KEY, NOT OPENAI_API_KEY (order 430). Codex ignores
+# OPENAI_API_KEY as an env var — it is only a FIELD NAME inside auth.json — so
+# gating on it meant an injected OPENAI_API_KEY suppressed this restore while
+# supplying no usable credential, leaving the lane unauthenticated by
+# construction.
+if [ -z "${CODEX_API_KEY:-}" ]; then
     /usr/local/bin/codex-oauth-vault restore
 fi
 
@@ -117,7 +123,7 @@ fi
 # When the host launcher passes a prompt (TILLANDSIAS_CODEX_PROMPT, set by
 # `tillandsias --codex <project> --prompt "<text>"`), run Codex HEADLESS via
 # its `exec` subcommand instead of the interactive TUI — the mirror of the
-# OpenCode lane's `opencode run --dangerously-skip-permissions "<prompt>"`.
+# OpenCode lane's `opencode run --auto "<prompt>"`.
 # This is what lets a forge smoke agent run `/meta-orchestration` as Codex
 # alongside OpenCode so their results can be compared. The bypass flag rides
 # the exec subcommand (documented on `codex exec`); it stays forge-gated
@@ -126,8 +132,22 @@ fi
 if [ -n "${TILLANDSIAS_CODEX_PROMPT:-}" ]; then
     trace_lifecycle "entrypoint" "codex launching (non-interactive exec)"
     trace_lifecycle "exec" "launching codex exec"
+    # Structured output (order 429), opt-in. Delegated runs need a
+    # machine-readable transcript so the dispatcher can distinguish success from
+    # failure from timeout; interactive/human runs keep the formatted default.
+    # `codex exec --json` emits JSONL (thread.started, turn.started/completed/
+    # failed, item.*, error). Verified present in codex-cli 0.144.4.
+    codex_result_args=()
+    if [ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]; then
+        codex_result_args+=(--json)
+        # -o writes just the final assistant message, which is what a
+        # dispatcher usually wants to report back without re-parsing the stream.
+        if [ -n "${TILLANDSIAS_AGENT_RESULT_FILE:-}" ]; then
+            codex_result_args+=(--output-last-message "$TILLANDSIAS_AGENT_RESULT_FILE")
+        fi
+    fi
     exec /usr/local/bin/codex-oauth-session -- \
-        codex exec "${codex_forge_args[@]}" "$TILLANDSIAS_CODEX_PROMPT"
+        codex exec "${codex_forge_args[@]}" "${codex_result_args[@]}" "$TILLANDSIAS_CODEX_PROMPT"
 fi
 
 trace_lifecycle "entrypoint" "codex launching"

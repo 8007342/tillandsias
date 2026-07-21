@@ -43,9 +43,9 @@ use std::fmt;
 
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::Layer;
 
 /// Fields extracted from a tracing event for Event Log formatting.
 #[derive(Debug, Default)]
@@ -185,11 +185,11 @@ where
 mod win {
     //! Thin safe wrapper over `RegisterEventSourceW`/`ReportEventW`.
 
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::EventLog::{
-        DeregisterEventSource, RegisterEventSourceW, ReportEventW, REPORT_EVENT_TYPE,
+        DeregisterEventSource, REPORT_EVENT_TYPE, RegisterEventSourceW, ReportEventW,
     };
+    use windows::core::PCWSTR;
 
     /// Owned event-source handle. `Send + Sync`: the Event Log APIs are
     /// documented thread-safe for a given handle.

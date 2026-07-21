@@ -53,7 +53,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L8](../../../crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L8)
 - [crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L26](../../../crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L26)
 - [crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L67](../../../crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L67)
-- [crates/tillandsias-vm-layer/Cargo.toml#L52](../../../crates/tillandsias-vm-layer/Cargo.toml#L52)
+- [crates/tillandsias-vm-layer/Cargo.toml#L55](../../../crates/tillandsias-vm-layer/Cargo.toml#L55)
 - [crates/tillandsias-vm-layer/examples/vz-spike.rs#L23](../../../crates/tillandsias-vm-layer/examples/vz-spike.rs#L23)
 - [crates/tillandsias-vm-layer/src/transport_macos.rs#L26](../../../crates/tillandsias-vm-layer/src/transport_macos.rs#L26)
 - [crates/tillandsias-vm-layer/src/vz.rs#L20](../../../crates/tillandsias-vm-layer/src/vz.rs#L20)

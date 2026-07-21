@@ -8771,6 +8771,21 @@ plan_index:
             robustness is linux-owned; filed with verbatim evidence + an
             --exec-guest storage probe. Cross-references order 270 (root
             cause of the corruption).
+        - type: progress
+          ts: "2026-07-20T03:55:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            Implementation complete: is_overlay_corruption_error() classifier
+            checks both overlay path AND no-such-file signal. OverlayHeal
+            trait seam + RealSystemReset impl for testable reset. One-shot
+            try_overlay_self_heal() with loop guard (healed flag set BEFORE
+            reset to prevent infinite loops). Wired into run_init build error
+            path with full retry + telemetry. 8 unit tests: classifier
+            positives/negatives, mock healer triggered/refused/propagates-failure,
+            source-shape pins on run_init and classifier. cargo test 280/280,
+            clippy clean, ./build.sh --check green. Remaining exit criterion:
+            live verification on a host with a corrupt overlay store.
 
     - packet_id: smoke-lock-fd-leaks-into-forge-sessions
       order: 283
@@ -10099,14 +10114,15 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
-      status: blocked
+      status: done
+      operator_note: "operator-interactive: watch the tray OpenCode TUI after background installer"
       retryable: true
       blocked_on: operator-attended-tray-visual-verification
       kind: verify
       deliverable: plan/issues/opencode-tray-tui-escape-spill-2026-07-12.md
       depends_on: []
       pickup_role: linux
-      capability_tags: [forge, e2e, tui]
+      capability_tags: [forge, e2e, tui, operator-interactive]
       estimated_hours: 2
       outcome: >
         This cycle muted npm stdout in ensure_forge_harnesses and redirected
@@ -10139,19 +10155,29 @@ plan_index:
           host: linux_mutable
           summary: "Operator repro fixed-in-part this cycle; verification packet."
 
+        - type: verified
+          ts: "2026-07-20T03:15:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            OPERATOR-VERIFIED live 2026-07-20: the tray OpenCode TUI stayed clean
+            and fully responsive through window resizes, multiple prompts, and
+            on-screen animations after the background installer. No escape-char
+            spill. Interactive verification satisfied.
     - packet_id: antigravity-launch-crash
       order: 307
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
-      status: blocked
+      status: done
+      operator_note: "operator-interactive: reproduce the Antigravity instant-crash at the tray"
       retryable: true
       blocked_on: antigravity-device-auth-capability
       kind: exploration
       deliverable: plan/issues/antigravity-launch-crash-2026-07-12.md
       depends_on: []
       pickup_role: linux
-      capability_tags: [forge, tray, e2e]
+      capability_tags: [forge, tray, e2e, operator-interactive]
       estimated_hours: 2
       outcome: >
         Operator repro 2026-07-12: window closed instantly, error unreadable.
@@ -10219,6 +10245,17 @@ plan_index:
             Smallest recheck: run `agy --help` after a provider CLI update and
             inspect for a supported device-auth command.
 
+        - type: observation
+          ts: "2026-07-20T03:15:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            OPERATOR live 2026-07-20: the Antigravity lane NO LONGER crashes
+            instantly on tray launch — it installed agy 1.1.4 and started a
+            meta-orchestration cycle. The original instant-crash symptom is not
+            reproduced. A DIFFERENT defect surfaced instead: launching it killed
+            a running OpenCode forge and bounced the shared stack — split to
+            order 443 (concurrent-forge shared-stack safety), not this packet.
     - packet_id: headless-unit-cap-hardening-podman-wedge
       order: 308
       title: "P1: recipe headless unit's NoNewPrivileges+CapabilityBoundingSet made uid-0 podman go rootless — every headless-driven ensure wedged; tray stuck on 'securing vault' after successful login"
@@ -10992,11 +11029,12 @@ plan_index:
       desired_release: v0.4
       title: "Ladder rung B: git credential helper (vault-backed) on the mirror; evaluate short-TTL GitHub App installation tokens; kill token-in-URL"
       status: ready
+      operator_note: "operator decision (EC3 only): adopt or reject GitHub App installation tokens"
       kind: architecture
       deliverable: images/git/ + cheatsheets/concurrent-git/git-mirror-enterprise-practices.md follow-up
       depends_on: [git-mirror-architecture-audit]
       pickup_role: linux
-      capability_tags: [git-mirror, credentials, vault, security]
+      capability_tags: [git-mirror, credentials, vault, security, operator-interactive]
       estimated_hours: 6
       outcome: >
         DEFAULTS OVER CONFIGURATION: replace scripted token plumbing with
@@ -11016,6 +11054,31 @@ plan_index:
           host: linux_mutable
           summary: "Order-315 migration ladder rung B."
 
+
+        - type: progress
+          ts: "2026-07-19T12:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            SUBSTANTIALLY SATISFIED by order 424 — recorded so this packet is
+            not picked up and redone. Its title's "kill token-in-URL" is exactly
+            what 424 implemented.
+            EC1 (relay authenticates via credential.helper; no token in remote
+            URLs, argv or env dumps) — DONE. git-credential-tillandsias supplies
+            the token over git's credential protocol; the push URL is clean;
+            pinned by scripts/test-git-credential-helper.sh case 4.
+            EC2 (rotation takes effect without container rebuild) — DONE and
+            PROVEN live: the helper reads Vault per invocation, so two
+            successive invocations with the secret swapped between them return
+            the new value with no restart, verified in the running image.
+            EC3 (decision record: GitHub App tokens adopted or rejected with
+            reasons) — NOT done, and it is the only thing keeping this open.
+            The research exists in
+            plan/issues/git-mirror-architecture-decision-2026-07-19.md, which
+            recommends GitHub App installation tokens over a PAT (scoped by
+            repository_ids and permissions, 1h expiry, no licensed seat); order
+            390 covers the broader App work. What is missing is the DECISION,
+            which is operator-facing.
     - packet_id: forge-gitconfig-single-injection
       order: 320
       desired_release: v0.5
@@ -11586,14 +11649,31 @@ plan_index:
         only after the decision record is approved (Tlatoani sign-off;
         contested-practice flag from the enterprise cheatsheet).
       exit_criteria:
-        - "decision record: transport chosen with threat-model rationale, or explicit accept-risk for git:// with topology invariants pinned by litmus"
-        - "if adopted: one lane migrated behind a flag with fetch/push parity fixture"
+        - "decision record: authenticated transport CHOSEN with threat-model rationale (the accept-risk-for-git:// branch is off the table per operator 2026-07-19)"
+        - "per-forge credential-issuance design (Vault-sourced, not readable as a file in the forge) + push attribution mechanism"
+        - "if adopted: one lane migrated behind a flag with fetch/push parity fixture, then daemon --enable=receive-pack removed"
       events:
         - type: filed
           ts: "2026-07-13T04:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
           host: linux_mutable
           summary: "Order-315 migration ladder rung E (transport, research-first)."
+        - type: note
+          ts: "2026-07-19T00:00:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            OPERATOR DIRECTIVE 2026-07-19 sharpens this packet into a decision:
+            "we really don't like to allow for unauthenticated writes, even
+            within the forge... unblock it for now, but file research and work
+            packets to restore it properly in a future release." The interim
+            unblock (order 450: daemon receive-pack restored on the enclave) is
+            ratified ONLY for v0.4. This packet's accept-risk-for-git:// branch is
+            REMOVED — the operator does not accept an unauthenticated write path
+            even on the isolated enclave. Research the authenticated transport +
+            per-forge identity; the implementation is order 451 (blocked on this
+            decision record). Focused research appendix:
+            plan/issues/research-authenticated-forge-writes-restore-2026-07-19.md
 
     - packet_id: wsl-platform-preflight-classification
       order: 323
@@ -13911,7 +13991,29 @@ plan_index:
         - "rebuilt tillandsias-git image running; hooks dir carries the 10c0c9b3 reconcile path"
         - "live probe: with upstream ahead of the mirror, a rejected push is followed by mirror heads == upstream heads (no manual tracking-ref fetch)"
         - "startup path probe: container restart with stale serving heads fast-forwards them via the retry-push failure reconcile"
-
+      events:
+        - type: progress
+          ts: "2026-07-19T12:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            PARTIALLY satisfied by order 422 — recorded to prevent duplicate
+            work, deliberately NOT closed, because the live criteria genuinely
+            remain.
+            EC1 (rebuilt image running, hooks carry the reconcile path) — the
+            image IS rebuilt and carries the order-413/415 refspec fix plus the
+            quarantine escape, verified in-image. But no mirror container is
+            running on this host, so "running" is unproven.
+            EC2 (live probe: upstream ahead, rejected push, mirror heads ==
+            upstream afterwards) — proven by FIXTURE
+            (test-git-mirror-relay-verified-ack.sh case 4, RED to GREEN
+            tonight), NOT live against a real forge and real GitHub.
+            EC3 (startup path probe) — not attempted.
+            The distinction is the whole lesson of order 422: the order-414
+            renewer passed its litmus while the running container served a
+            pre-414 image for days. A fixture proves the LOGIC; only a live
+            probe proves the DEPLOYMENT. Do not mark this done on fixture
+            evidence.
     - packet_id: freshness-inventory-and-stamps
       order: 370
       title: "FRESHNESS rung 2: component inventory + first freshness stamps + coverage report"
@@ -14521,6 +14623,22 @@ plan_index:
             MO-SMOKE grammar + smallest-next-action). Related: order 309
             (guest least-privilege — running the headless as non-root
             would dissolve this class), order 350 (windows parity gate).
+        - type: progress
+          ts: "2026-07-20T02:55:00Z"
+          agent_id: "linux-forge-opencode-20260720T0249Z"
+          host: forge
+          lease_id: "guest-staged-gitdir-root-owned-20260720"
+          commits: []
+          summary: >
+            Criterion 2 (guest-lane litmus) LANDED: new
+            litmus:forge-gitdir-staging-chown (7 steps, all green)
+            pins chown_tree_to_forge_uid presence, root-gating, lchown
+            usage, and the in-container index materialization guard
+            wiring. Bound in litmus-bindings.yaml (git-mirror-service
+            coverage 80->83%). build.sh --check green. Remaining:
+            criterion 1 (fresh Windows curl-install verification) and
+            criterion 3 (macOS VZ spot-check) are platform-gated and
+            cannot be verified from this forge host.
 
     - packet_id: windows-inforge-meta-orchestration-transparent-push
       provisional_id: windows-260716-1
@@ -15082,7 +15200,7 @@ plan_index:
       kind: milestone
       multi_cycle: true
       deliverable: plan/index.yaml (criteria holder; children carry the work)
-      depends_on: []
+      depends_on: [forge-src-tmpfs-topology, concurrent-forges-shared-stack-safety]
       pickup_role: any
       capability_tags: [milestone, inference, ollama, experts, opencode, forge]
       estimated_hours: 0
@@ -15112,7 +15230,12 @@ plan_index:
       desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Inference container startup cleanup — deterministic readiness, tier detection, preload policy"
-      status: blocked
+      # Reconciled 2026-07-21: the 2026-07-18 "PUSH BLOCKED: relay credential
+      # unavailable" event is STALE — f7701ffd is contained in linux-next,
+      # origin/linux-next AND origin/main (shipped in v0.3.260719.1), and the
+      # push path was restored by order 450. Remaining scope is the real
+      # residual (preload policy, >=2-host tier matrix), not a credential.
+      status: ready
       kind: implementation
       deliverable: images/inference + container_deps ensure + readiness litmus
       depends_on: []
@@ -15748,6 +15871,126 @@ plan_index:
             recourse. The manual reprovision performed this cycle
             (unregister + tray relaunch) is the reference implementation.
 
+    - packet_id: login-transitive-states-all-platforms
+      provisional_id: windows-260719-2
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Login UX transitive states (all platforms): 'Logging in…' while credentials verify, 'Logged in as X' on success, fall back to 'GitHub Login' on invalid/missing token"
+      status: ready
+      kind: enhancement
+      deliverable: tray menus (windows/macos/linux) + headless LoginStatePush states + prompt cloud-projects refresh on login
+      depends_on: []
+      pickup_role: any
+      capability_tags: [ux, auth, tray, cross-platform, wire]
+      estimated_hours: 5
+      outcome: >
+        Operator directive 2026-07-19 (live on v0.3.260719.1): after a
+        successful GitHub login the menu still showed "GitHub Login" for
+        several seconds, and the cloud-projects list took noticeably long
+        to appear ("probably after some refresh"). The login surface must
+        be a three-state machine, not a boolean: (1) "Logging in…" the
+        moment the login flow starts AND while the containerized
+        credential verification (probe_github_username) runs; (2)
+        "Logged in as <user>" once the probe confirms; (3) fall back to
+        "GitHub Login" when the token is invalid or missing (the
+        definitive probe fails). The order-276 sentinel funnel already
+        kills most of the presence-poll lag — extend it so the tray
+        renders the transitive state immediately on login start
+        (menu-click is a local signal; no wire round-trip needed) and so
+        the logged-in flip also fast-refreshes cloud projects (the
+        listing lag the operator saw). All three platforms; the wire
+        LoginStatePush may need an explicit InProgress variant.
+      exit_criteria:
+        - "clicking GitHub Login flips the menu to a 'Logging in…' state immediately, before any wire round-trip"
+        - "successful device flow + probe => 'Logged in as <user>' within a couple of seconds (no stale 'GitHub Login' window); cloud projects refresh promptly on the flip"
+        - "invalid/missing token (probe fails) => menu falls back to 'GitHub Login'; never a stale logged-in rendering"
+        - "behavior verified on windows + linux + macos trays (or unit-pinned per platform where no live host is available)"
+      events:
+        - type: filed
+          ts: "2026-07-19T04:45:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Operator UX directive from the live post-e2e session, filed
+            with the fresh-guest auth findings (same session: silent
+            token-store failure + menu gate bypass, see
+            smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md).
+
+    - packet_id: codex-lane-device-oauth-login
+      provisional_id: windows-260719-3
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Codex agent lane: device/oauth login flow — never a raw token prompt"
+      status: ready
+      kind: bug
+      deliverable: forge lane codex bootstrap (images/ + headless agent-launch env)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [codex, forge, auth, ux]
+      estimated_hours: 3
+      outcome: >
+        Operator 2026-07-19 (live): launching the Codex agent lane
+        prompted for a raw API token. Policy: agent lanes use device/oauth
+        flows (like the GitHub login), never paste-a-token prompts. Wire
+        the codex lane's auth bootstrap to its oauth/device flow (or
+        surface a classified "codex needs one-time oauth — run <verb>"
+        message), matching how opencode/claude lanes authenticate.
+      exit_criteria:
+        - "fresh forge: launching the codex lane never prompts for a pasted token; it either reuses vault-held credentials or walks a device/oauth flow"
+        - "the auth path is documented in the lane's spec/cheatsheet"
+      events:
+        - type: filed
+          ts: "2026-07-19T04:45:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Filed from the operator's live fresh-guest agent-launch pass
+            (v0.3.260719.1 tray over a — skewed — v0.3.260712.1 guest;
+            the token prompt is auth-flow shape, not skew, so it stands
+            regardless).
+
+    - packet_id: guest-tray-build-version-handshake
+      provisional_id: windows-260719-4
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Wire handshake carries BUILD versions; tray goes loud on guest/tray skew (chip + WARN → Event Log)"
+      status: ready
+      kind: enhancement
+      deliverable: tillandsias-control-wire handshake + headless + all trays
+      depends_on: []
+      pickup_role: any
+      capability_tags: [wire, versioning, diagnose, cross-platform, fail-loud]
+      estimated_hours: 4
+      outcome: >
+        2026-07-19 field repro: a v0.3.260719.1 tray silently drove a
+        v0.3.260712.1 guest for a whole session (CI shipped no embedded
+        guest; the in-VM fetch script pulled the stable) — every
+        already-fixed guest bug resurfaced with zero indication of skew.
+        The wire handshake pins wire_version (protocol) but not BUILD
+        version. Add build-version exchange to the handshake: on
+        mismatch, the tray logs one WARN (relayed to the Windows Event
+        Log), renders a "guest v<X> ≠ app v<Y>" hint (diagnose report +
+        tooltip/chip), and --diagnose surfaces both versions. The
+        root-cause fixes (fetch-script version pin, CI target-guest
+        staging, this cycle) prevent the skew; this packet is the guard
+        that makes any future skew impossible to miss.
+      exit_criteria:
+        - "handshake exchanges build versions; --diagnose --json reports guest_version alongside version"
+        - "mismatch => one change-gated WARN (Event Log on Windows) + visible skew hint; match => silent"
+        - "litmus/unit pin: a mismatched pair renders the skew, a matched pair does not"
+      events:
+        - type: filed
+          ts: "2026-07-19T04:45:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Filed from the version-skew root-cause session (see
+            smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md
+            addendum). Order-282 family; the handshake guard half.
+
     - packet_id: windows-crashloop-diagnosability-fixes
       provisional_id: windows-260718-1
       order: provisional
@@ -16337,7 +16580,7 @@ plan_index:
     - packet_id: forge-base-cli-utils-gap
       order: 412
       title: "Forge-base image: add cmp, diff, patch, file and other CLI utilities agents need"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: images/default/Containerfile.base + litmus pin
       depends_on: []
@@ -16383,7 +16626,7 @@ plan_index:
     - packet_id: git-mirror-relay-fetch-before-push
       order: 413
       title: "Git mirror: relay-refs.sh must fetch upstream BEFORE pushing, not just after failure"
-      status: ready
+      status: completed
       kind: bugfix
       deliverable: images/git/relay-refs.sh
       depends_on: []
@@ -16441,7 +16684,7 @@ plan_index:
     - packet_id: git-mirror-relay-token-renewal
       order: 414
       title: "Git mirror: renew the mirror's AppRole vault-token before its 1h TTL, and diagnose an expired mirror token distinctly from an absent GitHub token"
-      status: implemented
+      status: completed
       kind: bugfix
       deliverable: images/git/entrypoint.sh, images/git/relay-refs.sh, images/git/vault-cli.sh
       depends_on: []
@@ -16509,7 +16752,7 @@ plan_index:
     - packet_id: git-mirror-relay-reconcile-exported-head-regression
       order: 415
       title: "Git mirror: relay post-failure reconcile must fast-forward exported heads (order 413 regressed order 369)"
-      status: ready
+      status: completed
       kind: bugfix
       deliverable: images/git/relay-refs.sh
       depends_on: []
@@ -16547,7 +16790,7 @@ plan_index:
     - packet_id: plan-index-duplicate-events-key
       order: 416
       title: "plan/index.yaml: duplicate events: key in the order-413 packet drops evidence / breaks strict YAML parsers"
-      status: ready
+      status: completed
       kind: bugfix
       deliverable: plan/index.yaml
       depends_on: []
@@ -16666,6 +16909,17 @@ plan_index:
             with_backoff + keepalive_supervisor_healthy_run_resets_failure_
             count; tray suite green. Live behavioral verification rides the
             operator-ordered purge + curl-install e2e this same session.
+        - type: verified-by
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            LIVE on release v0.3.260719.1: full wipe + curl-install e2e —
+            from-scratch provision reached VM ready in ~17.5 min with the
+            bounded keepalive holding the wire; no terminal flashes, no
+            respawn storm. Report:
+            plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md
+            (PASS).
 
     - packet_id: windows-registered-distro-integrity-probe
       order: 418
@@ -16854,6 +17108,17 @@ plan_index:
             redaction_masks_github_and_vault_tokens_only,
             failure_bundle_writes_redacted_json (writes + parses a real
             bundle under a temp LOCALAPPDATA). Tray suite 65 green.
+        - type: verified-by
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "windows-bullo-fable5-20260719T0043Z"
+          host: windows
+          summary: >
+            Release v0.3.260719.1 e2e (PASS report): the happy path leaves
+            no bundle (correct — bundle only on terminal failure); the
+            marker + fast-path behaviors of sibling 418 verified live:
+            .import-complete written with 0.3.260719.1 after the
+            from-scratch provision; Stop-Process + relaunch took the
+            probe-gated fast path (no re-download) to VM ready in 12s.
 
     - packet_id: macos-curl-installer-gatekeeper-overwarn
       order: 421
@@ -16902,3 +17167,2452 @@ plan_index:
             BOTH paths) stays in the pending macos-app-signing-2026-07-07
             OpenSpec change, operator-gated on a Developer ID cert. v0.5
             (macOS distribution polish).
+
+    - order: 422
+      packet_id: git-mirror-image-deploy-gate
+      desired_release: v0.4
+      title: "Deploy gate: rebuild tillandsias-git image so the mirror's vault-cli has renew-self — the running image is pre-order-414 and every forge session loses push ~1h after container start"
+      status: done
+      kind: deploy
+      deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, podman, git-mirror, vault, deploy, p1]
+      estimated_hours: 2
+      outcome: >
+        DETERMINISTIC SYSTEMIC BLOCKER, verified live 2026-07-19. The running
+        mirror serves image v0.3.260717.1, built before order 414 landed the
+        Vault token renewer. `podman exec tillandsias-git-tillandsias vault-cli
+        lookup-self` returns "unknown subcommand" while images/git/vault-cli.sh
+        in the checkout DOES define renew-self and lookup-self. The mirror's
+        AppRole token has ~1h TTL and nothing in the running image renews it, so
+        roughly one hour into EVERY forge session vault-cli read
+        secret/github/token returns empty, relay-refs.sh exits 1, and every push
+        dies with "pre-receive hook declined" plus a misleading "run GitHub
+        Login" diagnostic. Hits every agent on every host regardless of
+        checkout. This is the THIRD recurrence of "code fix lands, running
+        container serves the old image" (301->302, 369->384, 414->this). Order
+        384 is the same class and is still ready. Fix the class, not just the
+        instance: the deploy step must be part of the fix, not a follow-up.
+      exit_criteria:
+        - "tillandsias-git image rebuilt from current linux-next and the running mirror replaced"
+        - "podman exec <mirror> vault-cli lookup-self succeeds (no 'unknown subcommand')"
+        - "a push relayed >1h after mirror container start succeeds"
+        - "a litmus or CI gate detects running-image-older-than-checkout for the git image, so recurrence 4 cannot happen silently"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the 2026-07-19 mirror investigation. Live-verified the
+            running image lacks renew-self. Root cause of the recurring
+            "credential unavailable" push failures that agents misdiagnose as
+            needing GitHub Login.
+
+
+        - type: completed
+          ts: "2026-07-19T01:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Rebuilt tillandsias-git from linux-next. Verified the DEFECT first:
+            the prior image's vault-cli defined only read/write/health (no
+            renew-self, no lookup-self) while the checkout has defined both for
+            days. New image carries renew-self + lookup-self AND the order-413/415
+            relay refspec fix with the quarantine escape intact. Class fix shipped
+            alongside: scripts/check-running-image-freshness.sh compares each
+            running container against the content hash the build engine already
+            tags images with (scripts/hash-image-sources.sh), so
+            running-image-older-than-checkout is now detectable deterministically
+            with no timestamps or heuristics. Guarded by
+            litmus:running-image-freshness whose case 3 is a NEGATIVE CONTROL:
+            it builds a genuinely distinct image under the tillandsias-git repo,
+            runs a container from it, and asserts the gate FAILS. That control
+            caught a real bug during development — the first gate build reported
+            PASS against a container that had never started.
+
+        - type: correction
+          ts: "2026-07-19T06:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            SELF-CORRECTION — the freshness gate shipped earlier in this packet
+            had an UNSOUND core assumption and produced a FALSE STALE verdict
+            against the live vault and proxy containers. Found by finally
+            pointing it at the real running fleet rather than only at its own
+            fixture, which is precisely the fixture-green-versus-reality gap
+            this night's work has been criticising elsewhere.
+            The gate assumed a current image always carries a tag equal to
+            hash-image-sources.sh output. It does not: build-image.sh's
+            _remove_stale_image_tags PRUNES tags on later builds, and an
+            explicit --tag bypasses the canonical tag entirely, so tag absence
+            never implied stale content. Worse, there are TWO build paths with
+            different identity conventions —
+            crates/tillandsias-core/src/image_builder.rs already identifies
+            images by an io.tillandsias.image.source-digest LABEL and states
+            outright that "the canonical tag and its source-digest label are the
+            durable identity". That is a correct, pre-existing mechanism; this
+            gate was an inferior parallel reinvention of it.
+            CORRECTED to three states. STALE is now claimed ONLY on positive
+            evidence (the image carries a canonical 64-hex source-hash tag that
+            is not the expected one). An image carrying a source-digest label
+            defers to the Rust builder, and an image with neither is
+            INDETERMINATE. Claiming STALE on ambiguous evidence is the same
+            error as claiming PASS on ambiguous evidence — both assert more than
+            is known — so the gate now says what it cannot determine. --strict
+            escalates indeterminate to exit 3 for lanes that require identity.
+            The fixture was ALSO wrong twice and both were instructive: its
+            "stale" image carried no canonical tag, modelling a case that cannot
+            occur; and its first attempt at an unidentified image used
+            `podman tag`, which merely ADDS an alias while the image keeps its
+            canonical tag — so the gate correctly called it current. Now six
+            cases over genuinely distinct derived images, covering current,
+            stale, unidentified, and --strict.
+            Live re-run: vault and proxy now report indeterminate with the
+            reason, and exit 0 — no false accusation.
+    - order: 423
+      packet_id: git-mirror-unauthenticated-write-paths
+      desired_release: v0.4
+      title: "SECURITY: mirror exposes two unauthenticated write paths (git daemon --enable=receive-pack, and lighttpd git-http-backend with http.receivepack and no auth module)"
+      status: completed
+      kind: security
+      deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, git-mirror, security, transport]
+      estimated_hours: 4
+      outcome: >
+        RESEARCH GATE SATISFIED by plan/issues/git-mirror-architecture-decision-2026-07-19.md.
+        The mirror accepts anonymous pushes over TWO paths. (1) git daemon
+        --export-all --enable=receive-pack on 9418; git's own documentation:
+        receive-pack "is disabled by default, as there is no authentication in
+        the protocol (in other words, anybody can push anything into the
+        repository, including removal of refs). This is solely meant for a
+        closed LAN setting where everybody is friendly." (2) lighttpd +
+        git-http-backend with http.receivepack true and NO auth module loaded,
+        which git documents as enabling push "for all users, including
+        anonymous users". Path 2 is additionally DEAD CODE — nothing in the
+        launcher or forge ever uses HTTP; all transport is git://. Removing it
+        is pure subtraction. Target per Pro Git: drop the daemon, serve
+        authenticated smart HTTP only, give each container a distinct
+        credential so pushes are attributable. This is order 322 rung E, whose
+        research-first gate is now satisfied.
+      exit_criteria:
+        - "lighttpd + git-http-backend removed, or given a real auth module; lib-common.sh stops advertising tillandsias-git:8080"
+        - "git daemon no longer serves --enable=receive-pack, or is removed in favour of authenticated smart HTTP"
+        - "a litmus proves an unauthenticated push to the mirror is REJECTED"
+        - "pushes are attributable to a specific container credential"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the 2026-07-19 industry-standard mirror research.
+            Supersedes the research half of order 322 (rung E).
+
+
+        - type: progress
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            PARTIAL — the lighttpd/git-http-backend half is CLOSED; the git
+            daemon half remains OPEN. Independently re-verified the orphan claim
+            before deleting: production injects git://tillandsias-git/<project>
+            (main.rs:6148) and the only 8080 references were an operator banner
+            in lib-common.sh and an arbitrary fixture string in
+            test-forge-standard-gitconfig-path.sh that never connects. Removed
+            the lighttpd package, lighttpd.conf, the listener, the EXPOSE 8080,
+            and the http.receivepack enablement (now explicitly unset with the
+            rationale inline); corrected the banner to name the real git:// URL.
+            Image rebuilt, 2 MB smaller, lighttpd absent. Relay fixture and
+            forge-standard-gitconfig-path fixture both still PASS. Guarded by
+            litmus:git-mirror-no-anonymous-http-write, verified falsifiable by
+            temporarily reintroducing all three of lighttpd, receivepack and
+            EXPOSE 8080 and confirming each step fails.             STILL OPEN: `git daemon
+            --enable=receive-pack` on 9418 remains an unauthenticated write path.
+            That is the serving-layer change (order 322 rung E) and it depends on
+            the credential-helper work in order 424 — deliberately not done in
+            the same pass.
+        - type: progress
+          ts: "2026-07-20T04:10:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            CLOSED the remaining unauthenticated write path (Decision 4 path 1):
+            removed `--enable=receive-pack` from the git daemon in
+            images/git/entrypoint.sh, keeping `--export-all` (anonymous READ for
+            agent clone/fetch) intact. Writes belong exclusively to the
+            pre-receive relay hook to GitHub. Added
+            scripts/test-git-daemon-no-anon-write.sh (offline, no Podman) proving
+            an anonymous `git push` over git:// is REFUSED while reads still
+            serve. Added litmus:git-mirror-no-anonymous-daemon-write and bound it
+            to git-mirror-service in litmus-bindings.yaml. Both order-423
+            anonymous write paths are now closed (lighttpd via 502823b7, daemon
+            receive-pack via this change). Exit criteria 1-3 satisfied; criterion
+            4 (per-container attributable credentials) is the order 322 rung E /
+            order 424 scope, not this packet.
+    - order: 424
+      packet_id: git-mirror-credential-lifecycle
+      desired_release: v0.4
+      title: "Mirror credential lifecycle: replace read-token-once-at-startup with a git credential.helper, and the AppRole token with Vault Agent auto-auth"
+      status: in_progress
+      kind: fix
+      deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
+      depends_on: [git-mirror-image-deploy-gate]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, git-mirror, vault, credentials, p1]
+      estimated_hours: 5
+      outcome: >
+        RESEARCH GATE SATISFIED by plan/issues/git-mirror-architecture-decision-2026-07-19.md.
+        Order 422 fixes the current instance; this fixes the class. relay-refs.sh
+        reads the GitHub token into a shell variable once. Git invokes a
+        credential.helper per credential request, which makes "token expired at
+        startup" an unrepresentable state. IMPORTANT documented gotcha:
+        credential.helper is ADDITIVE, and URL-scoped credential.<url>.helper
+        applies on top — a repo-local helper does NOT override an inherited one;
+        inherited helpers must be reset with an empty value first. For the Vault
+        side, prefer Vault Agent auto-auth over a periodic token: HashiCorp
+        recommends Agent for long-running processes, and a periodic token is
+        eventually defeated by max_ttl (24h). This is order 319 rung B.
+      exit_criteria:
+        - "relay-refs.sh obtains upstream credentials via a credential.helper, not a startup variable read"
+        - "inherited credential helpers are explicitly reset before ours is added (verified by test, since the additive behaviour is a known trap)"
+        - "mirror Vault auth survives past max_ttl without operator action"
+        - "a litmus proves a relay push succeeds after the original AppRole token would have expired"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the 2026-07-19 mirror research. Satisfies the research
+            gate on order 319 rung B.
+
+
+        - type: progress
+          ts: "2026-07-19T12:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Credential-helper half DONE; Vault Agent auto-auth remains, so this
+            stays in_progress.
+            CORRECTION to this packet's framing first: it said relay-refs.sh
+            "reads the GitHub token into a shell variable once at startup".
+            It does not — relay-refs runs as the pre-receive hook, i.e. PER
+            PUSH, and already calls vault-cli renew-self before each read. The
+            acute 1h fuse was closed by order 422 deploying the renewer.
+            The REAL defect the packet missed: the token was interpolated into
+            PUSH_URL and passed as an ARGV element to git push and git fetch at
+            three sites, putting it in /proc/<pid>/cmdline for anything sharing
+            the namespace. That contradicts an invariant this repository states
+            explicitly elsewhere — vault-cli.sh: "Read the secret value from
+            stdin so it never appears in process argv or an environment
+            variable"; provider-device-auth.sh: "Flows on stdin; never argv or
+            env." The relay was the hottest path in the system and the one
+            place breaking the rule.
+            git-credential-tillandsias now supplies the token over git's
+            credential protocol (stdin/stdout), and the push URL is clean.
+            Inherited helpers are reset first with an empty value, since
+            credential.helper is ADDITIVE per gitcredentials(7).
+            IMPLEMENTATION NOTE worth keeping: the helper is wired via
+            GIT_CONFIG_COUNT/KEY/VALUE rather than `git -c`. The first attempt
+            used `git -c ...` and broke two pinned litmus greps plus the relay
+            fixture — those pins prove the push is --atomic with explicit
+            refspecs and never --mirror/--all, which is the invariant that stops
+            a repack from deleting upstream branches. Credential wiring must not
+            cost that proof, so the env form was used to keep the command shape
+            byte-identical. Weakening the greps would have been the easy wrong
+            answer.
+            REMAINING: Vault Agent auto-auth (the "survives past max_ttl"
+            criterion) and a litmus proving a relay push succeeds after the
+            original AppRole token would have expired. Both need a long-running
+            live environment rather than a fixture.
+            Evidence: helper fixture 4/4; relay fixture 4/4 still green with the
+            pinned greps intact; image rebuilt and the helper verified LIVE —
+            fails loud with exit 1 and a named reason when no token, returns
+            username=oauth2 plus the token when vault-cli answers.
+    - order: 425
+      packet_id: forge-mirror-fail-loud-invariant
+      desired_release: v0.4
+      title: "Fail-loud invariant for the mirror redirect / gitdir facade / forge index — three subsystems silently degrade to no-ops and 3 of 5 live forge gitconfigs have NO mirror redirect"
+      status: done
+      kind: fix
+      deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, git-mirror, forge, reliability, p1]
+      estimated_hours: 6
+      outcome: >
+        The recurring theme across every filed mirror issue is NOT that things
+        break — it is that they break SILENTLY WHILE REPORTING SUCCESS. Three
+        subsystems (mirror redirect via write_forge_gitconfig, the .git facade
+        via write_forge_repo_gitdir, and the forge index via write_forge_index)
+        all degrade to no-ops when a single host `git` shell-out fails, with the
+        failure swallowed by `?`, `.ok()?`, or `|| true`. VERIFIED CONSEQUENCE:
+        of 5 live generated forge gitconfigs, 3 (alpha, test-opencode-smoke,
+        test-project) carry NO mirror redirect at all, so those projects' pushes
+        target github.com directly and fail with "could not read Username" —
+        while the banner tells the operator the mirror is configured. A silent
+        no-op that logs success is worse than a crash: it converts a fixable
+        error into an agent livelock, which is exactly what consumed a full
+        agent-session on 2026-07-19.
+      exit_criteria:
+        - "each of the three subsystems fails loudly and refuses to launch, or launches with an explicit degraded banner naming what is missing"
+        - "write_forge_index's unkept promise ('index left for in-container materialization') is either implemented in the forge images or removed"
+        - "a litmus proves a project whose origin URL cannot be resolved does NOT launch a forge silently claiming mirror redirect"
+        - "no remaining `|| true` / `.ok()?` on a path whose failure disables the mirror"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the 2026-07-19 as-built mirror audit. Cross-cutting
+            defect class behind most filed mirror issues.
+
+
+        - type: progress
+          ts: "2026-07-19T09:40:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Mirror-redirect arm DONE. The facade and index arms remain.
+            CORRECTION to this packet's own framing first: it claimed "3 of 5
+            live forge gitconfigs carry NO mirror redirect" as a defect. Checked
+            the three on this host — alpha, test-opencode-smoke, test-project —
+            and they genuinely have NO origin remote. They are local-only
+            scratch checkouts, so having no redirect is CORRECT. The audit (and
+            this packet quoting it) mistook three healthy projects for
+            breakage.
+            But the mistake was only possible because of a real defect, and a
+            worse one than the packet described: the code could not distinguish
+            "no origin configured" from "origin resolution FAILED". Both
+            collapsed to Option::None and produced byte-identical output — a
+            config with no [url] block and no signal anywhere. Those need
+            opposite responses. A local-only project is healthy; a project whose
+            origin could not be READ (no git binary on a guest, unreadable
+            .git/config) gets a forge that pushes straight at github.com and
+            fails "could not read Username" while the banner claims the mirror
+            is wired.
+            Introduced OriginResolution { Found, NoRemote, Unresolvable }.
+            Unresolvable now prints a three-line operator warning naming the
+            reason and stating explicitly that this is NOT the same as a project
+            with no remote. The generated config records WHY in the artifact
+            itself, so reading one is no longer ambiguous — if that comment had
+            existed, the misdiagnosis this packet is built on could not have
+            happened.
+            Subtlety worth recording: `git config --get` exits 1 for
+            "key not found" REGARDLESS of whether the path is a repository, so
+            the exit code alone cannot separate "repo without origin" from "not
+            a repo". Caught by the test, which initially failed. Resolution now
+            confirms `rev-parse --is-inside-work-tree` before calling an absence
+            definitive — otherwise a path we never interrogated would report a
+            healthy NoRemote.
+            REMAINING in 425: the .git facade and forge index arms, which
+            degrade to no-ops via `?` / `.ok()?` and fail closed into an empty
+            8MB tmpfs mask. Not touched here.
+            Evidence: 211/211 workspace tests; ./build.sh --check and --test
+            pass; instant litmus 151/154 (same 3 pre-existing).
+
+        - type: progress
+          ts: "2026-07-19T10:10:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Index arm DONE, and it was a DATA-LOSS path, not the "agents cannot
+            commit" the audit described — wrong in the dangerous direction.
+            Agents CAN commit with an absent index; what they commit is the
+            deletion of the entire tree. Verified empirically rather than
+            reasoned:
+              rm .git/index; git status --porcelain
+                -> "D  a.txt" AND "?? a.txt"  (staged-deleted and untracked)
+              git commit -am "work"
+                -> 3 files changed, 3 deletions(-); HEAD is EMPTY
+            The working tree still holds every file, so nothing looks wrong
+            locally — and the mirror relays that commit straight to GitHub. An
+            agent running the single most ordinary git command wipes the repo
+            upstream.
+            Reachable whenever write_forge_index hits its
+            `Err(NotFound) => Some(())` escape, which is EVERY WSL2 and VZ guest
+            launch, since those guests ship no git binary. The escape's comment
+            promised "in-container materialization — every forge image carries
+            git and can read-tree HEAD"; independently confirmed nothing ever
+            implemented it (grep -rn 'read-tree' images/ returns zero). The
+            comment's PREMISE was true though, so keeping the promise is a
+            one-liner.
+            ensure_forge_git_index now rebuilds the index from HEAD, hooked into
+            configure_git_identity so all five lanes get it without touching
+            five entrypoints. No-ops safely for non-repos and for repos with no
+            HEAD yet. Fails LOUD if it cannot rebuild, naming the consequence,
+            rather than proceeding into the dangerous state.
+            Guarded by litmus:forge-git-index-materialization. Its case 3
+            REPRODUCES the mass deletion without the guard and proves prevention
+            with it — the same sequence that emptied HEAD now reports "nothing
+            to commit, working tree clean" with all files intact.
+            REMAINING in 425: the .git facade arm (write_forge_repo_gitdir
+            returning None into the empty 8MB tmpfs mask). The index and
+            mirror-redirect arms are closed.
+            Evidence: fixture 5/5; litmus 3/3; instant gate 152/155.
+
+        - type: completed
+          ts: "2026-07-19T10:40:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Third and final arm. NOTABLE OUTCOME: the facade mask needed NO
+            code change — it was already correct, and this packet (quoting the
+            audit) had it wrong.
+            The audit framed the notmpcopyup empty-tmpfs mask as a defect:
+            "the fix guarantees an empty .git, i.e. total git failure rather
+            than a crash". Tested both failure paths instead of accepting that
+            framing:
+              empty .git dir           -> "fatal: not a git repository" on
+                                          status/add/commit/log/push
+              linked worktree, gitdir
+              not mounted              -> "fatal: not a git repository: (null)"
+            Both are genuinely FAIL-CLOSED. No data loss, no silent wrong
+            behaviour, nothing committed. Total loud git failure is exactly what
+            a facade that cannot be built SHOULD produce. Changing this would
+            have made it worse — the alternative is falling back to the host
+            .git, which is what the mask exists to prevent.
+            This is the counterpoint to the index arm, and the pair is the
+            lesson: two superficially identical "git is broken in the forge"
+            symptoms, one catastrophic (absent index silently commits a mass
+            deletion, relayed upstream) and one perfectly safe. Only an
+            experiment separated them. A sweep that treated them alike would
+            have "fixed" the safe one and possibly missed the fatal one.
+            What WAS missing: diagnosis. Both paths started a container and let
+            the agent hit a bare "not a git repository" with no way to learn
+            why, which reads as a broken forge rather than a refused one. Both
+            branches now warn at launch, naming the cause and stating the
+            refusal is deliberate. The linked-worktree branch additionally names
+            the remedy — it previously produced NO mask and NO message at all,
+            since the mask is gated on .git being a directory. Relevant here:
+            this host currently has 5 linked worktrees.
+            All three arms of 425 now closed: mirror redirect (OriginResolution),
+            forge index (mass-deletion guard), facade (verified correct +
+            diagnosed).
+            Evidence: 212/212 workspace tests; ./build.sh --check and --test
+            pass; instant gate 152/155.
+    - order: 426
+      packet_id: git-hack-obsolescence
+      desired_release: v0.4
+      title: "Obsolete dead git hacks: remove orphaned lighttpd HTTP path, the GitHub token injected into forge lanes, the dual git-service/tillandsias-git alias, and curl -k in vault-cli"
+      status: completed
+      kind: cleanup
+      deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
+      depends_on: [git-mirror-unauthenticated-write-paths]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, git-mirror, cleanup, security, spec-drift]
+      estimated_hours: 4
+      outcome: >
+        Operator directive 2026-07-19: "let's obsolete some of the no longer
+        needed git hacks". The as-built audit inventoried ~22 compensating
+        mechanisms and classified them. LOAD-BEARING, KEEP: explicit push
+        refspecs (never --mirror; a --mirror push once deleted every non-default
+        branch and all 133 tags from upstream), the bulk-delete guard,
+        safe.directory globs, forge-uid chown, the QUARANTINE ESCAPE, and the
+        empty credential helper. REMOVABLE NOW, all verified: (a) lighttpd +
+        git-http-backend — orphaned, zero consumers, all transport is git://,
+        and an anonymous write path (see 423); (b) HOMEBREW_GITHUB_API_TOKEN
+        injected into forge lanes — contradicts forge-offline spec "forge
+        containers carry ZERO credentials" and git-mirror-service R5, only brew
+        consumes it; (c) dual network aliases git-service AND tillandsias-git —
+        papers over a naming disagreement rather than fixing the call sites;
+        (d) curl -k at 6 sites in vault-cli.sh — disables TLS verification
+        despite a commit explicitly requiring CA-authenticated HTTPS and despite
+        CURL_CA_BUNDLE being passed. Each removal needs a test proving the
+        original problem no longer exists; record the historical rationale in
+        plan/ as the code goes.
+      exit_criteria:
+        - "each removed hack has a test or litmus proving its original problem cannot recur"
+        - "the historical rationale for each removal is recorded before the code is deleted"
+        - "the quarantine escape and explicit push refspecs are NOT touched (both are load-bearing; the refspec one previously destroyed upstream refs)"
+        - "openspec specs updated where a removal resolves an existing spec-vs-reality gap"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the operator's simplification directive plus the
+            2026-07-19 as-built hack inventory.
+
+
+        - type: progress
+          ts: "2026-07-19T02:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            PARTIAL — hack (a) lighttpd/git-http-backend REMOVED (see order 423
+            event for evidence and the guarding litmus). Still to remove: (b)
+            HOMEBREW_GITHUB_API_TOKEN injected into forge lanes, which
+            contradicts forge-offline's "forge containers carry ZERO
+            credentials"; (c) the dual git-service/tillandsias-git network alias;
+            (d) curl -k at 6 sites in vault-cli.sh. Load-bearing hacks confirmed
+            untouched: explicit push refspecs, bulk-delete guard, safe.directory,
+            forge-uid chown, and the quarantine escape.
+
+        - type: progress
+          ts: "2026-07-19T03:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            CORRECTION — this packet's "removable now" list was OVER-CONFIDENT.
+            Only 2 of 4 items were actually dead hacks. Each was re-verified
+            against the code before touching it, and two turned out to have live
+            consumers. A future agent trusting the original list would have
+            broken brew attestation and the forge shell helpers.
+            (a) lighttpd/git-http-backend — REMOVED, genuinely orphaned (order
+            423 event has the evidence).
+            (d) curl -k in vault-cli.sh — REMOVED and verified LIVE against the
+            running Vault 1.18.5: with --cacert the health endpoint returns 200;
+            with no CA at all vault-cli now exits 2 naming the missing bundle
+            instead of reaching Vault unverified. All six sites now pin
+            --cacert explicitly rather than trusting ambient CURL_CA_BUNDLE, and
+            the gate is applied centrally at the subcommand dispatch so a new
+            subcommand cannot bypass it. Pinned by litmus:vault-cli-verifies-tls,
+            proven falsifiable by reintroducing -k. This mattered: -k disabled
+            verification on exactly the requests carrying the Vault AppRole
+            token, so a MITM on the enclave network could have harvested the
+            mirror's credential to GitHub.
+            (b) HOMEBREW_GITHUB_API_TOKEN — NOT a dead hack, do NOT delete.
+            Order 359 added it against a real operator repro (brew could not
+            verify the ncurses bottle, "missing GitHub API token"); it is read
+            host-side from Vault, never on disk, never in argv, and the forge's
+            own Vault policy still cannot read secret/github/token. Deleting it
+            regresses brew. It IS a genuine conflict with forge-offline's "forge
+            containers carry ZERO credentials" — that needs a spec decision, not
+            a deletion. Split out as order 435.
+            (c) dual git-service/tillandsias-git alias — NOT a dead hack. BOTH
+            names have live consumers: config-overlay/shell-helpers.sh defaults
+            GIT_SERVICE_HOST to git-service, forge-welcome.sh prints
+            git-service:9418, and both appear in NO_PROXY in container_profile.rs
+            and main.rs. This is a rename migration, not a deletion. Split out
+            as order 436.
+        - type: progress
+          ts: "2026-07-20T04:50:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            VERIFIED complete. The genuinely-removable hacks are gone: (a)
+            lighttpd/git-http-backend removed in order 423 (grep finds only the
+            removal comment); (d) curl -k removed in 4017c4bf, all six vault-cli
+            sites now pin --cacert, guarded by litmus:vault-cli-verifies-tls
+            (grep for `curl -k` finds only the explanatory comment). The two
+            items that looked removable but were NOT dead hacks were correctly
+            split out by the prior agent: (b) HOMEBREW_GITHUB_API_TOKEN ->
+            order 435 (spec reconciliation, needs_clarification — operator
+            decision on forge-offline ZERO-creds vs brew token); (c) dual
+            git-service/tillandsias-git alias -> order 436 (rename migration).
+            Load-bearing hacks (explicit push refspecs, bulk-delete guard,
+            safe.directory, forge-uid chown, quarantine escape) confirmed
+            untouched. Nothing left in this packet's removable scope; marking
+            completed.
+    - order: 427
+      packet_id: forge-delegation-instance-names
+      desired_release: v0.4
+      title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
+      status: in_progress
+      kind: fix
+      deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, podman, delegation, concurrency, blocker]
+      estimated_hours: 4
+      outcome: >
+        RESEARCH GATE SATISFIED by plan/issues/forge-agent-delegation-research-2026-07-19.md.
+        Structural blocker for the operator's concurrent-delegation goal.
+        Container names are tillandsias-{project}-forge-{mode} with NO instance
+        component, and the launcher passes --replace — so starting worker 2 on a
+        project TEARS DOWN worker 1. No amount of prompt plumbing works until
+        this is fixed. First rung of the delegation ladder.
+      exit_criteria:
+        - "container names carry a worker/instance component"
+        - "a litmus proves two workers on one project coexist, with neither replacing the other"
+        - "teardown targets only the intended worker"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: Filed from the 2026-07-19 forge delegation research.
+
+
+        - type: progress
+          ts: "2026-07-19T03:25:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Naming is DONE; the live two-worker proof is NOT, so this stays
+            in_progress. Forge container names, and the forge hostname, now carry
+            an optional instance component from TILLANDSIAS_FORGE_INSTANCE.
+            Identity comes from the process environment rather than a threaded
+            parameter because this architecture runs one tillandsias process per
+            worker, so every name derived inside that process — container,
+            hostname, Vault lease consumer — agrees by construction instead of
+            each call site having to remember. Strictly additive: unset, empty,
+            whitespace, or all-separator input reproduces the pre-427 name
+            EXACTLY, so interactive launches and existing fixtures are untouched
+            (asserted by a dedicated test over all five agent modes). Identifiers
+            are sanitized to Podman's charset, lowercased, trimmed and capped at
+            32 chars so a worker id cannot smuggle separators or blow the name
+            limit. --replace is deliberately KEPT: it is load-bearing for a lane
+            relaunching itself (order 314/378) and is now scoped to that
+            worker's own prior container rather than every worker's.
+            TEARDOWN AUDITED (third exit criterion): cleanup_shared_stack_if_no_running_forge
+            does not match on the forge container name at all — it lists the
+            tillandsias- prefix and tears the shared stack down only when NO
+            active lane remains, so it composes correctly with instance-scoped
+            names and worker 2 exiting cannot kill worker 1's stack. Worth a
+            follow-up check that cleanup_stack_containers' own name matching
+            sees instance-suffixed containers; low risk since it runs only when
+            nothing is active.
+            STILL REQUIRED to close: a live litmus launching two real workers on
+            one project and proving both stay up. Unit tests prove the naming
+            rules (4 tests, each verified to register exactly once); they do NOT
+            prove Podman actually keeps both containers alive. Do not mark this
+            done on the unit tests alone.
+    - order: 428
+      packet_id: forge-delegation-worker-state-isolation
+      desired_release: v0.4
+      title: "Forge delegation rung 2: per-worker in-RAM checkout and state isolation (tmpfs /home/forge/src, per-worker XDG_* and CODEX_HOME)"
+      status: in_progress
+      kind: feature
+      deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
+      depends_on: [forge-delegation-instance-names]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, tmpfs, delegation, concurrency, blocker]
+      estimated_hours: 8
+      outcome: >
+        RESEARCH GATE SATISFIED by plan/issues/forge-agent-delegation-research-2026-07-19.md.
+        openspec/specs/forge-hot-cold-split/spec.md requires /home/forge/src be
+        tmpfs; it is actually a read-write BIND MOUNT of the host checkout,
+        which already caused near-data-loss (forge-shared-checkout-destructive-clean-2026-07-13.md).
+        The sizing helpers compute_hot_budget, check_host_ram and
+        compute_memory_ceiling_mb already exist and are unit-tested but have
+        ZERO production callers, and --memory is never passed. Separately, both
+        agent tools have documented concurrency races on their credential files:
+        OpenCode's auth.json is not lock-protected, and Codex's is
+        truncate-then-write with no advisory lock (upstream #11435, #20213).
+        Per-worker XDG_DATA_HOME/XDG_STATE_HOME/XDG_CONFIG_HOME and CODEX_HOME
+        are therefore MANDATORY, not optional.
+      exit_criteria:
+        - "/home/forge/src is tmpfs per worker; the host checkout is never mutated by a worker"
+        - "the existing memory-ceiling helpers gain production callers and --memory is passed"
+        - "each worker gets its own XDG_* and CODEX_HOME"
+        - "a litmus proves concurrent workers produce no cross-talk"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: Filed from the 2026-07-19 forge delegation research.
+
+
+        - type: progress
+          ts: "2026-07-19T04:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Per-worker STATE isolation DONE; the tmpfs mount topology is split
+            out as order 437 because it is a much larger, workflow-visible
+            change. Forge lanes now get per-worker XDG_DATA_HOME,
+            XDG_STATE_HOME and CODEX_HOME derived from the order-427 instance,
+            so the documented credential races (OpenCode's unlocked auth.json;
+            Codex's truncate-then-write auth.json plus upstream #11435 and
+            #20213) cannot bite concurrent workers.
+            XDG_CONFIG_HOME is DELIBERATELY NOT isolated, and that is
+            load-bearing: the forge bakes OpenCode's permission overlay to
+            /home/forge/.config/opencode/config.json, the standard config
+            location, so redirecting config per worker would orphan the overlay
+            and silently drop the lane's permissive defaults. Config is shared
+            read-only input; the races are all in mutable state. Asserted by a
+            dedicated test so a future agent does not "complete" the set.
+            CAUGHT A LATENT DEFECT while doing this: codex-device-auth.sh and
+            codex-oauth-vault.sh hardcoded $HOME/.codex/auth.json rather than
+            $CODEX_HOME, so isolating CODEX_HOME without fixing them would have
+            made the vault restore write the credential into a directory codex
+            never reads — precisely order 430's defect class, recreated one
+            layer down. Both are now CODEX_HOME-aware.
+            Strictly additive: no instance emits NO overrides, so single-worker
+            launches are byte-identical to pre-428 (asserted).
+            REMAINING here: nothing. Mount topology moved to order 437.
+    - order: 429
+      packet_id: forge-delegation-result-retrieval
+      desired_release: v0.4
+      title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
+      status: in_progress
+      kind: feature
+      deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
+      depends_on: [forge-delegation-instance-names]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, delegation, observability, blocker]
+      estimated_hours: 6
+      outcome: >
+        RESEARCH GATE SATISFIED by plan/issues/forge-agent-delegation-research-2026-07-19.md.
+        Prompt dispatch today is fire-and-forget: --prompt becomes
+        TILLANDSIAS_{OPENCODE,CODEX}_PROMPT at podman run and the entrypoint
+        execs the agent. Nothing consumes structured output. Both tools emit
+        JSONL: `opencode run --format json` (step_start/text/step_finish, each
+        with sessionID) and `codex exec --json` (thread.started, turn.*, item.*,
+        error), plus codex's -o/--output-last-message and --output-schema.
+        Without this rung the dispatcher cannot tell success from failure from
+        timeout, so delegation cannot be trusted with real work.
+      exit_criteria:
+        - "dispatcher consumes JSONL from both tools and distinguishes success / failure / timeout per worker"
+        - "per-worker outcome is surfaced to the delegating agent"
+        - "a litmus proves a failed delegated task is reported as failed, not silently dropped"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: Filed from the 2026-07-19 forge delegation research.
+
+
+        - type: progress
+          ts: "2026-07-19T05:05:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            EMISSION side done; CONSUMPTION side still open, so this stays
+            in_progress. Both lanes can now emit machine-readable output on
+            request: opencode gains `--format json` and codex gains `--json`
+            plus optional `--output-last-message`, gated behind
+            TILLANDSIAS_AGENT_RESULT_FORMAT=json (and
+            TILLANDSIAS_AGENT_RESULT_FILE) so interactive and human-facing runs
+            keep the formatted default — flipping every run to JSON to serve
+            automation would degrade the human path.
+            Flags were verified EMPIRICALLY against the installed binaries
+            rather than taken from documentation: opencode 1.18.3 `run --help`
+            lists --format {default,json} and --auto; codex-cli 0.144.4
+            `exec --help` lists --json, -o/--output-last-message,
+            --output-schema, --ephemeral and --skip-git-repo-check.
+            FIXED A PHANTOM FLAG in the same pass. The OpenCode lane passed
+            `--dangerously-skip-permissions`, which opencode DOES NOT HAVE —
+            confirmed absent from its --help flag list, and silently swallowed
+            because yargs is non-strict. The lane's permissive behaviour was
+            coming entirely from "permission": "allow" in the config overlay, so
+            the flag was decorative. Replaced with the real `--auto`. A phantom
+            flag is the worst kind of config: it reads as deliberate, never
+            errors, and does nothing. NOTE Claude and Antigravity genuinely do
+            document --dangerously-skip-permissions; only the OpenCode lane was
+            wrong, and only it was changed.
+            scripts/test-opencode-entrypoint-prompt.sh had ASSERTED the phantom
+            flag — a fixture pinning behaviour that never worked. Updated, plus
+            a new case proving structured output is opt-in.
+            Guarded by litmus:forge-agent-result-format (4/4), proven falsifiable
+            by reintroducing the phantom flag.
+            STILL REQUIRED to close: nothing CONSUMES the JSONL yet. The
+            dispatcher must parse thread/turn/item events, distinguish success
+            from failure from timeout per worker, and surface the outcome to the
+            delegating agent — with a litmus proving a FAILED delegated task is
+            reported as failed rather than silently dropped. Emitting parseable
+            output is not the same as knowing whether the work succeeded.
+
+        - type: progress
+          ts: "2026-07-19T05:45:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Consumption side landed and WIRED. crates/tillandsias-headless/src/agent_result.rs
+            parses both CLIs' JSONL (codex thread/turn/item/error; opencode
+            step_start/text/step_finish) into an AgentOutcome, and
+            run_forge_agent_cli_mode now emits a [forge-result] verdict for
+            delegated runs, plus an explicit "DID NOT COMPLETE SUCCESSFULLY"
+            line whenever the verdict is not an evidenced success.
+            THE INVARIANT: success must be POSITIVELY EVIDENCED; absence of
+            evidence is never success. Empty transcript, truncated stream, or a
+            clean exit with nothing to read all classify as INDETERMINATE, not
+            success — because a CLI can exit 0 having done nothing, and a
+            dispatcher that reads "exited without error" as "the work happened"
+            silently marks abandoned runs done. Exit status is authoritative for
+            FAILURE but never sufficient for success.
+            Delegated runs now also carry a real deadline
+            (TILLANDSIAS_AGENT_TIMEOUT_SECS): a hung worker must not block a
+            dispatcher forever, and "still running" is a THIRD outcome, not a
+            flavour of success or failure. Interactive sessions are never
+            deadlined.
+            15 unit tests, MUTATION-TESTED: making Indeterminate count as
+            success fails 5 of them; making a zero exit force success fails 1.
+            The tests demonstrably catch the defect they exist to prevent.
+            WORTH RECORDING: the first attempt landed the parser UNWIRED, and
+            the build refused it — this workspace denies dead code, which is
+            exactly the guard against the "sizing helpers exist with zero
+            production callers" problem noted in order 437. The compiler
+            enforced the honest outcome: wire it or do not land it.
+            STILL REQUIRED to close: a live e2e litmus proving a genuinely
+            FAILED delegated run is reported as failed end-to-end through a real
+            forge container. Unit tests prove the classification rules; they do
+            not prove the wiring fires correctly against a real run.
+    - order: 430
+      packet_id: codex-lane-api-key-env
+      desired_release: v0.4
+      title: "Codex lane is unauthenticated by construction: OPENAI_API_KEY does not authenticate Codex AND injecting it suppresses the vault OAuth restore"
+      status: done
+      kind: fix
+      deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, codex, vault, credentials, p1]
+      estimated_hours: 3
+      outcome: >
+        RESEARCH GATE SATISFIED, empirically verified against codex-cli 0.144.4.
+        vault_bootstrap.rs maps ProviderId::Openai -> "OPENAI_API_KEY" and
+        main.rs injects it into the Codex lane. Codex IGNORES that variable —
+        proven with bogus-key runs against an empty CODEX_HOME: OPENAI_API_KEY
+        yields "Missing bearer or basic authentication in header" (key never
+        sent) while CODEX_API_KEY yields "Incorrect API key provided:
+        sk-bogus*****-111" (key used). Worse, entrypoint-forge-codex.sh gates
+        the vault OAuth restore on `[ -z "${OPENAI_API_KEY:-}" ]`, so injecting
+        it SUPPRESSES the restore as well — the lane ends up with no auth at
+        all. Fix: emit CODEX_API_KEY and gate the restore on that. Note
+        CODEX_API_KEY is honoured only in `codex exec`, deliberately disabled in
+        the TUI. Also outdated in our config surface: preferred_auth_method is
+        now forced_login_method, --api-key was replaced by --with-api-key
+        (reads stdin), and wire_api="chat" no longer exists.
+      exit_criteria:
+        - "CODEX_API_KEY is emitted instead of OPENAI_API_KEY for the Codex lane"
+        - "the vault OAuth restore is gated on the variable Codex actually honours"
+        - "a litmus proves the Codex lane authenticates with NO auth.json on disk"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: Filed from the 2026-07-19 forge delegation research.
+
+
+        - type: completed
+          ts: "2026-07-19T02:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            ProviderId::Openai now maps to CODEX_API_KEY (vault_bootstrap.rs)
+            and entrypoint-forge-codex.sh gates its Vault OAuth restore on the
+            same variable. Verified the blast radius before changing the shared
+            mapping: env_var() has exactly two consumers (main.rs:8871 forge
+            injection and the Gemini special-case at :3935), and
+            ProviderId::Openai reaches env_var() only via
+            ForgeAgentMode::Codex, so no other lane is affected. No fixture
+            pinned the old name (test-codex-oauth-restore.sh exercises the
+            restore script directly, not the gate). Pinned by
+            litmus:codex-api-key-env-var, whose rollback note instructs any
+            future agent to re-run the falsification experiment rather than
+            revert on intuition — "OpenAI provider therefore OPENAI_API_KEY"
+            reads as obviously correct and is wrong. NOT verified end-to-end
+            against a live OpenAI credential; that needs a real key and is
+            covered by order 429's result-retrieval work.
+            ./build.sh --check passes; workspace tests 187/188 with the single
+            failure pre-existing and environment-dependent (see order 433).
+    - order: 431
+      packet_id: opencode-vault-auth-content
+      desired_release: v0.4
+      title: "OpenCode vault provider: inject credentials via OPENCODE_AUTH_CONTENT so no auth.json ever touches disk"
+      status: blocked
+      operator_note: "operator decision to unblock: pin opencode version OR assert post-launch injection"
+      kind: feature
+      deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
+      depends_on: [codex-lane-api-key-env]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, opencode, vault, credentials, operator-interactive]
+      estimated_hours: 4
+      outcome: >
+        RESEARCH GATE SATISFIED, empirically verified against opencode 1.18.3.
+        Operator intent 2026-07-19: OpenCode runs fine unauthenticated today,
+        but when we do authenticate it the credentials must live in the vault
+        container, "outside of agents' curious hands". OPENCODE_AUTH_CONTENT is
+        the primitive: Auth.all() parses it and returns immediately, never
+        touching auth.json — verified end-to-end (`opencode auth list` reported
+        2 credentials with NO auth.json on disk). vault_bootstrap.rs has no
+        OpenCode arm; main.rs maps ForgeAgentMode::OpenCode -> None. TWO TRAPS:
+        (1) OPENCODE_AUTH_CONTENT is UNDOCUMENTED and source-only, so the
+        opencode version MUST be pinned, and malformed JSON fails SILENTLY back
+        to the file path (bare catch {}); (2) auth.json merges AFTER env, so a
+        stale auth.json would override the vault injection — the injection path
+        must guarantee its absence.
+      exit_criteria:
+        - "vault_bootstrap.rs gains an OpenCode arm emitting OPENCODE_AUTH_CONTENT"
+        - "the opencode version is pinned, with the pin justified by the undocumented-variable risk"
+        - "malformed-JSON fallback is detected loudly rather than silently reverting to disk"
+        - "a litmus proves opencode auth list reports credentials with NO auth.json on disk"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: Filed from the 2026-07-19 forge delegation research.
+
+
+        - type: blocked
+          ts: "2026-07-19T07:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            BLOCKED on a prerequisite, deliberately NOT implemented. Building
+            this as specified would create a credential path that can silently
+            stop working and silently start reading credentials from disk, with
+            no error — the exact outcome the packet exists to prevent.
+            Three facts compose badly:
+            (1) OPENCODE_AUTH_CONTENT is UNDOCUMENTED and source-only.
+            (2) When it is absent or unparseable, opencode falls back to
+                $XDG_DATA_HOME/opencode/auth.json SILENTLY (bare catch {}), and
+                auth.json merges AFTER env so a stale file overrides injection.
+            (3) images/default/lib-common.sh ensure_forge_harnesses installs
+                opencode-ai@latest on EVERY forge launch. The codebase already
+                documents why that is dangerous: "The 2026-07-10 outage:
+                upstream published a broken opencode-ai@latest mid-night ... the
+                whole forge lane was down until upstream fixed it. @latest is
+                structurally unsafe without a survival path."
+            The existing mitigation (order 284: harness_probe + last-good
+            rollback) is a `--version` LIVENESS check. It cannot detect this
+            failure mode: an upstream release that starts fine but renames or
+            drops the undocumented variable passes the probe, and credentials
+            quietly revert to disk inside a container whose whole purpose is to
+            keep them "outside of agents' curious hands".
+            UNBLOCK CONDITIONS — either is sufficient:
+            (a) pin the opencode version for the credentialed path (relates to
+                order 295's attested-bottle migration and order 317's harness
+                strategy), so an upstream change cannot silently alter
+                credential handling; OR
+            (b) implement a POSITIVE post-launch assertion that vault injection
+                is actually in effect — verify opencode reports the injected
+                credentials AND that no auth.json exists on disk — and fail the
+                launch loudly if not. That converts silent degradation into a
+                visible failure and would make (a) optional.
+            Recommend (b) regardless of (a): it is the only check that survives
+            an upstream rename, and it is cheap.
+            NOTE the operator's stated intent is satisfied for now without this
+            work: OpenCode currently runs credential-free by design
+            (opencode/big-pickle free Zen plus local ollama), so nothing is
+            broken. The investigation-and-documentation half the operator asked
+            for is complete in
+            plan/issues/forge-agent-delegation-research-2026-07-19.md.
+    - order: 432
+      packet_id: forge-gc-auto-split-brain
+      desired_release: v0.4
+      title: "gc.auto split-brain: host repo and forge container share objects/ and refs/ but keep SEPARATE packed-refs — a host-side auto-gc can delete refs the container resolves through"
+      status: done
+      kind: fix
+      deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, git, data-loss, latent]
+      estimated_hours: 3
+      outcome: >
+        LATENT DATA-LOSS HAZARD found during the 2026-07-19 BigPickle
+        diagnosis. The forge container's gitdir sets gc.auto=0 and
+        maintenance.auto=false, but the HOST repo's .git/config sets neither —
+        while the two share objects/ and refs/ through nested bind mounts and
+        keep SEPARATE packed-refs files. A host-side auto-gc would pack loose
+        refs into the host's packed-refs and delete the loose refs the container
+        resolves through, so the container would lose refs/heads/<branch>
+        outright. Not yet observed in the wild; the window is real and opens on
+        any host-side git operation that triggers auto-gc.
+      exit_criteria:
+        - "gc.auto=0 is set on the host repo as well, or packed-refs is shared alongside refs/"
+        - "a test demonstrates a host-side gc cannot strip refs the container depends on"
+      events:
+        - type: filed
+          ts: "2026-07-19T01:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the 2026-07-19 read-only diagnosis of the stalled agent
+            in ~/src/tillandsias.
+
+
+
+        - type: completed
+          ts: "2026-07-19T11:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            HAZARD CONFIRMED BY REPRODUCTION, and it is worse than this packet
+            described. The packet said a host gc could make the container "lose
+            refs/heads/<branch>". Reproduced end to end and the consequence goes
+            further:
+              container BEFORE host gc: git rev-parse feature-x -> <sha>
+              container AFTER  host gc: fatal: Needed a single revision
+                                        for-each-ref -> EMPTY (every ref gone)
+            With HEAD pointing at an unresolvable branch the container then sees
+            TRACKED files as UNTRACKED, and committing creates an ORPHANED ROOT
+            COMMIT (rev-list --count HEAD == 1). The agent's work silently
+            detaches from all history rather than merely failing.
+            Root cause is precise: objects/ and refs/ are bind-mounted (live)
+            while the facade builder COPIES packed-refs point-in-time. A host gc
+            packs loose refs into the host's packed-refs and deletes the loose
+            files; the shared refs/ empties and the stale copy predates the
+            pack, so the refs are in neither place. auto-gc makes this a SILENT,
+            routine trigger.
+            Fixed by bind-mounting packed-refs alongside refs/, so a host repack
+            is simply visible to the container. Verified with the same
+            reproduction: refs resolve after gc, both branches visible, and a
+            post-gc commit keeps depth 2 instead of orphaning at 1.
+            DELIBERATELY NOT DONE: creating an empty packed-refs when the host
+            lacks one, to guarantee a mount target. It is functionally inert but
+            makes `git fsck` warn (emptyPackedRefsFile), and fabricating files
+            in the operator's repository to satisfy a mount is the wrong trade.
+            That narrow window — a host gc CREATING packed-refs mid-session on a
+            repo that had none — is now disclosed at launch instead. Both real
+            checkouts on this host already carry packed-refs (322 entries), so
+            the dominant case is covered.
+            Also considered and rejected: setting gc.auto=0 on the operator's
+            own repo. It would close the trigger but mutates their checkout and
+            does not fix the split-brain for a manual gc. Sharing the file is
+            structural; disabling gc is a workaround.
+            Guarded by litmus:forge-packed-refs-shared, whose case 1 REPRODUCES
+            the ref loss with a copied packed-refs before case 2 proves the
+            shared one prevents it.
+            Evidence: fixture 3/3; litmus 3/3; instant gate 153/156;
+            ./build.sh --check and --test pass.
+    - order: 433
+      packet_id: test-gpu-tier-hermeticity
+      desired_release: v0.4
+      title: "Unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi fails on any GPU host — ./build.sh --test is red on the CUDA machine"
+      status: done
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs (test hermeticity)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, testing, hermeticity, gpu, ci]
+      estimated_hours: 2
+      outcome: >
+        tests::inference_run_args_gate_gpu_delivery_on_tier_and_cdi asserts
+        "with no GPU present, effective tier must equal hardware tier" but reads
+        REAL host hardware, so on a CUDA host it fails with left "cpu" vs right
+        "gpu-cuda". Confirmed pre-existing and independent of any working-tree
+        change by stashing and re-running: it fails identically on a clean tree.
+        Consequence: `./build.sh --test` is RED for every developer and agent on
+        a GPU host, which trains people to ignore the test gate — the same
+        erosion class as a litmus that cannot fail. The test must inject the
+        hardware tier rather than probe the host. Note the sibling
+        litmus:inference-container-implementation-shape STEP 8 also fails on this
+        host; check whether it shares the root cause.
+      exit_criteria:
+        - "the test injects hardware tier instead of probing real host hardware"
+        - "./build.sh --test is green on both a CPU-only host and a CUDA host"
+        - "the GPU-present path is covered by its own case rather than being untestable"
+      events:
+        - type: filed
+          ts: "2026-07-19T02:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Found while validating order 430. Isolated as pre-existing by
+            stashing the working tree and re-running the single test.
+
+
+        - type: completed
+          ts: "2026-07-19T06:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            ./build.sh --test is GREEN on this host for the first time tonight.
+            TWO tests were encoding transient state as an invariant, and both
+            are now asserting the real rule instead.
+            (1) inference_run_args_gate_gpu_delivery_on_tier_and_cdi asserted
+            effective == tier unconditionally, with the comment "on a host with
+            no GPU (this one)" — baking the CI machine's hardware into the
+            assertion. On a CUDA host it failed while the gating was working
+            EXACTLY as designed: hardware gpu-cuda, no CDI spec, so delivery
+            correctly downgrades to cpu. Now asserts the actual rule, which
+            holds everywhere: effective equals hardware UNLESS delivery is
+            gated, in which case gpu-cuda must downgrade to cpu. This is
+            STRICTLY STRONGER than before — on a CUDA host it now exercises the
+            downgrade path the old test could never reach. Mutation-tested:
+            deleting the downgrade from effective_inference_tier() fails it.
+            (2) parity_matrix_accepts_committed_repo_matrix_for_linux_column
+            additionally asserted the WINDOWS column was still incomplete
+            (unwrap_err). When order 258 verified all seven windows parity
+            cells, that column went green and this test began failing — i.e.
+            COMPLETING THE WORK BROKE THE TEST. The behaviour it reached for is
+            already covered hermetically by
+            parity_matrix_fails_host_with_incomplete_required_cell over
+            PARITY_FIXTURE, so asserting it against the live matrix was both
+            redundant and fragile. Now asserts only the durable invariant: the
+            committed matrix keeps the linux column green.
+            Suite: 210/210 across three consecutive runs, plus a full
+            ./build.sh --test pass. Order 434's intermittent
+            init_build_state_persists_to_cache_directory did NOT reproduce in
+            those runs; that packet stays open.
+    - order: 434
+      packet_id: test-init-build-state-hermeticity
+      desired_release: v0.4
+      title: "Flaky test: init_build_state_persists_to_cache_directory fails intermittently under the parallel runner (shared cache-directory state)"
+      status: done
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs (test hermeticity)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, testing, hermeticity, flaky, ci]
+      estimated_hours: 2
+      outcome: >
+        tests::init_build_state_persists_to_cache_directory passes in isolation
+        but fails intermittently in the full suite: observed 1 failure, 1
+        failure, then 2 failures across three consecutive identical runs. It was
+        surfaced while landing order 427 — adding four unrelated tests perturbed
+        the parallel schedule enough to expose it — and is NOT caused by that
+        change: on a stashed clean tree the suite showed only the order-433 GPU
+        failure. Root cause is almost certainly shared cache-directory state
+        between tests rather than per-test temp dirs. Same hermeticity class as
+        order 433. Flaky tests are corrosive: they teach agents and humans to
+        re-run until green, which is exactly how a real regression gets waved
+        through.
+      exit_criteria:
+        - "the test uses an isolated per-test cache directory, not shared process/user state"
+        - "100 consecutive full-suite runs show zero failures of this test"
+        - "audit sibling tests for the same shared-cache-directory pattern"
+      events:
+        - type: filed
+          ts: "2026-07-19T03:25:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Found while landing order 427. Isolated as pre-existing and
+            intermittent by running the suite three times with the change and
+            once on a stashed clean tree.
+
+
+        - type: completed
+          ts: "2026-07-19T08:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            ROOT CAUSE was worse than "shared state between tests": the test
+            wrote into the REAL user cache directory. init_cache_dir() falls
+            back to $HOME/.cache/tillandsias when XDG_CACHE_HOME is unset, which
+            is the same directory the actual application and the image build
+            scripts use — so it raced with anything else on the machine touching
+            it, including the ./build-*.sh runs happening during this session.
+            That is not a unit test; it is a coin flip that also mutates the
+            developer's real state.
+            Fixed by redirecting XDG_CACHE_HOME to a tempdir for the test's
+            duration, serialised on the crate's SHARED env lock. That lock was
+            previously private to runtime_assets' test module, so it was
+            promoted to pub(crate) at module level — two independent mutexes
+            would serialise nothing, and std::env::set_var is process-global.
+            Restoration uses a Drop guard so the panic path also restores; the
+            previous inline restore in runtime_assets would have leaked a
+            deleted tempdir path into every later test had an assertion failed.
+            PROVEN, not assumed: captured the mtime of
+            ~/.cache/tillandsias/init-build-state.json before and after a test
+            run — unchanged, so the real cache is genuinely untouched. Its
+            timestamp of 01:44 tonight is itself evidence the test HAD been
+            writing there during earlier runs this session.
+            Suite: 210/210 across three consecutive runs; full ./build.sh --test
+            passes.
+    - order: 435
+      packet_id: forge-credential-spec-reconciliation
+      desired_release: v0.5
+      title: "Spec reconciliation: forge-offline says 'forge containers carry ZERO credentials' but the Codex/brew lane legitimately needs a GitHub token — decide, do not silently drift"
+      status: needs_clarification
+      operator_note: "operator spec decision: forge credential policy (forge-offline ZERO-creds vs brew token)"
+      kind: spec
+      deliverable: openspec change proposal reconciling forge-offline + git-mirror-service R5 with order 359
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, openspec, security, forge, spec-drift, operator-decision, operator-interactive]
+      estimated_hours: 3
+      outcome: >
+        Two invariants are false as written. openspec/specs/forge-offline states
+        forge containers carry ZERO credentials and git-mirror-service R5 forbids
+        a credential crossing the enclave, yet main.rs injects
+        HOMEBREW_GITHUB_API_TOKEN into every forge lane (order 359) for a REAL
+        reason: brew attestation verification of ghcr.io bottles goes anonymous
+        and gets rate-limited without it, with an operator repro on 2026-07-15.
+        The implementation is defensible — read host-side from Vault, env only,
+        never disk or argv, and the forge's own Vault policy still cannot read
+        secret/github/token — but no change proposal was ever filed, so the spec
+        and reality silently disagree. That is corrosive: an agent auditing
+        against the spec concludes the code is wrong, and an agent reading the
+        code concludes the spec is stale, and neither is safe to act on.
+        Options to weigh: (1) amend the spec to permit a narrowly-scoped,
+        vault-sourced token with stated threat model; (2) scope the injection to
+        only the lanes/phases where brew actually runs rather than every lane
+        for the whole session; (3) remove the token and accept anonymous brew
+        (regresses order 359). This is an operator-facing security-posture
+        decision — surface it rather than deciding unilaterally.
+        NOTE: this is a sibling of the SAME drift class recorded for
+        tillandsias-vault R6 ("forge containers receive zero Vault tokens"),
+        which the implementation has also deliberately contradicted since
+        2026-07-14 with no proposal filed. Fix both together.
+      exit_criteria:
+        - "an openspec change proposal exists reconciling forge-offline and git-mirror-service R5 with the real credential need"
+        - "the same pass reconciles tillandsias-vault R6"
+        - "the operator has signed off on the resulting security posture"
+        - "no invariant in any active spec is false as written when the change lands"
+      events:
+        - type: filed
+          ts: "2026-07-19T03:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Split out of order 426 after re-verification showed the token is not
+            a dead hack but a genuine spec-vs-need conflict requiring a decision.
+
+    - order: 436
+      packet_id: git-service-alias-unification
+      desired_release: v0.5
+      title: "Unify the git-service / tillandsias-git dual network alias — a rename migration, not a deletion (both names have live consumers)"
+      status: done
+      kind: cleanup
+      deliverable: images/default/config-overlay/shell-helpers.sh, forge-welcome.sh, container_profile.rs, main.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, git-mirror, naming, cleanup]
+      estimated_hours: 3
+      outcome: >
+        The mirror container is given BOTH network aliases because code and docs
+        disagree on its name. Re-verified: this cannot be fixed by dropping one
+        alias, because both are actively referenced —
+        config-overlay/shell-helpers.sh defaults GIT_SERVICE_HOST to
+        "git-service", forge-welcome.sh advertises "git-service:9418" to the
+        operator, and both names appear in the NO_PROXY literals in
+        container_profile.rs and main.rs. Meanwhile the URL actually injected
+        into forge gitconfig is git://tillandsias-git/<project>. Pick ONE
+        canonical name, migrate every consumer, keep the second alias for one
+        release as a deprecation shim, then drop it. Low risk but touches
+        several surfaces, so it wants its own pass rather than riding along with
+        an unrelated change.
+      exit_criteria:
+        - "one canonical service name, with every consumer migrated"
+        - "the second alias is either removed or explicitly documented as a time-boxed deprecation shim"
+        - "operator-facing banners name the same host the transport actually uses"
+      events:
+        - type: filed
+          ts: "2026-07-19T03:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Split out of order 426 after re-verification showed both alias names
+            have live consumers, so this is a migration rather than a deletion.
+
+
+        - type: completed
+          ts: "2026-07-19T11:45:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Canonical name is now `tillandsias-git` everywhere a consumer
+            actually resolves a host. That is what the launcher injects as
+            url.insteadOf (git://tillandsias-git/<project>) and what the
+            container is named, so the transport was always the source of truth;
+            `git-service` was the outlier.
+            Migrated: config-overlay/shell-helpers.sh (clone default — it clones
+            over git://$git_service/, so this was real transport, not cosmetics)
+            and forge-welcome.sh (both the description and the label the
+            operator reads). GIT_SERVICE_HOST still overrides, and the
+            `git-service` NETWORK ALIAS is retained for one release so an
+            explicit override keeps resolving — removal is the follow-up, not
+            this pass.
+            FOUND WHILE MIGRATING: TILLANDSIAS_GIT_SERVICE is a PRESENCE FLAG
+            masquerading as a hostname. lib-common.sh only tests
+            `-n "${TILLANDSIAS_GIT_SERVICE:-}"` to decide network transport is
+            available; the clone URL is hardcoded to git://tillandsias-git/, so
+            the value was never resolved as a host at all. It read as
+            configuration and was a boolean. Value set to the canonical name and
+            the semantics documented at both definition sites, so a future
+            reader cannot mistake it for a host selector — the confusion that
+            produced the dual alias in the first place.
+            Left alone deliberately: the NO_PROXY literals keep BOTH names,
+            which is correct during deprecation; and the "git-service" strings
+            in tillandsias-logging/src/aggregator.rs are log SOURCE names in
+            test fixtures, unrelated to the network alias. Renaming those would
+            have been churn with no consumer.
+            Evidence: ./build.sh --check and --test pass; instant gate 153/156
+            with the same 3 pre-existing unrelated failures.
+    - order: 437
+      packet_id: forge-src-tmpfs-topology
+      desired_release: v0.5
+      title: "/home/forge/src is a host bind mount, but BOTH active specs forbid that — forge-hot-cold-split requires tmpfs and forge-offline requires clone-only"
+      status: done
+      operator_note: "operator workflow decision: /home/forge/src tmpfs+clone changes how edits reach the host"
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
+      depends_on: [forge-delegation-instance-names, forge-delegation-worker-state-isolation]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, tmpfs, topology, data-loss, operator-visible, operator-interactive]
+      estimated_hours: 10
+      outcome: >
+        CORRECTION to an earlier audit note that called these two specs
+        "incompatible topologies". They are NOT in conflict — they AGREE, and
+        the implementation is the outlier. openspec/specs/forge-hot-cold-split
+        requires /home/forge/src be kernel tmpfs sized by compute_hot_budget();
+        openspec/specs/forge-offline requires forge containers have NO host
+        project mount, with source obtained exclusively via git clone from the
+        mirror and "no bind mount from the host project directory". Those
+        compose cleanly: tmpfs mount, then clone into it. The code instead
+        read-write bind-mounts the host checkout, violating both.
+        This is not merely cosmetic. The shared host checkout already caused a
+        near-data-loss incident (plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md),
+        and it is the reason concurrent workers cannot be trusted with a project
+        even after orders 427 and 428 gave them isolated names and state. The
+        sizing helpers the spec references — compute_hot_budget, check_host_ram,
+        compute_memory_ceiling_mb — already EXIST and are unit-tested but have
+        ZERO production callers, and --memory is never passed, so the hot-budget
+        design was built and then never wired.
+        OPERATOR-VISIBLE: switching to tmpfs + clone changes the daily workflow.
+        Today an agent's edits appear directly in the host checkout; afterwards
+        work reaches the host only once committed and relayed through the
+        mirror. That is the intended design and it removes the destructive-clean
+        hazard, but it is a behaviour change the operator should agree to rather
+        than discover. Surface it before implementing.
+      exit_criteria:
+        - "/home/forge/src is tmpfs sized by compute_hot_budget(), with --memory actually passed"
+        - "source arrives by clone from the mirror; no host project bind mount remains"
+        - "the existing sizing helpers gain production callers"
+        - "a litmus asserts findmnt -t tmpfs lists /home/forge/src inside a live forge"
+        - "operator has agreed to the workflow change before it lands"
+      events:
+        - type: filed
+          ts: "2026-07-19T04:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Split out of order 428. Re-read both specs directly rather than
+            trusting the earlier audit summary, and found they agree with each
+            other while the implementation diverges from both.
+
+        - type: operator-approved
+          ts: "2026-07-20T03:35:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            OPERATOR APPROVED + STRENGTHENED 2026-07-20, and gated concern
+            resolved. Live evidence: the forge bind-mounts the shared host
+            checkout /home/tlatoani/src/tillandsias rw at /home/forge/src/<proj>
+            (TILLANDSIAS_PROJECT_HOST_MOUNT=1, hardcoded), so every forge for a
+            project shares ONE working tree — Antigravity saw OpenCode's dirt,
+            and agents dirty a real host checkout (64 dirty files observed).
+            Operator requirement: "Each forge launch should have a clean fresh
+            checkout from the latest at the mirror and do a fresh pull from
+            remote. There should be absolutely no circumstances on which an
+            agent would land on a dirty forge." The earlier workflow-change
+            concern (edits reach host only via commit+relay) is ACCEPTED — that
+            is the intended behaviour.
+            IMPLEMENTATION LEVER (cheap): clone_project_from_mirror already
+            clones fresh when HOST_MOUNT is unset — it only skips-and-uses the
+            mount when HOST_MOUNT=1. So the core change is: stop setting
+            TILLANDSIAS_PROJECT_HOST_MOUNT=1 and stop bind-mounting the host
+            checkout, letting the existing clone path run. Ideally clone onto
+            tmpfs (forge-hot-cold-split) and fresh-pull.
+            ARCHITECTURAL INSIGHT (obsoletes hacks): the ENTIRE gitdir-facade
+            machinery — write_forge_repo_gitdir, the notmpcopyup empty-tmpfs
+            mask, ensure_forge_git_index materialisation (order 425), the
+            packed-refs live-mount (order 432) — exists ONLY to make the shared
+            HOST-MOUNT safe. A fresh clone has a normal .git and needs none of
+            it. Clone-only therefore RETIRES the whole data-loss surface hardened
+            2026-07-19, which is exactly the operator's original "obsolete the
+            no-longer-needed git hacks" directive. Facade retirement is a
+            same-milestone follow-on once clone-only lands and is proven.
+            TRADEOFF to record: HOST_MOUNT was a deliberate solo-tray UX choice
+            so a single user sees edits live. Clone-only gives the tray forge an
+            isolated clone too. Operator has chosen isolation over live-edit
+            visibility universally, matching forge-offline (clone-only) and
+            forge-hot-cold-split (tmpfs).
+        - type: progress
+          ts: "2026-07-20T04:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            MINIMAL TOGGLE-FLIP IMPLEMENTED (operator-approved). Both forge-
+            session launch paths (build_opencode_forge_args and
+            build_forge_agent_run_args_with_vault) now default to CLONE-ONLY: no
+            host-checkout bind mount, no gitdir facade/mask, and the
+            TILLANDSIAS_GIT_SERVICE presence flag set so the entrypoint's
+            clone_project_from_mirror clones a fresh tree from the mirror. The
+            legacy shared host-mount is opt-in via TILLANDSIAS_FORGE_HOST_MOUNT=1
+            (escape hatch — restores old behaviour with no rebuild). New helper
+            forge_host_mount_enabled is pure/unit-tested; the facade+mask block
+            is gated so a clone's real .git is never masked. Tests: 213/213
+            across 3 runs; the two host-mount/facade tests now run in the opt-in
+            mode; clone-only default asserted by forge_host_mount_is_opt_in_only
+            + flipped shape assertions + the source-window structure test. Bonus:
+            unified the crate's two env_lock mutexes into one (a latent race the
+            order-434 fix had left, since set_var is process-global).
+            NOT YET LIVE-VERIFIED: needs one real forge launch that clones
+            successfully from the mirror end to end — happens on the operator's
+            next reinstall. Facade retirement (deleting the now-dead
+            write_forge_repo_gitdir / notmpcopyup / index / packed-refs code) is
+            the clean follow-on once clone-only is live-proven.
+        - type: verified
+          ts: "2026-07-20T06:00:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            LIVE-VERIFIED by the operator 2026-07-20: after the fresh install,
+            forges clone cleanly from the mirror ("Cloning into
+            /home/forge/src/tillandsias") instead of bind-mounting a shared host
+            checkout. No dirty-worktree contamination. The clone-only keystone is
+            confirmed working end to end. (The clone-vs-daemon-startup race it
+            exposed was fixed as order 446.)
+    - order: 438
+      packet_id: test-transient-state-audit
+      desired_release: v0.5
+      title: "Audit the suite for tests that encode transient project state as an invariant — completing work should never break a test"
+      status: done
+      kind: fix
+      deliverable: plan/issues (audit report) + test fixes
+      depends_on: [test-gpu-tier-hermeticity]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [testing, hermeticity, ci, methodology]
+      estimated_hours: 4
+      outcome: >
+        Two independent instances surfaced within one cycle, so this is a
+        pattern rather than a coincidence.
+        (a) a test baked the CI host's GPU hardware into an assertion, so it
+        failed on any CUDA machine while the code was behaving correctly;
+        (b) a test asserted the windows parity column was still INCOMPLETE, so
+        finishing the windows lane (order 258) broke it.
+        Both share a shape: asserting a SNAPSHOT of the world rather than a rule
+        that should always hold. The failure mode is uniquely corrosive because
+        the test goes red when nothing is wrong — or worse, when something went
+        RIGHT — which trains agents and humans to re-run until green or to
+        ignore the suite, and that is exactly how a real regression later slips
+        through.
+        Sweep the workspace for the same shape. Candidate smells: assertions
+        over live repo documents that expect a particular incomplete state;
+        comments of the form "on this host"/"currently"/"until X lands";
+        unwrap_err() against a moving document; hardcoded counts of items in a
+        growing ledger. Prefer asserting invariants, and cover
+        state-dependent behaviour with synthetic fixtures (as PARITY_FIXTURE
+        already does correctly).
+      exit_criteria:
+        - "every test asserting against a live repo document is reviewed for transient-state assumptions"
+        - "state-dependent behaviour is covered by synthetic fixtures rather than the live document"
+        - "no test in the suite fails as a consequence of work being COMPLETED"
+      events:
+        - type: filed
+          ts: "2026-07-19T06:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed after fixing two instances of the same shape while closing
+            order 433.
+
+
+        - type: completed
+          ts: "2026-07-19T09:00:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Swept the whole suite. Twelve findings; the five HIGH ones fixed,
+            plus three MEDIUM. Categories A (host-environment assumptions) and E
+            (date/version pinning) came back EMPTY — the GPU-tier bug was the
+            only instance of A, and the shell suite already gates properly with
+            `command -v ... || SKIP` and derives the host column at runtime.
+            Four of the five HIGH findings were in ONE module:
+            crates/tillandsias-plan/src/lib.rs's tests, which built everything
+            on live_ledger() reading the real plan/index.yaml. Three of its
+            assertions went red specifically when work COMPLETED — it pinned
+            reference warnings as non-empty "until the debt filing is drained",
+            required two named packets to still be downstream of order 392, and
+            required some live packet to still carry a provisional_id. All three
+            now run against a synthetic ledger the test owns; the one genuine
+            live invariant (violations.is_empty()) is kept, and warnings are
+            printed rather than asserted.
+            THE BIG FIND was self-inflicted and only surfaced because the
+            synthetic fixture forced me to learn how depends_on actually
+            resolves: ALL 18 packets I filed tonight lacked `packet_id`. They
+            were the only 18 in the corpus missing it. Ledger::parse indexes by
+            packet_id, so a packet without one enters NEITHER by_id NOR
+            by_order — `tillandsias-plan status 422` answered "no packet
+            matches '422'" while pre-existing 392 resolved fine. Eighteen
+            packets that parsed, loaded, validated, and were completely
+            invisible to the plan engine. Same signature as everything else
+            tonight: looks filed, reports success, is not there. Also converted
+            7 integer depends_on to packet_id strings — str_list filter_maps on
+            as_str, so integer deps were silently dropped even where the packet
+            was otherwise visible.
+            Also: schema.yaml listed 8 statuses while the corpus uses 11, so
+            `check` emitted drift advisories for 66 packets — noise that trains
+            people to ignore the advisory channel. Recorded the 6 missing ones
+            (order 440 filed for the duplicate-vocabulary decision, since
+            completed/done/success are semantically the same and recording
+            usage is not endorsing it).
+            Judgement call worth recording: the sweep flagged test-inference.sh
+            for using the real $HOME model cache and recommended sandboxing it
+            like its siblings. Declined — the cache holds multi-GB blobs and
+            redirecting it would force a full re-download every run, so the test
+            would simply stop being run. Documented the trade in-place and fixed
+            the genuine defect it sat next to: a fixed /tmp log path that
+            collides between concurrent runs and between users.
+            Evidence: ./build.sh --check and --test both pass; plan check
+            reports "ok: 318 packets, ids unique, live references sound" with no
+            schema-drift advisories; instant litmus 151/154 with the same 3
+            pre-existing unrelated failures.
+    - order: 439
+      packet_id: harness-contract-verification
+      desired_release: v0.4
+      title: "Harness liveness probe cannot detect BEHAVIOURAL drift — a working @latest that changed an undocumented contract passes it"
+      status: done
+      kind: fix
+      deliverable: images/default/lib-common.sh (harness_probe) + per-harness contract checks
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, harness, supply-chain, reliability]
+      estimated_hours: 4
+      outcome: >
+        Order 284 added harness_probe + last-good rollback after the 2026-07-10
+        outage in which a broken opencode-ai@latest took the forge lane down.
+        The probe is `--version` within a timeout — a LIVENESS check. It proves
+        the binary starts; it proves nothing about the contracts we depend on.
+        Concrete gap found while scoping order 431: we depend on the
+        UNDOCUMENTED OPENCODE_AUTH_CONTENT env var for keeping credentials off
+        disk. An upstream release that starts cleanly but renames or drops that
+        variable passes the liveness probe, and opencode then silently falls
+        back to reading auth.json from disk — a credential landing in the one
+        place the design exists to keep it out of, with no error anywhere.
+        The same shape applies to every flag we pass: order 429 found the forge
+        had been passing --dangerously-skip-permissions to opencode, a flag it
+        does not have, silently swallowed for an unknown length of time.
+        Extend the probe from "does it start" to "does it still honour the
+        contracts we rely on": assert the flags we pass exist in --help, and
+        assert any env-var-driven behaviour we depend on actually takes effect.
+        Roll back to last-good on contract failure, exactly as for a crash.
+      exit_criteria:
+        - "harness_probe verifies per-harness CONTRACTS, not just liveness"
+        - "a flag we pass that no longer exists upstream triggers rollback, not silent acceptance"
+        - "env-var-driven behaviour we depend on is positively asserted post-install"
+        - "a fixture proves a contract-broken-but-starting harness is rejected"
+      events:
+        - type: filed
+          ts: "2026-07-19T07:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed while scoping order 431. Generalises the order-429 phantom
+            flag finding: liveness probes cannot see behavioural drift, and we
+            consume several undocumented or unverified upstream contracts.
+
+        - type: completed
+          ts: "2026-07-19T07:50:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            harness_probe now verifies CONTRACTS, not just liveness. Declared
+            contracts: opencode `run` must still accept --auto and --format;
+            codex `exec` must still accept --json, --output-last-message and
+            --dangerously-bypass-approvals-and-sandbox. All six were verified
+            present against the installed opencode 1.18.3 and codex-cli 0.144.4
+            before being declared. A contract failure takes the SAME last-good
+            rollback path as a crash (order 284's machinery), because a harness
+            that starts while silently ignoring our flags is not usable — it
+            just fails invisibly.
+            Deliberately FAILS OPEN on ambiguity: a help invocation that errors,
+            times out, or returns nothing is treated as "not disproven" rather
+            than broken. Failing closed on infrastructure noise would trigger
+            spurious rollbacks, and this repo has already been burned by gates
+            that cry wolf (see the order-422 self-correction). Only a POSITIVE
+            absence fails.
+            The fixture's load-bearing case reproduces the REAL order-429 bug:
+            declare --dangerously-skip-permissions against actual opencode and
+            confirm the probe rejects it, naming the flag. Had this existed, the
+            phantom flag would have been caught automatically instead of
+            surviving an unknown length of time.
+            SIDE EFFECT WORTH RECORDING: this change broke
+            scripts/test-harness-rollback.sh in two distinct ways, both real.
+            First, that fixture extracts individual functions from lib-common.sh
+            and did not know about the new helpers, so the probe died with
+            "harness_contract_ok: command not found" and the fixture reported it
+            as a ROLLBACK failure — a misleading symptom for a missing-function
+            cause. Second, its stub harnesses echoed their version for any
+            argument, so they modelled contract-BROKEN harnesses and were
+            correctly rejected; the good stubs now answer --help properly. A
+            stub standing in for a working tool must satisfy the contracts a
+            working tool satisfies, or the fixture tests a fiction.
+            Evidence: contract fixture 5/5; harness rollback fixture 6/6;
+            litmus:harness-contract-probe 3/3; instant gate 151/154 with the
+            same 3 pre-existing unrelated failures.
+
+    - order: 440
+      packet_id: plan-status-vocabulary-normalisation
+      desired_release: v0.5
+      title: "Plan ledger uses 11 status values with three semantic duplicate pairs — normalise the vocabulary"
+      status: ready
+      operator_note: "operator preference: canonical status vocabulary"
+      kind: cleanup
+      deliverable: plan/schema.yaml + plan/index.yaml status migration
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [plan, schema, consistency, operator-interactive]
+      estimated_hours: 3
+      outcome: >
+        The corpus uses 11 distinct statuses, and several mean the same thing:
+        done (144) vs completed (55) vs success (2) vs implemented (1); claimed
+        (2) vs in_progress (7) vs active (1). plan/index.yaml's own
+        default_status_values lists a DIFFERENT set again (it includes
+        needs_clarification and obsoleted, and omits done/claimed/provisional),
+        so the ledger disagrees with itself about its own vocabulary.
+        Consequence: every consumer must special-case synonyms, and any query
+        like "what is finished" silently under-reports depending on which
+        synonym a packet happened to use. Order 438 recorded the missing values
+        in schema.yaml to silence 66 drift advisories, because a noisy advisory
+        channel gets ignored — but recording usage is NOT endorsing it.
+        Pick one value per meaning, migrate, and make
+        plan/index.yaml.default_status_values and plan/schema.yaml.statuses the
+        SAME list so they cannot drift apart again.
+      exit_criteria:
+        - "one status value per distinct meaning; synonyms migrated"
+        - "plan/index.yaml default_status_values and plan/schema.yaml statuses are identical"
+        - "a check fails if the two lists diverge, so this cannot silently recur"
+      events:
+        - type: filed
+          ts: "2026-07-19T09:00:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: Filed while closing order 438's schema-drift advisories.
+    - packet_id: mirror-startup-sweep-per-ref-tolerant
+      order: 441
+      desired_release: v0.4
+      title: "Mirror startup retry-push is atomic over ALL refs — one stale ref blocks the whole recovery sweep"
+      status: completed
+      capability_tags: [linux, git-mirror, robustness, self-healing]
+      kind: optimization
+      deliverable: images/git/entrypoint.sh (startup sweep) + fixture
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 3
+      outcome: >
+        LIVE-OBSERVED 2026-07-20 on the running tillandsias-git-tillandsias mirror.
+        The startup retry-push fabricates synthetic receive records for EVERY ref
+        and relays them with git push --atomic, so a single non-fast-forward ref
+        (stale release/* branches the mirror retained on its persistent named
+        volume) rejects the entire transaction and no fast-forwardable ref is
+        flushed either. Not on the live push path — targeted single-ref agent
+        pushes succeed independently — so this degrades startup self-healing, not
+        active development. Full analysis:
+        plan/issues/mirror-startup-retry-push-atomic-all-refs-2026-07-20.md
+      exit_criteria:
+        - "the STARTUP recovery sweep relays per-ref (or per-independent-group) so a fast-forwardable ref reaches upstream even when a sibling ref is stranded"
+        - "a stranded ref is logged by NAME rather than silently failing the whole sweep"
+        - "the LIVE single-push path keeps git push --atomic and the non-mirror/all explicit-refspec invariant untouched"
+        - "a fixture reproduces the current all-atomic failure, then proves per-ref tolerance (fail-loud style)"
+      events:
+        - type: filed
+          ts: "2026-07-20T02:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from a live observation during the attended 2026-07-20
+            meta-orchestration cycle. Promoted from
+            plan/issues/mirror-startup-retry-push-atomic-all-refs-2026-07-20.md.
+        - type: progress
+          ts: "2026-07-20T04:40:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            CLOSED. Rewrote the startup retry-push sweep in images/git/entrypoint.sh
+            to relay PER REF (order 441): each local ref is fed to its own atomic
+            relay transaction via an overridable RELAY_REF, so a fast-forwardable
+            ref flushes even when a sibling ref is stranded, and a stranded ref is
+            logged BY NAME (not silently failing the whole sweep). The LIVE
+            single-push path (relay-refs.sh `git push --atomic`) and the
+            never-`--mirror`/`--all` invariant are untouched. Added
+            scripts/test-git-mirror-startup-per-ref.sh (offline, mock relay) and
+            litmus:git-mirror-startup-per-ref-tolerance bound to git-mirror-service.
+            Exit criteria 1-4 satisfied (per-ref relay, stranded-by-name log, live
+            path invariant preserved, fixture reproduces + proves tolerance).
+
+    - packet_id: e2e-gate-refuses-live-runtime
+      order: 442
+      desired_release: v0.4
+      title: "Destructive e2e gate can wipe a live operator/agent forge — eligibility probe is blind to concurrent forges"
+      status: completed
+      capability_tags: [linux, e2e, safety, data-loss, operator-interactive]
+      operator_note: "operator awareness: the destructive smoke reset defaults to proceed and cannot see a live forge; confirm the fail-safe default is acceptable"
+      kind: enhancement
+      deliverable: scripts/e2e-preflight.sh + fixture
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        LIVE 2026-07-20: e2e-preflight.sh eligibility returned `eligible` while a
+        forge (BigPickle mid-cycle), its mirror, vault, proxy, router and
+        inference were all running. /build-install-and-smoke-test-e2e's first
+        step is podman system reset --force; following the verdict literally
+        would have DESTROYED the operator's live forge and BigPickle's in-flight
+        cycle with no warning. This cycle overrode the probe by hand. The probe
+        only skips on smoke-lock-held; an operator/agent forge holds no smoke
+        lock, so it is invisible, and TILLANDSIAS_DESTRUCTIVE_RESET_OK defaults
+        to proceed. As operators and agents increasingly run forges on the same
+        hosts as unattended smoke cycles, this is a substrate-level data-loss
+        path. Full analysis:
+        plan/issues/e2e-destructive-gate-can-wipe-a-live-operator-forge-2026-07-20.md
+      exit_criteria:
+        - "e2e-preflight.sh eligibility emits skip:live-runtime-present when a tillandsias forge/shared stack it did not itself launch is running"
+        - "an explicit per-invocation TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 may still force the reset; the DEFAULT fails safe"
+        - "a fixture asserts skip:live-runtime-present with a marker forge container present and eligible once removed, reproducing the current unsafe eligible-despite-live-forge behaviour first"
+      events:
+        - type: filed
+          ts: "2026-07-20T02:55:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the attended 2026-07-20 cycle after the eligibility probe
+            returned eligible with BigPickle's forge live. Tagged
+            operator-interactive: the fail-safe default is an operator call.
+        - type: progress
+          ts: "2026-07-20T04:25:00Z"
+          agent_id: "linux-forge-opencode-20260720T0351Z"
+          host: forge
+          summary: >
+            CLOSED. Added live_runtime_is_present() to scripts/e2e-preflight.sh
+            that detects a running tillandsias forge / shared stack
+            (tillandsias-*-forge, tillandsias-git, tillandsias-vault,
+            tillandsias-proxy, tillandsias-router, tillandsias-inference) via
+            `podman ps` and emits skip:live-runtime-present from all three host
+            branches (Windows/MacOS/Linux) BEFORE the eligible verdict. The
+            default fails safe; an explicit per-invocation
+            TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 still forces the reset. Added
+            scripts/test-e2e-preflight-live-runtime.sh (offline, injects a fake
+            podman) covering live-forge -> skip, shared-stack -> skip, clean
+            host -> eligible, empty ps -> eligible, and override=1 -> eligible.
+            Extended litmus:e2e-eligibility-probe-shape with the
+            skip:live-runtime-present case and the wired-guard assertion. Exit
+            criteria 1-3 satisfied (override honoured per criterion 2).
+
+    - packet_id: concurrent-forges-shared-stack-safety
+      order: 443
+      desired_release: v0.4
+      title: "Concurrent forges are unsafe: a second launch bounces the shared stack and can tear it down under a live sibling"
+      status: in_progress
+      capability_tags: [linux, forge, concurrency, shared-stack, delegation, p1]
+      operator_note: "operator requirement 2026-07-20: concurrent forges/harnesses (even same type, same project) must be safe — independent checkouts + own containers"
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/main.rs (shared-stack ensure + teardown refcount) + fixtures
+      depends_on: [forge-delegation-instance-names, forge-src-tmpfs-topology]
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 8
+      outcome: >
+        LIVE 2026-07-20: with an OpenCode forge running clean, launching
+        Antigravity KILLED the OpenCode session and bounced proxy/git-mirror/
+        inference (restarted under the live sibling), also bouncing BigPickle's
+        mirror. Two mechanisms, one cause — the shared vault/proxy/router/
+        git-mirror/inference stack has no concurrency model: (1) a launch
+        re-ensures the stack and at least git-mirror uses --replace, restarting
+        shared containers the first forge is using; (2)
+        cleanup_shared_stack_if_no_running_forge tears the stack down on any
+        session exit with no refcount and no launch-in-flight lock, racing a
+        sibling still in a non-running created/installing state. Instance-scoped
+        NAMES (order 427) let forge containers coexist but do not give the SHARED
+        stack a concurrency model. This blocks the whole concurrent-delegation
+        direction. Full analysis:
+        plan/issues/concurrent-forges-unsafe-shared-stack-bounce-and-teardown-race-2026-07-20.md
+      exit_criteria:
+        - "launch-time shared-stack ensure is idempotent: a healthy shared container in use by another forge is NOT --replace-restarted"
+        - "the shared stack is reference-counted per project; teardown fires only when the LAST forge exits AND no launch is in flight (grace window absorbs create/install)"
+        - "each forge launch keeps its own terminal; never reuses or kills a sibling's"
+        - "fixture: second-forge ensure leaves shared container IDs unchanged (reproduce the current bounce first)"
+        - "fixture: an exiting sibling does NOT tear down the stack while another lane is in a non-running created state (reproduce the current teardown-under-sibling first)"
+      events:
+        - type: filed
+          ts: "2026-07-20T03:15:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from a live attended observation: launching Antigravity killed
+            a running OpenCode forge and bounced the shared stack. Anchors the
+            operator's concurrent-forge requirement; completes the shared-stack
+            half of the 427/428/437 concurrency ladder.
+
+        - type: refinement
+          ts: "2026-07-20T03:35:00Z"
+          agent_id: "operator-tlatoani"
+          host: linux
+          summary: >
+            OPERATOR REFINEMENT 2026-07-20 — the shared-stack idempotency is NOT
+            uniform: the INFERENCE container is nearly stateless and may keep
+            --replace (recreate freely). The git-mirror/vault/proxy/router are
+            stateful and must be ensure-if-healthy (never --replace a healthy
+            one in use by a sibling). Forge-local EXPERTS follow the same
+            ephemerality+idempotency principle as inference: recreate-if-absent,
+            recreate freely if unhealthy. So the fix is per-component:
+            stateless (inference, experts) -> recreate/replace fine;
+            stateful (mirror, vault, proxy) -> idempotent ensure + refcount.
+
+        - type: progress
+          ts: "2026-07-20T05:00:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            SLICE 1 done — the teardown-under-starting-sibling race is closed.
+            Root cause was precise: is_active_lane_container counted only
+            "running"/"up", so a sibling forge mid-launch (podman created/
+            configured/initializing — installing its agent, cloning from the
+            mirror) was invisible, and an exiting sibling saw "no active lanes"
+            and tore the shared stack down under it. Fixed: the predicate now
+            counts any ALIVE-or-STARTING state and excludes only terminal/dead
+            (exited/stopped/dead/removing/""). Unit-tested over all five lane
+            names across starting and terminal states. Note: ensure_proxy_running
+            is already idempotent (checks container_running before create), so
+            the observed proxy bounce came from the TEARDOWN, not a
+            non-idempotent ensure — this slice targets the real cause.
+            REMAINING (slices 2-3): (a) a launch-in-flight marker / grace-recheck
+            to also cover the pre-create window (before podman run, no container
+            exists yet); (b) per-project reference counting so teardown fires
+            only when the LAST forge exits; (c) audit the stateful shared-stack
+            ensures (git-mirror/vault/router) for the same running-before-replace
+            idempotency proxy already has, applying the operator's rule
+            (inference/experts may --replace freely; stateful ensure-if-healthy);
+            (d) tray terminal isolation (each forge its own terminal). Live crash
+            2026-07-20 (vault SIGKILL, proxy segfault) was resource contention
+            under concurrent forges + inference + a release build; slice 1 plus
+            fewer concurrent forges reduces it, full closure needs the refcount.
+        - type: progress
+          ts: "2026-07-20T05:45:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            SLICE 2 done — the PRIMARY bounce mechanism is fixed. Root cause was
+            NOT the teardown (slice 1) but the ENSURE: ensure_enclave_for_project
+            created the git mirror and inference via run_container_observed with
+            --replace and NO container_running guard (run_container_observed does
+            not check running; only proxy/router had explicit guards). So EVERY
+            forge launch --replaced the running git mirror, destroying it under a
+            sibling mid-clone — the observed 2026-07-20 bounce, which combined
+            with the 446 daemon-startup window crashed forges on clone. Fix per
+            the operator's per-component rule: git mirror is STATEFUL ->
+            ensure-if-running (reuse a live mirror; only mint a fresh Vault token
+            when actually creating). Inference is nearly stateless but --replace
+            drops loaded models and interrupts a sibling, so it too is now
+            recreate-if-not-running. A clean relaunch (stack torn down) still
+            recreates both fresh with the current image. Tests 221/221, clippy
+            clean.
+            REMAINING (slice 3, refinements, not on the critical path): per-
+            project reference counting so teardown fires only on the LAST forge
+            exit; a launch-in-flight marker for the pre-create window; running-
+            AND-HEALTHY (not just running) so a crashed-but-running mirror is
+            replaced; tray terminal isolation. The two main bounce triggers
+            (ensure --replace + teardown-under-starting-sibling) are now closed.
+    - packet_id: forge-launch-artifacts-not-tracked
+      order: 444
+      desired_release: v0.4
+      title: "Launch-generated artifacts must not dirty the checkout (.opencode/package-lock.json et al.)"
+      status: in_progress
+      capability_tags: [linux, forge, isolation, gitignore]
+      kind: optimization
+      deliverable: .gitignore + audit of harness launch writes
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 1
+      outcome: >
+        OpenCode regenerates .opencode/package-lock.json via npm install at every
+        launch; it was TRACKED, so every forge start dirtied the shared checkout
+        (contributing to the cross-forge dirt the operator observed 2026-07-20).
+        Untracked and gitignored (.opencode/package-lock.json + node_modules/).
+        Audited tracked lock/node_modules: only flake.lock remains, which is a
+        legitimate Nix lockfile, not launch-generated. Complementary to order 437
+        (fresh clone) — even a fresh clone would re-dirty on a tracked
+        launch-artifact, so both are needed.
+      exit_criteria:
+        - "no agent-harness launch write lands on a TRACKED path (.opencode/package-lock.json untracked + gitignored — DONE)"
+        - "a check greps the harness entrypoints for writes into tracked paths and fails loud if any is found"
+      events:
+        - type: progress
+          ts: "2026-07-20T03:35:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Untracked + gitignored .opencode/package-lock.json (the launch
+            artifact the operator flagged). Audit clean except flake.lock (legit).
+            Remaining: a fail-loud check that no harness launch writes a tracked path.
+
+    - packet_id: forge-host-lifecycle-control-channel
+      order: 445
+      desired_release: v0.4
+      title: "RESEARCH: forge->host lifecycle-control channel — agent signals 'refresh me' (rebuild+relaunch) and 'I'm done' (safe to destroy)"
+      status: ready
+      capability_tags: [linux, research, forge, mcp, automation, lifecycle]
+      kind: research
+      deliverable: plan/issues/research-forge-host-lifecycle-control-channel-2026-07-20.md (decision record + rung split)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        Operator ask 2026-07-20: agents in a forge need to tell the host (a) they
+        need a fresh tillandsias environment — rebuild + relaunch so their
+        committed changes load — and (b) that they are done, so the forge can be
+        safely destroyed. Research-first per the operator's standing rule. The
+        forge->host MCP socket already exposes publish_local/service_status/
+        service_stop; the natural extension is request_refresh + signal_done
+        verbs, a thin forge-local CLI wrapper, and a sentinel-file fallback for a
+        dying agent. Key safety constraint: REFRESH must verify the forge's work
+        is committed AND relayed upstream before tearing down (no destroying
+        unpushed work); clone-only forges (order 437) make destroy+re-clone
+        cheap. DONE composes with order 443's shared-stack refcount. This is the
+        forge->host reverse of the host->forge delegation research
+        (forge-agent-delegation-research-2026-07-19); together they are the full
+        duplex the automation direction needs. NOT ZeroClaw (order 403), not
+        agent<->agent — one-directional lifecycle control only. Full brief:
+        plan/issues/research-forge-host-lifecycle-control-channel-2026-07-20.md
+      exit_criteria:
+        - "decision record: transport (MCP verb + CLI wrapper + sentinel fallback), chosen with reasons"
+        - "REFRESH pre-destroy verification defined (pushed-before-destroy) and DONE<->443-refcount composition specified"
+        - "pause-vs-recreate and rebuild-failure fallback (last-good) decided"
+        - "split into smallest implementable rungs (e.g. signal_done+refcount, then request_refresh queued for dailies, then immediate rebuild-relaunch-resume)"
+      events:
+        - type: filed
+          ts: "2026-07-20T04:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed from the operator's 2026-07-20 automation directive. The
+            forge->host lifecycle-control channel — the reverse of the
+            host->forge delegation research — needed for hands-off rebuild/
+            relaunch/resume and safe forge destruction.
+
+    - packet_id: mirror-daemon-first-startup
+      order: 446
+      desired_release: v0.4
+      title: "Git daemon must start BEFORE the startup sweep — clone-only forges crash on 'connection refused' during the minutes-long per-ref sweep"
+      status: done
+      capability_tags: [linux, git-mirror, startup, readiness, forge, p1]
+      kind: fix
+      deliverable: images/git/entrypoint.sh (daemon-first ordering)
+      depends_on: [forge-src-tmpfs-topology]
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 1
+      outcome: >
+        LIVE 2026-07-20: a bad interaction between two of the same night's fixes.
+        437 (clone-only) makes a forge clone from git://tillandsias-git the
+        instant it launches. 441 (per-ref startup sweep) relays refs one at a
+        time — minutes over a ~216-ref set. The daemon started only AFTER that
+        sweep, so every forge launched during the window failed its clone with
+        'connection refused' and crashed (Codex and OpenCode both died). Fix:
+        move the git daemon start (plus vault renewer + shutdown trap) to BEFORE
+        the sweep loop, so clones are served the instant the container is up; the
+        sweep is a background recovery task and no longer gates the daemon.
+        Verified: relay-verified-ack fixture still 4/4; entrypoint has exactly
+        one daemon start + one renewer call; git image rebuilt. Needs the running
+        mirror recreated (or a relaunch) to take effect — the same
+        running-image-vs-checkout deployment gap order 422's freshness gate
+        exists to catch.
+      exit_criteria:
+        - "git daemon starts before the startup sweep loop (clones available immediately)"
+        - "exactly one daemon start and one renewer call in the entrypoint"
+        - "relay-verified-ack fixture stays green"
+      events:
+        - type: completed
+          ts: "2026-07-20T05:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Fixed the 437+441 interaction: daemon-first startup so clone-only
+            forges do not race the minutes-long per-ref sweep. Found live when
+            the operator's Codex and OpenCode forges crashed on clone.
+
+    - packet_id: guest-binary-embed-litmus-hermeticity
+      order: 447
+      desired_release: v0.4
+      title: "litmus:guest-binary-embed-integrity fails on STALE LOCAL staging (host-state), not a real regression"
+      status: ready
+      capability_tags: [linux, testing, hermeticity, ci-release, guest-binary]
+      kind: fix
+      deliverable: scripts/build-guest-binaries.sh --verify + litmus
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 2
+      outcome: >
+        Owned per methodology (not-mine is not an excuse). The check fails
+        because target-guest/ holds a guest binary stamped v0.3.260714.1 while
+        VERSION is v0.3.260720.2 — a STALE staged artifact from an old build, not
+        a code regression. Same class as order 433/422 (artifact older than
+        checkout). In CI the guest binary is built fresh so it matches; the
+        litmus fails only on a host with stale local staging. Fix: --verify
+        should REBUILD-or-skip-cleanly when the staged binary is stale/absent
+        (fail loud only on a genuine content/embed mismatch of a FRESH build),
+        rather than failing on host staging state. Reproduce the current
+        stale-fail first, per the fail-loud discipline.
+      exit_criteria:
+        - "a stale/absent staged guest binary triggers a rebuild (or a clean skip), not a hard FAIL"
+        - "a genuine embed/content mismatch of a freshly built binary still fails loud"
+        - "the litmus is green on a host whose target-guest/ predates the current VERSION"
+      events:
+        - type: filed
+          ts: "2026-07-20T06:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed after the operator's methodology reminder to own the 3 red
+            litmus rather than dismiss them. Diagnosed as stale local staging.
+
+    - packet_id: cheatsheet-image-copy-drift-prevention
+      order: 448
+      desired_release: v0.5
+      title: "Forge-image cheatsheet copy re-drifts from host whenever cheatsheets are edited — the committed copy is build-generated"
+      status: ready
+      capability_tags: [linux, cheatsheets, drift, generated-artifact]
+      kind: enhancement
+      deliverable: images/default/cheatsheets sync mechanism
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 3
+      outcome: >
+        The immediate drift was fixed 2026-07-20 (synced host cheatsheets/ ->
+        images/default/cheatsheets/, litmus green), but the ROOT is that
+        images/default/cheatsheets/ is a COMMITTED copy that build-image.sh
+        regenerates from the canonical host cheatsheets/ — so any host cheatsheet
+        edit that is not accompanied by a manual re-sync re-diverges, and
+        litmus:cheatsheet-host-image-sync only catches it at test time. Decide:
+        make the image copy a build-generated (gitignored) artifact, or add a
+        fail-loud pre-commit/CI guard that re-syncs, so it cannot silently drift
+        again.
+      exit_criteria:
+        - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
+        - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
+      events:
+        - type: filed
+          ts: "2026-07-20T06:20:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed while owning the cheatsheet-sync litmus failure — the manual
+            sync fixes the instance; this prevents recurrence.
+
+        - type: correction
+          ts: "2026-07-20T06:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            CORRECTION: images/default/cheatsheets/ is GITIGNORED (build-
+            generated), not committed — the design is already "generated, not
+            committed". So this is the SAME class as order 447: the litmus fails
+            on a STALE LOCAL generated copy (a prior build + subsequent host
+            edits), and would pass in CI where the copy is freshly generated. The
+            fix is therefore identical to 447: regenerate-before-check (or skip
+            cleanly on stale local state), not "make it generated" (it already
+            is). Consider folding 448 into 447 as one "litmus must regenerate
+            generated artifacts before asserting freshness" packet.
+
+    - packet_id: host-direct-push-bypasses-mirror-strands-agents
+      order: 449
+      desired_release: v0.4
+      title: "Host direct-pushes to origin bypass the mirror, stranding forge agents on a stale base"
+      status: ready
+      capability_tags: [linux, git-mirror, coordination, multi-writer, automation, p1]
+      kind: enhancement
+      deliverable: coordination policy + mirror continuous-reconcile OR host-pushes-through-mirror
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        LIVE 2026-07-20, and self-inflicted. The host coordinator (this agent)
+        pushed commits DIRECTLY to origin/linux-next all session, bypassing the
+        mirror. The mirror only reconciles with upstream on a push FAILURE, so
+        between pushes its exported heads went stale (mirror linux-next a109b0b3
+        while upstream was ed9f91d4). A forge agent (Hy3) cloned the stale mirror,
+        committed on that base, and its push diverged from upstream -> declined.
+        The agent then tried to reach /run/secrets to get a token directly (a
+        curiosity workaround the operator correctly denied) — the real need was a
+        current base to rebase onto. Unblocked live by manually fast-forwarding
+        the mirror's linux-next to upstream, after which the agent can
+        fetch+rebase+push. But the pattern is the bug: in a multi-writer world
+        (host coordinator + N forge agents), a writer that bypasses the mirror
+        strands everyone cloning FROM it. Options: (a) the host coordinator
+        ALSO pushes through the mirror (single source of truth); (b) the mirror
+        CONTINUOUSLY reconciles with upstream (a periodic ff of exported heads),
+        not only on push failure; (c) both. Ties into order 445 (forge<->host
+        lifecycle) and the delegation direction.
+      exit_criteria:
+        - "a forge agent's push is not stranded by a concurrent host direct-push — the mirror reflects current upstream within a bounded window"
+        - "either the host coordinator pushes through the mirror, or the mirror periodically fast-forwards exported heads from upstream"
+        - "a litmus/fixture reproduces the stranding (host pushes direct; mirror goes stale; agent clone diverges) and proves the chosen mechanism resolves it"
+      events:
+        - type: filed
+          ts: "2026-07-20T06:30:00Z"
+          agent_id: "linux-tillandsias-opus48-20260719T0000Z"
+          host: linux
+          summary: >
+            Filed as the root cause of Hy3's push failure. Self-inflicted by the
+            host pushing direct to origin while agents work through the mirror.
+            Unblocked live by fast-forwarding the mirror; the pattern needs a fix.
+
+    - packet_id: git-daemon-receive-pack-regression
+      order: 450
+      desired_release: v0.4
+      title: "REGRESSION: order 423 disabled git daemon receive-pack before order 322 shipped — ALL forge pushes rejected"
+      status: done
+      capability_tags: [linux, git-mirror, transport, regression, release-blocker, p0]
+      operator_note: "operator decision made 2026-07-20: option 1 (restore receive-pack on the internal-only enclave daemon); order 322 authenticated smart-HTTP remains the proper long-term fix"
+      kind: fix
+      deliverable: images/git/entrypoint.sh (restore --enable=receive-pack)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 1
+      outcome: >
+        DIAGNOSED BY Hy3 (forge meta-orchestration agent) 2026-07-20, recovered
+        from its stranded forge commits. Order 423 (a59cfb9d) removed
+        --enable=receive-pack from the tillandsias-git daemon to close the
+        anonymous write path (Decision 4), but the authenticated replacement
+        (order 322, smart HTTP on 8080) was never deployed. The forge pushes over
+        git:// receive-pack; with it disabled every forge push fails at the
+        transport layer ("access denied or repository not exported"). Fetches
+        still work (upload-pack). This blocks the ENTIRE v0.4 push workflow —
+        agents cannot deliver their work. Full analysis:
+        plan/issues/blocker-git-mirror-push-receive-pack-disabled-2026-07-20.md
+        RESOLUTION (option 1, operator-directed): restore receive-pack on the
+        daemon. The enclave mirror is INTERNAL-ONLY (--internal network, no
+        internet); the threat order 423 addressed (internet-anonymous write) does
+        not apply, and the real GitHub-auth boundary is the pre-receive relay +
+        the upstream token + the non-mirror/non-all + bulk-delete guards. Order
+        423's LIGHTTPD removal stays (genuinely dead + anonymous); only the
+        DAEMON receive-pack — the live push path — is restored. Order 322
+        (per-agent authenticated smart HTTP) remains the proper multi-tenant fix.
+      exit_criteria:
+        - "the git daemon serves receive-pack again so forge git:// pushes reach the pre-receive relay"
+        - "a forge push relays to GitHub end to end"
+        - "the security rationale (enclave-internal; relay is the real boundary) is documented inline, and order 322 is referenced as the proper fix"
+      events:
+        - type: filed
+          ts: "2026-07-20T06:45:00Z"
+          agent_id: "linux-forge-opencode-metaorch-20260720T0530Z"
+          host: forge
+          summary: >
+            Diagnosed by Hy3 in-forge; recovered from its stranded commits by the
+            host coordinator. The receive-pack regression blocking all forge
+            pushes. Renumbered from Hy3's provisional 447 (collided with the
+            host's guest-binary packet).
+        - type: completed
+          ts: "2026-07-19T00:00:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            RESOLVED (option 1, operator-directed via Hy3's recommendation).
+            Restored `--enable=receive-pack` on the tillandsias-git daemon
+            (images/git/entrypoint.sh) with an inline security rationale: the
+            daemon is enclave-INTERNAL (--internal, no internet route), so order
+            423's internet-anonymous-write threat does not apply here; the REAL
+            GitHub-auth boundary is the pre-receive relay (Vault token, no
+            --mirror/--all, bulk-delete guard), which is unchanged. Order 423's
+            lighttpd/HTTP anonymous path stays removed; only the live daemon push
+            path is restored. Rebuilt the git image (receive-pack verified present
+            in the built entrypoint). Reconciled the now-inverted invariant:
+            rewrote litmus:git-mirror-no-anonymous-daemon-write to pin the RELAY
+            boundary (no anon write reaches GITHUB) instead of the wrong
+            "daemon refuses pushes" claim, and retired the superseded offline
+            fixture scripts/test-git-daemon-no-anon-write.sh (it only passed by
+            launching a non-production receive-pack-less daemon). All 11 executed
+            git-mirror-service litmus pass, 0 fail. Order 322 (per-agent
+            authenticated smart HTTP) remains the proper multi-tenant fix.
+            Exit criteria 1 + 3 satisfied; criterion 2 (live end-to-end forge
+            push) verifies when a forge next pushes through the rebuilt mirror.
+        - type: note
+          ts: "2026-07-19T00:01:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            Operator RATIFIED the interim unblock 2026-07-19 AND set the end
+            state: "we really don't like to allow for unauthenticated writes,
+            even within the forge... restore it properly in a future release."
+            This unblock is v0.4-only. The proper restoration is tracked by the
+            research (order 322, sharpened today) and the implementation (order
+            451, blocked on that decision record). When 451 lands, this daemon
+            receive-pack path is removed again in favour of authenticated writes.
+
+    - packet_id: authenticated-forge-write-transport-impl
+      order: 451
+      desired_release: v0.5
+      title: "Restore authenticated forge->mirror writes: migrate pushes to an authenticated transport with per-forge identity, then remove the daemon receive-pack unauthenticated path (order 450 interim)"
+      status: blocked
+      blocked_on: "order 322 decision record (authenticated transport + per-forge identity design, Tlatoani sign-off)"
+      capability_tags: [linux, git-mirror, transport, security, release-blocker-v0.5]
+      operator_note: "operator 2026-07-19: unauthenticated writes are not acceptable even within the forge; the order-450 daemon receive-pack unblock is v0.4-only and must be replaced by authenticated writes in v0.5"
+      kind: fix
+      deliverable: images/git/entrypoint.sh + images/git/pre-receive-hook.sh + forge gitconfig injection + credential issuance
+      depends_on: ["322"]
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 12
+      outcome: >
+        The order-450 unblock restored `git daemon --enable=receive-pack` on the
+        enclave-internal mirror as the v0.4 forge push path. The operator has
+        decided (2026-07-19) that an unauthenticated write path is not acceptable
+        even on the isolated enclave, so this packet restores the authenticated
+        transport chosen by order 322's decision record and REMOVES the daemon
+        receive-pack path once parity is proven. Per the operator standing rule,
+        MANDATORY research (order 322) must produce a Tlatoani-signed decision
+        record first; this packet stays blocked until then. Design space and the
+        accepted-interim-risk being closed:
+        plan/issues/research-authenticated-forge-writes-restore-2026-07-19.md
+      exit_criteria:
+        - "forge pushes authenticate at the transport with a per-forge identity (Vault-sourced, not readable as a plain file in the forge); the pre-receive relay logs which forge pushed which refs"
+        - "one lane migrated behind a flag with a fetch/push parity fixture (authenticated push reaches upstream through the relay exactly as git:// did)"
+        - "default flipped and `--enable=receive-pack` removed from the daemon; git:// remains fetch/upload-pack-only (--export-all); litmus:git-mirror-no-anonymous-daemon-write updated to assert the write path is authenticated"
+      events:
+        - type: filed
+          ts: "2026-07-19T00:01:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            Filed per operator directive 2026-07-19 to restore authenticated
+            forge writes and eliminate the order-450 interim unauthenticated
+            daemon receive-pack path. Blocked on order 322's research decision
+            record (authenticated transport + per-forge identity). v0.5 target.
+
+    - packet_id: concurrent-mirror-forges-current-checkout-and-coherence
+      order: 452
+      desired_release: v0.4
+      title: "Concurrent mirror-based forges: every launch clones a CURRENT, non-empty checkout from the git-mirror, all push transparently and coherently"
+      status: in-progress
+      capability_tags: [linux, git-mirror, forge, concurrency, coherence, idempotency, release-blocker]
+      operator_note: "operator 2026-07-20: the v0.4-blocking regression was forges INCONSISTENTLY sourcing the tree (some host-mounted the checkout, some cloned the mirror) -> .git credential collisions. Host checkout separated to 2src/tillandsias; project default stays ~/src/<project>. Goal: ALL forges clone from the mirror, concurrently, each own tree, all pushing transparently + coherently. Fix the coherence issues Hy3 and the host hit."
+      kind: fix
+      deliverable: images/git/entrypoint.sh + images/default/lib-common.sh + crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 8
+      outcome: >
+        Root cause (verified 2026-07-20): in the DEFAULT clone-only mode (order
+        437) the forge clones its tree from the enclave MIRROR over git://; the
+        host checkout is NOT the forge's content source. Three defects broke it:
+        (1) COHERENCE — the mirror's startup sweep pushed mirror->GitHub but
+        never advanced the mirror's EXPORTED refs/heads/* FROM GitHub, so a
+        mirror left behind upstream (host pushed direct to origin, order 449)
+        served STALE heads; a forge then cloned stale and its push was rejected
+        non-fast-forward (Hy3's coherence break). (2) EMPTY-CLONE RACE / no
+        fail-loud — a git daemon serving a mid-seed empty bare repo returns a
+        SUCCESSFUL clone of an empty repository, and clone_project_from_mirror
+        treated that as success, silently dropping the agent into an empty tree
+        (the "forge had no checkout" symptom). (3) reused-running mirror is never
+        re-validated/advanced (main.rs:9198) and there is no mirror-readiness
+        gate before the forge clones. Full map + fix plan:
+        plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md
+        Related: order 449 (mirror divergence — this implements its startup-
+        coherence half), the concurrent-forge shared-stack bounce packet
+        (teardown race / terminal steal — the OTHER half of concurrency).
+      exit_criteria:
+        - "SLICE 1 (done): mirror advances exported heads from upstream (non-forced) at every start so clones are CURRENT; clone_project_from_mirror asserts a resolvable HEAD and FAILS LOUD (never launches on an empty tree)"
+        - "SLICE 2 (done): a host-side wait_for_git_mirror_ready gate (mirroring wait_for_inference_ready) blocks the launch until the mirror advertises the expected ref, and a reused running mirror is re-reconciled to upstream at launch (main.rs ensure_enclave_for_project)"
+        - "SLICE 3: two forges launched concurrently each clone their own current tree and both push transparently through the relay (fixture/live)"
+      events:
+        - type: progress
+          ts: "2026-07-21T01:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            SLICE 2 landed. wait_for_git_mirror_ready (main.rs, modeled on
+            wait_for_inference_ready) blocks the launch after the inference
+            gate until the mirror's bare repo has a resolvable HEAD (bounded
+            300s — first seed is a full-repo fetch through the proxy), loud
+            refusal on timeout; runs only when the project has an upstream
+            remote (no-origin mirrors fill from forge pushes and stay
+            guest-guarded). ensure_enclave_for_project's reuse branch (order
+            443) now re-reconciles a reused running mirror: NON-forced
+            exported-head fast-forward via podman exec + unborn-HEAD repair
+            (ensure-mirror-head on new images, inline conditional
+            symbolic-ref fallback on old ones). ALSO in this batch, the true
+            root cause of "every harness crashed at checkout" was found,
+            reproduced, and fixed as order 454 (mirror unborn HEAD — see
+            plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md):
+            452's slice-1 assert had made that permanent defect crash every
+            launch. Guest clone backstop widened to ~60s exponential-ish
+            backoff with split diagnostics (still-seeding vs unborn-HEAD
+            mirror defect). Both cloud-launch chokepoints (tray/mod.rs
+            handle_launch_cloud_project, main.rs
+            resolve_cloud_project_checkout) replaced their bare path.exists()
+            gates with ground-truth validation (is_valid_git_checkout) +
+            quarantine-aside of invalid checkouts (rename, never delete).
+            Evidence: scripts/test-git-mirror-unborn-head.sh PASS
+            (litmus:git-mirror-unborn-head-repair), cargo clippy clean,
+            334/336 headless tests pass (2 environmental flakes, one filed as
+            plan/issues/flaky-zombie-reap-test-precondition-2026-07-20.md and
+            reproduced on pristine c5708f79). Slice 3 (concurrent two-forge
+            clone+push live proof) remains, and folds in order 450 exit
+            criterion 2 (one live e2e forge push).
+        - type: progress
+          ts: "2026-07-20T00:00:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            SLICE 1 landed + verified. Fix 1 (coherence): images/git/entrypoint.sh
+            startup sweep now runs a NON-forced `git fetch origin
+            refs/heads/*:refs/heads/*` so the mirror's cloneable heads fast-forward
+            to upstream where safe (diverged heads still relay UP via the per-ref
+            push); a forge cloning the mirror gets CURRENT code and its push
+            fast-forwards. Fix 3 (fail-loud): images/default/lib-common.sh
+            clone_project_from_mirror asserts `git rev-parse HEAD` after clone —
+            an empty (mid-seed) clone RETRIES through the seed window and then
+            exits 1 loud instead of dropping the agent into an empty tree. Both
+            verified in the rebuilt images (git: coherence fetch present; forge:
+            fail-loud guard present at /usr/local/lib/tillandsias/lib-common.sh).
+            All 11 git-mirror-service litmus pass (safe-refspec + startup-per-ref
+            included — the coherence fetch uses an explicit refs/heads/* refspec,
+            never --mirror/--all). Slices 2 + 3 remain (readiness gate + reused-
+            mirror currenting + concurrent-push live proof).
+
+    - packet_id: diagnostics-stream-not-in-interactive-agent-terminal
+      order: 453
+      desired_release: v0.4
+      title: "The --debug/--diagnostics container-log stream must not spill into the interactive forge agent terminal (it corrupts the TUI)"
+      status: in-progress
+      capability_tags: [linux, diagnostics, forge, tray, ux]
+      operator_note: "operator 2026-07-20 (--debug --tray, Claude forge): the container-log stream is valid --debug output but must go to the LAUNCHING terminal, not spill into the agent's terminal. Fine-tune log levels later; for now stop the spillage."
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 3
+      outcome: >
+        Root cause: the interactive forge-agent lanes (run_forge_agent_cli_mode
+        for Claude/Codex/Antigravity, run_opencode_mode for OpenCode) started a
+        `podman logs -f` typed-event stderr tail
+        (DiagnosticsHandle::start_typed_event_stream) on the SUPPORT containers
+        (router/proxy/git/inference) whenever debug was set. The tray propagates
+        --debug into the popup-terminal re-exec, so that tail ran in the SAME
+        terminal that then hosts the interactive agent TUI — squid TCP_TUNNEL
+        access lines and git-mirror startup retry-push lines staircased over the
+        Claude/OpenCode UI (the '\n'-only lines hitting the raw-mode PTY produce
+        the staircase). SLICE 1 (done): removed the typed-event stderr tail from
+        both interactive agent lanes; the low-volume lifecycle diag_emitter
+        (event:container_launch, which the diagnostics annex + litmus rely on) is
+        kept. The diagnostics litmus pin the event FORMAT (client.rs) and a
+        SEPARATE annex capture, not the interactive lane's tail, so removal is
+        litmus-safe (type-check clean).
+      exit_criteria:
+        - "SLICE 1 (done): interactive Claude/Codex/Antigravity/OpenCode terminals no longer show the enclave container-log stream; the agent TUI is clean"
+        - "SLICE 2 (operator 'later'): route the container-log stream to the LAUNCHING terminal (or a separate --diagnostics observer) so the observability is not lost, and fine-tune squid/git-mirror log levels"
+      events:
+        - type: progress
+          ts: "2026-07-20T00:00:00Z"
+          agent_id: "linux-host-coordinator"
+          host: linux
+          summary: >
+            SLICE 1 landed. Removed DiagnosticsHandle::start_typed_event_stream
+            from run_forge_agent_cli_mode and run_opencode_mode (the container-log
+            tail that corrupted the interactive agent terminal); kept the
+            lifecycle diag_emitter. Type-check + fmt clean. The running forge keeps
+            the old behaviour — a relaunch on the rebuilt binary is required to get
+            the clean terminal. Slice 2 (route the stream to the launcher terminal
+            + log-level tuning) is the operator's deferred 'later' work.
+
+    - packet_id: mirror-bare-repo-unborn-head
+      order: 454
+      desired_release: v0.4
+      title: "Mirror bare repo HEAD is unborn (init --bare -> master; upstream has no master) — every clone-only forge checkout was empty, and the 452 assert made that a deterministic crash of every harness launch"
+      status: completed
+      capability_tags: [linux, git-mirror, forge, idempotency, release-blocker]
+      kind: fix
+      deliverable: plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        Root cause of "all harnesses crashed, nobody can checkout anything"
+        at c5708f79, reproduced offline over the same upload-pack transport
+        git:// uses: images/git/entrypoint.sh `git init --bare` leaves
+        HEAD -> refs/heads/master; the seed fetch writes refs/heads/main +
+        linux-next but nothing repoints HEAD; upstream has no master, so a
+        clone exits 0 with "remote HEAD refers to nonexistent ref" and an
+        EMPTY working tree — which order 452's fail-loud assert escalates to
+        exit 1 on EVERY launch. Live-host corroboration: the coordinator's
+        tillandsias-mirror-tillandsias volume sat completely EMPTY with no
+        git container running after the 15:21->15:24 PDT stack bounce.
+      exit_criteria:
+        - "images/git/ensure-mirror-head.sh ships in the git image; the entrypoint repairs HEAD after init, after the empty-mirror seed, after the startup fast-forward, and for no-origin mirrors (done)"
+        - "the launcher passes TILLANDSIAS_PROJECT_DEFAULT_BRANCH (host checkout's current branch, charset-sanitized) so agents land on the operator's working branch, with fallback to upstream's symref default (done)"
+        - "offline fixture reproduces the empty-clone break and proves repair + fallback + unseeded no-op: scripts/test-git-mirror-unborn-head.sh, pinned by litmus:git-mirror-unborn-head-repair (done)"
+        - "live proof on a rebuilt image: a fresh-volume forge launch lands on a valid current checkout (folds into order 452 slice 3's concurrent live proof)"
+      events:
+        - type: completed
+          ts: "2026-07-21T01:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Implemented + verified offline in the same batch as order 452
+            slice 2. New images/git/ensure-mirror-head.sh (single
+            implementation; entrypoint runs it via ENSURE_HEAD override —
+            same offline-fixture pattern as RELAY_REF), Containerfile
+            installs it, entrypoint sets HEAD from
+            TILLANDSIAS_PROJECT_DEFAULT_BRANCH at init and repairs at
+            seed/ff/no-origin points, build_git_run_args passes the env from
+            read_host_project_current_branch (new; symbolic-ref with
+            .git/HEAD fallback, charset-sanitized). Fixture
+            scripts/test-git-mirror-unborn-head.sh PASS: reproduces the
+            empty clone on an init-master mirror, proves preferred-branch
+            repair (clone lands on linux-next with content), upstream-symref
+            fallback (main), and unseeded exit-3 no-op. Residual live proof
+            rides order 452 slice 3.
+        - type: verified-live
+          ts: "2026-07-21T02:00:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            LIVE single-forge-path proof on the rebuilt image (podman build
+            images/git/, throwaway volume + container, proxyless sandbox):
+            entrypoint logged "HEAD -> refs/heads/linux-next (launcher
+            default branch)" at init; empty volume seeded from GitHub in ~6s;
+            ls-remote advertised "ref: refs/heads/linux-next HEAD" at
+            b385ef4d (the branch head pushed minutes earlier — CURRENT); a
+            git:// clone landed on branch linux-next @ b385ef4d with a full
+            56-entry tree and resolvable HEAD. Also live-validated en route:
+            the ensure-mirror-head exit-3 non-fatal path and the "still
+            seeding" ls-remote state (no HEAD line while heads are unborn)
+            that wait_for_git_mirror_ready keys on. Remaining for 452 slice
+            3: the CONCURRENT two-forge clone + transparent relay push proof
+            on the full stack (vault + proxy), which needs a real launch.
+
+    - packet_id: v04-cross-platform-smoke-queue
+      order: 455
+      desired_release: v0.4
+      title: "Once v0.4 lands stable on Linux: smoke-test the macOS and Windows builds against it (operator directive 2026-07-20)"
+      status: pending
+      kind: verification
+      deliverable: plan/issues (dated PASS/FAIL smoke reports per platform)
+      depends_on: [concurrent-mirror-forges-current-checkout-and-coherence]
+      pickup_role: "windows + macos hosts"
+      capability_tags: [windows, macos, smoke, release-verification]
+      estimated_hours: 4
+      outcome: >
+        Operator directive 2026-07-20: "Our next aim will be to smoke test
+        the macos and windows versions, once we land this v0.4 stable for
+        linux." When the v0.4 tag exists and the Linux curl-install e2e has
+        a PASS record, the Windows host runs /build-install-and-smoke-test-e2e
+        (or /smoke-curl-install-and-test-e2e against the published v0.4
+        artifact — closes order 382 criterion 1 en route) and the macOS host
+        does the same (closes 382 criterion 3's VZ spot-check). Special
+        attention: the unborn-HEAD fix's FILESYSTEM-transport lane
+        (TILLANDSIAS_GIT_MIRROR_PATH, Windows/WSL + macOS staged clone) —
+        the git:// lane is live-proven on Linux, the filesystem lane is
+        fixture-only so far.
+      exit_criteria:
+        - "Windows: dated smoke report in plan/issues naming the v0.4 build; forge lands on a valid current checkout; findings filed as packets"
+        - "macOS: dated smoke report in plan/issues naming the v0.4 build; VZ lane checkout valid + current; findings filed as packets"
+        - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
