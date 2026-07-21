@@ -60,8 +60,8 @@ pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpSt
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
-                build_version: None,
-            },
+            build_version: None,
+        },
     };
     let bytes = encode(&hello).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
     stream
@@ -83,7 +83,11 @@ pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpSt
     stream.read_exact(&mut body).await?;
     let ack = decode(&body).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
     match ack.body {
-        ControlMessage::HelloAck { wire_version, build_version: _, .. } => {
+        ControlMessage::HelloAck {
+            wire_version,
+            build_version: _,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(Error::new(
                     ErrorKind::InvalidData,

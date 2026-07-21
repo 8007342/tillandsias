@@ -138,8 +138,8 @@ async fn connect_and_run(socket_path: &std::path::Path, store: &OtpStore) -> std
         body: ControlMessage::Hello {
             from: "router-sidecar".to_string(),
             capabilities: vec!["IssueWebSession".to_string()],
-                build_version: None,
-            },
+            build_version: None,
+        },
     };
     write_envelope(&mut framed, &hello).await?;
 
@@ -150,13 +150,21 @@ async fn connect_and_run(socket_path: &std::path::Path, store: &OtpStore) -> std
             let env = decode(&buf)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
             match env.body {
-                ControlMessage::HelloAck { wire_version, build_version: _, .. } if wire_version == WIRE_VERSION => {
+                ControlMessage::HelloAck {
+                    wire_version,
+                    build_version: _,
+                    ..
+                } if wire_version == WIRE_VERSION => {
                     info!(
                         spec = "opencode-web-session-otp",
                         wire_version, "Control-socket Hello handshake complete"
                     );
                 }
-                ControlMessage::HelloAck { wire_version, build_version: _, .. } => {
+                ControlMessage::HelloAck {
+                    wire_version,
+                    build_version: _,
+                    ..
+                } => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Unsupported,
                         format!(

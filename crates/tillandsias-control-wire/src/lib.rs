@@ -789,16 +789,16 @@ mod tests {
                 ControlMessage::Hello {
                     from: "x".into(),
                     capabilities: vec![],
-                build_version: None,
-            },
+                    build_version: None,
+                },
                 "Hello",
             ),
             (
                 ControlMessage::HelloAck {
                     wire_version: WIRE_VERSION,
                     server_caps: vec![],
-                build_version: None,
-            },
+                    build_version: None,
+                },
                 "HelloAck",
             ),
             (

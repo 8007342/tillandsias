@@ -174,7 +174,11 @@ where
     let envelope =
         decode(&body).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     let wire_version = match envelope.body {
-        ControlMessage::HelloAck { wire_version, build_version, .. } => {
+        ControlMessage::HelloAck {
+            wire_version,
+            build_version,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -357,7 +361,11 @@ mod tests {
         assert_eq!(envelope.wire_version, WIRE_VERSION);
         assert_eq!(envelope.seq, 1);
         match envelope.body {
-            ControlMessage::Hello { from, capabilities, build_version: _ } => {
+            ControlMessage::Hello {
+                from,
+                capabilities,
+                build_version: _,
+            } => {
                 assert_eq!(from, "test");
                 assert_eq!(capabilities, vec!["X"]);
             }
@@ -391,7 +399,11 @@ mod tests {
             let env = decode(&buf).expect("decode hello");
             assert_eq!(env.seq, 1);
             match env.body {
-                ControlMessage::Hello { from, build_version: _, .. } => assert_eq!(from, "test-host"),
+                ControlMessage::Hello {
+                    from,
+                    build_version: _,
+                    ..
+                } => assert_eq!(from, "test-host"),
                 other => panic!("expected Hello, got {other:?}"),
             }
 
@@ -402,8 +414,8 @@ mod tests {
                 body: ControlMessage::HelloAck {
                     wire_version: WIRE_VERSION,
                     server_caps: vec!["pty.attach@v1".into()],
-                build_version: None,
-            },
+                    build_version: None,
+                },
             };
             let ab = encode(&ack).expect("encode ack");
             w.write_all(&(ab.len() as u32).to_be_bytes())

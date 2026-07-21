@@ -236,8 +236,8 @@ mod tests {
                 body: ControlMessage::Hello {
                     from: "transport-test".to_string(),
                     capabilities: vec!["IssueWebSession".to_string()],
-                build_version: None,
-            },
+                    build_version: None,
+                },
             };
             write_envelope(&mut stream, &hello)
                 .await
@@ -245,7 +245,11 @@ mod tests {
             let ack = read_envelope(&mut stream).await.expect("client read ack");
             assert_eq!(ack.seq, 7);
             match ack.body {
-                ControlMessage::HelloAck { wire_version, build_version: _, .. } => {
+                ControlMessage::HelloAck {
+                    wire_version,
+                    build_version: _,
+                    ..
+                } => {
                     assert_eq!(wire_version, WIRE_VERSION);
                 }
                 other => panic!("expected HelloAck, got {other:?}"),
