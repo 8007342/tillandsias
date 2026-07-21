@@ -1,6 +1,27 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-21T01:45:00Z
+LastExecutionTime: 2026-07-21T19:30:00Z
+
+## Cycle 2026-07-21T19:30Z (linux coordinator — repair broken handshake push; CI gate born)
+
+- **Operator-directed**: "Codex made some progress, pull and meta-orchestrate."
+  Pulled ced9657e (guest-tray-build-version-handshake, Antigravity) +
+  68094e7a (orders 456-458: MCP plan server, cheatsheet expert, context
+  hooks — EXPERTS-milestone family, left pending for the milestone track).
+- **Verification found the push BROKEN at HEAD**: notify_icon.rs unparseable
+  (tuple refactor spliced into string literals), literal \" escapes in
+  tray/mod.rs + vsock_server.rs, and 5 test targets missing the new
+  build_version/guest_version fields. Repaired all of it (macOS lane's
+  correct pattern used as reference); ./build.sh --check green, workspace
+  tests green (except the known zombie-reap flake), handshake packet status
+  normalized COMPLETED -> completed.
+- **Structural hole closed**: NO workflow ran on pushes or PRs (release PR
+  #78's "no checks reported" was the same hole). Added .github/workflows/
+  ci.yml (fmt + workspace check --all-targets on platform-branch pushes +
+  main PRs) and the AGENTS.md pre-push gate rule. Filed
+  plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md.
+- **Pre-release v0.3.260721.1** published earlier this day (3/3 platform
+  jobs, cosign-signed) for the order-455 cross-platform smoke queue.
 
 ## Cycle 2026-07-21T01:45Z (linux coordinator — v0.4: checkout crash root-caused + fixed; knowledge distribution; delegation)
 

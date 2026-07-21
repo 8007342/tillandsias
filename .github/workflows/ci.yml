@@ -1,0 +1,38 @@
+# @trace spec:ci-release
+# Lean push/PR gate (2026-07-21): nothing validated linux-next pushes or the
+# daily release PR server-side, so an agent push with UNPARSEABLE Rust landed
+# on linux-next and merge-to-main-and-release step 3 watched an empty check
+# set. See plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md.
+# Intentionally cheap: format + compile every target, NO test execution (the
+# full suite runs in local gates and litmus; keep Actions minutes low).
+name: CI
+
+on:
+  push:
+    branches: [linux-next, windows-next, osx-next]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: fmt + workspace check (all targets)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-check
+
+      - name: rustfmt gate (a parse failure fails HERE, loudly)
+        run: cargo fmt --all --check
+
+      - name: Workspace check (all features, all targets — test targets included)
+        run: cargo check --workspace --all-features --all-targets --locked

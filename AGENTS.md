@@ -30,6 +30,11 @@ sed -n '1,220p' plan/index.yaml
 If `.forge-startup-context.md` exists in the repository root, you are inside a
 Tillandsias forge container — read it for live infrastructure state.
 
+**Before EVERY push**: run `./build.sh --check` and fix what it reports. An
+unparseable or unformatted push poisons every downstream clone (see
+`plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md`); the
+`CI` workflow will mark it red, but the gate belongs on your side of the push.
+
 ## Versioning & Releases
 
 For versioning and the release process, read `methodology/versioning.yaml`,

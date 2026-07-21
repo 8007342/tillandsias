@@ -16040,7 +16040,12 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Wire handshake carries BUILD versions; tray goes loud on guest/tray skew (chip + WARN → Event Log)"
-      status: COMPLETED
+      # Status normalized COMPLETED -> completed (2026-07-21 coordinator):
+      # nonstandard casing breaks status-grep tooling. NOTE the implementation
+      # push (ced9657e) landed UNCOMPILABLE (see
+      # plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md);
+      # repaired by the coordinator in the same-day follow-up commit.
+      status: completed
       kind: enhancement
       deliverable: tillandsias-control-wire handshake + headless + all trays
       depends_on: []
