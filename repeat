@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--timeout <duration>] [--agent <agents>]
+  ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--timeout <duration>] [--agent <agents>] [--model <provider/model-or-id>]
 
 Options:
   --prompt <prompt>      Required prompt for every fresh agent cycle.
@@ -19,6 +19,8 @@ Options:
                          subset (e.g. claude,opencode,codex) to temporarily
                          skip a harness that is down. One agent is chosen at
                          random per cycle. Default: random.
+  --model <model>       Optional model override (e.g. openai/gpt-4o, claude-sonnet-4-5).
+                         Passed as -m to codex and opencode; ignored for other agents.
   --help, -h            Show this help.
 
 Resilience: a failed or silent cycle (non-zero exit, timeout, or an exit-0 run
@@ -41,6 +43,7 @@ TIMES_COUNT=""
 WAIT_INTERVAL="45m"
 TIMEOUT_INTERVAL="90m"
 AGENT="random"
+MODEL=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -68,6 +71,11 @@ while [[ $# -gt 0 ]]; do
     --agent)
       [[ $# -ge 2 ]] || die "--agent requires a value"
       AGENT="$2"
+      shift 2
+      ;;
+    --model)
+      [[ $# -ge 2 ]] || die "--model requires a value"
+      MODEL="$2"
       shift 2
       ;;
     --help|-h)
@@ -116,6 +124,12 @@ CALLER_PWD="$(pwd -P)"
 REPO_ROOT="$(git -C "$CALLER_PWD" rev-parse --show-toplevel 2>/dev/null || true)"
 [[ -n "$REPO_ROOT" ]] || die "current directory is not inside a Git worktree"
 cd "$REPO_ROOT"
+
+# Build optional --model flag for harnesses that support it (codex, opencode).
+MODEL_FLAG=()
+if [[ -n "$MODEL" ]]; then
+  MODEL_FLAG=(-m "$MODEL")
+fi
 
 duration_to_seconds() {
   local input="$1"
@@ -254,7 +268,7 @@ run_agent() {
   case "$selected" in
     codex)
       bin="$(resolve_bin CODEX_BIN codex)" || return $?
-      run_with_timeout "$bin" exec --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" "$PROMPT"
+      run_with_timeout "$bin" exec --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" "${MODEL_FLAG[@]}" "$PROMPT"
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
@@ -262,7 +276,7 @@ run_agent() {
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
-      (cd "$REPO_ROOT" && run_with_timeout "$bin" run --dangerously-skip-permissions "$PROMPT")
+      (cd "$REPO_ROOT" && run_with_timeout "$bin" run --auto "${MODEL_FLAG[@]}" "$PROMPT")
       ;;
     gemini)
       bin="$(resolve_bin GEMINI_BIN gemini)" || return $?
