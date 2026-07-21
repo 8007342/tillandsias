@@ -1187,9 +1187,19 @@ plan_index:
 
     - packet_id: wire-oscillation-root-cause
       order: 148
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Investigate: headless crash causing wire degraded/recovered oscillations"
       status: ready
+      events:
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): needs a live VM wire-oscillation reproduction; not reachable from the Linux stability bundle. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
       kind: investigation+bug-fix
       deliverable: plan/issues/wire-oscillation-root-cause-2026-06-30.md
       depends_on: []
@@ -1256,9 +1266,19 @@ plan_index:
 
     - packet_id: post-login-cloud-refresh
       order: 150
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Investigate: token storage + cloud refresh not triggering after GitHub Login"
       status: ready
+      events:
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): same live-VM oscillation family as 148. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
       kind: investigation+enhancement
       deliverable: plan/issues/post-login-cloud-refresh-2026-06-30.md
       depends_on: [wire-oscillation-root-cause]
@@ -8115,7 +8135,7 @@ plan_index:
 
     - packet_id: macos-attach-first-use-materialization-blackout
       order: 270
-      desired_release: v0.4
+      desired_release: v0.5
       title: "First-use attach: forge-image materialization has no progress feedback and the build dies with the attach process (guest-side)"
       status: ready
       kind: bug
@@ -8178,6 +8198,15 @@ plan_index:
             tillandsias-headless, criteria trimmed to the two guest-side
             realities. Reduction step: removed ambiguity + fixed
             attribution so a capable host can drain it.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): attach flow requires a live VM lane; verification rides the post-cut platform smoke. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: methodology-idiomatic-layers-for-agents
       order: 271
@@ -8300,7 +8329,7 @@ plan_index:
 
     - packet_id: guest-agent-attach-runs-login-flow
       order: 273
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Guest headless: agent-attach argv (--cloud <p> --opencode) runs the github-login flow and exits 0 — agent never launches"
       status: ready
       kind: bug
@@ -8417,6 +8446,15 @@ plan_index:
             (a merge artifact — YAML-valid so the gates missed it); linux
             as ledger owner should prune them. Filed:
             plan/issues/order-273-confounded-by-disk-reframe-2026-07-11.md.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): same attach-flow family as 270. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: forge-agent-liveness-signals
       order: 265
@@ -11026,7 +11064,7 @@ plan_index:
 
     - packet_id: mirror-credential-helper-broker
       order: 319
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Ladder rung B: git credential helper (vault-backed) on the mirror; evaluate short-TTL GitHub App installation tokens; kill token-in-URL"
       status: ready
       operator_note: "operator decision (EC3 only): adopt or reject GitHub App installation tokens"
@@ -11079,6 +11117,15 @@ plan_index:
             repository_ids and permissions, 1h expiry, no licensed seat); order
             390 covers the broader App work. What is missing is the DECISION,
             which is operator-facing.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): rung-B enhancement, not stability; explicitly deferrable. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
     - packet_id: forge-gitconfig-single-injection
       order: 320
       desired_release: v0.5
@@ -11874,7 +11921,7 @@ plan_index:
 
     - packet_id: wsl-guest-forge-user-src-ownership
       order: 326
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "WSL2 guest provisioning: no forge user + root-owned /home/forge/src — every containerized cloud clone fails EACCES"
       status: in_progress
@@ -11961,6 +12008,15 @@ plan_index:
             First Windows cold-provision cloud attach ever exercised; clone
             EACCES root-caused to missing forge user + root-owned src in the
             WSL recipe. Lane retried after chmod workaround.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): remaining criterion is a cold cloud-attach clone on a Windows host; rides order 455's Windows smoke. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: guest-lazy-ensure-router-image
       order: 327
@@ -12338,7 +12394,7 @@ plan_index:
 
     - packet_id: forge-shared-checkout-destructive-clean
       order: 328
-      desired_release: v0.4
+      desired_release: v0.5
       title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
       status: pending
       kind: bugfix
@@ -12385,6 +12441,15 @@ plan_index:
             targeting this host cycle's five uncommitted packet files; they
             survived only because e84ba192 had just been pushed. It also
             reverted its own blocker-file update (self-erasing evidence).
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): platform-gated destructive-clean verification; rides order 455. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: forge-dirty-tree-exit-contract
       order: 341
@@ -14531,7 +14596,7 @@ plan_index:
 
     - packet_id: guest-staged-gitdir-root-owned
       order: 382
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "P1: guest-staged forge gitdir is root-owned/700 on WSL2 — forge user cannot read git metadata; credential guard fail-closes every in-forge cycle"
       status: ready
@@ -14639,6 +14704,15 @@ plan_index:
             criterion 1 (fresh Windows curl-install verification) and
             criterion 3 (macOS VZ spot-check) are platform-gated and
             cannot be verified from this forge host.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): remaining criteria 1/3 are Windows curl-install + macOS VZ spot-checks; ride order 455. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: windows-inforge-meta-orchestration-transparent-push
       provisional_id: windows-260716-1
@@ -15309,7 +15383,7 @@ plan_index:
 
     - packet_id: experts-construction-research
       order: 393
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Research: expert-construction technique — fine-tune vs LoRA vs RAG-index vs Modelfile context, per tier, under a launch-time budget"
       status: ready
@@ -15355,6 +15429,15 @@ plan_index:
             plan/issues/experts-construction-decision-2026-07-17.md.
             Residual scope: per-tier measurements + ground-truth harness
             (consumed by 394 as its grading gate). 394 is UN-GATED.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): research packet; does not gate the stability bundle. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: plan-methodology-experts-rung1
       order: 394
@@ -16062,7 +16145,7 @@ plan_index:
 
     - packet_id: codex-e2e-smoke-launcher-and-verdict-parity
       order: 404
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Codex e2e smoke launcher: launch codex non-interactively in the forge smoke lane with rate-limit + MO-SMOKE verdict parity"
       status: ready
       kind: implementation
@@ -16103,10 +16186,19 @@ plan_index:
             run); the live codex-vs-opencode comparison is order 405. Shaped
             per methodology large_packet_is_eligible_work (split at the
             evidence boundary).
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): codex smoke verification rides the order-455 post-cut smoke queue. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: codex-opencode-smoke-divergence-comparison
       order: 405
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Live codex-vs-opencode forge smoke comparison — run both on /meta-orchestration, capture + file divergences"
       status: ready
       kind: verification
@@ -16143,6 +16235,15 @@ plan_index:
             comparison half (needs a real forge launch + provider budget),
             gated on the order-404 launcher. Divergence between codex and
             opencode is the valuable feedback the operator asked to monitor.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): same codex smoke family as 404. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: ephemeral-runtime-destroy-recreate-sweep
       provisional_id: windows-260717-5
@@ -19063,7 +19164,7 @@ plan_index:
 
     - packet_id: forge-host-lifecycle-control-channel
       order: 445
-      desired_release: v0.4
+      desired_release: v0.5
       title: "RESEARCH: forge->host lifecycle-control channel — agent signals 'refresh me' (rebuild+relaunch) and 'I'm done' (safe to destroy)"
       status: ready
       capability_tags: [linux, research, forge, mcp, automation, lifecycle]
@@ -19105,6 +19206,15 @@ plan_index:
             forge->host lifecycle-control channel — the reverse of the
             host->forge delegation research — needed for hands-off rebuild/
             relaunch/resume and safe forge destruction.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): research packet (forge-host lifecycle control channel) filed 2026-07-20; v0.5 design work. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: mirror-daemon-first-startup
       order: 446
