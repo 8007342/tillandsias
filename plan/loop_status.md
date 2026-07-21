@@ -266,7 +266,13 @@ plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
   413 (git-mirror-relay-fetch-before-push) that was dropping the b49b7776
   progress evidence via YAML last-wins; plan-orders gate green.
 
-## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
+## ACTIVE RELEASE: v0.4 (Linux stability bundle — EXPERTS re-scoped out by operator decision 2026-07-21)
+
+> OPERATOR DECISION 2026-07-21: the EXPERTS family + the compiled plan/MCP
+> server (456-458) land TOGETHER as a coupled overhaul (ramdisk + experts
+> synergy, transparent to end users) — NOT in v0.4. v0.4 = the stability
+> bundle: forge checkout/mirror/push correctness, no crashloops, no work
+> loss, smoke-PASS evidence, then series bump 0.3 -> 0.4.
 
 Releases are sequential, stability-gated bundles (versioning.yaml Minor;
 methodology `version_aware_release_planning`). Current shipped line is v0.3
