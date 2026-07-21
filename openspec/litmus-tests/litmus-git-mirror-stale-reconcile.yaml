@@ -1,0 +1,50 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-stale-reconcile
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: high
+description: >
+  Order 449: a host coordinator pushing DIRECT to origin must not strand
+  forge agents on a stale mirror. The mirror historically advanced its
+  exported refs/heads/* only at container start or on a push failure, so
+  long-lived mirrors served stale heads mid-session — an agent cloned stale,
+  committed on that base, and its push diverged (Hy3, live 2026-07-20). The
+  git image now runs a periodic bounded-window reconcile
+  (reconcile-exported-heads, default every 120s): a NON-forced exported-head
+  fast-forward plus unborn-HEAD repair. Diverged heads carrying un-relayed
+  agent commits are never clobbered; never --mirror/--all.
+preconditions:
+  - workspace contains images/git/reconcile-exported-heads.sh
+
+critical_path:
+  - step: "the reconcile pass ships in the git image and the entrypoint loops it"
+    command: "test -x images/git/reconcile-exported-heads.sh && grep -q 'reconcile-exported-heads' images/git/Containerfile && grep -q 'start_mirror_reconciler' images/git/entrypoint.sh && grep -q 'MIRROR_RECONCILE_INTERVAL' images/git/entrypoint.sh && echo 'ok: reconciler-wired'"
+    timeout_ms: 5000
+    expected_behavior: "ok: reconciler-wired"
+
+  - step: "the reconcile fetch is NON-forced and never --mirror/--all (code lines only; comments may name the invariant)"
+    command: "grep -q \"fetch origin 'refs/heads/\\*:refs/heads/\\*'\" images/git/reconcile-exported-heads.sh && ! grep -E '^[^#]*--(mirror|all)' images/git/reconcile-exported-heads.sh >/dev/null && ! grep -F \"fetch origin '+refs\" images/git/reconcile-exported-heads.sh >/dev/null && echo 'ok: safe-refspec'"
+    timeout_ms: 5000
+    expected_behavior: "ok: safe-refspec"
+
+  - step: "offline fixture reproduces the stranding and proves the reconcile heals it without clobbering un-relayed agent heads"
+    command: "scripts/test-git-mirror-stale-reconcile.sh >/dev/null && echo 'ok: stale-reconcile-fixture-pass'"
+    timeout_ms: 30000
+    expected_behavior: "ok: stale-reconcile-fixture-pass"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "periodic exported-head reconciler heals host-direct-push staleness within the bounded window"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-stale-reconcile"
+
+rollback:
+  on_failure: >
+    Do NOT make the periodic fetch forced (+refs/...) to "fix" a failing
+    fast-forward — that clobbers un-relayed agent commits, the exact data
+    loss the non-forced invariant prevents. Diverged heads relay UP through
+    the push path; only fast-forwardable heads advance here.
+  command: "grep -n 'start_mirror_reconciler' images/git/entrypoint.sh"

@@ -19221,7 +19221,7 @@ plan_index:
       order: 449
       desired_release: v0.4
       title: "Host direct-pushes to origin bypass the mirror, stranding forge agents on a stale base"
-      status: ready
+      status: completed
       capability_tags: [linux, git-mirror, coordination, multi-writer, automation, p1]
       kind: enhancement
       deliverable: coordination policy + mirror continuous-reconcile OR host-pushes-through-mirror
@@ -19260,6 +19260,28 @@ plan_index:
             Filed as the root cause of Hy3's push failure. Self-inflicted by the
             host pushing direct to origin while agents work through the mirror.
             Unblocked live by fast-forwarding the mirror; the pattern needs a fix.
+        - type: completed
+          ts: "2026-07-21T03:10:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Mechanism (b) landed: the git image now runs a periodic
+            bounded-window reconcile — images/git/reconcile-exported-heads.sh
+            (NON-forced exported-head fast-forward + ensure-mirror-head),
+            looped by the entrypoint every MIRROR_RECONCILE_INTERVAL (default
+            120s) and killed by the shutdown trap. Same file is exec'd by the
+            offline fixture (RECONCILE_HEADS override pattern), so there is
+            one implementation. Launch-time coverage was already landed in
+            452 slice 2 (reused-mirror re-reconcile in
+            ensure_enclave_for_project). Fixture
+            scripts/test-git-mirror-stale-reconcile.sh PASS: reproduces the
+            exact stranding (host direct-push -> stale mirror -> agent clone
+            lands on old base), proves the reconcile pass fast-forwards the
+            exported head within one iteration, and proves a DIVERGED head
+            carrying un-relayed agent commits survives untouched (non-forced
+            invariant). Pinned by litmus:git-mirror-stale-reconcile. Live
+            confirmation on a rebuilt image rides order 452 slice 3's launch
+            proof, alongside 450 criterion 2.
 
     - packet_id: git-daemon-receive-pack-regression
       order: 450
