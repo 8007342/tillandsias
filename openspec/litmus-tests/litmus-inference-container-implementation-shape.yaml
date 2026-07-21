@@ -118,6 +118,44 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: proxy + NO_PROXY env vars present"
 
+  - step: "Req CA fedora-path pin (order 313 residual): update-ca-trust active, Debian update-ca-certificates path absent from active code"
+    # order 313 slice 1 (commit 4281ce4e) fixed CA injection from Debian's
+    # update-ca-certificates + /usr/local/share/ca-certificates (NEVER
+    # worked on this Fedora Minimal image — the command is absent and the
+    # failure was swallowed by `|| true`) to Fedora's update-ca-trust +
+    # /etc/pki/ca-trust/source/anchors. That fix was code-correct but
+    # UNPINNED by any litmus/test — this step closes the residual so a
+    # future accidental revert to the Debian paths trips the litmus
+    # immediately instead of silently shipping broken CA injection again.
+    # entrypoint.sh's own explanatory comment (lines 15-16) legitimately
+    # names both Debian strings in prose ("NOT Debian's update-ca-
+    # certificates ... which has NEVER worked") — comment lines are
+    # stripped before every assertion below so the pin checks ACTIVE code
+    # on both sides (positive and negative), not comment text.
+    command: "ACTIVE=$(grep -vE '^[[:space:]]*#' images/inference/entrypoint.sh); printf '%s' \"$ACTIVE\" | grep -qF 'update-ca-trust' && printf '%s' \"$ACTIVE\" | grep -qF '/etc/pki/ca-trust/source/anchors' && ! printf '%s' \"$ACTIVE\" | grep -qF 'update-ca-certificates' && ! printf '%s' \"$ACTIVE\" | grep -qF '/usr/local/share/ca-certificates' && echo 'ok: Fedora CA path active, Debian CA path absent from active code'"
+    timeout_ms: 3000
+    expected_behavior: "ok: Fedora CA path active, Debian CA path absent from active code"
+
+  - step: "Req OLLAMA_BINDIR nesting pin (order 313 residual): .tools nests inside the mounted OLLAMA_MODELS volume, not a sibling"
+    # order 313's ledger outcome (plan/index.yaml) claims OLLAMA_BINDIR
+    # ("${OLLAMA_MODELS}.tools") "is a SIBLING of the mounted models
+    # volume, i.e. container-local" — persistence lost on container
+    # recreation. That claim is STALE at HEAD: OLLAMA_MODELS carries a
+    # TRAILING SLASH, so bash concatenation produces
+    # /home/ollama/.ollama/models/.tools/ollama — a SUBDIRECTORY of the
+    # bind-mounted models dir (crates/tillandsias-headless/src/main.rs
+    # build_inference_run_args: .../models:rw), not a sibling. Already
+    # true at HEAD (git log -p shows the trailing slash present since the
+    # line was introduced) and independently corroborated by litmus:
+    # inference-deferred-model-pulls (asserts $CACHE_DIR/.tools/ollama/
+    # ollama post-populate, the same host dir bind-mounted as
+    # OLLAMA_MODELS). Nothing to fix — pin the exact two lines (trailing
+    # slash literal included) so a future edit that drops the trailing
+    # slash (reintroducing a REAL sibling-dir bug) fails this litmus.
+    command: "grep -qF 'OLLAMA_MODELS=/home/ollama/.ollama/models/' images/inference/entrypoint.sh && grep -qF 'OLLAMA_BINDIR=\"${OLLAMA_MODELS}.tools/ollama\"' images/inference/entrypoint.sh && echo 'ok: OLLAMA_BINDIR nests inside the mounted OLLAMA_MODELS volume'"
+    timeout_ms: 3000
+    expected_behavior: "ok: OLLAMA_BINDIR nests inside the mounted OLLAMA_MODELS volume"
+
 observability:
   traces:
     - "@trace spec:inference-container"
