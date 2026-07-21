@@ -285,6 +285,7 @@ specs:
   litmus_tests:
   - litmus:forge-as-only-runtime
   - litmus:container-start-health
+  - litmus:launch-artifacts-untracked
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: forge-cache-architecture

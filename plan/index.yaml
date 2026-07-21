@@ -19016,7 +19016,7 @@ plan_index:
       order: 444
       desired_release: v0.4
       title: "Launch-generated artifacts must not dirty the checkout (.opencode/package-lock.json et al.)"
-      status: in_progress
+      status: completed
       capability_tags: [linux, forge, isolation, gitignore]
       kind: optimization
       deliverable: .gitignore + audit of harness launch writes
@@ -19045,6 +19045,21 @@ plan_index:
             Untracked + gitignored .opencode/package-lock.json (the launch
             artifact the operator flagged). Audit clean except flake.lock (legit).
             Remaining: a fail-loud check that no harness launch writes a tracked path.
+        - type: completed
+          ts: "2026-07-21T03:35:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Executable guard landed: scripts/check-launch-artifacts-untracked.sh
+            asserts every manifested launch artifact
+            (.opencode/package-lock.json, .opencode/node_modules,
+            .forge-startup-context.md) is untracked AND gitignored, and greps
+            the forge entrypoints for write idioms into per-harness checkout
+            dirs, failing loud on any unmanifested target. Falsifiable
+            grammar ok:launch-artifacts-untracked /
+            fail:(tracked|unignored|unmanifested)-launch-artifact:<path>.
+            Negative path sandbox-proven (tracked package-lock -> exit 1).
+            Pinned by litmus:launch-artifacts-untracked.
 
     - packet_id: forge-host-lifecycle-control-channel
       order: 445
