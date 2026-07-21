@@ -15230,7 +15230,12 @@ plan_index:
       desired_release: v0.4
       release_target: forge-local-experts-milestone
       title: "Inference container startup cleanup — deterministic readiness, tier detection, preload policy"
-      status: blocked
+      # Reconciled 2026-07-21: the 2026-07-18 "PUSH BLOCKED: relay credential
+      # unavailable" event is STALE — f7701ffd is contained in linux-next,
+      # origin/linux-next AND origin/main (shipped in v0.3.260719.1), and the
+      # push path was restored by order 450. Remaining scope is the real
+      # residual (preload policy, >=2-host tier matrix), not a credential.
+      status: ready
       kind: implementation
       deliverable: images/inference + container_deps ensure + readiness litmus
       depends_on: []
@@ -19565,3 +19570,21 @@ plan_index:
             repair (clone lands on linux-next with content), upstream-symref
             fallback (main), and unseeded exit-3 no-op. Residual live proof
             rides order 452 slice 3.
+        - type: verified-live
+          ts: "2026-07-21T02:00:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            LIVE single-forge-path proof on the rebuilt image (podman build
+            images/git/, throwaway volume + container, proxyless sandbox):
+            entrypoint logged "HEAD -> refs/heads/linux-next (launcher
+            default branch)" at init; empty volume seeded from GitHub in ~6s;
+            ls-remote advertised "ref: refs/heads/linux-next HEAD" at
+            b385ef4d (the branch head pushed minutes earlier — CURRENT); a
+            git:// clone landed on branch linux-next @ b385ef4d with a full
+            56-entry tree and resolvable HEAD. Also live-validated en route:
+            the ensure-mirror-head exit-3 non-fatal path and the "still
+            seeding" ls-remote state (no HEAD line while heads are unborn)
+            that wait_for_git_mirror_ready keys on. Remaining for 452 slice
+            3: the CONCURRENT two-forge clone + transparent relay push proof
+            on the full stack (vault + proxy), which needs a real launch.
