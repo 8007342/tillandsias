@@ -120,7 +120,8 @@ async fn sidecar_pushes_received_envelope_into_store() {
         body: ControlMessage::Hello {
             from: "router-sidecar-test".to_string(),
             capabilities: vec!["IssueWebSession".to_string()],
-        },
+                build_version: None,
+            },
     };
     write_envelope(&mut framed, &hello).await;
 

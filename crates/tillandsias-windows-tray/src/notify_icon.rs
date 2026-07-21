@@ -904,7 +904,7 @@ fn collect_status_report() -> StatusReport {
             }
         };
         let mut client = Client::from_stream(stream, Transport::Vsock { cid: 0, port });
-        let wire_version = match client.handshake().await {
+        let (wire_version, _) = match client.handshake().await {
             Ok(v) => v,
             Err(err) => {
                 return StatusReport {
@@ -1171,10 +1171,23 @@ async fn live_client_request(
             port: CONTROL_WIRE_VSOCK_PORT,
         },
     );
-    if let Err(err) = client.handshake().await {
-        tracing::debug!(%err, ctx, "handshake failed");
-        mark_wire_unreachable(hwnd);
-        return None;
+    match client.handshake().await {
+        Ok((_, Some(guest_version))) => {
+            if guest_version != env!("CARGO_PKG_VERSION") {
+                tracing::warn!(
+                    ctx,
+                    "build version skew: tray={} guest={}",
+                    env!("CARGO_PKG_VERSION"),
+                    guest_version
+                );
+            }
+        }
+        Ok(_) => {}
+        Err(err) => {
+            tracing::debug!(%err, ctx, "handshake failed");
+            mark_wire_unreachable(hwnd);
+            return None;
+        }
     }
     if let Err(err) =
         crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
@@ -1842,6 +1855,7 @@ pub enum DiagnoseFormat {
 #[derive(serde::Serialize)]
 struct DiagnoseReport {
     version: &'static str,
+    guest_version: Option<String>,
     /// Short git SHA of the commit this binary was built from. Baked at
     /// compile time by build.rs (`BUILD_COMMIT_SHA`); falls back to
     /// `"unknown"` if git wasn't available or the build was from a source
@@ -2058,11 +2072,12 @@ fn collect_report() -> DiagnoseReport {
 
     // Live control wire. Tokio runtime build is essentially infallible — on the
     // rare failure we still emit a (degraded) report rather than aborting.
-    let wire = match tokio::runtime::Builder::new_current_thread()
+    let (wire, guest_version) = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
     {
         Ok(runtime) => runtime.block_on(async {
+            let mut guest_version = None;
             let stream = match crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await
             {
                 Ok(s) => s,
@@ -2083,7 +2098,9 @@ fn collect_report() -> DiagnoseReport {
                     port: CONTROL_WIRE_VSOCK_PORT,
                 },
             );
-            if let Err(err) = client.handshake().await {
+            match client.handshake().await {
+                Ok((_, gv)) => guest_version = gv,
+                Err(err) => {
                 return WireReport {
                     reachable: false,
                     phase: None,
@@ -2108,45 +2125,45 @@ fn collect_report() -> DiagnoseReport {
                         podman_ready,
                         last_event,
                         ..
-                    } => WireReport {
+                    } => (WireReport {
                         reachable: true,
-                        phase: Some(format!("{phase:?}")),
+                        phase: Some(format!("{phase:?}, guest_version)")),
                         podman_ready: Some(podman_ready),
                         last_event,
                         error: None,
                     },
                     // Dispatcher returned Error (convergence packet item 2).
                     // Surface its code + message rather than just "unexpected reply".
-                    ControlMessage::Error { code, message, .. } => WireReport {
+                    ControlMessage::Error { code, message, .. } => (WireReport {
                         reachable: true,
                         phase: None,
                         podman_ready: None,
                         last_event: None,
                         error: Some(describe_wire_error(code, &message)),
-                    },
-                    other => WireReport {
+                    }, guest_version),
+                    other => (WireReport {
                         reachable: true,
                         phase: None,
                         podman_ready: None,
                         last_event: None,
-                        error: Some(format!("unexpected reply: {}", other.kind())),
+                        error: Some(format!("unexpected reply: {}, guest_version)", other.kind())),
                     },
                 },
-                Err(err) => WireReport {
+                Err(err) => (WireReport {
                     reachable: false,
                     phase: None,
                     podman_ready: None,
                     last_event: None,
-                    error: Some(format!("VmStatusRequest: {err}")),
+                    error: Some(format!("VmStatusRequest: {err}, guest_version)")),
                 },
             }
         }),
-        Err(err) => WireReport {
+        Err(err) => (WireReport {
             reachable: false,
             phase: None,
             podman_ready: None,
             last_event: None,
-            error: Some(format!("tokio runtime build failed: {err}")),
+            error: Some(format!("tokio runtime build failed: {err}, guest_version)")),
         },
     };
 
@@ -2166,6 +2183,7 @@ fn collect_report() -> DiagnoseReport {
     let log_size_bytes = std::fs::metadata(&log).ok().map(|m| m.len());
 
     let mut report = DiagnoseReport {
+        guest_version,
         // WORKSPACE_VERSION baked by build.rs from the repo-root VERSION file
         // so the JSON's `version` field matches the release tag instead of
         // the crate's static `Cargo.toml` `0.1.0`. See build.rs for details.

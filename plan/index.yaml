@@ -16040,7 +16040,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Wire handshake carries BUILD versions; tray goes loud on guest/tray skew (chip + WARN → Event Log)"
-      status: ready
+      status: COMPLETED
       kind: enhancement
       deliverable: tillandsias-control-wire handshake + headless + all trays
       depends_on: []

@@ -1941,10 +1941,22 @@ async fn run_push_listener(
                     port: CONTROL_WIRE_VSOCK_PORT,
                 },
             );
-            client
+            let (_, guest_version) = client
                 .handshake()
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
+            if let Some(ref gv) = guest_version {
+                if gv != env!("CARGO_PKG_VERSION") {
+                    tracing::warn!(
+                        "build version skew: tray={} guest={}",
+                        env!("CARGO_PKG_VERSION"),
+                        gv
+                    );
+                }
+            }
+            if let Ok(mut guard) = menu_state.lock() {
+                guard.guest_version = guest_version;
+            }
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),

@@ -110,12 +110,16 @@ pub enum ControlMessage {
     Hello {
         from: String,
         capabilities: Vec<String>,
+        #[serde(default)]
+        build_version: Option<String>,
     },
     /// Server reply to `Hello`. `wire_version` mismatch closes the stream
     /// with a single trailing `Error { code: Unsupported }` envelope.
     HelloAck {
         wire_version: u16,
         server_caps: Vec<String>,
+        #[serde(default)]
+        build_version: Option<String>,
     },
     /// Tray → consumer: register a per-window session cookie value with the
     /// router-side consumer.
@@ -511,6 +515,7 @@ mod tests {
             body: ControlMessage::Hello {
                 from: "router".to_string(),
                 capabilities: vec!["IssueWebSession".to_string()],
+                build_version: None,
             },
         };
         roundtrip(&envelope);
@@ -525,6 +530,7 @@ mod tests {
             body: ControlMessage::HelloAck {
                 wire_version: WIRE_VERSION,
                 server_caps: vec!["v1".to_string()],
+                build_version: None,
             },
         };
         roundtrip(&envelope);
@@ -783,14 +789,16 @@ mod tests {
                 ControlMessage::Hello {
                     from: "x".into(),
                     capabilities: vec![],
-                },
+                build_version: None,
+            },
                 "Hello",
             ),
             (
                 ControlMessage::HelloAck {
                     wire_version: WIRE_VERSION,
                     server_caps: vec![],
-                },
+                build_version: None,
+            },
                 "HelloAck",
             ),
             (
@@ -1091,6 +1099,7 @@ mod tests {
             body: ControlMessage::Hello {
                 from: "router".to_string(),
                 capabilities: vec!["IssueWebSession".to_string()],
+                build_version: None,
             },
         };
         let bytes = encode(&envelope).unwrap();

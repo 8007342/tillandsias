@@ -174,14 +174,16 @@ mod tests {
                 ControlMessage::Hello {
                     from: "x".into(),
                     capabilities: vec![],
-                },
+                build_version: None,
+            },
                 "Hello",
             ),
             (
                 ControlMessage::HelloAck {
                     wire_version: 2,
                     server_caps: vec![],
-                },
+                build_version: None,
+            },
                 "HelloAck",
             ),
             (
@@ -464,6 +466,7 @@ mod tests {
             ControlMessage::Hello {
                 from: "x".into(),
                 capabilities: vec![],
+                build_version: None,
             },
             ControlMessage::VmStatusRequest { seq: 1 },
             ControlMessage::VmShutdownRequest {
@@ -493,6 +496,7 @@ mod tests {
             ControlMessage::HelloAck {
                 wire_version: 2,
                 server_caps: vec![],
+                build_version: None,
             },
             ControlMessage::IssueAck { seq_acked: 1 },
             ControlMessage::Error {

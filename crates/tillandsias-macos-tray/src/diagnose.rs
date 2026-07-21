@@ -201,6 +201,7 @@ pub enum DiagnoseFormat {
 #[derive(serde::Serialize)]
 pub struct DiagnoseReport {
     pub version: &'static str,
+    pub guest_version: Option<String>,
     pub in_app: bool,
     pub exe_path: Option<String>,
     pub image_root: String,
@@ -246,6 +247,7 @@ fn collect_report() -> DiagnoseReport {
 
     DiagnoseReport {
         version: env!("CARGO_PKG_VERSION"),
+        guest_version: None,
         in_app,
         exe_path,
         image_root: image_root_str,
@@ -1245,7 +1247,7 @@ mod tests {
             .find(signature)
             .unwrap_or_else(|| panic!("missing signature: {signature}"));
         let tail = &source[start..];
-        let end = tail.find("\n/// Extract").unwrap_or(tail.len());
+        let end = tail.find("\n///").unwrap_or(tail.len());
         &tail[..end]
     }
 
@@ -1377,7 +1379,8 @@ mod tests {
 
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
-            version: "0.1.0",
+            version: env!("CARGO_PKG_VERSION"),
+            guest_version: None,
             in_app: true,
             exe_path: Some(
                 "/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray".to_string(),

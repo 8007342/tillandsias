@@ -135,7 +135,8 @@ async fn test_vsock_end_to_end_localhost() {
         body: ControlMessage::Hello {
             from: "vsock-e2e-test".to_string(),
             capabilities: vec!["VmStatusRequest".to_string()],
-        },
+                build_version: None,
+            },
     };
     write_envelope(&mut stream, &hello)
         .await

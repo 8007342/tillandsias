@@ -263,6 +263,7 @@ impl TargetSurface {
 /// the same `v<X.Y.Z> — By Tlatoāni` line the Linux tray does.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MenuState {
+    pub guest_version: Option<String>,
     pub status_text: String,
     pub version: String,
     pub login: GithubLoginState,
@@ -292,6 +293,7 @@ impl MenuState {
     /// not ready, target=WindowsTray.
     pub fn initial() -> Self {
         Self {
+            guest_version: None,
             status_text: BOOT_STATUS_TEXT.to_string(),
             version: crate::version().to_string(),
             login: GithubLoginState::LoggedOut,
@@ -436,10 +438,16 @@ pub fn build(state: &MenuState) -> MenuStructure {
     // (3) Separator before footer — matches Linux tray.
     items.push(MenuItem::separator());
 
+    let mut ver_str = format!("v{} \u{2014} By Tlatoa\u{0304}ni", state.version);
+    if let Some(ref guest_ver) = state.guest_version
+        && guest_ver != &state.version {
+            ver_str.push_str(" (Update Pending)");
+        }
+    
     // (4) Footer.
     items.push(MenuItem::disabled(
         ids::VERSION,
-        format!("v{} \u{2014} By Tlatoa\u{0304}ni", state.version),
+        ver_str,
         "informational",
     ));
     items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
