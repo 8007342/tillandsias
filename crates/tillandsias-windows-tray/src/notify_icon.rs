@@ -1214,6 +1214,91 @@ async fn live_client_request(
     Some(reply)
 }
 
+/// Guest crash-loop DETECTION state file. The long-lived tray process updates
+/// it on every VM-status observation so a SEPARATE `--diagnose` process (which
+/// holds no live wire handle) can read the current verdict. Lives beside the
+/// WSL install root so it is per-installation and survives a tray restart.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn crashloop_state_path() -> std::path::PathBuf {
+    WslLifecycle::install_root().join("crashloop.state")
+}
+
+/// Process-global live crash-loop detector, seeded once from the persisted
+/// state file so a loop that tripped before the tray last restarted is still in
+/// view. std `Mutex` — observations are infrequent (per-phase-change, not
+/// per-frame).
+static CRASH_LOOP_DETECTOR: std::sync::LazyLock<
+    Mutex<tillandsias_control_wire::crashloop::CrashLoopDetector>,
+> = std::sync::LazyLock::new(|| {
+    Mutex::new(
+        tillandsias_control_wire::crashloop::CrashLoopDetector::load(&crashloop_state_path()),
+    )
+});
+
+/// Edge-trigger guard so the crash-loop balloon (the single most-important tray
+/// notification) fires once per trip, not on every subsequent push while the
+/// loop persists. Re-armed when the verdict clears.
+static CRASH_LOOP_NOTIFIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Feed one live VM-status observation into the crash-loop detector, persist the
+/// updated state for `--diagnose`, and — on a NEW trip — surface the crash-loop
+/// as the tray's single most-important notification: an Error balloon that
+/// dominates the ordinary phase chip (order 250 ultra-minimal tray UX — the one
+/// message that matters is "the guest is crash-looping, reset it"). The chip is
+/// overwritten with the crash-loop line too so the steady-state surface agrees
+/// with the toast, and the terminal verdict clears the edge trigger so a later
+/// recurrence toasts again.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn note_crashloop_observation(
+    phase: tillandsias_control_wire::VmPhase,
+    last_event: Option<&str>,
+    hwnd: HWND,
+) {
+    use std::sync::atomic::Ordering::SeqCst;
+    let verdict = {
+        let Ok(mut det) = CRASH_LOOP_DETECTOR.lock() else {
+            return;
+        };
+        let v = det.observe_phase(phase, last_event, unix_now_secs());
+        if let Err(e) = det.save(&crashloop_state_path()) {
+            tracing::debug!(error = %e, "could not persist crash-loop state");
+        }
+        v
+    };
+    if verdict.is_crash_loop() {
+        // A crash-loop is THE single most-important state: overwrite the chip.
+        update_status_text(&format!("\u{1F534} {}", verdict.verdict()), hwnd);
+        if !CRASH_LOOP_NOTIFIED.swap(true, SeqCst) {
+            // ERROR relays to tray.log + Windows Event Log so the terminal
+            // state is discoverable post-hoc.
+            tracing::error!(verdict = %verdict, "guest crash-loop detected");
+            show_balloon(
+                hwnd,
+                "Tillandsias: guest crash-loop",
+                &format!(
+                    "The guest is crash-looping ({}) — it is not converging. \
+                     Reset the guest to recover; everything lives in the cloud, \
+                     you'll re-authenticate once.",
+                    verdict.verdict()
+                ),
+                BalloonSeverity::Error,
+            );
+        }
+    } else {
+        CRASH_LOOP_NOTIFIED.store(false, SeqCst);
+    }
+}
+
 /// Apply a live `VmStatus` observation — from a poll reply or an unrequested
 /// `VmStatusPush` frame — to the shared `MenuState` and status chip: sets
 /// `podman_ready` (which gates per-project actions like "Attach Here" in
@@ -1247,6 +1332,10 @@ fn apply_vm_status(
     // provisioning succeeds — that ground-truth confirmation lives
     // in the spawn_provisioning Ok path's balloon).
     mark_wire_recovered(hwnd);
+    // Feed the same observation into the crash-loop detector LAST: on a trip it
+    // overwrites the chip set above with the crash-loop verdict (the single
+    // most-important surface) and persists state for `--diagnose`.
+    note_crashloop_observation(phase, last_event, hwnd);
 }
 
 /// True while the dedicated push subscription (order 154 slices 1-3) is
@@ -2342,6 +2431,18 @@ fn print_human(r: &DiagnoseReport) {
             );
         }
     }
+
+    // Guest crash-loop DETECTION verdict. Additive line, read from the state
+    // file the live tray persists (this `--diagnose` process holds no live wire
+    // handle). Emits the PINNED grammar ^(healthy|starting|crash-loop:[a-z0-9-]+)$
+    // — a repeated restart/unseal/handshake pattern flips it to
+    // crash-loop:<subsystem>. Does NOT influence the 0/2/1 exit-code contract.
+    // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    println!("\n--- guest health (crash-loop detection) ---");
+    let mut det =
+        tillandsias_control_wire::crashloop::CrashLoopDetector::load(&crashloop_state_path());
+    println!("Guest health: {}", det.verdict(unix_now_secs()).verdict());
+
     if !r.recent_log_tail.is_empty() {
         println!();
         println!(

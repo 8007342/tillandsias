@@ -271,4 +271,28 @@ mod tests {
             );
         }
     }
+
+    /// Guest crash-loop DETECTION wiring pin. `diagnose.rs` is
+    /// `cfg(target_os = "macos")` and so is NOT compiled on the Linux dev box
+    /// where `cargo check -p tillandsias-macos-tray` runs; this source-scan
+    /// (a platform-independent `include_str!`) keeps `--diagnose`'s
+    /// pinned-grammar guest-health line wired in on every host.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn diagnose_wires_in_crashloop_verdict() {
+        let source = include_str!("diagnose.rs");
+        assert!(
+            source.contains("pub fn guest_health_verdict()"),
+            "diagnose must expose the guest-health verdict reader"
+        );
+        assert!(
+            source.contains("crashloop::CrashLoopDetector::load(&crashloop_state_path())"),
+            "the verdict must load the persisted crash-loop detector state"
+        );
+        assert!(
+            source.contains("Guest health:"),
+            "--diagnose must print the guest-health verdict line"
+        );
+    }
 }

@@ -71,6 +71,36 @@ fn image_root() -> PathBuf {
     home.join("Library/Application Support/tillandsias")
 }
 
+/// Guest crash-loop DETECTION state file. On macOS `--diagnose` is
+/// static/filesystem-only (no live wire handle — `Virtualization.framework`
+/// vsock is per-VM-handle, not per-host), so the crash-loop verdict is READ
+/// from this file, which the long-lived tray process updates on each
+/// VM-status observation. Lives in the same `image_root` the tray already
+/// reads/writes, so the two agree.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+pub fn crashloop_state_path() -> PathBuf {
+    image_root().join("crashloop.state")
+}
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Read the persisted crash-loop detector and render its verdict in the PINNED
+/// grammar `^(healthy|starting|crash-loop:[a-z0-9-]+)$`. A missing/unwritten
+/// state file yields `starting` (nothing observed yet), never a panic.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+pub fn guest_health_verdict() -> String {
+    tillandsias_control_wire::crashloop::CrashLoopDetector::load(&crashloop_state_path())
+        .verdict(unix_now_secs())
+        .verdict()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SecureControlWireMode {
     Off,
@@ -302,6 +332,15 @@ fn print_human(r: &DiagnoseReport) {
     println!("   the running tray process itself — macOS vsock is per-");
     println!("   VM-handle, no AF_VSOCK. Click the menubar icon for");
     println!("   the live chip; the 30 s poller refreshes it in place.)");
+    println!();
+    // Guest crash-loop DETECTION verdict. Read from the state file the live
+    // tray persists (this `--diagnose` process holds no live wire handle, per
+    // the module-header limitation). Emits the PINNED grammar
+    // ^(healthy|starting|crash-loop:[a-z0-9-]+)$; a repeated
+    // restart/unseal/handshake pattern flips it to crash-loop:<subsystem>.
+    // Additive — does NOT affect the 0/2/1 exit-code contract.
+    // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    println!("Guest health: {}", guest_health_verdict());
     println!();
     if r.provisioned {
         println!("Status: PROVISIONED — first-launch materialization complete.");
@@ -1501,5 +1540,58 @@ mod tests {
             err.contains("/Users/op/src") && err.contains("/home/forge/src"),
             "{err}"
         );
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    //  Guest crash-loop DETECTION — the macOS `--diagnose` read path.
+    //  (macOS-only tests; the cross-platform detector behavior itself is
+    //  pinned in tillandsias-control-wire::crashloop on the Linux dev box.)
+    //  @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    // ────────────────────────────────────────────────────────────────
+
+    /// The `--diagnose` guest-health line always renders a verdict in the
+    /// pinned grammar, even with no state file present (fresh install →
+    /// `starting`), and never panics.
+    #[test]
+    fn guest_health_verdict_matches_pinned_grammar() {
+        let v = super::guest_health_verdict();
+        assert!(
+            tillandsias_control_wire::crashloop::verdict_matches_grammar(&v),
+            "guest-health verdict {v:?} must match ^(healthy|starting|crash-loop:[a-z0-9-]+)$"
+        );
+    }
+
+    /// The crash-loop state file lives under the same `image_root` the live
+    /// tray reads/writes, so the writer and this static reader agree.
+    #[test]
+    fn crashloop_state_path_under_image_root() {
+        let p = super::crashloop_state_path();
+        assert!(
+            p.ends_with("Library/Application Support/tillandsias/crashloop.state"),
+            "{}",
+            p.display()
+        );
+    }
+
+    /// A tripped state written to a temp file reads back as
+    /// `crash-loop:<subsystem>` — the exact load path `--diagnose` uses.
+    #[test]
+    fn tripped_state_reads_back_as_crash_loop() {
+        use tillandsias_control_wire::crashloop::{
+            CrashLoopDetector, CrashLoopSubsystem, GuestHealth,
+        };
+        let dir = std::env::temp_dir().join(format!("tillandsias-diag-{}", std::process::id()));
+        let path = dir.join("crashloop.state");
+        let mut det = CrashLoopDetector::new(120, 3);
+        det.record_failure(CrashLoopSubsystem::Guest, 10);
+        det.record_failure(CrashLoopSubsystem::Guest, 11);
+        det.record_failure(CrashLoopSubsystem::Guest, 12);
+        det.save(&path).unwrap();
+        let mut loaded = CrashLoopDetector::load(&path);
+        assert_eq!(
+            loaded.verdict(12),
+            GuestHealth::CrashLoop(CrashLoopSubsystem::Guest)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

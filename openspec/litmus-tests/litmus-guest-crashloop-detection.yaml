@@ -1,0 +1,66 @@
+# @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+name: litmus:guest-crashloop-detection
+spec: guest-crashloop-detection
+phase: pre-build
+description: >
+  Offline proof of host-side guest CRASH-LOOP DETECTION. After a live Windows
+  crash-loop (vault-unseal regeneration cascaded into a headless/tray restart
+  loop) the operator directed that the host tier must DETECT looping vs
+  progressing and say so in a pinned, regex-testable grammar
+  ^(healthy|starting|crash-loop:[a-z0-9-]+)$. A bounded, time-windowed counter
+  (N phase regressions / vault-unseal failures / handshake connect-timeouts
+  within T seconds) trips a crash-loop:<subsystem> verdict emitted from
+  --diagnose and surfaced as the tray's single most-important notification;
+  monotonic Provisioning->Starting->Ready progress (even slow, even repeated)
+  never trips. The detector is a pure, clock-injected state machine living in
+  tillandsias-control-wire so the Windows and macOS trays share one grammar and
+  cannot drift.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-control-wire/src/lib.rs with the crashloop module
+  - workspace contains scripts/test-guest-crashloop-detection.sh
+
+critical_path:
+  - step: "a driven stop->start / sealed-vault series flips the detector to crash-loop:<subsystem> within the window; a slow-but-progressing provision never flips (no false positive on slow starts)"
+    command: "scripts/test-guest-crashloop-detection.sh"
+    timeout_ms: 120000
+    expected_behavior: "ok: crash-loop detector trips on a driven restart"
+
+  - step: "the cross-platform detector + pinned grammar live in control-wire (both trays consume them, so the two hosts cannot drift)"
+    command: "grep -Fq 'pub mod crashloop' crates/tillandsias-control-wire/src/lib.rs && grep -Fq 'crash-loop:[a-z0-9-]+' crates/tillandsias-control-wire/src/lib.rs && grep -Fq 'fn verdict_matches_grammar' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: grammar + detector in control-wire'"
+    timeout_ms: 10000
+    expected_behavior: "ok: grammar + detector in control-wire"
+
+  - step: "the counter gates on REPEATED regression not slowness — is_phase_regression plus a bounded window/threshold, so a monotonic slow provision records no events"
+    command: "grep -Fq 'pub fn is_phase_regression' crates/tillandsias-control-wire/src/lib.rs && grep -Fq 'DEFAULT_WINDOW_SECS' crates/tillandsias-control-wire/src/lib.rs && grep -Fq 'DEFAULT_THRESHOLD' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: windowed regression counter'"
+    timeout_ms: 10000
+    expected_behavior: "ok: windowed regression counter"
+
+  - step: "the Windows tray feeds the detector from its single VM-status funnel, persists state for --diagnose, and surfaces a trip as the single most-important Error balloon (order 250)"
+    command: "grep -Fq 'note_crashloop_observation(' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -Fq 'Guest health:' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -Fq 'Tillandsias: guest crash-loop' crates/tillandsias-windows-tray/src/notify_icon.rs && echo 'ok: windows tray + diagnose wired'"
+    timeout_ms: 10000
+    expected_behavior: "ok: windows tray + diagnose wired"
+
+  - step: "the macOS --diagnose reads the persisted verdict and prints the pinned-grammar guest-health line (static/filesystem-only per its platform limitation)"
+    command: "grep -Fq 'pub fn guest_health_verdict()' crates/tillandsias-macos-tray/src/diagnose.rs && grep -Fq 'Guest health:' crates/tillandsias-macos-tray/src/diagnose.rs && echo 'ok: macos diagnose wired'"
+    timeout_ms: 10000
+    expected_behavior: "ok: macos diagnose wired"
+
+observability:
+  traces:
+    - "@trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md"
+  expected_log: "detector renders healthy/starting/crash-loop:<subsystem>; trips on repeated regression, stays quiet on slow progression"
+  log_fields:
+    spec: guest-crashloop-detection
+    test: guest-crashloop-detection
+
+rollback:
+  on_failure: >
+    Do not relax the regression gate into a plain restart counter (that would
+    false-positive on slow starts) or drop the sliding window (a loop must
+    self-clear once it stops). Inspect is_phase_regression + the windowed
+    counter in crates/tillandsias-control-wire/src/lib.rs (crashloop module)
+    and the tray/--diagnose wire-in.
+  command: "scripts/test-guest-crashloop-detection.sh"

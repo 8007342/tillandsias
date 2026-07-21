@@ -150,3 +150,40 @@ fn main() {
     );
     std::process::exit(1);
 }
+
+#[cfg(test)]
+mod tests {
+    /// Guest crash-loop DETECTION wiring pin. `notify_icon.rs` is
+    /// `cfg(target_os = "windows")` and so is NOT compiled on the Linux dev box
+    /// where `cargo check -p tillandsias-windows-tray` runs — a behavioral test
+    /// there could not catch a dropped wire-in. This source-scan (an
+    /// `include_str!` compile-time read, platform-independent) keeps the four
+    /// load-bearing hooks from silently regressing on any host.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn notify_icon_wires_in_crashloop_detection() {
+        let src = include_str!("notify_icon.rs");
+        // 1. The detector is fed from the single VM-status funnel.
+        assert!(
+            src.contains("note_crashloop_observation("),
+            "apply_vm_status must feed the crash-loop detector"
+        );
+        // 2. State is persisted so a separate --diagnose process can read it.
+        assert!(
+            src.contains("fn crashloop_state_path()"),
+            "the live tray must persist crash-loop state for --diagnose"
+        );
+        // 3. --diagnose emits the pinned-grammar verdict line.
+        assert!(
+            src.contains("CrashLoopDetector::load(&crashloop_state_path())")
+                && src.contains("Guest health:"),
+            "--diagnose must read the persisted detector and print the verdict"
+        );
+        // 4. A trip raises the single most-important notification (Error balloon).
+        assert!(
+            src.contains("Tillandsias: guest crash-loop"),
+            "a crash-loop must raise the top-priority Error balloon"
+        );
+    }
+}

@@ -409,6 +409,12 @@ specs:
   - litmus:github-credential-health-shape
   coverage_ratio: 67
   last_verified: '2026-05-30'
+- spec_id: guest-crashloop-detection
+  status: active
+  litmus_tests:
+  - litmus:guest-crashloop-detection
+  coverage_ratio: 100
+  last_verified: '2026-07-21'
 - spec_id: host-browser-mcp
   status: active
   litmus_tests:
