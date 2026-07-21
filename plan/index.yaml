@@ -19778,3 +19778,62 @@ plan_index:
         - "Windows: dated smoke report in plan/issues naming the v0.4 build; forge lands on a valid current checkout; findings filed as packets"
         - "macOS: dated smoke report in plan/issues naming the v0.4 build; VZ lane checkout valid + current; findings filed as packets"
         - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
+
+    - packet_id: forge-plan-metadata-mcp-server
+      order: 456
+      desired_release: forge-local-experts-milestone
+      title: "Idiomatic compiled Rust layer MCP server in Ramdisk for deterministic plan/metadata queries"
+      status: pending
+      kind: implementation
+      deliverable: crates/tillandsias-forge-mcp (or similar) built and running in ramdisk at startup
+      depends_on: []
+      capability_tags: [mcp, rust, forge, optimizations]
+      estimated_hours: 6
+      outcome: >
+        Agents frequently struggle parsing plan/index.yaml using brittle, token-expensive python/regex 
+        scripts. This packet introduces a native compiled Rust layer that parses the plan via serde_yaml 
+        and hosts an MCP server inside the forge ramdisk. Agents can query this server (e.g., list ready 
+        packets for milestone X) instantaneously with 100% accuracy.
+      exit_criteria:
+        - "MCP server is launched ephemerally on forge startup from ramdisk"
+        - "Agents can invoke `query_plan` tool to get active packets without using grep or python"
+        - "Litmus test proves the MCP server returns the correct packets for the current active release"
+
+    - packet_id: cheatsheet-expert-model-rung1
+      order: 457
+      desired_release: forge-local-experts-milestone
+      title: "CHEATSHEET EXPERT rung 1 — ephemeral build on forge launch for ground-truth querying"
+      status: pending
+      kind: implementation
+      deliverable: inference expert-build pipeline + named cheatsheet expert endpoint
+      depends_on: [plan-methodology-experts-rung1]
+      capability_tags: [inference, ollama, experts, cheatsheets, forge]
+      estimated_hours: 8
+      outcome: >
+        The cheatsheet ecosystem is critical but moderately incomplete and poorly discovered. 
+        Building upon the PLAN EXPERT technique, we compile a CHEATSHEET EXPERT on forge launch. 
+        It ingests all docs/cheatsheets/ and cheatsheets/. Agents can ask the local inference model 
+        questions instead of grepping files, receiving perfectly cited answers based on current repo state.
+      exit_criteria:
+        - "fresh forge launch produces `tillandsias-cheatsheet-expert` on inference:11434"
+        - "queries to the expert yield correct, sourced answers from the cheatsheet ecosystem"
+        - "expert tears down ephemerally with the stack"
+
+    - packet_id: agent-forge-context-hooks
+      order: 458
+      desired_release: forge-local-experts-milestone
+      title: "Agent Context Initialization Hooks: auto-inject expert endpoints and MCP availability"
+      status: pending
+      kind: implementation
+      deliverable: forge/startup-hooks/agent_init.sh
+      depends_on: [forge-plan-metadata-mcp-server, cheatsheet-expert-model-rung1]
+      capability_tags: [forge, orchestration, ux]
+      estimated_hours: 4
+      outcome: >
+        Agents often dig dangerously in all directions because they lack immediate context. 
+        When an agent attaches to a forge, a context hook should inject a concise summary:
+        the current release target, the MCP server socket path, and the expert model endpoints.
+        This provides instant orientation and immediate leverage of the forge's compiled tools.
+      exit_criteria:
+        - "new agents see a 'Forge Startup Context' message upon launch"
+        - "the context correctly lists the active milestone, MCP Plan Query tool, and CHEATSHEET EXPERT"

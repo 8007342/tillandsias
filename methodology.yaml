@@ -144,7 +144,9 @@ methodology:
   invariant_summary:
     - specs_define_intent
     - cheatsheets_compress_provenance_backed_knowledge
+    - cheatsheets_are_ground_truth_and_enforced_by_local_experts
     - code_cites_specs_and_relevant_cheatsheets
+    - plan_is_queried_via_mcp_server_avoiding_heuristic_parsing
     - traces_and_litmus_tests_provide_falsifiable_evidence
     - evidence_bundles_bound_convergence_claims
     - unknown_events_capture_surprises_before_distillation
