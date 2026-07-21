@@ -386,6 +386,31 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 /// Exit codes:
 ///   * `0` — provisioned (or already provisioned)
 ///   * `1` — hard failure (manifest parse, network, conversion, SHA)
+/// `--reset-guest` CLI verb (windows-260717-4): intentional EPHEMERAL RESET —
+/// delete the provisioned boot artifacts (rootfs.img and with it the in-VM
+/// vault, vmlinuz, initramfs.img), clear the persisted crash-loop state (a
+/// fresh guest has a fresh history), then re-run the exact same
+/// `provision_main` path `--provision` uses. Destructive by design: state of
+/// value lives in the cloud; the only cost is one re-authentication. The
+/// dispatcher gates this behind `require_no_live_tray` (order 277) so it
+/// never wipes the disk out from under a running tray's VM.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+pub fn reset_guest_main() -> i32 {
+    eprintln!(
+        "[reset-guest] This discards the local guest and its cached credentials. \
+         Everything lives in the cloud \u{2014} you'll re-authenticate once."
+    );
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    if let Err(err) = vz.wipe_provisioned_artifacts() {
+        eprintln!("[reset-guest] RESULT: FAILED \u{2014} wipe: {err}");
+        return 1;
+    }
+    let _ = std::fs::remove_file(crashloop_state_path());
+    eprintln!("[reset-guest] guest wiped \u{2014} reprovisioning from scratch\u{2026}");
+    provision_main()
+}
+
 pub fn provision_main() -> i32 {
     if let Err(err) = stage_embedded_guest_binary() {
         eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");

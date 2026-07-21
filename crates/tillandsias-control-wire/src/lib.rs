@@ -919,6 +919,127 @@ pub mod crashloop {
         }
     }
 
+    /// Default cap on consecutive automatic guest resets before the policy
+    /// defers to the MANUAL reset affordance. Two automatic attempts cover
+    /// the "one reset fixes it" happy path plus a single retry; anything
+    /// still looping after that needs a human (never an unbounded loop —
+    /// that is the very failure this work fixes).
+    pub const AUTO_RESET_MAX_ATTEMPTS: u32 = 2;
+
+    /// Default base backoff between automatic reset attempts (doubles per
+    /// attempt). 300s comfortably exceeds a full wipe+reprovision cycle, so
+    /// two auto-resets can never overlap and a persistently-looping guest is
+    /// re-poked ever more gently.
+    pub const AUTO_RESET_BASE_BACKOFF_SECS: u64 = 300;
+
+    /// What the auto-reset policy tells the host tier to do for one observed
+    /// verdict.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum AutoResetDecision {
+        /// Trigger an automatic wipe+reprovision now (`attempt` is 1-based).
+        Reset { attempt: u32 },
+        /// A crash-loop is tripped but the backoff window since the last
+        /// attempt has not elapsed — do nothing yet.
+        Wait,
+        /// The attempt cap is exhausted: defer to the manual reset
+        /// affordance (tray menu item / `--reset-guest`). Stays terminal
+        /// until the guest reaches `Healthy` again.
+        Defer,
+        /// No crash-loop is tripped — nothing to do.
+        NotTripped,
+    }
+
+    /// Bounded, backed-off AUTO-RESET policy for the intentional ephemeral
+    /// reset (windows-260717-4). Pure + clock-injected like
+    /// [`CrashLoopDetector`], and deliberately housed here in control-wire so
+    /// the Windows NotifyIcon tray and the macOS AppKit tray consume the
+    /// exact same cap/backoff semantics (cross-platform by construction —
+    /// the packet's design note asked for exactly this placement).
+    ///
+    /// Semantics:
+    /// - Only a tripped `crash-loop:<subsystem>` verdict may trigger a reset.
+    /// - The first attempt fires immediately on a trip; attempt `n+1` only
+    ///   after `base_backoff_secs * 2^(n-1)` seconds since attempt `n`.
+    /// - After `max_attempts`, every further tripped observation yields
+    ///   [`AutoResetDecision::Defer`] — the manual affordance is the only
+    ///   path forward (no unbounded loop).
+    /// - A `Healthy` observation (the guest reached Ready and is not
+    ///   looping) clears the attempt budget so a NEW loop next month gets a
+    ///   fresh budget. `Starting` does NOT clear — the guest is always
+    ///   `starting` right after a reset, and treating that as recovery would
+    ///   un-bound the loop.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[derive(Clone, Debug)]
+    pub struct AutoResetPolicy {
+        max_attempts: u32,
+        base_backoff_secs: u64,
+        attempts: u32,
+        last_attempt_unix: Option<u64>,
+    }
+
+    impl Default for AutoResetPolicy {
+        fn default() -> Self {
+            Self::with_defaults()
+        }
+    }
+
+    impl AutoResetPolicy {
+        pub fn new(max_attempts: u32, base_backoff_secs: u64) -> Self {
+            Self {
+                max_attempts: max_attempts.max(1),
+                base_backoff_secs,
+                attempts: 0,
+                last_attempt_unix: None,
+            }
+        }
+
+        pub fn with_defaults() -> Self {
+            Self::new(AUTO_RESET_MAX_ATTEMPTS, AUTO_RESET_BASE_BACKOFF_SECS)
+        }
+
+        /// Attempts consumed so far (test/pin helper).
+        pub fn attempts(&self) -> u32 {
+            self.attempts
+        }
+
+        /// Backoff required after `attempts` consumed attempts (doubles per
+        /// attempt, from `base_backoff_secs`).
+        fn backoff_secs(&self) -> u64 {
+            let exp = self.attempts.saturating_sub(1).min(16);
+            self.base_backoff_secs.saturating_mul(1u64 << exp)
+        }
+
+        /// Consult the policy with the latest observed verdict. Mutates the
+        /// attempt budget only when a reset is actually granted (or on a
+        /// `Healthy` recovery, which clears it).
+        pub fn consult(&mut self, verdict: GuestHealth, now_unix: u64) -> AutoResetDecision {
+            match verdict {
+                GuestHealth::Healthy => {
+                    self.attempts = 0;
+                    self.last_attempt_unix = None;
+                    AutoResetDecision::NotTripped
+                }
+                GuestHealth::Starting => AutoResetDecision::NotTripped,
+                GuestHealth::CrashLoop(_) => {
+                    if self.attempts >= self.max_attempts {
+                        return AutoResetDecision::Defer;
+                    }
+                    if let Some(last) = self.last_attempt_unix
+                        && now_unix < last.saturating_add(self.backoff_secs())
+                    {
+                        return AutoResetDecision::Wait;
+                    }
+                    self.attempts += 1;
+                    self.last_attempt_unix = Some(now_unix);
+                    AutoResetDecision::Reset {
+                        attempt: self.attempts,
+                    }
+                }
+            }
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -1236,6 +1357,123 @@ pub mod crashloop {
                 loaded.verdict(t),
                 GuestHealth::CrashLoop(CrashLoopSubsystem::Handshake)
             );
+        }
+
+        /// AUTO-RESET (windows-260717-4 exit criterion 3): the policy is
+        /// BOUNDED — after `max_attempts` it defers to the manual affordance
+        /// forever (until a genuine recovery), never an unbounded loop.
+        #[test]
+        fn auto_reset_is_bounded_and_defers_after_cap() {
+            let mut policy = AutoResetPolicy::new(2, 300);
+            let loop_verdict = GuestHealth::CrashLoop(CrashLoopSubsystem::Guest);
+            let mut t = 1_000u64;
+
+            assert_eq!(
+                policy.consult(loop_verdict, t),
+                AutoResetDecision::Reset { attempt: 1 },
+                "first trip resets immediately"
+            );
+            // Attempt 2 only after the base backoff elapses.
+            t += 10;
+            assert_eq!(policy.consult(loop_verdict, t), AutoResetDecision::Wait);
+            t += 300;
+            assert_eq!(
+                policy.consult(loop_verdict, t),
+                AutoResetDecision::Reset { attempt: 2 }
+            );
+            // Cap reached: every further tripped observation defers to the
+            // manual affordance — even far in the future.
+            for dt in [1u64, 600, 86_400, 8_640_000] {
+                t += dt;
+                assert_eq!(
+                    policy.consult(loop_verdict, t),
+                    AutoResetDecision::Defer,
+                    "after the cap the policy must defer to the manual reset"
+                );
+            }
+        }
+
+        /// AUTO-RESET: the inter-attempt backoff doubles (300s → 600s with the
+        /// default base), so a persistently-looping guest is re-poked ever more
+        /// gently.
+        #[test]
+        fn auto_reset_backoff_doubles_between_attempts() {
+            let mut policy = AutoResetPolicy::new(3, 100);
+            let loop_verdict = GuestHealth::CrashLoop(CrashLoopSubsystem::VaultUnseal);
+            let mut t = 0u64;
+            assert_eq!(
+                policy.consult(loop_verdict, t),
+                AutoResetDecision::Reset { attempt: 1 }
+            );
+            // After attempt 1: 100s backoff.
+            t += 99;
+            assert_eq!(policy.consult(loop_verdict, t), AutoResetDecision::Wait);
+            t += 1;
+            assert_eq!(
+                policy.consult(loop_verdict, t),
+                AutoResetDecision::Reset { attempt: 2 }
+            );
+            // After attempt 2: 200s backoff (doubled).
+            t += 199;
+            assert_eq!(policy.consult(loop_verdict, t), AutoResetDecision::Wait);
+            t += 1;
+            assert_eq!(
+                policy.consult(loop_verdict, t),
+                AutoResetDecision::Reset { attempt: 3 }
+            );
+        }
+
+        /// AUTO-RESET: a `Healthy` recovery clears the attempt budget (a NEW
+        /// loop later gets fresh attempts), but `Starting` does NOT — the
+        /// guest is always `starting` right after a reset, and treating that
+        /// as recovery would un-bound the loop.
+        #[test]
+        fn auto_reset_budget_clears_on_healthy_not_on_starting() {
+            let mut policy = AutoResetPolicy::new(1, 100);
+            let loop_verdict = GuestHealth::CrashLoop(CrashLoopSubsystem::Guest);
+            let mut t = 0u64;
+            assert_eq!(
+                policy.consult(loop_verdict, t),
+                AutoResetDecision::Reset { attempt: 1 }
+            );
+            // Post-reset bring-up: Starting must NOT restore the budget.
+            t += 50;
+            assert_eq!(
+                policy.consult(GuestHealth::Starting, t),
+                AutoResetDecision::NotTripped
+            );
+            t += 50;
+            assert_eq!(
+                policy.consult(loop_verdict, t),
+                AutoResetDecision::Defer,
+                "cap of 1 exhausted; Starting must not have cleared it"
+            );
+            // A genuine Healthy recovery clears the budget.
+            t += 100;
+            assert_eq!(
+                policy.consult(GuestHealth::Healthy, t),
+                AutoResetDecision::NotTripped
+            );
+            assert_eq!(policy.attempts(), 0);
+            t += 100;
+            assert_eq!(
+                policy.consult(loop_verdict, t),
+                AutoResetDecision::Reset { attempt: 1 },
+                "a fresh loop after recovery gets a fresh budget"
+            );
+        }
+
+        /// AUTO-RESET: non-tripped verdicts never grant a reset.
+        #[test]
+        fn auto_reset_never_fires_without_a_tripped_verdict() {
+            let mut policy = AutoResetPolicy::with_defaults();
+            for verdict in [GuestHealth::Healthy, GuestHealth::Starting] {
+                assert_eq!(
+                    policy.consult(verdict, 1_000),
+                    AutoResetDecision::NotTripped
+                );
+            }
+            assert_eq!(policy.attempts(), 0);
         }
     }
 }

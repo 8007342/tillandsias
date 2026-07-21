@@ -46,6 +46,12 @@ pub mod ids {
     pub const SEPARATOR: &str = "---";
     pub const GITHUB_LOGIN: &str = "github-login";
     pub const VERSION: &str = "version";
+    /// Intentional EPHEMERAL RESET (windows-260717-4): one-click wipe +
+    /// reprovision of the guest. Destructive by design — the guest+vault are
+    /// disposable; state of value lives in the cloud and the only cost is one
+    /// re-authentication. Always visible (Quit-adjacent footer leaf) so a
+    /// wedged guest can be recovered even when nothing else in the menu works.
+    pub const RESET_GUEST: &str = "reset-guest";
     pub const QUIT: &str = "quit";
 
     // Legacy global-picker IDs — no longer emitted by `build()` but kept so
@@ -386,21 +392,23 @@ fn truncate_80(s: &str) -> String {
 /// `{~/src, Cloud}` is emitted, never both — matching the Linux golden.
 /// Agent selection lives inside each per-project submenu, not at top level.
 ///
-/// Logged **out** (collapsed) — 5 items:
+/// Logged **out** (collapsed) — 6 items:
 /// 1. `status` — disabled, current status line
 /// 2. `github-login` — `🔑 GitHub Login` leaf (or `📋 Setting up…` if not ready)
 /// 3. `---` — separator
 /// 4. `version` — disabled footer
-/// 5. `quit`
+/// 5. `reset-guest` — `♻️ Reset Guest…` (always enabled; windows-260717-4)
+/// 6. `quit`
 ///
-/// Logged **in** (expanded) — 6 items:
+/// Logged **in** (expanded) — 7 items:
 /// 1. `status`
 /// 2. `local-projects` — submenu of `~/src` entries; each project has
 ///    Claude / Codex / OpenCode / OpenCode Web / Observatorium / Maintenance
 /// 3. `cloud-projects` — submenu capped at `MAX_CLOUD_PROJECTS_IN_MENU` + overflow
 /// 4. `---` — separator
 /// 5. `version` — disabled footer
-/// 6. `quit`
+/// 6. `reset-guest` — `♻️ Reset Guest…` (always enabled; windows-260717-4)
+/// 7. `quit`
 ///
 /// @trace spec:host-shell-architecture, spec:windows-native-tray, spec:macos-native-tray
 pub fn build(state: &MenuState) -> MenuStructure {
@@ -445,8 +453,15 @@ pub fn build(state: &MenuState) -> MenuStructure {
         ver_str.push_str(" (Update Pending)");
     }
 
-    // (4) Footer.
+    // (4) Footer. Reset Guest sits Quit-adjacent and is ALWAYS enabled —
+    //     it is the designed recovery affordance for a wedged guest, so it
+    //     must never itself be gated on the guest being healthy
+    //     (windows-260717-4; ephemeral doctrine: destructive ok, one re-auth).
     items.push(MenuItem::disabled(ids::VERSION, ver_str, "informational"));
+    items.push(MenuItem::leaf(
+        ids::RESET_GUEST,
+        "\u{267B}\u{FE0F} Reset Guest\u{2026}",
+    ));
     items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
 
     MenuStructure::Ready { items }
@@ -648,10 +663,11 @@ mod tests {
             other => panic!("expected MenuStructure::Ready, got {other:?}"),
         };
 
-        // status + local + cloud + separator + version + quit = 6 top-level items.
+        // status + local + cloud + separator + version + reset-guest + quit
+        // = 7 top-level items (reset-guest added by windows-260717-4).
         assert_eq!(
             items.len(),
-            6,
+            7,
             "top-level item count (authenticated, Linux parity)"
         );
 
@@ -664,6 +680,7 @@ mod tests {
                 ids::CLOUD_PROJECTS,
                 ids::SEPARATOR,
                 ids::VERSION,
+                ids::RESET_GUEST,
                 ids::QUIT,
             ],
             "top-level IDs must follow the Linux-parity contract",
@@ -754,6 +771,7 @@ mod tests {
                 ids::GITHUB_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
+                ids::RESET_GUEST,
                 ids::QUIT
             ],
             "logged-out menu must collapse to the login-gated short list",
@@ -791,6 +809,7 @@ mod tests {
                 ids::GITHUB_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
+                ids::RESET_GUEST,
                 ids::QUIT
             ],
             "logged-out menu must still collapse to the short list",
@@ -978,5 +997,36 @@ mod tests {
                 .iter()
                 .all(|c| c.id != ids::CLOUD_PROJECTS_OVERFLOW)
         );
+    }
+
+    /// windows-260717-4: the intentional ephemeral-reset affordance is an
+    /// ALWAYS-enabled, Quit-adjacent leaf in every auth state — a wedged
+    /// guest must be recoverable from the menu no matter what else is broken.
+    #[test]
+    fn reset_guest_leaf_always_present_and_enabled() {
+        for login in [
+            GithubLoginState::LoggedOut,
+            GithubLoginState::LoggedIn { handle: "u".into() },
+        ] {
+            let state = MenuState {
+                login,
+                ..MenuState::initial()
+            };
+            let items = match build(&state) {
+                MenuStructure::Ready { items } => items,
+                other => panic!("expected Ready, got {other:?}"),
+            };
+            let reset = items
+                .iter()
+                .find(|i| i.id == ids::RESET_GUEST)
+                .expect("reset-guest leaf must be present in every auth state");
+            assert!(reset.enabled, "reset-guest must never be gated/disabled");
+            assert!(reset.children.is_empty(), "reset-guest is a leaf");
+            assert!(reset.label.contains("Reset Guest"));
+            // Quit-adjacent: immediately before the quit item.
+            let reset_idx = items.iter().position(|i| i.id == ids::RESET_GUEST).unwrap();
+            let quit_idx = items.iter().position(|i| i.id == ids::QUIT).unwrap();
+            assert_eq!(reset_idx + 1, quit_idx, "reset-guest sits right above Quit");
+        }
     }
 }

@@ -252,9 +252,10 @@ mod tests {
                 ids::CLOUD_PROJECTS,
                 ids::SEPARATOR,
                 ids::VERSION,
+                ids::RESET_GUEST,
                 ids::QUIT,
             ],
-            "macOS authed Ready menu must match the 6-item Linux parity contract"
+            "macOS authed Ready menu must match the 7-item Linux parity contract"
         );
         assert!(
             !top_ids.contains(&ids::GITHUB_LOGIN),
@@ -291,6 +292,7 @@ mod tests {
                 ids::GITHUB_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
+                ids::RESET_GUEST,
                 ids::QUIT
             ],
             "logged-out macOS menu must collapse to the login-gated short list (F3)"

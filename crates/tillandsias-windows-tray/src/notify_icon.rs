@@ -394,6 +394,12 @@ pub fn run() -> ! {
             if RETRY_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
                 spawn_provisioning(hwnd);
             }
+            // Same shape for `Reset Guest…` (windows-260717-4): the click (or
+            // the bounded auto-reset policy) sets the flag; the wipe +
+            // reprovision task spawns here in the LocalSet context.
+            if RESET_GUEST_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                spawn_guest_reset(hwnd);
+            }
             // Cooperative tokio drain.
             tokio::task::yield_now().await;
         }
@@ -712,6 +718,10 @@ pub fn help_text() -> String {
             (no flags)              Launch the interactive tray (GUI subsystem).\n    \
             --provision-once        Provision the WSL utility VM to Ready, print\n                            \
             progress, exit. Exit: 0 = Ready, 1 = failed.\n    \
+            --reset-guest           EPHEMERAL RESET: wipe the guest (wsl --unregister,\n                            \
+            deleting the VHDX + in-VM vault) and reprovision from scratch.\n                            \
+            Destructive by design; you'll re-authenticate once. Exit: 0 = Ready,\n                            \
+            1 = failed.\n    \
             --status-once [--json]  Connect to the live control wire, print VmStatus.\n                            \
             Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
             --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
@@ -792,6 +802,69 @@ pub fn provision_once() -> i32 {
             Err(err) => {
                 eprintln!("[provision] RESULT: FAILED \u{2014} {err}");
                 tracing::error!(%err, "provision-once failed");
+                1
+            }
+        }
+    })
+}
+
+/// `--reset-guest` CLI verb (windows-260717-4): intentional EPHEMERAL RESET —
+/// wipe the guest (bounded stop + `wsl --unregister`, deleting the VHDX and
+/// the in-VM vault) and reprovision from scratch through the exact same
+/// recipe path `--provision-once` exercises, then exit. Exit codes mirror
+/// `--provision-once`: 0 = VM reached Ready over the control wire, 1 = failed.
+/// Destructive by design: everything lives in the cloud; the only cost is one
+/// re-authentication.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+pub fn reset_guest_once() -> i32 {
+    struct ConsoleProgress;
+    impl ProvisionProgress for ConsoleProgress {
+        fn report_phase(&self, phase: ProvisionPhase) {
+            println!("[reset-guest] phase: {}", phase.status_text());
+            tracing::info!(?phase, "reset-guest provision phase");
+        }
+        fn report_message(&self, message: &str) {
+            println!("[reset-guest] {message}");
+        }
+    }
+
+    init_tracing();
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(err) => {
+            eprintln!("[reset-guest] failed to build tokio runtime: {err}");
+            return 1;
+        }
+    };
+    println!(
+        "[reset-guest] This discards the local guest and its cached credentials. \
+         Everything lives in the cloud \u{2014} you'll re-authenticate once."
+    );
+    runtime.block_on(async {
+        let lifecycle = WslLifecycle::new();
+        if let Err(err) = lifecycle.wipe_guest().await {
+            eprintln!("[reset-guest] RESULT: FAILED \u{2014} wipe: {err}");
+            tracing::error!(%err, "reset-guest wipe failed");
+            return 1;
+        }
+        reset_crashloop_state();
+        println!("[reset-guest] guest wiped \u{2014} reprovisioning from scratch\u{2026}");
+        match lifecycle
+            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
+            .await
+        {
+            Ok(()) => {
+                println!("[reset-guest] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                tracing::info!("reset-guest: VM Ready after wipe+reprovision");
+                0
+            }
+            Err(err) => {
+                eprintln!("[reset-guest] RESULT: FAILED \u{2014} reprovision: {err}");
+                tracing::error!(%err, "reset-guest reprovision failed");
                 1
             }
         }
@@ -1242,6 +1315,27 @@ static CRASH_LOOP_DETECTOR: std::sync::LazyLock<
 static CRASH_LOOP_NOTIFIED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// Bounded auto-reset policy (windows-260717-4 exit criterion 3): consulted on
+/// every crash-loop-tripped observation when `TILLANDSIAS_AUTO_RESET_GUEST=1`.
+/// The cap/backoff state machine lives in control-wire (cross-platform by
+/// design — macOS consumes the identical policy); this static is just the
+/// per-process instance. In-memory only: the policy guards against the GUEST
+/// looping while the tray lives, and a tray restart granting a fresh budget is
+/// acceptable (each budget is itself bounded).
+static AUTO_RESET_POLICY: std::sync::LazyLock<
+    Mutex<tillandsias_control_wire::crashloop::AutoResetPolicy>,
+> = std::sync::LazyLock::new(|| {
+    Mutex::new(tillandsias_control_wire::crashloop::AutoResetPolicy::with_defaults())
+});
+
+/// Opt-in gate for the automatic ephemeral reset. Default OFF: the manual
+/// affordances (tray `Reset Guest…` + `--reset-guest`) are always available,
+/// and an automatic destructive action must be an explicit operator choice
+/// until the live e2e smoke pass validates the full loop on a real host.
+fn auto_reset_enabled() -> bool {
+    std::env::var("TILLANDSIAS_AUTO_RESET_GUEST").is_ok_and(|v| v == "1")
+}
+
 fn unix_now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1296,6 +1390,34 @@ fn note_crashloop_observation(
         }
     } else {
         CRASH_LOOP_NOTIFIED.store(false, SeqCst);
+    }
+    // Bounded AUTO-RESET (windows-260717-4, opt-in): consult the shared
+    // cap/backoff policy on every observation — Healthy clears the budget,
+    // a tripped verdict may grant an attempt. A granted attempt rides the
+    // EXACT same request flag as the manual menu click, so the wipe +
+    // reprovision path is identical; after the cap the policy defers
+    // forever (the Error balloon above already points at the manual reset).
+    if auto_reset_enabled()
+        && let Ok(mut policy) = AUTO_RESET_POLICY.lock()
+    {
+        use tillandsias_control_wire::crashloop::AutoResetDecision;
+        match policy.consult(verdict, unix_now_secs()) {
+            AutoResetDecision::Reset { attempt } => {
+                tracing::warn!(
+                    attempt,
+                    verdict = %verdict,
+                    "auto-reset: crash-loop tripped — requesting ephemeral guest reset"
+                );
+                RESET_GUEST_REQUESTED.store(true, SeqCst);
+            }
+            AutoResetDecision::Defer => {
+                tracing::warn!(
+                    verdict = %verdict,
+                    "auto-reset: attempt cap exhausted — deferring to the manual reset affordance"
+                );
+            }
+            AutoResetDecision::Wait | AutoResetDecision::NotTripped => {}
+        }
     }
 }
 
@@ -2495,6 +2617,90 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FAST_POLL_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(5);
 
+/// Set by the `Reset Guest…` menu click (or the bounded auto-reset policy)
+/// and drained by the message loop, which spawns the wipe+reprovision task in
+/// the LocalSet context — the exact mirror of `RETRY_REQUESTED` so both
+/// affordances share the same click→flag→LocalSet-spawn shape.
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+static RESET_GUEST_REQUESTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// True while a wipe+reprovision reset task is in flight; a repeat request is
+/// a no-op until it settles.
+static RESET_GUEST_ACTIVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// A freshly-wiped guest has a fresh history: clear the live crash-loop
+/// detector AND its persisted state file so `--diagnose` returns to
+/// `starting` (the old loop died with the old guest), and re-arm the balloon
+/// edge-trigger so a loop on the NEW guest toasts again.
+fn reset_crashloop_state() {
+    if let Ok(mut det) = CRASH_LOOP_DETECTOR.lock() {
+        *det = tillandsias_control_wire::crashloop::CrashLoopDetector::with_defaults();
+        if let Err(e) = det.save(&crashloop_state_path()) {
+            tracing::debug!(error = %e, "could not persist cleared crash-loop state");
+        }
+    }
+    CRASH_LOOP_NOTIFIED.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Intentional EPHEMERAL RESET (windows-260717-4): wipe the guest (bounded
+/// stop + `wsl --unregister`, deleting the VHDX and the in-VM vault with it)
+/// and reprovision from scratch through the exact same
+/// `provision_via_recipe` first-provision path the tray always uses — which
+/// initializes vault cleanly, re-establishes the control wire, and reports
+/// progress on the status chip. Destructive by design; the honest-UX balloon
+/// states the designed cost (one re-authentication).
+///
+/// Known benign interplay: the previous provisioning task (parked holding a
+/// keepalive after a successful earlier provision) is not cancellable and
+/// keeps supervising its keepalive across the wipe. Its child dies with the
+/// unregistered distro, and the ORDER-417-bounded supervisor either
+/// re-attaches once the fresh import registers the same distro name again or
+/// gives up after its cap — either way bounded, never a loop.
+fn spawn_guest_reset(hwnd: HWND) {
+    use std::sync::atomic::Ordering::SeqCst;
+    if RESET_GUEST_ACTIVE.swap(true, SeqCst) {
+        tracing::info!("guest reset already in flight; ignoring (re)trigger");
+        return;
+    }
+    tracing::info!("ephemeral guest reset requested — wiping + reprovisioning from scratch");
+    update_status_text("\u{267B}\u{FE0F} Resetting guest\u{2026}", hwnd);
+    show_balloon(
+        hwnd,
+        "Tillandsias — resetting the guest",
+        "This discards the local guest and its cached credentials. Everything \
+         lives in the cloud — you'll re-authenticate once.",
+        BalloonSeverity::Info,
+    );
+    let lifecycle = WslLifecycle::new();
+    tokio::task::spawn_local(async move {
+        match lifecycle.wipe_guest().await {
+            Ok(()) => {
+                reset_crashloop_state();
+                // The wiped guest invalidates every derived surface: force the
+                // reprovision gate open (a prior successful provision left it
+                // set) and reprovision through the shared first-provision path.
+                PROVISIONING_ACTIVE.store(false, SeqCst);
+                RESET_GUEST_ACTIVE.store(false, SeqCst);
+                tracing::info!("guest wipe complete — reprovisioning from scratch");
+                spawn_provisioning(hwnd);
+            }
+            Err(err) => {
+                tracing::error!(%err, "guest wipe failed — reset aborted");
+                update_status_text("\u{1F534} Guest reset failed", hwnd);
+                show_balloon(
+                    hwnd,
+                    "Tillandsias — guest reset failed",
+                    &err,
+                    BalloonSeverity::Error,
+                );
+                RESET_GUEST_ACTIVE.store(false, SeqCst);
+            }
+        }
+    });
+}
+
 /// True while a provisioning task is running or has succeeded (and is parked
 /// holding the VM keepalive). Guards `spawn_provisioning` so a `Retry` while
 /// provisioning is already in flight — or already Ready — is a no-op; it's
@@ -3044,6 +3250,16 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         MenuAction::OpenLog => {
             tracing::info!(log = %log_file_path().display(), "opening tray log in Explorer");
             open_log_file();
+        }
+        // Intentional EPHEMERAL RESET (windows-260717-4). Mirrors Retry's
+        // click→flag shape: the wndproc only sets the flag; the message loop
+        // drains it and spawns the wipe+reprovision task in the LocalSet
+        // context. Unlike Retry there is NO PROVISIONING_ACTIVE gate — a
+        // reset is valid (and most useful) while the guest is wedged-Ready.
+        MenuAction::ResetGuest => {
+            tracing::info!("reset guest requested from the tray menu");
+            RESET_GUEST_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
+            update_status_text("\u{267B}\u{FE0F} Resetting guest\u{2026}", hwnd);
         }
         // Attach / Maintain / GitHub-login all open an in-VM PTY. `intent_for_action`
         // picks the `PtyIntent`; `launch_spec` produces the exact forge-wrapped in-VM

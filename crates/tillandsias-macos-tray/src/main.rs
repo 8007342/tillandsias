@@ -102,6 +102,9 @@ fn main() {
              FLAGS:\n    \
              (no flags)    Launch the menu-bar tray and auto-boot the VM\n    \
              --provision   Provision the VM disk from the manifest, then exit\n    \
+             --reset-guest EPHEMERAL RESET: wipe the guest disk (and with it the\n                  \
+             in-VM vault) and reprovision from scratch. Destructive by design;\n                  \
+             you'll re-authenticate once\n    \
              --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
              the control wire, print its output + exit, then stop\n    \
              --github-login  Boot the VM and log in to GitHub in the guest;\n                  \
@@ -121,6 +124,14 @@ fn main() {
     }
     if args.iter().any(|a| a == "--provision") {
         std::process::exit(diagnose::provision_main());
+    }
+    // Intentional EPHEMERAL RESET (windows-260717-4): wipe the provisioned
+    // boot artifacts (rootfs + in-VM vault) and reprovision from scratch.
+    // Destructive by design — one re-auth is the only cost. Order-277 gated:
+    // never wipes the disk out from under a running tray's VM.
+    if args.iter().any(|a| a == "--reset-guest") {
+        require_no_live_tray("--reset-guest");
+        std::process::exit(diagnose::reset_guest_main());
     }
     // Headless guest-exec smoke: boot the provisioned VM, run a command in the
     // guest over the control wire (VzRuntime::exec path), print its output +
@@ -257,6 +268,9 @@ mod tests {
                 "--transport-conformance",
                 "diagnose::transport_conformance_main()",
             ),
+            // windows-260717-4: the destructive reset must never wipe the
+            // disk out from under a running tray's VM.
+            ("--reset-guest", "diagnose::reset_guest_main()"),
         ] {
             let guard_call = format!("require_no_live_tray(\"{mode}\")");
             let g = source
@@ -293,6 +307,54 @@ mod tests {
         assert!(
             source.contains("Guest health:"),
             "--diagnose must print the guest-health verdict line"
+        );
+    }
+
+    /// Intentional EPHEMERAL RESET wiring pin (windows-260717-4). The macOS
+    /// bodies are `cfg(target_os = "macos")` and cannot be type-checked on
+    /// the Linux dev box, so this platform-independent source-scan keeps the
+    /// load-bearing hooks from silently regressing on any host: the menu
+    /// dispatch arm, the stop→wipe→reboot worker, the crash-loop history
+    /// clear, and the CLI verb.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn reset_guest_wiring_is_present() {
+        let action_host = include_str!("action_host.rs");
+        // 1. The shared-menu click routes to the reset worker.
+        assert!(
+            action_host.contains("MenuAction::ResetGuest => {"),
+            "dispatch_menu_action must handle MenuAction::ResetGuest"
+        );
+        assert!(
+            action_host.contains("pub fn reset_guest_async(&self)"),
+            "the stop→wipe→reboot worker must exist"
+        );
+        // 2. The wipe uses the shared vm-layer primitive (tested on Linux).
+        assert!(
+            action_host.contains("wipe_provisioned_artifacts()"),
+            "the reset must call VzRuntime::wipe_provisioned_artifacts"
+        );
+        // 3. A fresh guest clears the persisted crash-loop history.
+        assert!(
+            action_host.contains("remove_file(crate::diagnose::crashloop_state_path())"),
+            "the reset must clear the persisted crash-loop state"
+        );
+        // 4. The reboot re-enters the SAME boot path a first launch uses.
+        assert!(
+            action_host.contains("boot_vm_async(\"Reset guest\")"),
+            "the reset must re-enter boot_vm_async after the wipe"
+        );
+        // 5. The CLI verb exists and main dispatches it.
+        let diagnose = include_str!("diagnose.rs");
+        assert!(
+            diagnose.contains("pub fn reset_guest_main()"),
+            "--reset-guest CLI mode must exist"
+        );
+        let main_src = include_str!("main.rs");
+        assert!(
+            main_src.contains("diagnose::reset_guest_main()"),
+            "main must dispatch --reset-guest"
         );
     }
 }

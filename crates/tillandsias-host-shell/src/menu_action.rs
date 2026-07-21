@@ -39,6 +39,11 @@ impl ProjectScope {
 pub enum MenuAction {
     Quit,
     GithubLogin,
+    /// Intentional EPHEMERAL RESET (windows-260717-4): wipe the guest
+    /// (unregister the WSL distro / delete the VZ boot artifacts / tear down
+    /// the podman enclave) and reprovision from scratch. Destructive by
+    /// design; the only cost is one re-authentication.
+    ResetGuest,
     /// Per-project attach with an explicit agent (from the per-project submenu).
     Attach {
         scope: ProjectScope,
@@ -79,6 +84,7 @@ pub fn resolve(id: &str) -> MenuAction {
     match id {
         ids::QUIT => MenuAction::Quit,
         ids::GITHUB_LOGIN => MenuAction::GithubLogin,
+        ids::RESET_GUEST => MenuAction::ResetGuest,
         // Legacy global-picker IDs — still handled for backward compat.
         ids::OBSERVATORIUM => MenuAction::OpenObservatorium,
         ids::OPENCODE_WEB => MenuAction::OpenOpenCodeWeb,
@@ -193,6 +199,8 @@ mod tests {
     fn resolves_static_ids() {
         assert_eq!(resolve(ids::QUIT), MenuAction::Quit);
         assert_eq!(resolve(ids::GITHUB_LOGIN), MenuAction::GithubLogin);
+        // windows-260717-4: the ephemeral-reset leaf resolves for every tray.
+        assert_eq!(resolve(ids::RESET_GUEST), MenuAction::ResetGuest);
         assert_eq!(resolve(ids::OBSERVATORIUM), MenuAction::OpenObservatorium);
         assert_eq!(resolve(ids::OPENCODE_WEB), MenuAction::OpenOpenCodeWeb);
         assert_eq!(

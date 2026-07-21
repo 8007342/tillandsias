@@ -74,6 +74,12 @@ fn main() {
     if std::env::args().any(|a| a == "--provision-once") {
         std::process::exit(notify_icon::provision_once());
     }
+    // Intentional EPHEMERAL RESET (windows-260717-4): wipe the guest and
+    // reprovision from scratch. Destructive by design — one re-auth is the
+    // only cost.
+    if std::env::args().any(|a| a == "--reset-guest") {
+        std::process::exit(notify_icon::reset_guest_once());
+    }
     if std::env::args().any(|a| a == "--status-once") {
         let format = if std::env::args().any(|a| a == "--json") {
             notify_icon::DiagnoseFormat::Json
@@ -184,6 +190,64 @@ mod tests {
         assert!(
             src.contains("Tillandsias: guest crash-loop"),
             "a crash-loop must raise the top-priority Error balloon"
+        );
+    }
+
+    /// Intentional EPHEMERAL RESET wiring pin (windows-260717-4). The Windows
+    /// bodies are `cfg(target_os = "windows")` and cannot be type-checked on
+    /// the Linux dev box, so this platform-independent source-scan keeps the
+    /// load-bearing hooks from silently regressing on any host: the menu
+    /// click / auto-reset flag, the message-loop drain, the wipe primitive,
+    /// the reprovision hand-off, and the CLI verb.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn reset_guest_wiring_is_present() {
+        let notify = include_str!("notify_icon.rs");
+        // 1. The menu click sets the request flag (mirrors Retry's shape).
+        assert!(
+            notify.contains("MenuAction::ResetGuest => {"),
+            "dispatch_action must handle MenuAction::ResetGuest"
+        );
+        // 2. The message loop drains the flag into the LocalSet spawn.
+        assert!(
+            notify.contains("RESET_GUEST_REQUESTED.swap(false"),
+            "the message loop must drain RESET_GUEST_REQUESTED"
+        );
+        assert!(
+            notify.contains("fn spawn_guest_reset("),
+            "the wipe+reprovision task spawner must exist"
+        );
+        // 3. The wipe hands off to the SAME first-provision path.
+        assert!(
+            notify.contains("wipe_guest().await"),
+            "the reset must call the WslLifecycle wipe primitive"
+        );
+        // 4. A fresh guest clears the crash-loop history for --diagnose.
+        assert!(
+            notify.contains("fn reset_crashloop_state()"),
+            "a wiped guest must clear persisted crash-loop state"
+        );
+        // 5. The bounded auto-reset policy is consulted (opt-in).
+        assert!(
+            notify.contains("AutoResetDecision::Reset { attempt }"),
+            "the bounded auto-reset policy must be consulted on observations"
+        );
+        // 6. The CLI verb exists and main dispatches it.
+        assert!(
+            notify.contains("pub fn reset_guest_once()"),
+            "--reset-guest CLI mode must exist"
+        );
+        let main_src = include_str!("main.rs");
+        assert!(
+            main_src.contains("notify_icon::reset_guest_once()"),
+            "main must dispatch --reset-guest"
+        );
+
+        let wsl = include_str!("wsl_lifecycle.rs");
+        assert!(
+            wsl.contains("pub async fn wipe_guest("),
+            "WslLifecycle must expose the user-invokable wipe primitive"
         );
     }
 }

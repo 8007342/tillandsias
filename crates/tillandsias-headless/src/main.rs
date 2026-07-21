@@ -152,6 +152,10 @@ fn main() {
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
+    // Intentional EPHEMERAL RESET (windows-260717-4): wipe the podman guest
+    // substrate (vault + enclave containers/volumes/secrets/networks — NOT
+    // the inference model cache) and re-initialize from scratch.
+    let reset_guest = user_args.iter().any(|a| a == "--reset-guest");
 
     // @trace spec:enclave-service-catalog
     // `--publish-local <project>` — order 364 e2e closure: bring up the
@@ -486,6 +490,19 @@ fn main() {
         return;
     }
 
+    // Intentional EPHEMERAL RESET (windows-260717-4): the Linux `podman
+    // equivalent` of the Windows `wsl --unregister` + reprovision. Wipes the
+    // guest substrate (vault + enclave), then re-runs the same init + vault
+    // bring-up path a fresh install uses.
+    // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    if reset_guest {
+        if let Err(e) = run_reset_guest(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
     if init {
         if let Err(e) = run_init(debug, force) {
             eprintln!("Error: {}", e);
@@ -794,6 +811,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --antigravity-login [--debug]");
     println!("       tillandsias --cache-verify [--debug]");
     println!("       tillandsias --cache-clear [--debug]");
+    println!("       tillandsias --reset-guest [--debug]");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
     println!("       tillandsias --claude <project> [--debug|--diagnostics]");
@@ -822,6 +840,11 @@ fn print_usage(version: &str) {
     println!("  --force        Rebuild all images even if cached (use with --init)");
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
+    println!(
+        "  --reset-guest  EPHEMERAL RESET: wipe the guest substrate (vault + enclave \
+         containers/volumes/secrets; keeps the model cache) and re-initialize. \
+         Destructive by design; you'll re-authenticate once"
+    );
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
@@ -5795,6 +5818,195 @@ fn run_cache_clear(debug: bool) -> Result<(), String> {
         println!("\nNext --init will rebuild all images from scratch.");
     }
 
+    Ok(())
+}
+
+// ────────────────── intentional EPHEMERAL RESET (windows-260717-4) ──────────
+//
+// The Linux `podman equivalent` of the Windows `wsl --unregister` +
+// reprovision: wipe the guest substrate — every tillandsias container, the
+// tillandsias volumes/secrets (vault unseal + TLS material, git mirrors), the
+// enclave/egress networks, and the host-side vault-data directory — then
+// re-run the exact same `--init` + vault bring-up path a fresh install uses.
+// Fresh first-provision initializes vault cleanly (windows-260717-2 bites only
+// on re-ensure), so a reset always yields a working vault.
+//
+// SCOPE (operator doctrine): the guest + vault are disposable; the inference
+// MODEL CACHE (`~/.cache/tillandsias/models`) and the locally-built images are
+// NOT part of the guest and are deliberately preserved — re-downloading models
+// / rebuilding images is expensive and carries no credential state. Pinned by
+// the `reset_guest_*` unit tests below.
+//
+// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+
+/// Fail-safe gate for the destructive reset. The reset is destructive BY
+/// DESIGN (the operator's ephemeral doctrine) so unset/1 permits it with no
+/// extra ceremony; an explicit `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` (harness
+/// policy: plan/archive/podman-reset-harness-policy-2026-06-16.md) refuses
+/// loudly instead of silently proceeding.
+fn destructive_reset_allowed() -> bool {
+    std::env::var("TILLANDSIAS_DESTRUCTIVE_RESET_OK").map_or(true, |v| v != "0")
+}
+
+/// Pure scope filter: which podman object names (containers/volumes/secrets)
+/// belong to the Tillandsias guest substrate. Everything the stack creates is
+/// `tillandsias-` prefixed (vault, proxy, git-*, *-forge, *-web, mirror
+/// volumes, unseal/TLS/CA secrets); anything else on the host is untouched.
+fn reset_guest_scope(names: &[String]) -> Vec<String> {
+    names
+        .iter()
+        .filter(|n| n.starts_with("tillandsias-"))
+        .cloned()
+        .collect()
+}
+
+/// The networks the reset tears down: exactly the enclave + egress bridges.
+fn reset_guest_network_scope(names: &[String]) -> Vec<String> {
+    names
+        .iter()
+        .filter(|n| n.as_str() == ENCLAVE_NET || n.as_str() == EGRESS_NET)
+        .cloned()
+        .collect()
+}
+
+/// Host-side directories the reset deletes under the init cache dir. ONLY
+/// `vault-data` (the vault storage backend) — never `models` (the inference
+/// model cache, explicitly out of the ephemeral doctrine's scope) and never
+/// the cache dir itself.
+fn reset_guest_wipe_paths(cache_dir: &Path) -> Vec<PathBuf> {
+    vec![cache_dir.join("vault-data")]
+}
+
+/// Enumerate podman object names via `--format {{.Names}}`/`{{.Name}}`.
+/// Best-effort: an unreachable podman yields an empty list (the reset then
+/// only wipes host-side state — still an honest partial reset, reported).
+fn podman_name_list(args: &[&str], debug: bool) -> Vec<String> {
+    let mut command = podman_command();
+    command.args(args);
+    match command.output() {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect(),
+        Ok(out) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] reset-guest: podman {} exited with {}",
+                    args.join(" "),
+                    out.status
+                );
+            }
+            Vec::new()
+        }
+        Err(e) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] reset-guest: podman {} failed to spawn: {e}",
+                    args.join(" ")
+                );
+            }
+            Vec::new()
+        }
+    }
+}
+
+/// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the
+/// same end state as a pristine `--init` + vault bring-up, with every prior
+/// guest credential discarded (the honest UX: you'll re-authenticate once).
+fn run_reset_guest(debug: bool) -> Result<(), String> {
+    if !destructive_reset_allowed() {
+        return Err(
+            "guest reset refused: TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 forbids destructive \
+             resets in this environment. Unset it (or set it to 1) to proceed."
+                .to_string(),
+        );
+    }
+    eprintln!(
+        "[tillandsias] EPHEMERAL RESET: this discards the local guest (containers, vault, \
+         cached credentials). Everything lives in the cloud \u{2014} you'll re-authenticate once."
+    );
+
+    // 1. Containers (vault, proxy, git services, forges, web) — force-remove
+    //    with a bounded stop. Tolerant per-name: a concurrently-vanished
+    //    container must not abort the wipe.
+    for name in reset_guest_scope(&podman_name_list(
+        &["ps", "-a", "--format", "{{.Names}}"],
+        debug,
+    )) {
+        let mut command = podman_command();
+        command.args(["rm", "-f", "-t", "10", &name]);
+        if let Err(e) = run_command(command, debug) {
+            eprintln!("[tillandsias] reset-guest: could not remove container {name}: {e}");
+        }
+    }
+
+    // 2. Volumes (git mirrors, tool caches inside the enclave scope).
+    for name in reset_guest_scope(&podman_name_list(
+        &["volume", "ls", "--format", "{{.Name}}"],
+        debug,
+    )) {
+        let mut command = podman_command();
+        command.args(["volume", "rm", "-f", &name]);
+        if let Err(e) = run_command(command, debug) {
+            eprintln!("[tillandsias] reset-guest: could not remove volume {name}: {e}");
+        }
+    }
+
+    // 3. Secrets (vault unseal share + TLS material, CA, github token) —
+    //    the credential-discard half of the ephemeral doctrine.
+    for name in reset_guest_scope(&podman_name_list(
+        &["secret", "ls", "--format", "{{.Name}}"],
+        debug,
+    )) {
+        let mut command = podman_command();
+        command.args(["secret", "rm", &name]);
+        if let Err(e) = run_command(command, debug) {
+            eprintln!("[tillandsias] reset-guest: could not remove secret {name}: {e}");
+        }
+    }
+
+    // 4. Networks (enclave + egress bridges; containers are gone by now).
+    for name in reset_guest_network_scope(&podman_name_list(
+        &["network", "ls", "--format", "{{.Name}}"],
+        debug,
+    )) {
+        let mut command = podman_command();
+        command.args(["network", "rm", "-f", &name]);
+        if let Err(e) = run_command(command, debug) {
+            eprintln!("[tillandsias] reset-guest: could not remove network {name}: {e}");
+        }
+    }
+
+    // 5. Host-side vault storage (the data behind the vault container).
+    let cache_dir = init_cache_dir()?;
+    for path in reset_guest_wipe_paths(&cache_dir) {
+        if path.exists() {
+            fs::remove_dir_all(&path)
+                .map_err(|e| format!("failed to remove {}: {e}", path.display()))?;
+        }
+    }
+
+    eprintln!("[tillandsias] guest substrate wiped \u{2014} re-initializing from scratch\u{2026}");
+
+    // 6. Reprovision through the exact same first-provision path `--init`
+    //    uses (images are preserved, so this is fast when they still exist).
+    run_init(debug, false)?;
+    #[cfg(feature = "vault")]
+    if std::env::var_os("LITMUS_PODMAN_MODE").is_some() {
+        // Litmus/fake mode — no Vault container to bring up.
+    } else {
+        vault_bootstrap::ensure_vault_running(debug)?;
+    }
+    #[cfg(not(feature = "vault"))]
+    if debug {
+        eprintln!("[tillandsias] vault feature not compiled; reset finished without Vault");
+    }
+
+    eprintln!(
+        "[tillandsias] guest reset complete \u{2713} \u{2014} re-authenticate with \
+         --github-login (or the tray's GitHub Login) to restore cloud access."
+    );
     Ok(())
 }
 
@@ -15961,6 +16173,130 @@ mod tests {
         assert!(
             func_body.contains("overlay") && func_body.contains("no such file"),
             "classifier must check both overlay path and no-such-file signal"
+        );
+    }
+
+    // ────────── intentional EPHEMERAL RESET pins (windows-260717-4) ──────────
+
+    /// The reset touches ONLY tillandsias-prefixed podman objects: the
+    /// operator's other containers/volumes/secrets on the same host are
+    /// never in scope.
+    #[test]
+    fn reset_guest_scope_selects_only_tillandsias_objects() {
+        let names: Vec<String> = [
+            "tillandsias-vault",
+            "tillandsias-proxy",
+            "tillandsias-git-myproj",
+            "tillandsias-myproj-forge",
+            "tillandsias-mirror-myproj",
+            "tillandsias-vault-unseal",
+            "postgres-prod",
+            "totally-unrelated",
+            "vault", // someone else's vault — NOT ours (no prefix)
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let scoped = reset_guest_scope(&names);
+        assert_eq!(
+            scoped,
+            vec![
+                "tillandsias-vault",
+                "tillandsias-proxy",
+                "tillandsias-git-myproj",
+                "tillandsias-myproj-forge",
+                "tillandsias-mirror-myproj",
+                "tillandsias-vault-unseal",
+            ],
+            "only tillandsias-prefixed objects are in reset scope"
+        );
+    }
+
+    /// Network scope is exactly the enclave + egress bridges — nothing else,
+    /// notably never podman's default network.
+    #[test]
+    fn reset_guest_network_scope_is_enclave_and_egress_only() {
+        let names: Vec<String> = ["podman", ENCLAVE_NET, EGRESS_NET, "bridge0"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            reset_guest_network_scope(&names),
+            vec![ENCLAVE_NET.to_string(), EGRESS_NET.to_string()]
+        );
+    }
+
+    /// EXPLICIT exit-criterion pin: the host-side wipe removes the vault
+    /// storage dir and NEVER the inference model cache (the operator's
+    /// ephemeral doctrine covers the guest+vault, not the downloaded
+    /// models) nor the cache dir itself (build-state, images metadata).
+    #[test]
+    fn reset_guest_wipe_paths_exclude_model_cache() {
+        let cache_dir = Path::new("/home/u/.cache/tillandsias");
+        let paths = reset_guest_wipe_paths(cache_dir);
+        assert_eq!(paths, vec![cache_dir.join("vault-data")]);
+        let models = cache_dir.join("models");
+        assert!(
+            !paths.iter().any(|p| *p == models || models.starts_with(p)),
+            "the inference model cache must never be in the reset wipe set"
+        );
+        assert!(
+            !paths.iter().any(|p| p == cache_dir),
+            "the cache dir itself must never be wiped"
+        );
+    }
+
+    /// Fail-safe gate: unset/1 permits (the reset is destructive BY DESIGN),
+    /// an explicit 0 refuses. Serialized via a lock-free single-threaded
+    /// env dance — env mutation in tests is process-global, so this test
+    /// restores the prior value.
+    #[test]
+    fn reset_guest_destructive_gate_honors_opt_out() {
+        let key = "TILLANDSIAS_DESTRUCTIVE_RESET_OK";
+        let prior = std::env::var(key).ok();
+        unsafe {
+            std::env::set_var(key, "0");
+        }
+        assert!(
+            !destructive_reset_allowed(),
+            "explicit 0 must refuse the reset"
+        );
+        unsafe {
+            std::env::set_var(key, "1");
+        }
+        assert!(destructive_reset_allowed(), "explicit 1 must permit");
+        unsafe {
+            match &prior {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+
+    /// Source-shape pin: run_reset_guest re-enters the SAME first-provision
+    /// path a fresh install uses (run_init + vault bring-up) after the wipe —
+    /// the reset must never grow its own divergent provisioning flow.
+    #[test]
+    fn reset_guest_reprovisions_via_run_init() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source
+            .split("fn run_reset_guest(")
+            .nth(1)
+            .expect("run_reset_guest must exist")
+            .split("\nfn ")
+            .next()
+            .unwrap();
+        assert!(
+            body.contains("run_init(debug, false)"),
+            "run_reset_guest must reprovision via run_init"
+        );
+        assert!(
+            body.contains("ensure_vault_running(debug)"),
+            "run_reset_guest must bring vault up after the wipe"
+        );
+        assert!(
+            body.contains("destructive_reset_allowed()"),
+            "run_reset_guest must honor the destructive-reset gate"
         );
     }
 }

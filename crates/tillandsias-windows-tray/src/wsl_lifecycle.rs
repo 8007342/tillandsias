@@ -517,9 +517,41 @@ impl WslLifecycle {
         }
     }
 
+    /// Intentional EPHEMERAL RESET, wipe half (windows-260717-4): terminate
+    /// the guest (bounded graceful stop), `wsl --unregister` it — deleting
+    /// the distro, its VHDX, and with it the in-VM vault — and clear the
+    /// import-complete marker. Destructive BY DESIGN per the operator's
+    /// ephemeral doctrine ("rebuild and reprovision from scratch as needed,
+    /// destructive ok"): state of value lives in the cloud + the operator's
+    /// auth, so the only cost is one re-authentication. Callers follow up
+    /// with the exact same `provision_via_recipe` first-provision path,
+    /// which initializes vault cleanly (the windows-260717-2 regeneration
+    /// bug bites only on re-ensure, never on first init).
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    pub async fn wipe_guest(&self) -> Result<(), String> {
+        // Best-effort bounded stop first so the unregister doesn't race a
+        // live utility VM; a failed stop is logged and the unregister
+        // proceeds anyway (a wedged guest is precisely the reset use-case).
+        if let Err(e) = self.graceful_shutdown().await {
+            tracing::warn!(error = %e, "graceful stop before guest wipe failed; unregistering anyway");
+        }
+        if self.runtime.is_registered().await {
+            self.unregister_distro().await?;
+        } else {
+            tracing::info!(
+                distro = self.distro_name(),
+                "guest wipe: no registered distro — nothing to unregister"
+            );
+        }
+        let _ = tokio::fs::remove_file(Self::import_complete_marker_path()).await;
+        Ok(())
+    }
+
     /// Discard the damaged guest: `wsl --shutdown`-free targeted unregister
-    /// (deletes the distro + its VHDX). Only called after a failed integrity
-    /// probe on the ephemeral-reset doctrine.
+    /// (deletes the distro + its VHDX). Called after a failed integrity
+    /// probe (one-shot self-heal) and by the user-invoked `wipe_guest`
+    /// reset path, both on the ephemeral-reset doctrine.
     async fn unregister_distro(&self) -> Result<(), String> {
         let status = wsl_cmd()
             .args(["--unregister", self.distro_name()])

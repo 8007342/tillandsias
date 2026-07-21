@@ -1403,6 +1403,15 @@ impl TrayActionHost {
                     None,
                 );
             }
+            MenuAction::ResetGuest => {
+                // Intentional EPHEMERAL RESET (windows-260717-4): stop the
+                // running VM, delete the provisioned boot artifacts, and
+                // re-run the exact same boot path `boot_vm_async` always
+                // uses (which reprovisions from scratch when the artifacts
+                // are absent). Destructive by design — one re-auth is the
+                // only cost.
+                self.reset_guest_async();
+            }
             MenuAction::CloudOverflow | MenuAction::Inert => {
                 // Informational / overflow placeholders. No action.
             }
@@ -1601,6 +1610,95 @@ impl TrayActionHost {
                     self_handle_slot,
                 );
             }
+        });
+    }
+
+    /// Intentional EPHEMERAL RESET (windows-260717-4): stop the running VM
+    /// (bounded drain), delete the provisioned boot artifacts via
+    /// `VzRuntime::wipe_provisioned_artifacts` (rootfs.img — and with it the
+    /// in-VM vault — plus vmlinuz/initramfs.img), clear the persisted
+    /// crash-loop state (a fresh guest has a fresh history), then re-enter
+    /// the exact same `boot_vm_async` path a first launch uses — which
+    /// reprovisions from scratch because `is_provisioned()` is now false.
+    /// Destructive BY DESIGN per the operator's ephemeral doctrine; the only
+    /// cost is one re-authentication.
+    ///
+    /// Mirrors the `stopVm:` worker shape (busy gate, take-the-handle, tokio
+    /// worker, main-thread completion dispatch); the completion re-borrows
+    /// the action host through `self_handle` — the same seam the menu
+    /// rebuild dispatch uses — to call `boot_vm_async` on the main thread.
+    ///
+    /// Known benign interplay: the status poller/push listener spawned by
+    /// the previous boot hold their own `Arc<VzRuntime>` and keep polling
+    /// the stopped VM until process exit (no cancellation in v1); their wire
+    /// errors leave last-known state untouched, and the fresh boot spawns
+    /// its own poller which owns the chip from then on.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    pub fn reset_guest_async(&self) {
+        let ivars = self.ivars();
+
+        // Re-entry gate (shared with startVm/stopVm).
+        {
+            let mut busy = ivars.vm_busy.lock().unwrap();
+            if *busy {
+                eprintln!("[tillandsias-tray] Reset guest: already in progress, ignoring");
+                return;
+            }
+            *busy = true;
+        }
+        let vm_taken = ivars.vm.lock().unwrap().take();
+
+        let runtime = ivars.runtime.clone();
+        let vm_busy = ivars.vm_busy.clone();
+        let image_root = ivars.image_root.clone();
+        let self_handle = ivars.self_handle.clone();
+
+        eprintln!(
+            "[tillandsias-tray] Reset guest: discarding the local guest and its cached \
+             credentials (everything lives in the cloud — you'll re-authenticate once)"
+        );
+        self.set_status_text("\u{267B}\u{FE0F} Resetting guest\u{2026}");
+
+        runtime.spawn(async move {
+            if let Some(vm) = vm_taken {
+                if let Err(e) = vm.stop(VM_STOP_DRAIN).await {
+                    eprintln!(
+                        "[tillandsias-tray] Reset guest: stop failed ({e}); wiping anyway \
+                         (a wedged guest is the reset use-case)"
+                    );
+                }
+            }
+            // File-only wipe; the CID is irrelevant here (path accessors only).
+            let vz = VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root);
+            let wipe = vz.wipe_provisioned_artifacts();
+            if wipe.is_ok() {
+                // Fresh guest ⇒ fresh crash-loop history for --diagnose.
+                let _ = std::fs::remove_file(crate::diagnose::crashloop_state_path());
+            }
+            dispatch_to_main_thread(move || {
+                *vm_busy.lock().unwrap() = false;
+                match wipe {
+                    Ok(()) => {
+                        let guard = self_handle.lock().unwrap();
+                        if let Some(host) = guard.as_ref() {
+                            eprintln!(
+                                "[tillandsias-tray] Reset guest: wipe complete — \
+                                 reprovisioning from scratch"
+                            );
+                            host.0.boot_vm_async("Reset guest");
+                        } else {
+                            eprintln!(
+                                "[tillandsias-tray] Reset guest: self_handle not set; \
+                                 wipe done but reboot must be triggered manually"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] Reset guest: wipe failed: {e}");
+                    }
+                }
+            });
         });
     }
 }
