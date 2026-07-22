@@ -1553,6 +1553,11 @@ fn should_poll_local_projects(push_stream_healthy: bool, fast_poll_burst: bool) 
 fn apply_github_login(logged_in: bool, handle: Option<String>) {
     let state = github_login_state_from_reply(logged_in, handle);
     if let Ok(mut guard) = MENU_STATE.lock() {
+        // A confirmed probe reply ALWAYS overwrites the local transitional
+        // `LoggingIn` state (windows-260719-2): success flips to LoggedIn
+        // (rendering the project body), an invalid/missing token falls back
+        // to LoggedOut's actionable "GitHub Login" leaf — never a stale
+        // in-progress or logged-in rendering.
         guard.get_or_insert_with(MenuState::initial).login = state;
     }
 }
@@ -3266,6 +3271,20 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         // argv; then we open it in a native Windows terminal via `wsl.exe`.
         MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
             if matches!(action, MenuAction::GithubLogin) {
+                // windows-260719-2: flip the menu to the transitional
+                // "Logging in…" state IMMEDIATELY — a purely local signal,
+                // before any wire round-trip (the HMENU rebuilds from
+                // MENU_STATE on the next right-click). The confirming probe
+                // (fast-poll burst below / LoginStatePush) maps only to
+                // LoggedIn/LoggedOut, so a confirmed reply always clears
+                // this: success renders logged-in, an invalid/missing token
+                // falls back to the actionable GitHub Login leaf.
+                if let Ok(mut guard) = MENU_STATE.lock() {
+                    let state = guard.get_or_insert_with(MenuState::initial);
+                    if state.login == GithubLoginState::LoggedOut {
+                        state.login = GithubLoginState::LoggingIn;
+                    }
+                }
                 FAST_POLL_COUNT.store(5, std::sync::atomic::Ordering::SeqCst);
             }
             launch_open_shell_terminal(&action);

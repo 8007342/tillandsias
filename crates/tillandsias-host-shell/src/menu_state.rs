@@ -238,10 +238,28 @@ pub struct ProjectEntry {
 }
 
 /// Login state surfaced in the menu's GitHub item.
+///
+/// windows-260719-2: a THREE-state machine, not a boolean. `LoggingIn` is a
+/// purely LOCAL, transitional state each tray flips synchronously on the
+/// GitHub Login menu click — before any wire round-trip — and clears on the
+/// next CONFIRMED login observation (a `LoginStatePush` / login-status reply
+/// maps only to `LoggedIn`/`LoggedOut`, so a confirmed probe always
+/// overwrites it: success renders logged-in, an invalid/missing token falls
+/// back to the `GitHub Login` leaf, never a stale rendering). Deliberately
+/// NOT a wire variant: the click is a local signal (the packet's
+/// local-flag-preferred design), and no concrete cross-client in-progress
+/// coordination need has surfaced that would justify widening
+/// `LoginStatePush`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GithubLoginState {
     LoggedOut,
-    LoggedIn { handle: String },
+    /// The login flow has been started from this tray and the confirming
+    /// probe has not yet reported. Renders as a disabled "Logging in…" row
+    /// in place of the actionable login leaf.
+    LoggingIn,
+    LoggedIn {
+        handle: String,
+    },
 }
 
 /// Which native UI backend is going to paint the menu. Drives which items
@@ -434,6 +452,18 @@ pub fn build(state: &MenuState) -> MenuStructure {
                     "login runtime not ready",
                 ));
             }
+        }
+        GithubLoginState::LoggingIn => {
+            // windows-260719-2: transitional state, flipped locally on the
+            // login click before any wire round-trip. Disabled (a second
+            // click mid-flow is meaningless) in the same short-list slot as
+            // the login leaf, mirroring the "Setting up…" disabled-item
+            // pattern above. Cleared by the next confirmed probe reply.
+            items.push(MenuItem::disabled(
+                ids::GITHUB_LOGIN,
+                "\u{1F504} Logging in\u{2026}",
+                "login in progress",
+            ));
         }
         GithubLoginState::LoggedIn { .. } => {
             // Local projects — submenu with per-project agent leaves.
@@ -823,6 +853,49 @@ mod tests {
         assert!(login.label.contains("Setting up"));
     }
 
+    /// windows-260719-2: the transitional `LoggingIn` state renders a
+    /// disabled "Logging in…" row in the login slot — same collapsed short
+    /// list as logged-out (the project body stays auth-gated), no actionable
+    /// login leaf (a second click mid-flow is meaningless).
+    #[test]
+    fn logging_in_menu_shows_disabled_logging_in_row() {
+        let state = MenuState {
+            login: GithubLoginState::LoggingIn,
+            login_runtime_ready: true,
+            local_projects: vec![ProjectEntry {
+                name: "secret".into(),
+                path: "/home/u/src/secret".into(),
+                ready: false,
+            }],
+            ..MenuState::initial()
+        };
+        let items = match build(&state) {
+            MenuStructure::Ready { items } => items,
+            other => panic!("expected Ready, got {other:?}"),
+        };
+        let ids_seen: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(
+            ids_seen,
+            vec![
+                ids::STATUS,
+                ids::GITHUB_LOGIN,
+                ids::SEPARATOR,
+                ids::VERSION,
+                ids::RESET_GUEST,
+                ids::QUIT
+            ],
+            "logging-in menu keeps the collapsed short list",
+        );
+        let login = &items[1];
+        assert!(!login.enabled, "the in-progress row must not be clickable");
+        assert!(login.label.contains("Logging in"));
+        assert_eq!(login.disabled_reason.as_deref(), Some("login in progress"));
+        // The gated project body must NOT leak through mid-login.
+        for gated in [ids::LOCAL_PROJECTS, ids::CLOUD_PROJECTS] {
+            assert!(!ids_seen.contains(&gated), "{gated} hidden while LoggingIn");
+        }
+    }
+
     /// Per-project leaves are gated on podman_ready — when podman is not ready
     /// all 6 leaves are disabled with a "VM is not ready yet" reason.
     #[test]
@@ -1006,6 +1079,7 @@ mod tests {
     fn reset_guest_leaf_always_present_and_enabled() {
         for login in [
             GithubLoginState::LoggedOut,
+            GithubLoginState::LoggingIn,
             GithubLoginState::LoggedIn { handle: "u".into() },
         ] {
             let state = MenuState {

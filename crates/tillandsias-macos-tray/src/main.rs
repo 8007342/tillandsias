@@ -410,4 +410,45 @@ mod tests {
             "main must dispatch --reset-guest"
         );
     }
+
+    /// Login transitive-state wiring pin (windows-260719-2). action_host.rs
+    /// is cfg(macos)-gated and untype-checkable on the Linux dev box; this
+    /// source-scan keeps the click→LoggingIn flip + explicit NSMenu rebuild
+    /// (an NSMenu is static until rebuilt, unlike the per-paint HMENU) from
+    /// silently regressing on any host. The type/rendering logic itself is
+    /// fully unit-pinned in tillandsias-host-shell (compiled everywhere).
+    #[test]
+    fn login_transitive_state_wiring_is_present() {
+        let src = include_str!("action_host.rs");
+        let arm = src
+            .split("MenuAction::GithubLogin => {")
+            .nth(1)
+            .expect("the GithubLogin dispatch arm must exist")
+            .split("attach_pty(")
+            .next()
+            .unwrap();
+        // 1. The click flips to LoggingIn immediately (local signal, before
+        //    the PTY attach / any wire round-trip), gated on LoggedOut.
+        assert!(
+            arm.contains("GithubLoginState::LoggingIn"),
+            "the click must flip to LoggingIn before the attach"
+        );
+        assert!(
+            arm.contains("GithubLoginState::LoggedOut"),
+            "the flip must be gated on the current LoggedOut state"
+        );
+        // 2. The flip triggers an explicit menu rebuild (NSMenu is static).
+        assert!(
+            arm.contains("dispatch_rebuild("),
+            "the flip must rebuild the NSMenu to render immediately"
+        );
+        // 3. The confirmed probe/push path maps only LoggedIn/LoggedOut, so
+        //    it always clears the transitional state; and the post-login
+        //    cloud prime fires on the confirmed flip (`changed && logged_in`
+        //    covers LoggingIn→LoggedIn too).
+        assert!(
+            src.contains("fn map_login_state(") && src.contains("changed && logged_in"),
+            "the confirm path + prompt cloud prime must be wired"
+        );
+    }
 }

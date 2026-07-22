@@ -1419,6 +1419,37 @@ impl TrayActionHost {
                 }
             }
             MenuAction::GithubLogin => {
+                // windows-260719-2: flip the menu to the transitional
+                // "Logging in…" state IMMEDIATELY — a purely local signal,
+                // before any wire round-trip. An NSMenu is static until
+                // rebuilt, so trigger the rebuild explicitly (we are on the
+                // main thread here, same as the SelectAgent arm's rebuild).
+                // The confirming probe (LoginStatePush / login poll) maps
+                // only to LoggedIn/LoggedOut via map_login_state, so a
+                // confirmed reply always clears this: success renders the
+                // logged-in body, an invalid/missing token falls back to
+                // the actionable GitHub Login leaf.
+                let flipped = {
+                    let mut state = self.ivars().menu_state.lock().unwrap();
+                    if state.login
+                        == tillandsias_host_shell::menu_state::GithubLoginState::LoggedOut
+                    {
+                        state.login =
+                            tillandsias_host_shell::menu_state::GithubLoginState::LoggingIn;
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if flipped {
+                    let ivars = self.ivars();
+                    dispatch_rebuild(
+                        &ivars.menu_state,
+                        &ivars.status_item,
+                        &ivars.status_menu_item,
+                        &ivars.self_handle,
+                    );
+                }
                 // Top-level GitHub login. Same gate as Attach —
                 // needs the in-VM headless to be Ready. Defer to the
                 // existing `attach_pty(GithubLogin)` path, which
@@ -2362,6 +2393,12 @@ async fn run_push_listener(
                         // the reply routes through the CloudProjectsPush/
                         // CloudRefreshReply arm below. Mirrors the windows
                         // fast-poll-burst intent (order 154) push-natively.
+                        // windows-260719-2: `changed` covers BOTH the
+                        // LoggedOut→LoggedIn and the local
+                        // LoggingIn→LoggedIn transitions (apply_login_state
+                        // compares against whatever the menu currently
+                        // holds), so cloud projects refresh promptly on the
+                        // confirmed flip either way.
                         if changed && logged_in {
                             let seq = client.allocate_seq();
                             let prime_cloud = ControlEnvelope {

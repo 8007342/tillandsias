@@ -250,4 +250,40 @@ mod tests {
             "WslLifecycle must expose the user-invokable wipe primitive"
         );
     }
+
+    /// Login transitive-state wiring pin (windows-260719-2). notify_icon.rs
+    /// is cfg(windows)-gated and untype-checkable on the Linux dev box; this
+    /// source-scan keeps the click→LoggingIn flip (a purely local signal,
+    /// before any wire round-trip) and the confirmed-reply overwrite path
+    /// from silently regressing on any host. The type/rendering logic itself
+    /// is fully unit-pinned in tillandsias-host-shell (compiled everywhere).
+    #[test]
+    fn login_transitive_state_wiring_is_present() {
+        let src = include_str!("notify_icon.rs");
+        // 1. The GithubLogin click flips to LoggingIn immediately, before
+        //    the terminal spawn / any wire round-trip.
+        let arm = src
+            .split("MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin =>")
+            .nth(1)
+            .expect("the GithubLogin dispatch arm must exist")
+            .split("launch_open_shell_terminal(")
+            .next()
+            .unwrap();
+        assert!(
+            arm.contains("state.login = GithubLoginState::LoggingIn"),
+            "the click must flip to LoggingIn before the launch (local signal)"
+        );
+        // 2. Only a LoggedOut menu flips (idempotent re-click mid-flow).
+        assert!(
+            arm.contains("GithubLoginState::LoggedOut"),
+            "the flip must be gated on the current LoggedOut state"
+        );
+        // 3. The confirmed probe reply path overwrites the transitional
+        //    state unconditionally (fallback on invalid/missing token).
+        assert!(
+            src.contains("fn apply_github_login(")
+                && src.contains("github_login_state_from_reply(logged_in, handle)"),
+            "the confirm path must map replies over the transitional state"
+        );
+    }
 }
