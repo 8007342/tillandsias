@@ -15,8 +15,10 @@ else
 fi
 secret_dir="$state_dir/secrets"
 image_dir="$state_dir/images"
+container_dir="$state_dir/containers"
 mkdir -p "$secret_dir"
 mkdir -p "$image_dir"
+mkdir -p "$container_dir"
 
 image_key() {
     printf '%s' "$1" | sed 's|/|__slash__|g; s|:|__colon__|g'
@@ -28,6 +30,31 @@ image_path() {
 
 stateful_images_enabled() {
     [[ "${LITMUS_PODMAN_STATEFUL_IMAGES:-0}" == "1" ]]
+}
+
+# Stateful container tracking (order 443): mirrors the stateful-image gate.
+# When LITMUS_PODMAN_STATEFUL_CONTAINERS=1, detached `run`/`create` record
+# name+state+id under $container_dir (file per container: line 1 = state,
+# line 2 = id), `stop` marks exited, `rm` untracks, and `ps` replays the
+# tracked set in the exact `--format json` shape
+# PodmanClient::list_containers parses ([{"Names":[...],"State":"..."}]).
+# Foreground one-shots (--rm without --detach) are NOT tracked — they finish
+# and self-remove before anything could list them.
+# Deliberately permissive: a `run` against an existing name never errors
+# ("name already in use"); it re-records with a FRESH id, so a launch path
+# that wrongly re-runs a live shared container is observable as an id change
+# (the order-443 bounce fixtures assert exactly that).
+stateful_containers_enabled() {
+    [[ "${LITMUS_PODMAN_STATEFUL_CONTAINERS:-0}" == "1" ]]
+}
+
+container_path() {
+    printf '%s/%s' "$container_dir" "$1"
+}
+
+record_container() {
+    # $1 = name, $2 = state
+    printf '%s\nmock-id-%s-%s\n' "$2" "$$" "$RANDOM$RANDOM" >"$(container_path "$1")"
 }
 
 case "$subcommand" in
@@ -108,12 +135,65 @@ case "$subcommand" in
         exit 0
         ;;
     inspect)
+        if stateful_containers_enabled; then
+            wants_running_state=0
+            for arg in "$@"; do
+                if [[ "$arg" == "{{.State.Running}}" ]]; then
+                    wants_running_state=1
+                    break
+                fi
+            done
+            if [[ "$wants_running_state" == 1 ]]; then
+                # `inspect --format {{.State.Running}} <name>` is the
+                # container_running probe the launch-path reuse guards branch
+                # on — answer it from tracked state.
+                inspect_name="${@: -1}"
+                if [[ ! -f "$(container_path "$inspect_name")" ]]; then
+                    exit 125
+                fi
+                if [[ "$(sed -n '1p' "$(container_path "$inspect_name")")" == "running" ]]; then
+                    printf 'true\n'
+                else
+                    printf 'false\n'
+                fi
+                exit 0
+            fi
+        fi
         printf '{"Secrets":["vault-token","tillandsias-ca-cert","tillandsias-ca-key"]}\n'
         ;;
     info)
         printf '{}\n'
         ;;
     run|create)
+        if stateful_containers_enabled; then
+            container_name=""
+            detached=0
+            previous=""
+            for arg in "$@"; do
+                if [[ "$previous" == "--name" ]]; then
+                    container_name="$arg"
+                fi
+                if [[ "$arg" == --name=* ]]; then
+                    container_name="${arg#--name=}"
+                fi
+                if [[ "$arg" == "--detach" || "$arg" == "-d" ]]; then
+                    detached=1
+                fi
+                previous="$arg"
+            done
+            if [[ -n "$container_name" ]]; then
+                if [[ "$subcommand" == "create" ]]; then
+                    record_container "$container_name" "created"
+                elif [[ "$detached" == 1 ]]; then
+                    record_container "$container_name" "running"
+                fi
+                # Foreground runs stay untracked (see gate comment above).
+                if [[ "$subcommand" == "create" || "$detached" == 1 ]]; then
+                    sed -n '2p' "$(container_path "$container_name")"
+                    exit 0
+                fi
+            fi
+        fi
         if [[ "$subcommand" == "run" ]]; then
             cmd_string="$*"
             if [[ "$cmd_string" == *"status-check"* ]]; then
@@ -234,7 +314,82 @@ case "$subcommand" in
     version)
         printf 'podman version 5.0.0-mock\n'
         ;;
-    stop|rm|network|compose|system)
+    ps)
+        # Replay tracked containers for command-shape tests. The JSON branch
+        # matches what PodmanClient::list_containers parses; the plain branch
+        # emits one name per line like the default `podman ps` consumers
+        # expect. `--filter name=^<prefix>` narrows by name prefix (the one
+        # filter shape the Rust client issues).
+        if stateful_containers_enabled; then
+            filter_prefix=""
+            format_json=0
+            previous=""
+            for arg in "$@"; do
+                if [[ "$previous" == "--filter" && "$arg" == name=* ]]; then
+                    filter_prefix="${arg#name=}"
+                    filter_prefix="${filter_prefix#^}"
+                fi
+                if [[ "$previous" == "--format" && "$arg" == "json" ]]; then
+                    format_json=1
+                fi
+                previous="$arg"
+            done
+            if [[ "$format_json" == 1 ]]; then
+                json="["
+                first=1
+                for tracked in "$container_dir"/*; do
+                    [[ -e "$tracked" ]] || continue
+                    name="$(basename "$tracked")"
+                    if [[ -n "$filter_prefix" && "$name" != "$filter_prefix"* ]]; then
+                        continue
+                    fi
+                    state="$(sed -n '1p' "$tracked")"
+                    if [[ "$first" == 1 ]]; then
+                        first=0
+                    else
+                        json+=","
+                    fi
+                    json+="{\"Names\":[\"$name\"],\"State\":\"$state\"}"
+                done
+                json+="]"
+                printf '%s\n' "$json"
+            else
+                for tracked in "$container_dir"/*; do
+                    [[ -e "$tracked" ]] || continue
+                    name="$(basename "$tracked")"
+                    if [[ -n "$filter_prefix" && "$name" != "$filter_prefix"* ]]; then
+                        continue
+                    fi
+                    printf '%s\n' "$name"
+                done
+            fi
+        fi
+        exit 0
+        ;;
+    stop)
+        if stateful_containers_enabled; then
+            for arg in "$@"; do
+                [[ "$arg" == "stop" || "$arg" == -* ]] && continue
+                # `stop -t <secs> <name>`: skip the timeout value too.
+                [[ "$arg" =~ ^[0-9]+$ ]] && continue
+                if [[ -f "$(container_path "$arg")" ]]; then
+                    tracked_id="$(sed -n '2p' "$(container_path "$arg")")"
+                    printf 'exited\n%s\n' "$tracked_id" >"$(container_path "$arg")"
+                fi
+            done
+        fi
+        exit 0
+        ;;
+    rm)
+        if stateful_containers_enabled; then
+            for arg in "$@"; do
+                [[ "$arg" == "rm" || "$arg" == -* ]] && continue
+                rm -f "$(container_path "$arg")"
+            done
+        fi
+        exit 0
+        ;;
+    network|compose|system)
         exit 0
         ;;
 esac

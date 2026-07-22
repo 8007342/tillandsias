@@ -48,10 +48,15 @@ fn lock_dir() -> PathBuf {
     std::env::temp_dir().join(format!("tillandsias-locks-{uid}"))
 }
 
+/// Lock-file name prefix/suffix shared by `lock_path` and the
+/// `held_resources_with_prefix` scanner so the two cannot drift apart.
+const LOCK_FILE_PREFIX: &str = "resource-";
+const LOCK_FILE_SUFFIX: &str = ".lock";
+
 fn lock_path(resource: &str) -> PathBuf {
     // Resource names are internal constants ("proxy", "image-forge"); keep
     // the file name shape obvious for operators inspecting the lock dir.
-    lock_dir().join(format!("resource-{resource}.lock"))
+    lock_dir().join(format!("{LOCK_FILE_PREFIX}{resource}{LOCK_FILE_SUFFIX}"))
 }
 
 /// Lock mode: exclusive for check+act mutators, shared for operations that
@@ -117,6 +122,71 @@ pub fn acquire_shared(
     debug: bool,
 ) -> Result<ResourceLockGuard, String> {
     acquire_mode(resource, LockMode::Shared, timeout, debug)
+}
+
+/// Non-blocking probe: is `resource` currently held (in EITHER mode) by any
+/// process — including this one via another fd?
+///
+/// Order 443 slice 3: launch-in-flight markers are advisory flocks a launch
+/// holds across its pre-create window (no container exists yet for `podman
+/// ps` to see). The shared-stack teardown probes them here before deciding
+/// "no forge anywhere → tear down". flock(2) is per open-file-description,
+/// so probing on a FRESH fd never releases (or is satisfied by) a lock held
+/// on another fd — even one owned by the calling process itself.
+///
+/// A missing lock file means "never acquired on this boot" → not held. Any
+/// OTHER error (unreadable dir, flock failure) counts as HELD: the callers
+/// use this to gate destructive teardown, and a wrong "held" merely leaks a
+/// container while a wrong "free" tears the stack out from under a live
+/// sibling's launch (leak-not-destroy bias, same as order 233).
+pub fn is_held(resource: &str) -> bool {
+    let path = lock_path(resource);
+    let file = match File::options().write(true).open(&path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return false,
+        Err(_) => return true,
+    };
+    match try_lock(&file, LockMode::Exclusive) {
+        // Acquired instantly → nobody held it. The probe lock releases when
+        // `file` drops at the end of this function.
+        Ok(acquired) => !acquired,
+        Err(_) => true,
+    }
+}
+
+/// Resource names starting with `prefix` whose advisory locks are currently
+/// HELD, discovered by scanning the lock directory.
+///
+/// Lock files are deliberately never unlinked (unlink + re-create races a
+/// concurrent acquirer onto a different inode, making a held lock invisible
+/// to probers), so the directory accumulates released files; `is_held`
+/// filters those out. A missing/unreadable lock dir yields an empty list —
+/// nothing could have acquired a lock through it either (acquire fails loud
+/// on an unwritable dir).
+pub fn held_resources_with_prefix(prefix: &str) -> Vec<String> {
+    let dir = lock_dir();
+    let entries = match fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+    let mut held = Vec::new();
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some(resource) = file_name
+            .strip_prefix(LOCK_FILE_PREFIX)
+            .and_then(|name| name.strip_suffix(LOCK_FILE_SUFFIX))
+        else {
+            continue;
+        };
+        if resource.starts_with(prefix) && is_held(resource) {
+            held.push(resource.to_string());
+        }
+    }
+    held.sort();
+    held
 }
 
 fn acquire_mode(
@@ -252,6 +322,51 @@ mod tests {
         let _b = acquire_shared(&resource, Duration::from_millis(500), false)
             .expect("second shared holder must not wait");
         assert!(started.elapsed() < Duration::from_millis(400));
+    }
+
+    // ── Held-probe semantics (order 443 slice 3) ────────────────────────────
+
+    /// `is_held` tracks the lock lifecycle: free before acquire, held while
+    /// a guard lives (even when the prober is the SAME process — flock is
+    /// per open-file-description), free again after the guard drops.
+    #[test]
+    fn is_held_reflects_lock_lifecycle() {
+        let resource = format!("test-held-{}", std::process::id());
+        assert!(!is_held(&resource), "never-acquired resource must be free");
+        let guard = acquire(&resource, Duration::from_secs(5), false).unwrap();
+        assert!(
+            is_held(&resource),
+            "held resource must probe as held from the same process"
+        );
+        drop(guard);
+        assert!(!is_held(&resource), "dropped guard must release the probe");
+    }
+
+    /// The prefix scanner returns only currently-HELD resources matching the
+    /// prefix: released locks and other prefixes are invisible.
+    #[test]
+    fn held_resources_with_prefix_lists_only_live_matching_locks() {
+        let pid = std::process::id();
+        let prefix = format!("test-launch-{pid}-");
+        let held_name = format!("{prefix}alpha");
+        let released_name = format!("{prefix}beta");
+        let other_name = format!("test-other-{pid}-gamma");
+
+        let _held = acquire(&held_name, Duration::from_secs(5), false).unwrap();
+        drop(acquire(&released_name, Duration::from_secs(5), false).unwrap());
+        let _other = acquire(&other_name, Duration::from_secs(5), false).unwrap();
+
+        let listed = held_resources_with_prefix(&prefix);
+        assert_eq!(
+            listed,
+            vec![held_name.clone()],
+            "scanner must list exactly the live lock with the prefix"
+        );
+        drop(_held);
+        assert!(
+            held_resources_with_prefix(&prefix).is_empty(),
+            "released locks must vanish from the scan"
+        );
     }
 
     /// An exclusive holder excludes shared acquirers (recreate blocks new

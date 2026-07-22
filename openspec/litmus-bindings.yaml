@@ -608,6 +608,7 @@ specs:
   - litmus:podman-idiomatic-launch-routing
   - litmus:concurrent-container-ensure-no-race
   - litmus:shared-containers-survive-per-project-cleanup
+  - litmus:concurrent-forge-shared-stack-safety
   - litmus:drain-vs-self-heal
   coverage_ratio: 100
   last_verified: '2026-07-09'
