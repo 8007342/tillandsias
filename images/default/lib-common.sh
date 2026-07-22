@@ -1122,25 +1122,22 @@ ensure_forge_harnesses() {
         return 0
     fi
 
-    # Rate-limit the refresh (6h): each npm install replaces the shared
-    # prefix's bin symlinks non-atomically, and a sibling launch landing in
-    # that window sees the harness "missing" (2026-07-11 gate incident).
-    # A 6h cadence keeps order-181 freshness (multiple dailies) while
-    # cutting the race surface ~100x; a missing harness is still installed
-    # immediately by _require_harness regardless of this stamp.
+    # Keep a diagnostic timestamp, but do not use it as a gate: the launch
+    # contract is that every ephemeral forge launch attempts to refresh all
+    # harnesses.  Installers are idempotent and cached binaries remain the
+    # fail-soft fallback when the proxy is unavailable.
     local update_stamp="$HOME/.cache/tillandsias-project/harness-update-stamp"
-    if [ -f "$update_stamp" ]; then
-        local now last age
-        now="$(date +%s)"
-        last="$(cat "$update_stamp" 2>/dev/null || echo 0)"
-        case "$last" in *[!0-9]*|"") last=0 ;; esac
-        age=$(( now - last ))
-        if [ "$age" -lt 21600 ]; then
-            trace_lifecycle "harness" "refresh skipped (last update ${age}s ago, cadence 21600s)"
-            return 0
-        fi
-    fi
     date +%s > "$update_stamp" 2>/dev/null || true
+
+    # Official vendor installers are the source of truth for OpenCode and
+    # Claude.  They write only into the persistent harness-curl cache and are
+    # intentionally attempted on every launch; a warm cache makes this cheap.
+    if declare -F curl_install_opencode >/dev/null 2>&1; then
+        curl_install_opencode || trace_lifecycle "harness" "opencode curl refresh failed (using cache)"
+    fi
+    if declare -F curl_install_claude >/dev/null 2>&1; then
+        curl_install_claude || trace_lifecycle "harness" "claude curl refresh failed (using cache)"
+    fi
 
     # Update each harness to latest. We use `npm install` (not `npm update`) so
     # a missing or removed package is installed rather than silently skipped.
@@ -1182,6 +1179,14 @@ ensure_forge_harnesses() {
             trace_lifecycle "harness" "$pkg@latest FAILED health probe and no last-good recorded (upstream-broken publish?)"
         fi
     done
+
+    # Antigravity has no npm package; use its official installer on every
+    # launch.  require_antigravity is fail-soft here, while the primary
+    # antigravity entrypoint still emits an actionable fatal message when no
+    # cached binary exists.
+    if declare -F require_antigravity >/dev/null 2>&1; then
+        require_antigravity || trace_lifecycle "harness" "antigravity refresh failed (using cache)"
+    fi
 
     # Order 299 first-run floor: fail-soft is only sound when a cached
     # harness exists to fall back to. On a PRISTINE cache (fresh curl-install,
