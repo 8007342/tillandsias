@@ -19985,6 +19985,29 @@ plan_index:
         - "Windows: dated smoke report in plan/issues naming the v0.4 build; forge lands on a valid current checkout; findings filed as packets"
         - "macOS: dated smoke report in plan/issues naming the v0.4 build; VZ lane checkout valid + current; findings filed as packets"
         - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
+      events:
+        - type: progress
+          ts: "2026-07-22T22:15:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Windows smoke attempt #1 against v0.3.260722.1 (operator at the
+            terminal): FINDINGS report filed
+            (plan/issues/smoke-455-windows-v0.3.260722.1-2026-07-22.md) —
+            two P1 HOST-side defects found and FIXED on windows-next
+            58b58322 the same session: (1) saved-file installer runs
+            silently skip download+extract (PS5.1 BOM-less-UTF-8 em-dash ->
+            CP-1252 smart-quote parse corruption; all shipped .ps1 now
+            pure-ASCII + litmus gate); (2) rootfs download quantized to
+            ~40 KB/s by the 100ms GUI-pump executor + unbuffered per-chunk
+            writes (fixed: 4 MiB BufWriter + dedicated multi-thread bg
+            runtime for the provisioning tree). Fixed-build A/B on the same
+            host, full wipe incl. cache: download 2.9s (~23 MB/s), VM ready
+            in 72s total, guest_version handshake match, wire
+            Ready/podman up. Windows PASS record deferred to the NEXT daily
+            (must carry >= 58b58322); expected ~3 min e2e. The
+            windows-260722-1 WSL-absent flow ships in that build too but
+            needs a WSL-less host for live verification.
 
     - packet_id: forge-plan-metadata-mcp-server
       order: 456
