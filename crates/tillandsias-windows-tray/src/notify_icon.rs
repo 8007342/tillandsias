@@ -2782,9 +2782,11 @@ fn spawn_guest_reset(hwnd: HWND) {
 static PROVISIONING_ACTIVE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
-/// Spawn the WSL recipe-provisioning task on the current LocalSet: fetch the
-/// CI-published rootfs from the embedded manifest → `wsl --import` → systemd →
-/// HvSocket control-wire handshake (proven E2E on real hardware 2026-05-26).
+/// Spawn the WSL recipe-provisioning task on the dedicated background
+/// runtime (`bg_runtime`, windows-260722 split — never on the 100ms-pumped
+/// LocalSet): fetch the CI-published rootfs from the embedded manifest →
+/// `wsl --import` → systemd → HvSocket control-wire handshake (proven E2E
+/// on real hardware 2026-05-26).
 /// On success it flips the status to Ready and parks holding a VM keepalive
 /// (WSL2 idles the utility VM down otherwise, dropping the control wire). On
 /// failure it clears `PROVISIONING_ACTIVE` so `Retry` can try again.
@@ -2829,10 +2831,17 @@ fn spawn_provisioning(hwnd: HWND) {
             Ok(()) => {
                 tracing::info!("VM ready — control wire established");
                 hwnd.status("\u{1F7E2} Ready");
-                // Parking this task holds `_keepalive` for the tray's lifetime;
-                // on Quit the LocalSet drops the task → kill_on_drop releases the
-                // VM to idle normally again. PROVISIONING_ACTIVE stays set (Ready),
-                // so Retry is a no-op while the VM is up.
+                // Parking this task holds `_keepalive` for the tray's lifetime.
+                // TEARDOWN CONTRACT (post windows-260722 runtime split): this
+                // task lives on the never-shut-down static bg_runtime, so
+                // NOTHING cancels it at Quit and the keepalive child's
+                // kill_on_drop does NOT fire through task teardown — the
+                // explicit Quit drain (request_vm_shutdown + `wsl --terminate`
+                // backstop in the wndproc path) is the ONLY mechanism that
+                // stops the VM. Do not weaken that backstop assuming a
+                // LocalSet-drop cancellation that no longer exists.
+                // PROVISIONING_ACTIVE stays set (Ready), so Retry is a no-op
+                // while the VM is up.
                 let is_debug = std::env::args().any(|a| a == "--debug");
                 match lifecycle.spawn_keepalive(is_debug) {
                     Ok(_keepalive) => {
@@ -2878,8 +2887,9 @@ fn spawn_provisioning(hwnd: HWND) {
                         // sends NOTHING on the wire; retiring the tick task
                         // itself (watch-channel wakeups + SubscriptionHealth)
                         // is the packet's next slice.
-                        // Holds `_keepalive` for the tray's lifetime; on
-                        // Quit the LocalSet drops the task → kill_on_drop.
+                        // Holds `_keepalive` for the tray's lifetime; see the
+                        // TEARDOWN CONTRACT above — the explicit Quit drain
+                        // stops the VM, not task cancellation.
                         tokio::spawn(run_vm_status_push_listener(hwnd));
                         // SC-16 (slice 4): hold a watch receiver so the tick
                         // wait ends early on a healthy→down transition and

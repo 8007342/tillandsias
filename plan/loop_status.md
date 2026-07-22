@@ -1,5 +1,29 @@
 # Multi-Host Coordination Loop Status
 
+## WINDOWS LANE 2026-07-22 (operator-attended v0.4 cycle — HOST/VM wrapper hardening)
+
+Windows v0.4 lane CODE-COMPLETE at c41c515c+. This cycle (operator at the
+terminal): (1) windows-260722-1 WSL-absent-runtime-setup DONE — preflight
+before download, curated background `wsl --install` (Tlatoani-approved UX,
+governance-recorded), restart-required surfacing, installer runs the
+idempotent install; live-absent verification rides a WSL-less host. (2) P1:
+shipped installers PARSE INTO A DIFFERENT PROGRAM when run from a saved
+file (PS5.1 BOM-less UTF-8 em-dash -> CP-1252 smart-quote injection —
+silently skips download+extract; irm|iex unaffected); all shipped .ps1 now
+pure-ASCII + whole-file litmus gate. Retro-diagnoses the 07-19 "transient
+verify" mystery. (3) P1: rootfs download quantized to ~40 KB/s by the
+100ms GUI-pump executor + unbuffered per-chunk writes; fixed (4 MiB
+BufWriter + dedicated multi-thread bg runtime for the provisioning tree).
+A/B on this host, full wipe incl. cache: 66.9 MiB download 25+min-DNF ->
+2.9s; wipe-to-VM-ready 72s; guest_version handshake match. (4) Order-455
+Windows smoke vs v0.3.260722.1: FINDINGS record filed
+(smoke-455-windows-v0.3.260722.1-2026-07-22.md); PASS deferred to the NEXT
+daily (needs >= 58b58322) — expected ~3min e2e. (5) Boundary choke audit
+(27-agent verified): wsl --install pipe-drain deadlock fixed, teardown
+contract documented, ConPTY executor contract filed (windows-260722-2,
+v0.5). ASK FOR THE COORDINATOR: cut the next daily so Windows/macOS 455
+smokes can record their PASS against it.
+
 LastExecutionTime: 2026-07-22T03:50:00Z
 
 ## Cycle 2026-07-22T03:50Z (linux coordinator — final wave: UX governance enforced, leaf removed, CI typecheck lanes, reviews)

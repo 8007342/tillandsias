@@ -16114,6 +16114,43 @@ plan_index:
             WSL-less host (this dev host cannot simulate absence) — rides
             the next 455-style smoke there, per exit criterion 5.
 
+    - packet_id: windows-conpty-executor-contract
+      provisional_id: windows-260722-2
+      order: provisional
+      desired_release: v0.5
+      title: "ConPTY lane: enforce the executor contract mechanically when the lane is wired (split() must never run on the pumped LocalSet)"
+      status: pending
+      kind: enhancement
+      deliverable: crates/tillandsias-host-shell/src/pty (explicit runtime Handle param or bg-runtime spawn) + wiring site
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, pty, tokio, performance]
+      estimated_hours: 2
+      outcome: >
+        Boundary audit 2026-07-22 (adversarially verified): ConPtyMaster::
+        split() pins Handle::current() and pump_io spawns into the caller's
+        context; wired from the tray's 100ms-pumped LocalSet the 64 KB
+        duplex drains quantize to pump ticks (~640 KB/s terminal ceiling +
+        up to 100ms keystroke latency — the exact class fixed for the
+        rootfs download in 58b58322). The lane is DORMANT today (Windows
+        terminals go through spawn_wsl_terminal); the contract is
+        documented at the impl (pty/windows.rs). When wiring the lane,
+        make the contract mechanical: take an explicit tokio Handle (pass
+        bg_runtime().handle()) or spawn pump_io on the bg runtime, plus a
+        debug assertion or litmus pin that the pumped LocalSet never hosts
+        it.
+      events:
+        - type: filed
+          ts: "2026-07-22T22:40:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed from the host/VM boundary choke audit (27-agent verified
+            sweep; 4 confirmed findings — the other three fixed in-session:
+            wsl --install concurrent pipe drain + timeout-diagnostic
+            salvage, and the stale LocalSet-teardown comments replaced with
+            the real TEARDOWN CONTRACT).
+
     - packet_id: login-transitive-states-all-platforms
       provisional_id: windows-260719-2
       order: provisional

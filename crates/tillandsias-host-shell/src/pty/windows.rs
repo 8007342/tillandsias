@@ -248,6 +248,16 @@ unsafe impl<T> Send for SendPtr<T> {}
 ///
 /// Runtime behaviour is validated at VM end-to-end: a unit test can't exercise
 /// the read bridge because `ReadFile` blocks until a process produces output.
+///
+/// EXECUTOR CONTRACT (boundary audit 2026-07-22, windows-260722-2): `split()`
+/// pins `Handle::current()` and the bridge threads `block_on` duplex I/O
+/// against that runtime, while `pump_io` spawns into the same caller
+/// context. Callers MUST invoke this from a real multi-thread runtime (the
+/// tray's `bg_runtime`) — NEVER from the 100ms SetTimer-pumped LocalSet,
+/// where every 64 KB duplex drain would wait for a pump tick (~640 KB/s
+/// terminal ceiling + up to 100ms per-keystroke latency; the exact
+/// quantization class fixed for the rootfs download). When this dormant
+/// lane is wired, pass the runtime explicitly or spawn via `bg_runtime()`.
 impl super::PtyMaster for ConPtyMaster {
     type Reader = DuplexStream;
     type Writer = DuplexStream;

@@ -656,31 +656,43 @@ impl WslLifecycle {
         let progress_for_stream = progress.clone();
         let stream_task = tokio::spawn(async move {
             use tokio::io::AsyncBufReadExt;
-            let mut last_line = String::new();
-            if let Some(out) = stdout {
-                let mut lines = tokio::io::BufReader::new(out).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    let line = line.replace('\u{0}', "").trim().to_string();
-                    if line.is_empty() {
-                        continue;
-                    }
-                    tracing::info!(installer_line = %line, "windows feature install progress");
-                    progress_for_stream
-                        .report_message(&format!("{CHIP_FEATURE_SETUP_PROGRESS} {line}"));
-                    last_line = line;
-                }
-            }
-            let mut err_tail = String::new();
-            if let Some(err) = stderr {
-                let mut lines = tokio::io::BufReader::new(err).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    let line = line.replace('\u{0}', "").trim().to_string();
-                    if !line.is_empty() {
-                        err_tail = line;
+            // Drain BOTH pipes CONCURRENTLY (boundary-audit finding
+            // 2026-07-22): sequential stdout-then-stderr held the ~4 KB
+            // stderr pipe full when the child dumped a verbose error, so
+            // the child blocked in write(stderr), stdout never EOF'd, and
+            // the mutual wedge rode the whole 20-minute ceiling — losing
+            // the very diagnostic this task exists to capture.
+            let stdout_side = async {
+                let mut last_line = String::new();
+                if let Some(out) = stdout {
+                    let mut lines = tokio::io::BufReader::new(out).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let line = line.replace('\u{0}', "").trim().to_string();
+                        if line.is_empty() {
+                            continue;
+                        }
+                        tracing::info!(installer_line = %line, "windows feature install progress");
+                        progress_for_stream
+                            .report_message(&format!("{CHIP_FEATURE_SETUP_PROGRESS} {line}"));
+                        last_line = line;
                     }
                 }
-            }
-            (last_line, err_tail)
+                last_line
+            };
+            let stderr_side = async {
+                let mut err_tail = String::new();
+                if let Some(err) = stderr {
+                    let mut lines = tokio::io::BufReader::new(err).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let line = line.replace('\u{0}', "").trim().to_string();
+                        if !line.is_empty() {
+                            err_tail = line;
+                        }
+                    }
+                }
+                err_tail
+            };
+            tokio::join!(stdout_side, stderr_side)
         });
 
         let status = match tokio::time::timeout(
@@ -697,9 +709,26 @@ impl WslLifecycle {
             }
             Err(_) => {
                 let _ = child.kill().await;
+                // The kill EOFs both pipes; give the drain a moment so the
+                // timeout error carries whatever the installer actually said
+                // instead of only the ceiling number.
+                let (last_line, err_tail) = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    stream_task,
+                )
+                .await
+                .ok()
+                .and_then(|r| r.ok())
+                .unwrap_or_default();
+                let detail = if err_tail.is_empty() { last_line } else { err_tail };
                 return Err(format!(
                     "{PLATFORM_SETUP_FAILED_MARKER}: wsl --install did not finish within \
-                     {FEATURE_INSTALL_TIMEOUT_SECS}s"
+                     {FEATURE_INSTALL_TIMEOUT_SECS}s{}",
+                    if detail.is_empty() {
+                        String::new()
+                    } else {
+                        format!("; last output: {detail}")
+                    }
                 ));
             }
         };
