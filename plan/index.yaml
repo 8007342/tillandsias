@@ -16003,6 +16003,22 @@ plan_index:
           host: linux
           summary: >
             Wave-2 tray-chain Fable worker, commit ff4cff37 (cherry-picked). Intentional ephemeral reset landed on ALL THREE platforms: shared ids::RESET_GUEST always-enabled Quit-adjacent leaf + MenuAction::ResetGuest; Windows WslLifecycle::wipe_guest wired click->message-loop->same provision_via_recipe path + --reset-guest CLI; macOS VzRuntime::wipe_provisioned_artifacts (vm-layer, Linux-unit-tested) + reset_guest_async + gated --reset-guest; Linux run_reset_guest with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 refusal pin. 61+55+39+231 tests green, build check green. REMAINING: live wedged-guest->reset->Ready e2e on a Windows/macOS host (rides order 455 smoke).
+        - type: progress
+          ts: "2026-07-22T03:40:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260722"
+          host: linux
+          summary: >
+            OPERATOR ORDER (verbatim in tray-ux spec "UX curation
+            governance"): the always-on menu leaf was UNAPPROVED UX and has
+            been REMOVED from all three platforms (commit 1b4fb80c) — leaf
+            emission, MenuAction::ResetGuest, and every click path deleted;
+            ALL CLI/runtime reset paths retained (--reset-guest on
+            Linux/Windows/macOS, wipe implementations, Windows bounded
+            auto-reset). Presence pins flipped to absence pins + a
+            governance snapshot test now locks the exact approved top-level
+            menu id set per auth state. Live wedged-guest e2e still rides
+            order 455; behavioral residuals from the adversarial review are
+            in plan/issues/wave-review-findings-tray-chain-2026-07-22.md.
 
     - packet_id: login-transitive-states-all-platforms
       provisional_id: windows-260719-2

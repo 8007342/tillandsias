@@ -4285,17 +4285,27 @@ async fn cleanup_shared_stack_if_no_running_forge(
     own_launch_marker: Option<&str>,
     debug: bool,
 ) {
-    let running_lanes: Vec<String> = client
-        .list_containers("tillandsias-")
-        .await
-        .map(|containers| {
-            containers
-                .into_iter()
-                .filter(|container| is_active_lane_container(&container.name, &container.state))
-                .map(|container| container.name)
-                .collect()
-        })
-        .unwrap_or_default();
+    // An errored/unreachable `podman ps` MUST count as HELD, not as "zero
+    // lanes" — collapsing the failure to an empty list (the pre-review
+    // `.unwrap_or_default()`) let a transient podman hiccup tear the shared
+    // stack down under a live sibling, the exact data-loss direction this
+    // function's refcount exists to prevent (final-wave adversarial review
+    // finding, 2026-07-22). Leak-not-destroy: skip teardown and let a later
+    // launch's cleanup retry.
+    let running_lanes: Vec<String> = match client.list_containers("tillandsias-").await {
+        Ok(containers) => containers
+            .into_iter()
+            .filter(|container| is_active_lane_container(&container.name, &container.state))
+            .map(|container| container.name)
+            .collect(),
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] shared-stack cleanup: container listing failed ({e}); \
+                 treating the stack as IN USE and skipping teardown (leak-not-destroy)"
+            );
+            return;
+        }
+    };
 
     if !running_lanes.is_empty() {
         if debug {

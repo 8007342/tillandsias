@@ -1,6 +1,30 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-22T01:30:00Z
+LastExecutionTime: 2026-07-22T03:50:00Z
+
+## Cycle 2026-07-22T03:50Z (linux coordinator — final wave: UX governance enforced, leaf removed, CI typecheck lanes, reviews)
+
+- **UX GOVERNANCE (operator order, verbatim in tray-ux spec)**: every UX
+  change is Tlatoani-gated forever; codified in openspec/specs/tray-ux
+  ("UX curation governance"), methodology invariant, AGENTS.md. The
+  unapproved reset-guest menu leaf REMOVED from all platforms (1b4fb80c);
+  CLI --reset-guest retained; a governance snapshot test locks the approved
+  menu id set so unapproved additions fail tests.
+- **CI cross-typecheck lanes** (9e377477): windows-2022 + macos-14 cargo
+  check on the tray crates — cfg-gated bodies are compiled on every push
+  for the first time (closes the handshake-breakage hole).
+- **Adversarial reviews of waves 1-2**: compile-surface CLEAN on the
+  cfg-gated hunks; 16 behavioral findings triaged — the one
+  teardown-under-live-sibling bug (swallowed podman ps failure in the 443
+  refcount) FIXED same-batch (leak-not-destroy on listing failure);
+  residuals filed as wave-review-findings-{443-vault,tray-chain}-2026-07-22
+  packets. Review finding 1 (443-vault packet) rides before STABLE
+  promotion.
+- **Smoke channel**: curl-install e2e skill's Windows lane now pins the
+  resolved daily via TILLANDSIAS_VERSION (Linux/macOS already daily).
+- **Next**: cut v0.3.260722.1 daily pre-release; operator runs live
+  curl-install smokes on Windows + macOS (order 455) — those PASS records +
+  the Linux smoke complete the v0.4 evidence gate.
 
 ## Cycle 2026-07-22T01:30Z (linux coordinator — wave-2 drain integrated: 5 packets, all landed)
 
