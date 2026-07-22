@@ -10640,7 +10640,7 @@ plan_index:
       order: 313
       desired_release: v0.4
       title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
-      status: claimed
+      status: in_progress
       kind: bug
       deliverable: images/inference/entrypoint.sh
       depends_on: []
