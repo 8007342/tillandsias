@@ -154,6 +154,44 @@ struct HwndHandle(HWND);
 unsafe impl Send for HwndHandle {}
 unsafe impl Sync for HwndHandle {}
 
+/// Send-safe facade over the sync Win32-touching helpers (windows-260722
+/// runtime split): tasks on the background runtime hold only `HwndHandle`
+/// and never materialize a raw `HWND` — rustc's conservative Send analysis
+/// rejects async blocks that so much as construct one. The raw handle
+/// exists only inside these sync frames.
+impl HwndHandle {
+    fn status(self, text: &str) {
+        update_status_text(text, self.0);
+    }
+    fn balloon(self, title: &str, message: &str, severity: BalloonSeverity) {
+        show_balloon(self.0, title, message, severity);
+    }
+    fn wire_unreachable(self) {
+        mark_wire_unreachable(self.0);
+    }
+    fn wire_recovered(self) {
+        mark_wire_recovered(self.0);
+    }
+    fn spawn_provisioning(self) {
+        spawn_provisioning(self.0);
+    }
+    fn apply_vm_status(
+        self,
+        phase: tillandsias_control_wire::VmPhase,
+        podman_ready: bool,
+        last_event: Option<&str>,
+    ) {
+        apply_vm_status(phase, podman_ready, last_event, self.0);
+    }
+    fn note_crashloop(
+        self,
+        phase: tillandsias_control_wire::VmPhase,
+        last_event: Option<&str>,
+    ) {
+        note_crashloop_observation(phase, last_event, self.0);
+    }
+}
+
 impl TrayProgress {
     pub fn new(hwnd: HWND) -> Self {
         Self {
@@ -304,6 +342,30 @@ fn write_utf16_into<const N: usize>(buf: &mut [u16; N], text: &str) {
 
 /// Entry point invoked from `main`. Blocks until the user picks "Quit" on
 /// the tray; returns `!` because the OS message loop owns the thread.
+/// Dedicated multi-thread tokio runtime for the provisioning / VM-lifecycle
+/// task tree (windows-260722 download-throughput root cause). The window
+/// thread's LocalSet is drained by a 100ms `SetTimer` pump (b56a2064), so
+/// every async wake landing there waits for the next timer tick — a
+/// quantization tax that stretched the 66 MB rootfs fetch to minutes
+/// (~one tick per pending write) and adds latency to every wire operation.
+/// Heavy I/O has NO business on a GUI-timer executor: it runs here, on a
+/// standard runtime with native wake handling (mature tokio I/O, operator
+/// directive 2026-07-22). The LocalSet keeps only UI-adjacent tasks (menu
+/// scanner, wndproc glue); Win32 tooltip/balloon updates from these
+/// background tasks go through the same thread-safe `Shell_NotifyIconW`
+/// modify path as before (`HwndHandle` carries the window across threads).
+fn bg_runtime() -> &'static tokio::runtime::Runtime {
+    static BG_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+    BG_RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("tillandsias-bg")
+            .enable_all()
+            .build()
+            .expect("build background runtime")
+    })
+}
+
 pub fn run() -> ! {
     // Route tracing to a file before anything logs — a GUI tray has no console.
     init_tracing();
@@ -1200,7 +1262,7 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
 async fn live_client_request(
     ctx: &str,
     make_body: impl Fn(u64) -> tillandsias_control_wire::ControlMessage + Clone,
-    hwnd: HWND,
+    hwnd: HwndHandle,
 ) -> Option<tillandsias_control_wire::ControlEnvelope> {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_control_wire::{ControlEnvelope, WIRE_VERSION};
@@ -1235,7 +1297,7 @@ async fn live_client_request(
         Ok(s) => s,
         Err(err) => {
             tracing::debug!(%err, ctx, "control wire unreachable");
-            mark_wire_unreachable(hwnd);
+            hwnd.wire_unreachable();
             return None;
         }
     };
@@ -1260,7 +1322,7 @@ async fn live_client_request(
         Ok(_) => {}
         Err(err) => {
             tracing::debug!(%err, ctx, "handshake failed");
-            mark_wire_unreachable(hwnd);
+            hwnd.wire_unreachable();
             return None;
         }
     }
@@ -1279,13 +1341,13 @@ async fn live_client_request(
         Ok(r) => r,
         Err(err) => {
             tracing::debug!(%err, ctx, "request failed on new connection");
-            mark_wire_unreachable(hwnd);
+            hwnd.wire_unreachable();
             return None;
         }
     };
     // Store the working client — subsequent polls reuse it without reconnecting.
     *live_client_mutex().lock().await = Some(client);
-    mark_wire_recovered(hwnd);
+    hwnd.wire_recovered();
     Some(reply)
 }
 
@@ -1608,7 +1670,7 @@ fn apply_local_projects(entries: &[tillandsias_control_wire::LocalProjectEntry])
 /// Reconnects forever with the shared `BACKOFF_SCHEDULE` (250ms→4s), then
 /// 30s steady-state between attempts — while down, `VM_STATUS_PUSH_HEALTH`
 /// is false and the tick loop's fallback poll covers status freshness.
-async fn run_vm_status_push_listener(hwnd: HWND) {
+async fn run_vm_status_push_listener(hwnd: HwndHandle) {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::{BACKOFF_SCHEDULE, Client};
@@ -1726,7 +1788,7 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
                         last_event,
                         ..
                     } => {
-                        apply_vm_status(phase, podman_ready, last_event.as_deref(), hwnd);
+                        hwnd.apply_vm_status(phase, podman_ready, last_event.as_deref());
                         tracing::debug!(?phase, podman_ready, "vm status pushed");
                     }
                     ControlMessage::LoginStatePush {
@@ -1762,7 +1824,7 @@ async fn run_vm_status_push_listener(hwnd: HWND) {
 /// `live_client_request` which reuses the persistent `LIVE_CLIENT` connection
 /// or reconnects transparently. Steady-state this is fallback-only (SC-07):
 /// the tick loop skips it while [`VM_STATUS_PUSH_HEALTH`] holds.
-async fn refresh_vm_status(hwnd: HWND) {
+async fn refresh_vm_status(hwnd: HwndHandle) {
     use tillandsias_control_wire::ControlMessage;
 
     let reply = match live_client_request(
@@ -1782,7 +1844,7 @@ async fn refresh_vm_status(hwnd: HWND) {
             last_event,
             ..
         } => {
-            apply_vm_status(phase, podman_ready, last_event.as_deref(), hwnd);
+            hwnd.apply_vm_status(phase, podman_ready, last_event.as_deref());
             tracing::debug!(?phase, podman_ready, "vm status polled");
         }
         // Per the control-dispatch convergence packet (5c67ddb9, aeb5499a) the
@@ -1820,7 +1882,7 @@ fn local_entry_to_menu(entry: &tillandsias_control_wire::LocalProjectEntry) -> P
 ///
 /// Best-effort: a transient wire error / Error{Unsupported} leaves the
 /// last-known list untouched (logged at debug / warn respectively).
-async fn refresh_local_projects(hwnd: HWND) {
+async fn refresh_local_projects(hwnd: HwndHandle) {
     use tillandsias_control_wire::ControlMessage;
 
     let reply = match live_client_request(
@@ -1935,7 +1997,7 @@ fn cloud_entry_to_menu(entry: &tillandsias_control_wire::CloudProjectEntry) -> P
 /// `MenuState.cloud_projects` so the menu's cloud-projects submenu shows the
 /// logged-in user's repos. Best-effort: a transient wire error / unauthenticated
 /// gh leaves the last-known list untouched (logged at debug).
-async fn refresh_cloud_projects(hwnd: HWND) {
+async fn refresh_cloud_projects(hwnd: HwndHandle) {
     use tillandsias_control_wire::ControlMessage;
 
     let reply = match live_client_request(
@@ -1992,7 +2054,7 @@ fn github_login_state_from_reply(logged_in: bool, handle: Option<String>) -> Git
 /// `GithubLoginStatusRequest` handler it replies `Error { Unsupported }` (or
 /// rejects the unknown variant), and the last-known login state is left
 /// untouched. Mirrors the `refresh_cloud_projects` shape exactly.
-async fn refresh_github_login(hwnd: HWND) {
+async fn refresh_github_login(hwnd: HwndHandle) {
     use tillandsias_control_wire::ControlMessage;
 
     let reply = match live_client_request(
@@ -2684,7 +2746,10 @@ fn spawn_guest_reset(hwnd: HWND) {
         BalloonSeverity::Info,
     );
     let lifecycle = WslLifecycle::new();
-    tokio::task::spawn_local(async move {
+    // windows-260722 runtime split: guest wipe is heavy VM I/O — background
+    // runtime, same as provisioning.
+    let hwnd = HwndHandle(hwnd);
+    bg_runtime().spawn(async move {
         match lifecycle.wipe_guest().await {
             Ok(()) => {
                 reset_crashloop_state();
@@ -2694,13 +2759,12 @@ fn spawn_guest_reset(hwnd: HWND) {
                 PROVISIONING_ACTIVE.store(false, SeqCst);
                 RESET_GUEST_ACTIVE.store(false, SeqCst);
                 tracing::info!("guest wipe complete — reprovisioning from scratch");
-                spawn_provisioning(hwnd);
+                hwnd.spawn_provisioning();
             }
             Err(err) => {
                 tracing::error!(%err, "guest wipe failed — reset aborted");
-                update_status_text("\u{1F534} Guest reset failed", hwnd);
-                show_balloon(
-                    hwnd,
+                hwnd.status("\u{1F534} Guest reset failed");
+                hwnd.balloon(
                     "Tillandsias — guest reset failed",
                     &err,
                     BalloonSeverity::Error,
@@ -2732,9 +2796,15 @@ fn spawn_provisioning(hwnd: HWND) {
         tracing::info!("provisioning already active; ignoring (re)trigger");
         return;
     }
-    let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
+    // windows-260722 runtime split: the provisioning task tree runs on the
+    // dedicated multi-thread runtime, NOT the 100ms-pumped LocalSet — bulk
+    // download/import I/O must never be quantized by a GUI timer. HwndHandle
+    // (Send) carries the window; every Win32 touch goes through the existing
+    // thread-safe modify paths.
+    let hwnd = HwndHandle(hwnd);
+    let progress = std::sync::Arc::new(TrayProgress::new(hwnd.0));
     let lifecycle = WslLifecycle::new();
-    tokio::task::spawn_local(async move {
+    bg_runtime().spawn(async move {
         // windows-260722-1: an absent WSL platform gets the operator-approved
         // heads-up toast BEFORE the background install starts (the install
         // itself runs inside provision_via_recipe's platform ensure, which
@@ -2749,8 +2819,7 @@ fn spawn_provisioning(hwnd: HWND) {
             preflight,
             tillandsias_vm_layer::wsl::WslPlatformVerdict::WslPlatformAbsent
         ) {
-            show_balloon(
-                hwnd,
+            hwnd.balloon(
                 "Tillandsias \u{2014} one-time setup",
                 crate::wsl_lifecycle::TOAST_FEATURE_SETUP,
                 BalloonSeverity::Info,
@@ -2759,7 +2828,7 @@ fn spawn_provisioning(hwnd: HWND) {
         match lifecycle.provision_via_recipe(progress).await {
             Ok(()) => {
                 tracing::info!("VM ready — control wire established");
-                update_status_text("\u{1F7E2} Ready", hwnd);
+                hwnd.status("\u{1F7E2} Ready");
                 // Parking this task holds `_keepalive` for the tray's lifetime;
                 // on Quit the LocalSet drops the task → kill_on_drop releases the
                 // VM to idle normally again. PROVISIONING_ACTIVE stays set (Ready),
@@ -2774,16 +2843,12 @@ fn spawn_provisioning(hwnd: HWND) {
                         // and re-arm Retry. Without this the menu would keep
                         // claiming Ready while nothing holds the VM open.
                         let mut terminal_rx = _keepalive.terminal_rx();
-                        tokio::task::spawn_local(async move {
+                        tokio::spawn(async move {
                             while terminal_rx.changed().await.is_ok() {
                                 let reason = terminal_rx.borrow_and_update().clone();
                                 if let Some(reason) = reason {
-                                    update_status_text(
-                                        "\u{1F534} VM connection lost — Retry",
-                                        hwnd,
-                                    );
-                                    show_balloon(
-                                        hwnd,
+                                    hwnd.status("\u{1F534} VM connection lost — Retry");
+                                    hwnd.balloon(
                                         "Tillandsias — VM connection lost",
                                         &reason,
                                         BalloonSeverity::Error,
@@ -2815,7 +2880,7 @@ fn spawn_provisioning(hwnd: HWND) {
                         // is the packet's next slice.
                         // Holds `_keepalive` for the tray's lifetime; on
                         // Quit the LocalSet drops the task → kill_on_drop.
-                        tokio::task::spawn_local(run_vm_status_push_listener(hwnd));
+                        tokio::spawn(run_vm_status_push_listener(hwnd));
                         // SC-16 (slice 4): hold a watch receiver so the tick
                         // wait ends early on a healthy→down transition and
                         // the fallback round runs immediately.
@@ -2891,7 +2956,7 @@ fn spawn_provisioning(hwnd: HWND) {
                     }
                     Err(err) => {
                         eprintln!("VM keepalive spawn failed: {err}");
-                        update_status_text("\u{1F7E1} Ready (VM may idle out)", hwnd);
+                        hwnd.status("\u{1F7E1} Ready (VM may idle out)");
                         // No keepalive to hold; still surface one live status read.
                         refresh_vm_status(hwnd).await;
                     }
@@ -2904,9 +2969,8 @@ fn spawn_provisioning(hwnd: HWND) {
                 // over the generic classifier (operator-approved wording;
                 // tray-ux governance).
                 if err_text.contains(crate::wsl_lifecycle::PLATFORM_RESTART_REQUIRED_MARKER) {
-                    update_status_text(crate::wsl_lifecycle::CHIP_FEATURE_RESTART, hwnd);
-                    show_balloon(
-                        hwnd,
+                    hwnd.status(crate::wsl_lifecycle::CHIP_FEATURE_RESTART);
+                    hwnd.balloon(
                         "Tillandsias \u{2014} restart needed",
                         crate::wsl_lifecycle::TOAST_FEATURE_RESTART,
                         BalloonSeverity::Warning,
@@ -2917,15 +2981,14 @@ fn spawn_provisioning(hwnd: HWND) {
                     return;
                 }
                 if err_text.contains(crate::wsl_lifecycle::PLATFORM_SETUP_FAILED_MARKER) {
-                    update_status_text(crate::wsl_lifecycle::CHIP_FEATURE_FAILED, hwnd);
-                    show_balloon(
-                        hwnd,
+                    hwnd.status(crate::wsl_lifecycle::CHIP_FEATURE_FAILED);
+                    hwnd.balloon(
                         "Tillandsias \u{2014} setup didn't finish",
                         &err_text,
                         BalloonSeverity::Error,
                     );
                     let reason = err_text.clone();
-                    tokio::task::spawn_local(async move {
+                    tokio::spawn(async move {
                         let written = tokio::task::spawn_blocking(move || {
                             write_failure_diagnostics_bundle(&reason)
                         })
@@ -2933,8 +2996,7 @@ fn spawn_provisioning(hwnd: HWND) {
                         .ok()
                         .flatten();
                         if let Some(path) = written {
-                            show_balloon(
-                                hwnd,
+                            hwnd.balloon(
                                 "Tillandsias \u{2014} diagnostics saved",
                                 &format!(
                                     "Share this file when reporting the problem:\n{}",
@@ -2954,21 +3016,20 @@ fn spawn_provisioning(hwnd: HWND) {
                 // hosts. Unclassified failures keep the curated message
                 // (full error in the log).
                 if let Some(short) = tillandsias_vm_layer::wsl::classified_short_status(&err_text) {
-                    update_status_text(&format!("\u{1F534} {short}"), hwnd);
-                    show_balloon(
-                        hwnd,
+                    hwnd.status(&format!("\u{1F534} {short}"));
+                    hwnd.balloon(
                         "Tillandsias — provisioning failed",
                         &err_text,
                         BalloonSeverity::Error,
                     );
                 } else {
-                    update_status_text("\u{1F534} Provisioning failed — Retry", hwnd);
+                    hwnd.status("\u{1F534} Provisioning failed — Retry");
                 }
                 // Order 420: terminal launch failure — auto-capture the
                 // shareable diagnostics bundle and tell the user where it
                 // is, so a remote crash is debuggable with zero live help.
                 let reason = err_text.clone();
-                tokio::task::spawn_local(async move {
+                tokio::spawn(async move {
                     let written = tokio::task::spawn_blocking(move || {
                         write_failure_diagnostics_bundle(&reason)
                     })
@@ -2976,8 +3037,7 @@ fn spawn_provisioning(hwnd: HWND) {
                     .ok()
                     .flatten();
                     if let Some(path) = written {
-                        show_balloon(
-                            hwnd,
+                        hwnd.balloon(
                             "Tillandsias — diagnostics saved",
                             &format!(
                                 "Share this file when reporting the problem:\n{}",
