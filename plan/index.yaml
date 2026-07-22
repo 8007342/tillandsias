@@ -10640,7 +10640,7 @@ plan_index:
       order: 313
       desired_release: v0.4
       title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
-      status: in_progress
+      status: claimed
       kind: bug
       deliverable: images/inference/entrypoint.sh
       depends_on: []
@@ -19984,3 +19984,15 @@ plan_index:
             litmus:harness-curl-install-shape. Residual: live launch proof
             on a rebuilt forge image. Related: order 431's pin-or-assert
             concern narrows to the codex/openspec npm remainder.
+        - type: claim
+          ts: "2026-07-22T01:12:32Z"
+          agent_id: "linux-yoga-codex-20260722T011232Z"
+          host: linux
+          lease_id: "b47ff5638ac3"
+          expires_at: "2026-07-22T05:12:32Z"
+          summary: >
+            Operator-directed takeover after BigPickle stopped. Expand the
+            launch-time idempotent refresh contract from Claude+OpenCode to
+            all four forge harnesses: OpenCode, Claude, Codex, and
+            Antigravity; reconcile the stale active default-image spec and
+            produce cold/warm live launch evidence on immutable Linux.
