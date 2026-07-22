@@ -10,6 +10,41 @@ Define the minimalistic tray UX flow for Tillandsias, showing only essential ele
 
 ## Requirements
 
+### Requirement: UX curation governance — Tlatoāni approval is MANDATORY for every UX change
+UX exists for END USERS ONLY — not for agents, not for the operator. End
+users are assumed to have zero knowledge of the system's internals: they do
+not know what a VM, WSL, enclave, git mirror, container, or virtualization
+is, and the UX MUST be foolproof and curated to the last detail on that
+assumption. @trace spec:tray-ux
+
+Operator directive (The Tlatoāni, verbatim, 2026-07-22): "You will never
+ever again add any menus without my permission. [...] Absolutely no changes
+to UX ever ever again without my approval. [...] UX is not for agents, it's
+not for Tlatoāni, it's for end users who have no idea what they're doing,
+everything is curated to the last detail."
+
+- No agent MAY add, remove, rename, re-order, enable/disable, or otherwise
+  alter ANY user-visible UX surface — menu items, labels, tooltips, status
+  chips, notifications, dialogs, icons, terminal banners shown to end
+  users — without EXPLICIT prior operator approval recorded in the plan
+  ledger (an operator_note or operator-attributed event on the packet).
+- Internals vocabulary (VM, WSL, enclave, mirror, vault, container, podman,
+  provisioning) MUST NOT appear in end-user-facing UX text.
+- Diagnostic/agent-facing surfaces (`--diagnose` output, lifecycle traces,
+  logs) are NOT end-user UX and remain under normal engineering discipline.
+- Runtime/CLI flags for operators (e.g. `--reset-guest`) are permitted
+  WITHOUT a UX surface; wiring any such capability into the UX requires the
+  approval above.
+
+#### Scenario: An agent proposes a UX change
+- **WHEN** any change would alter a user-visible UX surface
+- **THEN** the change MUST NOT be implemented until the packet carries
+  recorded operator approval for that exact surface change
+- **AND** an unapproved UX change found at review MUST be reverted and the
+  incident recorded (precedent: the reset-guest menu leaf, added 2026-07-21
+  without approval, removed 2026-07-22 by operator order — the CLI flag
+  survived, the leaf did not)
+
 ### Requirement: First-launch minimal tray
 At launch, the tray MUST show only four elements: @trace spec:tray-ux
 1. `<☐ Verifying environment ...` (dynamic status icon + text)

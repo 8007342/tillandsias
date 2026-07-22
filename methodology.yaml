@@ -143,6 +143,7 @@ methodology:
 
   invariant_summary:
     - specs_define_intent
+    - ux_changes_require_explicit_tlatoani_approval_and_are_curated_for_end_users_only
     - cheatsheets_compress_provenance_backed_knowledge
     - cheatsheets_are_ground_truth_and_enforced_by_local_experts
     - code_cites_specs_and_relevant_cheatsheets

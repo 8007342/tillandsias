@@ -30,6 +30,12 @@ sed -n '1,220p' plan/index.yaml
 If `.forge-startup-context.md` exists in the repository root, you are inside a
 Tillandsias forge container — read it for live infrastructure state.
 
+**UX IS LOCKED**: never add, remove, or alter ANY user-visible UX surface
+(menus, labels, chips, notifications, dialogs) without explicit operator
+approval recorded in the plan ledger. UX is for end users who know nothing
+about VMs/WSL/enclaves/mirrors — not for agents, not for the operator.
+Canonical rule: `openspec/specs/tray-ux/spec.md` → "UX curation governance".
+
 **Before EVERY push**: run `./build.sh --check` and fix what it reports. An
 unparseable or unformatted push poisons every downstream clone (see
 `plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md`); the
