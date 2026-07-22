@@ -2735,6 +2735,27 @@ fn spawn_provisioning(hwnd: HWND) {
     let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
     let lifecycle = WslLifecycle::new();
     tokio::task::spawn_local(async move {
+        // windows-260722-1: an absent WSL platform gets the operator-approved
+        // heads-up toast BEFORE the background install starts (the install
+        // itself runs inside provision_via_recipe's platform ensure, which
+        // re-probes for fresh truth). Best-effort probe — never blocks the
+        // provisioning task on failure.
+        let preflight = tokio::task::spawn_blocking(
+            tillandsias_vm_layer::wsl::wsl_platform_preflight,
+        )
+        .await
+        .unwrap_or(tillandsias_vm_layer::wsl::WslPlatformVerdict::Ok);
+        if matches!(
+            preflight,
+            tillandsias_vm_layer::wsl::WslPlatformVerdict::WslPlatformAbsent
+        ) {
+            show_balloon(
+                hwnd,
+                "Tillandsias \u{2014} one-time setup",
+                crate::wsl_lifecycle::TOAST_FEATURE_SETUP,
+                BalloonSeverity::Info,
+            );
+        }
         match lifecycle.provision_via_recipe(progress).await {
             Ok(()) => {
                 tracing::info!("VM ready — control wire established");
@@ -2878,13 +2899,60 @@ fn spawn_provisioning(hwnd: HWND) {
             }
             Err(err) => {
                 tracing::error!(%err, "WSL recipe provisioning failed");
+                let err_text = err.to_string();
+                // windows-260722-1 curated terminal states take precedence
+                // over the generic classifier (operator-approved wording;
+                // tray-ux governance).
+                if err_text.contains(crate::wsl_lifecycle::PLATFORM_RESTART_REQUIRED_MARKER) {
+                    update_status_text(crate::wsl_lifecycle::CHIP_FEATURE_RESTART, hwnd);
+                    show_balloon(
+                        hwnd,
+                        "Tillandsias \u{2014} restart needed",
+                        crate::wsl_lifecycle::TOAST_FEATURE_RESTART,
+                        BalloonSeverity::Warning,
+                    );
+                    // A pending restart is expected setup, not a failure —
+                    // no diagnostics bundle. Retry re-arms for after reboot.
+                    PROVISIONING_ACTIVE.store(false, SeqCst);
+                    return;
+                }
+                if err_text.contains(crate::wsl_lifecycle::PLATFORM_SETUP_FAILED_MARKER) {
+                    update_status_text(crate::wsl_lifecycle::CHIP_FEATURE_FAILED, hwnd);
+                    show_balloon(
+                        hwnd,
+                        "Tillandsias \u{2014} setup didn't finish",
+                        &err_text,
+                        BalloonSeverity::Error,
+                    );
+                    let reason = err_text.clone();
+                    tokio::task::spawn_local(async move {
+                        let written = tokio::task::spawn_blocking(move || {
+                            write_failure_diagnostics_bundle(&reason)
+                        })
+                        .await
+                        .ok()
+                        .flatten();
+                        if let Some(path) = written {
+                            show_balloon(
+                                hwnd,
+                                "Tillandsias \u{2014} diagnostics saved",
+                                &format!(
+                                    "Share this file when reporting the problem:\n{}",
+                                    path.display()
+                                ),
+                                BalloonSeverity::Info,
+                            );
+                        }
+                    });
+                    PROVISIONING_ACTIVE.store(false, SeqCst);
+                    return;
+                }
                 // Order 323: a CLASSIFIED platform failure (WSL absent /
                 // reboot pending / virtualization off) names itself on the
                 // status chip and toasts the full remediation, instead of
                 // the generic chip that read as a crash on first-install
                 // hosts. Unclassified failures keep the curated message
                 // (full error in the log).
-                let err_text = err.to_string();
                 if let Some(short) = tillandsias_vm_layer::wsl::classified_short_status(&err_text) {
                     update_status_text(&format!("\u{1F534} {short}"), hwnd);
                     show_balloon(
@@ -3682,6 +3750,7 @@ mod tests {
             "manifest_pin_x86_64_oci_tar_xz",
             "wire",
             "recent_log_tail",
+            "guest_version",
         ] {
             assert!(
                 obj.contains_key(key),
@@ -3779,8 +3848,8 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         assert_eq!(
             obj.len(),
-            19,
-            "DiagnoseReport should have exactly 19 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`); got {}: {:?}",
+            20,
+            "DiagnoseReport should have exactly 20 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`, windows-260719-4 added `guest_version`); got {}: {:?}",
             obj.len(),
             obj.keys().collect::<Vec<_>>()
         );

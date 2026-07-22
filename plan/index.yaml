@@ -16020,6 +16020,100 @@ plan_index:
             order 455; behavioral residuals from the adversarial review are
             in plan/issues/wave-review-findings-tray-chain-2026-07-22.md.
 
+    - packet_id: windows-wsl-absent-runtime-setup
+      provisional_id: windows-260722-1
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Windows: WSL-absent is a first-class runtime state — preflight before download, background `wsl --install` with curated progress, restart-required surfacing; installer ends with the idempotent install"
+      status: done
+      kind: bug
+      deliverable: scripts/install-windows.ps1 + crates/tillandsias-windows-tray (wsl_lifecycle preflight/ensure + notify_icon curated states) + vm-layer absent stderr signature + spec deltas + litmus updates
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, wsl, installer, ux, vm-lifecycle, fail-loud]
+      estimated_hours: 6
+      outcome: >
+        Operator field report 2026-07-22 (another Windows host, published
+        release): a WSL-less machine was not detected — the install/first-run
+        degraded into what read as a crash loop. Code map confirms the gaps:
+        the installer's 'absent' arm is WARN-ONLY (never runs `wsl --install`,
+        and unlike S2/S3 does not even suppress auto-launch), and the tray
+        never consults the order-323 platform preflight before the rootfs
+        download — an absent-WSL user sits through the multi-hundred-MB
+        download and then gets the WRONG "VM import failed" chip. Required
+        behavior (operator directive): (a) the curl installer ends with an
+        idempotent `wsl --install --no-distribution` when the platform is
+        absent, and 'absent' suppresses auto-launch unless the install
+        completes healthy; (b) at END-USER RUNTIME the tray detects the
+        absent platform BEFORE downloading, shows a curated warning, runs
+        `wsl --install --no-distribution` in the BACKGROUND with progress
+        surfaced, then either continues provisioning (healthy), surfaces a
+        curated restart-required terminal state, or a curated failure state
+        with the diagnostics bundle — never an unbounded loop
+        (vm-provisioning-lifecycle launch-no-unbounded-loop invariant).
+      exit_criteria:
+        - "installer 'absent' arm executes `wsl --install --no-distribution` (idempotent), re-classifies afterward, and suppresses tray auto-launch unless the platform came up healthy; litmus:installer-wsl-preflight-shape updated in lockstep"
+        - "provision_via_recipe runs the platform preflight BEFORE any download; absent => the curated setup flow, never the rootfs fetch (source-window pinned)"
+        - "background `wsl --install` is bounded (timeout + single attempt per provisioning run), streams progress via the existing ProvisionProgress sink, and ends in exactly one of: continue-to-provisioning, restart-required terminal state, or failure terminal state with the order-420 diagnostics bundle"
+        - "curated chips/toasts match the operator-approved wording verbatim (see ux-approval event); no internals vocabulary in end-user text (tray-ux governance)"
+        - "live absent-host verification on a WSL-less Windows machine (this dev host cannot simulate absence) — rides the next order-455-style smoke on such a host; unit/shape pins cover until then"
+      events:
+        - type: ux-approval
+          ts: "2026-07-22T18:35:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            The Tlatoani approved (live, AskUserQuestion in-session) the
+            'Windows feature' wording family for the four new tray states,
+            verbatim: warn chip "(yellow) One-time Windows setup..." with
+            toast "Tillandsias needs a Windows feature that isn't installed
+            yet. Installing it now - you may see a Windows approval
+            prompt."; progress chip "(blue) Installing Windows feature..."
+            (wsl --install output lines streamed as sub-messages);
+            restart chip "(orange) Restart Windows to finish setup" with
+            toast "Setup is almost done. Restart Windows, then open
+            Tillandsias again."; failure chip "(red) Setup didn't finish -
+            Retry" with the captured error + diagnostics-bundle toast.
+            Satisfies tray-ux UX-curation governance for this packet's
+            surfaces.
+        - type: filed
+          ts: "2026-07-22T18:30:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed from the operator's live directive after the field
+            failure on a WSL-less host. Windows-lane v0.4 addition:
+            HOST/VM orchestration completeness (the operator's stated
+            focus now that GUEST/PODMAN layers are stable).
+        - type: completed
+          ts: "2026-07-22T19:20:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Implemented on windows-next (ledger lease). Installer: the
+            'absent' arm now EXECUTES `wsl --install --no-distribution`
+            (idempotent, wsl.exe self-elevates), re-classifies afterward,
+            and suppresses auto-launch unless healthy — previously
+            warn-only AND auto-launched (the field crash-loop shape).
+            Tray: new ensure_wsl_platform runs the order-323 preflight
+            BEFORE the registered fast path and any download (source-window
+            pinned); absent => operator-approved curated flow (warn toast +
+            chip, hidden bounded `wsl --install` streaming progress lines
+            via ProvisionProgress, 20-min ceiling, single attempt) ending
+            in continue / restart-required (no bundle) / failure (order-420
+            bundle) via marker-tagged errors; S2/S3 now fail loud
+            pre-download. Pins: feature_setup_ux_strings_match_operator_
+            approval (verbatim strings + 45-char cap + internals-vocabulary
+            ban), platform_ensure_runs_before_any_download;
+            litmus:installer-wsl-preflight-shape extended (absent-runs-
+            install + absent-no-launch), vm-provisioning-lifecycle spec
+            gains the preflight-before-download + curated-setup scenarios.
+            Suites green. RESIDUAL: live verification on an actually
+            WSL-less host (this dev host cannot simulate absence) — rides
+            the next 455-style smoke there, per exit criterion 5.
+
     - packet_id: login-transitive-states-all-platforms
       provisional_id: windows-260719-2
       order: provisional

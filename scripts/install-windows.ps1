@@ -156,9 +156,36 @@ $WslState = Get-WslPlatformState
 $NoLaunchReason = ''
 switch ($WslState) {
     'absent' {
-        SayWn "WSL is not installed. Install it with: wsl --install --no-distribution"
-        SayWn "(restart Windows if the installer asks). Tillandsias will install now,"
-        SayWn "but provisioning requires WSL2 on next launch."
+        # windows-260722-1: don't just instruct — RUN the idempotent install
+        # right here (operator directive 2026-07-22: "make sure our curl
+        # install ends with the idempotent wsl --install"). wsl.exe raises
+        # its own UAC prompt when elevation is needed; declining or failing
+        # degrades to the old warn-only behavior. Afterward re-classify: a
+        # healthy platform allows auto-launch; anything else suppresses it
+        # (the old arm auto-launched into a provisioning attempt that could
+        # never succeed — the field "crash loop" report of 2026-07-22).
+        SayWn "WSL is not installed. Running the one-time platform install now"
+        SayWn "(idempotent; you may see a Windows approval prompt)..."
+        try {
+            & wsl --install --no-distribution 2>&1 | ForEach-Object { Say "  $($_ -replace "`0", '')" }
+        } catch {
+            SayWn "wsl --install did not complete ($_)."
+        }
+        $WslState = Get-WslPlatformState
+        switch ($WslState) {
+            'ok' { SayOk "WSL platform ready." }
+            'reboot-pending' {
+                SayWn "WSL2 requires a restart to finish installing."
+                SayWn "NEXT: 1) restart Windows   2) launch Tillandsias from the Start Menu."
+                $NoLaunchReason = 'restart Windows first, then launch Tillandsias from the Start Menu'
+            }
+            default {
+                SayWn "WSL is still not available. Install it manually with:"
+                SayWn "  wsl --install --no-distribution"
+                SayWn "(restart Windows if the installer asks), then launch Tillandsias."
+                $NoLaunchReason = 'install WSL2 (wsl --install --no-distribution) first, then launch Tillandsias'
+            }
+        }
     }
     'reboot-pending' {
         SayWn "WSL2 requires a restart to finish installing."

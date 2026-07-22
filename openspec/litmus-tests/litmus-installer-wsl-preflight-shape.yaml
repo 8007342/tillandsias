@@ -49,6 +49,16 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: no-launch-coupled"
 
+  - step: "absent arm EXECUTES the idempotent platform install (windows-260722-1: never warn-only)"
+    command: "grep -q '& wsl --install --no-distribution' scripts/install-windows.ps1 && echo 'ok: absent-runs-install'"
+    timeout_ms: 3000
+    expected_behavior: "ok: absent-runs-install"
+
+  - step: "absent that stays unhealthy after the install suppresses auto-launch"
+    command: "grep -q 'install WSL2 (wsl --install --no-distribution) first' scripts/install-windows.ps1 && echo 'ok: absent-no-launch'"
+    timeout_ms: 3000
+    expected_behavior: "ok: absent-no-launch"
+
   - step: "strings stay PS5.1-safe: no em-dash in the preflight block (BOM-less UTF-8 ANSI trap)"
     command: "awk '/function Get-WslPlatformState/,/^\\}$/' scripts/install-windows.ps1 | grep -c $'\\u2014' | grep -qx 0 && echo 'ok: ascii-strings'"
     timeout_ms: 3000
