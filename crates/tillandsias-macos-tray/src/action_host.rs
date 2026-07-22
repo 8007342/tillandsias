@@ -1462,15 +1462,11 @@ impl TrayActionHost {
                     None,
                 );
             }
-            MenuAction::ResetGuest => {
-                // Intentional EPHEMERAL RESET (windows-260717-4): stop the
-                // running VM, delete the provisioned boot artifacts, and
-                // re-run the exact same boot path `boot_vm_async` always
-                // uses (which reprovisions from scratch when the artifacts
-                // are absent). Destructive by design — one re-auth is the
-                // only cost.
-                self.reset_guest_async();
-            }
+            // NOTE: there is deliberately NO menu arm for the guest reset —
+            // the `reset-guest` leaf was an UNAPPROVED UX surface, removed
+            // by operator order 2026-07-22 (tray-ux "UX curation
+            // governance"). The reset stays reachable via the `--reset-guest`
+            // CLI verb (`diagnose::reset_guest_main`), never a menu click.
             MenuAction::CloudOverflow | MenuAction::Inert => {
                 // Informational / overflow placeholders. No action.
             }
@@ -1693,7 +1689,15 @@ impl TrayActionHost {
     /// errors leave last-known state untouched, and the fresh boot spawns
     /// its own poller which owns the chip from then on.
     ///
+    /// NOTE: no menu path reaches this worker any more — the `Reset Guest…`
+    /// leaf was removed by operator order 2026-07-22 (tray-ux "UX curation
+    /// governance"). Retained (dead-code-allowed) as the stop→wipe→reboot
+    /// worker for future RUNTIME wiring (e.g. the cross-platform bounded
+    /// auto-reset policy in control-wire); the manual affordance today is
+    /// the `--reset-guest` CLI verb (`diagnose::reset_guest_main`).
+    ///
     /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[allow(dead_code)]
     pub fn reset_guest_async(&self) {
         let ivars = self.ivars();
 

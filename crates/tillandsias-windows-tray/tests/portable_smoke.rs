@@ -34,14 +34,14 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
             let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
             assert_eq!(
                 ids,
-                vec![
-                    "status",
-                    "github-login",
-                    "---",
-                    "version",
-                    "reset-guest",
-                    "quit"
-                ]
+                vec!["status", "github-login", "---", "version", "quit"]
+            );
+            // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
+            // governance"): the unapproved reset-guest leaf must not render
+            // on Windows — the reset is CLI-only (`--reset-guest`).
+            assert!(
+                !ids.contains(&"reset-guest"),
+                "reset-guest must NOT appear (removed by operator order)"
             );
         }
         other => panic!("expected Ready, got {other:?}"),
@@ -66,9 +66,14 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
                     "cloud-projects",
                     "---",
                     "version",
-                    "reset-guest",
                     "quit"
                 ]
+            );
+            // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
+            // governance"): no reset-guest leaf in the logged-in shape either.
+            assert!(
+                !ids.contains(&"reset-guest"),
+                "reset-guest must NOT appear (removed by operator order)"
             );
             assert!(
                 !items.iter().any(|i| i.id == "github-login"),

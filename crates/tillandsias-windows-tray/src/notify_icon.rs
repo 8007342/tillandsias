@@ -394,9 +394,11 @@ pub fn run() -> ! {
             if RETRY_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
                 spawn_provisioning(hwnd);
             }
-            // Same shape for `Reset Guest…` (windows-260717-4): the click (or
-            // the bounded auto-reset policy) sets the flag; the wipe +
-            // reprovision task spawns here in the LocalSet context.
+            // Same shape for the guest reset (windows-260717-4): the bounded
+            // auto-reset policy sets the flag; the wipe + reprovision task
+            // spawns here in the LocalSet context. (The `Reset Guest…` menu
+            // leaf was removed by operator order 2026-07-22 — the manual
+            // affordance is the `--reset-guest` CLI verb.)
             if RESET_GUEST_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
                 spawn_guest_reset(hwnd);
             }
@@ -1329,9 +1331,9 @@ static AUTO_RESET_POLICY: std::sync::LazyLock<
 });
 
 /// Opt-in gate for the automatic ephemeral reset. Default OFF: the manual
-/// affordances (tray `Reset Guest…` + `--reset-guest`) are always available,
-/// and an automatic destructive action must be an explicit operator choice
-/// until the live e2e smoke pass validates the full loop on a real host.
+/// affordance (the `--reset-guest` CLI verb) is always available, and an
+/// automatic destructive action must be an explicit operator choice until
+/// the live e2e smoke pass validates the full loop on a real host.
 fn auto_reset_enabled() -> bool {
     std::env::var("TILLANDSIAS_AUTO_RESET_GUEST").is_ok_and(|v| v == "1")
 }
@@ -1393,10 +1395,11 @@ fn note_crashloop_observation(
     }
     // Bounded AUTO-RESET (windows-260717-4, opt-in): consult the shared
     // cap/backoff policy on every observation — Healthy clears the budget,
-    // a tripped verdict may grant an attempt. A granted attempt rides the
-    // EXACT same request flag as the manual menu click, so the wipe +
-    // reprovision path is identical; after the cap the policy defers
-    // forever (the Error balloon above already points at the manual reset).
+    // a tripped verdict may grant an attempt. A granted attempt sets the
+    // request flag the message loop drains into `spawn_guest_reset`, the
+    // same wipe + reprovision path `--reset-guest` exercises; after the cap
+    // the policy defers forever (the Error balloon above already points at
+    // the manual reset).
     if auto_reset_enabled()
         && let Ok(mut policy) = AUTO_RESET_POLICY.lock()
     {
@@ -2622,10 +2625,12 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FAST_POLL_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(5);
 
-/// Set by the `Reset Guest…` menu click (or the bounded auto-reset policy)
-/// and drained by the message loop, which spawns the wipe+reprovision task in
-/// the LocalSet context — the exact mirror of `RETRY_REQUESTED` so both
-/// affordances share the same click→flag→LocalSet-spawn shape.
+/// Set by the bounded auto-reset policy and drained by the message loop,
+/// which spawns the wipe+reprovision task in the LocalSet context — the
+/// exact mirror of `RETRY_REQUESTED`'s flag→LocalSet-spawn shape. There is
+/// NO menu path to this flag: the `Reset Guest…` leaf was removed by
+/// operator order 2026-07-22 (tray-ux "UX curation governance"); the manual
+/// affordance is the `--reset-guest` CLI verb (`reset_guest_once`).
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
 static RESET_GUEST_REQUESTED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -3256,16 +3261,11 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
             tracing::info!(log = %log_file_path().display(), "opening tray log in Explorer");
             open_log_file();
         }
-        // Intentional EPHEMERAL RESET (windows-260717-4). Mirrors Retry's
-        // click→flag shape: the wndproc only sets the flag; the message loop
-        // drains it and spawns the wipe+reprovision task in the LocalSet
-        // context. Unlike Retry there is NO PROVISIONING_ACTIVE gate — a
-        // reset is valid (and most useful) while the guest is wedged-Ready.
-        MenuAction::ResetGuest => {
-            tracing::info!("reset guest requested from the tray menu");
-            RESET_GUEST_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
-            update_status_text("\u{267B}\u{FE0F} Resetting guest\u{2026}", hwnd);
-        }
+        // NOTE: there is deliberately NO menu arm for the guest reset — the
+        // `reset-guest` leaf was an UNAPPROVED UX surface, removed by
+        // operator order 2026-07-22 (tray-ux "UX curation governance").
+        // The reset stays reachable via `--reset-guest` (CLI) and the
+        // opt-in bounded auto-reset policy, never from a menu click.
         // Attach / Maintain / GitHub-login all open an in-VM PTY. `intent_for_action`
         // picks the `PtyIntent`; `launch_spec` produces the exact forge-wrapped in-VM
         // argv; then we open it in a native Windows terminal via `wsl.exe`.

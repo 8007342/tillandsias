@@ -46,13 +46,16 @@ pub mod ids {
     pub const SEPARATOR: &str = "---";
     pub const GITHUB_LOGIN: &str = "github-login";
     pub const VERSION: &str = "version";
-    /// Intentional EPHEMERAL RESET (windows-260717-4): one-click wipe +
-    /// reprovision of the guest. Destructive by design — the guest+vault are
-    /// disposable; state of value lives in the cloud and the only cost is one
-    /// re-authentication. Always visible (Quit-adjacent footer leaf) so a
-    /// wedged guest can be recovered even when nothing else in the menu works.
-    pub const RESET_GUEST: &str = "reset-guest";
     pub const QUIT: &str = "quit";
+
+    /// REMOVED UX surface (operator order, 2026-07-22): the `reset-guest`
+    /// menu leaf was added 2026-07-21 without operator approval and removed
+    /// per `openspec/specs/tray-ux/spec.md` → "UX curation governance".
+    /// The id is kept ONLY so absence pins and the legacy-id inert-resolution
+    /// tests can reference it — `build()` MUST NOT emit it. The reset
+    /// capability itself survives as the `--reset-guest` CLI verb on all
+    /// three platforms.
+    pub const RESET_GUEST: &str = "reset-guest";
 
     // Legacy global-picker IDs — no longer emitted by `build()` but kept so
     // the action resolver still compiles.
@@ -410,25 +413,29 @@ fn truncate_80(s: &str) -> String {
 /// `{~/src, Cloud}` is emitted, never both — matching the Linux golden.
 /// Agent selection lives inside each per-project submenu, not at top level.
 ///
-/// Logged **out** (collapsed) — 6 items:
+/// This item set is UX-curation-governed: adding, removing, or reordering
+/// ANY id below requires recorded operator approval
+/// (`openspec/specs/tray-ux/spec.md` → "UX curation governance"). The
+/// `reset-guest` leaf was removed 2026-07-22 by operator order; the reset
+/// capability survives only as the `--reset-guest` CLI verb.
+///
+/// Logged **out** (collapsed) — 5 items:
 /// 1. `status` — disabled, current status line
 /// 2. `github-login` — `🔑 GitHub Login` leaf (or `📋 Setting up…` if not ready)
 /// 3. `---` — separator
 /// 4. `version` — disabled footer
-/// 5. `reset-guest` — `♻️ Reset Guest…` (always enabled; windows-260717-4)
-/// 6. `quit`
+/// 5. `quit`
 ///
-/// Logged **in** (expanded) — 7 items:
+/// Logged **in** (expanded) — 6 items:
 /// 1. `status`
 /// 2. `local-projects` — submenu of `~/src` entries; each project has
 ///    Claude / Codex / OpenCode / OpenCode Web / Observatorium / Maintenance
 /// 3. `cloud-projects` — submenu capped at `MAX_CLOUD_PROJECTS_IN_MENU` + overflow
 /// 4. `---` — separator
 /// 5. `version` — disabled footer
-/// 6. `reset-guest` — `♻️ Reset Guest…` (always enabled; windows-260717-4)
-/// 7. `quit`
+/// 6. `quit`
 ///
-/// @trace spec:host-shell-architecture, spec:windows-native-tray, spec:macos-native-tray
+/// @trace spec:host-shell-architecture, spec:windows-native-tray, spec:macos-native-tray, spec:tray-ux
 pub fn build(state: &MenuState) -> MenuStructure {
     let mut items = Vec::new();
 
@@ -483,15 +490,11 @@ pub fn build(state: &MenuState) -> MenuStructure {
         ver_str.push_str(" (Update Pending)");
     }
 
-    // (4) Footer. Reset Guest sits Quit-adjacent and is ALWAYS enabled —
-    //     it is the designed recovery affordance for a wedged guest, so it
-    //     must never itself be gated on the guest being healthy
-    //     (windows-260717-4; ephemeral doctrine: destructive ok, one re-auth).
+    // (4) Footer: version + quit ONLY. The `reset-guest` leaf that briefly
+    //     lived here was an UNAPPROVED UX surface and was removed by operator
+    //     order 2026-07-22 (tray-ux "UX curation governance"); the recovery
+    //     affordance for a wedged guest is the `--reset-guest` CLI verb.
     items.push(MenuItem::disabled(ids::VERSION, ver_str, "informational"));
-    items.push(MenuItem::leaf(
-        ids::RESET_GUEST,
-        "\u{267B}\u{FE0F} Reset Guest\u{2026}",
-    ));
     items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
 
     MenuStructure::Ready { items }
@@ -653,7 +656,7 @@ mod tests {
     ///
     /// Logged-in menu: status + ~/src submenu + Cloud submenu + separator +
     /// version + quit = 6 top-level items, matching the Linux tray 1:1.
-    /// Agent selection lives inside each per-project submenu (6 leaves each).
+    /// Agent selection lives inside each per-project submenu (7 leaves each).
     #[test]
     fn menu_structure_matches_linux_tray_parity() {
         let local = (0..5)
@@ -693,11 +696,12 @@ mod tests {
             other => panic!("expected MenuStructure::Ready, got {other:?}"),
         };
 
-        // status + local + cloud + separator + version + reset-guest + quit
-        // = 7 top-level items (reset-guest added by windows-260717-4).
+        // status + local + cloud + separator + version + quit
+        // = 6 top-level items (the unapproved reset-guest leaf was removed
+        // by operator order 2026-07-22; tray-ux "UX curation governance").
         assert_eq!(
             items.len(),
-            7,
+            6,
             "top-level item count (authenticated, Linux parity)"
         );
 
@@ -710,7 +714,6 @@ mod tests {
                 ids::CLOUD_PROJECTS,
                 ids::SEPARATOR,
                 ids::VERSION,
-                ids::RESET_GUEST,
                 ids::QUIT,
             ],
             "top-level IDs must follow the Linux-parity contract",
@@ -801,7 +804,6 @@ mod tests {
                 ids::GITHUB_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
-                ids::RESET_GUEST,
                 ids::QUIT
             ],
             "logged-out menu must collapse to the login-gated short list",
@@ -839,7 +841,6 @@ mod tests {
                 ids::GITHUB_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
-                ids::RESET_GUEST,
                 ids::QUIT
             ],
             "logged-out menu must still collapse to the short list",
@@ -881,7 +882,6 @@ mod tests {
                 ids::GITHUB_LOGIN,
                 ids::SEPARATOR,
                 ids::VERSION,
-                ids::RESET_GUEST,
                 ids::QUIT
             ],
             "logging-in menu keeps the collapsed short list",
@@ -1072,35 +1072,114 @@ mod tests {
         );
     }
 
-    /// windows-260717-4: the intentional ephemeral-reset affordance is an
-    /// ALWAYS-enabled, Quit-adjacent leaf in every auth state — a wedged
-    /// guest must be recoverable from the menu no matter what else is broken.
+    /// Recursively collect every id in a menu subtree.
+    fn collect_ids<'a>(items: &'a [MenuItem], out: &mut Vec<&'a str>) {
+        for item in items {
+            out.push(item.id.as_str());
+            collect_ids(&item.children, out);
+        }
+    }
+
+    /// ABSENCE pin (operator order, 2026-07-22; `openspec/specs/tray-ux/spec.md`
+    /// → "UX curation governance"): the `reset-guest` menu leaf was an
+    /// UNAPPROVED UX surface and MUST NOT be emitted anywhere in the menu
+    /// tree, in ANY auth state, ready/podman state, or target surface. The
+    /// reset capability survives only as the `--reset-guest` CLI verb.
     #[test]
-    fn reset_guest_leaf_always_present_and_enabled() {
-        for login in [
-            GithubLoginState::LoggedOut,
-            GithubLoginState::LoggingIn,
-            GithubLoginState::LoggedIn { handle: "u".into() },
-        ] {
-            let state = MenuState {
-                login,
-                ..MenuState::initial()
-            };
-            let items = match build(&state) {
-                MenuStructure::Ready { items } => items,
-                other => panic!("expected Ready, got {other:?}"),
-            };
-            let reset = items
-                .iter()
-                .find(|i| i.id == ids::RESET_GUEST)
-                .expect("reset-guest leaf must be present in every auth state");
-            assert!(reset.enabled, "reset-guest must never be gated/disabled");
-            assert!(reset.children.is_empty(), "reset-guest is a leaf");
-            assert!(reset.label.contains("Reset Guest"));
-            // Quit-adjacent: immediately before the quit item.
-            let reset_idx = items.iter().position(|i| i.id == ids::RESET_GUEST).unwrap();
-            let quit_idx = items.iter().position(|i| i.id == ids::QUIT).unwrap();
-            assert_eq!(reset_idx + 1, quit_idx, "reset-guest sits right above Quit");
+    fn reset_guest_leaf_absent_in_every_state() {
+        for target in [TargetSurface::WindowsTray, TargetSurface::MacosTray] {
+            for login in [
+                GithubLoginState::LoggedOut,
+                GithubLoginState::LoggingIn,
+                GithubLoginState::LoggedIn { handle: "u".into() },
+            ] {
+                for podman_ready in [false, true] {
+                    let state = MenuState {
+                        login: login.clone(),
+                        target,
+                        podman_ready,
+                        login_runtime_ready: podman_ready,
+                        local_projects: vec![ProjectEntry {
+                            name: "myapp".into(),
+                            path: "/home/u/src/myapp".into(),
+                            ready: false,
+                        }],
+                        ..MenuState::initial()
+                    };
+                    let menu = build(&state);
+                    let mut all_ids = Vec::new();
+                    collect_ids(menu.top_items(), &mut all_ids);
+                    assert!(
+                        !all_ids.contains(&ids::RESET_GUEST),
+                        "no menu item with id `{}` may exist anywhere in the tree \
+                         (removed by operator order 2026-07-22; \
+                         tray-ux \"UX curation governance\")",
+                        ids::RESET_GUEST,
+                    );
+                    let labels: Vec<&str> =
+                        menu.top_items().iter().map(|i| i.label.as_str()).collect();
+                    assert!(
+                        !labels.iter().any(|l| l.contains("Reset Guest")),
+                        "no top-level label may read `Reset Guest…`: {labels:?}",
+                    );
+                }
+            }
+        }
+    }
+
+    /// GOVERNANCE pin (`openspec/specs/tray-ux/spec.md` → "UX curation
+    /// governance"): `build()` emits EXACTLY the approved top-level id set —
+    /// snapshotted below per auth state. UX exists for END USERS ONLY; any
+    /// future menu addition/removal/reorder MUST fail here until this
+    /// snapshot is deliberately updated ALONGSIDE recorded operator approval
+    /// in the plan ledger. Do NOT loosen this to a subset/contains check.
+    ///
+    /// @trace spec:tray-ux
+    #[test]
+    fn build_emits_exactly_the_approved_top_level_id_set() {
+        const APPROVED_LOGGED_OUT: [&str; 5] = [
+            ids::STATUS,
+            ids::GITHUB_LOGIN,
+            ids::SEPARATOR,
+            ids::VERSION,
+            ids::QUIT,
+        ];
+        const APPROVED_LOGGED_IN: [&str; 6] = [
+            ids::STATUS,
+            ids::LOCAL_PROJECTS,
+            ids::CLOUD_PROJECTS,
+            ids::SEPARATOR,
+            ids::VERSION,
+            ids::QUIT,
+        ];
+
+        for target in [TargetSurface::WindowsTray, TargetSurface::MacosTray] {
+            for (login, approved) in [
+                (GithubLoginState::LoggedOut, &APPROVED_LOGGED_OUT[..]),
+                (GithubLoginState::LoggingIn, &APPROVED_LOGGED_OUT[..]),
+                (
+                    GithubLoginState::LoggedIn { handle: "u".into() },
+                    &APPROVED_LOGGED_IN[..],
+                ),
+            ] {
+                let state = MenuState {
+                    login,
+                    target,
+                    ..MenuState::initial()
+                };
+                let items = match build(&state) {
+                    MenuStructure::Ready { items } => items,
+                    other => panic!("expected Ready, got {other:?}"),
+                };
+                let actual: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+                assert_eq!(
+                    actual, approved,
+                    "unapproved top-level menu change for target {target:?} — every \
+                     UX surface change requires recorded operator approval \
+                     (tray-ux \"UX curation governance\") before this snapshot \
+                     may be updated",
+                );
+            }
         }
     }
 }

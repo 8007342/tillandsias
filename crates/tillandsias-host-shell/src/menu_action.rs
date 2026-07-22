@@ -39,11 +39,6 @@ impl ProjectScope {
 pub enum MenuAction {
     Quit,
     GithubLogin,
-    /// Intentional EPHEMERAL RESET (windows-260717-4): wipe the guest
-    /// (unregister the WSL distro / delete the VZ boot artifacts / tear down
-    /// the podman enclave) and reprovision from scratch. Destructive by
-    /// design; the only cost is one re-authentication.
-    ResetGuest,
     /// Per-project attach with an explicit agent (from the per-project submenu).
     Attach {
         scope: ProjectScope,
@@ -84,7 +79,10 @@ pub fn resolve(id: &str) -> MenuAction {
     match id {
         ids::QUIT => MenuAction::Quit,
         ids::GITHUB_LOGIN => MenuAction::GithubLogin,
-        ids::RESET_GUEST => MenuAction::ResetGuest,
+        // NOTE: `ids::RESET_GUEST` deliberately resolves to `Inert` (via the
+        // fallthrough): the menu leaf was removed by operator order
+        // 2026-07-22 (tray-ux "UX curation governance"); the reset
+        // capability is CLI-only (`--reset-guest`), never menu-clickable.
         // Legacy global-picker IDs — still handled for backward compat.
         ids::OBSERVATORIUM => MenuAction::OpenObservatorium,
         ids::OPENCODE_WEB => MenuAction::OpenOpenCodeWeb,
@@ -199,8 +197,6 @@ mod tests {
     fn resolves_static_ids() {
         assert_eq!(resolve(ids::QUIT), MenuAction::Quit);
         assert_eq!(resolve(ids::GITHUB_LOGIN), MenuAction::GithubLogin);
-        // windows-260717-4: the ephemeral-reset leaf resolves for every tray.
-        assert_eq!(resolve(ids::RESET_GUEST), MenuAction::ResetGuest);
         assert_eq!(resolve(ids::OBSERVATORIUM), MenuAction::OpenObservatorium);
         assert_eq!(resolve(ids::OPENCODE_WEB), MenuAction::OpenOpenCodeWeb);
         assert_eq!(
@@ -328,6 +324,11 @@ mod tests {
         assert_eq!(resolve(ids::STATUS), MenuAction::Inert);
         assert_eq!(resolve(ids::VERSION), MenuAction::Inert);
         assert_eq!(resolve(ids::LOCAL_PROJECTS_EMPTY), MenuAction::Inert);
+        // The removed reset-guest leaf (operator order, 2026-07-22; tray-ux
+        // "UX curation governance"): even a stale click on the legacy id
+        // must be INERT — no menu path may reach the guest reset. The
+        // capability is CLI-only (`--reset-guest`).
+        assert_eq!(resolve(ids::RESET_GUEST), MenuAction::Inert);
         // Totally unknown.
         assert_eq!(resolve("nonsense"), MenuAction::Inert);
     }

@@ -363,25 +363,30 @@ mod tests {
         );
     }
 
-    /// Intentional EPHEMERAL RESET wiring pin (windows-260717-4). The macOS
-    /// bodies are `cfg(target_os = "macos")` and cannot be type-checked on
-    /// the Linux dev box, so this platform-independent source-scan keeps the
-    /// load-bearing hooks from silently regressing on any host: the menu
-    /// dispatch arm, the stop→wipe→reboot worker, the crash-loop history
-    /// clear, and the CLI verb.
+    /// EPHEMERAL RESET wiring pin (windows-260717-4, amended 2026-07-22 by
+    /// operator order — tray-ux "UX curation governance"). The macOS bodies
+    /// are `cfg(target_os = "macos")` and cannot be type-checked on the
+    /// Linux dev box, so this platform-independent source-scan keeps the
+    /// contract from silently regressing on any host: the MENU dispatch arm
+    /// is GONE (the `Reset Guest…` leaf was an unapproved UX surface), while
+    /// the stop→wipe→reboot worker, the crash-loop history clear, and the
+    /// `--reset-guest` CLI verb REMAIN.
     ///
     /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     #[test]
-    fn reset_guest_wiring_is_present() {
+    fn reset_guest_menu_wiring_absent_cli_and_worker_present() {
         let action_host = include_str!("action_host.rs");
-        // 1. The shared-menu click routes to the reset worker.
+        // 1. ABSENCE: no menu dispatch arm may reach the guest reset. The
+        //    `MenuAction::ResetGuest` variant itself was deleted from
+        //    host-shell, so ANY mention here means the click path came back.
         assert!(
-            action_host.contains("MenuAction::ResetGuest => {"),
-            "dispatch_menu_action must handle MenuAction::ResetGuest"
+            !action_host.contains("MenuAction::ResetGuest"),
+            "the reset-guest menu click wiring must stay REMOVED \
+             (operator order 2026-07-22; tray-ux \"UX curation governance\")"
         );
         assert!(
             action_host.contains("pub fn reset_guest_async(&self)"),
-            "the stop→wipe→reboot worker must exist"
+            "the stop→wipe→reboot worker must exist (runtime/CLI reuse)"
         );
         // 2. The wipe uses the shared vm-layer primitive (tested on Linux).
         assert!(

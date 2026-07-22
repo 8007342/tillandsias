@@ -2458,53 +2458,6 @@ fn handle_github_login(service: Arc<TrayService>) {
     }
 }
 
-/// Intentional EPHEMERAL RESET click handler (windows-260717-4): launch the
-/// `--reset-guest` CLI verb in a terminal — the same affordance GitHub Login
-/// uses — so the destructive wipe + re-init runs with fully visible progress.
-/// The reset discards the guest's cached credentials by design, so the tray
-/// immediately reflects the honest post-reset auth state (the GitHubLogin row
-/// returns; re-authenticating once restores cloud access).
-///
-/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
-fn handle_reset_guest(service: Arc<TrayService>) {
-    let service_for_emit = service.clone();
-    if service
-        .task_executor
-        .spawn_task(move || {
-            let _ = futures::executor::block_on(service_for_emit.set_status(
-                "\u{267B}\u{FE0F} Resetting guest \u{2026}".to_string(),
-                TrayIconState::Building,
-                None,
-            ));
-            let args = vec!["--reset-guest".to_string(), "--debug".to_string()];
-            if let Err(err) = launch_in_terminal("Reset Guest", "tillandsias", &args) {
-                warn!("guest reset terminal spawn failed: {err}");
-                // Surface to the tray UX: a desktop-shortcut launch has no
-                // controlling terminal, so a log-only failure would look
-                // like the click did nothing.
-                let _ = futures::executor::block_on(service_for_emit.set_status(
-                    format!("\u{1F940} Guest reset: {err}"),
-                    TrayIconState::Dried,
-                    None,
-                ));
-            } else {
-                // The reset discards the guest credentials: reflect the
-                // honest post-reset auth state immediately.
-                service_for_emit.with_state(|state| {
-                    state.is_authenticated = false;
-                    state.cloud_projects.clear();
-                    state.last_fetched = None;
-                    state.bump_revision();
-                });
-            }
-            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-        })
-        .is_err()
-    {
-        warn!("task queue full: skipping guest reset");
-    }
-}
-
 // @trace spec:remote-projects, gap:TR-005
 // Legacy clone-project handler. The new cloud-side flow lives in
 // `handle_launch_cloud_project` (clone-then-launch). Retained for callers.
@@ -3208,16 +3161,20 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
 ///    ☁️ Cloud >                                  id=22  (visible iff authenticated)
 /// 3. ─── separator ───                           id=29
 /// 4. v<full-version> — By Tlatoāni              id=30  (disabled)
-/// 5. ♻️ Reset Guest…                             id=32  (always enabled; windows-260717-4)
-/// 6. ❌ Quit Tillandsias                         id=31
+/// 5. ❌ Quit Tillandsias                         id=31
 /// ```
+///
+/// This shape is UX-curation-governed (`openspec/specs/tray-ux/spec.md` →
+/// "UX curation governance"): any addition/removal/reorder requires recorded
+/// operator approval. The `Reset Guest…` leaf (id=32) was removed 2026-07-22
+/// by operator order; the reset survives only as `--reset-guest` (CLI).
 ///
 /// ## Item-count contract
 ///
 /// | Authenticated? | Visible top-level items |
 /// |----------------|-------------------------|
-/// | No             | 6: status + login + separator + version + reset + quit |
-/// | Yes            | 7: status + ~/src + Cloud + separator + version + reset + quit |
+/// | No             | 5: status + login + separator + version + quit |
+/// | Yes            | 6: status + ~/src + Cloud + separator + version + quit |
 ///
 /// ## Podman-unavailable degradation
 ///
@@ -3292,24 +3249,10 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         Vec::new(),
     )));
 
-    // (5) Reset Guest — the intentional EPHEMERAL RESET affordance
-    //     (windows-260717-4). ALWAYS enabled, Quit-adjacent: a wedged guest
-    //     must be recoverable from the menu no matter what else is broken.
-    //     Destructive by design; the only cost is one re-authentication.
-    children.push(child(node(
-        32,
-        props(vec![
-            (
-                "label".to_string(),
-                ov_str("\u{267B}\u{FE0F} Reset Guest\u{2026}"),
-            ),
-            ("enabled".to_string(), ov(Value::from(true))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    // (6) Quit.
+    // (5) Quit. NOTE: the `Reset Guest…` leaf (id=32) that briefly sat here
+    //     was an UNAPPROVED UX surface, removed by operator order 2026-07-22
+    //     (tray-ux "UX curation governance"); a wedged guest is recovered
+    //     via the `--reset-guest` CLI verb.
     children.push(child(node(
         31,
         props(vec![
@@ -3727,16 +3670,12 @@ impl DbusMenuIface {
                     warn!("task queue full: skipping gh auth refresh");
                 }
             }
-            32 => {
-                // Reset Guest click (windows-260717-4): intentional EPHEMERAL
-                // RESET — wipe the podman guest substrate + vault and
-                // re-initialize from scratch. Runs the `--reset-guest` CLI
-                // verb in a terminal (same affordance GitHub Login uses) so
-                // the destructive wipe + re-init is fully visible.
-                handle_reset_guest(self.0.clone());
-            }
-            21 | 22 | 29 | 30 => {
+            21 | 22 | 29 | 30 | 32 => {
                 // submenu container, separator, or version label — no-op.
+                // id=32 is the REMOVED `Reset Guest…` leaf (operator order
+                // 2026-07-22, tray-ux "UX curation governance"): the menu no
+                // longer emits it, and a stale click must stay inert — the
+                // reset is CLI-only (`--reset-guest`).
             }
             CLOUD_OVERFLOW_ID => {
                 // Cloud overflow leaf — dump the full project list to stderr
@@ -4938,16 +4877,19 @@ mod tests {
         }
     }
 
-    // @trace spec:tray-minimal-ux
+    // @trace spec:tray-minimal-ux, spec:tray-ux
     #[test]
-    fn minimal_menu_has_6_top_level_items_when_unauthenticated() {
+    fn minimal_menu_has_5_top_level_items_when_unauthenticated() {
         // When `is_authenticated == false`, the top-level menu is exactly:
         //   1. Status (id=1)
         //   2. GitHubLogin (id=20)
         //   3. Separator (id=29)
         //   4. Version + attribution (id=30)
-        //   5. Reset Guest (id=32; windows-260717-4)
-        //   6. Quit (id=31)
+        //   5. Quit (id=31)
+        // This EXACT set is UX-curation-governed (tray-ux "UX curation
+        // governance"): the unapproved Reset Guest leaf (id=32) was removed
+        // by operator order 2026-07-22 and must never come back without
+        // recorded approval.
         let state = TrayStateBuilder::new()
             .forge_available(false)
             .enclave_status(EnclaveStatus::Verifying)
@@ -4958,8 +4900,8 @@ mod tests {
         let top_level = &menu.2;
         assert_eq!(
             top_level.len(),
-            6,
-            "Expected exactly 6 top-level items when unauthenticated, got {}",
+            5,
+            "Expected exactly 5 top-level items when unauthenticated, got {}",
             top_level.len()
         );
 
@@ -4986,9 +4928,12 @@ mod tests {
             label_list.iter().any(|l| l.contains("Quit Tillandsias")),
             "Missing quit button"
         );
+        // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
+        // governance"): the reset-guest leaf must NOT exist on any platform;
+        // the reset is CLI-only (`--reset-guest`).
         assert!(
-            label_list.iter().any(|l| l.contains("Reset Guest")),
-            "Missing Reset Guest entry (windows-260717-4)"
+            !label_list.iter().any(|l| l.contains("Reset Guest")),
+            "Reset Guest menu leaf must be ABSENT (removed by operator order)"
         );
 
         // No ~/src / Cloud at this auth stage.
@@ -4996,12 +4941,11 @@ mod tests {
         assert!(!label_list.iter().any(|l| l.contains("Cloud")));
     }
 
-    // @trace spec:tray-minimal-ux
+    // @trace spec:tray-minimal-ux, spec:tray-ux
     #[test]
     fn menu_expands_when_authenticated() {
         // When `is_authenticated == true` the GitHubLogin row is replaced by
-        // the `~/src` + `Cloud` pair, giving 7 top-level items (incl. the
-        // always-present Reset Guest, windows-260717-4).
+        // the `~/src` + `Cloud` pair, giving 6 top-level items.
         let state = TrayStateBuilder::new()
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
@@ -5012,8 +4956,8 @@ mod tests {
         let top_level = &menu.2;
         assert_eq!(
             top_level.len(),
-            7,
-            "Expected 7 top-level items when authenticated, got {}",
+            6,
+            "Expected 6 top-level items when authenticated, got {}",
             top_level.len()
         );
 
@@ -5030,6 +4974,12 @@ mod tests {
         assert!(
             !label_list.iter().any(|l| l.contains("GitHubLogin")),
             "GitHubLogin must not appear when authenticated"
+        );
+        // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
+        // governance"): no reset-guest leaf in the authenticated shape either.
+        assert!(
+            !label_list.iter().any(|l| l.contains("Reset Guest")),
+            "Reset Guest menu leaf must be ABSENT (removed by operator order)"
         );
         // The default local project from `TrayStateBuilder` is "test-project".
         assert!(
@@ -5053,8 +5003,8 @@ mod tests {
         let menu = build_menu(&state);
         assert_eq!(
             menu.2.len(),
-            6,
-            "logging-in keeps the collapsed 6-row shape"
+            5,
+            "logging-in keeps the collapsed 5-row shape"
         );
 
         let label_list = labels(&menu);
@@ -5317,7 +5267,7 @@ mod tests {
             .authenticated(false)
             .build();
         let before = build_menu(&initial);
-        assert_eq!(before.2.len(), 6);
+        assert_eq!(before.2.len(), 5);
 
         let after_state = TrayStateBuilder::new()
             .forge_available(true)
@@ -5325,7 +5275,7 @@ mod tests {
             .authenticated(true)
             .build();
         let after = build_menu(&after_state);
-        assert_eq!(after.2.len(), 7);
+        assert_eq!(after.2.len(), 6);
 
         // The status text moves from the verifying stack to the
         // "all ready" stack (with the OK suffix).
@@ -5358,7 +5308,7 @@ mod tests {
             .build();
         let menu = build_menu(&state);
         let top_level = &menu.2;
-        assert_eq!(top_level.len(), 7, "Failure must preserve menu shape");
+        assert_eq!(top_level.len(), 6, "Failure must preserve menu shape");
 
         let label_list = labels(&menu);
         // labels()[0] is the root menu container ("Tillandsias");
@@ -5805,7 +5755,7 @@ mod tests {
             .build();
 
         let menu = build_menu(&state);
-        assert_eq!(menu.2.len(), 6, "Unauthenticated top-level must be 6 items");
+        assert_eq!(menu.2.len(), 5, "Unauthenticated top-level must be 5 items");
 
         let label_list = labels(&menu);
         assert!(label_list.iter().any(|l| l.contains("GitHubLogin")));
@@ -5832,7 +5782,7 @@ mod tests {
             .build();
 
         let menu = build_menu(&state);
-        assert_eq!(menu.2.len(), 7, "Top-level must keep 7 rows on failure");
+        assert_eq!(menu.2.len(), 6, "Top-level must keep 6 rows on failure");
 
         let label_list = labels(&menu);
         // labels()[0] is the root menu container ("Tillandsias");

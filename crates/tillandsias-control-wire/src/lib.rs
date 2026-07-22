@@ -942,7 +942,7 @@ pub mod crashloop {
         /// attempt has not elapsed — do nothing yet.
         Wait,
         /// The attempt cap is exhausted: defer to the manual reset
-        /// affordance (tray menu item / `--reset-guest`). Stays terminal
+        /// affordance (the `--reset-guest` CLI verb). Stays terminal
         /// until the guest reaches `Healthy` again.
         Defer,
         /// No crash-loop is tripped — nothing to do.

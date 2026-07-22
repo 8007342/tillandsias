@@ -193,23 +193,30 @@ mod tests {
         );
     }
 
-    /// Intentional EPHEMERAL RESET wiring pin (windows-260717-4). The Windows
+    /// EPHEMERAL RESET wiring pin (windows-260717-4, amended 2026-07-22 by
+    /// operator order — tray-ux "UX curation governance"). The Windows
     /// bodies are `cfg(target_os = "windows")` and cannot be type-checked on
     /// the Linux dev box, so this platform-independent source-scan keeps the
-    /// load-bearing hooks from silently regressing on any host: the menu
-    /// click / auto-reset flag, the message-loop drain, the wipe primitive,
-    /// the reprovision hand-off, and the CLI verb.
+    /// contract from silently regressing on any host: the MENU click wiring
+    /// is GONE (the `Reset Guest…` leaf was an unapproved UX surface), while
+    /// the runtime paths REMAIN — the auto-reset flag, the message-loop
+    /// drain, the wipe primitive, the reprovision hand-off, and the
+    /// `--reset-guest` CLI verb.
     ///
     /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     #[test]
-    fn reset_guest_wiring_is_present() {
+    fn reset_guest_menu_wiring_absent_cli_and_runtime_present() {
         let notify = include_str!("notify_icon.rs");
-        // 1. The menu click sets the request flag (mirrors Retry's shape).
+        // 1. ABSENCE: no menu dispatch arm may reach the guest reset. The
+        //    `MenuAction::ResetGuest` variant itself was deleted from
+        //    host-shell, so ANY mention here means the click path came back.
         assert!(
-            notify.contains("MenuAction::ResetGuest => {"),
-            "dispatch_action must handle MenuAction::ResetGuest"
+            !notify.contains("MenuAction::ResetGuest"),
+            "the reset-guest menu click wiring must stay REMOVED \
+             (operator order 2026-07-22; tray-ux \"UX curation governance\")"
         );
-        // 2. The message loop drains the flag into the LocalSet spawn.
+        // 2. The message loop still drains the (auto-reset) flag into the
+        //    LocalSet spawn.
         assert!(
             notify.contains("RESET_GUEST_REQUESTED.swap(false"),
             "the message loop must drain RESET_GUEST_REQUESTED"
