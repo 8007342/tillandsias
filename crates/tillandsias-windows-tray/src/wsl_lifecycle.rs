@@ -1045,7 +1045,7 @@ fi"#,
                 .await
                 .map_err(|e| format!("hvsocket open: {e}"))?;
             let mut client = Client::from_stream(stream, Transport::Vsock { cid: 0, port });
-            let wire_version = client
+            let (wire_version, _guest_version) = client
                 .handshake()
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;

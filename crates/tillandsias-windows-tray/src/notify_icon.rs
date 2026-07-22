@@ -3652,6 +3652,7 @@ mod tests {
                 last_event: None,
                 error: Some("not provisioned".to_string()),
             },
+            guest_version: None,
             recent_log_tail: vec![],
         }
     }

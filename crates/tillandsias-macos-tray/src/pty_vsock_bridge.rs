@@ -149,6 +149,7 @@ where
         body: ControlMessage::Hello {
             from: hello_from,
             capabilities,
+            build_version: None,
         },
     };
     let bytes =

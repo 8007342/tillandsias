@@ -416,7 +416,7 @@ mod tests {
                 port: 42420,
             },
         );
-        let wire_version = client
+        let (wire_version, _guest_version) = client
             .handshake()
             .await
             .expect("Hello/HelloAck over the encrypted stream");
