@@ -19587,6 +19587,21 @@ plan_index:
             research (order 322, sharpened today) and the implementation (order
             451, blocked on that decision record). When 451 lands, this daemon
             receive-pack path is removed again in favour of authenticated writes.
+        - type: verified-live
+          ts: "2026-07-22T01:40:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721"
+          host: linux
+          summary: >
+            EXIT CRITERION 2 SATISFIED IN THE WILD: commit 89ae468b
+            ("chore(plan): backfill desired_release... order 407/372")
+            was authored and pushed by an agent INSIDE a forge container
+            (its loop_status cycle records host=forge, credential guard
+            ok:forge-git-mirror, no podman) and arrived on
+            origin/linux-next via the daemon receive-pack -> pre-receive
+            relay -> Vault-authenticated GitHub push chain — a live
+            end-to-end forge push through the rebuilt mirror. Order 452
+            slice 3 (TWO CONCURRENT forges) remains the outstanding
+            concurrency half.
 
     - packet_id: authenticated-forge-write-transport-impl
       order: 451
