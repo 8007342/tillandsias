@@ -32,7 +32,7 @@
 
 .EXAMPLE
     irm https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1 | iex
-    irm https://…/install-windows.ps1 | iex  # (same URL, short form)
+    irm https://.../install-windows.ps1 | iex  # (same URL, short form)
 
 # @trace spec:windows-native-tray, spec:vm-provisioning-lifecycle
 #>
@@ -73,7 +73,7 @@ function New-Shortcut {
     $sc.Save()
 }
 
-# ── Uninstall / Purge ────────────────────────────────────────────────────────
+# -- Uninstall / Purge --------------------------------------------------------
 if ($Uninstall -or $Purge) {
     $DataRoot = Join-Path $env:LOCALAPPDATA 'tillandsias'
     $action = if ($Purge) { 'Purging' } else { 'Uninstalling' }
@@ -95,7 +95,7 @@ if ($Uninstall -or $Purge) {
         foreach ($d in @('cache', 'logs', 'wsl') | ForEach-Object { Join-Path $DataRoot $_ }) {
             if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue; Say "  removed $d" }
         }
-        # Event Log source registration (HKLM) — removable only from an
+        # Event Log source registration (HKLM) -- removable only from an
         # elevated shell; best-effort, silent skip otherwise. Already-logged
         # events stay in the Application log by design (they are the record).
         try {
@@ -109,7 +109,7 @@ if ($Uninstall -or $Purge) {
     return
 }
 
-# ── Platform gates ───────────────────────────────────────────────────────────
+# -- Platform gates -----------------------------------------------------------
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     Die "PowerShell 5+ is required. Please update via Windows Update."
 }
@@ -117,7 +117,7 @@ if (-not [System.Environment]::Is64BitOperatingSystem) {
     Die "Tillandsias requires a 64-bit Windows installation."
 }
 
-# ── WSL platform preflight (order 324; mirrors the order-323 tray classifier) ─
+# -- WSL platform preflight (order 324; mirrors the order-323 tray classifier) -
 # A brand-new host can be in states where the tray's first VM create can NEVER
 # succeed (recipes: plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md):
 #   absent                  wsl.exe missing or Windows ships only the stub (S1)
@@ -156,14 +156,14 @@ $WslState = Get-WslPlatformState
 $NoLaunchReason = ''
 switch ($WslState) {
     'absent' {
-        # windows-260722-1: don't just instruct — RUN the idempotent install
+        # windows-260722-1: don't just instruct -- RUN the idempotent install
         # right here (operator directive 2026-07-22: "make sure our curl
         # install ends with the idempotent wsl --install"). wsl.exe raises
         # its own UAC prompt when elevation is needed; declining or failing
         # degrades to the old warn-only behavior. Afterward re-classify: a
         # healthy platform allows auto-launch; anything else suppresses it
         # (the old arm auto-launched into a provisioning attempt that could
-        # never succeed — the field "crash loop" report of 2026-07-22).
+        # never succeed -- the field "crash loop" report of 2026-07-22).
         SayWn "WSL is not installed. Running the one-time platform install now"
         SayWn "(idempotent; you may see a Windows approval prompt)..."
         try {
@@ -203,9 +203,9 @@ if ($NoLaunchReason -and -not $NoLaunch) {
     SayWn "Auto-launch disabled for this install ($WslState): the tray's first VM create cannot succeed yet."
 }
 
-# ── Hyper-V Administrators membership (order 312) ───────────────────────────
+# -- Hyper-V Administrators membership (order 312) ---------------------------
 # The tray's hvsocket VM lookup (hcsdiag) requires an ENABLED membership in
-# Administrators or 'Hyper-V Administrators' (BUILTIN SID S-1-5-32-578) —
+# Administrators or 'Hyper-V Administrators' (BUILTIN SID S-1-5-32-578) --
 # standard-user installs can otherwise never connect to the VM (masked for
 # months by elevated dev shells). Offer a one-time elevated group-add.
 # SIDs, not names: group names are localized ("Administrateurs Hyper-V").
@@ -220,7 +220,7 @@ function Test-HcsAccess {
     }
     return $false
 }
-# ── Windows Event Log source (@trace spec:windows-event-logging) ────────────
+# -- Windows Event Log source (@trace spec:windows-event-logging) ------------
 # The tray relays INFO/WARN/ERROR to the Application Event Log so failures are
 # discoverable in Event Viewer. The relay works WITHOUT registration (events
 # render inside Event Viewer's generic wrapper); registering the source under
@@ -283,7 +283,7 @@ Say "Target: Windows x64"
 Say "Install path: $InstalledExe"
 Write-Host ""
 
-# ── Resolve version and base URL ─────────────────────────────────────────────
+# -- Resolve version and base URL ---------------------------------------------
 if ($env:TILLANDSIAS_VERSION) {
     $Version = $env:TILLANDSIAS_VERSION.TrimStart('v')
     $Base = "https://github.com/$Repo/releases/download/v$Version"
@@ -293,18 +293,18 @@ if ($env:TILLANDSIAS_VERSION) {
     Say "Resolving latest release..."
 }
 
-# ── Temp workspace ────────────────────────────────────────────────────────────
+# -- Temp workspace ------------------------------------------------------------
 $Tmp = Join-Path $env:TEMP "tillandsias-install-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Force -Path $Tmp | Out-Null
 
 try {
-    # ── Download SHA256SUMS-windows ───────────────────────────────────────────
+    # -- Download SHA256SUMS-windows -------------------------------------------
     $SumsUrl = "$Base/SHA256SUMS-windows"
     Say "Fetching SHA256SUMS-windows..."
     try {
         Invoke-WebRequest -Uri $SumsUrl -OutFile "$Tmp\SHA256SUMS-windows" -UseBasicParsing -ErrorAction Stop
     } catch {
-        Die "Could not download SHA256SUMS-windows from $SumsUrl — check network or version."
+        Die "Could not download SHA256SUMS-windows from $SumsUrl -- check network or version."
     }
 
     # Find zip filename (e.g. tillandsias-tray-0.3.260622.4-windows-x64.zip)
@@ -314,7 +314,7 @@ try {
     if (-not $ZipName) { Die "No tillandsias-tray-*-windows-x64.zip entry in SHA256SUMS-windows." }
     Say "Asset: $ZipName"
 
-    # ── Download zip ──────────────────────────────────────────────────────────
+    # -- Download zip ----------------------------------------------------------
     $ZipUrl = "$Base/$ZipName"
     Say "Downloading $ZipUrl..."
     try {
@@ -323,7 +323,7 @@ try {
         Die "Download failed: $_"
     }
 
-    # ── Verify SHA-256 ────────────────────────────────────────────────────────
+    # -- Verify SHA-256 --------------------------------------------------------
     Say "Verifying SHA-256..."
     $Expected = ($SumsContent -split "`n" | Where-Object { $_ -match [regex]::Escape($ZipName) } |
                  Select-Object -First 1 | ForEach-Object { ($_ -split '\s+')[0] }).ToLower()
@@ -333,7 +333,7 @@ try {
     }
     SayOk "sha256: ok ($Expected)"
 
-    # ── Stop running tray + back up ────────────────────────────────────────────
+    # -- Stop running tray + back up --------------------------------------------
     Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
     if (Test-Path $InstallDir) {
         $Backup = "$InstallDir.bak"
@@ -342,15 +342,15 @@ try {
         Rename-Item $InstallDir $Backup
     }
 
-    # ── Extract ────────────────────────────────────────────────────────────────
+    # -- Extract ----------------------------------------------------------------
     Say "Extracting to $InstallDir..."
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     Expand-Archive -Path "$Tmp\$ZipName" -DestinationPath $InstallDir -Force
     if (-not (Test-Path $InstalledExe)) {
-        Die "Extraction did not produce $InstalledExe — zip may be corrupt."
+        Die "Extraction did not produce $InstalledExe -- zip may be corrupt."
     }
 
-    # ── Start Menu shortcut ───────────────────────────────────────────────────
+    # -- Start Menu shortcut ---------------------------------------------------
     New-Shortcut -LinkPath $ShortcutPath -Target $InstalledExe -Arguments '' -WorkDir $InstallDir
     SayOk "Start Menu shortcut: $ShortcutPath"
 
@@ -359,7 +359,7 @@ try {
         SayOk "Startup entry: $StartupLnk"
     }
 
-    # ── Verify installation ───────────────────────────────────────────────────
+    # -- Verify installation ---------------------------------------------------
     Say "Verifying installation via --version..."
     $VerTmp = Join-Path $env:TEMP "tillandsias-ver-$([guid]::NewGuid().ToString('N')).txt"
     & cmd.exe /c "`"$InstalledExe`" --version > `"$VerTmp`" 2>nul"
@@ -371,7 +371,7 @@ try {
     }
     SayOk $VerLine
 
-    # ── Launch (triggers WSL2 provisioning = tillandsias --init) ─────────────
+    # -- Launch (triggers WSL2 provisioning = tillandsias --init) -------------
     Write-Host ""
     if (-not $NoLaunch) {
         Say "Launching Tillandsias (WSL2 provisioning = --init will run automatically)..."

@@ -59,7 +59,12 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: absent-no-launch"
 
-  - step: "strings stay PS5.1-safe: no em-dash in the preflight block (BOM-less UTF-8 ANSI trap)"
-    command: "awk '/function Get-WslPlatformState/,/^\\}$/' scripts/install-windows.ps1 | grep -c $'\\u2014' | grep -qx 0 && echo 'ok: ascii-strings'"
+  - step: "WHOLE FILE is pure ASCII (windows-260722-1 root cause: BOM-less UTF-8 misread as ANSI turns an em-dash into a CP-1252 smart quote, which PS5.1 treats as a QUOTE CHARACTER — the installer parsed into a different program that silently skipped download+extract)"
+    command: "LC_ALL=C grep -c -P '[^\\x00-\\x7F]' scripts/install-windows.ps1 | grep -qx 0 && echo 'ok: pure-ascii'"
     timeout_ms: 3000
-    expected_behavior: "ok: ascii-strings"
+    expected_behavior: "ok: pure-ascii"
+
+  - step: "release-shipped sibling scripts are pure ASCII too (same saved-file execution hazard)"
+    command: "LC_ALL=C grep -c -P '[^\\x00-\\x7F]' scripts/diagnose-windows.ps1 scripts/tray-diagnose.ps1 | awk -F: '{s+=$2} END{exit s!=0}' && echo 'ok: siblings-ascii'"
+    timeout_ms: 3000
+    expected_behavior: "ok: siblings-ascii"

@@ -36,7 +36,7 @@
 
 .PARAMETER Uninstall
     Remove the installed binary, the install directory, and all shortcuts.
-    Leaves cached state behind (downloaded rootfs, WSL distro, logs) — use
+    Leaves cached state behind (downloaded rootfs, WSL distro, logs) -- use
     -Purge for full cleanup. After -Uninstall the script prints what's left.
 
 .PARAMETER Purge
@@ -111,7 +111,7 @@ if ($Uninstall -or $Purge) {
 
     if ($Purge) {
         # WSL distro: --unregister removes the registration AND the on-disk
-        # VHDX under $WslRoot. Best-effort — tolerate "no distro" / wsl-not-
+        # VHDX under $WslRoot. Best-effort -- tolerate "no distro" / wsl-not-
         # installed.
         $wsl = Get-Command wsl -ErrorAction SilentlyContinue
         if ($wsl) {

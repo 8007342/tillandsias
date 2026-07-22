@@ -248,3 +248,14 @@ must assert the capability, not just the version: e.g. include the feature
 set in the `--version` line (`Tillandsias vX (features: listen-vsock,vault)`)
 and pin it in the embed test + build-guest-binaries.sh --verify. Small
 order-282-family follow-up for the linux lane; noted here as the repro.
+
+## RESOLUTION 2026-07-22 (windows-installer-version-verify-transient-failure)
+
+Root cause identified — NOT transient, NOT first-exec scan latency: the
+saved-file installer silently skips download+extract under PS 5.1 (BOM-less
+UTF-8 em-dash -> CP-1252 smart-quote injection re-structuring the parse).
+The exe verified on "retry" only because this agent had manually copied one
+into place during diagnosis. Full analysis + fix:
+plan/issues/windows-installer-encoding-smart-quote-injection-2026-07-22.md.
+This packet is superseded by that doc; its retry/stderr-capture next_action
+downgraded to optional hardening.
