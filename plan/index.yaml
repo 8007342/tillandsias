@@ -10720,6 +10720,12 @@ plan_index:
             enclave-dead direct path curl 6; post-warm-up proxied 200;
             splice confirmed via Sectigo issuer). Operator unblocked by
             removing the exited container so the next ensure recreates it.
+        - type: progress
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            Wave-2 Sonnet worker, commit a774668a (cherry-picked): residual pinned via 2 new litmus steps in inference-container-implementation-shape (Fedora CA path active + Debian path absent, comment-stripped; exact OLLAMA_MODELS trailing-slash + OLLAMA_BINDIR lines verbatim). NOTE the packet outcome text claim that .tools/ollama is a container-local SIBLING of the models volume was FALSIFIED by the wave-2 planner: it is a SUBDIR of the mounted volume, so the binary already persists — now regression-pinned. REMAINING: criterion 4 live pristine-substrate e2e evidence (needs a destructive run window).
 
     - packet_id: container-ensure-not-idempotent-exited
       order: 314
@@ -15940,6 +15946,12 @@ plan_index:
           host: linux
           summary: >
             Wave-1 Opus worker, commit cf67e3e9 (cherry-picked). Pure clock-injected crashloop module in tillandsias-control-wire (3 events/180s over phase regressions, unseal failures, handshake timeouts; grammar ^(healthy|starting|crash-loop:[a-z0-9-]+)$); Windows tray fully wired (apply_vm_status feed, --diagnose line, Error balloon + chip); macOS --diagnose reads persisted verdict. litmus:guest-crashloop-detection PASS. FOLLOW-UP filed in event: macOS LIVE feed/toast needs status_item.rs+action_host.rs wiring (out of wave scope); guest-intentional-ephemeral-reset can consume GuestHealth::is_crash_loop as its trigger.
+        - type: progress
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            Follow-up closed by wave-2 chain commit 246b7a0e: macOS LIVE feed + toast — apply_vm_status (the single VmStatusPush+poller funnel in action_host.rs; the status_item.rs framing in the earlier event was imprecise) now feeds the shared CRASH_LOOP_DETECTOR and persists on every observation so --diagnose matches the live tray; NEW trips fire an edge-triggered Notification Center banner (re-armed on clear). macOS parity with Windows complete pending live platform verify (order 455).
 
     - packet_id: guest-intentional-ephemeral-reset
       provisional_id: windows-260717-4
@@ -15947,7 +15959,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Intentional EPHEMERAL RESET — one-click wipe+reprovision of the guest (destructive-by-design; re-auth is the only cost)"
-      status: ready
+      status: in_progress
       kind: enhancement
       deliverable: tray menu + --reset-guest CLI + host reprovision path + e2e
       depends_on: [guest-crashloop-detection]
@@ -15985,6 +15997,12 @@ plan_index:
             degrades to reset+re-auth, never to flashing terminals with no
             recourse. The manual reprovision performed this cycle
             (unregister + tray relaunch) is the reference implementation.
+        - type: progress
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            Wave-2 tray-chain Fable worker, commit ff4cff37 (cherry-picked). Intentional ephemeral reset landed on ALL THREE platforms: shared ids::RESET_GUEST always-enabled Quit-adjacent leaf + MenuAction::ResetGuest; Windows WslLifecycle::wipe_guest wired click->message-loop->same provision_via_recipe path + --reset-guest CLI; macOS VzRuntime::wipe_provisioned_artifacts (vm-layer, Linux-unit-tested) + reset_guest_async + gated --reset-guest; Linux run_reset_guest with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 refusal pin. 61+55+39+231 tests green, build check green. REMAINING: live wedged-guest->reset->Ready e2e on a Windows/macOS host (rides order 455 smoke).
 
     - packet_id: login-transitive-states-all-platforms
       provisional_id: windows-260719-2
@@ -15992,7 +16010,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Login UX transitive states (all platforms): 'Logging in…' while credentials verify, 'Logged in as X' on success, fall back to 'GitHub Login' on invalid/missing token"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: tray menus (windows/macos/linux) + headless LoginStatePush states + prompt cloud-projects refresh on login
       depends_on: []
@@ -16031,6 +16049,12 @@ plan_index:
             with the fresh-guest auth findings (same session: silent
             token-store failure + menu gate bypass, see
             smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md).
+        - type: completed
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            Wave-2 tray-chain Fable worker, commit cc8925b6 (cherry-picked). Three-state login via LOCAL GithubLoginState::LoggingIn (wire untouched — no cross-client need found): disabled transitive row rendered by host-shell build(); Windows flips on click pre-spawn, confirm path maps to LoggedIn/LoggedOut only (never stale); macOS same + explicit dispatch_rebuild. cfg-gated tray bodies await live platform verify (order 455; see cfg-gated-tray-code-never-typechecked packet).
 
     - packet_id: codex-lane-device-oauth-login
       provisional_id: windows-260719-3
@@ -19055,7 +19079,7 @@ plan_index:
       order: 443
       desired_release: v0.4
       title: "Concurrent forges are unsafe: a second launch bounces the shared stack and can tear it down under a live sibling"
-      status: in_progress
+      status: completed
       capability_tags: [linux, forge, concurrency, shared-stack, delegation, p1]
       operator_note: "operator requirement 2026-07-20: concurrent forges/harnesses (even same type, same project) must be safe — independent checkouts + own containers"
       kind: enhancement
@@ -19164,6 +19188,12 @@ plan_index:
             exit; a launch-in-flight marker for the pre-create window; running-
             AND-HEALTHY (not just running) so a crashed-but-running mirror is
             replaced; tray terminal isolation. The two main bounce triggers
+        - type: completed
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            SLICE 3 closed by wave-2 Fable worker, commit a5cc14ed (cherry-picked): every launch lane holds an advisory flock launch-<project>-<pid> (extends order-232 resource_lock with is_held/held_resources_with_prefix) from BEFORE first cleanup/ensure; cleanup_shared_stack_if_no_running_forge tears down only when BOTH refcount sources read zero (live active-lane scan + foreign launch-in-flight markers). Refcount derived LIVE, never a persisted counter; probe errors count as HELD (leak-not-destroy — the safe direction). Own marker excluded by name so the order-298 first-launch wipe survives. All slices now done.
             (ensure --replace + teardown-under-starting-sibling) are now closed.
     - packet_id: forge-launch-artifacts-not-tracked
       order: 444

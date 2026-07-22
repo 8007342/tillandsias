@@ -1,6 +1,34 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-21T23:13:00Z
+LastExecutionTime: 2026-07-22T01:30:00Z
+
+## Cycle 2026-07-22T01:30Z (linux coordinator — wave-2 drain integrated: 5 packets, all landed)
+
+- **Wave-2 drain (planner + chained-Fable tray worker + 2 parallel)**: all 5
+  candidates verified-then-implemented; 5 commits cherry-picked
+  (ff4cff37, 246b7a0e, cc8925b6, a5cc14ed, a774668a); gates green
+  (./build.sh --check; workspace tests minus the known zombie flake; one
+  NEW one-off resource_lock flake logged in the zombie packet's addendum):
+  - guest-intentional-ephemeral-reset: reset landed all three platforms
+    (RESET_GUEST leaf, Windows wipe_guest, macOS wipe_provisioned_artifacts,
+    Linux run_reset_guest + RESET_OK=0 refusal pin). Live wedged-guest e2e
+    rides order 455.
+  - guest-crashloop-detection follow-up: macOS LIVE feed + toast (parity
+    with Windows complete).
+  - login-transitive-states-all-platforms: three-state login, local-flag
+    design, wire untouched. COMPLETED.
+  - order 443 SLICE 3: launch-in-flight flock markers + live-derived
+    refcount; teardown only when both sources read zero; leak-not-destroy
+    posture. ALL SLICES DONE — the concurrent-forge data-loss hole is closed.
+  - order 313 residual: Fedora CA + OLLAMA path pins landed; planner
+    FALSIFIED the sibling-dir claim (binary already persisted — now pinned).
+- **New packet**: cfg-gated-tray-code-never-typechecked-2026-07-21 (the
+  structural hole behind the handshake breakage; CI cross-typecheck lanes
+  proposed). Wave-3 note: worker worktrees branch from origin/main — briefs
+  must include an explicit merge-to-linux-next first step.
+- **v0.4 remaining after this wave**: live items only — one real forge
+  launch (452 slice 3 + 459 curl-install proof + 450 c2), the smoke-PASS
+  record, then series bump 0.3 -> 0.4 and merge-to-main-and-release.
 
 ## Cycle 2026-07-21T23:13Z (forge — meta-orchestration: order 407 desired_release backfill + freshness)
 
