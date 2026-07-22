@@ -47,3 +47,30 @@ and keep gated bodies thin; source-scan tests pin the wiring textually.
    those remain the deep gate.
 - Exit: a deliberately mistyped (but parseable) edit inside a
   `#[cfg(target_os = "windows")]` body turns a PR/push red.
+
+## Implementation note (2026-07-21, linux coordinator waiver)
+
+Took smallest-fix path (a): two native cross-typecheck lanes added to
+`.github/workflows/ci.yml` (edited under an explicit coordinator waiver; the
+existing `check` job is untouched):
+
+- `windows-typecheck` on `windows-2022` (native x86_64-pc-windows-msvc):
+  `cargo check -p tillandsias-windows-tray --all-features --all-targets`.
+- `macos-typecheck` on `macos-14` (native aarch64-apple-darwin):
+  `cargo check -p tillandsias-macos-tray --all-features --all-targets`.
+
+These are CHECK-only (no linking), so no cross-linker/mingw/osxcross is needed
+— the type-checker walks the real `#[cfg(target_os = ...)]` bodies that the
+ubuntu runner stubs out. Style matches the `check` job: pinned
+`actions/checkout@de0fac2e...` (v6), `Swatinem/rust-cache@v2` with a distinct
+per-OS `shared-key` (`ci-windows-typecheck` / `ci-macos-typecheck`),
+`timeout-minutes: 30`, and the workflow-level `concurrency` group applies to
+all jobs. Dropped `--locked` from these lanes to mirror the coordinator's
+exact command (the workspace `check` lane still enforces the lockfile).
+
+Validated locally with `ruby -ryaml -e 'YAML.load_file(...)'` (parses; three
+jobs: check, windows-typecheck, macos-typecheck). Cannot exercise the runners
+from Linux — static validation + style fidelity is the bar here; the first
+real run on GitHub Actions (a push to a covered branch or a PR to `main`) is
+the live proof, and the exit-criteria red-test (a mistyped-but-parseable gated
+edit) can only be confirmed there.
