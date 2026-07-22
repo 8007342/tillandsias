@@ -155,6 +155,47 @@ impl VzRuntime {
         self.rootfs_image_path().exists()
     }
 
+    /// Intentional EPHEMERAL RESET, macOS wipe half (windows-260717-4):
+    /// delete the provisioned boot artifacts — `rootfs.img` (the guest disk,
+    /// and with it the in-VM vault), `vmlinuz`, `initramfs.img` — plus the
+    /// best-effort byproducts (`rootfs.qcow2` fetch intermediate,
+    /// `console.log`, `cidata.iso`), so `is_provisioned()` flips false and
+    /// the next boot takes the exact same first-provision path a fresh
+    /// install does. Destructive BY DESIGN per the operator's ephemeral
+    /// doctrine: state of value lives in the cloud + the operator's auth,
+    /// so the only cost is one re-authentication.
+    ///
+    /// Callers MUST stop any running VM first (`VmRuntime::stop`); this
+    /// method only touches the filesystem. Deliberately file-targeted — it
+    /// never removes `image_root` itself, so unrelated per-installation
+    /// state living beside the artifacts (e.g. `crashloop.state`) survives
+    /// for its owner to manage. Missing artifacts are fine (a half-wiped or
+    /// never-provisioned root resets to the same clean outcome); only a
+    /// real deletion failure on a present required artifact errors.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    pub fn wipe_provisioned_artifacts(&self) -> std::io::Result<()> {
+        for required in [
+            self.rootfs_image_path(),
+            self.kernel_path(),
+            self.initrd_path(),
+        ] {
+            match std::fs::remove_file(&required) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
+            }
+        }
+        for best_effort in [
+            self.rootfs_image_path().with_extension("qcow2"),
+            self.console_log_path(),
+            self.image_root.join("cidata.iso"),
+        ] {
+            let _ = std::fs::remove_file(&best_effort);
+        }
+        Ok(())
+    }
+
     /// Fetch Fedora's official Cloud qcow2 image and convert it to the
     /// raw disk image Virtualization.framework boots.
     ///
@@ -2021,6 +2062,58 @@ mod tests {
     fn fresh_runtime_is_not_provisioned() {
         let tmp = tempfile::tempdir().unwrap();
         let rt = VzRuntime::new(7, tmp.path().to_path_buf());
+        assert!(!rt.is_provisioned());
+    }
+
+    /// windows-260717-4 (intentional ephemeral reset): wiping a provisioned
+    /// image root removes every boot artifact — `is_provisioned()` flips
+    /// false so the next boot takes the first-provision path — while
+    /// UNRELATED per-installation state beside the artifacts survives.
+    #[test]
+    fn wipe_provisioned_artifacts_resets_to_first_provision_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(7, tmp.path().to_path_buf());
+        for path in [
+            rt.rootfs_image_path(),
+            rt.kernel_path(),
+            rt.initrd_path(),
+            rt.rootfs_image_path().with_extension("qcow2"),
+            rt.console_log_path(),
+            tmp.path().join("cidata.iso"),
+        ] {
+            std::fs::write(&path, b"x").unwrap();
+        }
+        // Unrelated sibling state (e.g. the crash-loop detector file) must
+        // NOT be touched by the wipe — its owner clears it deliberately.
+        let sibling = tmp.path().join("crashloop.state");
+        std::fs::write(&sibling, b"state").unwrap();
+
+        assert!(rt.is_provisioned());
+        rt.wipe_provisioned_artifacts().unwrap();
+
+        assert!(!rt.is_provisioned(), "wipe must flip is_provisioned false");
+        for gone in [
+            rt.rootfs_image_path(),
+            rt.kernel_path(),
+            rt.initrd_path(),
+            rt.rootfs_image_path().with_extension("qcow2"),
+            rt.console_log_path(),
+            tmp.path().join("cidata.iso"),
+        ] {
+            assert!(!gone.exists(), "{} must be deleted", gone.display());
+        }
+        assert!(sibling.exists(), "unrelated sibling state must survive");
+        assert!(tmp.path().exists(), "image_root itself must survive");
+    }
+
+    /// The wipe is idempotent: a never-provisioned (or half-wiped) root
+    /// resets to the same clean outcome without erroring.
+    #[test]
+    fn wipe_provisioned_artifacts_is_idempotent_on_missing_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(7, tmp.path().to_path_buf());
+        rt.wipe_provisioned_artifacts().unwrap();
+        rt.wipe_provisioned_artifacts().unwrap();
         assert!(!rt.is_provisioned());
     }
 

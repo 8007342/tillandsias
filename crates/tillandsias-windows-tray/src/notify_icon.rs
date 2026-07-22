@@ -394,6 +394,14 @@ pub fn run() -> ! {
             if RETRY_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
                 spawn_provisioning(hwnd);
             }
+            // Same shape for the guest reset (windows-260717-4): the bounded
+            // auto-reset policy sets the flag; the wipe + reprovision task
+            // spawns here in the LocalSet context. (The `Reset Guest…` menu
+            // leaf was removed by operator order 2026-07-22 — the manual
+            // affordance is the `--reset-guest` CLI verb.)
+            if RESET_GUEST_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                spawn_guest_reset(hwnd);
+            }
             // Cooperative tokio drain.
             tokio::task::yield_now().await;
         }
@@ -712,6 +720,10 @@ pub fn help_text() -> String {
             (no flags)              Launch the interactive tray (GUI subsystem).\n    \
             --provision-once        Provision the WSL utility VM to Ready, print\n                            \
             progress, exit. Exit: 0 = Ready, 1 = failed.\n    \
+            --reset-guest           EPHEMERAL RESET: wipe the guest (wsl --unregister,\n                            \
+            deleting the VHDX + in-VM vault) and reprovision from scratch.\n                            \
+            Destructive by design; you'll re-authenticate once. Exit: 0 = Ready,\n                            \
+            1 = failed.\n    \
             --status-once [--json]  Connect to the live control wire, print VmStatus.\n                            \
             Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
             --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
@@ -792,6 +804,69 @@ pub fn provision_once() -> i32 {
             Err(err) => {
                 eprintln!("[provision] RESULT: FAILED \u{2014} {err}");
                 tracing::error!(%err, "provision-once failed");
+                1
+            }
+        }
+    })
+}
+
+/// `--reset-guest` CLI verb (windows-260717-4): intentional EPHEMERAL RESET —
+/// wipe the guest (bounded stop + `wsl --unregister`, deleting the VHDX and
+/// the in-VM vault) and reprovision from scratch through the exact same
+/// recipe path `--provision-once` exercises, then exit. Exit codes mirror
+/// `--provision-once`: 0 = VM reached Ready over the control wire, 1 = failed.
+/// Destructive by design: everything lives in the cloud; the only cost is one
+/// re-authentication.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+pub fn reset_guest_once() -> i32 {
+    struct ConsoleProgress;
+    impl ProvisionProgress for ConsoleProgress {
+        fn report_phase(&self, phase: ProvisionPhase) {
+            println!("[reset-guest] phase: {}", phase.status_text());
+            tracing::info!(?phase, "reset-guest provision phase");
+        }
+        fn report_message(&self, message: &str) {
+            println!("[reset-guest] {message}");
+        }
+    }
+
+    init_tracing();
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(err) => {
+            eprintln!("[reset-guest] failed to build tokio runtime: {err}");
+            return 1;
+        }
+    };
+    println!(
+        "[reset-guest] This discards the local guest and its cached credentials. \
+         Everything lives in the cloud \u{2014} you'll re-authenticate once."
+    );
+    runtime.block_on(async {
+        let lifecycle = WslLifecycle::new();
+        if let Err(err) = lifecycle.wipe_guest().await {
+            eprintln!("[reset-guest] RESULT: FAILED \u{2014} wipe: {err}");
+            tracing::error!(%err, "reset-guest wipe failed");
+            return 1;
+        }
+        reset_crashloop_state();
+        println!("[reset-guest] guest wiped \u{2014} reprovisioning from scratch\u{2026}");
+        match lifecycle
+            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
+            .await
+        {
+            Ok(()) => {
+                println!("[reset-guest] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                tracing::info!("reset-guest: VM Ready after wipe+reprovision");
+                0
+            }
+            Err(err) => {
+                eprintln!("[reset-guest] RESULT: FAILED \u{2014} reprovision: {err}");
+                tracing::error!(%err, "reset-guest reprovision failed");
                 1
             }
         }
@@ -904,7 +979,7 @@ fn collect_status_report() -> StatusReport {
             }
         };
         let mut client = Client::from_stream(stream, Transport::Vsock { cid: 0, port });
-        let wire_version = match client.handshake().await {
+        let (wire_version, _) = match client.handshake().await {
             Ok(v) => v,
             Err(err) => {
                 return StatusReport {
@@ -1171,10 +1246,23 @@ async fn live_client_request(
             port: CONTROL_WIRE_VSOCK_PORT,
         },
     );
-    if let Err(err) = client.handshake().await {
-        tracing::debug!(%err, ctx, "handshake failed");
-        mark_wire_unreachable(hwnd);
-        return None;
+    match client.handshake().await {
+        Ok((_, Some(guest_version))) => {
+            if guest_version != env!("CARGO_PKG_VERSION") {
+                tracing::warn!(
+                    ctx,
+                    "build version skew: tray={} guest={}",
+                    env!("CARGO_PKG_VERSION"),
+                    guest_version
+                );
+            }
+        }
+        Ok(_) => {}
+        Err(err) => {
+            tracing::debug!(%err, ctx, "handshake failed");
+            mark_wire_unreachable(hwnd);
+            return None;
+        }
     }
     if let Err(err) =
         crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
@@ -1199,6 +1287,141 @@ async fn live_client_request(
     *live_client_mutex().lock().await = Some(client);
     mark_wire_recovered(hwnd);
     Some(reply)
+}
+
+/// Guest crash-loop DETECTION state file. The long-lived tray process updates
+/// it on every VM-status observation so a SEPARATE `--diagnose` process (which
+/// holds no live wire handle) can read the current verdict. Lives beside the
+/// WSL install root so it is per-installation and survives a tray restart.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn crashloop_state_path() -> std::path::PathBuf {
+    WslLifecycle::install_root().join("crashloop.state")
+}
+
+/// Process-global live crash-loop detector, seeded once from the persisted
+/// state file so a loop that tripped before the tray last restarted is still in
+/// view. std `Mutex` — observations are infrequent (per-phase-change, not
+/// per-frame).
+static CRASH_LOOP_DETECTOR: std::sync::LazyLock<
+    Mutex<tillandsias_control_wire::crashloop::CrashLoopDetector>,
+> = std::sync::LazyLock::new(|| {
+    Mutex::new(
+        tillandsias_control_wire::crashloop::CrashLoopDetector::load(&crashloop_state_path()),
+    )
+});
+
+/// Edge-trigger guard so the crash-loop balloon (the single most-important tray
+/// notification) fires once per trip, not on every subsequent push while the
+/// loop persists. Re-armed when the verdict clears.
+static CRASH_LOOP_NOTIFIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Bounded auto-reset policy (windows-260717-4 exit criterion 3): consulted on
+/// every crash-loop-tripped observation when `TILLANDSIAS_AUTO_RESET_GUEST=1`.
+/// The cap/backoff state machine lives in control-wire (cross-platform by
+/// design — macOS consumes the identical policy); this static is just the
+/// per-process instance. In-memory only: the policy guards against the GUEST
+/// looping while the tray lives, and a tray restart granting a fresh budget is
+/// acceptable (each budget is itself bounded).
+static AUTO_RESET_POLICY: std::sync::LazyLock<
+    Mutex<tillandsias_control_wire::crashloop::AutoResetPolicy>,
+> = std::sync::LazyLock::new(|| {
+    Mutex::new(tillandsias_control_wire::crashloop::AutoResetPolicy::with_defaults())
+});
+
+/// Opt-in gate for the automatic ephemeral reset. Default OFF: the manual
+/// affordance (the `--reset-guest` CLI verb) is always available, and an
+/// automatic destructive action must be an explicit operator choice until
+/// the live e2e smoke pass validates the full loop on a real host.
+fn auto_reset_enabled() -> bool {
+    std::env::var("TILLANDSIAS_AUTO_RESET_GUEST").is_ok_and(|v| v == "1")
+}
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Feed one live VM-status observation into the crash-loop detector, persist the
+/// updated state for `--diagnose`, and — on a NEW trip — surface the crash-loop
+/// as the tray's single most-important notification: an Error balloon that
+/// dominates the ordinary phase chip (order 250 ultra-minimal tray UX — the one
+/// message that matters is "the guest is crash-looping, reset it"). The chip is
+/// overwritten with the crash-loop line too so the steady-state surface agrees
+/// with the toast, and the terminal verdict clears the edge trigger so a later
+/// recurrence toasts again.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn note_crashloop_observation(
+    phase: tillandsias_control_wire::VmPhase,
+    last_event: Option<&str>,
+    hwnd: HWND,
+) {
+    use std::sync::atomic::Ordering::SeqCst;
+    let verdict = {
+        let Ok(mut det) = CRASH_LOOP_DETECTOR.lock() else {
+            return;
+        };
+        let v = det.observe_phase(phase, last_event, unix_now_secs());
+        if let Err(e) = det.save(&crashloop_state_path()) {
+            tracing::debug!(error = %e, "could not persist crash-loop state");
+        }
+        v
+    };
+    if verdict.is_crash_loop() {
+        // A crash-loop is THE single most-important state: overwrite the chip.
+        update_status_text(&format!("\u{1F534} {}", verdict.verdict()), hwnd);
+        if !CRASH_LOOP_NOTIFIED.swap(true, SeqCst) {
+            // ERROR relays to tray.log + Windows Event Log so the terminal
+            // state is discoverable post-hoc.
+            tracing::error!(verdict = %verdict, "guest crash-loop detected");
+            show_balloon(
+                hwnd,
+                "Tillandsias: guest crash-loop",
+                &format!(
+                    "The guest is crash-looping ({}) — it is not converging. \
+                     Reset the guest to recover; everything lives in the cloud, \
+                     you'll re-authenticate once.",
+                    verdict.verdict()
+                ),
+                BalloonSeverity::Error,
+            );
+        }
+    } else {
+        CRASH_LOOP_NOTIFIED.store(false, SeqCst);
+    }
+    // Bounded AUTO-RESET (windows-260717-4, opt-in): consult the shared
+    // cap/backoff policy on every observation — Healthy clears the budget,
+    // a tripped verdict may grant an attempt. A granted attempt sets the
+    // request flag the message loop drains into `spawn_guest_reset`, the
+    // same wipe + reprovision path `--reset-guest` exercises; after the cap
+    // the policy defers forever (the Error balloon above already points at
+    // the manual reset).
+    if auto_reset_enabled()
+        && let Ok(mut policy) = AUTO_RESET_POLICY.lock()
+    {
+        use tillandsias_control_wire::crashloop::AutoResetDecision;
+        match policy.consult(verdict, unix_now_secs()) {
+            AutoResetDecision::Reset { attempt } => {
+                tracing::warn!(
+                    attempt,
+                    verdict = %verdict,
+                    "auto-reset: crash-loop tripped — requesting ephemeral guest reset"
+                );
+                RESET_GUEST_REQUESTED.store(true, SeqCst);
+            }
+            AutoResetDecision::Defer => {
+                tracing::warn!(
+                    verdict = %verdict,
+                    "auto-reset: attempt cap exhausted — deferring to the manual reset affordance"
+                );
+            }
+            AutoResetDecision::Wait | AutoResetDecision::NotTripped => {}
+        }
+    }
 }
 
 /// Apply a live `VmStatus` observation — from a poll reply or an unrequested
@@ -1234,6 +1457,10 @@ fn apply_vm_status(
     // provisioning succeeds — that ground-truth confirmation lives
     // in the spawn_provisioning Ok path's balloon).
     mark_wire_recovered(hwnd);
+    // Feed the same observation into the crash-loop detector LAST: on a trip it
+    // overwrites the chip set above with the crash-loop verdict (the single
+    // most-important surface) and persists state for `--diagnose`.
+    note_crashloop_observation(phase, last_event, hwnd);
 }
 
 /// True while the dedicated push subscription (order 154 slices 1-3) is
@@ -1329,6 +1556,11 @@ fn should_poll_local_projects(push_stream_healthy: bool, fast_poll_burst: bool) 
 fn apply_github_login(logged_in: bool, handle: Option<String>) {
     let state = github_login_state_from_reply(logged_in, handle);
     if let Ok(mut guard) = MENU_STATE.lock() {
+        // A confirmed probe reply ALWAYS overwrites the local transitional
+        // `LoggingIn` state (windows-260719-2): success flips to LoggedIn
+        // (rendering the project body), an invalid/missing token falls back
+        // to LoggedOut's actionable "GitHub Login" leaf — never a stale
+        // in-progress or logged-in rendering.
         guard.get_or_insert_with(MenuState::initial).login = state;
     }
 }
@@ -1842,6 +2074,7 @@ pub enum DiagnoseFormat {
 #[derive(serde::Serialize)]
 struct DiagnoseReport {
     version: &'static str,
+    guest_version: Option<String>,
     /// Short git SHA of the commit this binary was built from. Baked at
     /// compile time by build.rs (`BUILD_COMMIT_SHA`); falls back to
     /// `"unknown"` if git wasn't available or the build was from a source
@@ -2058,22 +2291,26 @@ fn collect_report() -> DiagnoseReport {
 
     // Live control wire. Tokio runtime build is essentially infallible — on the
     // rare failure we still emit a (degraded) report rather than aborting.
-    let wire = match tokio::runtime::Builder::new_current_thread()
+    let (wire, guest_version) = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
     {
         Ok(runtime) => runtime.block_on(async {
+            let mut guest_version = None;
             let stream = match crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await
             {
                 Ok(s) => s,
                 Err(err) => {
-                    return WireReport {
-                        reachable: false,
-                        phase: None,
-                        podman_ready: None,
-                        last_event: None,
-                        error: Some(format!("hvsocket open: {err}")),
-                    };
+                    return (
+                        WireReport {
+                            reachable: false,
+                            phase: None,
+                            podman_ready: None,
+                            last_event: None,
+                            error: Some(format!("hvsocket open: {err}")),
+                        },
+                        guest_version,
+                    );
                 }
             };
             let mut client = Client::from_stream(
@@ -2083,14 +2320,20 @@ fn collect_report() -> DiagnoseReport {
                     port: CONTROL_WIRE_VSOCK_PORT,
                 },
             );
-            if let Err(err) = client.handshake().await {
-                return WireReport {
-                    reachable: false,
-                    phase: None,
-                    podman_ready: None,
-                    last_event: None,
-                    error: Some(format!("handshake: {err}")),
-                };
+            match client.handshake().await {
+                Ok((_, gv)) => guest_version = gv,
+                Err(err) => {
+                    return (
+                        WireReport {
+                            reachable: false,
+                            phase: None,
+                            podman_ready: None,
+                            last_event: None,
+                            error: Some(format!("handshake: {err}")),
+                        },
+                        guest_version,
+                    );
+                }
             }
             if let Err(err) = crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await {
                 tracing::warn!(%err, "credentials delivery / handover check failed during monitor cycle");
@@ -2108,46 +2351,61 @@ fn collect_report() -> DiagnoseReport {
                         podman_ready,
                         last_event,
                         ..
-                    } => WireReport {
-                        reachable: true,
-                        phase: Some(format!("{phase:?}")),
-                        podman_ready: Some(podman_ready),
-                        last_event,
-                        error: None,
-                    },
+                    } => (
+                        WireReport {
+                            reachable: true,
+                            phase: Some(format!("{phase:?}")),
+                            podman_ready: Some(podman_ready),
+                            last_event,
+                            error: None,
+                        },
+                        guest_version,
+                    ),
                     // Dispatcher returned Error (convergence packet item 2).
                     // Surface its code + message rather than just "unexpected reply".
-                    ControlMessage::Error { code, message, .. } => WireReport {
-                        reachable: true,
+                    ControlMessage::Error { code, message, .. } => (
+                        WireReport {
+                            reachable: true,
+                            phase: None,
+                            podman_ready: None,
+                            last_event: None,
+                            error: Some(describe_wire_error(code, &message)),
+                        },
+                        guest_version,
+                    ),
+                    other => (
+                        WireReport {
+                            reachable: true,
+                            phase: None,
+                            podman_ready: None,
+                            last_event: None,
+                            error: Some(format!("unexpected reply: {}", other.kind())),
+                        },
+                        guest_version,
+                    ),
+                },
+                Err(err) => (
+                    WireReport {
+                        reachable: false,
                         phase: None,
                         podman_ready: None,
                         last_event: None,
-                        error: Some(describe_wire_error(code, &message)),
+                        error: Some(format!("VmStatusRequest: {err}")),
                     },
-                    other => WireReport {
-                        reachable: true,
-                        phase: None,
-                        podman_ready: None,
-                        last_event: None,
-                        error: Some(format!("unexpected reply: {}", other.kind())),
-                    },
-                },
-                Err(err) => WireReport {
-                    reachable: false,
-                    phase: None,
-                    podman_ready: None,
-                    last_event: None,
-                    error: Some(format!("VmStatusRequest: {err}")),
-                },
+                    guest_version,
+                ),
             }
         }),
-        Err(err) => WireReport {
-            reachable: false,
-            phase: None,
-            podman_ready: None,
-            last_event: None,
-            error: Some(format!("tokio runtime build failed: {err}")),
-        },
+        Err(err) => (
+            WireReport {
+                reachable: false,
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some(format!("tokio runtime build failed: {err}")),
+            },
+            None,
+        ),
     };
 
     let recent_log_tail = std::fs::read_to_string(&log)
@@ -2166,6 +2424,7 @@ fn collect_report() -> DiagnoseReport {
     let log_size_bytes = std::fs::metadata(&log).ok().map(|m| m.len());
 
     let mut report = DiagnoseReport {
+        guest_version,
         // WORKSPACE_VERSION baked by build.rs from the repo-root VERSION file
         // so the JSON's `version` field matches the release tag instead of
         // the crate's static `Cargo.toml` `0.1.0`. See build.rs for details.
@@ -2302,6 +2561,18 @@ fn print_human(r: &DiagnoseReport) {
             );
         }
     }
+
+    // Guest crash-loop DETECTION verdict. Additive line, read from the state
+    // file the live tray persists (this `--diagnose` process holds no live wire
+    // handle). Emits the PINNED grammar ^(healthy|starting|crash-loop:[a-z0-9-]+)$
+    // — a repeated restart/unseal/handshake pattern flips it to
+    // crash-loop:<subsystem>. Does NOT influence the 0/2/1 exit-code contract.
+    // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    println!("\n--- guest health (crash-loop detection) ---");
+    let mut det =
+        tillandsias_control_wire::crashloop::CrashLoopDetector::load(&crashloop_state_path());
+    println!("Guest health: {}", det.verdict(unix_now_secs()).verdict());
+
     if !r.recent_log_tail.is_empty() {
         println!();
         println!(
@@ -2353,6 +2624,92 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 /// loop, which spawns a fresh provisioning task in the LocalSet context.
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FAST_POLL_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(5);
+
+/// Set by the bounded auto-reset policy and drained by the message loop,
+/// which spawns the wipe+reprovision task in the LocalSet context — the
+/// exact mirror of `RETRY_REQUESTED`'s flag→LocalSet-spawn shape. There is
+/// NO menu path to this flag: the `Reset Guest…` leaf was removed by
+/// operator order 2026-07-22 (tray-ux "UX curation governance"); the manual
+/// affordance is the `--reset-guest` CLI verb (`reset_guest_once`).
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+static RESET_GUEST_REQUESTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// True while a wipe+reprovision reset task is in flight; a repeat request is
+/// a no-op until it settles.
+static RESET_GUEST_ACTIVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// A freshly-wiped guest has a fresh history: clear the live crash-loop
+/// detector AND its persisted state file so `--diagnose` returns to
+/// `starting` (the old loop died with the old guest), and re-arm the balloon
+/// edge-trigger so a loop on the NEW guest toasts again.
+fn reset_crashloop_state() {
+    if let Ok(mut det) = CRASH_LOOP_DETECTOR.lock() {
+        *det = tillandsias_control_wire::crashloop::CrashLoopDetector::with_defaults();
+        if let Err(e) = det.save(&crashloop_state_path()) {
+            tracing::debug!(error = %e, "could not persist cleared crash-loop state");
+        }
+    }
+    CRASH_LOOP_NOTIFIED.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Intentional EPHEMERAL RESET (windows-260717-4): wipe the guest (bounded
+/// stop + `wsl --unregister`, deleting the VHDX and the in-VM vault with it)
+/// and reprovision from scratch through the exact same
+/// `provision_via_recipe` first-provision path the tray always uses — which
+/// initializes vault cleanly, re-establishes the control wire, and reports
+/// progress on the status chip. Destructive by design; the honest-UX balloon
+/// states the designed cost (one re-authentication).
+///
+/// Known benign interplay: the previous provisioning task (parked holding a
+/// keepalive after a successful earlier provision) is not cancellable and
+/// keeps supervising its keepalive across the wipe. Its child dies with the
+/// unregistered distro, and the ORDER-417-bounded supervisor either
+/// re-attaches once the fresh import registers the same distro name again or
+/// gives up after its cap — either way bounded, never a loop.
+fn spawn_guest_reset(hwnd: HWND) {
+    use std::sync::atomic::Ordering::SeqCst;
+    if RESET_GUEST_ACTIVE.swap(true, SeqCst) {
+        tracing::info!("guest reset already in flight; ignoring (re)trigger");
+        return;
+    }
+    tracing::info!("ephemeral guest reset requested — wiping + reprovisioning from scratch");
+    update_status_text("\u{267B}\u{FE0F} Resetting guest\u{2026}", hwnd);
+    show_balloon(
+        hwnd,
+        "Tillandsias — resetting the guest",
+        "This discards the local guest and its cached credentials. Everything \
+         lives in the cloud — you'll re-authenticate once.",
+        BalloonSeverity::Info,
+    );
+    let lifecycle = WslLifecycle::new();
+    tokio::task::spawn_local(async move {
+        match lifecycle.wipe_guest().await {
+            Ok(()) => {
+                reset_crashloop_state();
+                // The wiped guest invalidates every derived surface: force the
+                // reprovision gate open (a prior successful provision left it
+                // set) and reprovision through the shared first-provision path.
+                PROVISIONING_ACTIVE.store(false, SeqCst);
+                RESET_GUEST_ACTIVE.store(false, SeqCst);
+                tracing::info!("guest wipe complete — reprovisioning from scratch");
+                spawn_provisioning(hwnd);
+            }
+            Err(err) => {
+                tracing::error!(%err, "guest wipe failed — reset aborted");
+                update_status_text("\u{1F534} Guest reset failed", hwnd);
+                show_balloon(
+                    hwnd,
+                    "Tillandsias — guest reset failed",
+                    &err,
+                    BalloonSeverity::Error,
+                );
+                RESET_GUEST_ACTIVE.store(false, SeqCst);
+            }
+        }
+    });
+}
 
 /// True while a provisioning task is running or has succeeded (and is parked
 /// holding the VM keepalive). Guards `spawn_provisioning` so a `Retry` while
@@ -2904,11 +3261,30 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
             tracing::info!(log = %log_file_path().display(), "opening tray log in Explorer");
             open_log_file();
         }
+        // NOTE: there is deliberately NO menu arm for the guest reset — the
+        // `reset-guest` leaf was an UNAPPROVED UX surface, removed by
+        // operator order 2026-07-22 (tray-ux "UX curation governance").
+        // The reset stays reachable via `--reset-guest` (CLI) and the
+        // opt-in bounded auto-reset policy, never from a menu click.
         // Attach / Maintain / GitHub-login all open an in-VM PTY. `intent_for_action`
         // picks the `PtyIntent`; `launch_spec` produces the exact forge-wrapped in-VM
         // argv; then we open it in a native Windows terminal via `wsl.exe`.
         MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
             if matches!(action, MenuAction::GithubLogin) {
+                // windows-260719-2: flip the menu to the transitional
+                // "Logging in…" state IMMEDIATELY — a purely local signal,
+                // before any wire round-trip (the HMENU rebuilds from
+                // MENU_STATE on the next right-click). The confirming probe
+                // (fast-poll burst below / LoginStatePush) maps only to
+                // LoggedIn/LoggedOut, so a confirmed reply always clears
+                // this: success renders logged-in, an invalid/missing token
+                // falls back to the actionable GitHub Login leaf.
+                if let Ok(mut guard) = MENU_STATE.lock() {
+                    let state = guard.get_or_insert_with(MenuState::initial);
+                    if state.login == GithubLoginState::LoggedOut {
+                        state.login = GithubLoginState::LoggingIn;
+                    }
+                }
                 FAST_POLL_COUNT.store(5, std::sync::atomic::Ordering::SeqCst);
             }
             launch_open_shell_terminal(&action);
@@ -3276,6 +3652,7 @@ mod tests {
                 last_event: None,
                 error: Some("not provisioned".to_string()),
             },
+            guest_version: None,
             recent_log_tail: vec![],
         }
     }

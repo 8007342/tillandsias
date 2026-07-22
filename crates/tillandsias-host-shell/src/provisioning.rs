@@ -174,6 +174,7 @@ mod tests {
                 body: ControlMessage::HelloAck {
                     wire_version: WIRE_VERSION,
                     server_caps: vec!["v1".into()],
+                    build_version: None,
                 },
             };
             let bytes = encode(&ack).expect("encode");

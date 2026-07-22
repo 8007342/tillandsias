@@ -98,6 +98,7 @@ mod tests {
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: true,
             podman_ready: true,
+            guest_version: None,
             login_runtime_ready: true,
             target: TargetSurface::MacosTray,
         };
@@ -230,7 +231,7 @@ mod tests {
     ///
     /// Drift-protection for gap-2 (`plan/issues/macos-tray-ux-gaps-2026-05-29.md`)
     /// and F3 (`plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md`):
-    /// when authenticated, the macOS Ready menu MUST surface exactly the 8
+    /// when authenticated, the macOS Ready menu MUST surface exactly the 6
     /// login-gated top-level items in parity-contract order — no macOS-only
     /// extras, no reordering, no missing rows, and crucially NO `github-login`
     /// row alongside the project body (it is mutually exclusive with login, per
@@ -258,6 +259,13 @@ mod tests {
         assert!(
             !top_ids.contains(&ids::GITHUB_LOGIN),
             "github-login must not appear alongside the project body (F3)"
+        );
+        // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
+        // governance"): the unapproved reset-guest leaf must not render on
+        // macOS either — the reset is CLI-only (`--reset-guest`).
+        assert!(
+            !top_ids.contains(&ids::RESET_GUEST),
+            "reset-guest must NOT appear (removed by operator order 2026-07-22)"
         );
         // Global browser/agent rows removed; they now live in per-project submenus.
         for gone in [ids::AGENTS, ids::OBSERVATORIUM, ids::OPENCODE_WEB] {
@@ -293,6 +301,12 @@ mod tests {
                 ids::QUIT
             ],
             "logged-out macOS menu must collapse to the login-gated short list (F3)"
+        );
+        // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
+        // governance"): no reset-guest leaf in the logged-out shape either.
+        assert!(
+            !top_ids.contains(&ids::RESET_GUEST),
+            "reset-guest must NOT appear (removed by operator order 2026-07-22)"
         );
     }
 }

@@ -60,7 +60,14 @@ COPY relay-refs.sh /usr/local/share/git-service/relay-refs.sh
 # name a cloneable head; the entrypoint runs this at init/seed/fast-forward
 # and offline fixtures exec the same file (ENSURE_HEAD override).
 COPY ensure-mirror-head.sh /usr/local/share/git-service/ensure-mirror-head
-RUN chmod +x /usr/local/share/git-service/ensure-mirror-head
+
+# @trace spec:git-mirror-service
+# Order 449: bounded-window exported-head reconcile pass — run periodically
+# by the entrypoint so a host direct-push to origin cannot strand forge
+# agents on a stale mirror between launches.
+COPY reconcile-exported-heads.sh /usr/local/share/git-service/reconcile-exported-heads
+RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
+    /usr/local/share/git-service/reconcile-exported-heads
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli

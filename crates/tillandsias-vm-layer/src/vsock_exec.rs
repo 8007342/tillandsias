@@ -174,13 +174,18 @@ where
                     "pty.attach@v1".to_string(),
                     CAP_PTY_HEARTBEAT_V1.to_string(),
                 ],
+                build_version: None,
             },
         },
     )
     .await?;
     let ack = read_envelope(&mut stream).await?;
     match ack.body {
-        ControlMessage::HelloAck { wire_version, .. } => {
+        ControlMessage::HelloAck {
+            wire_version,
+            build_version: _,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(format!(
                     "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
@@ -319,13 +324,18 @@ where
                     "pty.attach@v1".to_string(),
                     CAP_PTY_HEARTBEAT_V1.to_string(),
                 ],
+                build_version: None,
             },
         },
     )
     .await?;
     let ack = read_envelope(&mut stream).await?;
     match ack.body {
-        ControlMessage::HelloAck { wire_version, .. } => {
+        ControlMessage::HelloAck {
+            wire_version,
+            build_version: _,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(format!(
                     "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
@@ -442,13 +452,18 @@ where
             body: ControlMessage::Hello {
                 from: "tillandsias-vm-layer::vsock_exec::probe_phase".to_string(),
                 capabilities: vec![],
+                build_version: None,
             },
         },
     )
     .await?;
     let ack = read_envelope(&mut stream).await?;
     match ack.body {
-        ControlMessage::HelloAck { wire_version, .. } => {
+        ControlMessage::HelloAck {
+            wire_version,
+            build_version: _,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(format!(
                     "probe_vm_phase: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
@@ -562,13 +577,22 @@ where
                     "pty.attach@v1".to_string(),
                     CAP_PTY_HEARTBEAT_V1.to_string(),
                 ],
+                build_version: None,
             },
         },
     )
     .await?;
     match read_envelope(&mut stream).await?.body {
-        ControlMessage::HelloAck { wire_version, .. } if wire_version == WIRE_VERSION => {}
-        ControlMessage::HelloAck { wire_version, .. } => {
+        ControlMessage::HelloAck {
+            wire_version,
+            build_version: _,
+            ..
+        } if wire_version == WIRE_VERSION => {}
+        ControlMessage::HelloAck {
+            wire_version,
+            build_version: _,
+            ..
+        } => {
             return Err(format!(
                 "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
             ));
@@ -700,6 +724,7 @@ mod tests {
                     body: ControlMessage::HelloAck {
                         wire_version: WIRE_VERSION,
                         server_caps: vec![],
+                        build_version: None,
                     },
                 },
             )
@@ -757,6 +782,7 @@ mod tests {
                     body: ControlMessage::HelloAck {
                         wire_version: WIRE_VERSION,
                         server_caps: vec![],
+                        build_version: None,
                     },
                 },
             )
@@ -835,6 +861,7 @@ mod tests {
                     body: ControlMessage::HelloAck {
                         wire_version: WIRE_VERSION,
                         server_caps: vec![],
+                        build_version: None,
                     },
                 },
             )
@@ -922,6 +949,7 @@ mod tests {
                     body: ControlMessage::HelloAck {
                         wire_version: WIRE_VERSION,
                         server_caps: vec![],
+                        build_version: None,
                     },
                 },
             )
@@ -962,6 +990,7 @@ mod tests {
                     body: ControlMessage::HelloAck {
                         wire_version: WIRE_VERSION,
                         server_caps: vec![],
+                        build_version: None,
                     },
                 },
             )
@@ -1042,6 +1071,7 @@ mod tests {
                     body: ControlMessage::HelloAck {
                         wire_version: WIRE_VERSION,
                         server_caps: vec![],
+                        build_version: None,
                     },
                 },
             )
@@ -1096,6 +1126,7 @@ mod tests {
                     body: ControlMessage::HelloAck {
                         wire_version: WIRE_VERSION,
                         server_caps: vec![],
+                        build_version: None,
                     },
                 },
             )
@@ -1212,6 +1243,7 @@ mod tests {
                     body: ControlMessage::HelloAck {
                         wire_version: WIRE_VERSION,
                         server_caps: vec![],
+                        build_version: None,
                     },
                 },
             )

@@ -152,6 +152,10 @@ fn main() {
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
+    // Intentional EPHEMERAL RESET (windows-260717-4): wipe the podman guest
+    // substrate (vault + enclave containers/volumes/secrets/networks — NOT
+    // the inference model cache) and re-initialize from scratch.
+    let reset_guest = user_args.iter().any(|a| a == "--reset-guest");
 
     // @trace spec:enclave-service-catalog
     // `--publish-local <project>` — order 364 e2e closure: bring up the
@@ -486,6 +490,19 @@ fn main() {
         return;
     }
 
+    // Intentional EPHEMERAL RESET (windows-260717-4): the Linux `podman
+    // equivalent` of the Windows `wsl --unregister` + reprovision. Wipes the
+    // guest substrate (vault + enclave), then re-runs the same init + vault
+    // bring-up path a fresh install uses.
+    // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    if reset_guest {
+        if let Err(e) = run_reset_guest(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
     if init {
         if let Err(e) = run_init(debug, force) {
             eprintln!("Error: {}", e);
@@ -794,6 +811,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --antigravity-login [--debug]");
     println!("       tillandsias --cache-verify [--debug]");
     println!("       tillandsias --cache-clear [--debug]");
+    println!("       tillandsias --reset-guest [--debug]");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
     println!("       tillandsias --claude <project> [--debug|--diagnostics]");
@@ -822,6 +840,11 @@ fn print_usage(version: &str) {
     println!("  --force        Rebuild all images even if cached (use with --init)");
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
+    println!(
+        "  --reset-guest  EPHEMERAL RESET: wipe the guest substrate (vault + enclave \
+         containers/volumes/secrets; keeps the model cache) and re-initialize. \
+         Destructive by design; you'll re-authenticate once"
+    );
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
@@ -4156,6 +4179,59 @@ async fn remove_shared_stack_containers(client: &PodmanClient) {
     let _ = client.remove_container("tillandsias-inference").await;
 }
 
+/// Resource-name prefix for launch-in-flight advisory locks (order 443
+/// slice 3). One marker per launching PROCESS: `launch-<project>-<pid>`.
+/// The pid suffix keeps concurrent launches of the SAME project from
+/// contending on one flock and lets a process exclude its OWN marker (by
+/// exact name) when it runs the shared-stack teardown itself.
+const LAUNCH_IN_FLIGHT_PREFIX: &str = "launch-";
+
+/// This process's launch-in-flight marker resource name for `project_name`.
+fn launch_in_flight_resource(project_name: &str) -> String {
+    format!(
+        "{LAUNCH_IN_FLIGHT_PREFIX}{project_name}-{}",
+        std::process::id()
+    )
+}
+
+/// Mark this process's forge launch as in flight (order 443 slice 3).
+///
+/// Held from before the first shared-stack ensure until the process exits,
+/// this advisory flock covers the PRE-CREATE window — after a launch decides
+/// to bring the stack up but before `podman run` creates any container — in
+/// which the launch is invisible to `list_containers`. Sibling processes
+/// probing [`foreign_launches_in_flight`] then refuse shared teardown. flock
+/// releases on fd close, so a crashed launch can never wedge teardown; there
+/// is no timed grace window to tune because the marker's lifetime IS the
+/// grace window (create/install are absorbed exactly, not approximately).
+///
+/// Returns the marker's resource name plus the guard keeping it held; keep
+/// the guard alive for the whole lane and pass the name as
+/// `own_launch_marker` to [`cleanup_shared_stack_if_no_running_forge`] so
+/// the lane's own cleanup calls do not see themselves as a foreign launch.
+fn acquire_launch_in_flight_marker(
+    project_name: &str,
+    debug: bool,
+) -> Result<(String, resource_lock::ResourceLockGuard), String> {
+    let resource = launch_in_flight_resource(project_name);
+    // The name is pid-unique, so contention is impossible in practice; the
+    // short bounded wait only guards against pathological fs stalls.
+    let guard = resource_lock::acquire(&resource, std::time::Duration::from_secs(10), debug)?;
+    Ok((resource, guard))
+}
+
+/// Launch-in-flight markers currently held by OTHER processes.
+///
+/// `own_launch_marker` is this process's marker name (if it holds one) and
+/// is excluded by exact name — flock cannot distinguish "held by me on
+/// another fd" from "held by a sibling", but the name (pid-suffixed) can.
+fn foreign_launches_in_flight(own_launch_marker: Option<&str>) -> Vec<String> {
+    resource_lock::held_resources_with_prefix(LAUNCH_IN_FLIGHT_PREFIX)
+        .into_iter()
+        .filter(|marker| Some(marker.as_str()) != own_launch_marker)
+        .collect()
+}
+
 /// Does this container's liveness require the SHARED stack (proxy,
 /// inference) to stay up? Order 289 broadened this beyond `-forge`:
 /// maintenance terminals ARE `-forge-maintenance` (already matched), but
@@ -4184,22 +4260,52 @@ fn is_active_lane_container(name: &str, state: &str) -> bool {
             || name.starts_with("tillandsias-browser-"))
 }
 
+/// Tear the shared stack down IFF this is the LAST forge anywhere and no
+/// launch is in flight.
+///
+/// Order 443 slice 3 — the shared stack's "refcount" is deliberately DERIVED
+/// LIVE on every call rather than kept in a persisted counter file:
+///
+///   count = active lane containers (`list_containers` + the order-443
+///           [`is_active_lane_container`] predicate, which already counts
+///           starting/created siblings)
+///         + launch-in-flight markers held by other processes
+///           ([`foreign_launches_in_flight`], covering the pre-create window
+///           where a launch owns no container yet)
+///
+/// A persisted counter can drift (a crashed forge that never decrements
+/// leaks forever; a double-decrement undercounts and tears the stack out
+/// from under a live sibling — the data-loss direction). The live view
+/// cannot undercount a sibling that either HAS a container (podman ps sees
+/// it) or is pre-create (its flock is held; flock dies with the process, so
+/// crashes self-expire). Teardown proceeds only when BOTH sources read zero.
 async fn cleanup_shared_stack_if_no_running_forge(
     client: &PodmanClient,
     project_name: &str,
+    own_launch_marker: Option<&str>,
     debug: bool,
 ) {
-    let running_lanes: Vec<String> = client
-        .list_containers("tillandsias-")
-        .await
-        .map(|containers| {
-            containers
-                .into_iter()
-                .filter(|container| is_active_lane_container(&container.name, &container.state))
-                .map(|container| container.name)
-                .collect()
-        })
-        .unwrap_or_default();
+    // An errored/unreachable `podman ps` MUST count as HELD, not as "zero
+    // lanes" — collapsing the failure to an empty list (the pre-review
+    // `.unwrap_or_default()`) let a transient podman hiccup tear the shared
+    // stack down under a live sibling, the exact data-loss direction this
+    // function's refcount exists to prevent (final-wave adversarial review
+    // finding, 2026-07-22). Leak-not-destroy: skip teardown and let a later
+    // launch's cleanup retry.
+    let running_lanes: Vec<String> = match client.list_containers("tillandsias-").await {
+        Ok(containers) => containers
+            .into_iter()
+            .filter(|container| is_active_lane_container(&container.name, &container.state))
+            .map(|container| container.name)
+            .collect(),
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] shared-stack cleanup: container listing failed ({e}); \
+                 treating the stack as IN USE and skipping teardown (leak-not-destroy)"
+            );
+            return;
+        }
+    };
 
     if !running_lanes.is_empty() {
         if debug {
@@ -4208,6 +4314,23 @@ async fn cleanup_shared_stack_if_no_running_forge(
                 running_lanes.join(", ")
             );
         }
+        return;
+    }
+
+    // Order 443 slice 3: a sibling launch in its PRE-CREATE window (decided
+    // to launch, no `podman run` issued yet) owns no container for the lane
+    // scan above to count. It does hold a launch-in-flight flock; if any
+    // OTHER process holds one, keep the stack — tearing it down here would
+    // yank proxy/git/inference out from under a forge seconds from creating
+    // its containers (the observed 2026-07-20 teardown-under-sibling race).
+    // Loud on purpose (not debug-gated): a stack that unexpectedly survives
+    // needs its reason in the log, same as the teardown trace below.
+    let launches_in_flight = foreign_launches_in_flight(own_launch_marker);
+    if !launches_in_flight.is_empty() {
+        eprintln!(
+            "[tillandsias] keeping shared stack alive; launch in flight (pre-create window): {}",
+            launches_in_flight.join(", ")
+        );
         return;
     }
 
@@ -5798,6 +5921,195 @@ fn run_cache_clear(debug: bool) -> Result<(), String> {
     Ok(())
 }
 
+// ────────────────── intentional EPHEMERAL RESET (windows-260717-4) ──────────
+//
+// The Linux `podman equivalent` of the Windows `wsl --unregister` +
+// reprovision: wipe the guest substrate — every tillandsias container, the
+// tillandsias volumes/secrets (vault unseal + TLS material, git mirrors), the
+// enclave/egress networks, and the host-side vault-data directory — then
+// re-run the exact same `--init` + vault bring-up path a fresh install uses.
+// Fresh first-provision initializes vault cleanly (windows-260717-2 bites only
+// on re-ensure), so a reset always yields a working vault.
+//
+// SCOPE (operator doctrine): the guest + vault are disposable; the inference
+// MODEL CACHE (`~/.cache/tillandsias/models`) and the locally-built images are
+// NOT part of the guest and are deliberately preserved — re-downloading models
+// / rebuilding images is expensive and carries no credential state. Pinned by
+// the `reset_guest_*` unit tests below.
+//
+// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+
+/// Fail-safe gate for the destructive reset. The reset is destructive BY
+/// DESIGN (the operator's ephemeral doctrine) so unset/1 permits it with no
+/// extra ceremony; an explicit `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` (harness
+/// policy: plan/archive/podman-reset-harness-policy-2026-06-16.md) refuses
+/// loudly instead of silently proceeding.
+fn destructive_reset_allowed() -> bool {
+    std::env::var("TILLANDSIAS_DESTRUCTIVE_RESET_OK").map_or(true, |v| v != "0")
+}
+
+/// Pure scope filter: which podman object names (containers/volumes/secrets)
+/// belong to the Tillandsias guest substrate. Everything the stack creates is
+/// `tillandsias-` prefixed (vault, proxy, git-*, *-forge, *-web, mirror
+/// volumes, unseal/TLS/CA secrets); anything else on the host is untouched.
+fn reset_guest_scope(names: &[String]) -> Vec<String> {
+    names
+        .iter()
+        .filter(|n| n.starts_with("tillandsias-"))
+        .cloned()
+        .collect()
+}
+
+/// The networks the reset tears down: exactly the enclave + egress bridges.
+fn reset_guest_network_scope(names: &[String]) -> Vec<String> {
+    names
+        .iter()
+        .filter(|n| n.as_str() == ENCLAVE_NET || n.as_str() == EGRESS_NET)
+        .cloned()
+        .collect()
+}
+
+/// Host-side directories the reset deletes under the init cache dir. ONLY
+/// `vault-data` (the vault storage backend) — never `models` (the inference
+/// model cache, explicitly out of the ephemeral doctrine's scope) and never
+/// the cache dir itself.
+fn reset_guest_wipe_paths(cache_dir: &Path) -> Vec<PathBuf> {
+    vec![cache_dir.join("vault-data")]
+}
+
+/// Enumerate podman object names via `--format {{.Names}}`/`{{.Name}}`.
+/// Best-effort: an unreachable podman yields an empty list (the reset then
+/// only wipes host-side state — still an honest partial reset, reported).
+fn podman_name_list(args: &[&str], debug: bool) -> Vec<String> {
+    let mut command = podman_command();
+    command.args(args);
+    match command.output() {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect(),
+        Ok(out) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] reset-guest: podman {} exited with {}",
+                    args.join(" "),
+                    out.status
+                );
+            }
+            Vec::new()
+        }
+        Err(e) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] reset-guest: podman {} failed to spawn: {e}",
+                    args.join(" ")
+                );
+            }
+            Vec::new()
+        }
+    }
+}
+
+/// One-click intentional EPHEMERAL RESET: wipe + re-initialize. Reaches the
+/// same end state as a pristine `--init` + vault bring-up, with every prior
+/// guest credential discarded (the honest UX: you'll re-authenticate once).
+fn run_reset_guest(debug: bool) -> Result<(), String> {
+    if !destructive_reset_allowed() {
+        return Err(
+            "guest reset refused: TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 forbids destructive \
+             resets in this environment. Unset it (or set it to 1) to proceed."
+                .to_string(),
+        );
+    }
+    eprintln!(
+        "[tillandsias] EPHEMERAL RESET: this discards the local guest (containers, vault, \
+         cached credentials). Everything lives in the cloud \u{2014} you'll re-authenticate once."
+    );
+
+    // 1. Containers (vault, proxy, git services, forges, web) — force-remove
+    //    with a bounded stop. Tolerant per-name: a concurrently-vanished
+    //    container must not abort the wipe.
+    for name in reset_guest_scope(&podman_name_list(
+        &["ps", "-a", "--format", "{{.Names}}"],
+        debug,
+    )) {
+        let mut command = podman_command();
+        command.args(["rm", "-f", "-t", "10", &name]);
+        if let Err(e) = run_command(command, debug) {
+            eprintln!("[tillandsias] reset-guest: could not remove container {name}: {e}");
+        }
+    }
+
+    // 2. Volumes (git mirrors, tool caches inside the enclave scope).
+    for name in reset_guest_scope(&podman_name_list(
+        &["volume", "ls", "--format", "{{.Name}}"],
+        debug,
+    )) {
+        let mut command = podman_command();
+        command.args(["volume", "rm", "-f", &name]);
+        if let Err(e) = run_command(command, debug) {
+            eprintln!("[tillandsias] reset-guest: could not remove volume {name}: {e}");
+        }
+    }
+
+    // 3. Secrets (vault unseal share + TLS material, CA, github token) —
+    //    the credential-discard half of the ephemeral doctrine.
+    for name in reset_guest_scope(&podman_name_list(
+        &["secret", "ls", "--format", "{{.Name}}"],
+        debug,
+    )) {
+        let mut command = podman_command();
+        command.args(["secret", "rm", &name]);
+        if let Err(e) = run_command(command, debug) {
+            eprintln!("[tillandsias] reset-guest: could not remove secret {name}: {e}");
+        }
+    }
+
+    // 4. Networks (enclave + egress bridges; containers are gone by now).
+    for name in reset_guest_network_scope(&podman_name_list(
+        &["network", "ls", "--format", "{{.Name}}"],
+        debug,
+    )) {
+        let mut command = podman_command();
+        command.args(["network", "rm", "-f", &name]);
+        if let Err(e) = run_command(command, debug) {
+            eprintln!("[tillandsias] reset-guest: could not remove network {name}: {e}");
+        }
+    }
+
+    // 5. Host-side vault storage (the data behind the vault container).
+    let cache_dir = init_cache_dir()?;
+    for path in reset_guest_wipe_paths(&cache_dir) {
+        if path.exists() {
+            fs::remove_dir_all(&path)
+                .map_err(|e| format!("failed to remove {}: {e}", path.display()))?;
+        }
+    }
+
+    eprintln!("[tillandsias] guest substrate wiped \u{2014} re-initializing from scratch\u{2026}");
+
+    // 6. Reprovision through the exact same first-provision path `--init`
+    //    uses (images are preserved, so this is fast when they still exist).
+    run_init(debug, false)?;
+    #[cfg(feature = "vault")]
+    if std::env::var_os("LITMUS_PODMAN_MODE").is_some() {
+        // Litmus/fake mode — no Vault container to bring up.
+    } else {
+        vault_bootstrap::ensure_vault_running(debug)?;
+    }
+    #[cfg(not(feature = "vault"))]
+    if debug {
+        eprintln!("[tillandsias] vault feature not compiled; reset finished without Vault");
+    }
+
+    eprintln!(
+        "[tillandsias] guest reset complete \u{2713} \u{2014} re-authenticate with \
+         --github-login (or the tray's GitHub Login) to restore cloud access."
+    );
+    Ok(())
+}
+
 /// Verify cache integrity and report status.
 /// @trace spec:forge-staleness, spec:forge-cache-dual
 fn run_cache_verify(debug: bool) -> Result<(), String> {
@@ -5866,6 +6178,10 @@ fn run_status_check(debug: bool) -> Result<(), String> {
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
     let project_name = "tillandsias-status-check";
+    // Order 443 slice 3: the status lane creates a one-shot forge too — mark
+    // its launch in flight so a sibling exiting during our pre-create window
+    // does not tear the shared stack down under us. Held to end of function.
+    let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -5895,7 +6211,13 @@ fn run_status_check(debug: bool) -> Result<(), String> {
         cleanup_stack_containers(&client, project_name).await;
         // Order 233 (R5): shared containers are removed only when no forge
         // is running anywhere; a parallel project's live session keeps them.
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+        cleanup_shared_stack_if_no_running_forge(
+            &client,
+            project_name,
+            Some(&launch_marker),
+            debug,
+        )
+        .await;
 
         client
             .run_container_observed(
@@ -5959,7 +6281,13 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 debug,
             )
             .await;
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+        cleanup_shared_stack_if_no_running_forge(
+            &client,
+            project_name,
+            Some(&launch_marker),
+            debug,
+        )
+        .await;
         result.map_err(|e| e.to_string())?;
 
         Ok::<(), String>(())
@@ -7844,6 +8172,11 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         }
     }
 
+    // Order 443 slice 3: mark this launch in flight BEFORE the first
+    // cleanup/ensure so a sibling exiting during our pre-create window keeps
+    // the shared stack up for us. Held for the whole session.
+    let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
+
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
@@ -7869,7 +8202,13 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         cleanup_stack_containers(&client, project_name).await;
         // Order 233 (R5): shared containers are removed only when no forge
         // is running anywhere; a parallel project's live session keeps them.
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+        cleanup_shared_stack_if_no_running_forge(
+            &client,
+            project_name,
+            Some(&launch_marker),
+            debug,
+        )
+        .await;
 
         // Step 15: bring the router up BEFORE any project containers so the
         // enclave's `router` network alias is already resolvable when proxy /
@@ -7993,7 +8332,13 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                 debug,
             )
             .await;
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+        cleanup_shared_stack_if_no_running_forge(
+            &client,
+            project_name,
+            Some(&launch_marker),
+            debug,
+        )
+        .await;
 
         // Stop the diagnostic-event emitter before propagating the
         // forge result so the stderr stream cleanly closes with the
@@ -8906,6 +9251,11 @@ pub(crate) fn run_opencode_web_mode(
         eprintln!("[tillandsias] [OpenCode Web] Launching full-stack session");
     }
 
+    // Order 443 slice 3: mark this launch in flight BEFORE the first
+    // cleanup/ensure so a sibling exiting during our pre-create window keeps
+    // the shared stack up for us. Held for the whole lane.
+    let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
+
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     let router_host_port = rt.block_on(async {
@@ -8940,7 +9290,13 @@ pub(crate) fn run_opencode_web_mode(
         cleanup_stack_containers(&client, project_name).await;
         // Order 233 (R5): shared containers are removed only when no forge
         // is running anywhere; a parallel project's live session keeps them.
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+        cleanup_shared_stack_if_no_running_forge(
+            &client,
+            project_name,
+            Some(&launch_marker),
+            debug,
+        )
+        .await;
 
         // Idempotent proxy bring-up: reuse a running proxy, clear a stale one.
         // See the forge-launch-proxy site for the full rationale.
@@ -9323,6 +9679,7 @@ fn executable_on_path(name: &str) -> bool {
 pub(crate) fn ensure_enclave_for_project(
     project_name: &str,
     project_path: Option<&Path>,
+    own_launch_marker: Option<&str>,
     debug: bool,
 ) -> Result<PathBuf, String> {
     // Idempotent re-attach wipe FIRST, prerequisites AFTER. The shared-stack
@@ -9334,6 +9691,9 @@ pub(crate) fn ensure_enclave_for_project(
     // Cleanup → ensure keeps exactly one proxy bring-up path (order 252) with
     // no inline duplicate. Ordering pinned by
     // enclave_bringup_cleans_up_before_ensuring_prerequisites.
+    // `own_launch_marker` (order 443 slice 3) is the CALLER's launch-in-flight
+    // marker: excluding it here keeps the order-298 first-launch wipe firing
+    // while a FOREIGN in-flight launch still blocks the shared teardown.
     {
         let rt = podman_runtime()?;
         let client = PodmanClient::new();
@@ -9342,7 +9702,13 @@ pub(crate) fn ensure_enclave_for_project(
             // Order 233 (R5): shared containers are removed only when no
             // forge is running anywhere; a parallel project's live session
             // keeps them.
-            cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+            cleanup_shared_stack_if_no_running_forge(
+                &client,
+                project_name,
+                own_launch_marker,
+                debug,
+            )
+            .await;
         });
     }
 
@@ -9418,145 +9784,17 @@ pub(crate) fn ensure_enclave_for_project(
         // ad-hoc proxy container start that duplicated ensure_proxy_running.
         // @trace plan/issues/launch-paths-route-through-dependency-model
 
-        // Order 443: the git mirror is STATEFUL — it serves clones and holds a
-        // Vault lease. Do NOT --replace a running mirror on a forge launch: a
-        // concurrent second forge would destroy the mirror out from under a
-        // sibling mid-clone (the observed 2026-07-20 bounce, which combined with
-        // the daemon-startup window of order 446 crashed forges on clone).
-        // Ensure-if-running: reuse a live mirror; a clean relaunch (stack torn
-        // down) still recreates it fresh with the current image. Only mint a new
-        // Vault token when actually creating the container.
+        ensure_shared_git_and_inference_for_launch(
+            &client,
+            project_name,
+            &certs_dir,
+            version,
+            project_remote_url.as_deref(),
+            project_default_branch.as_deref(),
+            debug,
+        )
+        .await?;
         let git_container_name = format!("tillandsias-git-{project_name}");
-        if crate::vault_bootstrap::container_running(&git_container_name) {
-            if debug {
-                eprintln!(
-                    "[tillandsias] git mirror {git_container_name} already running; reusing (order 443)"
-                );
-            }
-            // Order 452 slice 2 (reused-mirror re-reconcile) + order 449: the
-            // mirror only fast-forwards its EXPORTED heads at container START,
-            // so reusing a long-lived one (order 443) serves increasingly
-            // stale heads — a forge then clones stale and its push rejects
-            // non-fast-forward. Re-run the same NON-forced exported-head
-            // fast-forward, then repair an unborn HEAD (old-image container),
-            // before any forge clones. Non-fatal by design: a diverged head
-            // is left for the relay to push UP, an offline upstream still
-            // serves the last-known-good tree, and the readiness gate below
-            // still enforces a resolvable HEAD.
-            if project_remote_url.is_some() {
-                let ff = client
-                    .execute(
-                        OperationKind::Container,
-                        &[
-                            "exec".into(),
-                            "-i".into(),
-                            git_container_name.clone(),
-                            "git".into(),
-                            "-C".into(),
-                            format!("/srv/git/{project_name}"),
-                            "fetch".into(),
-                            "origin".into(),
-                            "refs/heads/*:refs/heads/*".into(),
-                        ],
-                    )
-                    .await;
-                match ff {
-                    Ok(out) if out.success() => {
-                        if debug {
-                            eprintln!(
-                                "[tillandsias] [forge-launch] reused mirror re-reconciled to upstream"
-                            );
-                        }
-                    }
-                    Ok(out) => eprintln!(
-                        "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile fetch exited {} (serving last-known-good heads; diverged heads relay up on push)",
-                        out.status.unwrap_or(-1)
-                    ),
-                    Err(e) => eprintln!(
-                        "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile failed: {e}"
-                    ),
-                }
-            }
-            // HEAD repair on a reused container. New images carry
-            // ensure-mirror-head; on an old image fall back to an inline
-            // conditional symbolic-ref when the launcher knows the branch.
-            // project_name is container-name-safe and the branch is charset-
-            // sanitized by read_host_project_current_branch, so the
-            // interpolation below cannot escape the sh -c word.
-            let repair = match project_default_branch.as_deref() {
-                Some(branch) => format!(
-                    "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
-                       /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name} {branch}; \
-                     elif ! git -C /srv/git/{project_name} rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
-                       && git -C /srv/git/{project_name} show-ref --verify --quiet refs/heads/{branch}; then \
-                       git -C /srv/git/{project_name} symbolic-ref HEAD refs/heads/{branch}; \
-                     fi"
-                ),
-                None => format!(
-                    "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
-                       /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name}; \
-                     fi"
-                ),
-            };
-            if let Err(e) = client
-                .execute(
-                    OperationKind::Container,
-                    &[
-                        "exec".into(),
-                        "-i".into(),
-                        git_container_name.clone(),
-                        "sh".into(),
-                        "-c".into(),
-                        repair,
-                    ],
-                )
-                .await
-            {
-                eprintln!(
-                    "[tillandsias] [forge-launch] WARNING: reused-mirror HEAD repair failed: {e}"
-                );
-            }
-        } else {
-            let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
-            client
-                .run_container_observed(
-                    "forge-launch-git",
-                    &git_container_name,
-                    &build_git_run_args(
-                        project_name,
-                        &certs_dir,
-                        &versioned_image_tag("git", version),
-                        project_remote_url.as_deref(),
-                        project_default_branch.as_deref(),
-                        git_vault_secret.as_deref(),
-                    ),
-                    debug,
-                )
-                .await
-                .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
-        }
-        // Order 443: inference is nearly stateless but --replacing it on every
-        // launch drops loaded models and interrupts a sibling's inference.
-        // Recreate-if-not-running (ephemerality/idempotency), not always.
-        if crate::vault_bootstrap::container_running("tillandsias-inference") {
-            if debug {
-                eprintln!("[tillandsias] inference already running; reusing (order 443)");
-            }
-        } else {
-            client
-                .run_container_observed(
-                    "forge-launch-inference",
-                    "tillandsias-inference",
-                    &build_inference_run_args(
-                        &certs_dir,
-                        &versioned_image_tag("inference", version),
-                        false,
-                    ),
-                    debug,
-                )
-                .await
-                .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
-        }
 
         // Order 392: deterministic inference readiness. The forge agent must
         // not boot into an indeterminate "inference may still be starting"
@@ -9583,6 +9821,167 @@ pub(crate) fn ensure_enclave_for_project(
     })?;
 
     Ok(certs_dir)
+}
+
+/// Ensure the project's git mirror and the shared inference container for a
+/// forge launch, per the operator's order-443 per-component concurrency rule:
+/// the STATEFUL mirror is ensure-if-running (never replace a healthy one a
+/// sibling is using); inference is recreate-if-not-running (a --replace would
+/// drop loaded models and interrupt a sibling's inference mid-flight).
+///
+/// Extracted verbatim from `ensure_enclave_for_project` (order 443 slice 3)
+/// so the concurrent-forge fixtures can drive the exact reuse/create decision
+/// against the stateful fake podman without the vault-dependent enclave
+/// prerequisites; behavior is unchanged.
+async fn ensure_shared_git_and_inference_for_launch(
+    client: &PodmanClient,
+    project_name: &str,
+    certs_dir: &Path,
+    version: &str,
+    project_remote_url: Option<&str>,
+    project_default_branch: Option<&str>,
+    debug: bool,
+) -> Result<(), String> {
+    // Order 443: the git mirror is STATEFUL — it serves clones and holds a
+    // Vault lease. Do NOT --replace a running mirror on a forge launch: a
+    // concurrent second forge would destroy the mirror out from under a
+    // sibling mid-clone (the observed 2026-07-20 bounce, which combined with
+    // the daemon-startup window of order 446 crashed forges on clone).
+    // Ensure-if-running: reuse a live mirror; a clean relaunch (stack torn
+    // down) still recreates it fresh with the current image. Only mint a new
+    // Vault token when actually creating the container.
+    let git_container_name = format!("tillandsias-git-{project_name}");
+    if crate::vault_bootstrap::container_running(&git_container_name) {
+        if debug {
+            eprintln!(
+                "[tillandsias] git mirror {git_container_name} already running; reusing (order 443)"
+            );
+        }
+        // Order 452 slice 2 (reused-mirror re-reconcile) + order 449: the
+        // mirror only fast-forwards its EXPORTED heads at container START,
+        // so reusing a long-lived one (order 443) serves increasingly
+        // stale heads — a forge then clones stale and its push rejects
+        // non-fast-forward. Re-run the same NON-forced exported-head
+        // fast-forward, then repair an unborn HEAD (old-image container),
+        // before any forge clones. Non-fatal by design: a diverged head
+        // is left for the relay to push UP, an offline upstream still
+        // serves the last-known-good tree, and the readiness gate below
+        // still enforces a resolvable HEAD.
+        if project_remote_url.is_some() {
+            let ff = client
+                .execute(
+                    OperationKind::Container,
+                    &[
+                        "exec".into(),
+                        "-i".into(),
+                        git_container_name.clone(),
+                        "git".into(),
+                        "-C".into(),
+                        format!("/srv/git/{project_name}"),
+                        "fetch".into(),
+                        "origin".into(),
+                        "refs/heads/*:refs/heads/*".into(),
+                    ],
+                )
+                .await;
+            match ff {
+                Ok(out) if out.success() => {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias] [forge-launch] reused mirror re-reconciled to upstream"
+                        );
+                    }
+                }
+                Ok(out) => eprintln!(
+                    "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile fetch exited {} (serving last-known-good heads; diverged heads relay up on push)",
+                    out.status.unwrap_or(-1)
+                ),
+                Err(e) => eprintln!(
+                    "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile failed: {e}"
+                ),
+            }
+        }
+        // HEAD repair on a reused container. New images carry
+        // ensure-mirror-head; on an old image fall back to an inline
+        // conditional symbolic-ref when the launcher knows the branch.
+        // project_name is container-name-safe and the branch is charset-
+        // sanitized by read_host_project_current_branch, so the
+        // interpolation below cannot escape the sh -c word.
+        let repair = match project_default_branch {
+            Some(branch) => format!(
+                "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
+                   /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name} {branch}; \
+                 elif ! git -C /srv/git/{project_name} rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
+                   && git -C /srv/git/{project_name} show-ref --verify --quiet refs/heads/{branch}; then \
+                   git -C /srv/git/{project_name} symbolic-ref HEAD refs/heads/{branch}; \
+                 fi"
+            ),
+            None => format!(
+                "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
+                   /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name}; \
+                 fi"
+            ),
+        };
+        if let Err(e) = client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    git_container_name.clone(),
+                    "sh".into(),
+                    "-c".into(),
+                    repair,
+                ],
+            )
+            .await
+        {
+            eprintln!(
+                "[tillandsias] [forge-launch] WARNING: reused-mirror HEAD repair failed: {e}"
+            );
+        }
+    } else {
+        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+        client
+            .run_container_observed(
+                "forge-launch-git",
+                &git_container_name,
+                &build_git_run_args(
+                    project_name,
+                    certs_dir,
+                    &versioned_image_tag("git", version),
+                    project_remote_url,
+                    project_default_branch,
+                    git_vault_secret.as_deref(),
+                ),
+                debug,
+            )
+            .await
+            .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
+    }
+    // Order 443: inference is nearly stateless but --replacing it on every
+    // launch drops loaded models and interrupts a sibling's inference.
+    // Recreate-if-not-running (ephemerality/idempotency), not always.
+    if crate::vault_bootstrap::container_running("tillandsias-inference") {
+        if debug {
+            eprintln!("[tillandsias] inference already running; reusing (order 443)");
+        }
+    } else {
+        client
+            .run_container_observed(
+                "forge-launch-inference",
+                "tillandsias-inference",
+                &build_inference_run_args(
+                    certs_dir,
+                    &versioned_image_tag("inference", version),
+                    false,
+                ),
+                debug,
+            )
+            .await
+            .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+    }
+    Ok(())
 }
 
 /// Build the forge `podman run` args for an interactive launch.
@@ -10044,7 +10443,13 @@ fn run_forge_agent_cli_mode(
     }
 
     let version = VERSION.trim();
-    let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
+    // Order 443 slice 3: mark this launch in flight BEFORE the first
+    // cleanup/ensure (inside ensure_enclave_for_project) so a sibling exiting
+    // during our pre-create window keeps the shared stack up for us. Held for
+    // the whole session; the exit cleanup below excludes it by name.
+    let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
+    let certs_dir =
+        ensure_enclave_for_project(project_name, Some(&canonical), Some(&launch_marker), debug)?;
     ensure_provider_auth(mode, debug)?;
 
     // Mint a scoped Vault token lease for any credentialed lane so its
@@ -10133,7 +10538,8 @@ fn run_forge_agent_cli_mode(
             }
             _ => run_fut.await,
         };
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+        cleanup_shared_stack_if_no_running_forge(&client, project_name, Some(&launch_marker), debug)
+            .await;
 
         if let Some(handle) = diag_emitter {
             handle.abort();
@@ -10245,7 +10651,20 @@ pub(crate) fn launch_forge_agent(
             "[tillandsias] launch_forge_agent: preparing enclave for '{project_name}' ({} agent); the terminal opens once it's ready…",
             mode.slug()
         );
-        let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
+        // Order 443 slice 3: mark the launch in flight across the enclave
+        // bring-up. Residual window (accepted): this guard drops when the
+        // tray helper returns, BEFORE the spawned terminal's `podman run`
+        // creates the forge container — the tray terminal lane holding its
+        // own marker is the separate, not-yet-filed terminal-isolation
+        // concern from the slice-2 progress note. Credentialed modes are
+        // covered: they re-exec the CLI lane, which holds its own marker.
+        let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
+        let certs_dir = ensure_enclave_for_project(
+            project_name,
+            Some(&canonical),
+            Some(&launch_marker),
+            debug,
+        )?;
         build_forge_agent_run_argv(
             &canonical,
             project_name,
@@ -11809,7 +12228,13 @@ mod tests {
             !mint.contains("legacy keyring"),
             "the phantom post-Phase-6 fallback message must stay dead"
         );
-        for lane in ["fn run_opencode_mode(", "fn ensure_enclave_for_project("] {
+        // Order 443 slice 3: the launch-lane mirror bring-up moved verbatim
+        // into ensure_shared_git_and_inference_for_launch (called by
+        // ensure_enclave_for_project); the hard-fail mint lives there now.
+        for lane in [
+            "fn run_opencode_mode(",
+            "async fn ensure_shared_git_and_inference_for_launch(",
+        ] {
             let window = source_window(source, lane);
             assert!(
                 window.contains("mint_git_mirror_vault_token(project_name, debug).await?"),
@@ -13306,6 +13731,231 @@ mod tests {
         }
     }
 
+    /// Order 443 slice 3: the shared-stack teardown guard must consult the
+    /// launch-in-flight markers (pre-create window) IN ADDITION to the live
+    /// lane scan, and both checks must precede the one shared-remover call.
+    /// A teardown that skips the marker check tears proxy/git/inference out
+    /// from under a sibling launch that has not yet created any container.
+    #[test]
+    fn shared_stack_teardown_gates_on_foreign_launch_in_flight_markers() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let guard = source_window(source, "async fn cleanup_shared_stack_if_no_running_forge(");
+        let lanes_idx = guard
+            .find("!running_lanes.is_empty()")
+            .expect("guard must keep its active-lane check");
+        let marker_idx = guard
+            .find("foreign_launches_in_flight(own_launch_marker)")
+            .expect("guard must probe foreign launch-in-flight markers");
+        let remove_idx = guard
+            .find("remove_shared_stack_containers(")
+            .expect("guard must still own the shared-remover call");
+        assert!(
+            lanes_idx < remove_idx && marker_idx < remove_idx,
+            "both refcount sources (live lanes + in-flight markers) must be \
+             consulted before the shared teardown"
+        );
+    }
+
+    /// Order 443 slice 3: launch-in-flight markers are pid-scoped, visible
+    /// to sibling probes while held, excluded by exact name for the owning
+    /// process, and vanish the moment the guard drops (flock-on-death).
+    #[test]
+    fn shared_stack_launch_marker_lifecycle_and_own_exclusion() {
+        let project = format!("marker-test-{}", std::process::id());
+        let (marker, guard) =
+            acquire_launch_in_flight_marker(&project, false).expect("marker acquires");
+        assert!(
+            marker.starts_with(LAUNCH_IN_FLIGHT_PREFIX) && marker.contains(&project),
+            "marker name must be launch-<project>-<pid>: {marker}"
+        );
+
+        // A sibling (own_launch_marker = None) must see the launch in flight…
+        let seen_by_sibling = foreign_launches_in_flight(None);
+        assert!(
+            seen_by_sibling.contains(&marker),
+            "sibling probe must see the held marker {marker}, got {seen_by_sibling:?}"
+        );
+        // …while the owner (passing its own name) must NOT, or the order-298
+        // first-launch wipe would never fire.
+        let seen_by_owner = foreign_launches_in_flight(Some(&marker));
+        assert!(
+            !seen_by_owner.contains(&marker),
+            "owner must exclude its own marker {marker}, got {seen_by_owner:?}"
+        );
+
+        drop(guard);
+        assert!(
+            !foreign_launches_in_flight(None).contains(&marker),
+            "dropped marker must stop blocking teardown"
+        );
+    }
+
+    /// Order 443 slices 2+3: the launch-path git/inference bring-up must stay
+    /// GUARDED — `container_running` decides reuse-vs-create BEFORE each
+    /// `run_container_observed` site, so a healthy container in use by a
+    /// sibling forge is never re-run (--replace would bounce it).
+    #[test]
+    fn shared_stack_ensure_guards_git_and_inference_behind_running_checks() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(
+            source,
+            "async fn ensure_shared_git_and_inference_for_launch(",
+        );
+        let git_guard_idx = window
+            .find("container_running(&git_container_name)")
+            .expect("git mirror ensure must check container_running first");
+        let git_run_idx = window
+            .find("\"forge-launch-git\"")
+            .expect("git mirror create site present");
+        let inference_guard_idx = window
+            .find("container_running(\"tillandsias-inference\")")
+            .expect("inference ensure must check container_running first");
+        let inference_run_idx = window
+            .find("\"forge-launch-inference\"")
+            .expect("inference create site present");
+        assert!(
+            git_guard_idx < git_run_idx,
+            "git mirror running-check must precede its run site"
+        );
+        assert!(
+            inference_guard_idx < inference_run_idx,
+            "inference running-check must precede its run site"
+        );
+    }
+
+    /// Order 443 fixture 1 (second-forge ensure leaves shared containers
+    /// untouched), driven end to end against the STATEFUL fake podman: with
+    /// the git mirror and inference already running, the launch ensure must
+    /// issue NO `podman run` for either and their recorded container IDs
+    /// must be unchanged — the pre-slice-2 behavior (--replace on every
+    /// launch) re-ran both and minted new IDs, bouncing a live sibling.
+    ///
+    /// Runs only under the fixture env (fake stateful podman on PATH; see
+    /// scripts/test-concurrent-forge-shared-stack.sh); a bare `cargo test`
+    /// has no podman mock wired and skips loudly, mirroring
+    /// source_built_init_and_status_check_smoke_uses_fake_podman.
+    #[test]
+    fn shared_stack_second_forge_ensure_reuses_running_containers() {
+        if std::env::var("LITMUS_PODMAN_MODE").as_deref() != Ok("fake")
+            || std::env::var("LITMUS_PODMAN_STATEFUL_CONTAINERS").as_deref() != Ok("1")
+        {
+            eprintln!(
+                "[shared-stack fixture] skipped: needs LITMUS_PODMAN_MODE=fake + \
+                 LITMUS_PODMAN_STATEFUL_CONTAINERS=1 (run via scripts/test-concurrent-forge-shared-stack.sh)"
+            );
+            return;
+        }
+        let _guard = env_lock();
+        let state_dir = std::env::var("LITMUS_PODMAN_STATE_DIR")
+            .expect("fixture env must set LITMUS_PODMAN_STATE_DIR");
+        let calls_file = std::env::var("LITMUS_PODMAN_CALLS_FILE")
+            .expect("fixture env must set LITMUS_PODMAN_CALLS_FILE");
+
+        // Seed through the shared podman layer (idiomatic-launch pin): the
+        // sync command resolves the fixture's PATH shim -> stateful mock.
+        let podman = |args: &[&str]| {
+            let out = podman_cmd_sync()
+                .args(args)
+                .output()
+                .expect("mock podman invokes");
+            assert!(out.status.success(), "mock podman {args:?} must succeed");
+        };
+        let container_id = |name: &str| -> String {
+            let path = std::path::Path::new(&state_dir)
+                .join("containers")
+                .join(name);
+            let recorded = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+                panic!("tracked container file {} readable: {e}", path.display())
+            });
+            recorded.lines().nth(1).unwrap_or_default().to_string()
+        };
+
+        // Forge A's launch: the stateful mock records the shared containers.
+        let git_name = "tillandsias-git-fixtureproj";
+        podman(&["run", "--detach", "--name", git_name, "mock-git-image"]);
+        podman(&[
+            "run",
+            "--detach",
+            "--name",
+            "tillandsias-inference",
+            "mock-inference-image",
+        ]);
+        let git_id_before = container_id(git_name);
+        let inference_id_before = container_id("tillandsias-inference");
+        assert!(!git_id_before.is_empty() && !inference_id_before.is_empty());
+
+        // Round-trip through the REAL parser: the mock `ps` arm must emit
+        // what PodmanClient::list_containers expects.
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        let client = PodmanClient::new();
+        let listed = rt
+            .block_on(client.list_containers("tillandsias-"))
+            .expect("list_containers parses the mock ps output");
+        let states: std::collections::HashMap<String, String> = listed
+            .into_iter()
+            .map(|entry| (entry.name, entry.state))
+            .collect();
+        assert_eq!(states.get(git_name).map(String::as_str), Some("running"));
+        assert_eq!(
+            states.get("tillandsias-inference").map(String::as_str),
+            Some("running")
+        );
+
+        // Forge B's launch ensure: everything already running → reuse only.
+        std::fs::write(&calls_file, "").expect("truncate calls log");
+        rt.block_on(ensure_shared_git_and_inference_for_launch(
+            &client,
+            "fixtureproj",
+            std::path::Path::new("/tmp"),
+            "v-fixture",
+            Some("https://example.invalid/repo.git"),
+            Some("main"),
+            true,
+        ))
+        .expect("second-forge ensure succeeds by reusing the running stack");
+
+        let calls = std::fs::read_to_string(&calls_file).expect("calls log readable");
+        assert!(
+            !calls
+                .lines()
+                .any(|l| l.contains(" run ") && l.contains(git_name)),
+            "second-forge ensure must NOT re-run the running git mirror:\n{calls}"
+        );
+        assert!(
+            !calls
+                .lines()
+                .any(|l| l.contains(" run ") && l.contains("tillandsias-inference")),
+            "second-forge ensure must NOT re-run the running inference:\n{calls}"
+        );
+        assert!(
+            calls.contains("/srv/git/fixtureproj"),
+            "reuse branch must have re-reconciled the mirror (proves the \
+             ensure actually ran, not vacuously): \n{calls}"
+        );
+        assert_eq!(
+            container_id(git_name),
+            git_id_before,
+            "git mirror container ID must be unchanged by a second-forge ensure"
+        );
+        assert_eq!(
+            container_id("tillandsias-inference"),
+            inference_id_before,
+            "inference container ID must be unchanged by a second-forge ensure"
+        );
+
+        // Reproduce the bounce boundary: once inference is genuinely DOWN,
+        // the same guard reports not-running — recreation is then correct
+        // (the pre-slice-2 bug was re-running it while ALIVE).
+        podman(&["stop", "tillandsias-inference"]);
+        assert!(
+            !crate::vault_bootstrap::container_running("tillandsias-inference"),
+            "stopped inference must probe as not running (recreate is then legal)"
+        );
+    }
+
     /// Order 298: within `ensure_enclave_for_project`, the idempotency wipe
     /// (which removes tillandsias-proxy when no lane is live — always true on
     /// a first launch) must run BEFORE the dependency-model ensure, never
@@ -13579,6 +14229,31 @@ mod tests {
                 .iter()
                 .any(|a| a == "tillandsias-github-token,mode=0400"),
             "legacy github-token secret must not be mounted in vault flow: {args:?}"
+        );
+    }
+
+    #[test]
+    fn git_run_args_omit_vault_secret_when_none() {
+        // Companion negative case to git_run_args_mount_vault_token_when_supplied
+        // (windows-260716-2, exit criterion 1). Without this pin a regression
+        // could hardcode/always-mount a stale vault-token secret name (or the
+        // VAULT_ADDR/VAULT_ROLE envs) regardless of what — if anything — the
+        // caller actually minted, silently defeating the fail-loud mint
+        // discipline enforced upstream by `?` propagation.
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+
+        assert!(
+            !args.iter().any(|a| a.contains("target=vault-token")),
+            "vault_token_secret was None — must not mount any vault-token secret: {args:?}"
+        );
+        assert!(
+            !has_arg(&args, "VAULT_ADDR=https://vault:8200"),
+            "vault_token_secret was None — must not set VAULT_ADDR: {args:?}"
+        );
+        assert!(
+            !has_arg(&args, "VAULT_ROLE=git-mirror"),
+            "vault_token_secret was None — must not set VAULT_ROLE: {args:?}"
         );
     }
 
@@ -15936,6 +16611,130 @@ mod tests {
         assert!(
             func_body.contains("overlay") && func_body.contains("no such file"),
             "classifier must check both overlay path and no-such-file signal"
+        );
+    }
+
+    // ────────── intentional EPHEMERAL RESET pins (windows-260717-4) ──────────
+
+    /// The reset touches ONLY tillandsias-prefixed podman objects: the
+    /// operator's other containers/volumes/secrets on the same host are
+    /// never in scope.
+    #[test]
+    fn reset_guest_scope_selects_only_tillandsias_objects() {
+        let names: Vec<String> = [
+            "tillandsias-vault",
+            "tillandsias-proxy",
+            "tillandsias-git-myproj",
+            "tillandsias-myproj-forge",
+            "tillandsias-mirror-myproj",
+            "tillandsias-vault-unseal",
+            "postgres-prod",
+            "totally-unrelated",
+            "vault", // someone else's vault — NOT ours (no prefix)
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let scoped = reset_guest_scope(&names);
+        assert_eq!(
+            scoped,
+            vec![
+                "tillandsias-vault",
+                "tillandsias-proxy",
+                "tillandsias-git-myproj",
+                "tillandsias-myproj-forge",
+                "tillandsias-mirror-myproj",
+                "tillandsias-vault-unseal",
+            ],
+            "only tillandsias-prefixed objects are in reset scope"
+        );
+    }
+
+    /// Network scope is exactly the enclave + egress bridges — nothing else,
+    /// notably never podman's default network.
+    #[test]
+    fn reset_guest_network_scope_is_enclave_and_egress_only() {
+        let names: Vec<String> = ["podman", ENCLAVE_NET, EGRESS_NET, "bridge0"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            reset_guest_network_scope(&names),
+            vec![ENCLAVE_NET.to_string(), EGRESS_NET.to_string()]
+        );
+    }
+
+    /// EXPLICIT exit-criterion pin: the host-side wipe removes the vault
+    /// storage dir and NEVER the inference model cache (the operator's
+    /// ephemeral doctrine covers the guest+vault, not the downloaded
+    /// models) nor the cache dir itself (build-state, images metadata).
+    #[test]
+    fn reset_guest_wipe_paths_exclude_model_cache() {
+        let cache_dir = Path::new("/home/u/.cache/tillandsias");
+        let paths = reset_guest_wipe_paths(cache_dir);
+        assert_eq!(paths, vec![cache_dir.join("vault-data")]);
+        let models = cache_dir.join("models");
+        assert!(
+            !paths.iter().any(|p| *p == models || models.starts_with(p)),
+            "the inference model cache must never be in the reset wipe set"
+        );
+        assert!(
+            !paths.iter().any(|p| p == cache_dir),
+            "the cache dir itself must never be wiped"
+        );
+    }
+
+    /// Fail-safe gate: unset/1 permits (the reset is destructive BY DESIGN),
+    /// an explicit 0 refuses. Serialized via a lock-free single-threaded
+    /// env dance — env mutation in tests is process-global, so this test
+    /// restores the prior value.
+    #[test]
+    fn reset_guest_destructive_gate_honors_opt_out() {
+        let key = "TILLANDSIAS_DESTRUCTIVE_RESET_OK";
+        let prior = std::env::var(key).ok();
+        unsafe {
+            std::env::set_var(key, "0");
+        }
+        assert!(
+            !destructive_reset_allowed(),
+            "explicit 0 must refuse the reset"
+        );
+        unsafe {
+            std::env::set_var(key, "1");
+        }
+        assert!(destructive_reset_allowed(), "explicit 1 must permit");
+        unsafe {
+            match &prior {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+
+    /// Source-shape pin: run_reset_guest re-enters the SAME first-provision
+    /// path a fresh install uses (run_init + vault bring-up) after the wipe —
+    /// the reset must never grow its own divergent provisioning flow.
+    #[test]
+    fn reset_guest_reprovisions_via_run_init() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source
+            .split("fn run_reset_guest(")
+            .nth(1)
+            .expect("run_reset_guest must exist")
+            .split("\nfn ")
+            .next()
+            .unwrap();
+        assert!(
+            body.contains("run_init(debug, false)"),
+            "run_reset_guest must reprovision via run_init"
+        );
+        assert!(
+            body.contains("ensure_vault_running(debug)"),
+            "run_reset_guest must bring vault up after the wipe"
+        );
+        assert!(
+            body.contains("destructive_reset_allowed()"),
+            "run_reset_guest must honor the destructive-reset gate"
         );
     }
 }

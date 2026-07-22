@@ -172,6 +172,34 @@ fn notify_provisioning_failed(reason: &str) {
     }
 }
 
+/// Fire the guest crash-loop Notification Center banner — the single
+/// most-important tray notification (order 250 ultra-minimal UX: "the
+/// guest is crash-looping, reset it"). Mirrors windows-tray's
+/// `show_balloon(..., BalloonSeverity::Error)` crash-loop toast in
+/// title/body framing, delivered through the SAME osascript mechanism
+/// as `notify_provisioning_failed` (a subprocess spawn — no AppKit, so
+/// no main-thread dispatch needed; safe from any thread). Best-effort:
+/// the chip carries the same verdict authoritatively.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn notify_crash_loop(reason: &str) {
+    let escaped = applescript_escape_single_quoted(reason);
+    let body = format!(
+        "display notification \"{escaped}\" with title \"Tillandsias\" \
+         subtitle \"Guest crash-loop\""
+    );
+    match std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&body)
+        .spawn()
+    {
+        Ok(_child) => {}
+        Err(err) => {
+            eprintln!("[tillandsias-tray] crash-loop notification: osascript spawn failed: {err}");
+        }
+    }
+}
+
 /// AppleScript double-quoted-string escaping: backslash + double-quote
 /// are the only metachars we need to handle inside `"..."`. Used by
 /// `notify_provisioning_failed` to embed a user-visible reason inside
@@ -1391,6 +1419,37 @@ impl TrayActionHost {
                 }
             }
             MenuAction::GithubLogin => {
+                // windows-260719-2: flip the menu to the transitional
+                // "Logging in…" state IMMEDIATELY — a purely local signal,
+                // before any wire round-trip. An NSMenu is static until
+                // rebuilt, so trigger the rebuild explicitly (we are on the
+                // main thread here, same as the SelectAgent arm's rebuild).
+                // The confirming probe (LoginStatePush / login poll) maps
+                // only to LoggedIn/LoggedOut via map_login_state, so a
+                // confirmed reply always clears this: success renders the
+                // logged-in body, an invalid/missing token falls back to
+                // the actionable GitHub Login leaf.
+                let flipped = {
+                    let mut state = self.ivars().menu_state.lock().unwrap();
+                    if state.login
+                        == tillandsias_host_shell::menu_state::GithubLoginState::LoggedOut
+                    {
+                        state.login =
+                            tillandsias_host_shell::menu_state::GithubLoginState::LoggingIn;
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if flipped {
+                    let ivars = self.ivars();
+                    dispatch_rebuild(
+                        &ivars.menu_state,
+                        &ivars.status_item,
+                        &ivars.status_menu_item,
+                        &ivars.self_handle,
+                    );
+                }
                 // Top-level GitHub login. Same gate as Attach —
                 // needs the in-VM headless to be Ready. Defer to the
                 // existing `attach_pty(GithubLogin)` path, which
@@ -1403,6 +1462,11 @@ impl TrayActionHost {
                     None,
                 );
             }
+            // NOTE: there is deliberately NO menu arm for the guest reset —
+            // the `reset-guest` leaf was an UNAPPROVED UX surface, removed
+            // by operator order 2026-07-22 (tray-ux "UX curation
+            // governance"). The reset stays reachable via the `--reset-guest`
+            // CLI verb (`diagnose::reset_guest_main`), never a menu click.
             MenuAction::CloudOverflow | MenuAction::Inert => {
                 // Informational / overflow placeholders. No action.
             }
@@ -1601,6 +1665,103 @@ impl TrayActionHost {
                     self_handle_slot,
                 );
             }
+        });
+    }
+
+    /// Intentional EPHEMERAL RESET (windows-260717-4): stop the running VM
+    /// (bounded drain), delete the provisioned boot artifacts via
+    /// `VzRuntime::wipe_provisioned_artifacts` (rootfs.img — and with it the
+    /// in-VM vault — plus vmlinuz/initramfs.img), clear the persisted
+    /// crash-loop state (a fresh guest has a fresh history), then re-enter
+    /// the exact same `boot_vm_async` path a first launch uses — which
+    /// reprovisions from scratch because `is_provisioned()` is now false.
+    /// Destructive BY DESIGN per the operator's ephemeral doctrine; the only
+    /// cost is one re-authentication.
+    ///
+    /// Mirrors the `stopVm:` worker shape (busy gate, take-the-handle, tokio
+    /// worker, main-thread completion dispatch); the completion re-borrows
+    /// the action host through `self_handle` — the same seam the menu
+    /// rebuild dispatch uses — to call `boot_vm_async` on the main thread.
+    ///
+    /// Known benign interplay: the status poller/push listener spawned by
+    /// the previous boot hold their own `Arc<VzRuntime>` and keep polling
+    /// the stopped VM until process exit (no cancellation in v1); their wire
+    /// errors leave last-known state untouched, and the fresh boot spawns
+    /// its own poller which owns the chip from then on.
+    ///
+    /// NOTE: no menu path reaches this worker any more — the `Reset Guest…`
+    /// leaf was removed by operator order 2026-07-22 (tray-ux "UX curation
+    /// governance"). Retained (dead-code-allowed) as the stop→wipe→reboot
+    /// worker for future RUNTIME wiring (e.g. the cross-platform bounded
+    /// auto-reset policy in control-wire); the manual affordance today is
+    /// the `--reset-guest` CLI verb (`diagnose::reset_guest_main`).
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[allow(dead_code)]
+    pub fn reset_guest_async(&self) {
+        let ivars = self.ivars();
+
+        // Re-entry gate (shared with startVm/stopVm).
+        {
+            let mut busy = ivars.vm_busy.lock().unwrap();
+            if *busy {
+                eprintln!("[tillandsias-tray] Reset guest: already in progress, ignoring");
+                return;
+            }
+            *busy = true;
+        }
+        let vm_taken = ivars.vm.lock().unwrap().take();
+
+        let runtime = ivars.runtime.clone();
+        let vm_busy = ivars.vm_busy.clone();
+        let image_root = ivars.image_root.clone();
+        let self_handle = ivars.self_handle.clone();
+
+        eprintln!(
+            "[tillandsias-tray] Reset guest: discarding the local guest and its cached \
+             credentials (everything lives in the cloud — you'll re-authenticate once)"
+        );
+        self.set_status_text("\u{267B}\u{FE0F} Resetting guest\u{2026}");
+
+        runtime.spawn(async move {
+            if let Some(vm) = vm_taken {
+                if let Err(e) = vm.stop(VM_STOP_DRAIN).await {
+                    eprintln!(
+                        "[tillandsias-tray] Reset guest: stop failed ({e}); wiping anyway \
+                         (a wedged guest is the reset use-case)"
+                    );
+                }
+            }
+            // File-only wipe; the CID is irrelevant here (path accessors only).
+            let vz = VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root);
+            let wipe = vz.wipe_provisioned_artifacts();
+            if wipe.is_ok() {
+                // Fresh guest ⇒ fresh crash-loop history for --diagnose.
+                let _ = std::fs::remove_file(crate::diagnose::crashloop_state_path());
+            }
+            dispatch_to_main_thread(move || {
+                *vm_busy.lock().unwrap() = false;
+                match wipe {
+                    Ok(()) => {
+                        let guard = self_handle.lock().unwrap();
+                        if let Some(host) = guard.as_ref() {
+                            eprintln!(
+                                "[tillandsias-tray] Reset guest: wipe complete — \
+                                 reprovisioning from scratch"
+                            );
+                            host.0.boot_vm_async("Reset guest");
+                        } else {
+                            eprintln!(
+                                "[tillandsias-tray] Reset guest: self_handle not set; \
+                                 wipe done but reboot must be triggered manually"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] Reset guest: wipe failed: {e}");
+                    }
+                }
+            });
         });
     }
 }
@@ -1818,6 +1979,116 @@ fn apply_local_projects(
     true
 }
 
+/// Process-global live crash-loop detector, seeded once from the persisted
+/// state file (`crate::diagnose::crashloop_state_path()`) so a loop that
+/// tripped before the tray last restarted is still in view. std `Mutex` —
+/// observations are infrequent (per-phase-change, not per-frame). Mirrors
+/// windows-tray's `CRASH_LOOP_DETECTOR` (notify_icon.rs) byte-for-byte in
+/// spirit; the detector itself lives in control-wire so the two hosts
+/// cannot drift.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+static CRASH_LOOP_DETECTOR: std::sync::LazyLock<
+    Mutex<tillandsias_control_wire::crashloop::CrashLoopDetector>,
+> = std::sync::LazyLock::new(|| {
+    Mutex::new(
+        tillandsias_control_wire::crashloop::CrashLoopDetector::load(
+            &crate::diagnose::crashloop_state_path(),
+        ),
+    )
+});
+
+/// Edge-trigger guard so the crash-loop banner (the single most-important
+/// tray notification) fires once per trip, not on every subsequent push
+/// while the loop persists. Re-armed when the verdict clears. Mirrors
+/// windows-tray's `CRASH_LOOP_NOTIFIED`.
+static CRASH_LOOP_NOTIFIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Feed one live VM-status observation into the crash-loop detector, persist
+/// the updated state so a separate `--diagnose` process (static /
+/// filesystem-only on macOS) reads the SAME verdict the live tray just
+/// computed, and — on a NEW trip — surface the crash-loop as the single
+/// most-important notification: a Notification Center banner plus a chip
+/// overwrite with the pinned-grammar verdict (`🔴 crash-loop:<subsystem>`,
+/// matching windows' framing). Called LAST inside [`apply_vm_status`] so the
+/// verdict overwrites the ordinary phase chip, same as windows'
+/// chip-overwrite-last ordering. The terminal verdict clearing re-arms the
+/// edge trigger so a later recurrence toasts again.
+///
+/// This is the WRITE side that closes the wave-1 gap: `--diagnose` already
+/// knew how to READ `crashloop.state`, but the live tray never wrote it.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn note_crashloop_observation(
+    phase: tillandsias_control_wire::VmPhase,
+    last_event: Option<&str>,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_text: &Arc<Mutex<String>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use std::sync::atomic::Ordering::SeqCst;
+    let verdict = {
+        let Ok(mut det) = CRASH_LOOP_DETECTOR.lock() else {
+            return;
+        };
+        let v = det.observe_phase(phase, last_event, unix_now_secs());
+        if let Err(e) = det.save(&crate::diagnose::crashloop_state_path()) {
+            eprintln!("[tillandsias-tray] could not persist crash-loop state: {e}");
+        }
+        v
+    };
+    if verdict.is_crash_loop() {
+        // A crash-loop is THE single most-important state: overwrite the
+        // chip (and MenuState's status row, so a menu rebuild does not
+        // resurrect the ordinary phase text — same clobber class
+        // apply_vm_status fixes for the healthy path).
+        let chip = clamp_tray_status_chip(format!("\u{1F534} {}", verdict.verdict()));
+        {
+            let mut guard = menu_state.lock().unwrap();
+            if guard.status_text != chip {
+                guard.status_text = chip.clone();
+            }
+        }
+        let chip_for_dispatch = chip.clone();
+        let chip_status_text = status_text.clone();
+        let chip_status_item = status_item.clone();
+        let chip_status_menu_item = status_menu_item.clone();
+        dispatch_to_main_thread(move || {
+            *chip_status_text.lock().unwrap() = chip_for_dispatch.clone();
+            apply_status_text_main_thread(
+                &chip_for_dispatch,
+                &chip_status_item,
+                &chip_status_menu_item,
+            );
+        });
+        if !CRASH_LOOP_NOTIFIED.swap(true, SeqCst) {
+            eprintln!(
+                "[tillandsias-tray] guest crash-loop detected: {}",
+                verdict.verdict()
+            );
+            // osascript subprocess — no AppKit, so no main-thread dispatch
+            // needed (same as notify_provisioning_failed).
+            notify_crash_loop(&format!(
+                "The guest is crash-looping ({}) — it is not converging. \
+                 Reset the guest to recover; everything lives in the cloud, \
+                 you'll re-authenticate once.",
+                verdict.verdict()
+            ));
+        }
+    } else {
+        CRASH_LOOP_NOTIFIED.store(false, SeqCst);
+    }
+}
+
 /// Apply a live `VmStatus` observation — from a poll reply or an unrequested
 /// `VmStatusPush` frame — to the shared `MenuState` and status chip. Returns
 /// whether the menu needs a rebuild (podman_ready / login gating changed).
@@ -1887,6 +2158,18 @@ fn apply_vm_status(
             &chip_status_menu_item,
         );
     });
+    // Feed the same observation into the crash-loop detector LAST: on a trip
+    // it overwrites the chip set above with the crash-loop verdict (the
+    // single most-important surface) and persists state for `--diagnose`.
+    // Mirrors windows-tray's chip-overwrite-last ordering in apply_vm_status.
+    note_crashloop_observation(
+        phase,
+        last_event,
+        menu_state,
+        status_text,
+        status_item,
+        status_menu_item,
+    );
     rebuild_needed
 }
 
@@ -1941,10 +2224,22 @@ async fn run_push_listener(
                     port: CONTROL_WIRE_VSOCK_PORT,
                 },
             );
-            client
+            let (_, guest_version) = client
                 .handshake()
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
+            if let Some(ref gv) = guest_version {
+                if gv != env!("CARGO_PKG_VERSION") {
+                    tracing::warn!(
+                        "build version skew: tray={} guest={}",
+                        env!("CARGO_PKG_VERSION"),
+                        gv
+                    );
+                }
+            }
+            if let Ok(mut guard) = menu_state.lock() {
+                guard.guest_version = guest_version;
+            }
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),
@@ -2102,6 +2397,12 @@ async fn run_push_listener(
                         // the reply routes through the CloudProjectsPush/
                         // CloudRefreshReply arm below. Mirrors the windows
                         // fast-poll-burst intent (order 154) push-natively.
+                        // windows-260719-2: `changed` covers BOTH the
+                        // LoggedOut→LoggedIn and the local
+                        // LoggingIn→LoggedIn transitions (apply_login_state
+                        // compares against whatever the menu currently
+                        // holds), so cloud projects refresh promptly on the
+                        // confirmed flip either way.
                         if changed && logged_in {
                             let seq = client.allocate_seq();
                             let prime_cloud = ControlEnvelope {

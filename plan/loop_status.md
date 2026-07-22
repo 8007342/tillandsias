@@ -1,6 +1,117 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-21T01:45:00Z
+LastExecutionTime: 2026-07-22T03:50:00Z
+
+## Cycle 2026-07-22T03:50Z (linux coordinator — final wave: UX governance enforced, leaf removed, CI typecheck lanes, reviews)
+
+- **UX GOVERNANCE (operator order, verbatim in tray-ux spec)**: every UX
+  change is Tlatoani-gated forever; codified in openspec/specs/tray-ux
+  ("UX curation governance"), methodology invariant, AGENTS.md. The
+  unapproved reset-guest menu leaf REMOVED from all platforms (1b4fb80c);
+  CLI --reset-guest retained; a governance snapshot test locks the approved
+  menu id set so unapproved additions fail tests.
+- **CI cross-typecheck lanes** (9e377477): windows-2022 + macos-14 cargo
+  check on the tray crates — cfg-gated bodies are compiled on every push
+  for the first time (closes the handshake-breakage hole).
+- **Adversarial reviews of waves 1-2**: compile-surface CLEAN on the
+  cfg-gated hunks; 16 behavioral findings triaged — the one
+  teardown-under-live-sibling bug (swallowed podman ps failure in the 443
+  refcount) FIXED same-batch (leak-not-destroy on listing failure);
+  residuals filed as wave-review-findings-{443-vault,tray-chain}-2026-07-22
+  packets. Review finding 1 (443-vault packet) rides before STABLE
+  promotion.
+- **Smoke channel**: curl-install e2e skill's Windows lane now pins the
+  resolved daily via TILLANDSIAS_VERSION (Linux/macOS already daily).
+- **Next**: cut v0.3.260722.1 daily pre-release; operator runs live
+  curl-install smokes on Windows + macOS (order 455) — those PASS records +
+  the Linux smoke complete the v0.4 evidence gate.
+
+## Cycle 2026-07-22T01:30Z (linux coordinator — wave-2 drain integrated: 5 packets, all landed)
+
+- **Wave-2 drain (planner + chained-Fable tray worker + 2 parallel)**: all 5
+  candidates verified-then-implemented; 5 commits cherry-picked
+  (ff4cff37, 246b7a0e, cc8925b6, a5cc14ed, a774668a); gates green
+  (./build.sh --check; workspace tests minus the known zombie flake; one
+  NEW one-off resource_lock flake logged in the zombie packet's addendum):
+  - guest-intentional-ephemeral-reset: reset landed all three platforms
+    (RESET_GUEST leaf, Windows wipe_guest, macOS wipe_provisioned_artifacts,
+    Linux run_reset_guest + RESET_OK=0 refusal pin). Live wedged-guest e2e
+    rides order 455.
+  - guest-crashloop-detection follow-up: macOS LIVE feed + toast (parity
+    with Windows complete).
+  - login-transitive-states-all-platforms: three-state login, local-flag
+    design, wire untouched. COMPLETED.
+  - order 443 SLICE 3: launch-in-flight flock markers + live-derived
+    refcount; teardown only when both sources read zero; leak-not-destroy
+    posture. ALL SLICES DONE — the concurrent-forge data-loss hole is closed.
+  - order 313 residual: Fedora CA + OLLAMA path pins landed; planner
+    FALSIFIED the sibling-dir claim (binary already persisted — now pinned).
+- **New packet**: cfg-gated-tray-code-never-typechecked-2026-07-21 (the
+  structural hole behind the handshake breakage; CI cross-typecheck lanes
+  proposed). Wave-3 note: worker worktrees branch from origin/main — briefs
+  must include an explicit merge-to-linux-next first step.
+- **v0.4 remaining after this wave**: live items only — one real forge
+  launch (452 slice 3 + 459 curl-install proof + 450 c2), the smoke-PASS
+  record, then series bump 0.3 -> 0.4 and merge-to-main-and-release.
+
+## Cycle 2026-07-21T23:13Z (forge — meta-orchestration: order 407 desired_release backfill + freshness)
+
+- **Host**: forge container, `linux-next`. Credential guard `ok:forge-git-mirror`. Boundary `/tmp/meta-orchestration-boundary.NmZZCG` clean.
+- **Worker Drain (order 407 desired-release-backfill)**: claimed and backfilled `desired_release` on `guest-intentional-ephemeral-reset` (v0.4) and `ephemeral-runtime-destroy-recreate-sweep` (v0.5), completing 100% `desired_release` coverage across all open packets in `plan/index.yaml`.
+- **Freshness Audit (order 372)**: audited `methodology/philosophy.yaml` — **refreshed** (`# freshness: auditor=forge-antigravity-20260721 date=2026-07-21 verdict=refreshed scope=core_principle+runtime_ephemerality`).
+- **E2E preflight**: `skip:no-podman-binary` (forge host has no podman) — skipped local-build gate cleanly.
+- **Verification**: `tillandsias-policy validate-yaml` passed for `plan/index.yaml` and `methodology/philosophy.yaml`.
+
+## Cycle 2026-07-21T23:45Z (linux coordinator — wave-1 drain integrated; order 459 curl-install channel)
+
+- **Wave-1 drain (operator-directed planner->workers orchestration)**: a
+  Sonnet planner sequenced the TRUE eligible set — of 79 ready packets only
+  6 v0.4/unset were linux-drainable after the EXPERTS re-scope; 4 became
+  wave 1, all landed done and cherry-picked after full gates
+  (./build.sh --check green; default-image 7/7, git-mirror 13/13,
+  guest-crashloop 1/1; workspace tests green minus the two known
+  environmental flakes):
+  - vault-unseal-secret-regenerated-on-reensure (Fable, cdd43e57): ensure
+    gates secret creation on existence; one-shot loud rejection recovery;
+    proven-failing keys never written/kept.
+  - guest-crashloop-detection (Opus, cf67e3e9): clock-injected detector in
+    control-wire + Windows tray fully wired + macOS --diagnose read; NEW
+    litmus + spec binding. Follow-up: macOS live feed/toast
+    (status_item.rs/action_host.rs) out of wave scope.
+  - git-mirror-container-created-without-relay-credential (Sonnet,
+    57478c57): residual closed test-only (None -> no vault-token mount).
+  - codex-lane-device-oauth-login (Sonnet, 7a5d5161): doc-only cheatsheet
+    Authentication section; runtime was already correct + pinned.
+- **Planner hygiene findings**: order 281 flipped ready->completed (all
+  criteria verified implemented at HEAD; status was stale). Backlog
+  sequenced: guest-crashloop -> guest-intentional-ephemeral-reset ->
+  login-transitive-states (tray-file collisions force serialization).
+  Order 384 needs a live-stack window; 407 is coordinator-owned.
+- **Order 459 (same day, coordinator)**: Claude+OpenCode now curl-install
+  from official vendors at container launch (cache-persisted, ephemeral,
+  idempotent; npm updater shrunk to codex+openspec; .claude.ai
+  allowlisted). Live proof rides the next forge smoke.
+
+## Cycle 2026-07-21T19:30Z (linux coordinator — repair broken handshake push; CI gate born)
+
+- **Operator-directed**: "Codex made some progress, pull and meta-orchestrate."
+  Pulled ced9657e (guest-tray-build-version-handshake, Antigravity) +
+  68094e7a (orders 456-458: MCP plan server, cheatsheet expert, context
+  hooks — EXPERTS-milestone family, left pending for the milestone track).
+- **Verification found the push BROKEN at HEAD**: notify_icon.rs unparseable
+  (tuple refactor spliced into string literals), literal \" escapes in
+  tray/mod.rs + vsock_server.rs, and 5 test targets missing the new
+  build_version/guest_version fields. Repaired all of it (macOS lane's
+  correct pattern used as reference); ./build.sh --check green, workspace
+  tests green (except the known zombie-reap flake), handshake packet status
+  normalized COMPLETED -> completed.
+- **Structural hole closed**: NO workflow ran on pushes or PRs (release PR
+  #78's "no checks reported" was the same hole). Added .github/workflows/
+  ci.yml (fmt + workspace check --all-targets on platform-branch pushes +
+  main PRs) and the AGENTS.md pre-push gate rule. Filed
+  plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md.
+- **Pre-release v0.3.260721.1** published earlier this day (3/3 platform
+  jobs, cosign-signed) for the order-455 cross-platform smoke queue.
 
 ## Cycle 2026-07-21T01:45Z (linux coordinator — v0.4: checkout crash root-caused + fixed; knowledge distribution; delegation)
 
@@ -245,7 +356,13 @@ plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
   413 (git-mirror-relay-fetch-before-push) that was dropping the b49b7776
   progress evidence via YAML last-wins; plan-orders gate green.
 
-## ACTIVE RELEASE: v0.4 (EXPERTS fat-host local-inference core)
+## ACTIVE RELEASE: v0.4 (Linux stability bundle — EXPERTS re-scoped out by operator decision 2026-07-21)
+
+> OPERATOR DECISION 2026-07-21: the EXPERTS family + the compiled plan/MCP
+> server (456-458) land TOGETHER as a coupled overhaul (ramdisk + experts
+> synergy, transparent to end users) — NOT in v0.4. v0.4 = the stability
+> bundle: forge checkout/mirror/push correctness, no crashloops, no work
+> loss, smoke-PASS evidence, then series bump 0.3 -> 0.4.
 
 Releases are sequential, stability-gated bundles (versioning.yaml Minor;
 methodology `version_aware_release_planning`). Current shipped line is v0.3

@@ -124,11 +124,19 @@ curl -fsSL "${SMOKE_BASE}/install-macos.sh" | TILLANDSIAS_RELEASE_BASE="${SMOKE_
   | tee target/smoke-e2e/01-version.txt || true
 ```
 
-Windows PowerShell:
+Windows PowerShell (daily-channel pinned — the release publishes
+`install-windows.ps1` + the x64 tray zip since v0.3.260721.1; the installer
+honors `TILLANDSIAS_VERSION` for an exact-tag pin, so the smoke installs the
+SAME resolved daily as the Linux/macOS lanes instead of `/releases/latest`,
+which is stable-only by GitHub semantics):
 
 ```powershell
-# Use the published Windows installer once release artifacts expose it.
-# Until then, file a finding that curl-install Windows release coverage is blocked.
+# $SmokeTag from pre-flight, e.g. v0.3.260721.1 (strip/keep the leading v —
+# the installer normalizes both).
+$env:TILLANDSIAS_VERSION = $SmokeTag
+irm "https://github.com/8007342/tillandsias/releases/download/$SmokeTag/install-windows.ps1" | iex `
+  *>&1 | Tee-Object target\smoke-e2e\01-install-windows.log
+Remove-Item Env:TILLANDSIAS_VERSION
 ```
 
 Verify the installed version matches the release tag from Step 0. If the install

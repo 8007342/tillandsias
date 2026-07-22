@@ -188,6 +188,7 @@ specs:
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
+  - litmus:harness-curl-install-shape
   - litmus:forge-firstrun-prebuilt-tools-arch-shape
   - litmus:brew-ondemand-tools-shape
   - litmus:harness-rollback-shape
@@ -285,6 +286,7 @@ specs:
   litmus_tests:
   - litmus:forge-as-only-runtime
   - litmus:container-start-health
+  - litmus:launch-artifacts-untracked
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: forge-cache-architecture
@@ -386,6 +388,7 @@ specs:
   - litmus:git-mirror-no-anonymous-daemon-write
   - litmus:git-mirror-startup-per-ref-tolerance
   - litmus:git-mirror-unborn-head-repair
+  - litmus:git-mirror-stale-reconcile
   - litmus:forge-git-index-materialization
   - litmus:forge-packed-refs-shared
   - litmus:enclave-isolation
@@ -406,6 +409,12 @@ specs:
   - litmus:github-credential-health-shape
   coverage_ratio: 67
   last_verified: '2026-05-30'
+- spec_id: guest-crashloop-detection
+  status: active
+  litmus_tests:
+  - litmus:guest-crashloop-detection
+  coverage_ratio: 100
+  last_verified: '2026-07-21'
 - spec_id: host-browser-mcp
   status: active
   litmus_tests:
@@ -599,6 +608,7 @@ specs:
   - litmus:podman-idiomatic-launch-routing
   - litmus:concurrent-container-ensure-no-race
   - litmus:shared-containers-survive-per-project-cleanup
+  - litmus:concurrent-forge-shared-stack-safety
   - litmus:drain-vs-self-heal
   coverage_ratio: 100
   last_verified: '2026-07-09'

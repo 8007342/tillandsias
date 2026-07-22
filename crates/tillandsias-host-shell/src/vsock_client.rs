@@ -154,7 +154,7 @@ impl Client {
     /// Send a `Hello` envelope and consume the `HelloAck` reply, returning
     /// the server's reported `wire_version`. Surfaces a wire-version
     /// mismatch as an `InvalidData` error.
-    pub async fn handshake(&mut self) -> io::Result<u16> {
+    pub async fn handshake(&mut self) -> io::Result<(u16, Option<String>)> {
         let seq = self.next_seq();
         let hello = ControlEnvelope {
             wire_version: WIRE_VERSION,
@@ -165,12 +165,17 @@ impl Client {
                     .iter()
                     .map(|s| s.to_string())
                     .collect(),
+                build_version: None,
             },
         };
         self.send(&hello).await?;
         let ack = self.recv().await?;
         match ack.body {
-            ControlMessage::HelloAck { wire_version, .. } => {
+            ControlMessage::HelloAck {
+                wire_version,
+                build_version,
+                ..
+            } => {
                 if wire_version != WIRE_VERSION {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -180,7 +185,7 @@ impl Client {
                         ),
                     ));
                 }
-                Ok(wire_version)
+                Ok((wire_version, build_version))
             }
             other => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -483,6 +488,7 @@ mod tests {
                 body: ControlMessage::HelloAck {
                     wire_version: WIRE_VERSION,
                     server_caps: vec!["v1".to_string()],
+                    build_version: None,
                 },
             };
             let ack_bytes = encode(&ack).expect("encode ack");
@@ -532,7 +538,7 @@ mod tests {
             .await
             .expect("connect");
         let mut client = Client::from_stream(Box::new(stream), Transport::Unix(path));
-        let wire = client.handshake().await.expect("handshake succeeds");
+        let (wire, _guest_version) = client.handshake().await.expect("handshake succeeds");
         assert_eq!(wire, WIRE_VERSION);
         // After handshake the next seq is 2 (we consumed 1 for Hello).
         assert_eq!(client.next_seq.load(Ordering::Relaxed), 2);

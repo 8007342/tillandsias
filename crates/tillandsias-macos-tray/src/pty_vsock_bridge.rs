@@ -149,6 +149,7 @@ where
         body: ControlMessage::Hello {
             from: hello_from,
             capabilities,
+            build_version: None,
         },
     };
     let bytes =
@@ -174,12 +175,25 @@ where
     let envelope =
         decode(&body).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     let wire_version = match envelope.body {
-        ControlMessage::HelloAck { wire_version, .. } => {
+        ControlMessage::HelloAck {
+            wire_version,
+            build_version,
+            ..
+        } => {
             if wire_version != WIRE_VERSION {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("wire version mismatch: local={WIRE_VERSION} server={wire_version}"),
                 ));
+            }
+            if let Some(guest_version) = build_version {
+                if guest_version != env!("CARGO_PKG_VERSION") {
+                    tracing::warn!(
+                        "build version skew: tray={} guest={}",
+                        env!("CARGO_PKG_VERSION"),
+                        guest_version
+                    );
+                }
             }
             wire_version
         }
@@ -327,6 +341,7 @@ mod tests {
             .send(ControlMessage::Hello {
                 from: "test".to_string(),
                 capabilities: vec!["X".to_string()],
+                build_version: None,
             })
             .expect("send into bounded mpsc");
 
@@ -347,7 +362,11 @@ mod tests {
         assert_eq!(envelope.wire_version, WIRE_VERSION);
         assert_eq!(envelope.seq, 1);
         match envelope.body {
-            ControlMessage::Hello { from, capabilities } => {
+            ControlMessage::Hello {
+                from,
+                capabilities,
+                build_version: _,
+            } => {
                 assert_eq!(from, "test");
                 assert_eq!(capabilities, vec!["X"]);
             }
@@ -381,7 +400,11 @@ mod tests {
             let env = decode(&buf).expect("decode hello");
             assert_eq!(env.seq, 1);
             match env.body {
-                ControlMessage::Hello { from, .. } => assert_eq!(from, "test-host"),
+                ControlMessage::Hello {
+                    from,
+                    build_version: _,
+                    ..
+                } => assert_eq!(from, "test-host"),
                 other => panic!("expected Hello, got {other:?}"),
             }
 
@@ -392,6 +415,7 @@ mod tests {
                 body: ControlMessage::HelloAck {
                     wire_version: WIRE_VERSION,
                     server_caps: vec!["pty.attach@v1".into()],
+                    build_version: None,
                 },
             };
             let ab = encode(&ack).expect("encode ack");

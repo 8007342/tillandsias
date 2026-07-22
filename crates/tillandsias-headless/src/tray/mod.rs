@@ -373,6 +373,14 @@ struct TrayUiState {
     /// any click of the GitHubLogin entry; never polled.
     /// @trace spec:tray-minimal-ux, spec:gh-auth-script
     is_authenticated: bool,
+    /// windows-260719-2: TRUE from the instant the GitHubLogin entry is
+    /// clicked (a purely local signal — no wire/probe round-trip) until the
+    /// confirming Vault probe settles. Renders the login row as a disabled
+    /// "Logging in…" so the menu never shows a stale actionable "GitHubLogin"
+    /// mid-flow; the probe's outcome then either expands the menu (success)
+    /// or falls back to the actionable login row (invalid/missing token).
+    /// Only meaningful while `is_authenticated == false`.
+    login_in_progress: bool,
     enclave_status: EnclaveStatus,
     revision: u32,
     /// Hash of projects list to detect when menu needs rebuild.
@@ -942,6 +950,7 @@ fn handle_control_connection(
                                 "IssueWebSession".to_string(),
                                 "EvictProject".to_string(),
                             ],
+                            build_version: Some(env!("CARGO_PKG_VERSION").to_string()),
                         },
                     };
                     if write_control_envelope(&mut stream, &ack).is_err() {
@@ -1358,6 +1367,7 @@ impl TrayUiState {
             forge_available,
             podman_available,
             is_authenticated,
+            login_in_progress: false,
             enclave_status,
             revision: 1,
             projects_hash,
@@ -3154,6 +3164,11 @@ fn stable_project_item_id(project: &str, suffix: &str) -> i32 {
 /// 5. ❌ Quit Tillandsias                         id=31
 /// ```
 ///
+/// This shape is UX-curation-governed (`openspec/specs/tray-ux/spec.md` →
+/// "UX curation governance"): any addition/removal/reorder requires recorded
+/// operator approval. The `Reset Guest…` leaf (id=32) was removed 2026-07-22
+/// by operator order; the reset survives only as `--reset-guest` (CLI).
+///
 /// ## Item-count contract
 ///
 /// | Authenticated? | Visible top-level items |
@@ -3187,10 +3202,24 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
     )));
 
     // (2) Auth-gated row. Exactly one of {GitHubLogin} OR {~/src, Cloud}
-    //     is emitted, never both.
+    //     is emitted, never both. windows-260719-2: the login row is a
+    //     THREE-state machine — while a login flow is in flight the row
+    //     renders as a disabled "Logging in…" (flipped locally on the
+    //     click, before any wire round-trip; the confirming probe either
+    //     expands the menu or falls back to the actionable login row).
     if state.is_authenticated {
         children.push(child(build_local_projects_submenu(state)));
         children.push(child(build_cloud_projects_submenu(state)));
+    } else if state.login_in_progress {
+        children.push(child(node(
+            20,
+            props(vec![
+                ("label".to_string(), ov_str("\u{1F504} Logging in\u{2026}")),
+                ("enabled".to_string(), ov(Value::from(false))),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
     } else {
         children.push(child(node(
             20,
@@ -3220,7 +3249,10 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
         Vec::new(),
     )));
 
-    // (5) Quit.
+    // (5) Quit. NOTE: the `Reset Guest…` leaf (id=32) that briefly sat here
+    //     was an UNAPPROVED UX surface, removed by operator order 2026-07-22
+    //     (tray-ux "UX curation governance"); a wedged guest is recovered
+    //     via the `--reset-guest` CLI verb.
     children.push(child(node(
         31,
         props(vec![
@@ -3547,6 +3579,28 @@ impl DbusMenuIface {
                 }
             }
             20 => {
+                // windows-260719-2: flip to the transitional "Logging in…"
+                // state IMMEDIATELY — a purely local signal, before the
+                // terminal spawn or any Vault probe — and re-render now so
+                // the user never sees a stale actionable "GitHubLogin" row
+                // mid-flow. A click while already in flight is a no-op (the
+                // row is disabled, but dbus may still deliver the event).
+                let already_in_flight = {
+                    let mut in_flight = false;
+                    self.0.with_state(|state| {
+                        if state.login_in_progress {
+                            in_flight = true;
+                        } else {
+                            state.login_in_progress = true;
+                            state.bump_revision();
+                        }
+                    });
+                    in_flight
+                };
+                if already_in_flight {
+                    return Ok((0, true));
+                }
+                let _ = self.0.rebuild_after_state_change().await;
                 // GitHubLogin click: launch the gh login flow AND refresh
                 // the cached auth state. This is the only path that
                 // re-reads `gh auth status` outside tray launch.
@@ -3581,6 +3635,12 @@ impl DbusMenuIface {
                         }
                         service_for_task.with_state(|state| {
                             state.is_authenticated = authed;
+                            // windows-260719-2: the probe settled — clear
+                            // the transitional flag. Success expands the
+                            // menu; an invalid/missing token falls back to
+                            // the actionable "GitHubLogin" row (never a
+                            // stale logged-in or in-progress rendering).
+                            state.login_in_progress = false;
                             state.bump_revision();
                         });
                         // @trace spec:tray-ux, spec:remote-projects
@@ -3610,8 +3670,12 @@ impl DbusMenuIface {
                     warn!("task queue full: skipping gh auth refresh");
                 }
             }
-            21 | 22 | 29 | 30 => {
+            21 | 22 | 29 | 30 | 32 => {
                 // submenu container, separator, or version label — no-op.
+                // id=32 is the REMOVED `Reset Guest…` leaf (operator order
+                // 2026-07-22, tray-ux "UX curation governance"): the menu no
+                // longer emits it, and a stale click must stay inert — the
+                // reset is CLI-only (`--reset-guest`).
             }
             CLOUD_OVERFLOW_ID => {
                 // Cloud overflow leaf — dump the full project list to stderr
@@ -4658,6 +4722,7 @@ mod tests {
             forge_available,
             podman_available: true,
             is_authenticated: false,
+            login_in_progress: false,
             enclave_status,
             revision: 1,
             projects_hash,
@@ -4710,6 +4775,7 @@ mod tests {
         forge_available: bool,
         podman_available: bool,
         is_authenticated: bool,
+        login_in_progress: bool,
         enclave_status: EnclaveStatus,
         projects: Vec<ProjectEntry>,
         cloud_projects: Vec<ProjectEntry>,
@@ -4723,6 +4789,7 @@ mod tests {
                 forge_available: false,
                 podman_available: true,
                 is_authenticated: false,
+                login_in_progress: false,
                 enclave_status: EnclaveStatus::Verifying,
                 projects: vec![ProjectEntry {
                     name: "test-project".to_string(),
@@ -4751,6 +4818,11 @@ mod tests {
 
         fn authenticated(mut self, value: bool) -> Self {
             self.is_authenticated = value;
+            self
+        }
+
+        fn login_in_progress(mut self, value: bool) -> Self {
+            self.login_in_progress = value;
             self
         }
 
@@ -4797,6 +4869,7 @@ mod tests {
                 forge_available: self.forge_available,
                 podman_available: self.podman_available,
                 is_authenticated: self.is_authenticated,
+                login_in_progress: self.login_in_progress,
                 enclave_status: self.enclave_status,
                 revision: 1,
                 projects_hash,
@@ -4804,7 +4877,7 @@ mod tests {
         }
     }
 
-    // @trace spec:tray-minimal-ux
+    // @trace spec:tray-minimal-ux, spec:tray-ux
     #[test]
     fn minimal_menu_has_5_top_level_items_when_unauthenticated() {
         // When `is_authenticated == false`, the top-level menu is exactly:
@@ -4813,6 +4886,10 @@ mod tests {
         //   3. Separator (id=29)
         //   4. Version + attribution (id=30)
         //   5. Quit (id=31)
+        // This EXACT set is UX-curation-governed (tray-ux "UX curation
+        // governance"): the unapproved Reset Guest leaf (id=32) was removed
+        // by operator order 2026-07-22 and must never come back without
+        // recorded approval.
         let state = TrayStateBuilder::new()
             .forge_available(false)
             .enclave_status(EnclaveStatus::Verifying)
@@ -4851,13 +4928,20 @@ mod tests {
             label_list.iter().any(|l| l.contains("Quit Tillandsias")),
             "Missing quit button"
         );
+        // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
+        // governance"): the reset-guest leaf must NOT exist on any platform;
+        // the reset is CLI-only (`--reset-guest`).
+        assert!(
+            !label_list.iter().any(|l| l.contains("Reset Guest")),
+            "Reset Guest menu leaf must be ABSENT (removed by operator order)"
+        );
 
         // No ~/src / Cloud at this auth stage.
         assert!(!label_list.iter().any(|l| l.contains("~/src")));
         assert!(!label_list.iter().any(|l| l.contains("Cloud")));
     }
 
-    // @trace spec:tray-minimal-ux
+    // @trace spec:tray-minimal-ux, spec:tray-ux
     #[test]
     fn menu_expands_when_authenticated() {
         // When `is_authenticated == true` the GitHubLogin row is replaced by
@@ -4891,11 +4975,108 @@ mod tests {
             !label_list.iter().any(|l| l.contains("GitHubLogin")),
             "GitHubLogin must not appear when authenticated"
         );
+        // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
+        // governance"): no reset-guest leaf in the authenticated shape either.
+        assert!(
+            !label_list.iter().any(|l| l.contains("Reset Guest")),
+            "Reset Guest menu leaf must be ABSENT (removed by operator order)"
+        );
         // The default local project from `TrayStateBuilder` is "test-project".
         assert!(
             label_list.contains(&"test-project".to_string()),
             "Local project submenu missing when authenticated"
         );
+    }
+
+    /// windows-260719-2: while the login flow is in flight the id=20 row
+    /// renders as a DISABLED "Logging in…" — same collapsed shape as
+    /// logged-out (the project body stays auth-gated), no actionable
+    /// GitHubLogin row mid-flow.
+    #[test]
+    fn login_in_progress_renders_disabled_logging_in_row() {
+        let state = TrayStateBuilder::new()
+            .forge_available(false)
+            .enclave_status(EnclaveStatus::Verifying)
+            .authenticated(false)
+            .login_in_progress(true)
+            .build();
+        let menu = build_menu(&state);
+        assert_eq!(
+            menu.2.len(),
+            5,
+            "logging-in keeps the collapsed 5-row shape"
+        );
+
+        let label_list = labels(&menu);
+        assert!(
+            label_list.iter().any(|l| l.contains("Logging in")),
+            "Missing the transitional Logging in… row. labels={label_list:?}"
+        );
+        assert!(
+            !label_list.iter().any(|l| l.contains("GitHubLogin")),
+            "The actionable GitHubLogin row must not render mid-flow"
+        );
+        assert!(!label_list.iter().any(|l| l.contains("~/src")));
+        assert!(!label_list.iter().any(|l| l.contains("Cloud")));
+
+        // The id=20 row itself is disabled (a second click is meaningless).
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+        let (_, props) = flat
+            .iter()
+            .find(|(id, _)| *id == 20)
+            .expect("login row id=20 must be present while logging in");
+        let enabled = props
+            .get("enabled")
+            .and_then(|v| v.try_clone().ok())
+            .and_then(|v| bool::try_from(v).ok())
+            .unwrap_or(true);
+        assert!(!enabled, "the Logging in… row must be disabled");
+    }
+
+    /// windows-260719-2: the three-state machine at the render level —
+    /// LoggedOut shows the actionable login row; LoggingIn shows the
+    /// disabled transitional row; a failed probe (login_in_progress cleared,
+    /// still unauthenticated) falls back to the actionable login row; a
+    /// successful probe expands the menu. Never a stale rendering.
+    #[test]
+    fn login_three_state_machine_renders_each_state() {
+        // (1) LoggedOut: actionable GitHubLogin.
+        let logged_out = TrayStateBuilder::new().authenticated(false).build();
+        let labels_out = labels(&build_menu(&logged_out));
+        assert!(labels_out.iter().any(|l| l.contains("GitHubLogin")));
+
+        // (2) LoggingIn: transitional row.
+        let logging_in = TrayStateBuilder::new()
+            .authenticated(false)
+            .login_in_progress(true)
+            .build();
+        let labels_progress = labels(&build_menu(&logging_in));
+        assert!(labels_progress.iter().any(|l| l.contains("Logging in")));
+
+        // (3) Probe FAILED: falls back to the actionable login row.
+        let probe_failed = TrayStateBuilder::new()
+            .authenticated(false)
+            .login_in_progress(false)
+            .build();
+        let labels_failed = labels(&build_menu(&probe_failed));
+        assert!(
+            labels_failed.iter().any(|l| l.contains("GitHubLogin")),
+            "a failed probe must fall back to the actionable login row"
+        );
+        assert!(!labels_failed.iter().any(|l| l.contains("Logging in")));
+
+        // (4) Probe SUCCEEDED: menu expands, no login row at all.
+        let logged_in = TrayStateBuilder::new()
+            .authenticated(true)
+            .login_in_progress(false)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .forge_available(true)
+            .build();
+        let labels_in = labels(&build_menu(&logged_in));
+        assert!(labels_in.iter().any(|l| l.contains("~/src")));
+        assert!(!labels_in.iter().any(|l| l.contains("GitHubLogin")));
+        assert!(!labels_in.iter().any(|l| l.contains("Logging in")));
     }
 
     // @trace spec:tray-ux

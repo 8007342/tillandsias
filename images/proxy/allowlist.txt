@@ -88,6 +88,10 @@
 .anthropic.com
 .chatgpt.com
 .claude.com
+# claude.ai serves the official Claude Code native installer
+# (curl -fsSL https://claude.ai/install.sh) — the order-459 launch-time
+# curl-install channel; the dist bucket itself is .googleapis.com (above).
+.claude.ai
 # Antigravity CLI product surface (not a subdomain of google.com; uses .google gTLD).
 .antigravity.google
 # Antigravity CLI binary updater (exact observed Cloud Run service, order 307).

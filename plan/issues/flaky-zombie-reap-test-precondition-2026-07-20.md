@@ -49,3 +49,13 @@ racing; the leak is order-dependent, not parallelism-dependent.
 
 Do not delete or `#[ignore]` the test — the reap behavior it pins is real
 (tray popup terminals must not accumulate zombies).
+
+## 2026-07-22 addendum: second order-dependent flake in the same class
+
+`resource_lock::tests::held_resources_with_prefix_lists_only_live_matching_locks`
+failed ONCE in a full parallel workspace run immediately after the wave-2
+order-443 slice-3 integration (which added launch-in-flight flock markers and
+new resource_lock probes), passes in isolation and in the follow-up full run.
+Likely shared-tmp/flock contention between parallel test binaries. If it
+recurs, scope each test's lock namespace by PID/tempdir rather than a shared
+prefix; track here rather than a new packet (same leak-across-tests class).

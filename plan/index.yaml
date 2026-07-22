@@ -1187,9 +1187,19 @@ plan_index:
 
     - packet_id: wire-oscillation-root-cause
       order: 148
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Investigate: headless crash causing wire degraded/recovered oscillations"
       status: ready
+      events:
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): needs a live VM wire-oscillation reproduction; not reachable from the Linux stability bundle. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
       kind: investigation+bug-fix
       deliverable: plan/issues/wire-oscillation-root-cause-2026-06-30.md
       depends_on: []
@@ -1256,9 +1266,19 @@ plan_index:
 
     - packet_id: post-login-cloud-refresh
       order: 150
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Investigate: token storage + cloud refresh not triggering after GitHub Login"
       status: ready
+      events:
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): same live-VM oscillation family as 148. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
       kind: investigation+enhancement
       deliverable: plan/issues/post-login-cloud-refresh-2026-06-30.md
       depends_on: [wire-oscillation-root-cause]
@@ -8115,7 +8135,7 @@ plan_index:
 
     - packet_id: macos-attach-first-use-materialization-blackout
       order: 270
-      desired_release: v0.4
+      desired_release: v0.5
       title: "First-use attach: forge-image materialization has no progress feedback and the build dies with the attach process (guest-side)"
       status: ready
       kind: bug
@@ -8178,6 +8198,15 @@ plan_index:
             tillandsias-headless, criteria trimmed to the two guest-side
             realities. Reduction step: removed ambiguity + fixed
             attribution so a capable host can drain it.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): attach flow requires a live VM lane; verification rides the post-cut platform smoke. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: methodology-idiomatic-layers-for-agents
       order: 271
@@ -8300,7 +8329,7 @@ plan_index:
 
     - packet_id: guest-agent-attach-runs-login-flow
       order: 273
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Guest headless: agent-attach argv (--cloud <p> --opencode) runs the github-login flow and exits 0 — agent never launches"
       status: ready
       kind: bug
@@ -8417,6 +8446,15 @@ plan_index:
             (a merge artifact — YAML-valid so the gates missed it); linux
             as ledger owner should prune them. Filed:
             plan/issues/order-273-confounded-by-disk-reframe-2026-07-11.md.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): same attach-flow family as 270. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: forge-agent-liveness-signals
       order: 265
@@ -8728,7 +8766,7 @@ plan_index:
       order: 281
       desired_release: v0.4
       title: "Guest image build: self-heal once from corrupt overlay store instead of permanent 125"
-      status: ready
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -8786,6 +8824,12 @@ plan_index:
             source-shape pins on run_init and classifier. cargo test 280/280,
             clippy clean, ./build.sh --check green. Remaining exit criterion:
             live verification on a host with a corrupt overlay store.
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Coordinator flip 2026-07-21: wave-1 planner verified ALL THREE exit criteria already implemented at HEAD (is_overlay_corruption_error, OverlayHeal trait + RealSystemReset, one-shot try_overlay_self_heal wired into run_init; 8 unit tests) — the 2026-07-20 progress event says the same; only an OPTIONAL live corrupt-overlay repro remains, which is not a stated criterion. Status was stale ready.
 
     - packet_id: smoke-lock-fd-leaks-into-forge-sessions
       order: 283
@@ -10676,6 +10720,12 @@ plan_index:
             enclave-dead direct path curl 6; post-warm-up proxied 200;
             splice confirmed via Sectigo issuer). Operator unblocked by
             removing the exited container so the next ensure recreates it.
+        - type: progress
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            Wave-2 Sonnet worker, commit a774668a (cherry-picked): residual pinned via 2 new litmus steps in inference-container-implementation-shape (Fedora CA path active + Debian path absent, comment-stripped; exact OLLAMA_MODELS trailing-slash + OLLAMA_BINDIR lines verbatim). NOTE the packet outcome text claim that .tools/ollama is a container-local SIBLING of the models volume was FALSIFIED by the wave-2 planner: it is a SUBDIR of the mounted volume, so the binary already persists — now regression-pinned. REMAINING: criterion 4 live pristine-substrate e2e evidence (needs a destructive run window).
 
     - packet_id: container-ensure-not-idempotent-exited
       order: 314
@@ -11026,7 +11076,7 @@ plan_index:
 
     - packet_id: mirror-credential-helper-broker
       order: 319
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Ladder rung B: git credential helper (vault-backed) on the mirror; evaluate short-TTL GitHub App installation tokens; kill token-in-URL"
       status: ready
       operator_note: "operator decision (EC3 only): adopt or reject GitHub App installation tokens"
@@ -11079,6 +11129,15 @@ plan_index:
             repository_ids and permissions, 1h expiry, no licensed seat); order
             390 covers the broader App work. What is missing is the DECISION,
             which is operator-facing.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): rung-B enhancement, not stability; explicitly deferrable. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
     - packet_id: forge-gitconfig-single-injection
       order: 320
       desired_release: v0.5
@@ -11874,7 +11933,7 @@ plan_index:
 
     - packet_id: wsl-guest-forge-user-src-ownership
       order: 326
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "WSL2 guest provisioning: no forge user + root-owned /home/forge/src — every containerized cloud clone fails EACCES"
       status: in_progress
@@ -11961,6 +12020,15 @@ plan_index:
             First Windows cold-provision cloud attach ever exercised; clone
             EACCES root-caused to missing forge user + root-owned src in the
             WSL recipe. Lane retried after chmod workaround.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): remaining criterion is a cold cloud-attach clone on a Windows host; rides order 455's Windows smoke. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: guest-lazy-ensure-router-image
       order: 327
@@ -12338,7 +12406,7 @@ plan_index:
 
     - packet_id: forge-shared-checkout-destructive-clean
       order: 328
-      desired_release: v0.4
+      desired_release: v0.5
       title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
       status: pending
       kind: bugfix
@@ -12385,6 +12453,15 @@ plan_index:
             targeting this host cycle's five uncommitted packet files; they
             survived only because e84ba192 had just been pushed. It also
             reverted its own blocker-file update (self-erasing evidence).
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): platform-gated destructive-clean verification; rides order 455. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: forge-dirty-tree-exit-contract
       order: 341
@@ -14531,7 +14608,7 @@ plan_index:
 
     - packet_id: guest-staged-gitdir-root-owned
       order: 382
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "P1: guest-staged forge gitdir is root-owned/700 on WSL2 — forge user cannot read git metadata; credential guard fail-closes every in-forge cycle"
       status: ready
@@ -14639,6 +14716,15 @@ plan_index:
             criterion 1 (fresh Windows curl-install verification) and
             criterion 3 (macOS VZ spot-check) are platform-gated and
             cannot be verified from this forge host.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): remaining criteria 1/3 are Windows curl-install + macOS VZ spot-checks; ride order 455. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: windows-inforge-meta-orchestration-transparent-push
       provisional_id: windows-260716-1
@@ -14748,7 +14834,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: per-project mirror container created WITHOUT the vault-token secret — relay fail-closes every in-forge push; mint/mount failure is silent"
-      status: ready
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs (mint_git_mirror_vault_token + ensure/recreate path) + images/git evidence
       depends_on: []
@@ -14792,6 +14878,12 @@ plan_index:
             §4. Linux builder window active — highest-value pickup: this
             is the LAST blocker between BigPickle/Hy3 and transparent
             in-forge pushes on Windows.
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Wave-1 Sonnet worker, commit 57478c57 (cherry-picked). Criteria 2+3 (fail-loud mint via Result + ? at all 3 ensure sites; loud status-check tolerance) verified already correct + pinned; real residual closed: negative-case test git_run_args_omit_vault_secret_when_none (None -> NO vault-token secret/env), proven against an injected regression. Test-only +25 lines.
 
     - packet_id: vault-root-token-rederivation
       order: 383
@@ -15194,7 +15286,14 @@ plan_index:
 
     - packet_id: forge-local-experts-milestone
       order: 391
-      desired_release: v0.4
+      desired_release: v0.5
+      # OPERATOR DECISION (The Tlatoani, 2026-07-21): EXPERTS does NOT gate
+      # v0.4. The EXPERTS family and the compiled-Rust plan/metadata MCP
+      # server (orders 456-458) LAND TOGETHER as one coupled overhaul —
+      # independent components with deliberate synergy (ramdisk + experts),
+      # an implementation detail transparent to end users. v0.4 ships as the
+      # Linux stability bundle. All 14 v0.4-tagged family members flipped to
+      # v0.5 in the same commit.
       title: "MILESTONE: forge-local EXPERTS — ephemeral tiny models over ./plan, ./methodology, and code; agents query instead of browse"
       status: ready
       kind: milestone
@@ -15227,7 +15326,7 @@ plan_index:
 
     - packet_id: inference-startup-cleanup
       order: 392
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Inference container startup cleanup — deterministic readiness, tier detection, preload policy"
       # Reconciled 2026-07-21: the 2026-07-18 "PUSH BLOCKED: relay credential
@@ -15309,7 +15408,7 @@ plan_index:
 
     - packet_id: experts-construction-research
       order: 393
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Research: expert-construction technique — fine-tune vs LoRA vs RAG-index vs Modelfile context, per tier, under a launch-time budget"
       status: ready
@@ -15355,10 +15454,19 @@ plan_index:
             plan/issues/experts-construction-decision-2026-07-17.md.
             Residual scope: per-tier measurements + ground-truth harness
             (consumed by 394 as its grading gate). 394 is UN-GATED.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): research packet; does not gate the stability bundle. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: plan-methodology-experts-rung1
       order: 394
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "PLAN EXPERT + METHODOLOGY EXPERT rung 1 — ephemeral build on forge launch from the mounted checkout"
       status: ready
@@ -15386,7 +15494,7 @@ plan_index:
 
     - packet_id: experts-opencode-affordance
       order: 395
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "OpenCode affordance — experts transparently queryable by forge agents (config provider entries + instructions; MCP only if needed)"
       status: ready
@@ -15413,7 +15521,7 @@ plan_index:
 
     - packet_id: experts-refresh-on-commit
       order: 396
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Expert refresh on commit/push — answers track the working tree"
       status: ready
@@ -15460,7 +15568,7 @@ plan_index:
 
     - packet_id: plan-yaml-compiled-editor
       order: 398
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Compiled deterministic YAML query/edit engine for ./plan + ./methodology — one engine for agents (CLI) and the PLAN EXPERT (library)"
       status: ready
@@ -15506,7 +15614,7 @@ plan_index:
             Slice 2 rung 1 (validated event-append) implemented + dogfooded: this very event was written by the new tillandsias-plan append-event CLI, which surgically inserts (format-preserving) then REFUSES to flush unless the candidate re-parses (serde_yaml rejects duplicate keys) and passes invariant-core integrity — the order-263 broken-ledger class is now structurally impossible through the tool. lib: Ledger::parse (no-IO validation) + edit module (append_event/validate_candidate/event_block). Tests 7/7 incl. dup-key + dangling-ref refusal. build.sh --check green. Remaining slices: claim/status-flip edits, the format-preserving round-trip design decision, and skill docs.
     - packet_id: forge-lsp-by-default
       order: 399
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "LSP available by default in the forge — agents query code structurally (OpenCode LSP wiring; rust-analyzer first)"
       status: ready
@@ -15549,7 +15657,7 @@ plan_index:
 
     - packet_id: code-spec-cheatsheet-expert
       order: 400
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "CODE EXPERT (+ SPEC/CHEATSHEET expert) — structural code + spec + cheatsheet knowledge, commit-fresh, audit-capable"
       status: ready
@@ -15721,7 +15829,7 @@ plan_index:
       order: provisional
       release_target: stable-milestone-v1
       title: "P1: headless re-ensure regenerates a non-matching vault unseal secret on restart — barrier orphaned, crash-loop (restart self-wedge)"
-      status: ready
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs (ensure_vault_running unseal-secret create path)
       depends_on: []
@@ -15787,13 +15895,19 @@ plan_index:
             still need attended recovery (deep key skew, layer 2 in the
             issue doc). Contributing factor: binary hot-swap deploy exposed
             it, but a version-matched restart could hit the same path.
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Wave-1 Fable worker, commit cdd43e57 (cherry-picked to linux-next). ensure_vault_running now gates unseal-secret creation on prior existence (reproduce-first test); rejection recovery is one-shot, loud, storage-untouched (pinned by seam test); a proven-failing key is never written/kept (pure write-decision gate + restore). 21 vault_bootstrap tests + 225 bin tests green.
 
     - packet_id: guest-crashloop-detection
       provisional_id: windows-260717-3
       order: provisional
       release_target: stable-milestone-v1
       title: "Guest crash-loop DETECTION — bounded restart/unseal/handshake counter surfaced as a falsifiable diagnose+tray verdict"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-headless (liveness/diagnose) + tray status + litmus
       depends_on: []
@@ -15826,13 +15940,26 @@ plan_index:
             Filed from the live Windows crash-loop incident + the operator's
             ephemeral-resilience directive. Detection is the trigger for
             both auto-recovery backoff and the manual reset (windows-260717-4).
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Wave-1 Opus worker, commit cf67e3e9 (cherry-picked). Pure clock-injected crashloop module in tillandsias-control-wire (3 events/180s over phase regressions, unseal failures, handshake timeouts; grammar ^(healthy|starting|crash-loop:[a-z0-9-]+)$); Windows tray fully wired (apply_vm_status feed, --diagnose line, Error balloon + chip); macOS --diagnose reads persisted verdict. litmus:guest-crashloop-detection PASS. FOLLOW-UP filed in event: macOS LIVE feed/toast needs status_item.rs+action_host.rs wiring (out of wave scope); guest-intentional-ephemeral-reset can consume GuestHealth::is_crash_loop as its trigger.
+        - type: progress
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            Follow-up closed by wave-2 chain commit 246b7a0e: macOS LIVE feed + toast — apply_vm_status (the single VmStatusPush+poller funnel in action_host.rs; the status_item.rs framing in the earlier event was imprecise) now feeds the shared CRASH_LOOP_DETECTOR and persists on every observation so --diagnose matches the live tray; NEW trips fire an edge-triggered Notification Center banner (re-armed on clear). macOS parity with Windows complete pending live platform verify (order 455).
 
     - packet_id: guest-intentional-ephemeral-reset
       provisional_id: windows-260717-4
       order: provisional
+      desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Intentional EPHEMERAL RESET — one-click wipe+reprovision of the guest (destructive-by-design; re-auth is the only cost)"
-      status: ready
+      status: in_progress
       kind: enhancement
       deliverable: tray menu + --reset-guest CLI + host reprovision path + e2e
       depends_on: [guest-crashloop-detection]
@@ -15870,6 +15997,28 @@ plan_index:
             degrades to reset+re-auth, never to flashing terminals with no
             recourse. The manual reprovision performed this cycle
             (unregister + tray relaunch) is the reference implementation.
+        - type: progress
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            Wave-2 tray-chain Fable worker, commit ff4cff37 (cherry-picked). Intentional ephemeral reset landed on ALL THREE platforms: shared ids::RESET_GUEST always-enabled Quit-adjacent leaf + MenuAction::ResetGuest; Windows WslLifecycle::wipe_guest wired click->message-loop->same provision_via_recipe path + --reset-guest CLI; macOS VzRuntime::wipe_provisioned_artifacts (vm-layer, Linux-unit-tested) + reset_guest_async + gated --reset-guest; Linux run_reset_guest with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 refusal pin. 61+55+39+231 tests green, build check green. REMAINING: live wedged-guest->reset->Ready e2e on a Windows/macOS host (rides order 455 smoke).
+        - type: progress
+          ts: "2026-07-22T03:40:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260722"
+          host: linux
+          summary: >
+            OPERATOR ORDER (verbatim in tray-ux spec "UX curation
+            governance"): the always-on menu leaf was UNAPPROVED UX and has
+            been REMOVED from all three platforms (commit 1b4fb80c) — leaf
+            emission, MenuAction::ResetGuest, and every click path deleted;
+            ALL CLI/runtime reset paths retained (--reset-guest on
+            Linux/Windows/macOS, wipe implementations, Windows bounded
+            auto-reset). Presence pins flipped to absence pins + a
+            governance snapshot test now locks the exact approved top-level
+            menu id set per auth state. Live wedged-guest e2e still rides
+            order 455; behavioral residuals from the adversarial review are
+            in plan/issues/wave-review-findings-tray-chain-2026-07-22.md.
 
     - packet_id: login-transitive-states-all-platforms
       provisional_id: windows-260719-2
@@ -15877,7 +16026,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Login UX transitive states (all platforms): 'Logging in…' while credentials verify, 'Logged in as X' on success, fall back to 'GitHub Login' on invalid/missing token"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: tray menus (windows/macos/linux) + headless LoginStatePush states + prompt cloud-projects refresh on login
       depends_on: []
@@ -15916,6 +16065,12 @@ plan_index:
             with the fresh-guest auth findings (same session: silent
             token-store failure + menu gate bypass, see
             smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md).
+        - type: completed
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            Wave-2 tray-chain Fable worker, commit cc8925b6 (cherry-picked). Three-state login via LOCAL GithubLoginState::LoggingIn (wire untouched — no cross-client need found): disabled transitive row rendered by host-shell build(); Windows flips on click pre-spawn, confirm path maps to LoggedIn/LoggedOut only (never stale); macOS same + explicit dispatch_rebuild. cfg-gated tray bodies await live platform verify (order 455; see cfg-gated-tray-code-never-typechecked packet).
 
     - packet_id: codex-lane-device-oauth-login
       provisional_id: windows-260719-3
@@ -15923,7 +16078,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Codex agent lane: device/oauth login flow — never a raw token prompt"
-      status: ready
+      status: completed
       kind: bug
       deliverable: forge lane codex bootstrap (images/ + headless agent-launch env)
       depends_on: []
@@ -15950,6 +16105,12 @@ plan_index:
             (v0.3.260719.1 tray over a — skewed — v0.3.260712.1 guest;
             the token prompt is auth-flow shape, not skew, so it stands
             regardless).
+        - type: completed
+          ts: "2026-07-21T23:30:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-1 drain)"
+          host: linux
+          summary: >
+            Wave-1 Sonnet worker, commit 7a5d5161 (cherry-picked). Criterion 1 (no raw-token prompt; Vault restore or device flow) verified already implemented + pinned; criterion 2 closed doc-only: codex-agent-entrypoints cheatsheet gains Authentication section (--codex-login, CODEX_API_KEY-vs-OPENAI_API_KEY order-430 footgun, harvest wrapper) + sources of truth.
 
     - packet_id: guest-tray-build-version-handshake
       provisional_id: windows-260719-4
@@ -15957,7 +16118,12 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Wire handshake carries BUILD versions; tray goes loud on guest/tray skew (chip + WARN → Event Log)"
-      status: ready
+      # Status normalized COMPLETED -> completed (2026-07-21 coordinator):
+      # nonstandard casing breaks status-grep tooling. NOTE the implementation
+      # push (ced9657e) landed UNCOMPILABLE (see
+      # plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md);
+      # repaired by the coordinator in the same-day follow-up commit.
+      status: completed
       kind: enhancement
       deliverable: tillandsias-control-wire handshake + headless + all trays
       depends_on: []
@@ -16062,7 +16228,7 @@ plan_index:
 
     - packet_id: codex-e2e-smoke-launcher-and-verdict-parity
       order: 404
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Codex e2e smoke launcher: launch codex non-interactively in the forge smoke lane with rate-limit + MO-SMOKE verdict parity"
       status: ready
       kind: implementation
@@ -16103,10 +16269,19 @@ plan_index:
             run); the live codex-vs-opencode comparison is order 405. Shaped
             per methodology large_packet_is_eligible_work (split at the
             evidence boundary).
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): codex smoke verification rides the order-455 post-cut smoke queue. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: codex-opencode-smoke-divergence-comparison
       order: 405
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Live codex-vs-opencode forge smoke comparison — run both on /meta-orchestration, capture + file divergences"
       status: ready
       kind: verification
@@ -16143,10 +16318,20 @@ plan_index:
             comparison half (needs a real forge launch + provider budget),
             gated on the order-404 launcher. Divergence between codex and
             opencode is the valuable feedback the operator asked to monitor.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): same codex smoke family as 404. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: ephemeral-runtime-destroy-recreate-sweep
       provisional_id: windows-260717-5
       order: provisional
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "MILESTONE: make ALL skills, scripts, and error messages follow destroy-and-recreate (runtime ephemerality) — never fix-forward borked substrate"
       status: ready
@@ -16244,7 +16429,7 @@ plan_index:
             recommended default is host-mapped reconciled with order 342.
     - packet_id: inference-cuda-bringup-fat-host
       order: 406
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Thinnest rung: bring the inference container UP on the fat cuda host with GPU passthrough + one model warm"
       status: ready
@@ -16339,6 +16524,14 @@ plan_index:
         - "cross-platform/cross-host deps are release-ordered (dependent's desired_release >= upstream's); any exception is noted"
       events:
         - type: progress
+          ts: "2026-07-21T23:13:00Z"
+          agent_id: "forge-antigravity-20260721T2312Z"
+          host: forge
+          summary: >
+            Backfilled desired_release on guest-intentional-ephemeral-reset (v0.4)
+            and ephemeral-runtime-destroy-recreate-sweep (v0.5), completing
+            100% desired_release coverage across all open packets in plan/index.yaml.
+        - type: progress
           ts: "2026-07-18T07:00:00Z"
           agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
           host: linux
@@ -16370,7 +16563,7 @@ plan_index:
 
     - packet_id: gpu-passthrough-auto-enablement
       order: 408
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Auto-enable GPU passthrough: generate + wire the CDI spec (no second sudo) when the host supports it; loud guided remedy when the toolkit is missing"
       status: ready
@@ -16588,7 +16781,7 @@ plan_index:
       owner_host: linux
       capability_tags: [forge, images, tooling, dx]
       estimated_hours: 1
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       outcome: >
         The forge-base image is missing fundamental CLI utilities that agents
@@ -16634,7 +16827,7 @@ plan_index:
       owner_host: linux
       capability_tags: [git, git-mirror, relay, correctness]
       estimated_hours: 1
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       outcome: >
         On a clean host with fresh OAuth tokens, `git push origin linux-next`
@@ -16692,7 +16885,7 @@ plan_index:
       owner_host: linux
       capability_tags: [git, git-mirror, relay, vault, credentials, correctness]
       estimated_hours: 2
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       supersedes_issue: plan/issues/blocker-git-mirror-relay-token-expiry-2026-07-18.md
       note: >
@@ -16760,7 +16953,7 @@ plan_index:
       owner_host: linux
       capability_tags: [git, git-mirror, relay, reconcile, correctness]
       estimated_hours: 2
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       issue_ref: plan/issues/git-mirror-relay-reconcile-exported-head-regression-2026-07-18.md
       outcome: >
@@ -16798,7 +16991,7 @@ plan_index:
       owner_host: linux
       capability_tags: [plan-ledger, yaml, ci, correctness]
       estimated_hours: 1
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: forge-local-experts-milestone
       issue_ref: plan/issues/plan-index-duplicate-events-key-2026-07-18.md
       outcome: >
@@ -18902,7 +19095,7 @@ plan_index:
       order: 443
       desired_release: v0.4
       title: "Concurrent forges are unsafe: a second launch bounces the shared stack and can tear it down under a live sibling"
-      status: in_progress
+      status: completed
       capability_tags: [linux, forge, concurrency, shared-stack, delegation, p1]
       operator_note: "operator requirement 2026-07-20: concurrent forges/harnesses (even same type, same project) must be safe — independent checkouts + own containers"
       kind: enhancement
@@ -19011,12 +19204,18 @@ plan_index:
             exit; a launch-in-flight marker for the pre-create window; running-
             AND-HEALTHY (not just running) so a crashed-but-running mirror is
             replaced; tray terminal isolation. The two main bounce triggers
+        - type: completed
+          ts: "2026-07-22T01:20:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721 (wave-2 drain)"
+          host: linux
+          summary: >
+            SLICE 3 closed by wave-2 Fable worker, commit a5cc14ed (cherry-picked): every launch lane holds an advisory flock launch-<project>-<pid> (extends order-232 resource_lock with is_held/held_resources_with_prefix) from BEFORE first cleanup/ensure; cleanup_shared_stack_if_no_running_forge tears down only when BOTH refcount sources read zero (live active-lane scan + foreign launch-in-flight markers). Refcount derived LIVE, never a persisted counter; probe errors count as HELD (leak-not-destroy — the safe direction). Own marker excluded by name so the order-298 first-launch wipe survives. All slices now done.
             (ensure --replace + teardown-under-starting-sibling) are now closed.
     - packet_id: forge-launch-artifacts-not-tracked
       order: 444
       desired_release: v0.4
       title: "Launch-generated artifacts must not dirty the checkout (.opencode/package-lock.json et al.)"
-      status: in_progress
+      status: completed
       capability_tags: [linux, forge, isolation, gitignore]
       kind: optimization
       deliverable: .gitignore + audit of harness launch writes
@@ -19045,10 +19244,25 @@ plan_index:
             Untracked + gitignored .opencode/package-lock.json (the launch
             artifact the operator flagged). Audit clean except flake.lock (legit).
             Remaining: a fail-loud check that no harness launch writes a tracked path.
+        - type: completed
+          ts: "2026-07-21T03:35:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Executable guard landed: scripts/check-launch-artifacts-untracked.sh
+            asserts every manifested launch artifact
+            (.opencode/package-lock.json, .opencode/node_modules,
+            .forge-startup-context.md) is untracked AND gitignored, and greps
+            the forge entrypoints for write idioms into per-harness checkout
+            dirs, failing loud on any unmanifested target. Falsifiable
+            grammar ok:launch-artifacts-untracked /
+            fail:(tracked|unignored|unmanifested)-launch-artifact:<path>.
+            Negative path sandbox-proven (tracked package-lock -> exit 1).
+            Pinned by litmus:launch-artifacts-untracked.
 
     - packet_id: forge-host-lifecycle-control-channel
       order: 445
-      desired_release: v0.4
+      desired_release: v0.5
       title: "RESEARCH: forge->host lifecycle-control channel — agent signals 'refresh me' (rebuild+relaunch) and 'I'm done' (safe to destroy)"
       status: ready
       capability_tags: [linux, research, forge, mcp, automation, lifecycle]
@@ -19090,6 +19304,15 @@ plan_index:
             forge->host lifecycle-control channel — the reverse of the
             host->forge delegation research — needed for hands-off rebuild/
             relaunch/resume and safe forge destruction.
+        - type: slipped
+          ts: "2026-07-21T03:45:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Slipped v0.4 -> v0.5 in the 2026-07-21 coordinator triage (order
+            407): research packet (forge-host lifecycle control channel) filed 2026-07-20; v0.5 design work. v0.4 scope tightened to the Linux stability
+            bundle per operator sequencing 2026-07-20 (macOS/Windows smoke
+            follows the Linux cut — order 455).
 
     - packet_id: mirror-daemon-first-startup
       order: 446
@@ -19136,7 +19359,7 @@ plan_index:
       order: 447
       desired_release: v0.4
       title: "litmus:guest-binary-embed-integrity fails on STALE LOCAL staging (host-state), not a real regression"
-      status: ready
+      status: completed
       capability_tags: [linux, testing, hermeticity, ci-release, guest-binary]
       kind: fix
       deliverable: scripts/build-guest-binaries.sh --verify + litmus
@@ -19167,6 +19390,21 @@ plan_index:
           summary: >
             Filed after the operator's methodology reminder to own the 3 red
             litmus rather than dismiss them. Diagnosed as stale local staging.
+        - type: completed
+          ts: "2026-07-21T03:25:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            --verify now separates host staging state from integrity:
+            stale/absent staging (version stamp predates VERSION) prints a
+            remedy and the falsifiable "verify:skip-stale-staging" line, exit
+            0; current-stamped binaries get the full strict check and a
+            genuine defect still exits non-zero (sandbox-proven: a
+            current-stamped ASCII fake fails loud on the ELF/static check).
+            Litmus success_pattern updated to verify:(ok|skip-stale-staging).
+            Verified on this host (staging at v0.3.260714.1 vs VERSION
+            0.3.260721.1): ci-release instant suite now 5/5 green. All three
+            exit criteria met.
 
     - packet_id: cheatsheet-image-copy-drift-prevention
       order: 448
@@ -19221,7 +19459,7 @@ plan_index:
       order: 449
       desired_release: v0.4
       title: "Host direct-pushes to origin bypass the mirror, stranding forge agents on a stale base"
-      status: ready
+      status: completed
       capability_tags: [linux, git-mirror, coordination, multi-writer, automation, p1]
       kind: enhancement
       deliverable: coordination policy + mirror continuous-reconcile OR host-pushes-through-mirror
@@ -19260,6 +19498,28 @@ plan_index:
             Filed as the root cause of Hy3's push failure. Self-inflicted by the
             host pushing direct to origin while agents work through the mirror.
             Unblocked live by fast-forwarding the mirror; the pattern needs a fix.
+        - type: completed
+          ts: "2026-07-21T03:10:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260720"
+          host: linux
+          summary: >
+            Mechanism (b) landed: the git image now runs a periodic
+            bounded-window reconcile — images/git/reconcile-exported-heads.sh
+            (NON-forced exported-head fast-forward + ensure-mirror-head),
+            looped by the entrypoint every MIRROR_RECONCILE_INTERVAL (default
+            120s) and killed by the shutdown trap. Same file is exec'd by the
+            offline fixture (RECONCILE_HEADS override pattern), so there is
+            one implementation. Launch-time coverage was already landed in
+            452 slice 2 (reused-mirror re-reconcile in
+            ensure_enclave_for_project). Fixture
+            scripts/test-git-mirror-stale-reconcile.sh PASS: reproduces the
+            exact stranding (host direct-push -> stale mirror -> agent clone
+            lands on old base), proves the reconcile pass fast-forwards the
+            exported head within one iteration, and proves a DIVERGED head
+            carrying un-relayed agent commits survives untouched (non-forced
+            invariant). Pinned by litmus:git-mirror-stale-reconcile. Live
+            confirmation on a rebuilt image rides order 452 slice 3's launch
+            proof, alongside 450 criterion 2.
 
     - packet_id: git-daemon-receive-pack-regression
       order: 450
@@ -19343,6 +19603,21 @@ plan_index:
             research (order 322, sharpened today) and the implementation (order
             451, blocked on that decision record). When 451 lands, this daemon
             receive-pack path is removed again in favour of authenticated writes.
+        - type: verified-live
+          ts: "2026-07-22T01:40:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721"
+          host: linux
+          summary: >
+            EXIT CRITERION 2 SATISFIED IN THE WILD: commit 89ae468b
+            ("chore(plan): backfill desired_release... order 407/372")
+            was authored and pushed by an agent INSIDE a forge container
+            (its loop_status cycle records host=forge, credential guard
+            ok:forge-git-mirror, no podman) and arrived on
+            origin/linux-next via the daemon receive-pack -> pre-receive
+            relay -> Vault-authenticated GitHub push chain — a live
+            end-to-end forge push through the rebuilt mirror. Order 452
+            slice 3 (TWO CONCURRENT forges) remains the outstanding
+            concurrency half.
 
     - packet_id: authenticated-forge-write-transport-impl
       order: 451
@@ -19616,3 +19891,124 @@ plan_index:
         - "Windows: dated smoke report in plan/issues naming the v0.4 build; forge lands on a valid current checkout; findings filed as packets"
         - "macOS: dated smoke report in plan/issues naming the v0.4 build; VZ lane checkout valid + current; findings filed as packets"
         - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
+
+    - packet_id: forge-plan-metadata-mcp-server
+      order: 456
+      desired_release: forge-local-experts-milestone
+      title: "Idiomatic compiled Rust layer MCP server in Ramdisk for deterministic plan/metadata queries"
+      status: pending
+      kind: implementation
+      deliverable: crates/tillandsias-forge-mcp (or similar) built and running in ramdisk at startup
+      depends_on: []
+      capability_tags: [mcp, rust, forge, optimizations]
+      estimated_hours: 6
+      outcome: >
+        Agents frequently struggle parsing plan/index.yaml using brittle, token-expensive python/regex 
+        scripts. This packet introduces a native compiled Rust layer that parses the plan via serde_yaml 
+        and hosts an MCP server inside the forge ramdisk. Agents can query this server (e.g., list ready 
+        packets for milestone X) instantaneously with 100% accuracy.
+      exit_criteria:
+        - "MCP server is launched ephemerally on forge startup from ramdisk"
+        - "Agents can invoke `query_plan` tool to get active packets without using grep or python"
+        - "Litmus test proves the MCP server returns the correct packets for the current active release"
+
+    - packet_id: cheatsheet-expert-model-rung1
+      order: 457
+      desired_release: forge-local-experts-milestone
+      title: "CHEATSHEET EXPERT rung 1 — ephemeral build on forge launch for ground-truth querying"
+      status: pending
+      kind: implementation
+      deliverable: inference expert-build pipeline + named cheatsheet expert endpoint
+      depends_on: [plan-methodology-experts-rung1]
+      capability_tags: [inference, ollama, experts, cheatsheets, forge]
+      estimated_hours: 8
+      outcome: >
+        The cheatsheet ecosystem is critical but moderately incomplete and poorly discovered. 
+        Building upon the PLAN EXPERT technique, we compile a CHEATSHEET EXPERT on forge launch. 
+        It ingests all docs/cheatsheets/ and cheatsheets/. Agents can ask the local inference model 
+        questions instead of grepping files, receiving perfectly cited answers based on current repo state.
+      exit_criteria:
+        - "fresh forge launch produces `tillandsias-cheatsheet-expert` on inference:11434"
+        - "queries to the expert yield correct, sourced answers from the cheatsheet ecosystem"
+        - "expert tears down ephemerally with the stack"
+
+    - packet_id: agent-forge-context-hooks
+      order: 458
+      desired_release: forge-local-experts-milestone
+      title: "Agent Context Initialization Hooks: auto-inject expert endpoints and MCP availability"
+      status: pending
+      kind: implementation
+      deliverable: forge/startup-hooks/agent_init.sh
+      depends_on: [forge-plan-metadata-mcp-server, cheatsheet-expert-model-rung1]
+      capability_tags: [forge, orchestration, ux]
+      estimated_hours: 4
+      outcome: >
+        Agents often dig dangerously in all directions because they lack immediate context. 
+        When an agent attaches to a forge, a context hook should inject a concise summary:
+        the current release target, the MCP server socket path, and the expert model endpoints.
+        This provides instant orientation and immediate leverage of the forge's compiled tools.
+      exit_criteria:
+        - "new agents see a 'Forge Startup Context' message upon launch"
+        - "the context correctly lists the active milestone, MCP Plan Query tool, and CHEATSHEET EXPERT"
+
+    - packet_id: harness-curl-install-launch-time
+      order: 459
+      desired_release: v0.4
+      title: "Claude + OpenCode install via OFFICIAL curl installers at container launch — cache-persisted, ephemeral, idempotent (operator directive 2026-07-21)"
+      status: in_progress
+      capability_tags: [linux, forge, harness, ephemerality, idempotency]
+      operator_note: >
+        The Tlatoani 2026-07-21: image build could never curl (no enclave
+        network during podman build) which forced the npm/brew detours that
+        kept breaking (orders 284/431 npm@latest; order 435 brew token
+        drift). Now that image-creation vs first-run vs every-run are
+        distinct, curl-install the OFFICIAL OpenCode and Claude at container
+        launch: persist on the mounted cache for quick restarts, reuse the
+        existing binary transparently when no newer exists, load any newer
+        version every time. Ephemerality all the way. Codex/Antigravity may
+        follow later.
+      kind: enhancement
+      deliverable: images/default/lib-common.sh + images/proxy/allowlist.txt
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      estimated_hours: 4
+      outcome: >
+        require_opencode/require_claude now run the vendor curl installers
+        first (OPENCODE_INSTALL_DIR onto the persistent tool-cache volume;
+        Claude's ~/.local/share/claude symlinked onto it with a cached
+        launcher for offline restarts), falling back to the cached binary
+        when egress is down, then to the legacy npm channel during the
+        transition, and only then harness_missing_fatal. The 6h npm
+        background updater no longer manages these two; the first-run floor
+        counts the curl caches. .claude.ai added to the egress allowlist
+        (.opencode.ai/.github.com/.googleapis.com already present).
+      exit_criteria:
+        - "launch-time curl install for both harnesses, persisted on the tool-cache volume (done — code landed)"
+        - "offline/proxy-down launches reuse the cached binary silently; fatal only when nothing is cached (done — code landed, fixture-untestable without egress; verified by shape litmus + code review)"
+        - "npm updater no longer churns opencode-ai/@anthropic-ai/claude-code; first-run floor counts curl caches (done)"
+        - "litmus:harness-curl-install-shape green (done)"
+        - "LIVE: a rebuilt-image forge launch logs 'curl-install OK' for the lane harness, and a warm restart logs reuse — rides the next forge smoke alongside 452 slice 3"
+      events:
+        - type: in_progress
+          ts: "2026-07-21T21:15:00Z"
+          agent_id: "linux-claude-fable-coordinator-20260721"
+          host: linux
+          summary: >
+            Implementation landed (lib-common curl channel + allowlist +
+            updater shrink + floor extension), pinned by
+            litmus:harness-curl-install-shape. Residual: live launch proof
+            on a rebuilt forge image. Related: order 431's pin-or-assert
+            concern narrows to the codex/openspec npm remainder.
+        - type: claim
+          ts: "2026-07-22T01:12:32Z"
+          agent_id: "linux-yoga-codex-20260722T011232Z"
+          host: linux
+          lease_id: "b47ff5638ac3"
+          expires_at: "2026-07-22T05:12:32Z"
+          summary: >
+            Operator-directed takeover after BigPickle stopped. Expand the
+            launch-time idempotent refresh contract from Claude+OpenCode to
+            all four forge harnesses: OpenCode, Claude, Codex, and
+            Antigravity; reconcile the stale active default-image spec and
+            produce cold/warm live launch evidence on immutable Linux.

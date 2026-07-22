@@ -9,6 +9,20 @@
 
 ## Why
 
+### Follow-up completion (2026-07-21, order 459 takeover)
+
+The earlier completion was incomplete: the launch updater did not invoke the
+official OpenCode/Claude curl installers, was still gated by a six-hour npm
+cadence, and the Antigravity entrypoint did not invoke the shared updater.
+The follow-up wires all four providers into every forge launch. Curl-managed
+providers refresh their persistent cache; Codex/OpenSpec refresh through npm;
+Antigravity uses its official installer. Every path remains fail-soft and the
+primary lane emits an actionable error only when its own binary is absent.
+
+Evidence: `scripts/test-harness-rollback.sh`, `scripts/check-launch-artifacts-untracked.sh`,
+`bash -n images/default/lib-common.sh images/default/entrypoint-forge-*.sh`, and
+`./build.sh --check` (toolbox re-exec observed; podman unavailable in toolbox).
+
 `Containerfile.base` npm-pins the harnesses at BUILD:
 `@openai/codex@0.137.0`, `@anthropic-ai/claude-code@2.1.168`, `opencode-ai@1.16.2`,
 plus the Antigravity CLI via a `curl … | bash` (currently DUPLICATED in the WIP

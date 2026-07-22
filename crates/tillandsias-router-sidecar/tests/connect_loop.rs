@@ -60,6 +60,7 @@ async fn run_mock_tray_one_shot(socket_path: std::path::PathBuf, cookie: [u8; 32
         body: ControlMessage::HelloAck {
             wire_version: WIRE_VERSION,
             server_caps: vec!["v1".to_string(), "IssueWebSession".to_string()],
+            build_version: None,
         },
     };
     write_envelope(&mut framed, &ack).await;
@@ -120,6 +121,7 @@ async fn sidecar_pushes_received_envelope_into_store() {
         body: ControlMessage::Hello {
             from: "router-sidecar-test".to_string(),
             capabilities: vec!["IssueWebSession".to_string()],
+            build_version: None,
         },
     };
     write_envelope(&mut framed, &hello).await;

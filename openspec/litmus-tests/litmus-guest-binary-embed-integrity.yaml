@@ -14,9 +14,9 @@ preconditions:
   - file is executable scripts/build-guest-binaries.sh
 
 critical_path:
-  - step: "verify staged guest binaries with build-guest-binaries.sh --verify"
+  - step: "verify staged guest binaries with build-guest-binaries.sh --verify (stale/absent staging skips cleanly — order 447; a current-stamped binary with a genuine integrity defect still exits non-zero)"
     command: "bash scripts/build-guest-binaries.sh --verify"
-    success_pattern: "Verification SUCCESS"
+    success_pattern: "verify:(ok|skip-stale-staging)"
     timeout_ms: 10000
 
 observability:

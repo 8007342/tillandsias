@@ -74,6 +74,12 @@ fn main() {
     if std::env::args().any(|a| a == "--provision-once") {
         std::process::exit(notify_icon::provision_once());
     }
+    // Intentional EPHEMERAL RESET (windows-260717-4): wipe the guest and
+    // reprovision from scratch. Destructive by design — one re-auth is the
+    // only cost.
+    if std::env::args().any(|a| a == "--reset-guest") {
+        std::process::exit(notify_icon::reset_guest_once());
+    }
     if std::env::args().any(|a| a == "--status-once") {
         let format = if std::env::args().any(|a| a == "--json") {
             notify_icon::DiagnoseFormat::Json
@@ -149,4 +155,142 @@ fn main() {
          — see openspec/specs/windows-native-tray/spec.md"
     );
     std::process::exit(1);
+}
+
+#[cfg(test)]
+mod tests {
+    /// Guest crash-loop DETECTION wiring pin. `notify_icon.rs` is
+    /// `cfg(target_os = "windows")` and so is NOT compiled on the Linux dev box
+    /// where `cargo check -p tillandsias-windows-tray` runs — a behavioral test
+    /// there could not catch a dropped wire-in. This source-scan (an
+    /// `include_str!` compile-time read, platform-independent) keeps the four
+    /// load-bearing hooks from silently regressing on any host.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn notify_icon_wires_in_crashloop_detection() {
+        let src = include_str!("notify_icon.rs");
+        // 1. The detector is fed from the single VM-status funnel.
+        assert!(
+            src.contains("note_crashloop_observation("),
+            "apply_vm_status must feed the crash-loop detector"
+        );
+        // 2. State is persisted so a separate --diagnose process can read it.
+        assert!(
+            src.contains("fn crashloop_state_path()"),
+            "the live tray must persist crash-loop state for --diagnose"
+        );
+        // 3. --diagnose emits the pinned-grammar verdict line.
+        assert!(
+            src.contains("CrashLoopDetector::load(&crashloop_state_path())")
+                && src.contains("Guest health:"),
+            "--diagnose must read the persisted detector and print the verdict"
+        );
+        // 4. A trip raises the single most-important notification (Error balloon).
+        assert!(
+            src.contains("Tillandsias: guest crash-loop"),
+            "a crash-loop must raise the top-priority Error balloon"
+        );
+    }
+
+    /// EPHEMERAL RESET wiring pin (windows-260717-4, amended 2026-07-22 by
+    /// operator order — tray-ux "UX curation governance"). The Windows
+    /// bodies are `cfg(target_os = "windows")` and cannot be type-checked on
+    /// the Linux dev box, so this platform-independent source-scan keeps the
+    /// contract from silently regressing on any host: the MENU click wiring
+    /// is GONE (the `Reset Guest…` leaf was an unapproved UX surface), while
+    /// the runtime paths REMAIN — the auto-reset flag, the message-loop
+    /// drain, the wipe primitive, the reprovision hand-off, and the
+    /// `--reset-guest` CLI verb.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn reset_guest_menu_wiring_absent_cli_and_runtime_present() {
+        let notify = include_str!("notify_icon.rs");
+        // 1. ABSENCE: no menu dispatch arm may reach the guest reset. The
+        //    `MenuAction::ResetGuest` variant itself was deleted from
+        //    host-shell, so ANY mention here means the click path came back.
+        assert!(
+            !notify.contains("MenuAction::ResetGuest"),
+            "the reset-guest menu click wiring must stay REMOVED \
+             (operator order 2026-07-22; tray-ux \"UX curation governance\")"
+        );
+        // 2. The message loop still drains the (auto-reset) flag into the
+        //    LocalSet spawn.
+        assert!(
+            notify.contains("RESET_GUEST_REQUESTED.swap(false"),
+            "the message loop must drain RESET_GUEST_REQUESTED"
+        );
+        assert!(
+            notify.contains("fn spawn_guest_reset("),
+            "the wipe+reprovision task spawner must exist"
+        );
+        // 3. The wipe hands off to the SAME first-provision path.
+        assert!(
+            notify.contains("wipe_guest().await"),
+            "the reset must call the WslLifecycle wipe primitive"
+        );
+        // 4. A fresh guest clears the crash-loop history for --diagnose.
+        assert!(
+            notify.contains("fn reset_crashloop_state()"),
+            "a wiped guest must clear persisted crash-loop state"
+        );
+        // 5. The bounded auto-reset policy is consulted (opt-in).
+        assert!(
+            notify.contains("AutoResetDecision::Reset { attempt }"),
+            "the bounded auto-reset policy must be consulted on observations"
+        );
+        // 6. The CLI verb exists and main dispatches it.
+        assert!(
+            notify.contains("pub fn reset_guest_once()"),
+            "--reset-guest CLI mode must exist"
+        );
+        let main_src = include_str!("main.rs");
+        assert!(
+            main_src.contains("notify_icon::reset_guest_once()"),
+            "main must dispatch --reset-guest"
+        );
+
+        let wsl = include_str!("wsl_lifecycle.rs");
+        assert!(
+            wsl.contains("pub async fn wipe_guest("),
+            "WslLifecycle must expose the user-invokable wipe primitive"
+        );
+    }
+
+    /// Login transitive-state wiring pin (windows-260719-2). notify_icon.rs
+    /// is cfg(windows)-gated and untype-checkable on the Linux dev box; this
+    /// source-scan keeps the click→LoggingIn flip (a purely local signal,
+    /// before any wire round-trip) and the confirmed-reply overwrite path
+    /// from silently regressing on any host. The type/rendering logic itself
+    /// is fully unit-pinned in tillandsias-host-shell (compiled everywhere).
+    #[test]
+    fn login_transitive_state_wiring_is_present() {
+        let src = include_str!("notify_icon.rs");
+        // 1. The GithubLogin click flips to LoggingIn immediately, before
+        //    the terminal spawn / any wire round-trip.
+        let arm = src
+            .split("MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin =>")
+            .nth(1)
+            .expect("the GithubLogin dispatch arm must exist")
+            .split("launch_open_shell_terminal(")
+            .next()
+            .unwrap();
+        assert!(
+            arm.contains("state.login = GithubLoginState::LoggingIn"),
+            "the click must flip to LoggingIn before the launch (local signal)"
+        );
+        // 2. Only a LoggedOut menu flips (idempotent re-click mid-flow).
+        assert!(
+            arm.contains("GithubLoginState::LoggedOut"),
+            "the flip must be gated on the current LoggedOut state"
+        );
+        // 3. The confirmed probe reply path overwrites the transitional
+        //    state unconditionally (fallback on invalid/missing token).
+        assert!(
+            src.contains("fn apply_github_login(")
+                && src.contains("github_login_state_from_reply(logged_in, handle)"),
+            "the confirm path must map replies over the transitional state"
+        );
+    }
 }

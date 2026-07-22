@@ -1,0 +1,47 @@
+# @trace spec:podman-orchestration
+name: litmus:concurrent-forge-shared-stack-safety
+spec: podman-orchestration
+phase: pre-build
+description: >-
+  Order 443 (slice 3): concurrent forges must be safe against the shared
+  vault/proxy/git-mirror/inference stack. Offline fixtures against the
+  STATEFUL fake podman prove (1) a second-forge ensure reuses a running git
+  mirror + inference with unchanged container IDs and no re-run; (2) an
+  exiting lane does NOT tear the shared stack down while a sibling lane
+  container is in a non-running created state; (3) an exiting lane does NOT
+  tear the stack down while a sibling launch is in flight PRE-CREATE (only
+  its advisory launch-in-flight flock exists yet); (4) the LAST exit with no
+  in-flight launch still tears the stack down (leak side must not regress).
+severity: critical
+size: quick
+
+preconditions:
+  - cargo workspace builds
+  - workspace contains scripts/test-concurrent-forge-shared-stack.sh
+  - workspace contains scripts/test-support/podman-mock.sh
+
+critical_path:
+  - step: "concurrent-forge shared-stack safety fixtures (fake stateful podman)"
+    command: "scripts/test-concurrent-forge-shared-stack.sh"
+    timeout_ms: 600000
+    success_pattern: "PASS: concurrent-forge shared-stack safety fixtures"
+    failure_pattern: "FAIL:"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "PASS: concurrent-forge shared-stack safety fixtures (order 443 slice 3)"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "concurrent-forge-shared-stack-safety"
+    backend: "fake-podman-stateful"
+
+rollback:
+  on_failure: >
+    Either the launch ensure re-ran a RUNNING shared container (bounce — see
+    ensure_shared_git_and_inference_for_launch guards), or
+    cleanup_shared_stack_if_no_running_forge stopped consulting one of its
+    two live refcount sources (active-lane scan + foreign launch-in-flight
+    flock markers), or the stateful mock's ps/inspect arms drifted from the
+    PodmanClient parser.
+  command: "grep -n 'foreign_launches_in_flight\\|container_running\\|remove_shared_stack_containers' crates/tillandsias-headless/src/main.rs | head -40"

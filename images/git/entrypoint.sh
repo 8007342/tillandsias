@@ -206,6 +206,40 @@ ensure_mirror_head() {
     return "$rc"
 }
 
+# @trace spec:git-mirror-service
+# Order 449: continuous bounded-window reconcile. The mirror used to advance
+# its EXPORTED heads from upstream only at container start (452) or on a push
+# failure, so a host coordinator pushing DIRECT to origin left long-lived
+# mirrors serving stale heads mid-session — a forge agent cloned stale,
+# committed, and its push diverged (Hy3, live 2026-07-20). This loop runs the
+# same NON-forced exported-head fast-forward every RECONCILE_INTERVAL seconds
+# (default 120 — the "bounded window" of order 449's exit criterion), via the
+# shared reconcile-exported-heads pass (RECONCILE_HEADS overridable so
+# fixtures exercise the exact same implementation). Diverged heads carrying
+# un-relayed agent commits are never clobbered (non-forced); offline
+# upstreams keep serving last-known-good heads.
+RECONCILE_HEADS="${RECONCILE_HEADS:-/usr/local/share/git-service/reconcile-exported-heads}"
+MIRROR_RECONCILE_INTERVAL="${MIRROR_RECONCILE_INTERVAL:-120}"
+MIRROR_RECONCILER_PID=""
+start_mirror_reconciler() {
+    if [ ! -x "$RECONCILE_HEADS" ]; then
+        retry_msg "[git-mirror] periodic reconciler NOT started: $RECONCILE_HEADS missing"
+        return 0
+    fi
+    (
+        while true; do
+            sleep "$MIRROR_RECONCILE_INTERVAL"
+            for m in /srv/git/*; do
+                [ -d "$m" ] || continue
+                OUT="$("$RECONCILE_HEADS" "$m" 2>&1)" || true
+                [ -n "$OUT" ] && retry_msg "[git-mirror] periodic: $OUT"
+            done
+        done
+    ) &
+    MIRROR_RECONCILER_PID=$!
+    echo "[git-service] periodic exported-head reconciler started (pid=$MIRROR_RECONCILER_PID, every ${MIRROR_RECONCILE_INTERVAL}s)"
+}
+
 # ── Order 437/441: START THE DAEMON FIRST ──────────────────────────────
 # Clone-only forges (order 437) clone from git://tillandsias-git the instant
 # they launch, and the per-ref startup retry-push (order 441) can take minutes
@@ -217,7 +251,8 @@ ensure_mirror_head() {
 # while the daemon already serves.
 VAULT_RENEWER_PID=""
 start_vault_token_renewer
-trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT_RENEWER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
+start_mirror_reconciler
+trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT_RENEWER_PID $MIRROR_RECONCILER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
 # receive-pack IS enabled — it is the forge's live push path (order 450).
 #
 # Order 423 removed --enable=receive-pack to close an "anonymous write path",
