@@ -16114,6 +16114,87 @@ plan_index:
             WSL-less host (this dev host cannot simulate absence) — rides
             the next 455-style smoke there, per exit criterion 5.
 
+    - packet_id: windows-app-identity-metadata
+      provisional_id: windows-260722-3
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Windows app identity: VERSIONINFO metadata ('Tillandsias v#.#.######.# by Tlatoani'), stable shell identity across updates, single idempotent Installed-Software entry"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray build.rs/.rc (VERSIONINFO) + notify-icon identity + scripts/install-windows.ps1 (uninstall key + stale-entry hygiene)
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, shell, installer, metadata, ux]
+      estimated_hours: 4
+      outcome: >
+        Operator report 2026-07-22: previous releases accumulate MULTIPLE
+        entries in Windows Task Manager / Taskbar settings surfaces across
+        updates, and the process shows as bare "Tillandsias-tray.exe"
+        (no VERSIONINFO resource). Required: (a) embed VERSIONINFO with
+        FileDescription EXACTLY "Tillandsias v<VERSION> by Tlatoani"
+        (operator-dictated wording, with the macron: 'by Tlatoāni'),
+        ProductName/versions templated from WORKSPACE_VERSION at build
+        time; (b) stabilize the shell identity so updates do NOT mint new
+        Taskbar-settings/Startup entries (notify-icon GUID identity and/or
+        AppUserModelID per forensics); (c) installer writes ONE idempotent
+        HKCU Uninstall key (same key name every install, DisplayVersion
+        updated in place) so Installed Software always shows exactly the
+        latest, plus cleanup of stale duplicate shell entries on
+        install/purge; purge removes the key.
+      exit_criteria:
+        - "Task Manager shows 'Tillandsias v<version> by Tlatoani' for the running tray (VERSIONINFO FileDescription); Explorer file Properties > Details carries product/version metadata"
+        - "after simulating >=2 sequential installs, the Taskbar-settings/tray-icon surface and Startup surface each show exactly ONE Tillandsias entry (no per-update accumulation)"
+        - "Installed Software (Settings > Apps) shows exactly one Tillandsias entry at the latest DisplayVersion; -Purge removes it"
+        - "litmus/unit pins: VERSIONINFO present in the .rc with the dictated description template; installer uninstall-key idempotence shape"
+      events:
+        - type: filed
+          ts: "2026-07-22T23:05:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Operator directive (the 'Buggy-Bug'): description string
+            dictated verbatim by The Tlatoani in-session — counts as the
+            UX approval for these OS-shell surfaces. Forensics workflow
+            launched to identify the exact duplicate-entry mechanism
+            before implementation.
+        - type: completed
+          ts: "2026-07-23T00:35:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Implemented + LIVE-VERIFIED on this host (ledger lease).
+            Forensics first (2-agent registry sweep): duplicate mechanism =
+            NotifyIconSettings keyed by exe path (stale paths/dead
+            binaries accumulate); no VERSIONINFO, no AUMID, no Uninstall
+            key ever existed. Fixes: (1) build.rs GENERATES a per-build
+            VERSIONINFO .rc (UTF-16LE; numeric fields encode
+            maj,min,YYMM,DD*100+N under the u16 cap) — the RUNNING process
+            reports FileDescription "Tillandsias v0.3.260721.1 by
+            Tlatoāni" with the macron intact (codepoint-verified; console
+            displays flatten it, Task Manager does not). (2)
+            SetCurrentProcessExplicitAppUserModelID("Tlatoani.Tillandsias")
+            at startup — stable version-free shell identity. (3) installer
+            writes ONE idempotent HKCU Uninstall key (verified: two
+            sequential installs => exactly 1 key, DisplayVersion updated
+            in place, Publisher Tlatoāni codepoint-verified);
+            uninstall/purge remove it + every tillandsias-tray
+            NotifyIconSettings entry + empty leftover Start Menu distro
+            dirs; install prunes stale-path tray-icon entries. (4) root
+            cause of the recurring install-dir lock KILLED: tray launch +
+            shortcuts now use the DATA root as CWD, never the install dir
+            (orphaned keepalive wsl.exe children pinned it and blocked
+            update renames — observed live twice). NIF_GUID deliberately
+            NOT adopted (unsigned-binary path-binding quirks would break
+            dev flows; path-keyed identity is already stable at the fixed
+            install path). Litmus: installer shape extended (uninstall-key
+            idempotence, shell-surface cleanup, VERSIONINFO template pin)
+            7/7 PASS; tray suite green; both installers pure-ASCII +
+            parse-clean; saved-file repo-installer run did full
+            download+SHA+extract+register live (also re-proving the
+            encoding fix on the real flow).
+
     - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
       order: provisional

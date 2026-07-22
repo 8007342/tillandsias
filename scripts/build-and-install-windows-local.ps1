@@ -73,6 +73,10 @@ $StartMenuDir  = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
 $ShortcutPath  = Join-Path $StartMenuDir "$AppName.lnk"
 $StartupDir    = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
 $StartupLnk    = Join-Path $StartupDir "$AppName.lnk"
+# windows-260722-3: never hand the INSTALL dir to the tray as CWD (orphaned
+# children pin it and block updates); shortcuts + launch use the data root.
+$DataRootDir   = Join-Path $env:LOCALAPPDATA 'tillandsias'
+New-Item -ItemType Directory -Force -Path $DataRootDir | Out-Null
 
 function New-Shortcut {
     param([string]$LinkPath, [string]$Target, [string]$Arguments, [string]$WorkDir)
@@ -184,10 +188,10 @@ Copy-Item $builtExe $InstalledExe -Force
 
 # --- Shortcuts --------------------------------------------------------------
 $launchArgs = if ($Provision) { '' } else { '--no-provision' }
-New-Shortcut -LinkPath $ShortcutPath -Target $InstalledExe -Arguments $launchArgs -WorkDir $InstallDir
+New-Shortcut -LinkPath $ShortcutPath -Target $InstalledExe -Arguments $launchArgs -WorkDir $DataRootDir
 Write-Host "  Start Menu shortcut: $ShortcutPath" -ForegroundColor Green
 if ($Startup) {
-    New-Shortcut -LinkPath $StartupLnk -Target $InstalledExe -Arguments $launchArgs -WorkDir $InstallDir
+    New-Shortcut -LinkPath $StartupLnk -Target $InstalledExe -Arguments $launchArgs -WorkDir $DataRootDir
     Write-Host "  Startup shortcut:    $StartupLnk" -ForegroundColor Green
 }
 
@@ -261,9 +265,9 @@ if ($diagJson) {
 if ($Launch) {
     Write-Host "Launching..." -ForegroundColor Cyan
     if ([string]::IsNullOrEmpty($launchArgs)) {
-        Start-Process -FilePath $InstalledExe -WorkingDirectory $InstallDir
+        Start-Process -FilePath $InstalledExe -WorkingDirectory $DataRootDir
     } else {
-        Start-Process -FilePath $InstalledExe -ArgumentList $launchArgs -WorkingDirectory $InstallDir
+        Start-Process -FilePath $InstalledExe -ArgumentList $launchArgs -WorkingDirectory $DataRootDir
     }
     Write-Host "Tray started. Look for the Tillandsias icon in the notification area" -ForegroundColor Green
     Write-Host "(you may need to click the overflow chevron). Right-click it for the menu." -ForegroundColor Green

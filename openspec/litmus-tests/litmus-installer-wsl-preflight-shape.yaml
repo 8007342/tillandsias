@@ -59,6 +59,21 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: absent-no-launch"
 
+  - step: "Installed-Software registration is ONE idempotent HKCU key with in-place DisplayVersion (windows-260722-3: updates must never accumulate entries)"
+    command: "grep -q \"Uninstall\\\\\\\\Tillandsias'\" scripts/install-windows.ps1 && grep -q \"Set-ItemProperty -Path .UninstKey -Name 'DisplayVersion'\" scripts/install-windows.ps1 && echo 'ok: uninstall-key-idempotent'"
+    timeout_ms: 3000
+    expected_behavior: "ok: uninstall-key-idempotent"
+
+  - step: "uninstall/purge remove the Installed-Software key and Tillandsias tray-icon settings entries"
+    command: "grep -q 'removed Installed-Software entry' scripts/install-windows.ps1 && grep -q 'NotifyIconSettings' scripts/install-windows.ps1 && echo 'ok: shell-surfaces-cleaned'"
+    timeout_ms: 3000
+    expected_behavior: "ok: shell-surfaces-cleaned"
+
+  - step: "tray binary embeds the operator-dictated VERSIONINFO description template (windows-260722-3)"
+    command: "grep -q 'Tillandsias v{workspace_version} by Tlato' crates/tillandsias-windows-tray/build.rs && grep -q 'VERSIONINFO' crates/tillandsias-windows-tray/build.rs && echo 'ok: versioninfo-template'"
+    timeout_ms: 3000
+    expected_behavior: "ok: versioninfo-template"
+
   - step: "WHOLE FILE is pure ASCII (windows-260722-1 root cause: BOM-less UTF-8 misread as ANSI turns an em-dash into a CP-1252 smart quote, which PS5.1 treats as a QUOTE CHARACTER — the installer parsed into a different program that silently skipped download+extract)"
     command: "LC_ALL=C grep -c -P '[^\\x00-\\x7F]' scripts/install-windows.ps1 | grep -qx 0 && echo 'ok: pure-ascii'"
     timeout_ms: 3000

@@ -55,6 +55,13 @@ $StartMenuDir  = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
 $ShortcutPath  = Join-Path $StartMenuDir "$AppName.lnk"
 $StartupDir    = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
 $StartupLnk    = Join-Path $StartupDir "$AppName.lnk"
+# windows-260722-3: the tray (and thus its child processes, e.g. the WSL
+# keepalive) must NEVER run with the INSTALL dir as CWD -- children that
+# outlive a hard-killed tray hold the directory handle and block the next
+# update's backup/replace (observed live: orphaned wsl.exe pinning the exe
+# dir). Launch and shortcuts point at the data root instead.
+$DataRootDir   = Join-Path $env:LOCALAPPDATA 'tillandsias'
+New-Item -ItemType Directory -Force -Path $DataRootDir | Out-Null
 
 function Say   { param([string]$msg) Write-Host "  $msg" }
 function SayOk { param([string]$msg) Write-Host "  $msg" -ForegroundColor Green }
@@ -83,6 +90,30 @@ if ($Uninstall -or $Purge) {
         if (Test-Path $p) { Remove-Item $p -Force; Say "  removed $p" }
     }
     if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force; Say "  removed $InstallDir" }
+    # windows-260722-3: Installed-Software entry + every Tillandsias
+    # tray-icon settings entry go with the app (uninstall AND purge -- a
+    # removed app must vanish from Settings surfaces entirely).
+    $UninstKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Tillandsias'
+    if (Test-Path $UninstKey) { Remove-Item $UninstKey -Recurse -Force -ErrorAction SilentlyContinue; Say "  removed Installed-Software entry" }
+    try {
+        $nis = 'HKCU:\Control Panel\NotifyIconSettings'
+        if (Test-Path $nis) {
+            Get-ChildItem $nis | ForEach-Object {
+                $p = (Get-ItemProperty -Path $_.PSPath -Name 'ExecutablePath' -ErrorAction SilentlyContinue).ExecutablePath
+                if ($p -and ($p -like '*tillandsias-tray.exe')) {
+                    Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+                    Say "  removed tray-icon settings entry: $p"
+                }
+            }
+        }
+    } catch {}
+    # Empty leftover Start Menu folders (WSL distro registration creates
+    # per-distro folders that `wsl --unregister` leaves behind).
+    foreach ($d in @('tillandsias', 'tillandsias-build') | ForEach-Object { Join-Path $StartMenuDir $_ }) {
+        if ((Test-Path $d) -and -not (Get-ChildItem $d -ErrorAction SilentlyContinue)) {
+            Remove-Item $d -Force -ErrorAction SilentlyContinue; Say "  removed empty $d"
+        }
+    }
     if ($Purge) {
         $wsl = Get-Command wsl -ErrorAction SilentlyContinue
         if ($wsl) {
@@ -351,11 +382,11 @@ try {
     }
 
     # -- Start Menu shortcut ---------------------------------------------------
-    New-Shortcut -LinkPath $ShortcutPath -Target $InstalledExe -Arguments '' -WorkDir $InstallDir
+    New-Shortcut -LinkPath $ShortcutPath -Target $InstalledExe -Arguments '' -WorkDir $DataRootDir
     SayOk "Start Menu shortcut: $ShortcutPath"
 
     if ($LoginItem) {
-        New-Shortcut -LinkPath $StartupLnk -Target $InstalledExe -Arguments '' -WorkDir $InstallDir
+        New-Shortcut -LinkPath $StartupLnk -Target $InstalledExe -Arguments '' -WorkDir $DataRootDir
         SayOk "Startup entry: $StartupLnk"
     }
 
@@ -371,11 +402,57 @@ try {
     }
     SayOk $VerLine
 
+    # -- Installed-Software registration (windows-260722-3) -------------------
+    # ONE idempotent HKCU key, SAME name every install: DisplayVersion is
+    # updated in place, so Settings > Apps always shows exactly the latest
+    # release and repeated updates can never accumulate entries. -Uninstall /
+    # -Purge remove it. Publisher carries the macron via a codepoint so this
+    # file stays pure ASCII (PS5.1 encoding gate, litmus-pinned).
+    $InstalledVersion = ($VerLine -split '\s+')[1]
+    $Publisher = "Tlato$([char]0x0101)ni"
+    $UninstKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Tillandsias'
+    try {
+        New-Item -Path $UninstKey -Force | Out-Null
+        Set-ItemProperty -Path $UninstKey -Name 'DisplayName'     -Value 'Tillandsias'
+        Set-ItemProperty -Path $UninstKey -Name 'DisplayVersion'  -Value $InstalledVersion
+        Set-ItemProperty -Path $UninstKey -Name 'Publisher'       -Value $Publisher
+        Set-ItemProperty -Path $UninstKey -Name 'InstallLocation' -Value $InstallDir
+        Set-ItemProperty -Path $UninstKey -Name 'DisplayIcon'     -Value $InstalledExe
+        Set-ItemProperty -Path $UninstKey -Name 'UninstallString' -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallDir\install-windows.ps1`" -Uninstall"
+        Set-ItemProperty -Path $UninstKey -Name 'QuietUninstallString' -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallDir\install-windows.ps1`" -Purge"
+        Set-ItemProperty -Path $UninstKey -Name 'NoModify' -Value 1 -Type DWord
+        Set-ItemProperty -Path $UninstKey -Name 'NoRepair' -Value 1 -Type DWord
+        $sizeKb = [int]((Get-Item $InstalledExe).Length / 1KB)
+        Set-ItemProperty -Path $UninstKey -Name 'EstimatedSize' -Value $sizeKb -Type DWord
+        SayOk "Registered in Installed Software (v$InstalledVersion)."
+    } catch {
+        SayWn "Installed-Software registration failed ($_) - continuing."
+    }
+
+    # -- Tray-icon settings hygiene (windows-260722-3) ------------------------
+    # Windows keys 'Taskbar corner / Other system tray icons' entries by
+    # executable path. Old installs at other paths (or deleted binaries)
+    # leave dead entries that read as duplicates. Drop every
+    # tillandsias-tray.exe entry whose path is NOT the canonical installed
+    # exe or whose target no longer exists.
+    try {
+        $nis = 'HKCU:\Control Panel\NotifyIconSettings'
+        if (Test-Path $nis) {
+            Get-ChildItem $nis | ForEach-Object {
+                $p = (Get-ItemProperty -Path $_.PSPath -Name 'ExecutablePath' -ErrorAction SilentlyContinue).ExecutablePath
+                if ($p -and ($p -like '*tillandsias-tray.exe') -and (($p -ne $InstalledExe) -or -not (Test-Path $p))) {
+                    Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+                    Say "  removed stale tray-icon entry: $p"
+                }
+            }
+        }
+    } catch {}
+
     # -- Launch (triggers WSL2 provisioning = tillandsias --init) -------------
     Write-Host ""
     if (-not $NoLaunch) {
         Say "Launching Tillandsias (WSL2 provisioning = --init will run automatically)..."
-        Start-Process -FilePath $InstalledExe -WorkingDirectory $InstallDir
+        Start-Process -FilePath $InstalledExe -WorkingDirectory $DataRootDir
         SayOk "Tray started. Look for the Tillandsias icon in the notification area."
         SayOk "(Right-click the icon for the menu; provisioning runs in the background.)"
     } else {
