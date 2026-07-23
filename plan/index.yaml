@@ -16948,7 +16948,7 @@ plan_index:
       order: 407
       desired_release: v0.4
       title: "Standing: backfill desired_release across open packets so every open packet carries a ship-bucket"
-      status: ready
+      status: claimed
       kind: housekeeping
       multi_cycle: true
       deliverable: plan/index.yaml (desired_release on open packets) + plan/loop_status.md active-release pointer kept current
@@ -17008,6 +17008,16 @@ plan_index:
             the backfill is tracked work, not an implicit expectation. Active
             release seeded to v0.4 (EXPERTS fat-host core); cross-platform +
             modest-hardware tiering seeded to v0.5.
+        - type: claim
+          ts: "2026-07-23T04:01:36Z"
+          agent_id: "forge-tillandsias-codex-20260723T040037Z"
+          host: forge
+          lease_id: "1ed36767840f"
+          expires_at: "2026-07-23T08:01:36Z"
+          summary: >
+            Cycle-scoped claim to structurally audit desired_release coverage,
+            correct the 2026-07-21 EXPERTS re-scope drift, and refresh the
+            active v0.4 counts and latest daily release in loop_status.
 
     - packet_id: gpu-passthrough-auto-enablement
       order: 408
