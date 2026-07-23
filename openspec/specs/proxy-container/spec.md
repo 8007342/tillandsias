@@ -7,14 +7,23 @@ active
 
 ## Purpose
 
-Caching HTTP/HTTPS forward proxy with domain allowlist that mediates all external traffic from forge containers. Alpine-based with squid, ~500MB disk cache. Uses ssl-bump MITM infrastructure with an ephemeral CA chain for HTTPS handling. Currently operates in splice-all mode (passthrough, no decryption) but the architecture supports selective per-domain interception for HTTPS content caching.
+Caching HTTP/HTTPS forward proxy with a domain allowlist that mediates external
+traffic from forge containers. It is Alpine-based with Squid and a bounded 4GiB
+disk cache. HTTPS interception is deliberately exceptional: the proxy bumps
+only the exact GitHub release-asset CDN hostname and splices all other TLS
+traffic end to end.
+
 ## Requirements
 ### Requirement: Caching HTTP/HTTPS proxy with ssl-bump MITM architecture
-The system SHALL build and run a `tillandsias-proxy` container that provides a caching HTTP/HTTPS proxy service. The proxy SHALL use squid configured with ssl-bump on all ports, using an ephemeral intermediate CA certificate for dynamic server certificate generation. The ssl-bump policy SHALL default to splice-all (passthrough): squid peeks at the TLS ClientHello to read the SNI for domain filtering, then splices (tunnels) the connection without decryption. The proxy cache SHALL be ~500MB disk-based, stored in a persistent volume.
-
-**Current operating mode**: splice-all. Squid reads SNI for domain filtering but does NOT decrypt TLS traffic. The MITM infrastructure (certs, sslcrtd, dynamic cert generation) is fully deployed but dormant. One configuration change (`ssl_bump bump bump_domains` replacing `ssl_bump splice all`) would enable active interception for selected domains.
-
-> **⚠ Implementation reality (as of 2026-05-30):** `images/proxy/squid.conf:102` currently uses `ssl_bump bump all` (active interception with caching across the entire enclave + dev builds, per `@trace spec:transparent-https-caching` on line 87). The splice-all language above describes the original design intent; the deployed configuration runs active bump mode. Reconcile by either reverting the squid.conf policy to splice-all OR updating this spec text to match. The drift was discovered by `litmus:proxy-container-shape` (commit 9703da88 + 2026-05-30T08:51Z work-queue ledger).
+The system SHALL build and run a `tillandsias-proxy` container that provides a
+caching HTTP/HTTPS proxy service. The proxy SHALL use Squid configured with
+ssl-bump on both ports, using an ephemeral intermediate CA certificate for
+dynamic server certificate generation. The ssl-bump policy SHALL peek only at
+`SslBump1`, make its terminal decision at `SslBump2`, bump only
+`release-assets.githubusercontent.com`, and splice every other destination.
+The proxy cache SHALL be a bounded 4GiB disk cache stored in a persistent
+volume, with a 2GiB per-object ceiling so the observed ~1.44GiB Ollama release
+asset is eligible for storage.
 
 @trace spec:proxy-container
 
@@ -23,7 +32,15 @@ The system SHALL build and run a `tillandsias-proxy` container that provides a c
 - **THEN** the proxy SHALL forward the request and cache the response
 - **AND** log the request via `--log-proxy` with domain, size, and cache status
 
-#### Scenario: HTTPS request to allowlisted domain (splice-all mode)
+#### Scenario: HTTPS request to the exact release-asset CDN
+- **WHEN** a container follows a GitHub release redirect to
+  `release-assets.githubusercontent.com`
+- **THEN** Squid SHALL peek only at `SslBump1` to obtain ClientHello/SNI
+- **AND** bump the connection at `SslBump2`
+- **AND** validate the origin certificate and hostname against the system CA
+- **AND** cache the response only when standard HTTP response semantics permit
+
+#### Scenario: HTTPS request to any other allowlisted domain
 - **WHEN** a container sends an HTTPS request to `crates.io` through port 3128
 - **THEN** the proxy SHALL peek at the TLS ClientHello to read the SNI
 - **AND** splice (tunnel) the connection to the origin without decryption
@@ -35,10 +52,13 @@ The system SHALL build and run a `tillandsias-proxy` container that provides a c
 - **THEN** the proxy SHALL deny the request with HTTP 403
 - **AND** log the denied domain prominently via `--log-proxy`
 
-#### Scenario: Cache hit (HTTP only in splice-all mode)
-- **WHEN** a container requests an HTTP resource previously downloaded by another container
+#### Scenario: Cache hit under an identical cache key
+- **WHEN** a container requests a cacheable HTTP resource or an identical
+  release-asset HTTPS URL previously downloaded by another container
 - **THEN** the proxy SHALL serve the cached copy without contacting the origin
 - **AND** log the cache hit via `--log-proxy`
+- **AND** a changed signed query string SHALL remain a distinct cache key unless
+  a separately verified StoreID policy is introduced
 
 ### Requirement: Ephemeral CA chain (per-launch generation)
 The system SHALL generate a fresh two-level CA chain on every proxy launch. The chain SHALL consist of a self-signed Root CA and an Intermediate CA signed by the root, both using EC P-256 keys. All key material SHALL be stored on tmpfs (`$XDG_RUNTIME_DIR/tillandsias/proxy-certs/`) and SHALL be destroyed when the session ends (logout/reboot). No CA keys SHALL persist to disk.
@@ -77,8 +97,8 @@ The proxy SHALL listen on two ports with different access policies. Both ports S
 
 | Port | Name | Domain policy | SSL bump | Use case |
 |------|------|---------------|----------|----------|
-| 3128 | Strict | Allowlisted domains only | Enabled (splice-all) | Runtime forge containers |
-| 3129 | Permissive | All domains allowed | Enabled (splice-all) | Reserved for future use |
+| 3128 | Strict | Allowlisted domains only | Exact release-asset host only; splice otherwise | Runtime forge containers |
+| 3129 | Permissive | All domains allowed | Exact release-asset host only; splice otherwise | Reserved for future use |
 
 #### Scenario: Port 3128 strict filtering
 - **WHEN** a forge container sends a request through port 3128
@@ -91,7 +111,11 @@ The proxy SHALL listen on two ports with different access policies. Both ports S
 - **AND** domain filtering SHALL NOT apply
 
 ### Requirement: Image builds bypass the proxy
-Container image builds (via `build-image.sh`) SHALL NOT route through the proxy. Build containers run outside the enclave network and do not have the ephemeral CA chain installed. If ssl-bump were active, build containers would reject the MITM'd certificates because they lack the CA trust anchor. Only runtime containers (forge, terminal) have the CA chain injected.
+Container image builds (via `build-image.sh`) SHALL NOT route through the proxy.
+Build containers run outside the enclave network and do not have the ephemeral
+CA chain installed. Because ssl-bump is active for the exact release-asset CDN,
+build containers would reject that proxy-issued certificate. Only runtime
+containers (forge, terminal) have the CA chain injected.
 
 @trace spec:proxy-container
 
@@ -157,66 +181,71 @@ One domain per line, prefixed with `.` to match the domain and all subdomains. S
 - **WHEN** a request to an unlisted domain is denied on port 3128
 - **THEN** the proxy response SHALL include the blocked domain name for debugging
 
-### Requirement: SSL bump policy and future activation
-The ssl-bump infrastructure SHALL be fully deployed but dormant by default. The current policy SHALL be splice-all (peek SNI, then tunnel without decryption). The configuration SHALL define three domain categories for future selective bumping.
+### Requirement: SSL bump policy is step-aware and narrowly selective
+The ssl-bump policy SHALL use an `at_step SslBump1` ACL so `peek` runs only
+once. At `SslBump2`, Squid SHALL use the client-requested
+`ssl::server_name` and bump only the exact hostname
+`release-assets.githubusercontent.com`. The terminal fallback SHALL be
+`ssl_bump splice all`. Broad suffixes such as `.githubusercontent.com`,
+package registries, provider endpoints, and authentication domains MUST NOT
+enter the bump ACL.
 
-@trace spec:proxy-container
+@trace spec:proxy-container, spec:transparent-https-caching,
+spec:security-privacy-isolation
 
-#### Domain categories for ssl-bump policy
+This order is semantic, not cosmetic: Squid 6 evaluates every rule at every
+SSL-bump step and applies the first possible match. `ssl_bump peek all` would
+match at `SslBump2` as well and usually preclude bumping later.
 
-| Category | ACL name | Behavior (splice-all mode) | Behavior (selective bump mode) |
-|----------|----------|---------------------------|-------------------------------|
-| No-bump domains | `no_bump_domains` | Spliced (passthrough) | Spliced (passthrough) |
-| Bump domains | `bump_domains` | Spliced (passthrough) | Bumped (MITM decryption + caching) |
-| All other domains | (default) | Spliced (passthrough) | Spliced (passthrough) |
+#### Scenario: Exact release-asset host is bumped
 
-**No-bump domains** (NEVER intercepted, even if bumping is enabled): domains with certificate pinning, HSTS preload, or where interception would break functionality:
-- `.google.com`, `.googleapis.com`, `.gstatic.com`
-- `.microsoft.com`, `.azure.com`, `.azureedge.net`
-- `.github.com`, `.githubusercontent.com`
-- `.anthropic.com`, `.openai.com`
+- **WHEN** ClientHello SNI is exactly
+  `release-assets.githubusercontent.com`
+- **THEN** the `SslBump1` peek SHALL expose SNI
+- **AND** the exact-host bump rule SHALL terminate the decision at `SslBump2`
+- **AND** Squid SHALL generate a leaf certificate from the ephemeral
+  intermediate CA
+- **AND** Squid SHALL verify origin TLS before forwarding plaintext HTTP
 
-**Bump domains** (intercepted when selective bumping is enabled): package registries where HTTPS content caching provides the most benefit:
-- `.npmjs.org`, `.npmjs.com`, `.yarnpkg.com`, `.crates.io`, `.rust-lang.org`
-- `.pypi.org`, `.pythonhosted.org`, `.rubygems.org`, `.packagist.org`
-- `.pub.dev`, `.nuget.org`, `.maven.org`, `.hex.pm`
-- `.cocoapods.org`, `.cpan.org`, `.cran.r-project.org`
-- `.hackage.haskell.org`, `.clojars.org`, `.opam.ocaml.org`
-- `.jsdelivr.net`, `.unpkg.com`, `.esm.sh`
-- `.nodejs.org`, `.golang.org`, `.go.dev`
-- `.opencode.ai`
+#### Scenario: TLS-sensitive and non-allowlisted hosts remain end-to-end
 
-#### Current activation status: NEVER
-Active ssl-bump interception is not enabled. The splice-all policy is hardcoded in `images/proxy/squid.conf`. Enabling selective bumping requires:
-1. Rootless CA trust injection is implemented by the image-baked system-path indirection and shared runtime initializer
-2. Changing `ssl_bump splice all` to domain-selective bump rules in `squid.conf`
-3. Verifying the system-default bundle with representative package managers
+- **WHEN** ClientHello SNI is `github.com`, `api.github.com`,
+  `objects.githubusercontent.com`, a package registry, or a provider/auth host
+- **THEN** the exact release-asset ACL SHALL NOT match
+- **AND** `ssl_bump splice all` SHALL preserve client-to-origin TLS and pinning
 
-#### Scenario: Current mode (splice-all)
-- **WHEN** any HTTPS request passes through the proxy
-- **THEN** squid SHALL peek at the ClientHello to extract the SNI
-- **AND** splice the connection (passthrough tunnel) without decryption
-- **AND** no dynamic server certificates SHALL be generated by sslcrtd
-- **AND** no HTTPS response content SHALL be cached
+### Requirement: Release-asset caching preserves origin semantics
+The release-asset refresh rule SHALL be scoped to the exact HTTPS hostname and
+checked before Squid's conservative defaults. It MAY provide bounded heuristic
+freshness when the origin omits an explicit lifetime, but MUST NOT use
+`override-expire`, `ignore-no-store`, `ignore-private`, or `ignore-reload`.
+Signed query terms SHALL remain out of logs. They SHALL remain part of the
+cache key: `strip_query_terms` is log privacy only, and no StoreID or URL
+rewriter may normalize them without separate fixture and live proof that two
+keys are content-identical.
 
-#### Scenario: Future selective bumping (not yet enabled)
-- **WHEN** selective bumping is enabled and a request targets a bump_domain
-- **THEN** squid SHALL generate a dynamic server certificate signed by the intermediate CA
-- **AND** decrypt the HTTPS traffic, cache the response, and re-encrypt to the client
-- **AND** the client SHALL trust the dynamic cert via the injected CA chain
+#### Scenario: Origin marks an asset private or no-store
+- **WHEN** the release-asset response contains `Cache-Control: private` or
+  `Cache-Control: no-store`
+- **THEN** Squid SHALL honor that directive
+- **AND** the refresh pattern SHALL NOT force the response into shared cache
+
+#### Scenario: A later redirect yields a different signed URL
+- **WHEN** the release redirect produces a different query string
+- **THEN** Squid SHALL treat it as a different cache key
+- **AND** the system SHALL NOT claim a HIT until a real Squid fixture or live
+  trace demonstrates stable keys and a repeated `TCP_HIT`
 
 ### Requirement: Upstream TLS verification
 The proxy SHALL verify upstream (origin) server certificates against the system CA store when connecting to origin servers. TLS options SHALL enforce minimum TLS 1.2 with strong ciphers.
 
 @trace spec:proxy-container
 
-**Current exception**: `DONT_VERIFY_PEER` is set in `tls_outgoing_options` for initial compatibility. Some registries use unusual CAs or certificate pinning that may need explicit trust anchors. This flag SHOULD be removed in production to enforce upstream certificate verification.
-
 #### Scenario: Upstream TLS connection
 - **WHEN** the proxy connects to an origin HTTPS server
 - **THEN** it SHALL use TLS 1.2+ with `HIGH:!aNULL:!MD5` ciphers
-- **AND** currently: it SHALL NOT verify the upstream certificate (`DONT_VERIFY_PEER`)
-- **AND** future: it SHALL verify against `/etc/ssl/certs/ca-certificates.crt`
+- **AND** it SHALL verify against `/etc/ssl/certs/ca-certificates.crt`
+- **AND** neither `DONT_VERIFY_PEER` nor `DONT_VERIFY_DOMAIN` SHALL be active
 
 ### Requirement: Proxy container image versioned and built via pipeline
 The proxy container image SHALL be tagged as `tillandsias-proxy:v{FULL_VERSION}` and built via the existing `build-image.sh` pipeline. The image SHALL be Alpine-based with squid + SSL support installed. The Containerfile and configuration SHALL be stored in `images/proxy/`.
@@ -351,20 +380,23 @@ both an `acl localhost_subdomain dstdomain .localhost` and a
 ## Security implications and trust model
 
 ### What the proxy CAN do (architecturally)
-- Read SNI from all HTTPS ClientHello messages (peek step, always active)
+- Read SNI from HTTPS ClientHello messages after the step-1 peek
 - Block connections to non-allowlisted domains (port 3128)
-- If bumping is enabled: decrypt, inspect, cache, and re-encrypt HTTPS traffic for bump_domains
+- Decrypt, cache when HTTP permits, and re-encrypt traffic only for the exact
+  `release-assets.githubusercontent.com` host
 - Generate dynamic server certificates trusted by forge containers (via injected CA chain)
 
 ### What the proxy DOES NOT do (current policy)
-- Decrypt any HTTPS traffic (splice-all policy)
-- Cache any HTTPS response content (tunneled traffic is opaque)
-- Generate dynamic server certificates (sslcrtd is running but idle)
-- Inspect request/response bodies
+- Decrypt GitHub/API/provider/auth/package-registry traffic outside the exact
+  release-asset CDN host
+- Override `private`/`no-store`/origin expiry directives
+- Normalize signed query strings or assume different redirect URLs share content
 - Store or exfiltrate credentials
 
 ### Trust boundaries
-1. **Forge containers trust the proxy CA**: the ca-chain.crt is bind-mounted and environment variables point package managers to it. This is a prerequisite for future ssl-bump, not a current risk.
+1. **Forge containers trust the proxy CA**: the CA chain is bind-mounted and
+   incorporated into the system-default bundle. Therefore the proxy MUST verify
+   the real release-asset origin; `DONT_VERIFY_*` is forbidden.
 2. **Proxy has no credentials**: it cannot authenticate to any service on behalf of forge containers.
 3. **Key material is ephemeral**: all CA keys live on tmpfs and die with the session. There is no persistent CA that could be compromised across reboots.
 4. **Image builds are outside the trust boundary**: they fetch packages directly, never through the proxy.
@@ -373,11 +405,18 @@ both an `acl localhost_subdomain dstdomain .localhost` and a
 
 - `cheatsheets/runtime/networking.md` — Networking reference and patterns
 - `cheatsheets/web/http.md` — Http reference and patterns
+- https://www.squid-cache.org/Doc/config/ssl_bump/ — Squid 6 rule evaluation and actions
+- https://www.squid-cache.org/Doc/config/acl/ — `at_step` and `ssl::server_name`
+- https://www.squid-cache.org/Doc/config/refresh_pattern/ — first-match freshness semantics and unsafe overrides
+- https://www.squid-cache.org/Doc/config/strip_query_terms/ — log-only query privacy
+- https://docs.github.com/en/rest/releases/assets — release asset identity and replacement API
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation`
+- `litmus:proxy-container-shape`
+- `cargo test -p tillandsias-headless --test proxy_cache_policy`
 
 Gating points:
 - Proxy enforces network isolation; no unauthorized egress

@@ -57,4 +57,10 @@ echo "  strict:     :3128"
 echo "  permissive: :3129"
 echo "========================================"
 
+# Parse only after the runtime CA material and cache paths exist. This turns
+# malformed ACL/action syntax into a bounded startup failure instead of a
+# partially running proxy with an accidental trust policy.
+echo "Validating Squid configuration..."
+squid -k parse
+
 exec squid -N

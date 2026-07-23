@@ -9,23 +9,23 @@
 # `litmus:enclave-isolation` (e2e, last_verified 2026-05-03) covered
 # the generic network-isolation invariant but no source-level pin.
 #
-# **Spec / implementation divergence flagged**: the spec § "SSL bump
-# policy and future activation" states the current policy is
-# splice-all. The actual `squid.conf` line 102 is `ssl_bump bump all`
-# (active interception, per the "transparent HTTPS caching across the
-# entire enclave + dev builds" comment block). This litmus pins what
-# the code does today (bump all), not the spec's outdated splice-all
-# claim — the spec text needs an update.
+# windows-260723-4 reconciles the former spec/config drift with a
+# step-aware selective policy: peek only at SslBump1, bump the exact
+# GitHub release-asset CDN host, and splice every other destination.
+# Origin certificate verification and HTTP cache-control remain
+# authoritative.
 name: litmus:proxy-container-shape
 spec: proxy-container
 phase: pre-build
 description: >
   Pin the proxy container source surfaces: Containerfile (Alpine +
-  squid + UID 1000), squid.conf (dual-port, ssl_bump bump all,
+  squid + UID 1000), squid.conf (dual-port, step-aware selective bump,
+  exact GitHub release-asset host, verified origin TLS, bounded large-object
+  cache policy,
   *.localhost cache_peer router, allowlist dstdomain,
   forwarded_for delete + via off), allowlist.txt (key OpenCode
   egress domains + leading-dot Squid 6.x rule), entrypoint.sh
-  (cert init + podman-secret CA delivery).
+  (cert init + podman-secret CA delivery + runtime parser gate).
 severity: medium
 size: instant
 
@@ -34,6 +34,7 @@ preconditions:
   - workspace contains images/proxy/squid.conf
   - workspace contains images/proxy/allowlist.txt
   - workspace contains images/proxy/entrypoint.sh
+  - workspace contains crates/tillandsias-headless/tests/proxy_cache_policy.rs
   - shell utilities (grep) are available in PATH
 
 critical_path:
@@ -63,18 +64,26 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ssl-bump"
 
-  - step: "squid.conf: ssl_bump peek+stare+bump policy (current mode: BUMP all)"
-    # Spec § "SSL bump policy and future activation" claims splice-
-    # all is the current mode, but the actual squid.conf (line 102)
-    # uses `ssl_bump bump all` — active interception with caching
-    # per the inline "transparent HTTPS caching across the entire
-    # enclave + dev builds" comment. Pin the 3 ssl_bump lines that
-    # form the peek→stare→bump pipeline; a regression to a
-    # different terminal verdict (splice/terminate) would silently
-    # change the trust model.
-    command: "grep -F 'ssl_bump peek all' images/proxy/squid.conf && grep -F 'ssl_bump stare all' images/proxy/squid.conf && grep -F 'ssl_bump bump all' images/proxy/squid.conf"
+  - step: "squid.conf: peek only at SslBump1, bump one exact release host, splice everything else"
+    # Squid 6 re-evaluates every ssl_bump rule at every step; a bare
+    # `peek all` consumes step 2 and usually makes a later bump
+    # impossible. The exact three-rule order is the trust boundary.
+    command: "grep -Fx 'acl ssl_bump_step1 at_step SslBump1' images/proxy/squid.conf && grep -Fx 'acl github_release_assets ssl::server_name --client-requested release-assets.githubusercontent.com' images/proxy/squid.conf && test \"$(grep -c '^ssl_bump ' images/proxy/squid.conf)\" -eq 3 && peek=$(grep -nFx 'ssl_bump peek ssl_bump_step1' images/proxy/squid.conf | cut -d: -f1) && bump=$(grep -nFx 'ssl_bump bump github_release_assets' images/proxy/squid.conf | cut -d: -f1) && splice=$(grep -nFx 'ssl_bump splice all' images/proxy/squid.conf | cut -d: -f1) && test \"$peek\" -lt \"$bump\" && test \"$bump\" -lt \"$splice\" && ! grep -Eq '^ssl_bump (peek all|stare all|bump all)$' images/proxy/squid.conf && echo 'ok: exact allowlist then splice-all'"
     timeout_ms: 3000
-    expected_behavior: "ssl_bump bump all"
+    expected_behavior: "exact allowlist then splice-all"
+
+  - step: "squid.conf: bumped TLS verifies origin and cache policy respects origin directives"
+    # Bumped clients trust the proxy-issued leaf, so Squid must verify
+    # the real origin. Cache freshness must not ignore no-store/private
+    # or normalize signed URLs under an unsafe StoreID.
+    command: "grep -F 'tls_outgoing_options cafile=/etc/ssl/certs/ca-certificates.crt' images/proxy/squid.conf && ! grep -Eq '^[[:space:]]*(flags=.*DONT_VERIFY|sslproxy_cert_error allow)' images/proxy/squid.conf && grep -Fx 'refresh_pattern -i ^https://release-assets\\.githubusercontent\\.com/ 0 20% 4320' images/proxy/squid.conf && ! grep -Eq '^[[:space:]]*(refresh_pattern .*override-expire|refresh_pattern .*ignore-(no-store|private|reload)|store_id_program|url_rewrite_program)' images/proxy/squid.conf && grep -Fx 'strip_query_terms on' images/proxy/squid.conf && echo 'ok: verified origin TLS and standards-respecting cache policy'"
+    timeout_ms: 3000
+    expected_behavior: "ok: verified origin TLS and standards-respecting cache policy"
+
+  - step: "squid.conf: disk and per-object bounds can retain the observed 1.44GiB asset"
+    command: "grep -Fx 'cache_dir ufs /var/spool/squid 4096 16 256' images/proxy/squid.conf && grep -Fx 'maximum_object_size 2048 MB' images/proxy/squid.conf && echo 'ok: 4096 MiB cache / 2048 MiB object ceiling'"
+    timeout_ms: 3000
+    expected_behavior: "4096 MiB cache / 2048 MiB object ceiling"
 
   - step: "squid.conf: allowlist sourced from /etc/squid/allowlist.txt"
     # Spec § "Generous developer-focused domain allowlist" mandates
@@ -115,15 +124,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "entrypoint.sh: squid -z cache init + security_file_certgen + /run/secrets/tillandsias-ca-cert read"
+  - step: "entrypoint.sh: cache/cert init + CA secret + runtime squid parser gate"
     # Spec § "Ephemeral CA chain (per-launch generation)" Scenario
     # "Cert generation on proxy launch" — the cert generator
     # binary `security_file_certgen` initialises the ssl_db; the
     # CA cert is delivered via the podman secret. Pin the 3
     # surfaces: cache init, certgen tooling, podman-secret read.
-    command: "grep -F 'squid -z' images/proxy/entrypoint.sh && grep -F 'security_file_certgen' images/proxy/entrypoint.sh && grep -F '/run/secrets/tillandsias-ca-cert' images/proxy/entrypoint.sh"
+    command: "grep -F 'squid -z' images/proxy/entrypoint.sh && grep -F 'security_file_certgen' images/proxy/entrypoint.sh && grep -F '/run/secrets/tillandsias-ca-cert' images/proxy/entrypoint.sh && parse=$(grep -nF 'squid -k parse' images/proxy/entrypoint.sh | cut -d: -f1) && launch=$(grep -nF 'exec squid -N' images/proxy/entrypoint.sh | cut -d: -f1) && test \"$parse\" -lt \"$launch\" && echo 'ok: security_file_certgen and pre-launch parser gate'"
     timeout_ms: 3000
-    expected_behavior: "security_file_certgen"
+    expected_behavior: "ok: security_file_certgen and pre-launch parser gate"
 
 observability:
   traces:
@@ -141,14 +150,20 @@ rollback:
     A `spec:proxy-container` source surface drifted. Restore all 4
     `@trace spec:proxy-container` markers; Alpine 3.20 base + apk
     install of squid/openssl/bash + UID-1000 proxy user;
-    `http_port 3128 ssl-bump` + `http_port 3129 ssl-bump`;
-    `ssl_bump peek all` + `ssl_bump stare all` + `ssl_bump bump all`
-    pipeline; `acl allowlist dstdomain "/etc/squid/allowlist.txt"`;
+    `http_port 3128 ssl-bump` + `http_port 3129 ssl-bump`; the exact
+    `acl ssl_bump_step1 at_step SslBump1` → `ssl_bump peek
+    ssl_bump_step1` → `ssl_bump bump github_release_assets` →
+    `ssl_bump splice all` policy with only
+    `release-assets.githubusercontent.com` in that interception ACL;
+    verified outgoing TLS without DONT_VERIFY flags; the 4096 MiB
+    cache / 2048 MiB object bounds; origin-respecting refresh patterns
+    and `strip_query_terms on`; `acl allowlist dstdomain
+    "/etc/squid/allowlist.txt"`;
     `acl localhost_subdomain dstdomain .localhost` +
     `cache_peer router parent` + `never_direct allow localhost_
     subdomain`; `forwarded_for delete` + `via off`; the 4 OpenCode
     egress allowlist entries (`.models.dev`, `.openrouter.ai`,
     `.helicone.ai`, `.anthropic.com`); `squid -z` cache init +
-    `security_file_certgen` + `/run/secrets/tillandsias-ca-cert`
-    read in entrypoint.sh.
+    `security_file_certgen` + `/run/secrets/tillandsias-ca-cert` +
+    pre-launch `squid -k parse` in entrypoint.sh.
   command: "grep -nE '@trace|FROM|squid|http_port|ssl_bump|allowlist|localhost_subdomain|forwarded_for|via off|tillandsias-ca-cert|security_file_certgen' images/proxy/Containerfile images/proxy/squid.conf images/proxy/entrypoint.sh | head -30"
