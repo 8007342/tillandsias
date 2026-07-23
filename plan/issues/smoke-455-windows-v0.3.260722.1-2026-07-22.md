@@ -64,3 +64,25 @@ Cut the next daily from linux-next (>= 58b58322), then re-run this smoke on
 Windows — expected ~3 minutes end-to-end including install — and record the
 PASS naming that build. macOS smoke unaffected by these findings (both
 defects are Windows-host-specific).
+
+## Addendum 2026-07-23: full-stack live session — BigPickle meta-orchestration IN a Windows forge
+
+After the mirror first-seed race (windows-260722-7) and one re-attach, the
+operator's forge came up on a populated checkout and BigPickle (in-forge
+opencode) began a meta-orchestration cycle INSIDE the container — the
+complete HOST -> WSL2 VM -> podman GUEST -> forge -> agent chain live on
+Windows for the first time.
+
+Performance validation (operator ask, measured live mid-run):
+- Host wrapper: tray 15.1 MB RSS, ~5s CPU total across the whole session —
+  effectively zero.
+- Infra containers (proxy 3.72% + router 0.36% + git 1.08% CPU + vault
+  idle-healthy): ~5% CPU, ~250 MB combined.
+- Forge container: 269% CPU / 4.06 GB — the agent's own work.
+Verdict: HOST/VM boundary overhead is slim-to-none; compute goes to the
+agent, matching the Linux-host experience.
+
+Login-state 3-state flip verified live post-reset (menu advanced past
+GitHub Login after one login on a healthy vault); the earlier
+login-succeeds-but-menu-stuck shape was the windows-260717-2 vault skew
+(annotated on that packet), not the login flow.
