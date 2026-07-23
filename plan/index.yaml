@@ -16299,6 +16299,8 @@ plan_index:
             logged "control wire recovered" 39s later on its own — the
             order-154 never-recovers pattern did not reproduce post
             runtime-split. Live tray relaunched carrying everything.
+
+    - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
       order: provisional
       desired_release: v0.5
