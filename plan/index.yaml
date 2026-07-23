@@ -15827,6 +15827,17 @@ plan_index:
     - packet_id: vault-unseal-secret-regenerated-on-reensure
       provisional_id: windows-260717-2
       order: provisional
+      # REPRO 2026-07-23 (windows lane, fresh guest): repeated
+      # tillandsias-headless service restarts (same-version hot-injects)
+      # re-ran the liveness re-ensure and wedged the vault at the deep-skew
+      # layer — "cipher: message authentication failed" on the Shamir
+      # share, order-383 self-heal correctly refusing, cached root token
+      # rejected. USER-VISIBLE SHAPE: GitHub login prints SUCCESS (the
+      # login container's own lease writes fine) but the menu never flips
+      # off "GitHub Login" and projects never load — the resident server
+      # cannot VERIFY the login through its skewed token. Recovered via
+      # ephemeral guest reset (~90s warm-cache). This packet remains THE
+      # root fix; still ready, pickup_role linux.
       release_target: stable-milestone-v1
       title: "P1: headless re-ensure regenerates a non-matching vault unseal secret on restart — barrier orphaned, crash-loop (restart self-wedge)"
       status: completed
