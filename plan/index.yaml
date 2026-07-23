@@ -20068,7 +20068,7 @@ plan_index:
       operator_note: "operator 2026-07-19: unauthenticated writes are not acceptable even within the forge; the order-450 daemon receive-pack unblock is v0.4-only and must be replaced by authenticated writes in v0.5"
       kind: fix
       deliverable: images/git/entrypoint.sh + images/git/pre-receive-hook.sh + forge gitconfig injection + credential issuance
-      depends_on: ["322"]
+      depends_on: [mirror-authenticated-push-transport]
       pickup_role: linux
       owner_host: linux
       estimated_hours: 12

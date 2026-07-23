@@ -183,11 +183,7 @@ impl HwndHandle {
     ) {
         apply_vm_status(phase, podman_ready, last_event, self.0);
     }
-    fn note_crashloop(
-        self,
-        phase: tillandsias_control_wire::VmPhase,
-        last_event: Option<&str>,
-    ) {
+    fn note_crashloop(self, phase: tillandsias_control_wire::VmPhase, last_event: Option<&str>) {
         note_crashloop_observation(phase, last_event, self.0);
     }
 }
@@ -1320,9 +1316,7 @@ async fn live_client_request(
             // crate version (0.1.0) and the guest may omit the build
             // component — the original comparison WARN'd a false skew on
             // EVERY handshake (and relayed the noise to the Event Log).
-            let normalize = |v: &str| {
-                v.split('.').take(3).collect::<Vec<_>>().join(".")
-            };
+            let normalize = |v: &str| v.split('.').take(3).collect::<Vec<_>>().join(".");
             if normalize(&guest_version) != normalize(env!("WORKSPACE_VERSION")) {
                 tracing::warn!(
                     ctx,
@@ -4103,7 +4097,10 @@ mod tests {
             "Tillandsias 0.2.260528.1"
         );
         // Version + status (live tray after update_status_text).
-        let with_status = compose_tooltip("0.2.260528.1", "\u{1F7E0} Reconnecting to your workspace\u{2026}");
+        let with_status = compose_tooltip(
+            "0.2.260528.1",
+            "\u{1F7E0} Reconnecting to your workspace\u{2026}",
+        );
         assert!(
             with_status.starts_with("Tillandsias 0.2.260528.1"),
             "tooltip should start with name + version: {with_status}"

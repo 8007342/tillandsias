@@ -91,7 +91,8 @@ pub const CHIP_FEATURE_SETUP_PROGRESS: &str = "\u{1F535} Installing Windows feat
 pub const CHIP_FEATURE_RESTART: &str = "\u{1F7E0} Restart Windows to finish setup";
 pub const CHIP_FEATURE_FAILED: &str = "\u{1F534} Setup didn't finish \u{2014} Retry";
 pub const TOAST_FEATURE_SETUP: &str = "Tillandsias needs a Windows feature that isn't installed yet. Installing it now \u{2014} you may see a Windows approval prompt.";
-pub const TOAST_FEATURE_RESTART: &str = "Setup is almost done. Restart Windows, then open Tillandsias again.";
+pub const TOAST_FEATURE_RESTART: &str =
+    "Setup is almost done. Restart Windows, then open Tillandsias again.";
 
 /// Error-string markers `notify_icon`'s failure path maps to the curated
 /// terminal states (same substring-marker pattern as
@@ -618,7 +619,10 @@ impl WslLifecycle {
     ///   hard 20-minute ceiling — bounded by construction. Terminal
     ///   outcomes are marker-tagged errors `notify_icon` maps to the
     ///   approved restart/failure chips + toasts.
-    async fn ensure_wsl_platform(&self, progress: &Arc<dyn ProvisionProgress>) -> Result<(), String> {
+    async fn ensure_wsl_platform(
+        &self,
+        progress: &Arc<dyn ProvisionProgress>,
+    ) -> Result<(), String> {
         use tillandsias_vm_layer::wsl::{WslPlatformVerdict, wsl_platform_preflight};
         let verdict = tokio::task::spawn_blocking(wsl_platform_preflight)
             .await
@@ -647,9 +651,9 @@ impl WslLifecycle {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
         tillandsias_vm_layer::no_window_async(&mut cmd);
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| format!("{PLATFORM_SETUP_FAILED_MARKER}: could not start wsl --install: {e}"))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            format!("{PLATFORM_SETUP_FAILED_MARKER}: could not start wsl --install: {e}")
+        })?;
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
@@ -712,15 +716,17 @@ impl WslLifecycle {
                 // The kill EOFs both pipes; give the drain a moment so the
                 // timeout error carries whatever the installer actually said
                 // instead of only the ceiling number.
-                let (last_line, err_tail) = tokio::time::timeout(
-                    Duration::from_secs(5),
-                    stream_task,
-                )
-                .await
-                .ok()
-                .and_then(|r| r.ok())
-                .unwrap_or_default();
-                let detail = if err_tail.is_empty() { last_line } else { err_tail };
+                let (last_line, err_tail) =
+                    tokio::time::timeout(Duration::from_secs(5), stream_task)
+                        .await
+                        .ok()
+                        .and_then(|r| r.ok())
+                        .unwrap_or_default();
+                let detail = if err_tail.is_empty() {
+                    last_line
+                } else {
+                    err_tail
+                };
                 return Err(format!(
                     "{PLATFORM_SETUP_FAILED_MARKER}: wsl --install did not finish within \
                      {FEATURE_INSTALL_TIMEOUT_SECS}s{}",
@@ -752,7 +758,11 @@ impl WslLifecycle {
             }
             _ => Err(format!(
                 "{PLATFORM_SETUP_FAILED_MARKER}: wsl --install exited {status}; last output: {}",
-                if err_tail.is_empty() { &last_line } else { &err_tail }
+                if err_tail.is_empty() {
+                    &last_line
+                } else {
+                    &err_tail
+                }
             )),
         }
     }
@@ -1327,20 +1337,32 @@ mod tests {
     /// NEW recorded approval.
     #[test]
     fn feature_setup_ux_strings_match_operator_approval() {
-        assert_eq!(CHIP_FEATURE_SETUP_WARN, "\u{1F7E1} One-time Windows setup\u{2026}");
+        assert_eq!(
+            CHIP_FEATURE_SETUP_WARN,
+            "\u{1F7E1} One-time Windows setup\u{2026}"
+        );
         assert_eq!(
             CHIP_FEATURE_SETUP_PROGRESS,
             "\u{1F535} Installing Windows feature\u{2026}"
         );
-        assert_eq!(CHIP_FEATURE_RESTART, "\u{1F7E0} Restart Windows to finish setup");
-        assert_eq!(CHIP_FEATURE_FAILED, "\u{1F534} Setup didn't finish \u{2014} Retry");
+        assert_eq!(
+            CHIP_FEATURE_RESTART,
+            "\u{1F7E0} Restart Windows to finish setup"
+        );
+        assert_eq!(
+            CHIP_FEATURE_FAILED,
+            "\u{1F534} Setup didn't finish \u{2014} Retry"
+        );
         for chip in [
             CHIP_FEATURE_SETUP_WARN,
             CHIP_FEATURE_SETUP_PROGRESS,
             CHIP_FEATURE_RESTART,
             CHIP_FEATURE_FAILED,
         ] {
-            assert!(chip.chars().count() <= 45, "chip exceeds status cap: {chip}");
+            assert!(
+                chip.chars().count() <= 45,
+                "chip exceeds status cap: {chip}"
+            );
         }
         for text in [
             CHIP_FEATURE_SETUP_WARN,

@@ -13126,9 +13126,16 @@ mod tests {
             );
         }
 
+        // When the host $HOME matches the container HOME (/home/forge), every
+        // container-side bind target also contains the host $HOME string — the
+        // is_target_only heuristic below cannot distinguish them. The test is
+        // still valid: build_forge_agent_run_argv uses a /tmp/project source
+        // path, so no real host-Home-as-source leak can appear. Skip the
+        // host-HOME leak check entirely when the two values collide.
         if let Some(home) = std::env::var_os("HOME") {
             let home_str = home.to_string_lossy().into_owned();
-            if !home_str.is_empty() && home_str != "/" {
+            let container_home = "/home/forge";
+            if !home_str.is_empty() && home_str != "/" && home_str != container_home {
                 // The *target* HOME inside the container is /home/forge — that's fine.
                 // We're guarding against the *host* $HOME leaking in as a bind source.
                 for arg in &argv {
