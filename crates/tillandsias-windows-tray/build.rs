@@ -140,10 +140,19 @@ fn main() {
     // version. UTF-8 with `#pragma code_page(65001)` keeps the macron in
     // "Tlatoāni" intact under both rc.exe and windres.
     let numeric = {
-        let parts: Vec<u32> = workspace_version.split('.').filter_map(|p| p.parse().ok()).collect();
+        let parts: Vec<u32> = workspace_version
+            .split('.')
+            .filter_map(|p| p.parse().ok())
+            .collect();
         match parts.as_slice() {
             [maj, min, yymmdd, n] => {
-                format!("{},{},{},{}", maj, min, yymmdd / 100, (yymmdd % 100) * 100 + n)
+                format!(
+                    "{},{},{},{}",
+                    maj,
+                    min,
+                    yymmdd / 100,
+                    (yymmdd % 100) * 100 + n
+                )
             }
             _ => "0,0,0,0".to_string(),
         }
