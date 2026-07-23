@@ -44,8 +44,11 @@ codex exec --ephemeral --json --skip-git-repo-check "$PROMPT"
 - **`OPENCODE_AUTH_CONTENT`** is the vault primitive: `Auth.all()` parses it and
   returns immediately, never touching `auth.json`. Verified end-to-end — `opencode
   auth list` reported 2 credentials with **no `auth.json` on disk**.
-  - Caveat: **undocumented, source-only**. Pin the opencode version if depending on
-    it. Malformed JSON fails silently back to the file path (bare `catch {}`).
+  - Caveat: **undocumented, source-only**. A dependent lane must either pin the
+    OpenCode version or positively assert the parse/no-file contract on every
+    selected binary. Order 431 chose the positive assertion. Malformed JSON
+    fails silently back to the file path (bare `catch {}`), so assertion
+    failure is fatal.
   - Ordering gotcha: `auth.json` merges *after* env, so stored credentials override
     env vars. Vault injection must therefore also guarantee no stale `auth.json`.
 - Upstream moved: `github.com/sst/opencode` now redirects to `github.com/anomalyco/opencode`.
@@ -159,9 +162,11 @@ prerequisites for any concurrency at all.
    dispatcher distinguishes success / failure / timeout per worker.
 4. **Fix Bug 1** — emit `CODEX_API_KEY`, gate the vault restore on it. Litmus: Codex
    lane authenticates with no `auth.json` on disk.
-5. **OpenCode vault provider** — add an OpenCode arm to `vault_bootstrap.rs` emitting
-   `OPENCODE_AUTH_CONTENT`. Litmus: `opencode auth list` reports credentials with no
-   `auth.json` on disk. **Pin the opencode version** — the variable is undocumented.
+5. **OpenCode vault provider** — **implemented 2026-07-23 (order 431)**.
+   The launcher mounts an `opencode-forge` AppRole token, and the entrypoint
+   derives `OPENCODE_AUTH_CONTENT` from the existing Gemini source. The
+   selected installed binary must report the provider/count with no
+   `auth.json`; contract failure restores the persistent last-good binary.
 6. **Runtime prompt channel** — a way to prompt an already-running container, and
    lift the Codex-only restriction. This is the ZeroClaw precursor.
 7. **File the vault spec-drift change proposal** (Bug 3).
@@ -172,3 +177,43 @@ External behaviour above was verified empirically against installed binaries
 (opencode 1.18.3, codex-cli 0.144.4) rather than taken from documentation, because
 several documented claims were found stale. Upstream issue references:
 codex #11435 (parallel `exec` cross-talk), #20213 (SQLite deadlock).
+
+## Order 431 implementation evidence — 2026-07-23
+
+The implementation preserves `secret/gemini/api-key` as the only credential
+producer. A new read-only `opencode-forge-policy` can read exactly
+`secret/data/gemini/api-key`; it has no metadata, list, write, OAuth, GitHub,
+OpenAI, or Anthropic access. The launcher checks presence without capturing the
+key, mounts only the short-lived AppRole token, and never puts the key or
+derived document in Podman argv.
+
+Inside the forge, the entrypoint removes any real file or symlink at
+`$XDG_DATA_HOME/opencode/auth.json`, reads the key through `vault-cli.sh`, and
+builds the `google` API auth record through `jq -Rsc` stdin. It then runs the
+selected OpenCode binary's `auth list` against isolated XDG state and requires
+the expected provider and credential count with no auth file. The
+every-launch official curl refresh is retained: a candidate that violates the
+undocumented env/no-file contract takes the same persistent last-good rollback
+as a liveness failure. With no Gemini key, the launcher mints no provider token
+and the free Zen/local lane remains credential-free.
+
+Evidence on this forge:
+
+- locally installed OpenCode 1.18.4 reported provider `google`, count 1, with
+  `auth.json` absent using a runtime-generated sentinel;
+- `scripts/test-opencode-vault-auth-content.sh` passed the free lane,
+  Vault-adapter, installed-binary, no-file, no-persistence, and rollback cases;
+- the focused Vault policy and headless Podman-argv unit tests passed;
+- `litmus:opencode-vault-auth-content` binds the canonical default-image,
+  tillandsias-vault, podman-secrets-integration, and
+  security-privacy-isolation contracts.
+- after rebasing onto `origin/linux-next` at 148a9076, `./build.sh --check`,
+  all 16 `opencode_`-filtered headless tests, all six Vault policy tests,
+  both existing harness contract/rollback fixtures, and touched-YAML
+  validation passed.
+
+This host has no Podman binary, so no live Vault/container credential was used.
+That is not an unverified exit criterion: the producer/path and mount shapes
+are covered hermetically, while the undocumented OpenCode consumer contract is
+proved against the locally installed 1.18.4 binary without a committed or live
+credential.

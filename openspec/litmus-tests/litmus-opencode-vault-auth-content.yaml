@@ -1,0 +1,55 @@
+# @trace spec:default-image, spec:tillandsias-vault, spec:podman-secrets-integration, spec:security-privacy-isolation
+name: litmus:opencode-vault-auth-content
+spec: default-image
+phase: pre-build
+size: quick
+severity: critical
+backend: fake
+description: >
+  Order 431 preserves the existing Gemini Vault producer and adapts it inside
+  the OpenCode forge to OPENCODE_AUTH_CONTENT. The selected installed binary
+  must positively report the injected provider and count without creating
+  auth.json. A release that starts but drops that undocumented contract is
+  rejected through the same persistent last-good rollback used for liveness
+  failures. Credential bytes may exist only in the in-container OpenCode
+  process environment, never launcher argv, logs, fixtures, or disk.
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains scripts/test-opencode-vault-auth-content.sh
+  - cargo, bash, and jq are available in PATH
+
+critical_path:
+  - step: "exercise free, Vault-derived, installed-binary, no-file, and rollback paths"
+    command: "scripts/test-opencode-vault-auth-content.sh"
+    timeout_ms: 120000
+    success_pattern: "PASS: OpenCode Vault auth content, no-file assertion, and last-good rollback"
+    failure_pattern: "FAIL:"
+
+  - step: "prove the OpenCode Vault policy has exactly one read-only data path"
+    command: "cargo test -p tillandsias-vault-client policy::tests::opencode_forge_policy_is_read_only_and_source_scoped -- --exact"
+    timeout_ms: 120000
+
+  - step: "prove Podman argv carries only the scoped lease or the credential-free lane"
+    command: "cargo test -p tillandsias-headless tests::opencode_vault_auth_mount_is_scoped_and_contains_no_credential_bytes -- --exact && cargo test -p tillandsias-headless tests::opencode_without_vault_key_preserves_credential_free_lane -- --exact"
+    timeout_ms: 180000
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+    - "@trace spec:tillandsias-vault"
+    - "@trace spec:podman-secrets-integration"
+    - "@trace spec:security-privacy-isolation"
+  expected_log: "fixed provider/count/no-file evidence only; no credential value"
+  log_fields:
+    spec: "default-image,tillandsias-vault,podman-secrets-integration,security-privacy-isolation"
+    test: "opencode-vault-auth-content"
+    backend: "fake"
+
+rollback:
+  on_failure: >
+    Do not weaken the provider/count/no-file assertion or restore raw key
+    injection in Podman argv. If an upstream OpenCode release changed the
+    undocumented contract, retain the last-good binary and update the adapter
+    only after re-running the installed-binary falsification fixture.
+  command: "scripts/test-opencode-vault-auth-content.sh"

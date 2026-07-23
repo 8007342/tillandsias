@@ -4569,6 +4569,7 @@ fn build_opencode_forge_args(
     certs_dir: &Path,
     version: &str,
     mode: ForgeMode,
+    opencode_vault_secret: Option<&str>,
     diagnostics: bool,
     debug: bool,
 ) -> Vec<String> {
@@ -4741,18 +4742,19 @@ fn build_opencode_forge_args(
         ]);
     }
 
-    // Inject Gemini API key for OpenCode harness
-    if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(
-        crate::vault_bootstrap::ProviderId::Gemini,
-        debug,
-    ) && !key.is_empty()
-    {
+    // Order 431: credential bytes never enter this Podman argv. When Vault
+    // contains the OpenCode auth document, mount only a short-lived,
+    // provider-scoped AppRole token. The entrypoint reads the document from
+    // Vault directly into OPENCODE_AUTH_CONTENT and positively proves the
+    // installed harness parsed it without creating auth.json.
+    if let Some(secret_name) = opencode_vault_secret {
         args.extend([
+            "--secret".into(),
+            format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"),
             "--env".into(),
-            format!(
-                "{}={key}",
-                crate::vault_bootstrap::ProviderId::Gemini.env_var()
-            ),
+            "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1".into(),
+            "--env".into(),
+            "VAULT_ROLE=opencode-forge".into(),
         ]);
     }
     if debug {
@@ -8403,6 +8405,22 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         tokio::task::spawn_blocking(move || vault_bootstrap::ensure_vault_running(debug))
             .await
             .map_err(|e| format!("[OpenCode] vault ensure task panicked: {e}"))??;
+        #[cfg(feature = "vault")]
+        let opencode_vault_lease = if vault_bootstrap::opencode_auth_content_available(debug)? {
+            Some(vault_bootstrap::mint_approle_secret_lease(
+                "opencode-forge",
+                &forge_container_name(project_name),
+                debug,
+            )?)
+        } else {
+            None
+        };
+        #[cfg(feature = "vault")]
+        let opencode_vault_secret = opencode_vault_lease
+            .as_ref()
+            .map(|lease| lease.secret_name());
+        #[cfg(not(feature = "vault"))]
+        let opencode_vault_secret: Option<&str> = None;
         let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(
@@ -8456,6 +8474,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             &certs_dir,
             version,
             ForgeMode::Cli,
+            opencode_vault_secret,
             diagnostics,
             debug,
         );
@@ -9461,6 +9480,26 @@ pub(crate) fn run_opencode_web_mode(
             Some(&versioned_image_tag("proxy", version)),
         )?;
         let git_container_name = format!("tillandsias-git-{project_name}");
+        #[cfg(feature = "vault")]
+        tokio::task::spawn_blocking(move || vault_bootstrap::ensure_vault_running(debug))
+            .await
+            .map_err(|e| format!("[OpenCode Web] vault ensure task panicked: {e}"))??;
+        #[cfg(feature = "vault")]
+        let opencode_vault_lease = if vault_bootstrap::opencode_auth_content_available(debug)? {
+            Some(vault_bootstrap::mint_approle_secret_lease(
+                "opencode-forge",
+                &forge_container_name(project_name),
+                debug,
+            )?)
+        } else {
+            None
+        };
+        #[cfg(feature = "vault")]
+        let opencode_vault_secret = opencode_vault_lease
+            .as_ref()
+            .map(|lease| lease.secret_name());
+        #[cfg(not(feature = "vault"))]
+        let opencode_vault_secret: Option<&str> = None;
         let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
         client
             .run_container_observed(
@@ -9515,6 +9554,7 @@ pub(crate) fn run_opencode_web_mode(
             &certs_dir,
             version,
             ForgeMode::Web,
+            opencode_vault_secret,
             false,
             debug,
         );
@@ -10260,13 +10300,10 @@ fn build_forge_agent_run_args_with_vault(
     } else {
         spec.env("TILLANDSIAS_GIT_SERVICE", "tillandsias-git")
     };
-    // Every credentialed agent lane (Codex/Claude/Antigravity) mounts a
-    // scoped Vault token so its entrypoint can restore the opaque OAuth
-    // document from Vault. Gating this on Codex alone (the original
-    // orders-338/340 wiring) left Claude/Antigravity lanes with no token,
-    // so their `provider-oauth-vault restore` failed "no Vault token at
-    // /run/secrets/vault-token" and killed the launch (operator repro
-    // 2026-07-15). OpenCode/Maintenance are credential-free and get none.
+    // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
+    // entrypoint can restore the opaque provider document. OpenCode re-execs
+    // through its existing CLI lane and uses the separate raw OpenCode/Web
+    // builder's scoped opencode-forge lease.
     if mode_provider_pair(mode).is_some()
         && let Some(secret_name) = vault_secret
     {
@@ -10467,7 +10504,8 @@ pub(crate) fn build_forge_agent_run_argv(
 }
 
 /// Map an agent mode to its (OAuth provider, API-key provider) pair.
-/// OpenCode/Maintenance lanes are credential-free by design.
+/// OpenCode has a separate Gemini-to-auth-content adapter; Maintenance needs
+/// no provider credential.
 fn mode_provider_pair(
     mode: ForgeAgentMode,
 ) -> Option<(ProviderId, crate::vault_bootstrap::ProviderId)> {
@@ -10594,9 +10632,8 @@ fn run_forge_agent_cli_mode(
         ensure_enclave_for_project(project_name, Some(&canonical), Some(&launch_marker), debug)?;
     ensure_provider_auth(mode, debug)?;
 
-    // Mint a scoped Vault token lease for any credentialed lane so its
-    // entrypoint can restore the OAuth document. Was Codex-only; generalized
-    // to all provider lanes 2026-07-15 (see build_forge_agent_run_args_with_vault).
+    // Mint a scoped Vault token lease for any OAuth-credentialed lane so its
+    // entrypoint can restore the provider document.
     #[cfg(feature = "vault")]
     let provider_vault_lease = if mode_provider_pair(mode).is_some() {
         Some(vault_bootstrap::mint_approle_secret_lease(
@@ -10729,9 +10766,9 @@ fn run_forge_agent_cli_mode(
 ///
 /// Flow:
 /// 1. Resolve project name + canonical path.
-/// 2. For Codex, re-exec the CLI lane in the terminal so its scoped Vault
-///    lease lives for the attached session. Other modes build the forge
-///    `podman run` argv via `ContainerSpec` after bringing up the enclave.
+/// 2. Credential-capable agents re-exec the CLI lane in the terminal so their
+///    scoped Vault lease lives for the attached session. Maintenance builds
+///    the forge `podman run` argv directly after bringing up the enclave.
 /// 3. Detect host terminal, spawn it detached with the argv appended.
 ///
 /// The terminal window is the user-facing surface. When the user closes it,
@@ -10760,7 +10797,7 @@ pub(crate) fn launch_forge_agent(
         );
     }
 
-    // Credentialed agents (Claude/Codex/Antigravity) delegate to the CLI
+    // Credential-capable agents delegate to the CLI
     // lane inside the popup terminal: the tray process has no TTY, so the
     // ensure_provider_auth ladder (vault check -> device-code login in an
     // ephemeral container -> vault write -> forge launch with injection)
@@ -10768,7 +10805,10 @@ pub(crate) fn launch_forge_agent(
     // Flow specified by The Tlatoāni 2026-07-15 (order 303 lineage).
     let argv = if matches!(
         mode,
-        ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity
+        ForgeAgentMode::Codex
+            | ForgeAgentMode::Claude
+            | ForgeAgentMode::OpenCode
+            | ForgeAgentMode::Antigravity
     ) {
         eprintln!(
             "[tillandsias] launch_forge_agent: opening the {} terminal for '{project_name}'; the CLI lane prepares the enclave and scoped credential lease",
@@ -14573,6 +14613,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             false,
             true,
         );
@@ -14670,6 +14711,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             false,
             true,
         );
@@ -14681,6 +14723,57 @@ mod tests {
     }
 
     #[test]
+    fn opencode_vault_auth_mount_is_scoped_and_contains_no_credential_bytes() {
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            Some("opencode-forge-lease"),
+            false,
+            false,
+        );
+        assert!(has_arg(&args, "--secret"));
+        assert!(has_arg(
+            &args,
+            &format!("opencode-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
+        ));
+        assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
+        assert!(has_arg(&args, "VAULT_ROLE=opencode-forge"));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("OPENCODE_AUTH_CONTENT="))
+        );
+        assert!(!args.iter().any(|arg| arg.starts_with("GEMINI_API_KEY=")));
+    }
+
+    #[test]
+    fn opencode_without_vault_key_preserves_credential_free_lane() {
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        assert!(!has_arg(&args, "--secret"));
+        assert!(!has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("OPENCODE_AUTH_CONTENT="))
+        );
+        assert!(!args.iter().any(|arg| arg.starts_with("GEMINI_API_KEY=")));
+    }
+
+    #[test]
     fn opencode_args_diagnostics_mode() {
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
@@ -14689,6 +14782,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             true,
             true,
         );
@@ -15337,6 +15431,7 @@ mod tests {
             &tmp.path().join("ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             false,
             false,
         );
@@ -15395,6 +15490,7 @@ mod tests {
             &tmp.path().join("ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             false,
             false,
         );

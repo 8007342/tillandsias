@@ -26,6 +26,7 @@ const ANTIGRAVITY_FORGE_HCL: &str =
     include_str!("../../../images/vault/policies/antigravity-forge.hcl");
 const ANTIGRAVITY_LOGIN_HCL: &str =
     include_str!("../../../images/vault/policies/antigravity-login.hcl");
+const OPENCODE_FORGE_HCL: &str = include_str!("../../../images/vault/policies/opencode-forge.hcl");
 
 /// Named policy bound to a Vault token.
 ///
@@ -41,6 +42,10 @@ const ANTIGRAVITY_LOGIN_HCL: &str =
 ///   policies mounted into a running forge lane so its entrypoint can restore
 ///   (and persist rotation of) the opaque OAuth document; scoped to
 ///   `secret/data/<provider>/oauth` only.
+/// - `OpenCodeForge` — read-only on the existing
+///   `secret/data/gemini/api-key` credential source. OpenCode receives a
+///   derived auth document only through `OPENCODE_AUTH_CONTENT`; the lane
+///   cannot rotate or enumerate Vault data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Policy {
     GitMirror,
@@ -54,6 +59,7 @@ pub enum Policy {
     ClaudeForge,
     AntigravityForge,
     AntigravityLogin,
+    OpenCodeForge,
 }
 
 impl Policy {
@@ -72,6 +78,7 @@ impl Policy {
             Policy::ClaudeForge => "claude-forge-policy",
             Policy::AntigravityForge => "antigravity-forge-policy",
             Policy::AntigravityLogin => "antigravity-login-policy",
+            Policy::OpenCodeForge => "opencode-forge-policy",
         }
     }
 
@@ -91,6 +98,7 @@ impl Policy {
             Policy::ClaudeForge => "images/vault/policies/claude-forge.hcl",
             Policy::AntigravityForge => "images/vault/policies/antigravity-forge.hcl",
             Policy::AntigravityLogin => "images/vault/policies/antigravity-login.hcl",
+            Policy::OpenCodeForge => "images/vault/policies/opencode-forge.hcl",
         }
     }
 
@@ -110,6 +118,7 @@ impl Policy {
             Policy::ClaudeForge => CLAUDE_FORGE_HCL,
             Policy::AntigravityForge => ANTIGRAVITY_FORGE_HCL,
             Policy::AntigravityLogin => ANTIGRAVITY_LOGIN_HCL,
+            Policy::OpenCodeForge => OPENCODE_FORGE_HCL,
         }
     }
 
@@ -127,6 +136,7 @@ impl Policy {
             Policy::ClaudeForge,
             Policy::AntigravityForge,
             Policy::AntigravityLogin,
+            Policy::OpenCodeForge,
         ]
     }
 }
@@ -172,6 +182,7 @@ mod tests {
         assert_eq!(Policy::CodexLogin.name(), "codex-login-policy");
         assert_eq!(Policy::CodexForge.name(), "codex-forge-policy");
         assert_eq!(Policy::AntigravityLogin.name(), "antigravity-login-policy");
+        assert_eq!(Policy::OpenCodeForge.name(), "opencode-forge-policy");
     }
 
     #[test]
@@ -234,5 +245,20 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn opencode_forge_policy_is_read_only_and_source_scoped() {
+        let hcl = Policy::OpenCodeForge.hcl();
+        assert!(hcl.contains("secret/data/gemini/api-key"));
+        assert!(hcl.contains("capabilities = [\"read\"]"));
+        assert!(!hcl.contains("\"create\""));
+        assert!(!hcl.contains("\"update\""));
+        assert!(!hcl.contains("\"delete\""));
+        assert!(!hcl.contains("github/token"));
+        assert!(!hcl.contains("/oauth"));
+        assert!(!hcl.contains("anthropic/api-key"));
+        assert!(!hcl.contains("openai/api-key"));
+        assert!(!hcl.contains("secret/metadata/"));
     }
 }

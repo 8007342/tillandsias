@@ -498,16 +498,16 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                 // never created on existing vault volumes and every token
                 // mint 404'd. load_policies/create_approle_role are
                 // idempotent overwrites, so re-provisioning is safe. Bump this
-                // to the newest role EVERY time a Policy is added — 2026-07-15
-                // added claude-forge + antigravity-forge (provider forge-lane
-                // OAuth restore), so the sentinel moved to 'antigravity-forge'.
+                // to the newest role EVERY time a Policy is added — order 431
+                // adds the read-only OpenCode auth-document role, so the
+                // sentinel is now 'opencode-forge'.
                 if rt
-                    .block_on(client.approle_role_exists("antigravity-forge"))
+                    .block_on(client.approle_role_exists("opencode-forge"))
                     .unwrap_or(false)
                 {
                     if debug {
                         eprintln!(
-                            "[tillandsias-vault] AppRole 'antigravity-forge' (newest sentinel) already exists; skipping policy and role provisioning"
+                            "[tillandsias-vault] AppRole 'opencode-forge' (newest sentinel) already exists; skipping policy and role provisioning"
                         );
                     }
                 } else {
@@ -816,6 +816,54 @@ pub(crate) fn vault_kv_get_via_exec(
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(format!("vault kv get {secret_path}: {}", stderr.trim()))
+    }
+}
+
+// ─── OpenCode auth-document storage ─────────────────────────────────────────
+// OpenCode's undocumented OPENCODE_AUTH_CONTENT contract consumes the same JSON
+// object it would otherwise read from $XDG_DATA_HOME/opencode/auth.json. Keep
+// the existing Gemini key producer/path and assemble that object in memory;
+// launch argv never contains the key or the derived document.
+// @trace spec:tillandsias-vault, spec:default-image
+pub(crate) const OPENCODE_AUTH_VAULT_PATH: &str = "secret/gemini/api-key";
+pub(crate) const OPENCODE_AUTH_VAULT_FIELD: &str = "key";
+
+/// Return whether Vault currently holds the Gemini source used for OpenCode.
+///
+/// Missing content is the supported credential-free lane. Other Vault failures
+/// remain errors so a configured credential cannot silently disappear because
+/// the availability probe itself degraded.
+pub(crate) fn opencode_auth_content_available(debug: bool) -> Result<bool, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Ok(false);
+    }
+    let _stability = vault_stability_lease(debug)?;
+    let root_token = read_and_handover_root_token(debug)?;
+    let field_arg = format!("-field={OPENCODE_AUTH_VAULT_FIELD}");
+    let mut command = vault_exec_command(
+        &root_token,
+        &["kv", "get", &field_arg, OPENCODE_AUTH_VAULT_PATH],
+    );
+    // Presence only: discard stdout at the process boundary so the Gemini key
+    // never enters launcher memory. The scoped forge reads it later.
+    command.stdout(Stdio::null());
+    let output = command
+        .output()
+        .map_err(|error| format!("OpenCode Vault auth availability command failed: {error}"))?;
+    if output.status.success() {
+        return Ok(true);
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("No value found")
+        || stderr.contains("secret not found")
+        || stderr.contains("field not present")
+    {
+        Ok(false)
+    } else {
+        Err(format!(
+            "OpenCode Vault auth availability check failed (status {})",
+            output.status
+        ))
     }
 }
 
@@ -3051,6 +3099,7 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
         Policy::ClaudeForge => "claude-forge",
         Policy::AntigravityForge => "antigravity-forge",
         Policy::AntigravityLogin => "antigravity-login",
+        Policy::OpenCodeForge => "opencode-forge",
     }
 }
 
@@ -3079,6 +3128,7 @@ mod tests {
         assert_eq!(policy_role_name(&Policy::ClaudeLogin), "claude-login");
         assert_eq!(policy_role_name(&Policy::CodexLogin), "codex-login");
         assert_eq!(policy_role_name(&Policy::CodexForge), "codex-forge");
+        assert_eq!(policy_role_name(&Policy::OpenCodeForge), "opencode-forge");
         assert_eq!(
             policy_role_name(&Policy::AntigravityLogin),
             "antigravity-login"

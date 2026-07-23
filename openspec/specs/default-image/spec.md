@@ -156,28 +156,39 @@ together.
   commit)
 - **THEN** the instructions SHALL keep the work on the Zen tool-caller
 
-### Requirement: Coding agents are image-baked, not runtime-installed
+### Requirement: Coding-agent harnesses refresh at launch with persistent fallback
 
-Claude Code, OpenCode, and OpenSpec MUST be installed into the forge
-image at `podman build` time. The binaries SHALL live under
-`/opt/agents/{claude,opencode,openspec}/` with symlinks at
-`/usr/local/bin/{claude,opencode,openspec}`. No runtime installer
-(npm, curl | bash) MUST run on each attach.
+Agent harnesses SHALL be refreshed at container launch into the persistent
+project tool cache. OpenCode and Claude Code SHALL use their official curl
+installers; Codex and OpenSpec SHALL use their declared npm channels. Installer
+scripts SHALL be downloaded to a temporary file and executed separately, never
+piped directly from `curl` into a shell. A network failure MAY reuse a
+previously validated cached binary, but the first launch SHALL fail loudly when
+no usable binary exists.
 
-Rationale: the prior runtime tools overlay re-installed these agents on
-every launch into a bind-mounted `/home/forge/.tools` directory. It
-added ~7s to every attach, routinely failed the OpenCode install
-(dropping the binary outside the overlay target path), and duplicated
-work whose output was already in the image. Hard-install gives
-deterministic agent versions per forge image tag, zero runtime
-network for agents, and one fewer failure surface.
+OpenCode's cache SHALL additionally retain a known-good binary that passed the
+OpenCode liveness, flag, `OPENCODE_AUTH_CONTENT` parse, credential-count, and
+no-`auth.json` contracts. A freshly installed OpenCode that violates any of
+those contracts SHALL be rejected and replaced by that last-good binary.
 
-#### Scenario: Agents resolve from image at attach time
-- **WHEN** a forge container is freshly spawned
-- **THEN** `which claude opencode openspec` inside the container SHALL
-  return `/usr/local/bin/{claude,opencode,openspec}` respectively
-- **AND** the binaries SHALL be present without any runtime install
-  step running on the host
+#### Scenario: Launch refreshes harnesses through declared channels
+- **WHEN** a forge container starts with working egress
+- **THEN** OpenCode and Claude Code SHALL run their official installers
+- **AND** Codex and OpenSpec SHALL check their declared npm channels
+- **AND** the selected executables SHALL live in the persistent tool cache.
+
+#### Scenario: OpenCode contract failure rolls back
+- **WHEN** a newly refreshed OpenCode starts but does not parse an isolated
+  runtime `OPENCODE_AUTH_CONTENT` record without creating `auth.json`
+- **THEN** that candidate SHALL fail its contract probe
+- **AND** the launcher SHALL restore the last-good OpenCode binary
+- **AND** a fixed, credential-free rollback message SHALL be logged.
+
+#### Scenario: Offline launch reuses validated cache
+- **WHEN** an installer is unreachable and a validated cached binary exists
+- **THEN** the forge SHALL reuse the cached binary
+- **WHEN** neither a fresh nor cached binary is usable
+- **THEN** the forge SHALL fail loudly before trying to launch the harness.
 
 #### Scenario: No runtime overlay build runs
 - **WHEN** the user runs `tillandsias <project>` with a fresh or
@@ -187,6 +198,45 @@ network for agents, and one fewer failure surface.
 - **AND** no temporary forge container MUST spawn to populate
   `/home/forge/.tools`
 - **AND** no `[tools-overlay]` log lines SHALL appear at attach time
+
+### Requirement: OpenCode consumes Vault authentication without credential files
+
+When the existing Gemini API-key producer at `secret/gemini/api-key` is
+configured, OpenCode and OpenCode Web SHALL derive exactly one
+`OPENCODE_AUTH_CONTENT` `google` API record inside the forge. The credential
+value SHALL flow from Vault to `jq` on stdin and then exist only in the OpenCode
+process environment. It SHALL NOT appear in launcher argv, lifecycle logs,
+committed fixtures, or persistent files.
+
+Before every OpenCode launch, the entrypoint SHALL remove any real file or
+symlink at `$XDG_DATA_HOME/opencode/auth.json` and fail if it cannot prove the
+path absent. It SHALL run the selected installed OpenCode against isolated XDG
+state and positively assert that `auth list` reports the injected provider and
+credential count while no `auth.json` exists. A parse, count, provider, or
+no-file failure SHALL stop the launch loudly. When the Gemini key is absent,
+the free Zen/local lane SHALL remain available with no Vault token and no
+ambient `OPENCODE_AUTH_CONTENT`.
+
+#### Scenario: Configured OpenCode proves in-memory authentication
+- **WHEN** `secret/gemini/api-key` exists and an OpenCode entrypoint starts
+- **THEN** the entrypoint SHALL derive `{google:{type:"api",key:<value>}}`
+  without placing `<value>` in a process argument
+- **AND** the selected OpenCode binary SHALL report provider `google` and the
+  expected credential count in an isolated positive assertion
+- **AND** `$XDG_DATA_HOME/opencode/auth.json` and the assertion's isolated
+  `auth.json` SHALL both remain absent.
+
+#### Scenario: Stale credential file fails closed
+- **WHEN** `$XDG_DATA_HOME/opencode/auth.json` exists as a file or symlink
+- **THEN** the entrypoint SHALL remove it before deriving auth content
+- **AND** SHALL refuse to launch if removal or the absence check fails.
+
+#### Scenario: Unconfigured OpenCode preserves the free lane
+- **WHEN** Vault contains no Gemini API key
+- **THEN** the OpenCode container SHALL receive no provider Vault token
+- **AND** the entrypoint SHALL discard ambient `OPENCODE_AUTH_CONTENT`
+- **AND** OpenCode SHALL remain available through configured credential-free
+  providers.
 
 ### Requirement: Agent instructions document subdomain routing convention
 
@@ -475,10 +525,12 @@ The containment boundaries that make default-grant safe are:
    through the enclave proxy (Squid), which enforces a strict domain allowlist.
    An agent that can write arbitrary files cannot exfiltrate data because no
    unproxied egress path exists.
-5. **Credential indirection** (git mirror): the forge has no raw GitHub token
-   or provider API keys. All git operations go through the git mirror service,
-   which holds the credential. An agent that can read `/home/forge/.gitconfig`
-   sees only the mirror URL, not the credential.
+5. **Credential indirection and scoping**: the forge has no raw GitHub token;
+   git operations go through the mirror service. Provider credentials are
+   absent unless the owning provider contract explicitly mounts a
+   least-privilege Vault token. OpenCode's optional Gemini source is adapted
+   only into its process environment, never launcher argv, logs, fixtures, or
+   `auth.json`.
 6. **Source-mount credential quarantine** (order 170): when the forge source
    mount overlaps the host checkout, host `~/.gitconfig`, `~/.config/gh`, and
    `~/.ssh` are masked with forge-owned empty overlays. Host credentials never
@@ -558,6 +610,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:ephemeral-guarantee`
 - `litmus:claude-launch-stability-shape` — Claude TUI runtime and credential-free launch boundary
 - `litmus:forge-validation-profile` — non-destructive stable forge validation report
+- `litmus:opencode-vault-auth-content` — OpenCode Vault adapter, installed-binary positive assertion, no-file contract, and last-good rollback
 
 Gating points:
 - Default forge image is pulled fresh; cached images are cleared on container stop

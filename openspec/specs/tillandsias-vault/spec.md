@@ -144,10 +144,10 @@ ALWAYS store the GitHub token in Vault at `secret/github/token`.
 - **THEN** the launcher SHALL exit with a fatal error indicating the flags are removed.
 
 ### Requirement: Policy taxonomy enforces least privilege per container kind
-- **ID**: tillandsias-vault.security.policy-taxonomy@v1
+- **ID**: tillandsias-vault.security.policy-taxonomy@v2
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [tillandsias-vault.invariant.policies-defined, tillandsias-vault.invariant.forge-policy-has-no-token-read]
+- **Invariants**: [tillandsias-vault.invariant.policies-defined, tillandsias-vault.invariant.forge-policy-has-no-token-read, tillandsias-vault.invariant.opencode-forge-policy-scoped]
 
 Vault SHALL be configured idempotently with these ACL policies:
 
@@ -158,6 +158,10 @@ Vault SHALL be configured idempotently with these ACL policies:
 - `tray-policy` can create, read, update, delete, and list under `secret/*` for
   host-owned credential management and migrations.
 - `inference-policy` remains empty until an inference credential contract exists.
+- Provider login and forge policies are separate. In particular,
+  `opencode-forge-policy` can read only the existing
+  `secret/data/gemini/api-key` value; it cannot read metadata, create, update,
+  delete, list, or read a sibling provider path.
 
 @trace spec:tillandsias-vault
 
@@ -176,6 +180,14 @@ Vault SHALL be configured idempotently with these ACL policies:
 - **WHEN** a token scoped to `tray-policy` writes `secret/github/token` with a fresh value
 - **THEN** the call SHALL succeed
 - **AND** subsequent reads by `git-mirror-policy` SHALL return the new value.
+
+#### Scenario: opencode-forge-policy can read only its existing source
+- **WHEN** a token scoped to `opencode-forge-policy` reads
+  `secret/gemini/api-key`
+- **THEN** the call SHALL succeed
+- **WHEN** the same token tries to write that path or read
+  `secret/github/token`, `secret/openai/api-key`, or a provider OAuth path
+- **THEN** the call SHALL return HTTP 403.
 
 ### Requirement: Per-container tokens are short-lived AppRole tokens
 - **ID**: tillandsias-vault.security.short-lived-tokens@v2
@@ -212,25 +224,32 @@ per-container token before exiting.
 - **THEN** the host SHALL revoke that container's Vault token
 - **AND** later Vault calls with that token SHALL return HTTP 403.
 
-### Requirement: Forge containers receive zero Vault tokens
-- **ID**: tillandsias-vault.security.forge-offline@v1
+### Requirement: Forge Vault access is optional and provider-scoped
+- **ID**: tillandsias-vault.security.forge-offline@v2
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [tillandsias-vault.invariant.forge-no-vault-token, tillandsias-vault.invariant.forge-cannot-reach-vault]
+- **Invariants**: [tillandsias-vault.invariant.forge-no-broad-vault-token, tillandsias-vault.invariant.opencode-forge-policy-scoped]
 
-Forge containers SHALL NOT receive any Vault token. Forge containers SHALL NOT
-have network reachability to `vault:8200` unless a future spec introduces a
-separate, narrowly-scoped forge credential contract.
+Forge containers SHALL NOT receive a broad Vault token. A credentialed provider
+lane MAY receive a short-lived AppRole token only when its owning provider spec
+names the exact policy and path. A configured OpenCode lane SHALL receive an
+`opencode-forge-policy` token through `/run/secrets/vault-token`; an OpenCode
+lane with no Gemini key SHALL remain credential-free. Credential values and
+derived documents SHALL NOT cross the launcher boundary in argv or logs.
 
 @trace spec:tillandsias-vault
 
-#### Scenario: Forge container has no Vault mount
-- **WHEN** `podman inspect <forge-container>` is run
-- **THEN** `Mounts` SHALL NOT contain `/run/secrets/vault-token`.
+#### Scenario: Configured OpenCode receives only a scoped token
+- **WHEN** `secret/gemini/api-key` exists and an OpenCode forge starts
+- **THEN** the launcher SHALL mint the `opencode-forge` AppRole lease
+- **AND** SHALL mount it read-only at `/run/secrets/vault-token`
+- **AND** the launcher argv SHALL contain neither the Gemini key nor
+  `OPENCODE_AUTH_CONTENT`.
 
-#### Scenario: Forge container cannot resolve Vault hostname
-- **WHEN** the forge container runs `getent hosts vault`
-- **THEN** the call SHALL return no entry.
+#### Scenario: Unconfigured OpenCode stays credential-free
+- **WHEN** `secret/gemini/api-key` does not exist and an OpenCode forge starts
+- **THEN** the launcher SHALL NOT mint or mount an `opencode-forge` token
+- **AND** the free Zen and local-model lane SHALL remain available.
 
 ## Invariants
 
@@ -281,7 +300,7 @@ separate, narrowly-scoped forge credential contract.
 
 ### Invariant: Policies are defined
 - **ID**: tillandsias-vault.invariant.policies-defined
-- **Expression**: `vault.policies HAS_KEYS {git-mirror-policy, forge-policy, tray-policy, inference-policy}`
+- **Expression**: `vault.policies HAS_KEYS {git-mirror-policy, forge-policy, tray-policy, inference-policy, github-login-policy, claude-login-policy, codex-login-policy, antigravity-login-policy, claude-forge-policy, codex-forge-policy, antigravity-forge-policy, opencode-forge-policy}`
 - **Measurable**: true
 
 ### Invariant: forge-policy has no token read capability
@@ -299,14 +318,14 @@ separate, narrowly-scoped forge credential contract.
 - **Expression**: `container.stop EVENT TRIGGERS vault.token.revoke FOR_THAT_CONTAINER`
 - **Measurable**: true
 
-### Invariant: Forge has no Vault token
-- **ID**: tillandsias-vault.invariant.forge-no-vault-token
-- **Expression**: `forge_container.mounts DOES_NOT_CONTAIN /run/secrets/vault-token`
+### Invariant: Forge has no broad Vault token
+- **ID**: tillandsias-vault.invariant.forge-no-broad-vault-token
+- **Expression**: `forge_container.vault_policy IN {none, explicitly_named_provider_policy} AND token_transport EQ /run/secrets/vault-token`
 - **Measurable**: true
 
-### Invariant: Forge cannot reach Vault
-- **ID**: tillandsias-vault.invariant.forge-cannot-reach-vault
-- **Expression**: `forge_container.network ISOLATED_FROM vault_container.network`
+### Invariant: OpenCode forge policy is source-scoped and read-only
+- **ID**: tillandsias-vault.invariant.opencode-forge-policy-scoped
+- **Expression**: `opencode-forge-policy.capabilities EQ {read secret/data/gemini/api-key}`
 - **Measurable**: true
 
 ## Litmus Tests
@@ -317,6 +336,8 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
   forge-policy 403s on token path.
 - `litmus:git-mirror-safe-refspec-push` - transitively checks the git mirror
   Vault-token mount shape and safe forwarding contract.
+- `litmus:opencode-vault-auth-content` - asserts the read-only OpenCode policy,
+  scoped token mount, in-memory auth document, and no-file contract.
 
 ## Litmus Chain
 

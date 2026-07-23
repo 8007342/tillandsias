@@ -1015,6 +1015,170 @@ ensure_forge_prebuilt_tools() {
 # Keep these lists in sync with the entrypoints that pass the flags. A flag
 # listed here and absent upstream is a LOUD failure by design — that is the
 # whole point.
+
+# OpenCode Vault auth (order 431) ─────────────────────────────
+# The existing credential producer remains secret/gemini/api-key. Every
+# interactive/Web path reaches the scoped CLI launch and mounts an
+# opencode-forge AppRole token. This function reads that source and adapts it to
+# OPENCODE_AUTH_CONTENT in memory. No credential document is materialized under
+# XDG_DATA_HOME.
+opencode_auth_file_path() {
+    printf '%s/opencode/auth.json\n' "${XDG_DATA_HOME:-$HOME/.local/share}"
+}
+
+opencode_remove_stale_auth_file() {
+    local auth_file
+    auth_file="$(opencode_auth_file_path)"
+    if [ -e "$auth_file" ] || [ -L "$auth_file" ]; then
+        if ! rm -f -- "$auth_file" 2>/dev/null; then
+            trace_lifecycle "credentials" "opencode: refusing launch; stale auth.json could not be removed"
+            return 1
+        fi
+    fi
+    if [ -e "$auth_file" ] || [ -L "$auth_file" ]; then
+        trace_lifecycle "credentials" "opencode: refusing launch; stale auth.json remains"
+        return 1
+    fi
+    return 0
+}
+
+prepare_opencode_vault_auth() {
+    opencode_remove_stale_auth_file || return 1
+
+    if [ "${TILLANDSIAS_OPENCODE_AUTH_EXPECTED:-0}" != "1" ]; then
+        # Never honor an ambient, non-Vault credential.
+        unset OPENCODE_AUTH_CONTENT
+        return 0
+    fi
+
+    local gemini_key auth_content
+    # The marker is launcher-owned, but the surrounding process environment
+    # is not a credential source. Always replace any ambient document with the
+    # value read through this lane's scoped Vault token.
+    unset OPENCODE_AUTH_CONTENT
+    if ! gemini_key="$(vault-cli.sh read -field=key secret/gemini/api-key 2>/dev/null)" \
+        || [ -z "$gemini_key" ]; then
+        trace_lifecycle "credentials" "opencode: Vault credential was expected but could not be read"
+        return 1
+    fi
+    if ! auth_content="$(printf '%s' "$gemini_key" \
+        | jq -Rsc '{google:{type:"api",key:.}}' 2>/dev/null)"; then
+        unset gemini_key
+        trace_lifecycle "credentials" "opencode: could not assemble Vault auth content"
+        return 1
+    fi
+    unset gemini_key
+
+    if ! printf '%s' "$auth_content" \
+        | jq -e 'type == "object" and length > 0' >/dev/null 2>&1; then
+        trace_lifecycle "credentials" "opencode: Vault auth content is malformed"
+        return 1
+    fi
+    OPENCODE_AUTH_CONTENT="$auth_content"
+    export OPENCODE_AUTH_CONTENT
+    unset auth_content
+    return 0
+}
+
+# Probe the undocumented environment contract itself, independent of any real
+# credential. The sentinel is generated at runtime, used only in an isolated
+# temp state tree, and never printed or committed as fixture data.
+opencode_auth_contract_ok() {
+    local bin_path="$1" probe_root probe_key probe_content probe_output auth_file
+    local probe_status=0
+    probe_root="$(mktemp -d /tmp/tillandsias-opencode-auth-probe.XXXXXX)" || return 1
+    probe_key="tillandsias-probe-${RANDOM:-0}-$$-$(date +%s%N 2>/dev/null || date +%s)"
+    probe_content="$(printf '%s' "$probe_key" \
+        | jq -Rsc '{"tillandsias-contract-probe":{type:"api",key:.}}')" \
+        || probe_status=1
+    if [ "$probe_status" -eq 0 ]; then
+        probe_output="$(
+            XDG_DATA_HOME="$probe_root/data" \
+            XDG_STATE_HOME="$probe_root/state" \
+            OPENCODE_DB=:memory: \
+            OPENCODE_AUTH_CONTENT="$probe_content" \
+            timeout 30 "$bin_path" auth list 2>&1
+        )" || probe_status=1
+    fi
+    auth_file="$probe_root/data/opencode/auth.json"
+    if [ "$probe_status" -eq 0 ] \
+        && { [ -e "$auth_file" ] || [ -L "$auth_file" ]; }; then
+        probe_status=1
+    fi
+    if [ "$probe_status" -eq 0 ] \
+        && ! printf '%s' "$probe_output" | grep -qF "tillandsias-contract-probe"; then
+        probe_status=1
+    fi
+    if [ "$probe_status" -eq 0 ] \
+        && ! printf '%s' "$probe_output" | grep -Eq '(^|[^0-9])1 credentials?([^0-9]|$)'; then
+        probe_status=1
+    fi
+    if [ "$probe_status" -eq 0 ] \
+        && grep -R -a -F -f <(printf '%s' "$probe_key") \
+            "$probe_root" >/dev/null 2>&1; then
+        probe_status=1
+    fi
+    rm -rf -- "$probe_root"
+    if [ "$probe_status" -ne 0 ] || [ -e "$probe_root" ]; then
+        trace_lifecycle "harness" "opencode AUTH CONTRACT BROKEN — env credential was not parsed cleanly without disk state"
+        return 1
+    fi
+    return 0
+}
+
+# Positive assertion for the credential actually injected into this lane. The
+# isolated probe compares OpenCode's reported count and provider IDs with the
+# in-memory JSON, checks both probe and real XDG paths for auth.json, and never
+# emits command output or credential values.
+opencode_actual_auth_ok() {
+    local bin_path="$1" expected_count providers provider
+    local probe_root probe_output normalized_output auth_file real_auth_file status=0
+    [ "${TILLANDSIAS_OPENCODE_AUTH_EXPECTED:-0}" = "1" ] || return 0
+    [ -n "${OPENCODE_AUTH_CONTENT:-}" ] || return 1
+
+    expected_count="$(printf '%s' "$OPENCODE_AUTH_CONTENT" \
+        | jq -er 'if type == "object" and length > 0 then length else error("empty") end')" \
+        || return 1
+    providers="$(printf '%s' "$OPENCODE_AUTH_CONTENT" | jq -er 'keys[]')" || return 1
+    probe_root="$(mktemp -d /tmp/tillandsias-opencode-auth-actual.XXXXXX)" || return 1
+    probe_output="$(
+        XDG_DATA_HOME="$probe_root/data" \
+        XDG_STATE_HOME="$probe_root/state" \
+        OPENCODE_DB=:memory: \
+        timeout 30 "$bin_path" auth list 2>&1
+    )" || status=1
+    normalized_output="$(printf '%s' "$probe_output" \
+        | sed $'s/\033\\[[0-9;]*[[:alpha:]]//g' \
+        | tr '[:upper:]' '[:lower:]')"
+    auth_file="$probe_root/data/opencode/auth.json"
+    real_auth_file="$(opencode_auth_file_path)"
+    if [ -e "$auth_file" ] || [ -L "$auth_file" ] \
+        || [ -e "$real_auth_file" ] || [ -L "$real_auth_file" ]; then
+        status=1
+    fi
+    if [ "$status" -eq 0 ] \
+        && ! printf '%s' "$normalized_output" \
+            | grep -Eq "(^|[^0-9])${expected_count} credentials?([^0-9]|$)"; then
+        status=1
+    fi
+    if [ "$status" -eq 0 ]; then
+        while IFS= read -r provider; do
+            if ! printf '%s' "$normalized_output" \
+                | grep -qF -- "$(printf '%s' "$provider" | tr '[:upper:]' '[:lower:]')"; then
+                status=1
+                break
+            fi
+        done <<<"$providers"
+    fi
+    rm -rf -- "$probe_root"
+    if [ "$status" -ne 0 ] || [ -e "$probe_root" ]; then
+        trace_lifecycle "credentials" "opencode: injected Vault credential failed the no-auth.json contract"
+        return 1
+    fi
+    trace_lifecycle "credentials" "opencode: Vault auth content parsed; auth.json absent"
+    return 0
+}
+
 harness_contract_help_cmd() {
     # Flags live on subcommands, so each harness needs its own help invocation.
     case "$1" in
@@ -1035,13 +1199,11 @@ harness_contract_flags() {
 }
 
 harness_contract_ok() {
-    # $1 = binary name. Returns 0 when every flag we pass still exists, or when
-    # no contract is declared for this harness. Never fails merely because help
-    # output could not be captured (offline/slow): a contract check that fails
-    # open on infrastructure noise would cause spurious rollbacks, so ambiguity
-    # is treated as "not disproven" and only a POSITIVE absence fails.
+    # $1 = binary name, optional $2 = exact binary path. Returns 0 when every
+    # flag we pass still exists, or when no contract is declared for this
+    # harness.
     local bin="$1"
-    local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+    local bin_path="${2:-${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin}"
     local help_cmd flags help_out missing=""
     help_cmd="$(harness_contract_help_cmd "$bin")"
     flags="$(harness_contract_flags "$bin")"
@@ -1065,9 +1227,10 @@ harness_probe() {
     # $1 = binary name. Liveness (--version within a short timeout) AND the
     # contracts we depend on (order 439). Both must hold: a harness that starts
     # but silently ignores our flags is not usable, it just fails invisibly.
-    local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1"
+    local bin_path="${2:-${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1}"
     [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1 \
-        && harness_contract_ok "$1"
+        && harness_contract_ok "$1" "$bin_path" \
+        && { [ "$1" != "opencode" ] || opencode_auth_contract_ok "$bin_path"; }
 }
 
 harness_last_good_file() {
@@ -1379,30 +1542,96 @@ harness_missing_fatal() {
 # Codex/Antigravity stay on npm for now (operator: "maybe later").
 HARNESS_CURL_ROOT="$HOME/.cache/tillandsias-project/harness-curl"
 
+opencode_curl_last_good_path() {
+    printf '%s/opencode/last-good/opencode\n' "$HARNESS_CURL_ROOT"
+}
+
+opencode_record_curl_last_good() {
+    local bin_path="$1" last_good tmp
+    harness_probe opencode "$bin_path" || return 1
+    last_good="$(opencode_curl_last_good_path)"
+    mkdir -p "$(dirname "$last_good")" || return 1
+    tmp="${last_good}.tmp.$$"
+    if install -m 0755 "$bin_path" "$tmp" 2>/dev/null \
+        && mv -f -- "$tmp" "$last_good" 2>/dev/null; then
+        return 0
+    fi
+    rm -f -- "$tmp" 2>/dev/null || true
+    return 1
+}
+
+opencode_restore_curl_last_good() {
+    local target="$1" last_good
+    last_good="$(opencode_curl_last_good_path)"
+    [ -x "$last_good" ] || return 1
+    install -m 0755 "$last_good" "$target" 2>/dev/null || return 1
+    harness_probe opencode "$target"
+}
+
+opencode_validate_or_rollback() {
+    local bin="$1"
+    OPENCODE_ROLLBACK_USED=0
+    if [ -x "$bin" ] && harness_probe opencode "$bin"; then
+        opencode_record_curl_last_good "$bin" >/dev/null 2>&1 || true
+        return 0
+    fi
+    trace_lifecycle "harness" "opencode refresh FAILED auth contract — rolling back to last-good"
+    if opencode_restore_curl_last_good "$bin"; then
+        OPENCODE_ROLLBACK_USED=1
+        trace_lifecycle "harness" "opencode rollback to last-good OK"
+        return 0
+    fi
+    return 1
+}
+
 curl_install_opencode() {
     OC_BIN=""
-    local dir="$HARNESS_CURL_ROOT/opencode/bin" tmp errlog
+    local dir="$HARNESS_CURL_ROOT/opencode/bin" tmp errlog bin
+    local refresh_ok=0
     mkdir -p "$dir" 2>/dev/null || true
+    bin="$dir/opencode"
+    # Snapshot only a binary that passes liveness, flag, and the isolated
+    # OPENCODE_AUTH_CONTENT/no-auth.json contract. This survives an official
+    # installer replacing the cached binary with a release that starts but
+    # silently dropped the undocumented credential primitive.
+    if [ -x "$bin" ]; then
+        opencode_record_curl_last_good "$bin" >/dev/null 2>&1 || true
+    fi
     tmp="$(mktemp /tmp/opencode-install.XXXXXX 2>/dev/null || echo /tmp/opencode-install.sh)"
     errlog="$(mktemp /tmp/opencode-install-log.XXXXXX 2>/dev/null || echo /tmp/opencode-install.err)"
     # OPENCODE_INSTALL_DIR is the installer's documented target override; the
     # binary downloads from GitHub releases (opencode.ai + github.com are
     # both in the egress allowlist).
-    if curl -fsSL --max-time 60 https://opencode.ai/install -o "$tmp" 2>"$errlog" \
-       && OPENCODE_INSTALL_DIR="$dir" bash "$tmp" >>"$errlog" 2>&1 \
-       && [ -x "$dir/opencode" ]; then
-        trace_lifecycle "harness" "opencode curl-install OK ($("$dir/opencode" --version 2>/dev/null || echo '?'))"
-        rm -f "$tmp" "$errlog" 2>/dev/null || true
-    elif [ -x "$dir/opencode" ]; then
-        trace_lifecycle "harness" "opencode curl-install unreachable — reusing cached ($("$dir/opencode" --version 2>/dev/null || echo '?'))"
-        rm -f "$tmp" 2>/dev/null || true
-    else
-        trace_lifecycle "harness" "opencode curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
-        rm -f "$tmp" 2>/dev/null || true
-        return 1
+    if env -u OPENCODE_AUTH_CONTENT \
+        curl -fsSL --max-time 60 https://opencode.ai/install -o "$tmp" 2>"$errlog" \
+       && env -u OPENCODE_AUTH_CONTENT OPENCODE_INSTALL_DIR="$dir" \
+        bash "$tmp" >>"$errlog" 2>&1 \
+       && [ -x "$bin" ]; then
+        refresh_ok=1
     fi
-    OC_BIN="$dir/opencode"
-    return 0
+
+    if opencode_validate_or_rollback "$bin"; then
+        if [ "${OPENCODE_ROLLBACK_USED:-0}" -eq 1 ]; then
+            trace_lifecycle "harness" "opencode refresh rejected — reusing last-good ($("$bin" --version 2>/dev/null || echo '?'))"
+            rm -f "$tmp" "$errlog" 2>/dev/null || true
+        elif [ "$refresh_ok" -eq 1 ]; then
+            trace_lifecycle "harness" "opencode curl-install OK ($("$bin" --version 2>/dev/null || echo '?'))"
+            rm -f "$tmp" "$errlog" 2>/dev/null || true
+        else
+            trace_lifecycle "harness" "opencode curl-install unreachable — reusing cached ($("$bin" --version 2>/dev/null || echo '?'))"
+            rm -f "$tmp" 2>/dev/null || true
+        fi
+        OC_BIN="$bin"
+        return 0
+    fi
+
+    if [ ! -x "$bin" ]; then
+        trace_lifecycle "harness" "opencode curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+    else
+        trace_lifecycle "harness" "opencode auth contract FAILED and no usable last-good binary remains"
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+    return 1
 }
 
 curl_install_claude() {

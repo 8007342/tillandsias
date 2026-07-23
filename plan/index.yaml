@@ -19042,7 +19042,7 @@ plan_index:
       packet_id: opencode-vault-auth-content
       desired_release: v0.4
       title: "OpenCode vault provider: inject credentials via OPENCODE_AUTH_CONTENT so no auth.json ever touches disk"
-      status: claimed
+      status: done
       operator_note: "operator decision to unblock: pin opencode version OR assert post-launch injection"
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
@@ -19052,24 +19052,26 @@ plan_index:
       capability_tags: [linux, forge, opencode, vault, credentials, operator-interactive]
       estimated_hours: 4
       outcome: >
-        RESEARCH GATE SATISFIED, empirically verified against opencode 1.18.3.
-        Operator intent 2026-07-19: OpenCode runs fine unauthenticated today,
-        but when we do authenticate it the credentials must live in the vault
-        container, "outside of agents' curious hands". OPENCODE_AUTH_CONTENT is
-        the primitive: Auth.all() parses it and returns immediately, never
-        touching auth.json — verified end-to-end (`opencode auth list` reported
-        2 credentials with NO auth.json on disk). vault_bootstrap.rs has no
-        OpenCode arm; main.rs maps ForgeAgentMode::OpenCode -> None. TWO TRAPS:
-        (1) OPENCODE_AUTH_CONTENT is UNDOCUMENTED and source-only, so the
-        opencode version MUST be pinned, and malformed JSON fails SILENTLY back
-        to the file path (bare catch {}); (2) auth.json merges AFTER env, so a
-        stale auth.json would override the vault injection — the injection path
-        must guarantee its absence.
+        IMPLEMENTED 2026-07-23 via the operator-approved positive-assertion
+        alternative to a version pin. The existing
+        secret/gemini/api-key producer is unchanged. Configured OpenCode and
+        OpenCode Web lanes receive only a short-lived opencode-forge AppRole
+        token whose policy can read exactly secret/data/gemini/api-key.
+        Their entrypoints remove stale auth.json, derive the google
+        OPENCODE_AUTH_CONTENT record through stdin, and require the selected
+        installed OpenCode to report the expected provider/count against
+        isolated state while both real and isolated auth.json paths remain
+        absent. The official every-launch curl refresh remains intact; a
+        parse/no-file contract failure restores the persistent last-good
+        OpenCode binary. No Gemini or derived-document bytes enter launcher
+        argv, lifecycle logs, committed fixtures, or disk. When the key is
+        absent, no provider token is minted and the free Zen/local lane remains
+        credential-free.
       exit_criteria:
-        - "vault_bootstrap.rs gains an OpenCode arm emitting OPENCODE_AUTH_CONTENT"
-        - "the opencode version is pinned, with the pin justified by the undocumented-variable risk"
-        - "malformed-JSON fallback is detected loudly rather than silently reverting to disk"
-        - "a litmus proves opencode auth list reports credentials with NO auth.json on disk"
+        - "DONE: launcher presence-checks the existing Gemini source without capturing it, then mounts only an opencode-forge AppRole token; the entrypoint derives OPENCODE_AUTH_CONTENT in-container"
+        - "DONE: the operator-approved positive installed-binary assertion replaces a version pin and is part of every OpenCode harness validation/last-good decision"
+        - "DONE: malformed JSON, provider/count drift, or any auth.json presence fails loudly rather than silently reverting to disk"
+        - "DONE: litmus:opencode-vault-auth-content proves free/configured/no-file/rollback paths; locally installed OpenCode 1.18.4 reports google, count 1, auth.json absent"
       events:
         - type: filed
           ts: "2026-07-19T01:30:00Z"
@@ -19137,6 +19139,32 @@ plan_index:
             present. No UX changes and no credential bytes in argv, logs,
             fixtures, or disk. Observed heads: main 667aca15, linux-next
             8f0fd86f, windows-next 8f0fd86f, osx-next 66ccfa70.
+        - type: done
+          ts: "2026-07-23T05:00:02Z"
+          agent_id: "forge-tillandsias-codex-20260723T0418Z"
+          host: forge
+          lease_id: "opencode-vault-auth-content-forge-20260723T0418Z"
+          summary: >
+            Closed with the operator-approved positive assertion. Added the
+            exactly-one-path read-only opencode-forge policy and AppRole,
+            presence-only launcher probe, CLI/Web scoped-token mounts,
+            in-container Gemini-to-google auth adapter, unconditional stale
+            auth.json removal, installed-binary provider/count/no-file checks,
+            and contract-aware persistent last-good rollback. The free lane
+            mounts no provider token and discards ambient auth content.
+            Canonical default-image, tillandsias-vault,
+            podman-secrets-integration, and security-privacy-isolation specs
+            plus litmus:opencode-vault-auth-content now own the behavior.
+            Locally installed OpenCode 1.18.4 passed with provider=google,
+            count=1, auth.json absent; hermetic adapter/rollback and focused
+            Rust policy/argv tests passed. No Podman binary was available, so
+            no live credential was used; no exit criterion requires one.
+            After rebasing onto origin/linux-next 148a9076,
+            ./build.sh --check, all 16 opencode-filtered headless tests, all
+            six Vault policy tests, the existing harness contract/rollback
+            fixtures, touched-YAML validation, and git diff checks passed.
+            Recomputed from the latest rebased ledger: this claimed-to-done
+            transition reduces open v0.4 packets from 16 to 15.
     - order: 432
       packet_id: forge-gc-auto-split-brain
       desired_release: v0.4

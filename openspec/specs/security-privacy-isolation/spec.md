@@ -18,20 +18,33 @@ leak, escape, or silently weaken?"
 
 The runtime SHALL never expose host credentials, secret material, or native
 keyring access to forge, terminal, browser, or proxy containers except through
-the specific credential transports named by the owning secrets specs. Token
-material MAY exist only as ephemeral host-side artifacts or read-only mounts
-defined by the credential specs.
+the specific credential transports named by the owning secrets specs. Vault
+token material MAY exist only as ephemeral host-side artifacts or read-only
+mounts defined by the credential specs. A provider credential MAY exist in a
+provider process environment only when its owning spec requires an in-memory
+adapter; it MUST NOT appear in launcher argv, logs, fixtures, or persistent
+files.
 
-#### Scenario: Forge and terminal containers remain credential-free
-- **WHEN** a forge or terminal container is launched
-- **THEN** no secret mount, token file, or keyring handle is attached
+#### Scenario: Provider-free forge and terminal containers remain credential-free
+- **WHEN** a maintenance forge, an unconfigured OpenCode forge, or a terminal
+  container is launched
+- **THEN** no provider secret mount, token file, or keyring handle is attached
 - **AND** no credential value appears in logs or environment variables
 
-#### Scenario: Git service receives the only token transport
-- **WHEN** a git service container is launched with credentials
-- **THEN** the only credential material allowed is the read-only token transport
+#### Scenario: Credentialed services and provider lanes use only named transports
+- **WHEN** a git service or explicitly credentialed provider forge is launched
+- **THEN** the only cross-boundary credential material allowed is its read-only,
+  least-privilege Vault token transport
 - **AND** the transport MUST match `spec:secrets-management` and
-  `spec:native-secrets-store`
+  `spec:podman-secrets-integration`
+
+#### Scenario: OpenCode auth stays in memory and off observable surfaces
+- **WHEN** OpenCode consumes a Vault-derived `OPENCODE_AUTH_CONTENT`
+- **THEN** the Gemini value and derived JSON MUST NOT appear in launcher argv,
+  lifecycle logs, committed fixtures, or `auth.json`
+- **AND** a stale `$XDG_DATA_HOME/opencode/auth.json` MUST be removed before
+  OpenCode starts
+- **AND** a failed parse/no-file assertion MUST fail the launch loudly.
 
 ### Requirement: Zero-tolerance runtime leakage boundary
 
@@ -126,6 +139,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:socket-cleanup`
 - `litmus:podman-build-command-shape`
 - `litmus:podman-web-launch-profile`
+- `litmus:opencode-vault-auth-content`
 
 ## Observability
 

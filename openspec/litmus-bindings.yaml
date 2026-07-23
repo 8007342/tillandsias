@@ -193,8 +193,9 @@ specs:
   - litmus:brew-ondemand-tools-shape
   - litmus:harness-rollback-shape
   - litmus:forge-validation-profile
+  - litmus:opencode-vault-auth-content
   coverage_ratio: 80
-  last_verified: '2026-07-14'
+  last_verified: '2026-07-23'
 - spec_id: dev-build
   status: active
   litmus_tests:
@@ -558,8 +559,9 @@ specs:
   - litmus:podman-build-command-shape
   - litmus:podman-web-launch-profile
   - litmus:podman-path-availability
+  - litmus:opencode-vault-auth-content
   coverage_ratio: 77
-  last_verified: '2026-05-12'
+  last_verified: '2026-07-23'
 - spec_id: nix-builder
   status: active
   litmus_tests:
@@ -928,8 +930,9 @@ specs:
   litmus_tests:
   - litmus:credential-isolation
   - litmus:podman-secrets-integration-shape
+  - litmus:opencode-vault-auth-content
   coverage_ratio: 75
-  last_verified: '2026-06-08'
+  last_verified: '2026-07-23'
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
@@ -944,8 +947,9 @@ specs:
   - litmus:vault-https-shape
   - litmus:vault-entrypoint-hardened-shape
   - litmus:vault-recreate-mutex
+  - litmus:opencode-vault-auth-content
   coverage_ratio: 100
-  last_verified: '2026-07-09'
+  last_verified: '2026-07-23'
 - spec_id: headless-mode
   status: active
   litmus_tests:

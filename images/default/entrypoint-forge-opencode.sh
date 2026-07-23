@@ -73,6 +73,13 @@ require_opencode
 require_openspec
 apply_opencode_config_overlay
 
+# @trace spec:default-image, spec:tillandsias-vault
+# Preserve the existing Gemini credential source, but adapt it inside the
+# container to OpenCode's no-file environment contract. Both the actual
+# credential and the installed-binary contract are verified before launch.
+prepare_opencode_vault_auth
+opencode_actual_auth_ok "$OC_BIN"
+
 trace_lifecycle "entrypoint" "opencode ready"
 
 # ── Inference probe (async-inference-launch contract) ───────
