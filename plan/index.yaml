@@ -16656,7 +16656,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: squid ssl_bump rule order makes bumping unreachable — 0% HTTPS cache hit rate ever; same 1.44GB ollama tarball tunneled 4x in 20 minutes"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: images/proxy/squid.conf ssl_bump rule order + cache policy for immutable release-asset URLs
       depends_on: []
@@ -16686,6 +16686,18 @@ plan_index:
             Fat-audit verified (measurements in the audit doc). Security
             note for the implementer: bumping changes the TLS trust
             story per host — keep the allowlist minimal and deliberate.
+        - type: claim
+          ts: "2026-07-23T05:28:53Z"
+          agent_id: "forge-tillandsias-codex-20260723T052853Z"
+          host: forge
+          lease_id: "e09ee4b31e0a"
+          expires_at: "2026-07-23T09:28:53Z"
+          summary: >
+            Claimed under explicit orchestrator assignment for one bounded
+            security-preserving config/spec/test slice. Base heads: main
+            667aca15, linux-next dcafd59c, windows-next 187a9199, osx-next
+            8bb79480. This forge has neither Podman nor Squid; no live cache
+            hit or runtime parser evidence will be claimed.
 
     - packet_id: vault-handover-empty-first-reply-suppresses-retry
       provisional_id: forge-260723-2
