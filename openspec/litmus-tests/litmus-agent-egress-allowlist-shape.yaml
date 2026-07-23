@@ -4,7 +4,8 @@ spec: proxy-container
 phase: pre-build
 description: >
   Verifies that required domains for agent auth and telemetry are allowlisted
-  and appropriately classified for bump/no-bump to prevent transparent interception failures.
+  while the sole exact-host bump ACL excludes them and the terminal splice
+  fallback preserves end-to-end TLS.
 severity: medium
 size: instant
 
@@ -19,10 +20,10 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: allowlisted"
 
-  - step: "Verify domains are marked no-bump in squid.conf"
-    command: "grep -Fq 'no_bump_domains dstdomain' images/proxy/squid.conf && grep -Fq '.chatgpt.com' images/proxy/squid.conf && grep -Fq '.claude.com' images/proxy/squid.conf && grep -Fq 'antigravity-cli-auto-updater-974169037036.us-central1.run.app' images/proxy/squid.conf && echo \"ok: no-bump\""
+  - step: "Verify agent domains cannot enter the sole bump ACL and fall through to splice"
+    command: "grep -Fxq 'acl github_release_assets ssl::server_name --client-requested release-assets.githubusercontent.com' images/proxy/squid.conf && ! grep -Eq '^acl github_release_assets .*([.]chatgpt[.]com|[.]claude[.]com|antigravity-cli-auto-updater-974169037036[.]us-central1[.]run[.]app)' images/proxy/squid.conf && grep -Fxq 'ssl_bump splice all' images/proxy/squid.conf && echo \"ok: exact bump ACL excludes agent domains; splice-all fallback active\""
     timeout_ms: 3000
-    expected_behavior: "ok: no-bump"
+    expected_behavior: "ok: exact bump ACL excludes agent domains; splice-all fallback active"
 
 observability:
   traces:
@@ -34,5 +35,5 @@ observability:
     artifact: "images/proxy/{allowlist.txt,squid.conf}"
 
 rollback:
-  on_failure: "Restore .chatgpt.com, .claude.com, and the exact Antigravity updater host to allowlist.txt and squid.conf no_bump_domains."
+  on_failure: "Restore .chatgpt.com, .claude.com, and the exact Antigravity updater host to allowlist.txt; keep the bump ACL exact-host-only and the terminal splice-all fallback."
   command: "echo rollback"

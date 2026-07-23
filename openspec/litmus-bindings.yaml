@@ -666,13 +666,14 @@ specs:
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
   coverage_ratio: 75
-  last_verified: '2026-05-30'
+  last_verified: '2026-07-23'
 - spec_id: transparent-https-caching
   status: active
   litmus_tests:
   - litmus:forge-runtime-ca-trust
+  - litmus:proxy-container-shape
   coverage_ratio: 100
-  last_verified: '2026-07-14'
+  last_verified: '2026-07-23'
 - spec_id: remote-projects
   status: active
   litmus_tests:

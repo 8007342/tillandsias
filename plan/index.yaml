@@ -16678,27 +16678,55 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: squid ssl_bump rule order makes bumping unreachable — 0% HTTPS cache hit rate ever; same 1.44GB ollama tarball tunneled 4x in 20 minutes"
-      status: claimed
+      status: in_progress
       kind: bug
-      deliverable: images/proxy/squid.conf ssl_bump rule order + cache policy for immutable release-asset URLs
+      deliverable: >
+        images/proxy/squid.conf + entrypoint.sh; proxy cache policy tests and
+        litmuses; proxy-container / transparent-https-caching spec
+        reconciliation; windows slowdown evidence update
       depends_on: []
       pickup_role: linux
       capability_tags: [proxy, squid, cache, performance, images]
       estimated_hours: 3
       outcome: >
-        Live-verified on the running proxy (squid 6.9): 846/846 HTTPS
-        requests in the 2.2h access log are TCP_TUNNEL/200 — zero bumped
-        requests, zero cache hits, ssl_db empty after 846 connections;
-        the ssl_bump rules at squid.conf:96-109 are ordered so the bump
-        step is unreachable. Consequence: NOTHING https is ever cached —
-        the same 1.44GB ollama release tarball was tunneled 4x in 20
-        minutes (5.76GB) during first-launch races, and every
-        harness/artifact re-download (windows-260723-3) hits origin.
-        Fix the rule order (peek at step1 -> bump for cacheable
-        allowlisted artifact hosts, splice the rest) + refresh_pattern
-        for immutable release-asset URLs, OR explicitly decide
-        tunnel-only and cache at a different layer — either way the
-        current config's cache is dead weight.
+        The original Windows evidence remains: Squid 6.9 logged 846/846
+        HTTPS requests as TCP_TUNNEL, no bumped requests or hits, and the
+        same ~1.44GiB Ollama asset moved four times. The security-preserving
+        static repair is implemented: peek only at SslBump1, bump only the
+        exact client-requested SNI release-assets.githubusercontent.com, and
+        splice every other TLS destination. Bumped origin TLS now verifies
+        certificate and hostname; unsafe DONT_VERIFY flags, HTTP freshness
+        overrides, StoreID, and URL rewriting are absent. A 4096MiB cache,
+        2048MiB object ceiling, origin-respecting exact-host refresh rule,
+        log-only query redaction, static semantic tests, litmus pins, and a
+        pre-launch `squid -k parse` gate are present. This packet remains
+        in_progress because this forge has neither Squid nor Podman: no
+        rebuilt-image parser result or real identical-key MISS-to-HIT trace is
+        claimed, and changing signed redirect queries remain distinct keys.
+      next_action: >
+        On a mutable Linux Podman host, check out the implementation commit
+        from linux-next and run the sanctioned `tillandsias --init --debug`
+        boundary so the rebuilt proxy's entrypoint proves `squid -k parse`.
+        From a CA-initialized forge/client container, resolve one small public
+        GitHub release asset once and request that identical final
+        release-assets.githubusercontent.com URL twice through the strict
+        proxy. Record equal checksums plus TCP_MISS then TCP_HIT without
+        recording signed query terms. Separately repeat the public redirect
+        and record whether its final signed key changes; if it does, keep the
+        packet open and file a fixture-backed StoreID decision rather than
+        normalizing here. Confirm github.com, api.github.com, one package
+        registry, and one provider endpoint remain TCP_TUNNEL.
+      acceptance_evidence:
+        - "cargo test -p tillandsias-headless --test proxy_cache_policy: 3/3 passed"
+        - "./scripts/run-litmus-test.sh --spec proxy-container --size instant: 2/2 executed passed; e2e excluded by size"
+        - "static config pins exact SslBump1 peek -> exact-host bump -> splice-all order and no DONT_VERIFY/StoreID/HTTP override"
+        - "entrypoint pins squid -k parse after runtime initialization and before foreground launch"
+      exit_criteria:
+        - "exact client-SNI release-asset host is the sole bump target; all other TLS falls through to splice"
+        - "bumped origin certificate and hostname verification remain enabled and cache freshness honors origin directives"
+        - "bounded cache and object ceilings can retain the observed ~1.44GiB asset"
+        - "static semantic tests and proxy instant litmuses pass"
+        - "LIVE: rebuilt Squid parser succeeds; an identical final release-asset URL yields equal checksums plus TCP_MISS then TCP_HIT; signed redirect-key behavior is recorded; representative non-target hosts remain TCP_TUNNEL"
       events:
         - type: filed
           ts: "2026-07-23T04:20:00Z"
@@ -16720,6 +16748,25 @@ plan_index:
             667aca15, linux-next dcafd59c, windows-next 187a9199, osx-next
             8bb79480. This forge has neither Podman nor Squid; no live cache
             hit or runtime parser evidence will be claimed.
+        - type: progress
+          ts: "2026-07-23T05:43:32Z"
+          agent_id: "forge-tillandsias-codex-20260723T052853Z"
+          host: forge
+          lease_id: "e09ee4b31e0a"
+          summary: >
+            Static/config/spec slice implemented and validated without
+            widening the TLS trust boundary: the exact release-asset CDN host
+            is the only bump target, all other TLS splices, origin
+            verification is mandatory, and query stripping is log privacy
+            only. The old 500MiB/512MiB bounds became 4096MiB/2048MiB, and the
+            entrypoint now parses the real runtime configuration before
+            launch. Static Rust policy tests passed 3/3 and proxy instant
+            litmuses passed 2/2. Runtime residual is explicit: on a mutable
+            Podman host, rebuild via `tillandsias --init --debug`, prove the
+            parser gate, then record equal checksums plus TCP_MISS -> TCP_HIT
+            for the identical final URL and TCP_TUNNEL for non-target hosts.
+            Signed redirect keys must be measured separately; no cache-hit
+            claim or StoreID normalization is made here.
 
     - packet_id: vault-handover-empty-first-reply-suppresses-retry
       provisional_id: forge-260723-2
