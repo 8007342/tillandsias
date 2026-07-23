@@ -109,6 +109,9 @@ impl PodmanBackend for RealBackend {
         let started = Instant::now();
         let mut cmd = crate::podman_cmd();
         cmd.args(argv);
+        // Backend calls are frequently wrapped in bounded timeouts. Ensure
+        // cancelling such a future cannot strand the Podman CLI process.
+        cmd.kill_on_drop(true);
         // User-visible debug log (only when --debug / TILLANDSIAS_DEBUG=1). See
         // crate::log_podman_invocation for the format and redaction rules.
         let label = format!("{:?}", operation).to_ascii_lowercase();

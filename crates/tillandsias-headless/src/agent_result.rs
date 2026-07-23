@@ -3,10 +3,10 @@
 //! Both agent CLIs can emit a JSONL transcript when
 //! `TILLANDSIAS_AGENT_RESULT_FORMAT=json` is set (see the forge entrypoints):
 //!
-//!   * codex-cli 0.144.4 `codex exec --json` emits `thread.started`,
-//!     `turn.started` / `turn.completed` / `turn.failed`, `item.*`, `error`.
-//!   * opencode 1.18.3 `opencode run --format json` emits `step_start`,
-//!     `text`, `step_finish`, each carrying a `sessionID`.
+//!   * Codex `codex exec --json` emits `thread.started`, `turn.*`,
+//!     `item.completed` with a nested `item`, and `error`.
+//!   * OpenCode `opencode run --format json` emits events whose payload lives
+//!     under `part` (`part.text` and `part.reason`) plus nested error data.
 //!
 //! # The one invariant that matters
 //!
@@ -89,7 +89,8 @@ pub fn parse_transcript(transcript: &str) -> AgentOutcome {
     let mut saw_any_event = false;
     let mut saw_start = false;
     let mut last_text: Option<String> = None;
-    let mut terminal: Option<AgentOutcome> = None;
+    let mut saw_terminal_success = false;
+    let mut failure_reason: Option<String> = None;
 
     for line in transcript.lines() {
         let line = line.trim();
@@ -108,49 +109,41 @@ pub fn parse_transcript(transcript: &str) -> AgentOutcome {
             // ---- codex ----
             "thread.started" | "turn.started" => saw_start = true,
             "turn.completed" => {
-                terminal = Some(AgentOutcome::Succeeded {
-                    last_message: last_text.clone(),
-                });
+                saw_terminal_success = true;
             }
             "turn.failed" => {
-                terminal = Some(AgentOutcome::Failed {
-                    reason: extract_reason(&v).unwrap_or_else(|| "turn.failed".to_string()),
+                failure_reason.get_or_insert_with(|| {
+                    extract_reason(&v).unwrap_or_else(|| "turn.failed".to_string())
                 });
             }
             "error" => {
-                terminal = Some(AgentOutcome::Failed {
-                    reason: extract_reason(&v).unwrap_or_else(|| "error event".to_string()),
+                failure_reason.get_or_insert_with(|| {
+                    extract_reason(&v).unwrap_or_else(|| "error event".to_string())
                 });
+            }
+            "item.completed" => {
+                if let Some(item) = v.get("item")
+                    && item.get("type").and_then(Value::as_str) == Some("agent_message")
+                    && let Some(text) = item.get("text").and_then(Value::as_str)
+                    && !text.trim().is_empty()
+                {
+                    last_text = Some(text.to_string());
+                }
             }
 
             // ---- opencode ----
             "step_start" => saw_start = true,
             "step_finish" => {
-                // opencode reports the finish reason on the step; only an
-                // explicit non-error finish counts as success.
-                match v
-                    .get("finishReason")
-                    .or_else(|| v.get("finish_reason"))
-                    .and_then(Value::as_str)
-                {
-                    Some(r) if r.eq_ignore_ascii_case("error") => {
-                        terminal = Some(AgentOutcome::Failed {
-                            reason: extract_reason(&v)
-                                .unwrap_or_else(|| "step_finish reported error".to_string()),
-                        });
-                    }
-                    _ => {
-                        terminal = Some(AgentOutcome::Succeeded {
-                            last_message: last_text.clone(),
-                        });
-                    }
+                // OpenCode may emit an intermediate `tool-calls` finish before
+                // continuing with another step. Only an explicit `stop` is a
+                // terminal success. Missing and unknown reasons remain
+                // non-terminal so a truncated stream cannot manufacture done.
+                if v.pointer("/part/reason").and_then(Value::as_str) == Some("stop") {
+                    saw_terminal_success = true;
                 }
             }
             "text" => {
-                if let Some(t) = v
-                    .get("text")
-                    .or_else(|| v.get("content"))
-                    .and_then(Value::as_str)
+                if let Some(t) = v.pointer("/part/text").and_then(Value::as_str)
                     && !t.trim().is_empty()
                 {
                     last_text = Some(t.to_string());
@@ -161,14 +154,13 @@ pub fn parse_transcript(transcript: &str) -> AgentOutcome {
         }
     }
 
-    if let Some(outcome) = terminal {
-        // Re-attach the latest text seen, so a success that arrived before the
-        // final text still reports the fullest message available.
-        return match outcome {
-            AgentOutcome::Succeeded { .. } => AgentOutcome::Succeeded {
-                last_message: last_text,
-            },
-            other => other,
+    // Failure is sticky. A later finish event cannot erase an earlier error.
+    if let Some(reason) = failure_reason {
+        return AgentOutcome::Failed { reason };
+    }
+    if saw_terminal_success {
+        return AgentOutcome::Succeeded {
+            last_message: last_text,
         };
     }
 
@@ -217,7 +209,54 @@ pub fn classify_run(transcript: &str, exit_code: Option<i32>) -> AgentOutcome {
     }
 }
 
+/// Combine a transcript with a real child-process status.
+///
+/// A status without an exit code means signal/forced termination and is a
+/// failure, not the "status unavailable" case represented by
+/// `classify_run(_, None)`.
+pub fn classify_exit_status(transcript: &str, status: &std::process::ExitStatus) -> AgentOutcome {
+    if status.success() {
+        classify_run(transcript, Some(0))
+    } else if let Some(code) = status.code() {
+        classify_run(transcript, Some(code))
+    } else {
+        AgentOutcome::Failed {
+            reason: format!(
+                "process terminated without an exit code (transcript said: {})",
+                parse_transcript(transcript).summary()
+            ),
+        }
+    }
+}
+
+/// Classify a bounded current-run capture.
+///
+/// Capture overflow can never be success, but it also cannot hide a real
+/// nonzero/signal failure.
+pub fn classify_captured_run(
+    transcript: &str,
+    status: &std::process::ExitStatus,
+    stdout_truncated: bool,
+) -> AgentOutcome {
+    if !status.success() {
+        classify_exit_status(transcript, status)
+    } else if stdout_truncated {
+        AgentOutcome::Indeterminate {
+            reason: "captured agent transcript exceeded its bounded host-memory limit".to_string(),
+        }
+    } else {
+        classify_exit_status(transcript, status)
+    }
+}
+
 fn extract_reason(v: &Value) -> Option<String> {
+    for pointer in ["/error/data/message", "/data/message"] {
+        if let Some(s) = v.pointer(pointer).and_then(Value::as_str)
+            && !s.trim().is_empty()
+        {
+            return Some(s.to_string());
+        }
+    }
     for key in ["error", "message", "reason", "detail"] {
         match v.get(key) {
             Some(Value::String(s)) if !s.trim().is_empty() => return Some(s.clone()),
@@ -237,6 +276,18 @@ fn extract_reason(v: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    fn test_exit_status(code: i32) -> std::process::ExitStatus {
+        use std::os::unix::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(code << 8)
+    }
+
+    #[cfg(windows)]
+    fn test_exit_status(code: i32) -> std::process::ExitStatus {
+        use std::os::windows::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(code as u32)
+    }
 
     // ---------------------------------------------------------------
     // The load-bearing tests: nothing ambiguous may read as success.
@@ -268,7 +319,7 @@ mod tests {
     fn started_but_truncated_is_indeterminate_not_success() {
         let t = r#"{"type":"thread.started","thread_id":"t1"}
 {"type":"turn.started"}
-{"type":"item.completed","item":{"kind":"message"}}"#;
+{"type":"item.completed","item":{"type":"agent_message","text":"not terminal"}}"#;
         let o = parse_transcript(t);
         assert!(
             !o.is_success(),
@@ -296,7 +347,7 @@ mod tests {
     #[test]
     fn nonzero_exit_overrides_a_success_looking_transcript() {
         let t = r#"{"type":"thread.started"}
-{"type":"text","text":"all done"}
+{"type":"item.completed","item":{"type":"agent_message","text":"all done"}}
 {"type":"turn.completed"}"#;
         assert!(parse_transcript(t).is_success());
         let o = classify_run(t, Some(37));
@@ -319,11 +370,11 @@ mod tests {
     // ---------------------------------------------------------------
 
     #[test]
-    fn codex_turn_completed_is_success_with_last_message() {
+    fn delegated_result_codex_nested_agent_message_is_returned() {
         let t = r#"{"type":"thread.started","thread_id":"t1"}
 {"type":"turn.started"}
-{"type":"text","text":"first"}
-{"type":"text","text":"final answer"}
+{"type":"item.completed","item":{"type":"agent_message","text":"first"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"final answer"}}
 {"type":"turn.completed"}"#;
         match parse_transcript(t) {
             AgentOutcome::Succeeded { last_message } => {
@@ -358,10 +409,24 @@ mod tests {
     }
 
     #[test]
-    fn opencode_step_finish_is_success() {
+    fn delegated_result_opencode_tool_calls_only_is_indeterminate() {
         let t = r#"{"type":"step_start","sessionID":"s1"}
-{"type":"text","text":"did the thing"}
-{"type":"step_finish","sessionID":"s1"}"#;
+{"type":"text","sessionID":"s1","part":{"text":"calling a tool"}}
+{"type":"step_finish","sessionID":"s1","part":{"reason":"tool-calls"}}"#;
+        assert!(matches!(
+            parse_transcript(t),
+            AgentOutcome::Indeterminate { .. }
+        ));
+    }
+
+    #[test]
+    fn delegated_result_opencode_tool_calls_then_stop_succeeds() {
+        let t = r#"{"type":"step_start","sessionID":"s1"}
+{"type":"text","sessionID":"s1","part":{"text":"calling a tool"}}
+{"type":"step_finish","sessionID":"s1","part":{"reason":"tool-calls"}}
+{"type":"step_start","sessionID":"s1"}
+{"type":"text","sessionID":"s1","part":{"text":"did the thing"}}
+{"type":"step_finish","sessionID":"s1","part":{"reason":"stop"}}"#;
         match parse_transcript(t) {
             AgentOutcome::Succeeded { last_message } => {
                 assert_eq!(last_message.as_deref(), Some("did the thing"));
@@ -371,23 +436,11 @@ mod tests {
     }
 
     #[test]
-    fn opencode_step_finish_with_error_reason_is_failure() {
-        let t = r#"{"type":"step_start","sessionID":"s1"}
-{"type":"step_finish","sessionID":"s1","finishReason":"error","message":"tool blew up"}"#;
-        let o = parse_transcript(t);
-        assert!(!o.is_success(), "an error finish must not be success");
-        match o {
-            AgentOutcome::Failed { reason } => assert!(reason.contains("tool blew up"), "{reason}"),
-            other => panic!("expected Failed, got {other:?}"),
-        }
-    }
-
-    #[test]
     fn interleaved_log_noise_does_not_break_classification() {
         let t = r#"loading config...
 {"type":"thread.started"}
 warning: cache miss
-{"type":"text","text":"ok"}
+{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}
 not json at all
 {"type":"turn.completed"}
 done."#;
@@ -395,13 +448,46 @@ done."#;
     }
 
     #[test]
+    fn delegated_result_opencode_error_then_finish_is_sticky_failure() {
+        let t = r#"{"type":"step_start","sessionID":"s1"}
+{"type":"error","sessionID":"s1","error":{"name":"UnknownError","data":{"message":"tool blew up"}}}
+{"type":"step_finish","sessionID":"s1","part":{"reason":"stop"}}"#;
+        match parse_transcript(t) {
+            AgentOutcome::Failed { reason } => assert!(reason.contains("tool blew up"), "{reason}"),
+            other => panic!("expected sticky Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn delegated_result_unknown_or_missing_opencode_reason_is_not_terminal() {
+        for finish in [
+            r#"{"type":"step_finish","sessionID":"s1","part":{}}"#,
+            r#"{"type":"step_finish","sessionID":"s1","part":{"reason":"length"}}"#,
+        ] {
+            assert!(matches!(
+                parse_transcript(finish),
+                AgentOutcome::Indeterminate { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn delegated_result_capture_overflow_never_succeeds_or_hides_nonzero() {
+        assert!(matches!(
+            classify_captured_run(r#"{"type":"turn.completed"}"#, &test_exit_status(0), true),
+            AgentOutcome::Indeterminate { .. }
+        ));
+        match classify_captured_run(r#"{"type":"turn.completed"}"#, &test_exit_status(37), true) {
+            AgentOutcome::Failed { reason } => assert!(reason.contains("37"), "{reason}"),
+            other => panic!("overflow + exit 37 must remain Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn a_failure_anywhere_beats_an_earlier_success_event() {
-        // Last terminal event wins: a run that completed a turn and then
-        // errored has failed.
         let t = r#"{"type":"turn.completed"}
 {"type":"error","message":"post-run crash"}"#;
-        let o = parse_transcript(t);
-        assert!(!o.is_success(), "a later error must not be masked");
+        assert!(matches!(parse_transcript(t), AgentOutcome::Failed { .. }));
     }
 
     #[test]

@@ -1,11 +1,11 @@
-# @trace spec:codex-tray-launcher
+# @trace spec:forge-as-only-runtime, spec:codex-tray-launcher
 name: litmus:forge-agent-result-format
-spec: codex-tray-launcher
+spec: forge-as-only-runtime
 phase: pre-build
-size: instant
+size: quick
 severity: critical
 description: >
-  Two invariants for delegated agent runs (order 429).
+  Delegated agent invariants (order 429).
 
   1. The OpenCode lane must pass a permission flag that ACTUALLY EXISTS. It
   passed `--dangerously-skip-permissions` for a long time — verified absent from
@@ -22,9 +22,16 @@ description: >
   interactive and human-facing runs must keep the formatted default. Flipping
   every run to JSON to serve automation would degrade the human path.
 
+  3. Host classification must consume stdout from the current exact worker,
+  retain the real exit status, understand the actual nested Codex/OpenCode
+  schemas, reject stale or overflowed evidence, and bound exact-name timeout
+  cleanup without touching a sibling.
+
 preconditions:
   - workspace contains images/default/entrypoint-forge-opencode.sh
   - workspace contains images/default/entrypoint-forge-codex.sh
+  - workspace contains crates/tillandsias-headless/src/agent_result.rs
+  - workspace contains crates/tillandsias-podman/src/client.rs
 
 critical_path:
   - step: "the OpenCode lane never passes the phantom --dangerously-skip-permissions flag"
@@ -47,12 +54,28 @@ critical_path:
     timeout_ms: 120000
     expected_behavior: "ok: opencode entrypoint prompt routing"
 
+  - step: "container entrypoints do not consume a host result-file path"
+    command: "! grep -q 'TILLANDSIAS_AGENT_RESULT_FILE' images/default/entrypoint-forge-codex.sh && ! grep -q 'TILLANDSIAS_AGENT_RESULT_FILE' images/default/entrypoint-forge-opencode.sh && echo 'ok: result path remains host-only'"
+    timeout_ms: 5000
+    expected_behavior: "ok: result path remains host-only"
+
+  - step: "both builders, both real JSON schemas, fresh capture, nonzero status, and exact timeout cleanup pass without Podman"
+    command: "cargo test -q -p tillandsias-headless delegated_result_"
+    timeout_ms: 120000
+    expected_behavior: "all delegated_result_ fixtures pass"
+
+  - step: "captured stdout retains a fixed bound while the source continues draining"
+    command: "cargo test -q -p tillandsias-podman bounded_attached_capture_drains_but_never_retains_over_limit"
+    timeout_ms: 120000
+    expected_behavior: "bounded capture overflow fixture passes"
+
 observability:
   traces:
+    - "@trace spec:forge-as-only-runtime"
     - "@trace spec:codex-tray-launcher"
-  expected_log: "forge agent lanes pass real flags and emit structured output only on request"
+  expected_log: "forge agent lanes emit and classify current-run structured output conservatively"
   log_fields:
-    spec: "codex-tray-launcher"
+    spec: "forge-as-only-runtime"
     test: "forge-agent-result-format"
 
 rollback:
@@ -60,5 +83,6 @@ rollback:
     Do NOT reintroduce --dangerously-skip-permissions on the OpenCode lane to
     make this pass; confirm against `opencode run --help` for the pinned version
     first. If opencode genuinely renamed --auto, update this litmus in the same
-    change as the entrypoint, citing the help output.
-  command: "grep -n 'auto\\|dangerously\\|RESULT_FORMAT' images/default/entrypoint-forge-opencode.sh"
+    change as the entrypoint, citing the help output. Never restore result-file
+    reads or timeout-by-dropping-the-run-future.
+  command: "grep -n 'auto\\|dangerously\\|RESULT_FORMAT\\|run_delegated_agent_container' images/default/entrypoint-forge-opencode.sh crates/tillandsias-headless/src/main.rs"

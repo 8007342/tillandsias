@@ -163,6 +163,68 @@ stack containers are removed only when no active forge containers remain.
   forge container remains active
 - **AND** a debug line SHALL state that no active forge containers remain
 
+### Requirement: Delegated agent results come from the current scoped run
+
+A delegated agent run is exactly a nonblank prompt combined with
+`TILLANDSIAS_AGENT_RESULT_FORMAT=json`. It MUST also carry a nonempty
+`TILLANDSIAS_FORGE_INSTANCE`; otherwise the launcher MUST fail before container
+startup because timeout cleanup cannot own the legacy unscoped name safely.
+Prompted runs without the JSON request retain their existing human-formatted
+path, while JSON without a nonblank prompt MUST NOT fall through to an
+interactive session.
+
+Both the raw OpenCode builder and the generic Codex builder MUST propagate only
+`TILLANDSIAS_AGENT_RESULT_FORMAT=json` into a delegated container. Host timeout
+and result-file paths MUST NOT enter container argv or mounts. The idiomatic
+Podman layer MUST capture stdout produced by that invocation and return its real
+process exit status while the existing TUI API continues to inherit stdout.
+
+Current-run capture has these conservative rules:
+
+- Codex assistant text comes from
+  `item.completed.item{type:"agent_message",text:...}`; `turn.completed` is
+  terminal success.
+- OpenCode text comes from `part.text`; only `part.reason == "stop"` is
+  terminal success. `tool-calls`, missing reasons, and unknown reasons are
+  nonterminal. Error detail comes from `error.data.message`.
+- Any observed failure is sticky, and a nonzero or signal exit is authoritative
+  failure even if earlier JSON looked successful.
+- Empty, malformed, truncated, nonterminal, or capture-overflow transcripts
+  MUST NOT report success. Stdout MUST be drained with at most 16 MiB retained;
+  overflow is surfaced as failure/indeterminate evidence rather than parsed as
+  a complete stream.
+
+Delegated runs MUST use a positive timeout. When no override is supplied, the
+bounded default is 900 seconds; zero or invalid overrides fail before launch.
+At deadline, the launcher MUST keep the captured run future awaitable, issue a
+bounded checked `podman rm --force --ignore` against only the exact
+instance-scoped container, reap under a bounded deadline, use `kill_on_drop` as
+a Podman-CLI backstop, and repeat the exact removal after reap/backstop to close
+the create-after-first-removal race. It MUST never list, glob, or remove sibling
+worker names.
+
+When `TILLANDSIAS_AGENT_RESULT_FILE` is requested, the host MUST atomically
+replace any preexisting content with an empty current-generation file before
+spawn and atomically replace it with the fresh captured stdout afterward. The
+host MUST never read that path as outcome evidence.
+
+#### Scenario: A failed Codex or OpenCode delegation is not reported done
+
+- **WHEN** a scoped prompt-driven JSON run emits a terminal-looking event and
+  then exits nonzero or emits an error
+- **THEN** the delegating process MUST surface `[forge-result] ... FAILED`
+- **AND** it MUST return failure rather than treating the work as done
+- **AND** any caller result file MUST contain only bytes from the current run
+
+#### Scenario: A delegated worker exceeds its deadline
+
+- **WHEN** an instance-scoped delegated worker does not exit before its deadline
+- **THEN** cleanup MUST target only its exact digest-scoped container name
+- **AND** the original Podman run MUST be reaped or killed under a bounded
+  fallback
+- **AND** sibling workers MUST remain alive
+- **AND** the outcome MUST be `TIMED OUT`, never success
+
 ### Requirement: Host Terminal Is the Only Host-Side Process
 
 For interactive launches, the tray MUST spawn exactly one host-side process:
@@ -220,7 +282,8 @@ This spec explicitly forbids:
   - `build_forge_agent_run_args`, `build_forge_agent_run_argv`, and
     `detect_host_terminal` (the host terminal seam)
 - `crates/tillandsias-podman/src/client.rs` and `container_spec.rs` —
-  the idiomatic podman boundary that every launch flows through.
+  the idiomatic podman boundary that every launch flows through, including
+  bounded current-run stdout capture for delegation.
 - `cheatsheets/runtime/podman-control-plane.md` — the broader "one throat
   to choke" framing this spec narrows to interactive agents.
 
@@ -231,6 +294,9 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:forge-as-only-runtime` — verifies (a) the forge image contains
   `claude`, `codex`, `opencode`, `bash` on `$PATH`, and (b) no raw
   `podman run` shell-outs exist outside the idiomatic layer.
+- `litmus:forge-agent-result-format` — verifies JSON propagation, actual
+  Codex/OpenCode schemas, fresh capture ownership, real status, bounded
+  overflow, and exact-worker timeout cleanup without Podman.
 
 Gating points:
 
