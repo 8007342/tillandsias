@@ -19233,7 +19233,7 @@ plan_index:
       packet_id: forge-delegation-result-retrieval
       desired_release: v0.4
       title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
-      status: claimed
+      status: in_progress
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: [forge-delegation-instance-names]
@@ -19378,6 +19378,44 @@ plan_index:
             lease. Scope remains the bounded no-Podman source closure and
             deterministic production-adapter evidence; the real container
             failure/timeout proof remains an explicit live residual.
+        - type: progress
+          ts: "2026-07-24T02:28:49Z"
+          agent_id: "forge-tillandsias-codex-result-repair-20260724T0228Z"
+          host: forge
+          lease_id: "8728be0c631d"
+          summary: >
+            The bounded no-Podman source slice is implementation-complete.
+            Both prompted CLI builders now opt into fresh captured JSONL,
+            detached OpenCode Web serve omits the unsupported result request,
+            the idiomatic Podman layer returns bounded stdout plus the real
+            process status, and the host consumes the actual nested Codex and
+            OpenCode schemas with sticky failure and conservative success.
+            Caller result files are invalidated before spawn, atomically
+            replaced from current capture, and never read as evidence.
+            Timeout cleanup retains the run future, checks exact
+            instance-scoped removal, reaps under a bound, uses kill-on-drop as
+            a CLI backstop, and repeats exact removal without listing or
+            touching siblings. Adversarial review additionally proved the
+            Codex --json command seam, routed a success-looking exit 37
+            through the production verdict wrapper, and made post-run
+            infrastructure failure dominate transcript success without first
+            emitting a succeeded verdict. Deterministic evidence is 11/11
+            selected headless tests, 1/1 bounded-capture test, and the
+            OpenCode prompt-entrypoint fixture; no Podman was invoked.
+          partial_artifact_refs:
+            - "crates/tillandsias-headless/src/agent_result.rs"
+            - "crates/tillandsias-headless/src/main.rs"
+            - "crates/tillandsias-podman/src/client.rs"
+            - "images/default/entrypoint-forge-codex.sh"
+            - "images/default/entrypoint-forge-opencode.sh"
+            - "openspec/litmus-tests/litmus-forge-agent-result-format.yaml"
+            - "plan/issues/forge-agent-delegation-research-2026-07-19.md"
+          next_action: >
+            Keep this packet in progress. On a mutable Linux host with Podman,
+            build the forge and run genuinely failed delegated Codex and
+            OpenCode tasks with nonblank prompt, JSON format, and exact
+            instance identity; prove each returns failure end to end and that
+            an adjacent scoped worker survives timeout cleanup.
     - order: 430
       packet_id: codex-lane-api-key-env
       desired_release: v0.4
@@ -21388,6 +21426,42 @@ plan_index:
             integer order, 460, for order 453's operator-deferred Slice 2.
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
+
+    - packet_id: podman-idiomatic-forge-secret-contract-drift
+      order: 461
+      desired_release: v0.5
+      title: "Reconcile generic Podman forge-secret prohibition with scoped Vault capability mounts"
+      status: ready
+      kind: methodology
+      deliverable: plan/issues/podman-idiomatic-forge-secret-contract-drift-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [methodology, spec, podman, vault, security, forge]
+      estimated_hours: 2
+      outcome: >
+        Independent methodology/spec proposal discovered while auditing order
+        429. The active podman-idiomatic-patterns spec says forge containers
+        receive no --secret flags, while the narrower current
+        podman-secrets-integration contract intentionally permits
+        short-lived, per-container Vault AppRole capability mounts. Reconcile
+        the generic invariant without changing v0.4 result-channel behavior:
+        forbid raw or long-lived provider credentials while explicitly
+        governing allowed least-privilege Vault capabilities.
+      exit_criteria:
+        - "the two active specs make the same claim about scoped forge AppRole secrets"
+        - "a litmus distinguishes forbidden raw provider credentials from allowed short-lived Vault capability mounts"
+        - "existing OpenCode/OAuth forge mounts either satisfy the reconciled wording or fail a named falsifiable check"
+      events:
+        - type: filed
+          ts: "2026-07-24T02:28:49Z"
+          agent_id: "forge-tillandsias-codex-result-repair-20260724T0228Z"
+          host: forge
+          summary: >
+            Primary Linux coordinator reserved canonical order 461 after the
+            contradiction was observed during order429 review. Filed as a
+            v0.5 independent methodology proposal so other agents can review,
+            upvote, and implement it without broadening the v0.4 source fix.
 
     - packet_id: repeat-human-operator-only-supervisor
       provisional_id: forge-260723-1

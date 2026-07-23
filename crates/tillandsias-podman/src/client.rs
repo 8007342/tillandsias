@@ -2,6 +2,7 @@
 use std::process::Stdio;
 use std::sync::Arc;
 
+use tokio::io::AsyncReadExt;
 use tracing::{debug, info, instrument, warn};
 
 use crate::backend::{BackendRef, CommandFailure, OperationKind, RealBackend, redact_argv};
@@ -15,6 +16,53 @@ pub struct RunOutput {
     pub stdout: String,
     pub stderr: String,
     pub status: std::process::ExitStatus,
+}
+
+/// Fresh stdout and the real process status from a non-interactive attached
+/// container run.
+///
+/// Unlike [`RunOutput`], stderr remains attached to the invoking terminal so
+/// lifecycle and agent diagnostics stay visible while stdout is reserved for
+/// a machine-readable transcript.
+/// @trace spec:podman-idiomatic-patterns, spec:forge-as-only-runtime
+#[derive(Debug)]
+pub struct CapturedAttachedRun {
+    pub stdout: Vec<u8>,
+    pub stdout_truncated: bool,
+    pub status: std::process::ExitStatus,
+}
+
+const MAX_ATTACHED_CAPTURE_BYTES: usize = 16 * 1024 * 1024;
+
+#[derive(Debug)]
+struct BoundedCapture {
+    bytes: Vec<u8>,
+    limit: usize,
+    truncated: bool,
+}
+
+impl BoundedCapture {
+    fn new(limit: usize) -> Self {
+        Self {
+            bytes: Vec::new(),
+            limit,
+            truncated: false,
+        }
+    }
+
+    /// Retain at most `limit` bytes while allowing the caller to keep draining
+    /// the source to EOF. Overflow is sticky and makes the transcript
+    /// ineligible for success classification upstream.
+    fn push(&mut self, chunk: &[u8]) {
+        let remaining = self.limit.saturating_sub(self.bytes.len());
+        if remaining > 0 {
+            self.bytes
+                .extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+        }
+        if chunk.len() > remaining {
+            self.truncated = true;
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -928,6 +976,137 @@ impl PodmanClient {
             Some(summary_line(&detail)),
         );
         Err(detail)
+    }
+
+    /// Run a non-interactive container with fresh stdout capture.
+    ///
+    /// This is the automation counterpart to
+    /// [`Self::run_container_attached_observed`]. It deliberately returns a
+    /// non-zero [`std::process::ExitStatus`] instead of converting it into an
+    /// error so the caller can combine the real status with the captured
+    /// agent protocol. Spawn failures remain errors. The existing inherited
+    /// stdio API stays unchanged for interactive TUI sessions.
+    ///
+    /// @trace spec:podman-idiomatic-patterns, spec:runtime-diagnostics-stream,
+    /// spec:forge-as-only-runtime
+    pub async fn run_container_attached_captured_observed(
+        &self,
+        stage: &str,
+        container_name: &str,
+        args: &[String],
+        debug_enabled: bool,
+    ) -> Result<CapturedAttachedRun, String> {
+        emit_launch_event(
+            debug_enabled,
+            stage,
+            container_name,
+            "starting",
+            Some("attached=true capture=stdout"),
+        );
+
+        let mut full_args = vec!["run".to_string()];
+        full_args.extend_from_slice(args);
+        let mut cmd = crate::podman_cmd();
+        cmd.args(&full_args)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit());
+        // Exact-name container removal is the primary timeout mechanism.
+        // This is only a last-resort guard for the Podman CLI process itself
+        // if checked removal plus bounded reap both fail.
+        cmd.kill_on_drop(true);
+        crate::log_podman_invocation_with_flag(
+            &format!("run-attached-captured:{stage}"),
+            cmd.as_std(),
+            debug_enabled,
+        );
+
+        let mut child = cmd.spawn().map_err(|err| {
+            let message = format!(
+                "stage '{stage}' could not spawn captured container {container_name}: {err}\nnext: verify podman is available in this desktop session\nredacted argv: podman {}",
+                redact_argv(&full_args).join(" ")
+            );
+            crate::log_podman_failure(
+                &format!("run-attached-captured:{stage}"),
+                "spawn-error",
+                &err.to_string(),
+            );
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "failed",
+                Some(summary_line(&message)),
+            );
+            message
+        })?;
+        let mut stdout = child.stdout.take().ok_or_else(|| {
+            format!("stage '{stage}' did not expose captured stdout for {container_name}")
+        })?;
+        let mut captured = BoundedCapture::new(MAX_ATTACHED_CAPTURE_BYTES);
+        let mut chunk = [0_u8; 8192];
+        loop {
+            let read = stdout.read(&mut chunk).await.map_err(|err| {
+                format!(
+                    "stage '{stage}' could not read captured stdout for {container_name}: {err}"
+                )
+            })?;
+            if read == 0 {
+                break;
+            }
+            captured.push(&chunk[..read]);
+        }
+        let status = child.wait().await.map_err(|err| {
+            let message = format!(
+                "stage '{stage}' could not reap captured container {container_name}: {err}"
+            );
+            crate::log_podman_failure(
+                &format!("run-attached-captured:{stage}"),
+                "wait-error",
+                &err.to_string(),
+            );
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "failed",
+                Some(summary_line(&message)),
+            );
+            message
+        })?;
+
+        let status_code = status
+            .code()
+            .map(|code| code.to_string())
+            .unwrap_or_else(|| "signal".to_string());
+        if status.success() {
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "exited",
+                Some("status=0 capture=stdout"),
+            );
+        } else {
+            crate::log_podman_failure(
+                &format!("run-attached-captured:{stage}"),
+                &status_code,
+                "(stderr inherited to terminal)",
+            );
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "failed",
+                Some(&format!("status={status_code} capture=stdout")),
+            );
+        }
+
+        Ok(CapturedAttachedRun {
+            stdout: captured.bytes,
+            stdout_truncated: captured.truncated,
+            status,
+        })
     }
 
     async fn format_observed_launch_failure(
@@ -2113,6 +2292,16 @@ mod tests {
             }),
             retry: RetryClass::Unknown,
         }
+    }
+
+    #[test]
+    fn bounded_attached_capture_drains_but_never_retains_over_limit() {
+        let mut capture = BoundedCapture::new(4);
+        capture.push(b"abc");
+        capture.push(b"def");
+        capture.push(b"still drained after overflow");
+        assert_eq!(capture.bytes, b"abcd");
+        assert!(capture.truncated, "overflow must remain sticky");
     }
 
     /// Step 15 slice 4: the canonical "network does not exist" cascade
