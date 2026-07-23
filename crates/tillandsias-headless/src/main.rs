@@ -3110,6 +3110,32 @@ fn build_inference_run_args(
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| String::from("/home/forge"));
     let model_cache_dir = Path::new(&home_dir).join(".cache/tillandsias/models");
     let _ = std::fs::create_dir_all(&model_cache_dir);
+    // Order 313 ROOT CAUSE (windows lane 2026-07-23, airtight repro): this
+    // dir is bind-mounted into the hardened inference container, which runs
+    // as uid 1000 (ollama) under --userns=keep-id — but the dir is created
+    // by the root headless, so the entrypoint's ollama self-install died
+    // EACCES on EVERY launch (mkdir/install errors swallowed by 2>/dev/null;
+    // the "proxy warm-up race" was only ever the first curl's 1ms DNS race,
+    // the download itself succeeded). Own the tree for the container user —
+    // idempotent, once per ensure, no per-start :U rechown of multi-GB
+    // model dirs.
+    #[cfg(unix)]
+    {
+        fn chown_tree(dir: &Path, uid: u32, gid: u32) {
+            let _ = std::os::unix::fs::chown(dir, Some(uid), Some(gid));
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.is_dir() {
+                        chown_tree(&p, uid, gid);
+                    } else {
+                        let _ = std::os::unix::fs::chown(&p, Some(uid), Some(gid));
+                    }
+                }
+            }
+        }
+        chown_tree(&model_cache_dir, 1000, 1000);
+    }
 
     let mut args = vec![
         "--detach".into(),

@@ -10636,16 +10636,25 @@ plan_index:
             shell. This packet is the release gate for any
             standard-user-facing Windows install.
 
-    # LIVE EVIDENCE 2026-07-23 (windows lane, first Windows forge launch,
-    # logs captured BEFORE teardown this time): inference Exited(1) with
-    # exactly the warm-up race — "curl: (7) Failed to connect to github.com
-    # port 443 via proxy after 1 ms" (proxy restarted alongside the lane,
-    # still cold), then the SINGLE 10s warm-up retry also failed, then the
-    # designed FATAL-exit-for-next-launch. The 10s one-shot retry ladder is
-    # too thin for a cold squid; wants the capped-exponential treatment
-    # (1,2,4,8,16..s) before giving up. Manual `podman start` against the
-    # warm proxy ~10 min later re-ran the install successfully (pending
-    # completion check). — windows-bullo-fable5-20260722
+    # ROOT CAUSE SOLVED 2026-07-23 (windows lane, airtight stepwise repro):
+    # the "recreated-container failure not explained by warm-up alone" is a
+    # VOLUME-OWNERSHIP bug. The models bind-mount source (guest
+    # /root/.cache/tillandsias/models) is created by the ROOT headless
+    # (drwxr-xr-x 0:0), while the hardened container runs as uid 1000
+    # (ollama, --userns=keep-id): mkdir/install into the volume dies EACCES
+    # — hidden by 2>/dev/null — so the self-install FAILED on EVERY launch
+    # and the FATAL exit followed. Proven: (a) curl through the proxy under
+    # the FULL hardened flag set = HTTP 200 and a complete 1.4GB
+    # download+zstd+tar EXTRACT-OK when no volume is mounted; (b) uid-1000
+    # write probe INTO the mounted volume = "Permission denied". The curl(7)
+    # 1ms refusal on first boot is only the container's own DNS bring-up
+    # race for attempt 1. FIXES landed from windows-next: headless
+    # build_inference_run_args now chowns the model-cache tree to 1000:1000
+    # (idempotent, cfg(unix)); entrypoint.sh error-swallowing removed so
+    # this class can never hide again. The live guest was manually chowned +
+    # restarted (install completing). Residual for this packet: the
+    # capped-exponential retry ladder polish + closing the packet with a
+    # clean pristine-substrate launch. — windows-bullo-fable5-20260722
     - packet_id: inference-firstrun-install-resilience
       order: 313
       desired_release: v0.4
