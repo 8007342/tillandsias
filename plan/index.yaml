@@ -16311,6 +16311,54 @@ plan_index:
             order-154 never-recovers pattern did not reproduce post
             runtime-split. Live tray relaunched carrying everything.
 
+    - packet_id: forge-first-launch-progress-surface
+      provisional_id: windows-260722-6
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Forge first launch: surface curated progress for the silent minutes (image build, inference first-run, harness installers) — 'the user must know that something is happening'"
+      status: ready
+      kind: enhancement
+      deliverable: headless forge-launch stage progress -> attach terminal + tray chip (curated, not raw dnf spam)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [ux, forge, launch, progress, cross-platform]
+      estimated_hours: 5
+      outcome: >
+        Operator, live during the first Windows forge launch 2026-07-23
+        (verbatim): "It's taking a while to launch, is it silently
+        installing brew and other first time launch installers? ... we
+        don't want to just spam a bunch of linux dnf upgrade logs, but we
+        do want to eventually show at least some spinners and some
+        progress for actual meaningful stuff happening. The user must
+        know that something is happening, and that their system is not
+        stuck." Ground truth of that silence: buildah forge-image build
+        (multi-minute, GBs written), inference first-run ollama install,
+        order-459 harness curl-installers — all invisible from the attach
+        terminal and the tray. The forge-launch path already has staged
+        structure (run_container_observed stages, wait_for_inference_
+        ready, entrypoint installers): surface it as curated stage lines
+        in the ATTACH terminal (spinner/short line per meaningful stage,
+        detail stays in logs) and mirror the current stage on the tray
+        chip while a launch is in flight. Wording is a tray-ux governed
+        surface: propose a stage-name family to The Tlatoani for approval
+        before implementing the strings.
+      exit_criteria:
+        - "first forge launch shows a visible, stage-level progress line within ~2s of attach and updates per stage (image build / runtime warm-up / harness install / opening) — no silent multi-minute window"
+        - "raw package-manager output stays OUT of the default view (available in logs/--debug)"
+        - "tray chip mirrors the in-flight launch stage; returns to Ready when the lane is up"
+        - "stage wording operator-approved and pinned (tray-ux governance)"
+      events:
+        - type: filed
+          ts: "2026-07-23T01:30:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed live mid-first-launch with the operator watching the
+            silence. The buildah stages were confirmed running (3.3 GB
+            layer) while the attach terminal showed nothing — the exact
+            'is it stuck?' moment this packet eliminates.
+
     - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
       order: provisional

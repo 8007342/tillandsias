@@ -401,7 +401,12 @@ pub fn run() -> ! {
         // menu's local-projects list current. This runs entirely on the host
         // and needs no VM, so the tray lists ~/src projects from first paint
         // (the popup rebuilds from MENU_STATE on every right-click).
+        // A missing ~/src is a NORMAL state (fresh machine, or the operator
+        // relocated it — live 2026-07-23): create the canonical dir so the
+        // watch always registers and the list is simply empty, instead of
+        // the scanner's no-paths ERROR landing in the Event Log.
         // @trace spec:host-shell-architecture.scanner.local-project-discovery@v1
+        let _ = std::fs::create_dir_all(crate::wsl_lifecycle::user_src_dir());
         match watch_projects(&crate::wsl_lifecycle::user_src_dir()) {
             Ok(mut rx) => {
                 tokio::task::spawn_local(async move {
