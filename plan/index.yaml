@@ -18962,7 +18962,7 @@ plan_index:
       packet_id: opencode-vault-auth-content
       desired_release: v0.4
       title: "OpenCode vault provider: inject credentials via OPENCODE_AUTH_CONTENT so no auth.json ever touches disk"
-      status: blocked
+      status: claimed
       operator_note: "operator decision to unblock: pin opencode version OR assert post-launch injection"
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
@@ -18996,7 +18996,6 @@ plan_index:
           agent_id: "linux-tillandsias-opus48-20260719T0000Z"
           host: linux
           summary: Filed from the 2026-07-19 forge delegation research.
-
 
         - type: blocked
           ts: "2026-07-19T07:15:00Z"
@@ -19042,6 +19041,22 @@ plan_index:
             broken. The investigation-and-documentation half the operator asked
             for is complete in
             plan/issues/forge-agent-delegation-research-2026-07-19.md.
+        - type: claim
+          ts: "2026-07-23T04:21:00Z"
+          agent_id: "forge-tillandsias-codex-20260723T0418Z"
+          host: forge
+          lease_id: "opencode-vault-auth-content-forge-20260723T0418Z"
+          expires_at: "2026-07-23T08:21:00Z"
+          summary: >
+            Claimed after the recorded operator decision satisfied the packet's
+            unblock condition. This cycle chooses the positive post-launch
+            assertion, preserving the every-launch curl refresh and last-good
+            rollback contract: inject Vault-backed OPENCODE_AUTH_CONTENT for
+            the OpenCode lane, exclude stale auth.json, and fail loudly unless
+            the installed harness parses the injected credential with no file
+            present. No UX changes and no credential bytes in argv, logs,
+            fixtures, or disk. Observed heads: main 667aca15, linux-next
+            8f0fd86f, windows-next 8f0fd86f, osx-next 66ccfa70.
     - order: 432
       packet_id: forge-gc-auto-split-brain
       desired_release: v0.4
