@@ -47,11 +47,36 @@ with exit 0 / `provisioned: true`):
   boots via EFI from inside `rootfs.img`; no host-side extracted kernel/initrd is
   required by the VZ boot path. `--diagnose` treats them as optional and still
   reports `provisioned`.
-- `guest_version: null` — the guest-version handshake (ced9657e) is populated
-  only after the VM boots and the in-guest headless reports in. `--diagnose` is a
-  static disk-state probe (no boot), so `null` pre-boot is correct. This field is
-  the one cold-path element not previously re-smoked on macOS; it will be
-  observable once the tray boots the VM (see attended smoke below).
+- `guest_version: null` — **stays null in the CLI `--diagnose` surface even after
+  the guest boots to ready** (confirmed empirically below). `diagnose.rs`
+  constructs the report with `guest_version: None` hardcoded (`:280`, `:1447`) and
+  never reads a persisted value; the live handshake result (ced9657e) is written
+  only into the *running tray's in-memory* `menu_state`
+  (`action_host.rs:~2227-2241`), so it is visible in the tray menu but never in
+  the static CLI diagnose. This is a minor observability gap (the diagnose JSON
+  schema advertises a field it never fills) — filed as
+  `plan/issues/macos-diagnose-guest-version-null-observability-2026-07-23.md`.
+  Not a provisioning defect.
+
+## Live-boot confirmation (beyond the static gate)
+
+After the tray was launched from `~/Applications`, it booted the freshly
+provisioned VM. `~/Library/Application Support/tillandsias/crashloop.state`
+reports the guest reached ready over the live vsock control wire:
+
+```
+tillandsias-crashloop-state v1
+window_secs 180
+threshold 3
+ever_ready 1
+last_phase ready
+```
+
+`ever_ready 1` + `last_phase ready` = boot → vsock handshake → guest ready
+succeeded on the cold-provisioned disk (rootfs.img actively written; tray PID
+alive). This exceeds the skill's automated macOS gate (which stops at
+`--diagnose`) but is still short of the full attended interaction pass (menu
+clicks, PTY attach, project enumeration), which remains operator-driven.
 
 ## Scope / what this does NOT close
 
