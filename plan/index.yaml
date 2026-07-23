@@ -16604,7 +16604,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "harness refresh moves ~1.09GB per lane launch — 273MB Claude dist downloaded TWICE in 7s; the 'warm cache makes this cheap' contract is broken"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: images/default/lib-common.sh curl_install_claude/ensure_forge_harnesses (short-circuit when persistent versions/ is current; disable launcher self-update on the --version probe; same guard for cargo tools)
       depends_on: []
@@ -16622,6 +16622,26 @@ plan_index:
         launch. Make the refresh byte-cheap when current, as its own
         comment promises (lib-common.sh:1373).
       events:
+        - type: claim
+          ts: "2026-07-23T05:26:25Z"
+          agent_id: "forge-codex-harness-refresh-20260723T0526Z"
+          host: forge
+          host_id: "forge-tillandsias"
+          platform: linux
+          lease_id: "harness-refresh-not-byte-cheap-dcafd59c-20260723T0526Z"
+          expires_at: "2026-07-23T09:26:25Z"
+          worktree_path: "/tmp/tillandsias-harness-refresh.R9prEM"
+          last_seen_commit: "dcafd59cd491064001338713450030a8192d9276"
+          upstream_commit: "dcafd59cd491064001338713450030a8192d9276"
+          observed_sibling_heads:
+            main: "667aca153b28faa88c8484faeb911aa5b8f2a895"
+            linux-next: "dcafd59cd491064001338713450030a8192d9276"
+            windows-next: "187a91995eca2a65050e5b5525029b97d64e80be"
+            osx-next: "8bb794805d96f6b7846493d53b47341822630eae"
+          summary: >
+            Claimed the v0.4 warm-harness byte-cost packet for a deterministic
+            implementation and fixture pass. No live Podman evidence will be
+            claimed from this forge.
         - type: filed
           ts: "2026-07-23T04:20:00Z"
           agent_id: "windows-bullo-fable5-20260722"
