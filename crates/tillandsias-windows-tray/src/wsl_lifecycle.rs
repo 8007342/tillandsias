@@ -23,6 +23,11 @@ use tillandsias_vm_layer::materialize::{
 use tillandsias_vm_layer::recipe::Manifest;
 use tillandsias_vm_layer::{VmRuntime, wsl::WslRuntime};
 
+use crate::wsl_probe_policy::{
+    DistroExecProbeAttempt, DistroExecProbeClass, DistroExecProbeDecision,
+    classify_nonzero_distro_exec, distro_exec_probe_decision,
+};
+
 /// Committed per-release pins (rootfs + headless binary URLs and checksums).
 /// Embedded so an installed, checkout-free tray still provisions correctly.
 ///
@@ -106,6 +111,11 @@ pub const PLATFORM_SETUP_FAILED_MARKER: &str = "windows-feature-setup failed";
 /// vm-provisioning-lifecycle `launch-no-unbounded-loop` invariant).
 const FEATURE_INSTALL_TIMEOUT_SECS: u64 = 20 * 60;
 
+/// The probe may boot a stopped utility VM, so it keeps order 418's
+/// 60-second budget. Absence of a result is never evidence that the distro
+/// is damaged.
+const DISTRO_EXEC_PROBE_TIMEOUT_SECS: u64 = 60;
+
 /// Build a background `wsl.exe` command with CREATE_NO_WINDOW applied.
 /// From the GUI-subsystem tray a raw console child flashes a visible window
 /// per invocation — the operator-reported "terminals popping open and
@@ -168,6 +178,60 @@ fn keepalive_backoff_delay(consecutive_failures: u32) -> Duration {
 enum KeepaliveDecision {
     RetryAfter(Duration),
     GiveUp,
+}
+
+/// The observable result of one `wsl -d <distro> --exec /bin/true` attempt.
+///
+/// Only [`DistroFailure`](Self::DistroFailure) proves that `wsl.exe` spawned,
+/// completed, rejected the distro exec, and the WSL service was independently
+/// classified as sane. Service failures, timeouts, and spawn/wait errors are
+/// inconclusive infrastructure outcomes and must never authorize unregistering
+/// the distro.
+#[derive(Debug)]
+enum DistroExecProbeResult {
+    Healthy,
+    DistroFailure(String),
+    ServiceFailure(String),
+    Timeout,
+    InfrastructureFailure(String),
+}
+
+impl DistroExecProbeResult {
+    fn class(&self) -> DistroExecProbeClass {
+        match self {
+            Self::Healthy => DistroExecProbeClass::Healthy,
+            Self::DistroFailure(_) => DistroExecProbeClass::DistroFailure,
+            Self::ServiceFailure(_) => DistroExecProbeClass::ServiceFailure,
+            Self::Timeout => DistroExecProbeClass::Timeout,
+            Self::InfrastructureFailure(_) => DistroExecProbeClass::InfrastructureFailure,
+        }
+    }
+
+    fn inconclusive_error(&self, attempt: &str) -> String {
+        match self {
+            Self::Timeout => format!(
+                "registered distro exec probe {attempt} timed out; \
+                 refusing destructive self-heal because the result is inconclusive"
+            ),
+            Self::ServiceFailure(error) => format!(
+                "registered distro exec probe {attempt} hit a WSL-service failure: {error}; \
+                 refusing destructive self-heal because the distro result is inconclusive"
+            ),
+            Self::InfrastructureFailure(error) => format!(
+                "registered distro exec probe {attempt} could not run: {error}; \
+                 refusing destructive self-heal because the result is inconclusive"
+            ),
+            Self::Healthy | Self::DistroFailure(_) => {
+                "internal error: conclusive distro probe routed as inconclusive".to_string()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RegisteredDistroDisposition {
+    UseRegistered,
+    ReprovisionDamaged,
 }
 
 /// Pure consecutive-failure state machine backing the keepalive loop, so the
@@ -397,34 +461,43 @@ impl WslLifecycle {
         // is a bare name match — a partial/corrupt import (first run killed
         // mid-provision) still LISTS, and every relaunch then fed a dead
         // distro to start()+keepalive: the second crash-loop vector. Trust
-        // the fast path only when the distro passes an actual exec probe;
-        // otherwise self-heal ONCE by discarding the damaged guest and
-        // falling through to a fresh import (ephemeral-by-design: the guest
-        // is disposable, plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md).
+        // the fast path only when the distro passes an actual exec probe.
+        // A timeout or WSL-service failure gets one bounded recovery + retry;
+        // only a completed nonzero exec with an independently sane WSL service
+        // authorizes one-shot self-heal by discarding the damaged guest.
+        // Inconclusive outcomes abort non-destructively (the guest is disposable
+        // only after damage is proven, per
+        // plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md).
         if self.runtime.is_registered().await {
-            if self.distro_exec_probe().await {
-                // Adopt pre-marker healthy installs: probe green is the truth.
-                self.write_import_complete_marker().await;
-                progress.report_phase(ProvisionPhase::StartingVm);
-                self.runtime.start().await?;
-                progress.report_phase(ProvisionPhase::Connecting);
-                const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-                let _keepalive = self.spawn_keepalive(false).ok();
-                return self.connect_with_backoff(CW_PORT).await;
+            match self.registered_distro_disposition().await? {
+                RegisteredDistroDisposition::UseRegistered => {
+                    // Adopt pre-marker healthy installs: probe green is the truth.
+                    self.write_import_complete_marker().await;
+                    progress.report_phase(ProvisionPhase::StartingVm);
+                    self.runtime.start().await?;
+                    progress.report_phase(ProvisionPhase::Connecting);
+                    const CW_PORT: u32 =
+                        tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+                    let _keepalive = self.spawn_keepalive(false).ok();
+                    return self.connect_with_backoff(CW_PORT).await;
+                }
+                RegisteredDistroDisposition::ReprovisionDamaged => {
+                    let marker = Self::import_complete_marker_path();
+                    tracing::error!(
+                        marker_present = marker.exists(),
+                        "registered WSL distro explicitly failed the exec probe — \
+                         treating the guest as damaged and reprovisioning from \
+                         scratch (one-shot self-heal; the guest is disposable \
+                         by design)"
+                    );
+                    progress.report_message(
+                        "\u{267B}\u{FE0F} Local VM is damaged — reprovisioning from scratch...",
+                    );
+                    self.unregister_distro().await?;
+                    let _ = tokio::fs::remove_file(&marker).await;
+                    // Fall through to the full download + import path below.
+                }
             }
-            let marker = Self::import_complete_marker_path();
-            tracing::error!(
-                marker_present = marker.exists(),
-                "registered WSL distro failed the exec probe — treating the \
-                 guest as damaged and reprovisioning from scratch (one-shot \
-                 self-heal; the guest is disposable by design)"
-            );
-            progress.report_message(
-                "\u{267B}\u{FE0F} Local VM is damaged — reprovisioning from scratch...",
-            );
-            self.unregister_distro().await?;
-            let _ = tokio::fs::remove_file(&marker).await;
-            // Fall through to the full download + import path below.
         }
 
         let manifest = Manifest::from_toml(RECIPE_MANIFEST)
@@ -528,23 +601,115 @@ impl WslLifecycle {
         }
     }
 
+    /// Resolve a registered distro without conflating missing evidence with
+    /// damage. A first timeout or WSL-service failure invokes the existing
+    /// WSL-service shutdown recovery exactly once and retries the probe exactly
+    /// once. Recovery failure, a second inconclusive result, or any
+    /// infrastructure error returns an error without reaching
+    /// `unregister_distro`.
+    async fn registered_distro_disposition(&self) -> Result<RegisteredDistroDisposition, String> {
+        let first = self.distro_exec_probe().await;
+        match distro_exec_probe_decision(DistroExecProbeAttempt::Initial, first.class()) {
+            DistroExecProbeDecision::UseRegistered => {
+                return Ok(RegisteredDistroDisposition::UseRegistered);
+            }
+            DistroExecProbeDecision::ReprovisionDamaged => {
+                return Ok(RegisteredDistroDisposition::ReprovisionDamaged);
+            }
+            DistroExecProbeDecision::FailNonDestructively => {
+                return Err(first.inconclusive_error("initial attempt"));
+            }
+            DistroExecProbeDecision::RecoverAndRetry => {}
+        }
+
+        tracing::warn!(
+            "registered distro exec probe was inconclusive (timeout or \
+             WSL-service failure); attempting one bounded WSL-service shutdown \
+             recovery before one retry"
+        );
+        if let Err(error) = WslRuntime::perform_wsl_shutdown_recovery().await {
+            return Err(format!(
+                "WSL-service shutdown recovery failed: {error}; \
+                 refusing destructive self-heal"
+            ));
+        }
+
+        let retry = self.distro_exec_probe().await;
+        match distro_exec_probe_decision(
+            DistroExecProbeAttempt::AfterShutdownRecovery,
+            retry.class(),
+        ) {
+            DistroExecProbeDecision::UseRegistered => {
+                tracing::info!("registered distro exec probe passed after WSL-service recovery");
+                Ok(RegisteredDistroDisposition::UseRegistered)
+            }
+            DistroExecProbeDecision::ReprovisionDamaged => {
+                Ok(RegisteredDistroDisposition::ReprovisionDamaged)
+            }
+            DistroExecProbeDecision::FailNonDestructively => {
+                Err(retry.inconclusive_error("after WSL-service recovery"))
+            }
+            DistroExecProbeDecision::RecoverAndRetry => {
+                unreachable!("the state machine never recovers twice")
+            }
+        }
+    }
+
     /// Cheap integrity probe for a registered distro: can it actually exec?
     /// `wsl -d <distro> --exec /bin/true` (hidden window, 60s cap — first
-    /// exec may boot the utility VM). A partial/corrupt import errors out;
-    /// a healthy distro exits 0. Timeout counts as failure.
-    async fn distro_exec_probe(&self) -> bool {
-        let fut = wsl_cmd()
+    /// exec may boot the utility VM). A partial/corrupt import returns an
+    /// explicit non-zero exit; a healthy distro exits 0. A non-zero result is
+    /// damage evidence only when a separate service-sanity probe passes and
+    /// stderr carries no WSL-service failure marker. Timeout, service failure,
+    /// and spawn/wait errors remain distinct, inconclusive outcomes.
+    async fn distro_exec_probe(&self) -> DistroExecProbeResult {
+        let mut cmd = wsl_cmd();
+        cmd.kill_on_drop(true);
+        let fut = cmd
             .args(["-d", self.distro_name(), "--exec", "/bin/true"])
-            .status();
-        match tokio::time::timeout(Duration::from_secs(60), fut).await {
-            Ok(Ok(status)) => status.success(),
+            .output();
+        match tokio::time::timeout(Duration::from_secs(DISTRO_EXEC_PROBE_TIMEOUT_SECS), fut).await {
+            Ok(Ok(output)) if output.status.success() => DistroExecProbeResult::Healthy,
+            Ok(Ok(output)) => {
+                let stderr = String::from_utf8_lossy(&output.stderr)
+                    .replace('\0', "")
+                    .trim()
+                    .to_string();
+                let service_sane = WslRuntime::is_wsl_service_sane().await;
+                match classify_nonzero_distro_exec(&stderr, service_sane) {
+                    DistroExecProbeClass::DistroFailure => {
+                        tracing::warn!(
+                            status = %output.status,
+                            stderr = %stderr,
+                            "distro exec probe failed while WSL service was independently sane"
+                        );
+                        DistroExecProbeResult::DistroFailure(format!("{}: {stderr}", output.status))
+                    }
+                    DistroExecProbeClass::ServiceFailure => {
+                        tracing::warn!(
+                            status = %output.status,
+                            stderr = %stderr,
+                            service_sane,
+                            "distro exec probe hit a WSL-service failure; distro damage is unproven"
+                        );
+                        DistroExecProbeResult::ServiceFailure(format!(
+                            "{}: {stderr}",
+                            output.status
+                        ))
+                    }
+                    other => unreachable!("non-zero classifier returned {other:?}"),
+                }
+            }
             Ok(Err(e)) => {
                 tracing::warn!(error = %e, "distro exec probe failed to spawn wsl.exe");
-                false
+                DistroExecProbeResult::InfrastructureFailure(e.to_string())
             }
             Err(_) => {
-                tracing::warn!("distro exec probe timed out after 60s");
-                false
+                tracing::warn!(
+                    timeout_s = DISTRO_EXEC_PROBE_TIMEOUT_SECS,
+                    "distro exec probe timed out; result is inconclusive"
+                );
+                DistroExecProbeResult::Timeout
             }
         }
     }
@@ -581,9 +746,10 @@ impl WslLifecycle {
     }
 
     /// Discard the damaged guest: `wsl --shutdown`-free targeted unregister
-    /// (deletes the distro + its VHDX). Called after a failed integrity
-    /// probe (one-shot self-heal) and by the user-invoked `wipe_guest`
-    /// reset path, both on the ephemeral-reset doctrine.
+    /// (deletes the distro + its VHDX). Called after an independently
+    /// service-sane failed integrity probe (one-shot self-heal) and by the
+    /// user-invoked `wipe_guest` reset path, both on the ephemeral-reset
+    /// doctrine.
     async fn unregister_distro(&self) -> Result<(), String> {
         let status = wsl_cmd()
             .args(["--unregister", self.distro_name()])
@@ -1319,6 +1485,21 @@ pub fn recipe_rootfs_artifact(manifest: &Manifest) -> Result<RemoteArtifact, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inconclusive_probe_errors_refuse_destructive_self_heal() {
+        for result in [
+            DistroExecProbeResult::Timeout,
+            DistroExecProbeResult::ServiceFailure("E_UNEXPECTED".into()),
+            DistroExecProbeResult::InfrastructureFailure("spawn denied".into()),
+        ] {
+            let error = result.inconclusive_error("test attempt");
+            assert!(error.contains("refusing destructive self-heal"));
+        }
+
+        let damage = DistroExecProbeResult::DistroFailure("exit code 1".into());
+        assert_eq!(damage.class(), DistroExecProbeClass::DistroFailure);
+    }
 
     #[test]
     fn import_complete_marker_lives_under_install_root() {

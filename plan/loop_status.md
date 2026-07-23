@@ -399,14 +399,14 @@ crashloops or work loss, and durable smoke-PASS evidence.
 
 ### Release roadmap (full backfill 2026-07-18; structural refresh 2026-07-23; order 407)
 
-All 114 nonterminal packets now carry a canonical `desired_release: vX.Y`.
+All 113 nonterminal packets now carry a canonical `desired_release: vX.Y`.
 The 2026-07-23 structural audit found zero missing/malformed assignments and
 zero dependency-order violations among those nonterminal packets (no open
 dependent is assigned to a release earlier than its upstream). The following
 releases are sequential and stability-gated; the coordinator may slip
 individual packets with a reason event.
 
-- **v0.4 — ACTIVE (17 open / 55 total tagged): "the product doesn't
+- **v0.4 — ACTIVE (16 open / 55 total tagged): "the product doesn't
   crashloop, lose work, or corrupt forge/mirror state."** Finish forge
   checkout/mirror/push correctness, credential lifecycle and concurrency
   safeguards, delegated-worker instance/result handling, first-launch and harness

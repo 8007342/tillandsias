@@ -16484,9 +16484,9 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "418 refinement: a probe TIMEOUT is not a damaged distro — do not destructively re-import on a transiently wedged WSL service"
-      status: ready
+      status: completed
       kind: bug
-      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs (probe timeout => bounded retry/wsl-service recovery, only probe FAILURE => self-heal)
+      deliverable: crates/tillandsias-windows-tray/src/{wsl_lifecycle.rs,wsl_probe_policy.rs} + crates/tillandsias-vm-layer/src/wsl.rs (bounded recovery)
       depends_on: []
       pickup_role: windows
       owner_host: windows
@@ -16500,8 +16500,17 @@ plan_index:
         wsl --shutdown) would trigger the one-shot DESTRUCTIVE
         unregister+reimport of a perfectly healthy distro. Distinguish:
         timeout => run the existing perform_wsl_shutdown_recovery + retry
-        the probe once; only a real exec failure (or post-recovery
-        failure) engages the ephemeral self-heal.
+        the probe once; only a completed non-zero exec probe whose independent
+        WSL-service sanity check passes engages the ephemeral self-heal.
+        WSL/Service and E_UNEXPECTED failures route through recovery, never
+        directly to reprovisioning. Failed recovery, a second timeout/service
+        failure, and infrastructure/spawn failures remain inconclusive and
+        fail bounded without unregistering or re-importing the distro.
+      exit_criteria:
+        - "the existing healthy registered-distro probe remains the unchanged fast path"
+        - "an initial timeout invokes perform_wsl_shutdown_recovery exactly once under a hard bound, then retries the probe exactly once"
+        - "only a completed non-zero probe after an independent service-sane classification reaches unregister/reimport; WSL/Service, E_UNEXPECTED, failed recovery, a second timeout, and infrastructure/spawn errors do not"
+        - "a pure decision-table test and a platform-independent source/wiring test falsifiably pin every state transition"
       events:
         - type: filed
           ts: "2026-07-23T04:20:00Z"
@@ -16510,6 +16519,43 @@ plan_index:
           summary: >
             From the 23-agent slowdown audit (finding verified MEDIUM):
             safety refinement, not a performance item.
+        - type: claim
+          ts: "2026-07-23T04:50:30Z"
+          agent_id: "forge-tillandsias-codex-20260723T045030Z"
+          host: forge
+          lease_id: "24b61361c2d4"
+          expires_at: "2026-07-23T08:50:30Z"
+          summary: >
+            Claimed under explicit orchestrator coordination for a bounded
+            code/test slice in the Windows-owned crate. Observed heads: main
+            667aca15, linux-next 98fe6f9c, windows-next f10731f7, osx-next
+            66ccfa70. No user-visible UX changes and no live-WSL claim.
+        - type: completed
+          ts: "2026-07-23T04:53:15Z"
+          agent_id: "forge-tillandsias-codex-20260723T045030Z"
+          host: forge
+          lease_id: "24b61361c2d4"
+          summary: >
+            Implemented a typed, pure probe decision table and wired it into
+            the registered-distro fast path. Healthy probes still start the
+            existing distro immediately. A first timeout or WSL-service
+            failure runs the existing WSL shutdown recovery once under a
+            60-second bound and retries once. A non-zero result is classified
+            as distro damage only after the independent WSL-service sanity
+            probe succeeds and stderr contains neither WSL/Service nor
+            E_UNEXPECTED; those service-wedge signatures instead take the
+            recovery path. Recovery failure, second timeout/service failure,
+            and spawn/wait infrastructure failure return errors without
+            destructive self-heal. Probe and shutdown-recovery children are
+            kill-on-drop at hard timeout boundaries. No menu, chip,
+            notification, dialog, or other UX text changed.
+          evidence:
+            - "cargo test -p tillandsias-windows-tray: 9 passed, 0 failed (state-machine, source/wiring, and portable tray tests)"
+            - "wsl_probe_policy.rs decision table enumerates all ten initial/retry outcomes and explicitly falsifies E_UNEXPECTED => damage"
+            - "cargo test -p tillandsias-vm-layer wsl_shutdown_recovery_owns_a_hard_process_bound: 1 passed, 0 failed"
+            - "tillandsias-policy validate-yaml plan/index.yaml: ok; tillandsias-plan check: ok (352 packets, known organic-reference/schema-drift advisories only)"
+            - "./build.sh --check: formatting, workspace type-check, strict clippy, and strict listen-vsock clippy passed"
+            - "verification scope: Linux-host source/unit evidence; no real WSL runtime was exercised or claimed"
 
     - packet_id: codex-lane-state-amnesia
       provisional_id: windows-260723-2
