@@ -118,7 +118,7 @@ if (Test-Path $InstalledExe) {
     # Quick identity ping via `tillandsias-tray --version` (fast, no WSL
     # touch; same flag install-windows.ps1's Layer 1 preflight uses). Reports
     # workspace VERSION + short build_commit baked at compile time, so the
-    # operator sees what the installed binary self-identifies as — distinct
+    # operator sees what the installed binary self-identifies as -- distinct
     # from the file's mtime above (which is install time, not build time
     # for binaries copied from a release artifact). cmd-redirect to bypass
     # PowerShell's GUI-subsystem stdout capture quirk; see

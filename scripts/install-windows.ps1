@@ -32,7 +32,7 @@
 
 .EXAMPLE
     irm https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1 | iex
-    irm https://…/install-windows.ps1 | iex  # (same URL, short form)
+    irm https://.../install-windows.ps1 | iex  # (same URL, short form)
 
 # @trace spec:windows-native-tray, spec:vm-provisioning-lifecycle
 #>
@@ -55,6 +55,13 @@ $StartMenuDir  = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
 $ShortcutPath  = Join-Path $StartMenuDir "$AppName.lnk"
 $StartupDir    = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
 $StartupLnk    = Join-Path $StartupDir "$AppName.lnk"
+# windows-260722-3: the tray (and thus its child processes, e.g. the WSL
+# keepalive) must NEVER run with the INSTALL dir as CWD -- children that
+# outlive a hard-killed tray hold the directory handle and block the next
+# update's backup/replace (observed live: orphaned wsl.exe pinning the exe
+# dir). Launch and shortcuts point at the data root instead.
+$DataRootDir   = Join-Path $env:LOCALAPPDATA 'tillandsias'
+New-Item -ItemType Directory -Force -Path $DataRootDir | Out-Null
 
 function Say   { param([string]$msg) Write-Host "  $msg" }
 function SayOk { param([string]$msg) Write-Host "  $msg" -ForegroundColor Green }
@@ -73,7 +80,7 @@ function New-Shortcut {
     $sc.Save()
 }
 
-# ── Uninstall / Purge ────────────────────────────────────────────────────────
+# -- Uninstall / Purge --------------------------------------------------------
 if ($Uninstall -or $Purge) {
     $DataRoot = Join-Path $env:LOCALAPPDATA 'tillandsias'
     $action = if ($Purge) { 'Purging' } else { 'Uninstalling' }
@@ -83,6 +90,30 @@ if ($Uninstall -or $Purge) {
         if (Test-Path $p) { Remove-Item $p -Force; Say "  removed $p" }
     }
     if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force; Say "  removed $InstallDir" }
+    # windows-260722-3: Installed-Software entry + every Tillandsias
+    # tray-icon settings entry go with the app (uninstall AND purge -- a
+    # removed app must vanish from Settings surfaces entirely).
+    $UninstKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Tillandsias'
+    if (Test-Path $UninstKey) { Remove-Item $UninstKey -Recurse -Force -ErrorAction SilentlyContinue; Say "  removed Installed-Software entry" }
+    try {
+        $nis = 'HKCU:\Control Panel\NotifyIconSettings'
+        if (Test-Path $nis) {
+            Get-ChildItem $nis | ForEach-Object {
+                $p = (Get-ItemProperty -Path $_.PSPath -Name 'ExecutablePath' -ErrorAction SilentlyContinue).ExecutablePath
+                if ($p -and ($p -like '*tillandsias-tray.exe')) {
+                    Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+                    Say "  removed tray-icon settings entry: $p"
+                }
+            }
+        }
+    } catch {}
+    # Empty leftover Start Menu folders (WSL distro registration creates
+    # per-distro folders that `wsl --unregister` leaves behind).
+    foreach ($d in @('tillandsias', 'tillandsias-build') | ForEach-Object { Join-Path $StartMenuDir $_ }) {
+        if ((Test-Path $d) -and -not (Get-ChildItem $d -ErrorAction SilentlyContinue)) {
+            Remove-Item $d -Force -ErrorAction SilentlyContinue; Say "  removed empty $d"
+        }
+    }
     if ($Purge) {
         $wsl = Get-Command wsl -ErrorAction SilentlyContinue
         if ($wsl) {
@@ -95,7 +126,7 @@ if ($Uninstall -or $Purge) {
         foreach ($d in @('cache', 'logs', 'wsl') | ForEach-Object { Join-Path $DataRoot $_ }) {
             if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue; Say "  removed $d" }
         }
-        # Event Log source registration (HKLM) — removable only from an
+        # Event Log source registration (HKLM) -- removable only from an
         # elevated shell; best-effort, silent skip otherwise. Already-logged
         # events stay in the Application log by design (they are the record).
         try {
@@ -109,7 +140,7 @@ if ($Uninstall -or $Purge) {
     return
 }
 
-# ── Platform gates ───────────────────────────────────────────────────────────
+# -- Platform gates -----------------------------------------------------------
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     Die "PowerShell 5+ is required. Please update via Windows Update."
 }
@@ -117,7 +148,7 @@ if (-not [System.Environment]::Is64BitOperatingSystem) {
     Die "Tillandsias requires a 64-bit Windows installation."
 }
 
-# ── WSL platform preflight (order 324; mirrors the order-323 tray classifier) ─
+# -- WSL platform preflight (order 324; mirrors the order-323 tray classifier) -
 # A brand-new host can be in states where the tray's first VM create can NEVER
 # succeed (recipes: plan/issues/wsl2-reboot-pending-first-install-ux-2026-07-13.md):
 #   absent                  wsl.exe missing or Windows ships only the stub (S1)
@@ -156,9 +187,36 @@ $WslState = Get-WslPlatformState
 $NoLaunchReason = ''
 switch ($WslState) {
     'absent' {
-        SayWn "WSL is not installed. Install it with: wsl --install --no-distribution"
-        SayWn "(restart Windows if the installer asks). Tillandsias will install now,"
-        SayWn "but provisioning requires WSL2 on next launch."
+        # windows-260722-1: don't just instruct -- RUN the idempotent install
+        # right here (operator directive 2026-07-22: "make sure our curl
+        # install ends with the idempotent wsl --install"). wsl.exe raises
+        # its own UAC prompt when elevation is needed; declining or failing
+        # degrades to the old warn-only behavior. Afterward re-classify: a
+        # healthy platform allows auto-launch; anything else suppresses it
+        # (the old arm auto-launched into a provisioning attempt that could
+        # never succeed -- the field "crash loop" report of 2026-07-22).
+        SayWn "WSL is not installed. Running the one-time platform install now"
+        SayWn "(idempotent; you may see a Windows approval prompt)..."
+        try {
+            & wsl --install --no-distribution 2>&1 | ForEach-Object { Say "  $($_ -replace "`0", '')" }
+        } catch {
+            SayWn "wsl --install did not complete ($_)."
+        }
+        $WslState = Get-WslPlatformState
+        switch ($WslState) {
+            'ok' { SayOk "WSL platform ready." }
+            'reboot-pending' {
+                SayWn "WSL2 requires a restart to finish installing."
+                SayWn "NEXT: 1) restart Windows   2) launch Tillandsias from the Start Menu."
+                $NoLaunchReason = 'restart Windows first, then launch Tillandsias from the Start Menu'
+            }
+            default {
+                SayWn "WSL is still not available. Install it manually with:"
+                SayWn "  wsl --install --no-distribution"
+                SayWn "(restart Windows if the installer asks), then launch Tillandsias."
+                $NoLaunchReason = 'install WSL2 (wsl --install --no-distribution) first, then launch Tillandsias'
+            }
+        }
     }
     'reboot-pending' {
         SayWn "WSL2 requires a restart to finish installing."
@@ -176,9 +234,9 @@ if ($NoLaunchReason -and -not $NoLaunch) {
     SayWn "Auto-launch disabled for this install ($WslState): the tray's first VM create cannot succeed yet."
 }
 
-# ── Hyper-V Administrators membership (order 312) ───────────────────────────
+# -- Hyper-V Administrators membership (order 312) ---------------------------
 # The tray's hvsocket VM lookup (hcsdiag) requires an ENABLED membership in
-# Administrators or 'Hyper-V Administrators' (BUILTIN SID S-1-5-32-578) —
+# Administrators or 'Hyper-V Administrators' (BUILTIN SID S-1-5-32-578) --
 # standard-user installs can otherwise never connect to the VM (masked for
 # months by elevated dev shells). Offer a one-time elevated group-add.
 # SIDs, not names: group names are localized ("Administrateurs Hyper-V").
@@ -193,7 +251,7 @@ function Test-HcsAccess {
     }
     return $false
 }
-# ── Windows Event Log source (@trace spec:windows-event-logging) ────────────
+# -- Windows Event Log source (@trace spec:windows-event-logging) ------------
 # The tray relays INFO/WARN/ERROR to the Application Event Log so failures are
 # discoverable in Event Viewer. The relay works WITHOUT registration (events
 # render inside Event Viewer's generic wrapper); registering the source under
@@ -256,7 +314,7 @@ Say "Target: Windows x64"
 Say "Install path: $InstalledExe"
 Write-Host ""
 
-# ── Resolve version and base URL ─────────────────────────────────────────────
+# -- Resolve version and base URL ---------------------------------------------
 if ($env:TILLANDSIAS_VERSION) {
     $Version = $env:TILLANDSIAS_VERSION.TrimStart('v')
     $Base = "https://github.com/$Repo/releases/download/v$Version"
@@ -266,18 +324,18 @@ if ($env:TILLANDSIAS_VERSION) {
     Say "Resolving latest release..."
 }
 
-# ── Temp workspace ────────────────────────────────────────────────────────────
+# -- Temp workspace ------------------------------------------------------------
 $Tmp = Join-Path $env:TEMP "tillandsias-install-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Force -Path $Tmp | Out-Null
 
 try {
-    # ── Download SHA256SUMS-windows ───────────────────────────────────────────
+    # -- Download SHA256SUMS-windows -------------------------------------------
     $SumsUrl = "$Base/SHA256SUMS-windows"
     Say "Fetching SHA256SUMS-windows..."
     try {
         Invoke-WebRequest -Uri $SumsUrl -OutFile "$Tmp\SHA256SUMS-windows" -UseBasicParsing -ErrorAction Stop
     } catch {
-        Die "Could not download SHA256SUMS-windows from $SumsUrl — check network or version."
+        Die "Could not download SHA256SUMS-windows from $SumsUrl -- check network or version."
     }
 
     # Find zip filename (e.g. tillandsias-tray-0.3.260622.4-windows-x64.zip)
@@ -287,7 +345,7 @@ try {
     if (-not $ZipName) { Die "No tillandsias-tray-*-windows-x64.zip entry in SHA256SUMS-windows." }
     Say "Asset: $ZipName"
 
-    # ── Download zip ──────────────────────────────────────────────────────────
+    # -- Download zip ----------------------------------------------------------
     $ZipUrl = "$Base/$ZipName"
     Say "Downloading $ZipUrl..."
     try {
@@ -296,7 +354,7 @@ try {
         Die "Download failed: $_"
     }
 
-    # ── Verify SHA-256 ────────────────────────────────────────────────────────
+    # -- Verify SHA-256 --------------------------------------------------------
     Say "Verifying SHA-256..."
     $Expected = ($SumsContent -split "`n" | Where-Object { $_ -match [regex]::Escape($ZipName) } |
                  Select-Object -First 1 | ForEach-Object { ($_ -split '\s+')[0] }).ToLower()
@@ -306,7 +364,7 @@ try {
     }
     SayOk "sha256: ok ($Expected)"
 
-    # ── Stop running tray + back up ────────────────────────────────────────────
+    # -- Stop running tray + back up --------------------------------------------
     Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
     if (Test-Path $InstallDir) {
         $Backup = "$InstallDir.bak"
@@ -315,24 +373,24 @@ try {
         Rename-Item $InstallDir $Backup
     }
 
-    # ── Extract ────────────────────────────────────────────────────────────────
+    # -- Extract ----------------------------------------------------------------
     Say "Extracting to $InstallDir..."
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     Expand-Archive -Path "$Tmp\$ZipName" -DestinationPath $InstallDir -Force
     if (-not (Test-Path $InstalledExe)) {
-        Die "Extraction did not produce $InstalledExe — zip may be corrupt."
+        Die "Extraction did not produce $InstalledExe -- zip may be corrupt."
     }
 
-    # ── Start Menu shortcut ───────────────────────────────────────────────────
-    New-Shortcut -LinkPath $ShortcutPath -Target $InstalledExe -Arguments '' -WorkDir $InstallDir
+    # -- Start Menu shortcut ---------------------------------------------------
+    New-Shortcut -LinkPath $ShortcutPath -Target $InstalledExe -Arguments '' -WorkDir $DataRootDir
     SayOk "Start Menu shortcut: $ShortcutPath"
 
     if ($LoginItem) {
-        New-Shortcut -LinkPath $StartupLnk -Target $InstalledExe -Arguments '' -WorkDir $InstallDir
+        New-Shortcut -LinkPath $StartupLnk -Target $InstalledExe -Arguments '' -WorkDir $DataRootDir
         SayOk "Startup entry: $StartupLnk"
     }
 
-    # ── Verify installation ───────────────────────────────────────────────────
+    # -- Verify installation ---------------------------------------------------
     Say "Verifying installation via --version..."
     $VerTmp = Join-Path $env:TEMP "tillandsias-ver-$([guid]::NewGuid().ToString('N')).txt"
     & cmd.exe /c "`"$InstalledExe`" --version > `"$VerTmp`" 2>nul"
@@ -344,11 +402,57 @@ try {
     }
     SayOk $VerLine
 
-    # ── Launch (triggers WSL2 provisioning = tillandsias --init) ─────────────
+    # -- Installed-Software registration (windows-260722-3) -------------------
+    # ONE idempotent HKCU key, SAME name every install: DisplayVersion is
+    # updated in place, so Settings > Apps always shows exactly the latest
+    # release and repeated updates can never accumulate entries. -Uninstall /
+    # -Purge remove it. Publisher carries the macron via a codepoint so this
+    # file stays pure ASCII (PS5.1 encoding gate, litmus-pinned).
+    $InstalledVersion = ($VerLine -split '\s+')[1]
+    $Publisher = "Tlato$([char]0x0101)ni"
+    $UninstKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Tillandsias'
+    try {
+        New-Item -Path $UninstKey -Force | Out-Null
+        Set-ItemProperty -Path $UninstKey -Name 'DisplayName'     -Value 'Tillandsias'
+        Set-ItemProperty -Path $UninstKey -Name 'DisplayVersion'  -Value $InstalledVersion
+        Set-ItemProperty -Path $UninstKey -Name 'Publisher'       -Value $Publisher
+        Set-ItemProperty -Path $UninstKey -Name 'InstallLocation' -Value $InstallDir
+        Set-ItemProperty -Path $UninstKey -Name 'DisplayIcon'     -Value $InstalledExe
+        Set-ItemProperty -Path $UninstKey -Name 'UninstallString' -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallDir\install-windows.ps1`" -Uninstall"
+        Set-ItemProperty -Path $UninstKey -Name 'QuietUninstallString' -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallDir\install-windows.ps1`" -Purge"
+        Set-ItemProperty -Path $UninstKey -Name 'NoModify' -Value 1 -Type DWord
+        Set-ItemProperty -Path $UninstKey -Name 'NoRepair' -Value 1 -Type DWord
+        $sizeKb = [int]((Get-Item $InstalledExe).Length / 1KB)
+        Set-ItemProperty -Path $UninstKey -Name 'EstimatedSize' -Value $sizeKb -Type DWord
+        SayOk "Registered in Installed Software (v$InstalledVersion)."
+    } catch {
+        SayWn "Installed-Software registration failed ($_) - continuing."
+    }
+
+    # -- Tray-icon settings hygiene (windows-260722-3) ------------------------
+    # Windows keys 'Taskbar corner / Other system tray icons' entries by
+    # executable path. Old installs at other paths (or deleted binaries)
+    # leave dead entries that read as duplicates. Drop every
+    # tillandsias-tray.exe entry whose path is NOT the canonical installed
+    # exe or whose target no longer exists.
+    try {
+        $nis = 'HKCU:\Control Panel\NotifyIconSettings'
+        if (Test-Path $nis) {
+            Get-ChildItem $nis | ForEach-Object {
+                $p = (Get-ItemProperty -Path $_.PSPath -Name 'ExecutablePath' -ErrorAction SilentlyContinue).ExecutablePath
+                if ($p -and ($p -like '*tillandsias-tray.exe') -and (($p -ne $InstalledExe) -or -not (Test-Path $p))) {
+                    Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+                    Say "  removed stale tray-icon entry: $p"
+                }
+            }
+        }
+    } catch {}
+
+    # -- Launch (triggers WSL2 provisioning = tillandsias --init) -------------
     Write-Host ""
     if (-not $NoLaunch) {
         Say "Launching Tillandsias (WSL2 provisioning = --init will run automatically)..."
-        Start-Process -FilePath $InstalledExe -WorkingDirectory $InstallDir
+        Start-Process -FilePath $InstalledExe -WorkingDirectory $DataRootDir
         SayOk "Tray started. Look for the Tillandsias icon in the notification area."
         SayOk "(Right-click the icon for the menu; provisioning runs in the background.)"
     } else {

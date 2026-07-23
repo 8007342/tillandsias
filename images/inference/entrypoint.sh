@@ -56,7 +56,10 @@ OLLAMA_BINDIR="${OLLAMA_MODELS}.tools/ollama"
 OLLAMA_BIN="$OLLAMA_BINDIR/ollama"
 if [ ! -x "$OLLAMA_BIN" ]; then
     echo "[inference] Installing ollama binary (first run)..."
-    mkdir -p "$OLLAMA_BINDIR" 2>/dev/null || true
+    # Order 313: NO error swallowing in this chain — the volume-ownership
+    # EACCES (root-owned models bind-mount vs uid-1000 container) hid for
+    # weeks behind 2>/dev/null while the failure was blamed on the proxy.
+    mkdir -p "$OLLAMA_BINDIR" || echo "[inference] WARN: cannot create $OLLAMA_BINDIR (volume ownership? see order 313)" >&2
     OLLAMA_ARCH=""
     case "$(uname -m)" in
         x86_64 | amd64) OLLAMA_ARCH="amd64" ;;
@@ -81,12 +84,12 @@ if [ ! -x "$OLLAMA_BIN" ]; then
                          "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst"; } \
                 || _ollama_dl=1
             if [ "$_ollama_dl" -eq 0 ]; then
-                if zstd -d "$TMP_O/ollama.tar.zst" -o "$TMP_O/ollama.tar" 2>/dev/null \
-                    && tar -xf "$TMP_O/ollama.tar" -C "$TMP_O" bin/ollama 2>/dev/null \
-                    && install -m 0755 "$TMP_O/bin/ollama" "$OLLAMA_BIN" 2>/dev/null; then
+                if zstd -d "$TMP_O/ollama.tar.zst" -o "$TMP_O/ollama.tar" \
+                    && tar -xf "$TMP_O/ollama.tar" -C "$TMP_O" bin/ollama \
+                    && install -m 0755 "$TMP_O/bin/ollama" "$OLLAMA_BIN"; then
                     echo "[inference] ollama $OLLAMA_ARCH installed into model cache"
                 else
-                    echo "[inference] ollama install FAILED — will retry next launch (non-fatal)" >&2
+                    echo "[inference] ollama install FAILED (see errors above) — will retry next launch (non-fatal)" >&2
                 fi
             else
                 echo "[inference] ollama download FAILED — will retry next launch (non-fatal)" >&2

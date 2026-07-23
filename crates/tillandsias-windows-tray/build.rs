@@ -129,4 +129,75 @@ fn main() {
             "cargo:warning=tillandsias-windows-tray: embed-resource compile failed: {err} — continuing"
         );
     }
+
+    // windows-260722-3: VERSIONINFO resource, GENERATED per build so the
+    // metadata always carries the real workspace version. Task Manager /
+    // Explorer Details then show the operator-dictated identity
+    // "Tillandsias v<version> by Tlatoāni" instead of the bare exe name.
+    // Numeric FILEVERSION fields are u16, so YYMMDD (e.g. 260722) cannot
+    // ride one field: encoded as major, minor, YYMM, DD*100+N — monotonic
+    // within each field. The STRING values carry the full untruncated
+    // version. UTF-8 with `#pragma code_page(65001)` keeps the macron in
+    // "Tlatoāni" intact under both rc.exe and windres.
+    let numeric = {
+        let parts: Vec<u32> = workspace_version
+            .split('.')
+            .filter_map(|p| p.parse().ok())
+            .collect();
+        match parts.as_slice() {
+            [maj, min, yymmdd, n] => {
+                format!(
+                    "{},{},{},{}",
+                    maj,
+                    min,
+                    yymmdd / 100,
+                    (yymmdd % 100) * 100 + n
+                )
+            }
+            _ => "0,0,0,0".to_string(),
+        }
+    };
+    let description = format!("Tillandsias v{workspace_version} by Tlatoāni");
+    let version_rc = format!(
+        r#"1 VERSIONINFO
+FILEVERSION {numeric}
+PRODUCTVERSION {numeric}
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "Tlatoāni"
+      VALUE "FileDescription", "{description}"
+      VALUE "FileVersion", "{workspace_version}"
+      VALUE "InternalName", "tillandsias-tray"
+      VALUE "OriginalFilename", "tillandsias-tray.exe"
+      VALUE "ProductName", "Tillandsias"
+      VALUE "ProductVersion", "{workspace_version}"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 0x04B0
+  END
+END
+"#
+    );
+    let out_dir = std::env::var("OUT_DIR").unwrap_or_default();
+    let version_rc_path = std::path::PathBuf::from(&out_dir).join("version.rc");
+    // UTF-16LE with BOM: rc.exe reads it natively, preserving the macron in
+    // "Tlatoāni" (the UTF-8 code_page pragma proved unreliable — the first
+    // build flattened ā to a).
+    let version_rc: Vec<u8> = std::iter::once(0xFEFFu16)
+        .chain(version_rc.encode_utf16())
+        .flat_map(|u| u.to_le_bytes())
+        .collect();
+    if std::fs::write(&version_rc_path, version_rc).is_ok() {
+        let result = embed_resource::compile(&version_rc_path, embed_resource::NONE);
+        if let Err(err) = result.manifest_optional() {
+            println!(
+                "cargo:warning=tillandsias-windows-tray: VERSIONINFO embed failed: {err} — continuing"
+            );
+        }
+    }
 }

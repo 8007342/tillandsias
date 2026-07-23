@@ -49,7 +49,37 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: no-launch-coupled"
 
-  - step: "strings stay PS5.1-safe: no em-dash in the preflight block (BOM-less UTF-8 ANSI trap)"
-    command: "awk '/function Get-WslPlatformState/,/^\\}$/' scripts/install-windows.ps1 | grep -c $'\\u2014' | grep -qx 0 && echo 'ok: ascii-strings'"
+  - step: "absent arm EXECUTES the idempotent platform install (windows-260722-1: never warn-only)"
+    command: "grep -q '& wsl --install --no-distribution' scripts/install-windows.ps1 && echo 'ok: absent-runs-install'"
     timeout_ms: 3000
-    expected_behavior: "ok: ascii-strings"
+    expected_behavior: "ok: absent-runs-install"
+
+  - step: "absent that stays unhealthy after the install suppresses auto-launch"
+    command: "grep -q 'install WSL2 (wsl --install --no-distribution) first' scripts/install-windows.ps1 && echo 'ok: absent-no-launch'"
+    timeout_ms: 3000
+    expected_behavior: "ok: absent-no-launch"
+
+  - step: "Installed-Software registration is ONE idempotent HKCU key with in-place DisplayVersion (windows-260722-3: updates must never accumulate entries)"
+    command: "grep -q \"Uninstall\\\\\\\\Tillandsias'\" scripts/install-windows.ps1 && grep -q \"Set-ItemProperty -Path .UninstKey -Name 'DisplayVersion'\" scripts/install-windows.ps1 && echo 'ok: uninstall-key-idempotent'"
+    timeout_ms: 3000
+    expected_behavior: "ok: uninstall-key-idempotent"
+
+  - step: "uninstall/purge remove the Installed-Software key and Tillandsias tray-icon settings entries"
+    command: "grep -q 'removed Installed-Software entry' scripts/install-windows.ps1 && grep -q 'NotifyIconSettings' scripts/install-windows.ps1 && echo 'ok: shell-surfaces-cleaned'"
+    timeout_ms: 3000
+    expected_behavior: "ok: shell-surfaces-cleaned"
+
+  - step: "tray binary embeds the operator-dictated VERSIONINFO description template (windows-260722-3)"
+    command: "grep -q 'Tillandsias v{workspace_version} by Tlato' crates/tillandsias-windows-tray/build.rs && grep -q 'VERSIONINFO' crates/tillandsias-windows-tray/build.rs && echo 'ok: versioninfo-template'"
+    timeout_ms: 3000
+    expected_behavior: "ok: versioninfo-template"
+
+  - step: "WHOLE FILE is pure ASCII (windows-260722-1 root cause: BOM-less UTF-8 misread as ANSI turns an em-dash into a CP-1252 smart quote, which PS5.1 treats as a QUOTE CHARACTER — the installer parsed into a different program that silently skipped download+extract)"
+    command: "LC_ALL=C grep -c -P '[^\\x00-\\x7F]' scripts/install-windows.ps1 | grep -qx 0 && echo 'ok: pure-ascii'"
+    timeout_ms: 3000
+    expected_behavior: "ok: pure-ascii"
+
+  - step: "release-shipped sibling scripts are pure ASCII too (same saved-file execution hazard)"
+    command: "LC_ALL=C grep -c -P '[^\\x00-\\x7F]' scripts/diagnose-windows.ps1 scripts/tray-diagnose.ps1 | awk -F: '{s+=$2} END{exit s!=0}' && echo 'ok: siblings-ascii'"
+    timeout_ms: 3000
+    expected_behavior: "ok: siblings-ascii"

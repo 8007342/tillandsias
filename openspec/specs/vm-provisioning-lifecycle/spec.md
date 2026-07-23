@@ -248,6 +248,18 @@ Windows Event Log names the real cause.
 - **WHEN** an unclassified launch failure repeats
 - **THEN** retries SHALL back off exponentially to a cap and end in a terminal failed state carrying the last stderr
 
+#### Scenario: Platform preflight precedes any download (windows-260722-1)
+- **WHEN** provisioning starts on Windows
+- **THEN** the order-323 platform classifier SHALL run BEFORE the registered fast path and BEFORE any rootfs download
+- **AND** an absent/reboot-pending/virtualization-disabled platform SHALL surface its classified state without fetching anything
+
+#### Scenario: Absent platform runs the curated one-time setup (windows-260722-1)
+- **WHEN** the preflight classifies the platform as absent at end-user runtime
+- **THEN** the tray SHALL show the operator-approved setup warning and run `wsl --install --no-distribution` in the BACKGROUND (hidden window; wsl.exe raises its own elevation prompt), streaming its output through the provisioning progress sink
+- **AND** the attempt SHALL be bounded: exactly one per provisioning run with a hard timeout (no unbounded loop)
+- **AND** it SHALL end in exactly one of: continue-to-provisioning (platform healthy), the curated restart-required terminal state (no diagnostics bundle — a pending restart is expected setup), or the curated failure terminal state (with the order-420 diagnostics bundle)
+- **AND** the curl installer's absent arm SHALL execute the same idempotent install and suppress tray auto-launch unless the platform came up healthy
+
 ## Invariants
 
 ### Invariant: Launch has no unbounded loop

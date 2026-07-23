@@ -111,7 +111,7 @@ Write-Check 'log file exists   ' $report.log_exists $logSizeDetail
 if (-not $report.log_exists) { $failures++ }
 
 Write-Host "`nWindows host:"
-# Surface OS + WSL versions for triage. Locale-as-is — the bracketed
+# Surface OS + WSL versions for triage. Locale-as-is -- the bracketed
 # version payload is invariant across locales.
 $osVersion = if ($report.os_version) { $report.os_version } else { '(not detected)' }
 Write-Check 'OS version        ' $true $osVersion
@@ -146,7 +146,7 @@ if (-not $wireOk) {
     }
 }
 
-# Recent log activity (sourced from the in-report recent_log_tail field —
+# Recent log activity (sourced from the in-report recent_log_tail field --
 # 20 lines max). Useful for triaging "tray was up earlier and went south"
 # scenarios. If the operator wants more, `tillandsias-tray --logs --tail N`
 # dumps the full log to stdout.
@@ -162,7 +162,7 @@ Write-Host
 # strict wire-readiness invariant: distro registered + wire reachable +
 # phase Ready) AND the script's own classification (which gates on the
 # wider host-machinery invariant: + WSL + wt.exe + manifest pin). The
-# two can disagree — the script is intentionally stricter — and showing
+# two can disagree -- the script is intentionally stricter -- and showing
 # both lets an operator see WHY.
 $binVerdict = switch ($trayExit) {
     0 { 'HEALTHY' }

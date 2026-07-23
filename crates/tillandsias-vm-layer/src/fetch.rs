@@ -210,7 +210,7 @@ pub async fn download_verified(
 
         let total = resp.content_length().map(|c| c + downloaded);
 
-        let mut file = tokio::fs::OpenOptions::new()
+        let file = tokio::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .append(downloaded > 0)
@@ -218,6 +218,16 @@ pub async fn download_verified(
             .open(&part)
             .await
             .map_err(|e| format!("open {} for write: {e}", part.display()))?;
+        // Large write buffer (windows-260722 download-throughput finding):
+        // unbuffered tokio::fs sends EVERY ~16 KB network chunk through a
+        // spawn_blocking write whose completion wake is only processed on the
+        // tray's next message-pump drain tick (~100 ms SetTimer cadence) — a
+        // per-chunk latency tax that stretched a 66 MB fetch to minutes.
+        // Buffered, chunk writes complete synchronously in-memory and only
+        // ~one real write per 4 MiB goes pending. Retry/timeout arms MUST
+        // flush before dropping the writer so `downloaded` (the Range resume
+        // offset) never exceeds the bytes actually on disk.
+        let mut file = tokio::io::BufWriter::with_capacity(4 * 1024 * 1024, file);
 
         on_progress(downloaded, total);
         let mut resp = resp;
@@ -245,6 +255,14 @@ pub async fn download_verified(
                     on_progress(downloaded, total);
                 }
                 Ok(Err(e)) => {
+                    // Persist buffered bytes so the Range resume offset stays
+                    // truthful; a failed flush poisons the partial — restart
+                    // from zero rather than resume past a hole.
+                    if file.flush().await.is_err() {
+                        hasher = Sha256::new();
+                        downloaded = 0;
+                        let _ = tokio::fs::remove_file(&part).await;
+                    }
                     drop(file);
                     attempt += 1;
                     if attempt > MAX_RETRIES {
@@ -264,6 +282,11 @@ pub async fn download_verified(
                 }
                 Err(_) => {
                     // Idle timeout: no bytes for CHUNK_IDLE_SECS.
+                    if file.flush().await.is_err() {
+                        hasher = Sha256::new();
+                        downloaded = 0;
+                        let _ = tokio::fs::remove_file(&part).await;
+                    }
                     drop(file);
                     attempt += 1;
                     if attempt > MAX_RETRIES {

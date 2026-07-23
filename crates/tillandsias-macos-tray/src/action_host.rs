@@ -770,9 +770,9 @@ const TILLANDSIAS_GUEST_CID: u32 = 3;
 /// the emoji), the cross-tray UX-parity invariant silently
 /// breaks. The unit test
 /// `wire_unreachable_chip_text_pinned` asserts the exact byte
-/// sequence (`🔴 + space + Wire unreachable`, U+1F534 + " Wire
-/// unreachable" = 22 bytes).
-const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
+/// sequence (windows-260722-5 Tlatoāni-approved wording: U+1F7E0
+/// LARGE ORANGE CIRCLE + " Reconnecting to your workspace…").
+const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F7E0} Reconnecting to your workspace\u{2026}";
 
 /// How long `VzRuntime::stop` waits for an orderly drain before
 /// escalating to a force-stop. Documented in
@@ -2612,8 +2612,8 @@ fn spawn_vm_status_poller(
                     // `mark_wire_unreachable` (commit d2cf10f0):
                     //   1. clear podman_ready so per-project actions
                     //      correctly re-gate off after the rebuild
-                    //   2. flip the chip to "🔴 Wire unreachable"
-                    //      (byte-identical to windows)
+                    //   2. flip the chip to the curated reconnecting
+                    //      state (byte-identical to windows)
                     //   3. trigger a rebuild so the menu re-renders
                     //      the now-gated state
                     // The next successful poll restores phase +
@@ -2979,22 +2979,21 @@ mod tests {
     /// they adopt this pattern).
     #[test]
     fn wire_unreachable_chip_text_pinned() {
-        // Exact bytes: U+1F534 (LARGE RED CIRCLE = 4 bytes UTF-8)
-        // + ' ' (U+0020 = 1 byte) + "Wire unreachable" (16 bytes).
-        // Total = 21 bytes. Pin both the byte length and the
-        // expanded string literal so a partial typo (e.g. dropping
+        // Pin the expanded string literal so a partial typo (e.g. dropping
         // the space, or swapping the emoji codepoint) is caught.
+        // windows-260722-5 curated wording (Tlatoāni-approved 'Workspace'
+        // family): the transient state is ORANGE and says the app is
+        // reconnecting BY ITSELF — 'Wire unreachable' was internals
+        // vocabulary with no user-actionable meaning (tray-ux governance).
         assert_eq!(
             WIRE_UNREACHABLE_CHIP_TEXT.as_bytes(),
-            "\u{1F534} Wire unreachable".as_bytes()
+            "\u{1F7E0} Reconnecting to your workspace\u{2026}".as_bytes()
         );
-        assert_eq!(WIRE_UNREACHABLE_CHIP_TEXT.len(), 21);
-        // Emoji codepoint is the LARGE RED CIRCLE specifically (not
-        // BLACK CIRCLE FOR RECORD U+23FA or any other red glyph).
-        // Windows tray's mark_wire_unreachable uses the exact same
-        // codepoint — keep these in lockstep.
+        // Emoji codepoint is the LARGE ORANGE CIRCLE (transient, not the
+        // red terminal state). Windows tray's mark_wire_unreachable uses
+        // the exact same codepoint — keep these in lockstep.
         let first_char = WIRE_UNREACHABLE_CHIP_TEXT.chars().next().unwrap();
-        assert_eq!(first_char, '\u{1F534}');
+        assert_eq!(first_char, '\u{1F7E0}');
     }
 
     /// `describe_wire_error` pins the operator-visible format of a

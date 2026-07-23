@@ -82,6 +82,30 @@ fn connect_backoff_delay(attempt: u32) -> Duration {
     Duration::from_secs(exp.min(30))
 }
 
+/// windows-260722-1 curated UX strings (operator-approved verbatim — see the
+/// packet's `ux-approval` ledger event; tray-ux governance forbids changing
+/// them without a new approval). Chips obey the 45-char status cap; the
+/// toasts pair with them in `notify_icon`'s terminal-state mapping.
+pub const CHIP_FEATURE_SETUP_WARN: &str = "\u{1F7E1} One-time Windows setup\u{2026}";
+pub const CHIP_FEATURE_SETUP_PROGRESS: &str = "\u{1F535} Installing Windows feature\u{2026}";
+pub const CHIP_FEATURE_RESTART: &str = "\u{1F7E0} Restart Windows to finish setup";
+pub const CHIP_FEATURE_FAILED: &str = "\u{1F534} Setup didn't finish \u{2014} Retry";
+pub const TOAST_FEATURE_SETUP: &str = "Tillandsias needs a Windows feature that isn't installed yet. Installing it now \u{2014} you may see a Windows approval prompt.";
+pub const TOAST_FEATURE_RESTART: &str =
+    "Setup is almost done. Restart Windows, then open Tillandsias again.";
+
+/// Error-string markers `notify_icon`'s failure path maps to the curated
+/// terminal states (same substring-marker pattern as
+/// `classified_short_status`). Pinned by unit tests.
+pub const PLATFORM_RESTART_REQUIRED_MARKER: &str = "windows-feature-setup: restart required";
+pub const PLATFORM_SETUP_FAILED_MARKER: &str = "windows-feature-setup failed";
+
+/// Hard ceiling for one background `wsl --install --no-distribution` run.
+/// The feature download + DISM enablement usually completes well inside
+/// this; past it we fail into the curated terminal state (bounded — the
+/// vm-provisioning-lifecycle `launch-no-unbounded-loop` invariant).
+const FEATURE_INSTALL_TIMEOUT_SECS: u64 = 20 * 60;
+
 /// Build a background `wsl.exe` command with CREATE_NO_WINDOW applied.
 /// From the GUI-subsystem tray a raw console child flashes a visible window
 /// per invocation — the operator-reported "terminals popping open and
@@ -349,6 +373,14 @@ impl WslLifecycle {
             }
         }
 
+        // windows-260722-1: consult the order-323 platform classifier BEFORE
+        // any download or import. Previously the preflight only ran inside
+        // WslRuntime::start(), so an absent-WSL host sat through the full
+        // rootfs fetch and then failed with a misleading import error. An
+        // absent platform now runs the curated background install; S2/S3
+        // fail loud with their pinned remediations up-front.
+        self.ensure_wsl_platform(&progress).await?;
+
         progress.report_phase(ProvisionPhase::SettingUp);
         tokio::fs::create_dir_all(Self::cache_root())
             .await
@@ -568,6 +600,170 @@ impl WslLifecycle {
                 self.distro_name(),
                 self.distro_name()
             ))
+        }
+    }
+
+    /// windows-260722-1: make the WSL platform a first-class provisioning
+    /// precondition. Classify the host (order-323 probes) BEFORE anything is
+    /// downloaded:
+    ///
+    /// - `Ok` → proceed.
+    /// - `RebootPending` / `VirtualizationDisabled` → fail loud immediately
+    ///   with the pinned remediation (previously only surfaced after the
+    ///   full rootfs fetch, at `start()`).
+    /// - `WslPlatformAbsent` → the curated one-time setup flow: run
+    ///   `wsl --install --no-distribution` in the BACKGROUND (hidden window,
+    ///   wsl.exe raises its own UAC prompt when needed), stream its output
+    ///   lines through the provisioning progress sink under the approved
+    ///   chip, then re-classify. Exactly one attempt per provisioning run,
+    ///   hard 20-minute ceiling — bounded by construction. Terminal
+    ///   outcomes are marker-tagged errors `notify_icon` maps to the
+    ///   approved restart/failure chips + toasts.
+    async fn ensure_wsl_platform(
+        &self,
+        progress: &Arc<dyn ProvisionProgress>,
+    ) -> Result<(), String> {
+        use tillandsias_vm_layer::wsl::{WslPlatformVerdict, wsl_platform_preflight};
+        let verdict = tokio::task::spawn_blocking(wsl_platform_preflight)
+            .await
+            .unwrap_or(WslPlatformVerdict::Ok);
+        match verdict {
+            WslPlatformVerdict::Ok => return Ok(()),
+            WslPlatformVerdict::WslPlatformAbsent => {}
+            other => {
+                return Err(format!(
+                    "WSL platform preflight: {}",
+                    other.remediation().unwrap_or("platform not ready")
+                ));
+            }
+        }
+
+        tracing::warn!(
+            "WSL platform absent — running the one-time background \
+             `wsl --install --no-distribution` (single bounded attempt)"
+        );
+        progress.report_message(CHIP_FEATURE_SETUP_WARN);
+
+        let mut cmd = tokio::process::Command::new("wsl");
+        cmd.args(["--install", "--no-distribution"])
+            .env("WSL_UTF8", "1")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        tillandsias_vm_layer::no_window_async(&mut cmd);
+        let mut child = cmd.spawn().map_err(|e| {
+            format!("{PLATFORM_SETUP_FAILED_MARKER}: could not start wsl --install: {e}")
+        })?;
+
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let progress_for_stream = progress.clone();
+        let stream_task = tokio::spawn(async move {
+            use tokio::io::AsyncBufReadExt;
+            // Drain BOTH pipes CONCURRENTLY (boundary-audit finding
+            // 2026-07-22): sequential stdout-then-stderr held the ~4 KB
+            // stderr pipe full when the child dumped a verbose error, so
+            // the child blocked in write(stderr), stdout never EOF'd, and
+            // the mutual wedge rode the whole 20-minute ceiling — losing
+            // the very diagnostic this task exists to capture.
+            let stdout_side = async {
+                let mut last_line = String::new();
+                if let Some(out) = stdout {
+                    let mut lines = tokio::io::BufReader::new(out).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let line = line.replace('\u{0}', "").trim().to_string();
+                        if line.is_empty() {
+                            continue;
+                        }
+                        tracing::info!(installer_line = %line, "windows feature install progress");
+                        progress_for_stream
+                            .report_message(&format!("{CHIP_FEATURE_SETUP_PROGRESS} {line}"));
+                        last_line = line;
+                    }
+                }
+                last_line
+            };
+            let stderr_side = async {
+                let mut err_tail = String::new();
+                if let Some(err) = stderr {
+                    let mut lines = tokio::io::BufReader::new(err).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let line = line.replace('\u{0}', "").trim().to_string();
+                        if !line.is_empty() {
+                            err_tail = line;
+                        }
+                    }
+                }
+                err_tail
+            };
+            tokio::join!(stdout_side, stderr_side)
+        });
+
+        let status = match tokio::time::timeout(
+            Duration::from_secs(FEATURE_INSTALL_TIMEOUT_SECS),
+            child.wait(),
+        )
+        .await
+        {
+            Ok(Ok(status)) => status,
+            Ok(Err(e)) => {
+                return Err(format!(
+                    "{PLATFORM_SETUP_FAILED_MARKER}: wsl --install could not be awaited: {e}"
+                ));
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                // The kill EOFs both pipes; give the drain a moment so the
+                // timeout error carries whatever the installer actually said
+                // instead of only the ceiling number.
+                let (last_line, err_tail) =
+                    tokio::time::timeout(Duration::from_secs(5), stream_task)
+                        .await
+                        .ok()
+                        .and_then(|r| r.ok())
+                        .unwrap_or_default();
+                let detail = if err_tail.is_empty() {
+                    last_line
+                } else {
+                    err_tail
+                };
+                return Err(format!(
+                    "{PLATFORM_SETUP_FAILED_MARKER}: wsl --install did not finish within \
+                     {FEATURE_INSTALL_TIMEOUT_SECS}s{}",
+                    if detail.is_empty() {
+                        String::new()
+                    } else {
+                        format!("; last output: {detail}")
+                    }
+                ));
+            }
+        };
+        let (last_line, err_tail) = stream_task.await.unwrap_or_default();
+
+        // Truth is the re-probe, not the exit status: a successful feature
+        // enablement often needs a reboot before `wsl --status` goes healthy.
+        let after = tokio::task::spawn_blocking(wsl_platform_preflight)
+            .await
+            .unwrap_or(WslPlatformVerdict::WslPlatformAbsent);
+        match after {
+            WslPlatformVerdict::Ok => {
+                tracing::info!("windows feature install completed; platform healthy — continuing");
+                Ok(())
+            }
+            WslPlatformVerdict::RebootPending => Err(PLATFORM_RESTART_REQUIRED_MARKER.to_string()),
+            _ if status.success() => {
+                // Install claims success but the platform isn't visible yet —
+                // the classic needs-a-reboot shape even without the CBS key.
+                Err(PLATFORM_RESTART_REQUIRED_MARKER.to_string())
+            }
+            _ => Err(format!(
+                "{PLATFORM_SETUP_FAILED_MARKER}: wsl --install exited {status}; last output: {}",
+                if err_tail.is_empty() {
+                    &last_line
+                } else {
+                    &err_tail
+                }
+            )),
         }
     }
 
@@ -1133,6 +1329,83 @@ mod tests {
         let marker = WslLifecycle::import_complete_marker_path();
         assert!(marker.starts_with(WslLifecycle::install_root()));
         assert!(marker.ends_with(".import-complete"));
+    }
+
+    /// windows-260722-1: the curated strings are an operator-approved UX
+    /// contract (tray-ux governance) — verbatim pins, the 45-char chip cap,
+    /// and the internals-vocabulary ban. Changing any of these requires a
+    /// NEW recorded approval.
+    #[test]
+    fn feature_setup_ux_strings_match_operator_approval() {
+        assert_eq!(
+            CHIP_FEATURE_SETUP_WARN,
+            "\u{1F7E1} One-time Windows setup\u{2026}"
+        );
+        assert_eq!(
+            CHIP_FEATURE_SETUP_PROGRESS,
+            "\u{1F535} Installing Windows feature\u{2026}"
+        );
+        assert_eq!(
+            CHIP_FEATURE_RESTART,
+            "\u{1F7E0} Restart Windows to finish setup"
+        );
+        assert_eq!(
+            CHIP_FEATURE_FAILED,
+            "\u{1F534} Setup didn't finish \u{2014} Retry"
+        );
+        for chip in [
+            CHIP_FEATURE_SETUP_WARN,
+            CHIP_FEATURE_SETUP_PROGRESS,
+            CHIP_FEATURE_RESTART,
+            CHIP_FEATURE_FAILED,
+        ] {
+            assert!(
+                chip.chars().count() <= 45,
+                "chip exceeds status cap: {chip}"
+            );
+        }
+        for text in [
+            CHIP_FEATURE_SETUP_WARN,
+            CHIP_FEATURE_SETUP_PROGRESS,
+            CHIP_FEATURE_RESTART,
+            CHIP_FEATURE_FAILED,
+            TOAST_FEATURE_SETUP,
+            TOAST_FEATURE_RESTART,
+        ] {
+            for banned in ["WSL", "VM", "provision", "virtualization"] {
+                assert!(
+                    !text.contains(banned),
+                    "internals vocabulary {banned:?} in end-user text: {text}"
+                );
+            }
+        }
+        assert!(PLATFORM_RESTART_REQUIRED_MARKER.starts_with("windows-feature-setup"));
+        assert!(PLATFORM_SETUP_FAILED_MARKER.starts_with("windows-feature-setup"));
+    }
+
+    /// windows-260722-1: the platform ensure MUST run before the registered
+    /// fast path and before any download — an absent-WSL host must never
+    /// fetch the rootfs first (the 2026-07-22 field failure shape).
+    #[test]
+    fn platform_ensure_runs_before_any_download() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let body = source
+            .split("pub async fn provision_via_recipe")
+            .nth(1)
+            .expect("provision_via_recipe present");
+        let ensure = body
+            .find("ensure_wsl_platform")
+            .expect("platform ensure called in provision path");
+        let registered = body
+            .find("is_registered")
+            .expect("registered fast path present");
+        let download = body
+            .find("download_verified")
+            .expect("download site present");
+        assert!(
+            ensure < registered && ensure < download,
+            "ensure_wsl_platform must precede the fast path and the download"
+        );
     }
 
     #[test]

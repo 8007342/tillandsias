@@ -10636,6 +10636,25 @@ plan_index:
             shell. This packet is the release gate for any
             standard-user-facing Windows install.
 
+    # ROOT CAUSE SOLVED 2026-07-23 (windows lane, airtight stepwise repro):
+    # the "recreated-container failure not explained by warm-up alone" is a
+    # VOLUME-OWNERSHIP bug. The models bind-mount source (guest
+    # /root/.cache/tillandsias/models) is created by the ROOT headless
+    # (drwxr-xr-x 0:0), while the hardened container runs as uid 1000
+    # (ollama, --userns=keep-id): mkdir/install into the volume dies EACCES
+    # — hidden by 2>/dev/null — so the self-install FAILED on EVERY launch
+    # and the FATAL exit followed. Proven: (a) curl through the proxy under
+    # the FULL hardened flag set = HTTP 200 and a complete 1.4GB
+    # download+zstd+tar EXTRACT-OK when no volume is mounted; (b) uid-1000
+    # write probe INTO the mounted volume = "Permission denied". The curl(7)
+    # 1ms refusal on first boot is only the container's own DNS bring-up
+    # race for attempt 1. FIXES landed from windows-next: headless
+    # build_inference_run_args now chowns the model-cache tree to 1000:1000
+    # (idempotent, cfg(unix)); entrypoint.sh error-swallowing removed so
+    # this class can never hide again. The live guest was manually chowned +
+    # restarted (install completing). Residual for this packet: the
+    # capped-exponential retry ladder polish + closing the packet with a
+    # clean pristine-substrate launch. — windows-bullo-fable5-20260722
     - packet_id: inference-firstrun-install-resilience
       order: 313
       desired_release: v0.4
@@ -15827,6 +15846,17 @@ plan_index:
     - packet_id: vault-unseal-secret-regenerated-on-reensure
       provisional_id: windows-260717-2
       order: provisional
+      # REPRO 2026-07-23 (windows lane, fresh guest): repeated
+      # tillandsias-headless service restarts (same-version hot-injects)
+      # re-ran the liveness re-ensure and wedged the vault at the deep-skew
+      # layer — "cipher: message authentication failed" on the Shamir
+      # share, order-383 self-heal correctly refusing, cached root token
+      # rejected. USER-VISIBLE SHAPE: GitHub login prints SUCCESS (the
+      # login container's own lease writes fine) but the menu never flips
+      # off "GitHub Login" and projects never load — the resident server
+      # cannot VERIFY the login through its skewed token. Recovered via
+      # ephemeral guest reset (~90s warm-cache). This packet remains THE
+      # root fix; still ready, pickup_role linux.
       release_target: stable-milestone-v1
       title: "P1: headless re-ensure regenerates a non-matching vault unseal secret on restart — barrier orphaned, crash-loop (restart self-wedge)"
       status: completed
@@ -16019,6 +16049,424 @@ plan_index:
             menu id set per auth state. Live wedged-guest e2e still rides
             order 455; behavioral residuals from the adversarial review are
             in plan/issues/wave-review-findings-tray-chain-2026-07-22.md.
+
+    - packet_id: windows-wsl-absent-runtime-setup
+      provisional_id: windows-260722-1
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Windows: WSL-absent is a first-class runtime state — preflight before download, background `wsl --install` with curated progress, restart-required surfacing; installer ends with the idempotent install"
+      status: done
+      kind: bug
+      deliverable: scripts/install-windows.ps1 + crates/tillandsias-windows-tray (wsl_lifecycle preflight/ensure + notify_icon curated states) + vm-layer absent stderr signature + spec deltas + litmus updates
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, wsl, installer, ux, vm-lifecycle, fail-loud]
+      estimated_hours: 6
+      outcome: >
+        Operator field report 2026-07-22 (another Windows host, published
+        release): a WSL-less machine was not detected — the install/first-run
+        degraded into what read as a crash loop. Code map confirms the gaps:
+        the installer's 'absent' arm is WARN-ONLY (never runs `wsl --install`,
+        and unlike S2/S3 does not even suppress auto-launch), and the tray
+        never consults the order-323 platform preflight before the rootfs
+        download — an absent-WSL user sits through the multi-hundred-MB
+        download and then gets the WRONG "VM import failed" chip. Required
+        behavior (operator directive): (a) the curl installer ends with an
+        idempotent `wsl --install --no-distribution` when the platform is
+        absent, and 'absent' suppresses auto-launch unless the install
+        completes healthy; (b) at END-USER RUNTIME the tray detects the
+        absent platform BEFORE downloading, shows a curated warning, runs
+        `wsl --install --no-distribution` in the BACKGROUND with progress
+        surfaced, then either continues provisioning (healthy), surfaces a
+        curated restart-required terminal state, or a curated failure state
+        with the diagnostics bundle — never an unbounded loop
+        (vm-provisioning-lifecycle launch-no-unbounded-loop invariant).
+      exit_criteria:
+        - "installer 'absent' arm executes `wsl --install --no-distribution` (idempotent), re-classifies afterward, and suppresses tray auto-launch unless the platform came up healthy; litmus:installer-wsl-preflight-shape updated in lockstep"
+        - "provision_via_recipe runs the platform preflight BEFORE any download; absent => the curated setup flow, never the rootfs fetch (source-window pinned)"
+        - "background `wsl --install` is bounded (timeout + single attempt per provisioning run), streams progress via the existing ProvisionProgress sink, and ends in exactly one of: continue-to-provisioning, restart-required terminal state, or failure terminal state with the order-420 diagnostics bundle"
+        - "curated chips/toasts match the operator-approved wording verbatim (see ux-approval event); no internals vocabulary in end-user text (tray-ux governance)"
+        - "live absent-host verification on a WSL-less Windows machine (this dev host cannot simulate absence) — rides the next order-455-style smoke on such a host; unit/shape pins cover until then"
+      events:
+        - type: ux-approval
+          ts: "2026-07-22T18:35:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            The Tlatoani approved (live, AskUserQuestion in-session) the
+            'Windows feature' wording family for the four new tray states,
+            verbatim: warn chip "(yellow) One-time Windows setup..." with
+            toast "Tillandsias needs a Windows feature that isn't installed
+            yet. Installing it now - you may see a Windows approval
+            prompt."; progress chip "(blue) Installing Windows feature..."
+            (wsl --install output lines streamed as sub-messages);
+            restart chip "(orange) Restart Windows to finish setup" with
+            toast "Setup is almost done. Restart Windows, then open
+            Tillandsias again."; failure chip "(red) Setup didn't finish -
+            Retry" with the captured error + diagnostics-bundle toast.
+            Satisfies tray-ux UX-curation governance for this packet's
+            surfaces.
+        - type: filed
+          ts: "2026-07-22T18:30:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed from the operator's live directive after the field
+            failure on a WSL-less host. Windows-lane v0.4 addition:
+            HOST/VM orchestration completeness (the operator's stated
+            focus now that GUEST/PODMAN layers are stable).
+        - type: completed
+          ts: "2026-07-22T19:20:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Implemented on windows-next (ledger lease). Installer: the
+            'absent' arm now EXECUTES `wsl --install --no-distribution`
+            (idempotent, wsl.exe self-elevates), re-classifies afterward,
+            and suppresses auto-launch unless healthy — previously
+            warn-only AND auto-launched (the field crash-loop shape).
+            Tray: new ensure_wsl_platform runs the order-323 preflight
+            BEFORE the registered fast path and any download (source-window
+            pinned); absent => operator-approved curated flow (warn toast +
+            chip, hidden bounded `wsl --install` streaming progress lines
+            via ProvisionProgress, 20-min ceiling, single attempt) ending
+            in continue / restart-required (no bundle) / failure (order-420
+            bundle) via marker-tagged errors; S2/S3 now fail loud
+            pre-download. Pins: feature_setup_ux_strings_match_operator_
+            approval (verbatim strings + 45-char cap + internals-vocabulary
+            ban), platform_ensure_runs_before_any_download;
+            litmus:installer-wsl-preflight-shape extended (absent-runs-
+            install + absent-no-launch), vm-provisioning-lifecycle spec
+            gains the preflight-before-download + curated-setup scenarios.
+            Suites green. RESIDUAL: live verification on an actually
+            WSL-less host (this dev host cannot simulate absence) — rides
+            the next 455-style smoke there, per exit criterion 5.
+
+    - packet_id: windows-app-identity-metadata
+      provisional_id: windows-260722-3
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Windows app identity: VERSIONINFO metadata ('Tillandsias v#.#.######.# by Tlatoani'), stable shell identity across updates, single idempotent Installed-Software entry"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray build.rs/.rc (VERSIONINFO) + notify-icon identity + scripts/install-windows.ps1 (uninstall key + stale-entry hygiene)
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, shell, installer, metadata, ux]
+      estimated_hours: 4
+      outcome: >
+        Operator report 2026-07-22: previous releases accumulate MULTIPLE
+        entries in Windows Task Manager / Taskbar settings surfaces across
+        updates, and the process shows as bare "Tillandsias-tray.exe"
+        (no VERSIONINFO resource). Required: (a) embed VERSIONINFO with
+        FileDescription EXACTLY "Tillandsias v<VERSION> by Tlatoani"
+        (operator-dictated wording, with the macron: 'by Tlatoāni'),
+        ProductName/versions templated from WORKSPACE_VERSION at build
+        time; (b) stabilize the shell identity so updates do NOT mint new
+        Taskbar-settings/Startup entries (notify-icon GUID identity and/or
+        AppUserModelID per forensics); (c) installer writes ONE idempotent
+        HKCU Uninstall key (same key name every install, DisplayVersion
+        updated in place) so Installed Software always shows exactly the
+        latest, plus cleanup of stale duplicate shell entries on
+        install/purge; purge removes the key.
+      exit_criteria:
+        - "Task Manager shows 'Tillandsias v<version> by Tlatoani' for the running tray (VERSIONINFO FileDescription); Explorer file Properties > Details carries product/version metadata"
+        - "after simulating >=2 sequential installs, the Taskbar-settings/tray-icon surface and Startup surface each show exactly ONE Tillandsias entry (no per-update accumulation)"
+        - "Installed Software (Settings > Apps) shows exactly one Tillandsias entry at the latest DisplayVersion; -Purge removes it"
+        - "litmus/unit pins: VERSIONINFO present in the .rc with the dictated description template; installer uninstall-key idempotence shape"
+      events:
+        - type: filed
+          ts: "2026-07-22T23:05:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Operator directive (the 'Buggy-Bug'): description string
+            dictated verbatim by The Tlatoani in-session — counts as the
+            UX approval for these OS-shell surfaces. Forensics workflow
+            launched to identify the exact duplicate-entry mechanism
+            before implementation.
+        - type: completed
+          ts: "2026-07-23T00:35:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Implemented + LIVE-VERIFIED on this host (ledger lease).
+            Forensics first (2-agent registry sweep): duplicate mechanism =
+            NotifyIconSettings keyed by exe path (stale paths/dead
+            binaries accumulate); no VERSIONINFO, no AUMID, no Uninstall
+            key ever existed. Fixes: (1) build.rs GENERATES a per-build
+            VERSIONINFO .rc (UTF-16LE; numeric fields encode
+            maj,min,YYMM,DD*100+N under the u16 cap) — the RUNNING process
+            reports FileDescription "Tillandsias v0.3.260721.1 by
+            Tlatoāni" with the macron intact (codepoint-verified; console
+            displays flatten it, Task Manager does not). (2)
+            SetCurrentProcessExplicitAppUserModelID("Tlatoani.Tillandsias")
+            at startup — stable version-free shell identity. (3) installer
+            writes ONE idempotent HKCU Uninstall key (verified: two
+            sequential installs => exactly 1 key, DisplayVersion updated
+            in place, Publisher Tlatoāni codepoint-verified);
+            uninstall/purge remove it + every tillandsias-tray
+            NotifyIconSettings entry + empty leftover Start Menu distro
+            dirs; install prunes stale-path tray-icon entries. (4) root
+            cause of the recurring install-dir lock KILLED: tray launch +
+            shortcuts now use the DATA root as CWD, never the install dir
+            (orphaned keepalive wsl.exe children pinned it and blocked
+            update renames — observed live twice). NIF_GUID deliberately
+            NOT adopted (unsigned-binary path-binding quirks would break
+            dev flows; path-keyed identity is already stable at the fixed
+            install path). Litmus: installer shape extended (uninstall-key
+            idempotence, shell-surface cleanup, VERSIONINFO template pin)
+            7/7 PASS; tray suite green; both installers pure-ASCII +
+            parse-clean; saved-file repo-installer run did full
+            download+SHA+extract+register live (also re-proving the
+            encoding fix on the real flow).
+
+    - packet_id: github-login-vault-write-missing-ca-mount
+      provisional_id: windows-260722-4
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "P1: --github-login token store dies with 'CA bundle not readable' on a fresh guest — login container lacks the CA mount and never runs ensure_ca_bundle"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs run_provider_login (vault branch)
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [auth, vault, tls, headless, fail-loud]
+      estimated_hours: 1
+      outcome: >
+        Operator live repro 2026-07-22 (fresh Windows guest, login FIRST —
+        the recommended order): identity prompts + token collected, then
+        "in-container vault write failed: vault-cli: CA bundle not
+        readable at /etc/tillandsias/ca.crt / refusing to talk to
+        https://vault:8200 without TLS verification". Root cause: the
+        provider-login container's podman run mounts the vault-token
+        secret but NOT the CA bundle, and run_provider_login never calls
+        ensure_ca_bundle — on a fresh guest nothing else has materialized
+        /tmp/tillandsias-ca yet (forge-launch does it; login-first hosts
+        never got it). vault-cli's TLS refusal is CORRECT fail-loud
+        behavior; the prerequisite was missing. Fix: ensure_ca_bundle
+        (idempotent) + the same readonly intermediate.crt bind-mount every
+        other vault-talking container uses, in the vault branch of
+        run_provider_login. Sibling of the 2026-07-19
+        login-before-vault-init sequencing bug — same lesson: --github-login
+        must ensure its FULL prerequisite chain itself.
+      exit_criteria:
+        - "fresh guest, login before any forge launch: token store writes to vault successfully (live-verified by the operator's retry)"
+        - "the login container's run args carry the CA mount (source-window or litmus pin)"
+      events:
+        - type: completed
+          ts: "2026-07-23T00:58:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Fixed in run_provider_login's vault branch (ensure_ca_bundle +
+            ca_mount identical to the git-daemon container's pattern);
+            cargo check green. GUEST-side code fixed from the windows lane
+            (cross-platform Rust); same-version hot-inject into the live
+            guest for the operator's immediate retry, and rides the next
+            daily for all platforms. Live retry verification pending the
+            operator's next login attempt (exit criterion 1).
+
+    - packet_id: curated-connection-chips-and-skew-guard-fix
+      provisional_id: windows-260722-5
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Curated connection-state chips (Tlatoani 'Workspace' family, cross-tray) + build-version skew guard compared the wrong version (0.1.0 crate version, false WARN every handshake)"
+      status: done
+      kind: bug
+      deliverable: windows+macos tray chip consts/tests + notify_icon skew comparison
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [ux, tray, cross-platform, wire, versioning]
+      estimated_hours: 2
+      outcome: >
+        Operator, live 2026-07-22: "'wire unreachable' is absolutely
+        meaningless to me... an end user would have no idea or actionable
+        feedback" — also internals vocabulary banned by tray-ux
+        governance. Approved wording (AskUserQuestion, 'Workspace'
+        family): transient auto-reconnect chip "(orange) Reconnecting to
+        your workspace..." (was "(red) Wire unreachable"), terminal
+        keepalive-give-up chip "(red) Workspace connection lost - Retry"
+        (was "VM connection lost"); toast title follows. Applied
+        byte-identical to windows + macos consts, unit pins updated both
+        crates, litmus-wire-unreachable-chip-text-symmetric PASS. ALSO
+        fixed en route: the windows-260719-4 skew guard (implemented by
+        the linux lane) compared env!(CARGO_PKG_VERSION) (static 0.1.0)
+        against the guest's 3-component version — a FALSE "build version
+        skew: tray=0.1.0 guest=0.3.260721" WARN on EVERY handshake,
+        relayed as Event Log noise. Now compares WORKSPACE_VERSION,
+        normalized to maj.min.yymmdd on both sides.
+      events:
+        - type: ux-approval
+          ts: "2026-07-23T01:20:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            The Tlatoani approved the 'Workspace' wording family live
+            (AskUserQuestion): transient "(U+1F7E0) Reconnecting to your
+            workspace..." / terminal "(U+1F534) Workspace connection
+            lost - Retry". Recorded per tray-ux governance; applies to
+            all platform trays via the symmetric litmus.
+        - type: completed
+          ts: "2026-07-23T01:30:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Both trays' consts + pins updated byte-identical; macOS crate
+            compiles (test pin runs on the macOS host); windows suite
+            green; symmetric litmus PASS. Skew guard normalized-compare
+            landed; the wire-recovery path was ALSO live-proven this
+            session: after a deliberate headless restart the tray logged
+            the new WARN, re-established the push subscription, and
+            logged "control wire recovered" 39s later on its own — the
+            order-154 never-recovers pattern did not reproduce post
+            runtime-split. Live tray relaunched carrying everything.
+
+    - packet_id: forge-first-launch-progress-surface
+      provisional_id: windows-260722-6
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "Forge first launch: surface curated progress for the silent minutes (image build, inference first-run, harness installers) — 'the user must know that something is happening'"
+      status: ready
+      kind: enhancement
+      deliverable: headless forge-launch stage progress -> attach terminal + tray chip (curated, not raw dnf spam)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [ux, forge, launch, progress, cross-platform]
+      estimated_hours: 5
+      outcome: >
+        Operator, live during the first Windows forge launch 2026-07-23
+        (verbatim): "It's taking a while to launch, is it silently
+        installing brew and other first time launch installers? ... we
+        don't want to just spam a bunch of linux dnf upgrade logs, but we
+        do want to eventually show at least some spinners and some
+        progress for actual meaningful stuff happening. The user must
+        know that something is happening, and that their system is not
+        stuck." Ground truth of that silence: buildah forge-image build
+        (multi-minute, GBs written), inference first-run ollama install,
+        order-459 harness curl-installers — all invisible from the attach
+        terminal and the tray. The forge-launch path already has staged
+        structure (run_container_observed stages, wait_for_inference_
+        ready, entrypoint installers): surface it as curated stage lines
+        in the ATTACH terminal (spinner/short line per meaningful stage,
+        detail stays in logs) and mirror the current stage on the tray
+        chip while a launch is in flight. Wording is a tray-ux governed
+        surface: propose a stage-name family to The Tlatoani for approval
+        before implementing the strings.
+      exit_criteria:
+        - "first forge launch shows a visible, stage-level progress line within ~2s of attach and updates per stage (image build / runtime warm-up / harness install / opening) — no silent multi-minute window"
+        - "raw package-manager output stays OUT of the default view (available in logs/--debug)"
+        - "tray chip mirrors the in-flight launch stage; returns to Ready when the lane is up"
+        - "stage wording operator-approved and pinned (tray-ux governance)"
+      events:
+        - type: filed
+          ts: "2026-07-23T01:30:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed live mid-first-launch with the operator watching the
+            silence. The buildah stages were confirmed running (3.3 GB
+            layer) while the attach terminal showed nothing — the exact
+            'is it stuck?' moment this packet eliminates.
+
+    - packet_id: mirror-first-seed-vs-launch-readiness-race
+      provisional_id: windows-260722-7
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "P1: first forge launch races the mirror's initial upstream seed — readiness gate passes on 'reachable', clone retries exhaust minutes before refs arrive (live Windows repro for the 452/454 family)"
+      status: ready
+      kind: bug
+      deliverable: headless launch-readiness gate (wait for SEEDED, not reachable) + first-seed progress surfacing
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, forge, launch, race, windows-evidence]
+      estimated_hours: 4
+      outcome: >
+        Operator's first Windows forge attach 2026-07-23 (fresh guest,
+        first launch): cloud clone into /home/forge/src succeeded, missing
+        images built, then the forge's bounded in-container clone got
+        "empty repository" 12x and fail-loud aborted ("mirror is reachable
+        but advertised no cloneable refs — it has not finished seeding")
+        — the 452-slice-2 guard working as designed. VOLUME AUTOPSY
+        (windows lane, live): tillandsias-mirror-tillandsias created
+        01:37Z with the mirror container; the forge's retries exhausted
+        ~01:38-01:40; the mirror's initial upstream fetch COMPLETED at
+        01:52 (FETCH_HEAD mtime; refs/heads/audit + claude/* present in
+        the bare repo) — the seed simply takes minutes on first run
+        (large repo through the proxy) and NOTHING gates the launch on
+        it. wait_for_git_mirror_ready passes on reachability. Fix
+        direction: the readiness gate must wait for a SEEDED mirror
+        (HEAD resolvable / nonzero refs) with a first-launch-sized budget
+        and curated progress ("Preparing your project workspace..." —
+        pairs with windows-260722-6), or the clone retry budget must
+        scale to first-seed reality. Retry-after-seed works (volume
+        persists across the lane teardown) — recovery = re-attach.
+        Also observed same launch, evidence lost to teardown:
+        tillandsias-inference Exited(1) on first run — order 313's
+        pristine-substrate case; next run should capture its logs before
+        exit-cleanup.
+      exit_criteria:
+        - "first forge launch on a pristine guest waits (with visible progress) for the mirror's initial seed and lands the agent on a populated checkout — no empty-clone abort"
+        - "the readiness probe distinguishes reachable-but-unseeded from seeded (HEAD resolvable or refs > 0)"
+        - "a seeded-mirror re-attach continues to work unchanged (fast path)"
+      events:
+        - type: filed
+          ts: "2026-07-23T02:05:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed live from the operator's first Windows forge attach with
+            the volume autopsy as evidence (mirror seeded 12-15 min after
+            the gate passed). This is the 455 smoke surfacing exactly the
+            fixture-only lane the plan flagged; the fail-loud guard held —
+            no agent ran on an empty tree.
+
+    - packet_id: windows-conpty-executor-contract
+      provisional_id: windows-260722-2
+      order: provisional
+      desired_release: v0.5
+      title: "ConPTY lane: enforce the executor contract mechanically when the lane is wired (split() must never run on the pumped LocalSet)"
+      status: pending
+      kind: enhancement
+      deliverable: crates/tillandsias-host-shell/src/pty (explicit runtime Handle param or bg-runtime spawn) + wiring site
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, pty, tokio, performance]
+      estimated_hours: 2
+      outcome: >
+        Boundary audit 2026-07-22 (adversarially verified): ConPtyMaster::
+        split() pins Handle::current() and pump_io spawns into the caller's
+        context; wired from the tray's 100ms-pumped LocalSet the 64 KB
+        duplex drains quantize to pump ticks (~640 KB/s terminal ceiling +
+        up to 100ms keystroke latency — the exact class fixed for the
+        rootfs download in 58b58322). The lane is DORMANT today (Windows
+        terminals go through spawn_wsl_terminal); the contract is
+        documented at the impl (pty/windows.rs). When wiring the lane,
+        make the contract mechanical: take an explicit tokio Handle (pass
+        bg_runtime().handle()) or spawn pump_io on the bg runtime, plus a
+        debug assertion or litmus pin that the pumped LocalSet never hosts
+        it.
+      events:
+        - type: filed
+          ts: "2026-07-22T22:40:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed from the host/VM boundary choke audit (27-agent verified
+            sweep; 4 confirmed findings — the other three fixed in-session:
+            wsl --install concurrent pipe drain + timeout-diagnostic
+            salvage, and the stale LocalSet-teardown comments replaced with
+            the real TEARDOWN CONTRACT).
 
     - packet_id: login-transitive-states-all-platforms
       provisional_id: windows-260719-2
@@ -17549,6 +17997,16 @@ plan_index:
             receive-pack via this change). Exit criteria 1-3 satisfied; criterion
             4 (per-container attributable credentials) is the order 322 rung E /
             order 424 scope, not this packet.
+    # LIVE max-TTL EVIDENCE 2026-07-23T03:03:47Z (windows lane, first
+    # long-running Windows forge session): "[vault-renewer] WARNING:
+    # git-mirror Vault token can no longer be renewed (max TTL reached or
+    # expired). Relaunch the forge to re-mint" — fired ~1h into the
+    # BigPickle in-forge session, exactly the litmus this packet says it
+    # needs ("a relay push after the original AppRole token would have
+    # expired"). Consequence pending observation: the next in-forge relay
+    # push should strand in the mirror volume until a lane relaunch
+    # re-mints + startup-reconcile flushes (449/450 machinery) — will be
+    # verified at the session's graceful end. — windows-bullo-fable5
     - order: 424
       packet_id: git-mirror-credential-lifecycle
       desired_release: v0.4
@@ -19629,7 +20087,7 @@ plan_index:
       operator_note: "operator 2026-07-19: unauthenticated writes are not acceptable even within the forge; the order-450 daemon receive-pack unblock is v0.4-only and must be replaced by authenticated writes in v0.5"
       kind: fix
       deliverable: images/git/entrypoint.sh + images/git/pre-receive-hook.sh + forge gitconfig injection + credential issuance
-      depends_on: ["322"]
+      depends_on: [mirror-authenticated-push-transport]
       pickup_role: linux
       owner_host: linux
       estimated_hours: 12
@@ -19891,6 +20349,29 @@ plan_index:
         - "Windows: dated smoke report in plan/issues naming the v0.4 build; forge lands on a valid current checkout; findings filed as packets"
         - "macOS: dated smoke report in plan/issues naming the v0.4 build; VZ lane checkout valid + current; findings filed as packets"
         - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
+      events:
+        - type: progress
+          ts: "2026-07-22T22:15:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Windows smoke attempt #1 against v0.3.260722.1 (operator at the
+            terminal): FINDINGS report filed
+            (plan/issues/smoke-455-windows-v0.3.260722.1-2026-07-22.md) —
+            two P1 HOST-side defects found and FIXED on windows-next
+            58b58322 the same session: (1) saved-file installer runs
+            silently skip download+extract (PS5.1 BOM-less-UTF-8 em-dash ->
+            CP-1252 smart-quote parse corruption; all shipped .ps1 now
+            pure-ASCII + litmus gate); (2) rootfs download quantized to
+            ~40 KB/s by the 100ms GUI-pump executor + unbuffered per-chunk
+            writes (fixed: 4 MiB BufWriter + dedicated multi-thread bg
+            runtime for the provisioning tree). Fixed-build A/B on the same
+            host, full wipe incl. cache: download 2.9s (~23 MB/s), VM ready
+            in 72s total, guest_version handshake match, wire
+            Ready/podman up. Windows PASS record deferred to the NEXT daily
+            (must carry >= 58b58322); expected ~3 min e2e. The
+            windows-260722-1 WSL-absent flow ships in that build too but
+            needs a WSL-less host for live verification.
 
     - packet_id: forge-plan-metadata-mcp-server
       order: 456

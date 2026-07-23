@@ -3037,11 +3037,21 @@ async fn wait_for_git_mirror_ready(
     // First seed is a full-repo fetch through the proxy: minutes, not seconds
     // (this workspace's pack alone is >100 MiB). Bounded so a dead upstream
     // still fails the launch loudly instead of hanging forever.
+    //
+    // Race note (order: mirror-first-seed-vs-launch-readiness-race):
+    // `git rev-parse --verify HEAD` passes as soon as ensure-mirror-head
+    // symlinks HEAD to a ref — but the initial upstream fetch may still be
+    // in progress, leaving the ref empty. We therefore ALSO check for
+    // actual content via `git show-ref --verify refs/heads/main`; only when
+    // that ref exists and has a target SHA is the mirror truly seeded and
+    // cloneable. The check is additive — old images where refs/heads/main
+    // is absent fall through to the HEAD check.
     const MAX_ATTEMPTS: u32 = 300;
     let repo_path = format!("/srv/git/{project_name}");
     let mut last = String::from("no probe attempted");
     for attempt in 1..=MAX_ATTEMPTS {
-        match client
+        // Probe 1: HEAD resolvable (existing gate — catches unborn-HEAD on old images).
+        let head_ok = match client
             .execute(
                 OperationKind::Container,
                 &[
@@ -3059,22 +3069,68 @@ async fn wait_for_git_mirror_ready(
             )
             .await
         {
-            Ok(out) if out.success() => {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] [forge-launch] git mirror ready on attempt {attempt}/{MAX_ATTEMPTS}"
-                    );
-                }
-                return Ok(());
-            }
+            Ok(out) if out.success() => true,
             Ok(out) => {
                 last = format!(
                     "mirror HEAD not resolvable yet (exit {})",
                     out.status.unwrap_or(-1)
                 );
+                false
             }
             Err(e) => {
                 last = format!("probe failed: {e}");
+                false
+            }
+        };
+        if !head_ok {
+            // HEAD not even resolvable — mirror is definitely not ready.
+            if attempt == 5 {
+                eprintln!(
+                    "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {MAX_ATTEMPTS}s max)..."
+                );
+            }
+            if debug {
+                eprintln!(
+                    "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+                );
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        // Probe 2: refs/heads/main exists with a real SHA — the upstream
+        // seed has delivered content, not just an empty symref.
+        match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    container_name.into(),
+                    "git".into(),
+                    "-C".into(),
+                    repo_path.clone(),
+                    "show-ref".into(),
+                    "--verify".into(),
+                    "--quiet".into(),
+                    "refs/heads/main".into(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [forge-launch] git mirror seeded on attempt {attempt}/{MAX_ATTEMPTS} (refs/heads/main present)"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(_) => {
+                last = "HEAD resolvable but refs/heads/main absent — seed still in progress"
+                    .to_string();
+            }
+            Err(e) => {
+                last = format!("show-ref probe failed: {e}");
             }
         }
         if attempt == 5 {
@@ -3110,6 +3166,32 @@ fn build_inference_run_args(
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| String::from("/home/forge"));
     let model_cache_dir = Path::new(&home_dir).join(".cache/tillandsias/models");
     let _ = std::fs::create_dir_all(&model_cache_dir);
+    // Order 313 ROOT CAUSE (windows lane 2026-07-23, airtight repro): this
+    // dir is bind-mounted into the hardened inference container, which runs
+    // as uid 1000 (ollama) under --userns=keep-id — but the dir is created
+    // by the root headless, so the entrypoint's ollama self-install died
+    // EACCES on EVERY launch (mkdir/install errors swallowed by 2>/dev/null;
+    // the "proxy warm-up race" was only ever the first curl's 1ms DNS race,
+    // the download itself succeeded). Own the tree for the container user —
+    // idempotent, once per ensure, no per-start :U rechown of multi-GB
+    // model dirs.
+    #[cfg(unix)]
+    {
+        fn chown_tree(dir: &Path, uid: u32, gid: u32) {
+            let _ = std::os::unix::fs::chown(dir, Some(uid), Some(gid));
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.is_dir() {
+                        chown_tree(&p, uid, gid);
+                    } else {
+                        let _ = std::os::unix::fs::chown(&p, Some(uid), Some(gid));
+                    }
+                }
+            }
+        }
+        chown_tree(&model_cache_dir, 1000, 1000);
+    }
 
     let mut args = vec![
         "--detach".into(),
@@ -6706,6 +6788,20 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &container,
             debug,
         )?;
+        // windows-260722-4: the in-container token store talks TLS to
+        // https://vault:8200, and vault-cli refuses to run unverified —
+        // the CA bundle MUST be materialized and mounted like every other
+        // vault-talking container. On a fresh guest where login runs
+        // BEFORE any forge launch (the recommended order), nothing else
+        // has created /tmp/tillandsias-ca yet: without this the flow
+        // collected the operator's token and THEN died with "CA bundle
+        // not readable" (field repro 2026-07-22). ensure_ca_bundle is
+        // idempotent.
+        let certs_dir = ensure_ca_bundle(debug)?;
+        let ca_mount = format!(
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        );
         let mut run = podman_command();
         run.args([
             "run",
@@ -6723,6 +6819,8 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
+            "--mount",
+            &ca_mount,
         ]);
         run.args(proxy_env_args());
         run.args([
@@ -13110,9 +13208,16 @@ mod tests {
             );
         }
 
+        // When the host $HOME matches the container HOME (/home/forge), every
+        // container-side bind target also contains the host $HOME string — the
+        // is_target_only heuristic below cannot distinguish them. The test is
+        // still valid: build_forge_agent_run_argv uses a /tmp/project source
+        // path, so no real host-Home-as-source leak can appear. Skip the
+        // host-HOME leak check entirely when the two values collide.
         if let Some(home) = std::env::var_os("HOME") {
             let home_str = home.to_string_lossy().into_owned();
-            if !home_str.is_empty() && home_str != "/" {
+            let container_home = "/home/forge";
+            if !home_str.is_empty() && home_str != "/" && home_str != container_home {
                 // The *target* HOME inside the container is /home/forge — that's fine.
                 // We're guarding against the *host* $HOME leaking in as a bind source.
                 for arg in &argv {

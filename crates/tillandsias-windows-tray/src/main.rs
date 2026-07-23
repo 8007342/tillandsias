@@ -116,6 +116,20 @@ fn main() {
         let bak = std::env::args().any(|a| a == "--bak");
         std::process::exit(notify_icon::logs(tail, bak));
     }
+    // windows-260722-3: stable, version-free shell identity BEFORE any UI
+    // exists. Without an explicit AppUserModelID Windows derives identity
+    // from the exe path/heuristics, and identity churn across updates is
+    // how Taskbar-settings/notification surfaces accumulate duplicate
+    // entries. One constant ID = one app, forever.
+    {
+        use windows::core::w;
+        let _ = unsafe {
+            windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(w!(
+                "Tlatoani.Tillandsias"
+            ))
+        };
+    }
+
     // Initialize tracing BEFORE the singleton guard and any Win32 setup so
     // every startup failure below lands in tray.log AND the Windows Event
     // Log (source "Tillandsias") — a GUI-subsystem binary has no console, so
