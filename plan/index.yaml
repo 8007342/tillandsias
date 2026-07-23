@@ -20517,9 +20517,15 @@ plan_index:
       order: 453
       desired_release: v0.4
       title: "The --debug/--diagnostics container-log stream must not spill into the interactive forge agent terminal (it corrupts the TUI)"
-      status: in-progress
+      status: completed
+      split_into: [diagnostics-observer-routing-and-log-level-tuning]
       capability_tags: [linux, diagnostics, forge, tray, ux]
-      operator_note: "operator 2026-07-20 (--debug --tray, Claude forge): the container-log stream is valid --debug output but must go to the LAUNCHING terminal, not spill into the agent's terminal. Fine-tune log levels later; for now stop the spillage."
+      operator_note: >
+        Operator 2026-07-20 (--debug --tray, Claude forge): for v0.4, stop
+        the valid container-log stream from spilling into the interactive
+        agent terminal. Routing that stream to the LAUNCHING terminal or a
+        separate observer and fine-tuning log levels were explicitly "later"
+        work, now isolated in order 460.
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -20536,15 +20542,16 @@ plan_index:
         terminal that then hosts the interactive agent TUI — squid TCP_TUNNEL
         access lines and git-mirror startup retry-push lines staircased over the
         Claude/OpenCode UI (the '\n'-only lines hitting the raw-mode PTY produce
-        the staircase). SLICE 1 (done): removed the typed-event stderr tail from
-        both interactive agent lanes; the low-volume lifecycle diag_emitter
-        (event:container_launch, which the diagnostics annex + litmus rely on) is
-        kept. The diagnostics litmus pin the event FORMAT (client.rs) and a
-        SEPARATE annex capture, not the interactive lane's tail, so removal is
-        litmus-safe (type-check clean).
+        the staircase). The shipped v0.4 fix (e3efab245cd4) removes the
+        typed-event stderr tail from both interactive agent lanes while keeping
+        the low-volume lifecycle diag_emitter (`event:container_launch`) used by
+        the diagnostics annex and litmus. Observer routing and log-level tuning
+        are not part of this closure; they are the explicitly deferred order
+        460.
       exit_criteria:
-        - "SLICE 1 (done): interactive Claude/Codex/Antigravity/OpenCode terminals no longer show the enclave container-log stream; the agent TUI is clean"
-        - "SLICE 2 (operator 'later'): route the container-log stream to the LAUNCHING terminal (or a separate --diagnostics observer) so the observability is not lost, and fine-tune squid/git-mirror log levels"
+        - "run_forge_agent_cli_mode does not start DiagnosticsHandle::start_typed_event_stream, including when --debug is active"
+        - "run_opencode_mode does not start DiagnosticsHandle::start_typed_event_stream, including when --debug is active"
+        - "both interactive lanes retain the low-volume lifecycle diagnostic_event_emitter"
       events:
         - type: progress
           ts: "2026-07-20T00:00:00Z"
@@ -20558,6 +20565,36 @@ plan_index:
             the old behaviour — a relaunch on the rebuilt binary is required to get
             the clean terminal. Slice 2 (route the stream to the launcher terminal
             + log-level tuning) is the operator's deferred 'later' work.
+        - type: claim
+          ts: "2026-07-23T04:21:24Z"
+          agent_id: "forge-tillandsias-codex-20260723T042124Z"
+          host: forge
+          lease_id: "7fceca02997a"
+          expires_at: "2026-07-23T08:21:24Z"
+          summary: >
+            Coordinator-assigned reconciliation cycle: verify the shipped
+            no-spill slice, reserve order 460 for the operator-deferred
+            observer-routing and log-level work, then close only order 453's
+            v0.4 scope.
+        - type: completed
+          ts: "2026-07-23T04:33:54Z"
+          agent_id: "forge-tillandsias-codex-20260723T042124Z"
+          host: forge
+          lease_id: "7fceca02997a"
+          commits: ["e3efab245cd4d1bd6e6f8cac9aea7d90fd6458ac"]
+          evidence:
+            - "e3efab245cd4 is an ancestor of the verified linux-next tree"
+            - "source-window audit: run_opencode_mode has zero start_typed_event_stream calls, one disabled diagnostics handle, and one lifecycle emitter"
+            - "source-window audit: run_forge_agent_cli_mode has zero start_typed_event_stream calls, one disabled diagnostics handle, and one lifecycle emitter"
+            - "./build.sh --check passed after rebasing onto origin/linux-next@98c07544"
+            - "tillandsias-policy validate-yaml plan/index.yaml and tillandsias-plan check passed"
+          summary: >
+            Reconciled the shipped v0.4 no-spill slice as complete. The
+            attached OpenCode and Claude/Codex/Antigravity lanes cannot start
+            the continuous support-container stderr tail, while their
+            low-volume lifecycle emitters remain present. The operator's
+            deferred observer-routing and log-level work is preserved without
+            scope loss in ready v0.5 order 460.
 
     - packet_id: mirror-bare-repo-unborn-head
       order: 454
@@ -20797,6 +20834,47 @@ plan_index:
             all four forge harnesses: OpenCode, Claude, Codex, and
             Antigravity; reconcile the stale active default-image spec and
             produce cold/warm live launch evidence on immutable Linux.
+
+    - packet_id: diagnostics-observer-routing-and-log-level-tuning
+      order: 460
+      desired_release: v0.5
+      title: "Route support-container diagnostics to a launcher-owned observer and tune routine log levels without contaminating agent terminals"
+      status: ready
+      kind: enhancement
+      deliverable: launcher/separate-observer diagnostics routing + squid/git-mirror log-level policy + regression coverage
+      depends_on: [diagnostics-stream-not-in-interactive-agent-terminal]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, diagnostics, observability, logging, forge, tray]
+      estimated_hours: 5
+      operator_note: >
+        The Tlatoani 2026-07-20: "Fine-tune log levels later; for now stop
+        the spillage." Order 453 closes only the v0.4 no-spill fix. This is
+        that explicitly deferred "later" scope and must not be pulled back
+        into the v0.4 release gate.
+      outcome: >
+        Preserve support-container observability without writing any
+        continuous `podman logs -f` stream into an attached Claude, Codex,
+        Antigravity, or OpenCode terminal. Give the stream an explicit
+        launcher-owned or separately invoked diagnostics observer with a
+        bounded lifetime, and tune routine squid access and git-mirror retry
+        chatter so actionable warnings/errors remain visible without
+        overwhelming the observer.
+      exit_criteria:
+        - "interactive agent lanes remain free of support-container log tails; order 453's no-spill invariant is regression-pinned"
+        - "debug/diagnostics users can observe router/proxy/git/inference logs through the launching terminal or an explicit separate observer whose ownership and teardown are deterministic"
+        - "routine squid access and git-mirror retry chatter have documented levels/filters while warnings, relay failures, and startup failures remain visible"
+        - "focused tests or litmus coverage pin observer routing, terminal isolation, and cleanup; ./build.sh --check passes"
+      events:
+        - type: filed
+          ts: "2026-07-23T04:29:19Z"
+          agent_id: "forge-tillandsias-codex-20260723T042124Z"
+          host: forge
+          summary: >
+            The primary linux coordinator reserved and assigned the next
+            integer order, 460, for order 453's operator-deferred Slice 2.
+            desired_release is v0.5 so this later observability work does not
+            hold the v0.4 no-spill stability closure.
 
     - packet_id: repeat-human-operator-only-supervisor
       provisional_id: forge-260723-1
