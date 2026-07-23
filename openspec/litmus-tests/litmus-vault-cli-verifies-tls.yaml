@@ -45,7 +45,7 @@ critical_path:
     expected_behavior: "ok: fails closed"
 
   - step: "the CA gate is applied centrally so a new subcommand cannot bypass it"
-    command: "grep -Eq 'read\\|write\\|write-stdin\\|renew-self\\|lookup-self\\|health\\) require_cacert' images/git/vault-cli.sh && echo 'ok: centrally gated'"
+    command: "grep -Eq 'read\\|write\\|write-stdin\\|renew-self\\|lookup-self\\|revoke-self\\|health\\) require_cacert' images/git/vault-cli.sh && echo 'ok: centrally gated'"
     timeout_ms: 5000
     expected_behavior: "ok: centrally gated"
 

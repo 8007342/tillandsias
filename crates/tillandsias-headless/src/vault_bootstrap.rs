@@ -203,6 +203,13 @@ pub fn is_running_in_vm() -> bool {
 pub const APPROLE_TOKEN_TTL_SECS: u64 = 3_600;
 /// Hard upper bound on a renewed AppRole token (24h).
 pub const APPROLE_TOKEN_MAX_TTL_SECS: u64 = 86_400;
+/// Dedicated bounded-reuse AppRole for the long-running git-mirror Vault Agent.
+///
+/// Ordinary roles keep one-use, 30-second SecretIDs. This role is the narrow
+/// exception that can log in again after its client token reaches max_ttl;
+/// the host destroys each issued SecretID by accessor on shutdown, while the
+/// role's 48h server TTL bounds credentials orphaned by an uncatchable crash.
+pub const GIT_MIRROR_AGENT_ROLE: &str = "git-mirror-agent";
 
 /// Process-wide registry of per-container vault tokens that should be
 /// revoked on shutdown. The tray installs entries here when minting a token
@@ -211,6 +218,35 @@ pub const APPROLE_TOKEN_MAX_TTL_SECS: u64 = 86_400;
 fn revocation_registry() -> &'static Mutex<HashMap<String, String>> {
     static REG: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
     REG.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Bounded-reuse AppRole login material issued to a long-running Vault Agent.
+///
+/// Only the non-secret accessor is retained by the host. It lets shutdown
+/// invalidate the secret ID without ever reading the credential back from its
+/// Podman secret.
+struct AppRoleAutoAuthRegistration {
+    role: String,
+    secret_id_accessor: String,
+}
+
+#[derive(serde::Serialize)]
+struct AppRoleAutoAuthDocument<'a> {
+    role_id: &'a str,
+    secret_id: &'a str,
+}
+
+fn approle_auto_auth_registry() -> &'static Mutex<HashMap<String, AppRoleAutoAuthRegistration>> {
+    static REG: OnceLock<Mutex<HashMap<String, AppRoleAutoAuthRegistration>>> = OnceLock::new();
+    REG.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn next_approle_auto_auth_secret_name(role: &str, container_instance: &str) -> String {
+    // A random issuance component avoids collisions both on same-process
+    // relaunch and after a crash followed by PID reuse, when a prior Podman
+    // secret can still exist pending cleanup.
+    let issuance = uuid::Uuid::new_v4();
+    format!("tillandsias-vault-approle-{role}-{container_instance}-{issuance}")
 }
 
 /// Default base URL the macOS/Windows tray uses to talk to the local Vault
@@ -500,14 +536,23 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                 // idempotent overwrites, so re-provisioning is safe. Bump this
                 // to the newest role EVERY time a Policy is added — order 431
                 // adds the read-only OpenCode auth-document role, so the
-                // sentinel is now 'opencode-forge'.
-                if rt
+                // conventional newest sentinel is 'opencode-forge'.
+                //
+                // git-mirror-agent is a dedicated lifecycle role rather than
+                // a Policy enum entry. Probe it independently: a volume
+                // upgraded through order 431 before order 424 can already have
+                // the newest Policy sentinel while still lacking the Agent
+                // role. Skip only when BOTH migrations are present.
+                let opencode_role_exists = rt
                     .block_on(client.approle_role_exists("opencode-forge"))
-                    .unwrap_or(false)
-                {
+                    .unwrap_or(false);
+                let git_mirror_agent_role_exists = rt
+                    .block_on(client.approle_role_exists(GIT_MIRROR_AGENT_ROLE))
+                    .unwrap_or(false);
+                if opencode_role_exists && git_mirror_agent_role_exists {
                     if debug {
                         eprintln!(
-                            "[tillandsias-vault] AppRole 'opencode-forge' (newest sentinel) already exists; skipping policy and role provisioning"
+                            "[tillandsias-vault] AppRoles 'opencode-forge' (newest Policy sentinel) and '{GIT_MIRROR_AGENT_ROLE}' (Agent lifecycle migration) already exist; skipping policy and role provisioning"
                         );
                     }
                 } else {
@@ -1129,6 +1174,79 @@ pub async fn mint_approle_token_for_container(
     Ok((token, secret_name))
 }
 
+/// Issue bounded-reuse AppRole material for a long-running container's Agent.
+///
+/// Unlike [`mint_approle_token_for_container`], this does not perform the
+/// AppRole login on the host. The role ID and secret ID cross the container
+/// boundary together in one Podman secret and never appear in argv or the
+/// environment. Vault Agent owns client-token renewal and re-authentication;
+/// shutdown destroys the secret ID through its accessor.
+///
+/// @trace spec:tillandsias-vault, spec:git-mirror-service
+pub async fn mint_approle_auto_auth_for_container(
+    role: &str,
+    container_instance: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    let credentials = client
+        .issue_approle_credentials(role)
+        .await
+        .map_err(|e| format!("vault issue_approle_credentials failed: {e}"))?;
+    let secret_id_accessor = credentials.secret_id_accessor().to_string();
+    // A same-process lane relaunch reuses `<project>-<pid>`. Keep every
+    // reusable-within-48h SecretID under an issuance-unique Podman name so registry
+    // insertion cannot overwrite and orphan the previous accessor.
+    let secret_name = next_approle_auto_auth_secret_name(role, container_instance);
+    // Serialize borrowed fields directly into the one buffer we can zeroize;
+    // constructing a serde_json::Value here would allocate a second,
+    // non-zeroizing SecretID copy.
+    let mut payload = serde_json::to_string(&AppRoleAutoAuthDocument {
+        role_id: credentials.role_id(),
+        secret_id: credentials.secret_id(),
+    })
+    .map_err(|e| format!("serialize AppRole auto-auth material: {e}"))?;
+
+    let create_result = create_token_podman_secret(&secret_name, &payload, debug);
+    payload.zeroize();
+    if let Err(error) = create_result {
+        let _ = client
+            .destroy_approle_secret_id_accessor(role, &secret_id_accessor)
+            .await;
+        return Err(error);
+    }
+
+    let registration = AppRoleAutoAuthRegistration {
+        role: role.to_string(),
+        secret_id_accessor,
+    };
+    match approle_auto_auth_registry().lock() {
+        Ok(mut registry) => {
+            registry.insert(secret_name.clone(), registration);
+        }
+        Err(_) => {
+            let _ = client
+                .destroy_approle_secret_id_accessor(
+                    &registration.role,
+                    &registration.secret_id_accessor,
+                )
+                .await;
+            let _ = podman_cmd_sync()
+                .args(["secret", "rm", &secret_name])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+            return Err("AppRole auto-auth revocation registry is poisoned".into());
+        }
+    }
+    Ok(secret_name)
+}
+
 /// Short-lived podman-secret mount for a synchronous container command.
 ///
 /// The underlying Vault token remains in the revocation registry and is
@@ -1192,37 +1310,68 @@ pub fn mint_approle_secret_lease(
 /// preserved on disk (matches the `tillandsias-vault-data` volume
 /// contract).
 pub async fn revoke_pending_container_tokens(debug: bool) {
-    let entries: Vec<(String, String)> = match revocation_registry().lock() {
+    let token_entries: Vec<(String, String)> = match revocation_registry().lock() {
         Ok(mut reg) => reg.drain().collect(),
-        Err(_) => return,
+        Err(_) => Vec::new(),
     };
-    if entries.is_empty() {
+    let auto_auth_entries: Vec<(String, AppRoleAutoAuthRegistration)> =
+        match approle_auto_auth_registry().lock() {
+            Ok(mut reg) => reg.drain().collect(),
+            Err(_) => Vec::new(),
+        };
+    if token_entries.is_empty() && auto_auth_entries.is_empty() {
         return;
     }
     let base_url = vault_api_base_url();
-    let root_token = match read_and_handover_root_token(debug) {
-        Ok(t) => t,
+    let client = match read_and_handover_root_token(debug) {
+        Ok(root_token) => match vault_client(&base_url, &root_token, debug) {
+            Ok(client) => Some(client),
+            Err(e) => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias-vault] revoke: cannot build TLS client: {e}; \
+                         removing Podman secrets without server-side revocation"
+                    );
+                }
+                None
+            }
+        },
         Err(e) => {
             if debug {
-                eprintln!("[tillandsias-vault] revoke: cannot read root token: {e}; skipping");
+                eprintln!(
+                    "[tillandsias-vault] revoke: cannot read root token: {e}; \
+                     removing Podman secrets without server-side revocation"
+                );
             }
-            return;
+            None
         }
     };
-    let client = match vault_client(&base_url, &root_token, debug) {
-        Ok(client) => client,
-        Err(e) => {
-            if debug {
-                eprintln!("[tillandsias-vault] revoke: cannot build TLS client: {e}; skipping");
-            }
-            return;
-        }
-    };
-    for (secret_name, token) in entries {
-        if let Err(e) = client.revoke_token(&token).await
+
+    for (secret_name, token) in token_entries {
+        if let Some(client) = &client
+            && let Err(e) = client.revoke_token(&token).await
             && debug
         {
-            eprintln!("[tillandsias-vault] revoke {} failed: {e}", secret_name);
+            eprintln!("[tillandsias-vault] revoke token for {secret_name} failed: {e}");
+        }
+        let _ = podman_cmd_sync()
+            .args(["secret", "rm", &secret_name])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+
+    for (secret_name, registration) in auto_auth_entries {
+        if let Some(client) = &client
+            && let Err(e) = client
+                .destroy_approle_secret_id_accessor(
+                    &registration.role,
+                    &registration.secret_id_accessor,
+                )
+                .await
+            && debug
+        {
+            eprintln!("[tillandsias-vault] destroy AppRole accessor for {secret_name} failed: {e}");
         }
         let _ = podman_cmd_sync()
             .args(["secret", "rm", &secret_name])
@@ -3055,7 +3204,12 @@ async fn load_policies(client: &VaultClient, debug: bool) -> Result<(), String> 
 /// Role names are the policy name without the `-policy` suffix
 /// (`git-mirror-policy` → `git-mirror`). Tokens default to 1h TTL with a
 /// 24h ceiling; the underlying secret-id is single-use and expires after
-/// 30s, so a stolen secret-id is worthless past container launch.
+/// 30s, so a stolen secret-id is worthless past container launch. The one
+/// explicit exception is `git-mirror-agent`: it maps to the same narrow
+/// git-mirror policy but keeps a reusable 48h SecretID so Vault Agent can log
+/// in again after max_ttl. Host-side accessor destruction normally bounds that
+/// credential to the Tillandsias session; the server TTL bounds SIGKILL and
+/// host-crash orphans when process memory cannot run teardown.
 pub async fn provision_approle_roles(client: &VaultClient, debug: bool) -> Result<(), String> {
     client
         .enable_approle()
@@ -3079,6 +3233,22 @@ pub async fn provision_approle_roles(client: &VaultClient, debug: bool) -> Resul
             .await
             .map_err(|e| format!("create_approle_role {role}: {e}"))?;
     }
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] provisioning long-running AppRole role {} -> {}",
+            GIT_MIRROR_AGENT_ROLE,
+            Policy::GitMirror.name()
+        );
+    }
+    client
+        .create_approle_agent_role(
+            GIT_MIRROR_AGENT_ROLE,
+            &[Policy::GitMirror.name()],
+            APPROLE_TOKEN_TTL_SECS,
+            APPROLE_TOKEN_MAX_TTL_SECS,
+        )
+        .await
+        .map_err(|e| format!("create_approle_agent_role {GIT_MIRROR_AGENT_ROLE}: {e}"))?;
     Ok(())
 }
 
@@ -3132,6 +3302,71 @@ mod tests {
         assert_eq!(
             policy_role_name(&Policy::AntigravityLogin),
             "antigravity-login"
+        );
+    }
+
+    #[test]
+    fn existing_vault_requires_both_newest_policy_and_agent_role_migrations() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let ensure = source
+            .split("pub fn ensure_vault_running(")
+            .nth(1)
+            .expect("ensure_vault_running source");
+        let opencode_probe = ["approle_role_exists(", "\"opencode-forge\"", ")"].concat();
+        let agent_probe = ["approle_role_exists(", "GIT_MIRROR_AGENT_ROLE", ")"].concat();
+        let combined_gate = [
+            "if opencode_role_exists ",
+            "&& git_mirror_agent_role_exists",
+        ]
+        .concat();
+        assert!(
+            ensure.contains(&opencode_probe)
+                && ensure.contains(&agent_probe)
+                && ensure.contains(&combined_gate),
+            "an existing volume may skip provisioning only after both order-431's \
+             newest Policy role and order-424's dedicated Agent role exist"
+        );
+    }
+
+    #[test]
+    fn git_mirror_agent_role_and_secret_issuances_are_distinct() {
+        assert_eq!(GIT_MIRROR_AGENT_ROLE, "git-mirror-agent");
+        let first = next_approle_auto_auth_secret_name(GIT_MIRROR_AGENT_ROLE, "alpha-1234");
+        let second = next_approle_auto_auth_secret_name(GIT_MIRROR_AGENT_ROLE, "alpha-1234");
+        assert_ne!(
+            first, second,
+            "same-process lane relaunches must not overwrite a prior reusable SecretID accessor"
+        );
+        for name in [first, second] {
+            assert!(
+                name.starts_with("tillandsias-vault-approle-git-mirror-agent-alpha-1234-"),
+                "unexpected auto-auth secret name: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn provisioning_keeps_agent_role_separate_from_one_shot_roles() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("pub async fn provision_approle_roles(")
+            .nth(1)
+            .expect("provision_approle_roles source")
+            .split("\n///")
+            .next()
+            .unwrap();
+        assert!(
+            window.contains(".create_approle_role(")
+                && window.contains(".create_approle_agent_role(")
+                && window.contains("GIT_MIRROR_AGENT_ROLE")
+                && window.contains("Policy::GitMirror.name()"),
+            "ordinary one-shot roles and the reusable mirror-agent role must be provisioned separately"
         );
     }
 

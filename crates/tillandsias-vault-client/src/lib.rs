@@ -27,6 +27,85 @@ use std::time::Duration;
 use tracing::debug;
 use zeroize::Zeroize;
 
+/// Server-side lifetime for a reusable Vault Agent AppRole SecretID.
+///
+/// This is twice the 24h client-token max TTL: long enough to prove and use a
+/// max-TTL re-authentication, but finite so SIGKILL or host loss cannot orphan
+/// an unlimited credential when the in-process accessor registry is lost.
+pub const APPROLE_AGENT_SECRET_ID_TTL: &str = "48h";
+
+/// Launch-scoped AppRole material for a long-running Vault Agent.
+///
+/// The role ID is not confidential by itself, but it is kept private with the
+/// secret ID so callers cannot accidentally log either field through a derived
+/// `Debug` implementation. All three strings are zeroized on drop.
+pub struct AppRoleCredentials {
+    role_id: String,
+    secret_id: String,
+    secret_id_accessor: String,
+}
+
+impl AppRoleCredentials {
+    pub fn role_id(&self) -> &str {
+        &self.role_id
+    }
+
+    pub fn secret_id(&self) -> &str {
+        &self.secret_id
+    }
+
+    pub fn secret_id_accessor(&self) -> &str {
+        &self.secret_id_accessor
+    }
+}
+
+impl Drop for AppRoleCredentials {
+    fn drop(&mut self) {
+        self.role_id.zeroize();
+        self.secret_id.zeroize();
+        self.secret_id_accessor.zeroize();
+    }
+}
+
+/// Parse a response that may contain credential material, then overwrite the
+/// raw response buffer immediately. Callers must remove any secret strings
+/// from the returned JSON value with [`take_required_json_string`] so the
+/// generic value cannot retain a second heap copy.
+fn parse_sensitive_json(mut body: String, context: &str) -> Result<Value, VaultError> {
+    let parsed = serde_json::from_str(&body)
+        .map_err(|e| VaultError::Other(format!("malformed {context} response: {e}")));
+    body.zeroize();
+    parsed
+}
+
+/// Move one required string out of a JSON response without including the
+/// response body in a schema error. AppRole issuance responses contain a
+/// SecretID, so formatting the whole value into an error would leak that
+/// credential precisely when an adjacent field is missing.
+fn take_required_json_string(
+    value: &mut Value,
+    pointer: &str,
+    field: &str,
+) -> Result<String, VaultError> {
+    let Some(slot) = value.pointer_mut(pointer) else {
+        return Err(VaultError::Other(format!(
+            "missing {field} in Vault response"
+        )));
+    };
+    match std::mem::take(slot) {
+        Value::String(text) if !text.is_empty() => Ok(text),
+        Value::String(mut text) => {
+            text.zeroize();
+            Err(VaultError::Other(format!(
+                "empty {field} in Vault response"
+            )))
+        }
+        _ => Err(VaultError::Other(format!(
+            "missing {field} in Vault response"
+        ))),
+    }
+}
+
 /// Health status returned by `GET /v1/sys/health`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HealthStatus {
@@ -165,15 +244,15 @@ impl VaultClient {
         }
     }
 
-    /// Mint a child token scoped to the named AppRole.
+    /// Issue launch-scoped AppRole material without consuming it in a login.
     ///
-    /// Uses the AppRole auth flow under the hood: this client (assumed to
-    /// hold the tray/root token) reads the role's `role_id`, mints a fresh
-    /// `secret_id`, then logs in as that role to obtain a policy-scoped
-    /// token. The resulting token is what gets injected as a podman secret
-    /// into the target container.
-    pub async fn issue_approle_token(&self, role: &str) -> Result<String, VaultError> {
-        // Step 1: read role_id.
+    /// Long-running containers give this material to Vault Agent through a
+    /// Podman secret. Agent can then renew the current client token and
+    /// re-authenticate after that token reaches its hard max TTL.
+    pub async fn issue_approle_credentials(
+        &self,
+        role: &str,
+    ) -> Result<AppRoleCredentials, VaultError> {
         let role_id: String = {
             let url = self.url(&format!("auth/approle/role/{role}/role-id"));
             let resp = self
@@ -187,15 +266,12 @@ impl VaultClient {
                 let body = resp.text().await.unwrap_or_default();
                 return Err(Self::map_status(status, body));
             }
-            let v: Value = resp.json().await?;
-            v.pointer("/data/role_id")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .ok_or_else(|| VaultError::Other(format!("missing role_id in response: {v}")))?
+            let body = resp.text().await?;
+            let mut v = parse_sensitive_json(body, "AppRole role ID")?;
+            take_required_json_string(&mut v, "/data/role_id", "role_id")?
         };
 
-        // Step 2: mint a fresh secret_id.
-        let secret_id: String = {
+        let (secret_id, secret_id_accessor): (String, String) = {
             let url = self.url(&format!("auth/approle/role/{role}/secret-id"));
             let resp = self
                 .client
@@ -208,33 +284,85 @@ impl VaultClient {
                 let body = resp.text().await.unwrap_or_default();
                 return Err(Self::map_status(status, body));
             }
-            let v: Value = resp.json().await?;
-            v.pointer("/data/secret_id")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .ok_or_else(|| VaultError::Other(format!("missing secret_id in response: {v}")))?
+            let body = resp.text().await?;
+            let mut v = parse_sensitive_json(body, "AppRole SecretID")?;
+            let mut secret_id = take_required_json_string(&mut v, "/data/secret_id", "secret_id")?;
+            let secret_id_accessor = match take_required_json_string(
+                &mut v,
+                "/data/secret_id_accessor",
+                "secret_id_accessor",
+            ) {
+                Ok(accessor) => accessor,
+                Err(error) => {
+                    secret_id.zeroize();
+                    return Err(error);
+                }
+            };
+            (secret_id, secret_id_accessor)
         };
 
-        // Step 3: login.
+        Ok(AppRoleCredentials {
+            role_id,
+            secret_id,
+            secret_id_accessor,
+        })
+    }
+
+    /// Mint a child token scoped to the named AppRole.
+    ///
+    /// One-shot callers consume fresh AppRole material immediately. Long-lived
+    /// callers should use [`Self::issue_approle_credentials`] and Vault Agent
+    /// so they can re-authenticate after the original token reaches max TTL.
+    pub async fn issue_approle_token(&self, role: &str) -> Result<String, VaultError> {
+        let credentials = self.issue_approle_credentials(role).await?;
         let url = self.url("auth/approle/login");
-        let body = serde_json::json!({ "role_id": role_id, "secret_id": secret_id });
+        #[derive(Serialize)]
+        struct AppRoleLogin<'a> {
+            role_id: &'a str,
+            secret_id: &'a str,
+        }
+        let body = AppRoleLogin {
+            role_id: credentials.role_id(),
+            secret_id: credentials.secret_id(),
+        };
         let resp = self.client.post(&url).json(&body).send().await?;
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             return Err(Self::map_status(status, body));
         }
-        let v: Value = resp.json().await?;
-        let mut token = v
-            .pointer("/auth/client_token")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .ok_or_else(|| {
-                VaultError::Other(format!("missing auth.client_token in response: {v}"))
-            })?;
-        let out = token.clone();
-        token.zeroize();
-        Ok(out)
+        let body = resp.text().await?;
+        let mut v = parse_sensitive_json(body, "AppRole login")?;
+        take_required_json_string(&mut v, "/auth/client_token", "auth.client_token")
+    }
+
+    /// Revoke reusable AppRole login material by its non-secret accessor.
+    ///
+    /// Vault Agent needs the same secret ID again after a client token reaches
+    /// max TTL, so git-mirror credentials are intentionally reusable for the
+    /// container lifetime. The host destroys the accessor during shutdown.
+    pub async fn destroy_approle_secret_id_accessor(
+        &self,
+        role: &str,
+        secret_id_accessor: &str,
+    ) -> Result<(), VaultError> {
+        let url = self.url(&format!(
+            "auth/approle/role/{role}/secret-id-accessor/destroy"
+        ));
+        let resp = self
+            .client
+            .post(&url)
+            .header("X-Vault-Token", &self.token)
+            .json(&serde_json::json!({ "secret_id_accessor": secret_id_accessor }))
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() {
+            Ok(())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
     }
 
     /// Check if a given AppRole exists.
@@ -316,13 +444,62 @@ impl VaultClient {
         token_ttl_secs: u64,
         token_max_ttl_secs: u64,
     ) -> Result<(), VaultError> {
+        self.create_approle_role_with_secret_id_lifecycle(
+            role,
+            policies,
+            token_ttl_secs,
+            token_max_ttl_secs,
+            1,
+            "30s",
+        )
+        .await
+    }
+
+    /// Create the dedicated long-running AppRole consumed by Vault Agent.
+    ///
+    /// A normal one-use/30-second SecretID cannot authenticate again after
+    /// the first client token reaches max TTL. This role therefore permits
+    /// reuse for a bounded 48h window or until the host explicitly destroys
+    /// its SecretID accessor. Its client tokens are explicitly unlimited-use
+    /// (`token_num_uses=0`), as required by Vault Agent auto-auth.
+    pub async fn create_approle_agent_role(
+        &self,
+        role: &str,
+        policies: &[&str],
+        token_ttl_secs: u64,
+        token_max_ttl_secs: u64,
+    ) -> Result<(), VaultError> {
+        self.create_approle_role_with_secret_id_lifecycle(
+            role,
+            policies,
+            token_ttl_secs,
+            token_max_ttl_secs,
+            0,
+            APPROLE_AGENT_SECRET_ID_TTL,
+        )
+        .await
+    }
+
+    async fn create_approle_role_with_secret_id_lifecycle(
+        &self,
+        role: &str,
+        policies: &[&str],
+        token_ttl_secs: u64,
+        token_max_ttl_secs: u64,
+        secret_id_num_uses: u64,
+        secret_id_ttl: &str,
+    ) -> Result<(), VaultError> {
         let url = self.url(&format!("auth/approle/role/{role}"));
         let body = serde_json::json!({
             "token_policies": policies.join(","),
             "token_ttl": format!("{token_ttl_secs}s"),
             "token_max_ttl": format!("{token_max_ttl_secs}s"),
-            "secret_id_num_uses": 1,
-            "secret_id_ttl": "30s",
+            // Vault Agent auto-auth cannot use limited-use client tokens.
+            // Pin the Vault default explicitly so role updates cannot inherit
+            // a stale nonzero value from an earlier configuration.
+            "token_num_uses": 0,
+            "secret_id_num_uses": secret_id_num_uses,
+            "secret_id_ttl": secret_id_ttl,
         });
         let resp = self
             .client

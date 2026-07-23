@@ -18356,16 +18356,35 @@ plan_index:
       estimated_hours: 5
       outcome: >
         RESEARCH GATE SATISFIED by plan/issues/git-mirror-architecture-decision-2026-07-19.md.
-        Order 422 fixes the current instance; this fixes the class. relay-refs.sh
-        reads the GitHub token into a shell variable once. Git invokes a
-        credential.helper per credential request, which makes "token expired at
-        startup" an unrepresentable state. IMPORTANT documented gotcha:
-        credential.helper is ADDITIVE, and URL-scoped credential.<url>.helper
-        applies on top — a repo-local helper does NOT override an inherited one;
-        inherited helpers must be reset with an empty value first. For the Vault
-        side, prefer Vault Agent auto-auth over a periodic token: HashiCorp
-        recommends Agent for long-running processes, and a periodic token is
-        eventually defeated by max_ttl (24h). This is order 319 rung B.
+        The credential-helper half is implemented: Git requests the GitHub
+        credential per operation over stdin/stdout, inherited helpers are reset
+        first, and no upstream credential enters git argv. The Vault half is now
+        implementation-complete offline: the official Vault Agent receives an
+        issuance-unique `git-mirror-agent` AppRole secret, maintains a client
+        token in explicit `/tmp` tmpfs, renews it, and re-authenticates after the
+        24h client-token max TTL. The dedicated role maps only to
+        `git-mirror-policy`, explicitly sets `token_num_uses=0`, and uses an
+        unlimited-use but finite 48h SecretID. That is long enough to cross the
+        required max-TTL boundary while bounding a SIGKILL/host-crash orphan;
+        graceful shutdown destroys every retained accessor immediately.
+        Same-process and PID-reuse relaunches use UUID-distinct Podman secret
+        names, so no accessor can be overwritten in the registry. This packet
+        remains in_progress only for real-Podman/Vault image and re-auth evidence.
+      next_action: >
+        On a mutable Linux Podman host, rebuild the git image from current
+        linux-next and run an isolated real-Vault Agent relay with a
+        seconds-scaled client max-TTL/SecretID-TTL ratio. Verify a full relay
+        before and after real Agent re-auth without container replacement,
+        inspect process argv/env for all credential values, and record the
+        rebuilt-image evidence here. Do not substitute the old renewer warning
+        or the hermetic Agent-process stub for this final live gate.
+      acceptance_evidence:
+        - "cargo test -p tillandsias-vault-client: 32/32 passed"
+        - "cargo test -p tillandsias-headless --features vault: all runnable tests passed"
+        - "scripts/test-git-mirror-vault-agent-auto-auth.sh: 6/6 passed"
+        - "scripts/test-git-mirror-relay-token-expiry.sh: 3/3 passed"
+        - "scripts/test-git-credential-helper.sh: 4/4 passed"
+        - "scripts/test-git-mirror-relay-verified-ack.sh: 4/4 passed"
       exit_criteria:
         - "relay-refs.sh obtains upstream credentials via a credential.helper, not a startup variable read"
         - "inherited credential helpers are explicitly reset before ours is added (verified by test, since the additive behaviour is a known trap)"
@@ -18423,6 +18442,81 @@ plan_index:
             pinned greps intact; image rebuilt and the helper verified LIVE —
             fails loud with exit 1 and a named reason when no token, returns
             username=oauth2 plus the token when vault-cli answers.
+        - type: claim
+          ts: "2026-07-23T04:44:10Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          lease_id: "ec9837f79158"
+          expires_at: "2026-07-23T08:44:10Z"
+          summary: >
+            Parent-orchestrator delegation of the remaining Vault Agent half.
+            Starting sibling heads: main 667aca153b28, linux-next 8b98f93ab1e6,
+            windows-next f10731f7b4d4, osx-next 66ccfa70e57f. Direction
+            alignment: v0.4 stability prioritizes mirror/push correctness and
+            credential lifecycle; no UX surface is touched.
+        - type: progress
+          ts: "2026-07-23T04:45:00Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          lease_id: "ec9837f79158"
+          summary: >
+            Vault Agent implementation checkpoint complete; packet stays
+            in_progress for the explicit live gate above. Replaced the fixed
+            client-token mount and max-TTL renewer dead end with official Agent
+            auto-auth, a dedicated one-policy role, tmpfs role/SecretID and
+            client-token files, graceful current-token revocation, and
+            host-side destruction of every issuance-unique SecretID accessor.
+            Security review caught and closed two would-be escape defects before
+            landing: the read-only mirror had no writable /tmp (now an explicit
+            hardened tmpfs), and a TTL-0 reusable SecretID would survive
+            SIGKILL after the in-memory accessor registry vanished (now
+            server-bounded to 48h, twice client max-TTL). Vault client tokens
+            also reach curl through a mode-0600 tmpfs header file rather than
+            argv. Ordinary AppRoles remain exactly one-use/30s. Offline evidence:
+            Vault client 32/32, full headless-vault runnable suite green,
+            Agent lifecycle fixture 6/6, expiry 3/3, helper 4/4, verified-ack
+            4/4. Rebase retained 98c07544's empty-handover retry repair. No new
+            finding packet was needed; both findings were corrected in-scope.
+        - type: progress
+          ts: "2026-07-23T05:03:06Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          lease_id: "ec9837f79158"
+          summary: >
+            Final adversarial lifecycle pass closed four more in-scope escape
+            paths before landing. Foreground status/OpenCode/agent CLI
+            processes now drain every token and SecretID accessor after their
+            mirror stops instead of silently converting a graceful return into
+            the 48h crash-orphan window (detached web sessions retain their
+            still-live mirror credentials). Malformed AppRole JSON can no
+            longer echo an already-issued SecretID in an error and borrowed
+            serialization avoids an unnecessary non-zeroizing secret copy.
+            Legacy HTTP userinfo is stripped before the remote URL reaches
+            podman argv/container env. Finally, the git entrypoint installs its
+            EXIT/signal cleanup before Agent starts, preserves startup/daemon
+            failure status, refuses an expected-but-missing AppRole mount, and
+            quiesces Agent before revoking its sink token. New pins are green;
+            the hermetic Agent lifecycle remains 6/6 and Vault client is 32/32.
+        - type: progress
+          ts: "2026-07-23T05:19:00Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          lease_id: "ec9837f79158"
+          summary: >
+            Rebased and semantically reconciled with the independently landed
+            OpenCode Vault-auth packet at 3df90b4d. Existing Vault migrations
+            now require both the newest conventional one-shot policy role and
+            the dedicated reusable git-mirror Agent role before skipping
+            provisioning; the OpenCode direct-token mounts and credential-free
+            lane remain intact. Post-integration evidence is green: Vault client
+            32/32; headless 249/249 runnable unit tests plus every integration
+            suite; git-mirror-service litmus 14/14, tillandsias-vault 7/7, and
+            podman-secrets-integration 2/2. Two stale tray source-shape tests
+            were updated to include OpenCode, and a resource-lock assertion now
+            tolerates only the bounded fork-to-exec O_CLOEXEC inheritance
+            window found during the full parallel run. No runtime lock semantics
+            changed. The packet still waits only on the explicit real-Podman
+            Agent re-authentication gate above.
     - order: 425
       packet_id: forge-mirror-fail-loud-invariant
       desired_release: v0.4

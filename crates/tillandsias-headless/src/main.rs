@@ -88,6 +88,36 @@ mod runtime_phase;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
+/// Run a foreground/one-shot lane and drain every Vault credential it minted
+/// before returning to the CLI dispatcher.
+///
+/// The long-running headless/tray process owns its registry until application
+/// shutdown, and detached web lanes intentionally keep their mirror alive
+/// after this launcher returns. Interactive CLI lanes and status-check are
+/// different: their project mirror is stopped before the lane returns, so
+/// leaving its AppRole accessor in this short-lived process would turn a
+/// graceful container stop into the same 48h orphan window reserved for
+/// SIGKILL/host loss.
+fn run_cli_with_vault_credential_cleanup<T>(
+    debug: bool,
+    action: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let result = action();
+
+    #[cfg(feature = "vault")]
+    match podman_runtime() {
+        Ok(runtime) => runtime.block_on(vault_bootstrap::revoke_pending_container_tokens(debug)),
+        Err(e) => eprintln!(
+            "[tillandsias-vault] WARNING: could not create a cleanup runtime after a foreground \
+             lane: {e}; local and server-side credential cleanup could not be completed"
+        ),
+    }
+    #[cfg(not(feature = "vault"))]
+    let _ = debug;
+
+    result
+}
+
 fn main() {
     #[cfg(unix)]
     {
@@ -536,7 +566,8 @@ fn main() {
         }
 
         if status_check {
-            if let Err(e) = run_status_check(debug) {
+            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_status_check(debug))
+            {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -561,7 +592,7 @@ fn main() {
     }
 
     if status_check && !init {
-        if let Err(e) = run_status_check(debug) {
+        if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_status_check(debug)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -588,7 +619,9 @@ fn main() {
     if opencode {
         maybe_spawn_detached_tray_for_cli(tray, debug);
         if let Some(project_path) = config_path {
-            if let Err(e) = run_opencode_mode(&project_path, prompt.as_deref(), debug) {
+            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
+                run_opencode_mode(&project_path, prompt.as_deref(), debug)
+            }) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -611,9 +644,9 @@ fn main() {
             (ForgeAgentMode::Maintenance, "--bash")
         };
         if let Some(project_path) = config_path {
-            if let Err(e) =
+            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
                 run_forge_agent_cli_mode(&project_path, mode, flag, prompt.as_deref(), debug)
-            {
+            }) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -2578,10 +2611,15 @@ fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
     {
         let trimmed = url.trim();
         if !trimmed.is_empty() {
-            return Some(trimmed.to_string());
+            // The mirror authenticates through its Vault-backed credential
+            // helper. Never forward legacy HTTP userinfo into podman argv,
+            // container environment, debug logs, or the bare-repo config.
+            return sanitize_forge_origin_url(trimmed);
         }
     }
     parse_gitdir_origin_url(project_path)
+        .as_deref()
+        .and_then(sanitize_forge_origin_url)
 }
 
 /// Minimal `.git/config` reader for `remote.origin.url`, used when no
@@ -2694,18 +2732,7 @@ fn read_host_project_current_branch(project_path: &Path) -> Option<String> {
     sanitize(head.trim().strip_prefix("ref: refs/heads/")?)
 }
 
-/// Best-effort mint of a Vault AppRole token for a git-mirror container.
-///
-/// Returns `Some(secret_name)` when Vault is up and the AppRole login
-/// succeeds; the caller passes that name to `build_git_run_args` to mount
-/// the token into the container. Returns `None` on any failure or when the
-/// `vault` feature is not compiled — the caller then falls back to the
-/// legacy `tillandsias-github-token` podman secret.
-///
-/// @trace spec:tillandsias-vault
-#[allow(unused_variables)]
-/// Mint the per-project git-mirror relay credential (vault AppRole token,
-/// delivered to the container as a podman secret).
+/// Mint the per-project git-mirror Vault Agent auto-auth credential.
 ///
 /// windows-260716-2 (P1, live repro on the WSL2 lane 2026-07-16): this
 /// used to return `Option<String>` and swallow mint failures behind a
@@ -2715,21 +2742,35 @@ fn read_host_project_current_branch(project_path: &Path) -> Option<String> {
 /// when relay-refs.sh correctly fail-closed at push time, blocking the
 /// whole in-forge cycle. A mirror without a relay credential is a broken
 /// push channel by construction: fail LOUD at create time instead.
-async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Result<String, String> {
+///
+/// Order 424 replaces the fixed client-token mount with reusable AppRole
+/// login material consumed by Vault Agent. The Agent renews its current 1h
+/// token and re-authenticates after the 24h max TTL without a container
+/// relaunch. The role ID and secret ID remain in one Podman secret and never
+/// enter argv or the environment.
+///
+/// @trace spec:tillandsias-vault, spec:git-mirror-service
+async fn mint_git_mirror_vault_auto_auth(
+    project_name: &str,
+    debug: bool,
+) -> Result<String, String> {
     #[cfg(feature = "vault")]
     {
         let instance = format!("{project_name}-{}", std::process::id());
-        vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug)
-            .await
-            .map(|(_token, secret_name)| secret_name)
-            .map_err(|e| {
-                format!(
-                    "vault AppRole mint for the git-mirror relay credential failed: {e}. \
+        vault_bootstrap::mint_approle_auto_auth_for_container(
+            vault_bootstrap::GIT_MIRROR_AGENT_ROLE,
+            &instance,
+            debug,
+        )
+        .await
+        .map_err(|e| {
+            format!(
+                "vault AppRole auto-auth mint for the git-mirror relay credential failed: {e}. \
                      Refusing to launch a credential-less mirror — every in-forge push \
                      would fail-close at relay time (windows-260716-2). Check vault \
                      health (tillandsias-vault container, unseal state) and retry."
-                )
-            })
+            )
+        })
     }
     #[cfg(not(feature = "vault"))]
     {
@@ -2738,7 +2779,7 @@ async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Result<
     }
 }
 
-/// Podman `--secret` mount options for the per-launch Vault AppRole token.
+/// Podman `--secret` mount options for a direct per-launch Vault token.
 ///
 /// `uid=1000,gid=1000` is REQUIRED, not cosmetic. The git image runs its
 /// workload as the unprivileged `git` user (uid/gid 1000 — see
@@ -2754,15 +2795,20 @@ async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Result<
 pub(crate) const GIT_VAULT_TOKEN_SECRET_OPTS: &str =
     "target=vault-token,uid=1000,gid=1000,mode=0400";
 
+/// Podman mount options for the git mirror's Vault Agent AppRole document.
+///
+/// The document contains `role_id` and `secret_id` fields. It stays read-only
+/// under `/run/secrets`; the bootstrap copies each value to a mode-0400 tmpfs
+/// file for Vault Agent without putting either value in argv or the
+/// environment.
+const GIT_VAULT_APPROLE_SECRET_OPTS: &str = "target=vault-approle,uid=1000,gid=1000,mode=0400";
+
 /// Build the podman launch args for the per-project git-mirror container.
 ///
-/// `vault_token_secret` is the name of the podman secret holding a fresh
-/// AppRole-issued Vault token scoped to `git-mirror-policy`. When supplied
-/// (the Phase 6 default flow), the container mounts it at
-/// `/run/secrets/vault-token` and reads the GitHub token from Vault at hook
-/// time via `vault-cli`. When `None`, the launcher is running in legacy
-/// keyring mode: the container instead mounts `tillandsias-github-token`
-/// and the hook reads it directly from disk.
+/// `vault_approle_secret` is the Podman secret holding launch-scoped AppRole
+/// material for Vault Agent. Agent writes renewable client tokens to a tmpfs
+/// sink, and `vault-cli` reads the GitHub token from Vault at hook time. When
+/// `None`, the mirror has no authenticated upstream credential path.
 ///
 /// @trace spec:tillandsias-vault, spec:git-mirror-service
 fn build_git_run_args(
@@ -2771,7 +2817,7 @@ fn build_git_run_args(
     image: &str,
     project_remote_url: Option<&str>,
     project_default_branch: Option<&str>,
-    vault_token_secret: Option<&str>,
+    vault_approle_secret: Option<&str>,
 ) -> Vec<String> {
     // Named podman volume for the bare repo. Persists across container
     // restarts so the mirror's "startup retry-push" loop has stranded commits
@@ -2800,6 +2846,12 @@ fn build_git_run_args(
         "--userns=keep-id".into(),
         "--pids-limit=64".into(),
         "--read-only".into(),
+        // Vault Agent's role/SecretID working files, PID file, and client-token
+        // sink must live on writable volatile storage. The root filesystem is
+        // read-only, so /tmp must be an explicit tmpfs rather than an assumed
+        // image directory.
+        "--tmpfs".into(),
+        "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777".into(),
         "--volume".into(),
         format!("{mirror_volume}:/srv/git"),
         "--env".into(),
@@ -2813,7 +2865,7 @@ fn build_git_run_args(
     // list — not a shorter hand-rolled one.
     // See cheatsheets/runtime/enclave-proxy-patterns.md for justification.
     args.extend(proxy_env_args());
-    if let Some(url) = project_remote_url
+    if let Some(url) = project_remote_url.and_then(sanitize_forge_origin_url)
         && !url.is_empty()
     {
         args.push("--env".into());
@@ -2832,28 +2884,25 @@ fn build_git_run_args(
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_PROJECT_DEFAULT_BRANCH={branch}"));
     }
-    if let Some(secret_name) = vault_token_secret {
-        // @trace spec:tillandsias-vault — git-mirror reads the GitHub token
-        // via vault-cli using this short-lived AppRole token at hook time.
-        // The token is mounted as a podman secret (owned by the git user,
-        // mode 0400 — see GIT_VAULT_TOKEN_SECRET_OPTS) at the stable path
-        // /run/secrets/vault-token regardless of the per-launch secret name;
-        // podman's --secret target= rewrites the mount.
+    if let Some(secret_name) = vault_approle_secret {
+        // @trace spec:tillandsias-vault — Vault Agent consumes launch-scoped
+        // AppRole material and maintains the tmpfs client-token sink used by
+        // vault-cli. The reusable login credential is what lets the Agent
+        // re-authenticate after a client token reaches max_ttl.
         args.push("--secret".into());
-        args.push(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
+        args.push(format!("{secret_name},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
         args.push("--env".into());
         args.push("VAULT_ADDR=https://vault:8200".into());
         args.push("--env".into());
         args.push("CURL_CA_BUNDLE=/etc/tillandsias/ca.crt".into());
         args.push("--env".into());
-        args.push("VAULT_ROLE=git-mirror".into());
+        args.push(format!(
+            "VAULT_ROLE={}",
+            vault_bootstrap::GIT_MIRROR_AGENT_ROLE
+        ));
+        args.push("--env".into());
+        args.push("VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token".into());
     }
-    // Legacy fallback: when no vault secret is supplied AND the launcher is
-    // configured to fall back to the keyring path, the runtime layer pushes
-    // the token via a separate `SecretKind::GitHubToken` mount in
-    // `container_profile`. We do NOT attach the legacy secret here because
-    // it may not exist on a fresh install — the post-receive hook tolerates
-    // a missing token by failing the upstream push and exiting 0.
     args.push("--mount".into());
     args.push(format!(
         "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
@@ -6351,7 +6400,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = match mint_git_mirror_vault_token(project_name, debug).await {
+        let git_vault_secret = match mint_git_mirror_vault_auto_auth(project_name, debug).await {
             Ok(secret) => Some(secret),
             Err(e) => {
                 // Status-check mirror is a throwaway bare repo (no pushes) —
@@ -8421,7 +8470,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .map(|lease| lease.secret_name());
         #[cfg(not(feature = "vault"))]
         let opencode_vault_secret: Option<&str> = None;
-        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+        let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(
                 "opencode-git",
@@ -9500,7 +9549,7 @@ pub(crate) fn run_opencode_web_mode(
             .map(|lease| lease.secret_name());
         #[cfg(not(feature = "vault"))]
         let opencode_vault_secret: Option<&str> = None;
-        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+        let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(
                 "opencode-web-git",
@@ -10123,7 +10172,7 @@ async fn ensure_shared_git_and_inference_for_launch(
             );
         }
     } else {
-        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+        let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(
                 "forge-launch-git",
@@ -12417,7 +12466,7 @@ mod tests {
         // relay time. The mint is Result now; real lanes propagate (`?`),
         // only the throwaway status-check mirror tolerates, loudly.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let mint = source_window(source, "async fn mint_git_mirror_vault_token(");
+        let mint = source_window(source, "async fn mint_git_mirror_vault_auto_auth(");
         assert!(
             mint.contains("Result<String, String>"),
             "mint must be Result — silent Option was the fail-open vector"
@@ -12439,7 +12488,7 @@ mod tests {
         ] {
             let window = source_window(source, lane);
             assert!(
-                window.contains("mint_git_mirror_vault_token(project_name, debug).await?"),
+                window.contains("mint_git_mirror_vault_auto_auth(project_name, debug).await?"),
                 "{lane} must hard-fail on a missing relay credential"
             );
         }
@@ -12447,6 +12496,30 @@ mod tests {
         assert!(
             status.contains("WARNING: status-check mirror launching credential-less"),
             "status-check tolerance must be loud, not debug-gated"
+        );
+    }
+
+    #[test]
+    fn foreground_git_mirror_lanes_revoke_issued_approle_accessors_on_return() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let cleanup = source_window(source, "fn run_cli_with_vault_credential_cleanup<T>(");
+        assert!(
+            cleanup.contains("revoke_pending_container_tokens(debug)"),
+            "foreground lane wrapper must drain token and AppRole-accessor registries"
+        );
+
+        let main_window = source_window(source, "fn main()");
+        assert_eq!(
+            main_window
+                .matches("run_cli_with_vault_credential_cleanup(debug")
+                .count(),
+            4,
+            "both status dispatches plus OpenCode and forge-agent CLI dispatches must clean up"
+        );
+        assert!(
+            !main_window
+                .contains("run_cli_with_vault_credential_cleanup(debug, || run_opencode_web_mode"),
+            "detached web sessions must retain their AppRole accessor while the mirror stays alive"
         );
     }
 
@@ -13803,22 +13876,16 @@ mod tests {
 
     #[test]
     fn tray_credentialed_agents_delegate_to_cli_lane_for_tty_login() {
-        // The tray process has no TTY; Claude/Codex/OpenCode/Antigravity
-        // clicks must route through the CLI lane (ensure_provider_auth
-        // ladder) inside the popup terminal instead of a bare podman argv.
+        // The tray process has no TTY; Claude/Codex/OpenCode/Antigravity clicks must
+        // route through the CLI lane (ensure_provider_auth ladder) inside
+        // the popup terminal instead of a bare podman argv.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let start = source
             .find("pub(crate) fn launch_forge_agent(")
             .expect("launch_forge_agent must exist");
         let window = &source[start..start + 3000];
-        let arm: String = window
-            .chars()
-            .map(|c| if c.is_whitespace() { ' ' } else { c })
-            .collect::<String>()
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        assert!(arm.contains(
+        let normalized = window.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(normalized.contains(
             "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
         ));
     }
@@ -14476,10 +14543,35 @@ mod tests {
     }
 
     #[test]
-    fn git_run_args_mount_vault_token_when_supplied() {
-        // @trace spec:tillandsias-vault — Phase 6 default flow
+    fn git_run_args_strip_embedded_http_credentials_before_container_env() {
         let certs = PathBuf::from("/tmp/ca");
-        let secret = "tillandsias-vault-token-git-mirror-alpha-1234";
+        let args = build_git_run_args(
+            "alpha",
+            &certs,
+            "tillandsias-git:v1",
+            Some("https://host-user:host-secret@github.com/example/repo.git"),
+            Some("main"),
+            Some("tillandsias-vault-approle-git-mirror-agent-alpha-1"),
+        );
+        assert!(
+            has_arg(
+                &args,
+                "TILLANDSIAS_PROJECT_REMOTE_URL=https://github.com/example/repo.git"
+            ),
+            "mirror must receive a credential-free upstream URL: {args:?}"
+        );
+        assert!(
+            args.iter()
+                .all(|arg| !arg.contains("host-user") && !arg.contains("host-secret")),
+            "host URL credentials must never enter podman argv or container env: {args:?}"
+        );
+    }
+
+    #[test]
+    fn git_run_args_mount_vault_agent_approle_when_supplied() {
+        // @trace spec:tillandsias-vault — long-running mirror auto-auth flow
+        let certs = PathBuf::from("/tmp/ca");
+        let secret = "tillandsias-vault-approle-git-mirror-agent-alpha-1234-1";
         let args = build_git_run_args(
             "alpha",
             &certs,
@@ -14489,36 +14581,24 @@ mod tests {
             Some(secret),
         );
 
-        // The vault token secret MUST be mounted at the stable path
-        // /run/secrets/vault-token, owned by the git user (uid 1000) so the
-        // in-container vault-cli helper can actually read it under keep-id.
-        let secret_arg = format!("{secret},{GIT_VAULT_TOKEN_SECRET_OPTS}");
+        // Vault Agent's reusable AppRole document must be mounted at the
+        // stable path /run/secrets/vault-approle and owned by the git user.
+        let secret_arg = format!("{secret},{GIT_VAULT_APPROLE_SECRET_OPTS}");
         assert!(
             args.iter().any(|a| a == &secret_arg),
-            "expected vault token secret arg `{secret_arg}` in args: {args:?}"
+            "expected Vault Agent AppRole secret arg `{secret_arg}` in args: {args:?}"
         );
 
-        // Regression pin (literal, NOT derived from the constant): the secret
-        // MUST be owned by the git user (uid/gid 1000). Podman defaults
-        // `--secret` to root:root, and a root-owned mode 0400 file is
-        // unreadable by the container's unprivileged `git` user under
-        // `--userns=keep-id` — `vault-cli` then reports "no Vault token at
-        // /run/secrets/vault-token" and the git-mirror push silently falls back
-        // to interactive auth. Asserting the literal here (rather than
-        // reformatting the constant) is what actually catches a regression.
-        // @trace spec:git-mirror-service, spec:tillandsias-vault
         let mounted = args
             .iter()
-            .find(|a| a.contains("target=vault-token"))
-            .expect("vault-token secret must be mounted");
+            .find(|a| a.contains("target=vault-approle"))
+            .expect("vault-approle secret must be mounted");
         assert!(
             mounted.contains("uid=1000") && mounted.contains("gid=1000"),
-            "vault-token secret must be owned by the git user (uid/gid 1000) \
+            "vault-approle secret must be owned by the git user (uid/gid 1000) \
              so it is readable under keep-id; got `{mounted}`"
         );
 
-        // The container needs VAULT_ADDR + VAULT_ROLE to know how to talk
-        // to Vault and which role to authenticate as.
         assert!(
             has_arg(&args, "VAULT_ADDR=https://vault:8200"),
             "missing VAULT_ADDR env: {args:?}"
@@ -14528,8 +14608,18 @@ mod tests {
             "missing Vault CA env: {args:?}"
         );
         assert!(
-            has_arg(&args, "VAULT_ROLE=git-mirror"),
+            has_arg(&args, "VAULT_ROLE=git-mirror-agent"),
             "missing VAULT_ROLE env: {args:?}"
+        );
+        assert!(
+            has_arg(&args, "VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token"),
+            "vault-cli must follow Vault Agent's tmpfs token sink: {args:?}"
+        );
+        assert!(
+            args.windows(2).any(|pair| {
+                pair[0] == "--tmpfs" && pair[1] == "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777"
+            }),
+            "read-only git container must provide writable volatile /tmp for Vault Agent: {args:?}"
         );
 
         // The legacy github-token podman secret MUST NOT be mounted in the
@@ -14543,10 +14633,10 @@ mod tests {
     }
 
     #[test]
-    fn git_run_args_omit_vault_secret_when_none() {
-        // Companion negative case to git_run_args_mount_vault_token_when_supplied
+    fn git_run_args_omit_vault_auto_auth_when_none() {
+        // Companion negative case to git_run_args_mount_vault_agent_approle_when_supplied
         // (windows-260716-2, exit criterion 1). Without this pin a regression
-        // could hardcode/always-mount a stale vault-token secret name (or the
+        // could hardcode/always-mount a stale vault-approle secret name (or the
         // VAULT_ADDR/VAULT_ROLE envs) regardless of what — if anything — the
         // caller actually minted, silently defeating the fail-loud mint
         // discipline enforced upstream by `?` propagation.
@@ -14554,16 +14644,20 @@ mod tests {
         let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
 
         assert!(
-            !args.iter().any(|a| a.contains("target=vault-token")),
-            "vault_token_secret was None — must not mount any vault-token secret: {args:?}"
+            !args.iter().any(|a| a.contains("target=vault-approle")),
+            "vault_approle_secret was None — must not mount AppRole material: {args:?}"
         );
         assert!(
             !has_arg(&args, "VAULT_ADDR=https://vault:8200"),
-            "vault_token_secret was None — must not set VAULT_ADDR: {args:?}"
+            "vault_approle_secret was None — must not set VAULT_ADDR: {args:?}"
         );
         assert!(
-            !has_arg(&args, "VAULT_ROLE=git-mirror"),
-            "vault_token_secret was None — must not set VAULT_ROLE: {args:?}"
+            !has_arg(&args, "VAULT_ROLE=git-mirror-agent"),
+            "vault_approle_secret was None — must not set VAULT_ROLE: {args:?}"
+        );
+        assert!(
+            !has_arg(&args, "VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token"),
+            "vault_approle_secret was None — must not set a token sink: {args:?}"
         );
     }
 
@@ -14702,6 +14796,7 @@ mod tests {
 
     #[test]
     fn opencode_args_mount_persistent_tool_cache_named_volume() {
+        let _env = env_lock();
         // Order 220: OpenCode/OpenCode Web launches must mount the same
         // per-project persistent cache volume as Claude/Codex/Antigravity/
         // Maintenance (order 179), or FIRST_RUN tool installs (orders
@@ -14731,6 +14826,7 @@ mod tests {
 
     #[test]
     fn opencode_vault_auth_mount_is_scoped_and_contains_no_credential_bytes() {
+        let _env = env_lock();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -14759,6 +14855,7 @@ mod tests {
 
     #[test]
     fn opencode_without_vault_key_preserves_credential_free_lane() {
+        let _env = env_lock();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -14782,6 +14879,7 @@ mod tests {
 
     #[test]
     fn opencode_args_diagnostics_mode() {
+        let _env = env_lock();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -14975,15 +15073,12 @@ mod tests {
     #[test]
     fn tray_codex_launch_reexecs_cli_for_lease_lifetime() {
         // Extended 2026-07-15: the CLI-lane delegation now covers ALL
-        // credentialed agents (Claude/Codex/OpenCode/Antigravity), same
-        // reasoning — the tray has no TTY for the device-code login, and
-        // (order 431) OpenCode's Vault auth lease lifetime must be owned by
-        // the re-exec'd CLI process. Whitespace-normalized so rustfmt arm
-        // reflow cannot break the pin without a semantic change.
+        // credentialed agents (Claude/Codex/OpenCode/Antigravity), same reasoning —
+        // the tray has no TTY for the device-code login.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let body = source_window(source, "pub(crate) fn launch_forge_agent(");
-        let flat: String = body.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(flat.contains(
+        let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(normalized.contains(
             "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
         ));
         assert!(body.contains("std::env::current_exe()"));

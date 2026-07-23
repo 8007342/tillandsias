@@ -71,12 +71,13 @@ SECRETS=(
 # registry entry and shutdown remains idempotent for older installs.
 
 # @trace spec:tillandsias-vault — the tray normally drains per-container
-# AppRole tokens on shutdown via the in-process revocation registry, but
-# CTRL-C / SIGKILL paths can leave stragglers. Walk every secret matching
-# the per-container naming pattern and remove it here.
+# AppRole tokens and reusable Agent SecretIDs on shutdown via the in-process
+# revocation registries, but CTRL-C / SIGKILL paths can leave stragglers.
+# Walk both per-container naming patterns and remove them here.
 while IFS= read -r leftover; do
     case "$leftover" in
         tillandsias-vault-token-*) SECRETS+=("$leftover") ;;
+        tillandsias-vault-approle-*) SECRETS+=("$leftover") ;;
     esac
 done < <("$PODMAN" secret ls --format '{{.Name}}' 2>/dev/null || true)
 
