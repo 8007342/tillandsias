@@ -256,6 +256,125 @@ those contracts SHALL be rejected and replaced by that last-good binary.
   `/home/forge/.tools`
 - **AND** no `[tools-overlay]` log lines SHALL appear at attach time
 
+### Requirement: Forge worker identities are collision-resistant across launch and teardown
+
+Every nonempty `TILLANDSIAS_FORGE_INSTANCE` value SHALL produce a
+collision-resistant Podman-safe component consisting of a readable capped
+prefix plus a stable SHA-256 suffix over the exact raw identity. Normalization,
+case folding, punctuation replacement, and length capping MUST NOT make two
+distinct raw identities share a container name, hostname, or mutable state
+path. Only an absent or exactly empty value SHALL preserve the legacy unscoped
+name.
+
+The instance-aware headless launch path, OpenCode Web router upstream, and
+per-project headless cleanup SHALL derive forge names through the same
+constructor. In particular, cleanup MUST NOT remove an unscoped legacy forge
+when the active process owns an instance-scoped forge.
+
+The legacy tray Stop/PTy lookup surfaces do not yet carry a worker-selection
+contract and therefore remain a tracked order-427 residual; they MUST NOT be
+represented as instance-safe until that contract exists. Multiple OpenCode Web
+instances also currently share the user-facing `opencode.<project>` route key,
+so concurrent-Web routing remains residual rather than silently choosing a
+worker.
+
+#### Scenario: Host-normalized identities remain distinct
+- **WHEN** two launchers use raw identities such as `a b` and `a-b`, case
+  variants, or values which differ after the readable prefix cap
+- **THEN** their forge container names, hostnames, and mutable state paths
+  SHALL differ
+- **AND** `--replace` in one launch SHALL NOT target the sibling worker.
+
+Observed provenance: the real ledger identities
+`forge-tillandsias-codex-20260723T043901Z` and
+`forge-tillandsias-codex-20260723T062500Z` previously both truncated to
+`forge-tillandsias-codex-20260723`; the collision fixture MUST retain this
+pair.
+
+#### Scenario: Scoped teardown removes only the scoped forge
+- **WHEN** an instance-scoped forge exits or fails
+- **THEN** cleanup SHALL derive its target through the same raw-identity
+  constructor used for launch
+- **AND** SHALL NOT fall back to `tillandsias-<project>-forge`.
+
+#### Scenario: OpenCode Web routes to the scoped forge
+- **WHEN** an instance-scoped OpenCode Web forge registers its router upstream
+- **THEN** the upstream container SHALL come from the same scoped constructor
+  as launch
+- **AND** SHALL NOT target a nonexistent unscoped legacy forge.
+
+### Requirement: Codex state persistence excludes provider authentication and is worker-namespaced
+
+The broad Codex state root (`CODEX_HOME`) SHALL remain ephemeral and, when a
+forge instance is present, per-worker. Tillandsias SHALL persist only explicitly
+reviewed state classes beneath
+`/home/forge/.cache/tillandsias-project/codex-state/<worker-or-default>`:
+`cache/` and `sessions/` as direct directories, SQLite-backed state through the
+supported `CODEX_SQLITE_HOME` split, and the exact copied-file whitelist
+`models_cache.json`, `version.json`, `installation_id`, and
+`.sandbox_migration`.
+
+`auth.json`, `config.toml`, history, logs, shell snapshots, skills, and unknown
+future `CODEX_HOME` content MUST NOT be copied into this state namespace.
+Provider authentication SHALL remain owned by the existing scoped Vault
+restore/harvest path. This is not a content-level secret scrubber:
+cache/session/SQLite state can contain sensitive project or conversation data
+and MUST use mode-0700 directories. Worker roots prevent automatic
+cross-restore, but are namespace separation rather than access control because
+forge workers share the project cache as the same UID.
+
+The host SHALL pass the exact pre-sanitized forge-instance identity to the
+container. Non-default persistence keys SHALL be a full SHA-256 digest of that
+identity so host-normalized or length-capped names cannot collide. Setup SHALL
+validate canonical paths, reject links and non-regular copied-file
+destinations, enforce permissions, preflight all direct classes before linking,
+and roll back helper-owned links on failure. Persistence failure MUST NOT block
+the Codex lane or cause the provider auth document to persist.
+
+Direct cache/session/SQLite state MAY survive an uncatchable container kill
+because it writes to the project cache directly. Copied metadata SHALL be
+checkpointed only on normal foreground-wrapper exit; a hard kill MAY lose
+changes since that checkpoint and MAY leave a reserved regular checkpoint temp
+containing only one whitelisted metadata file, which the next setup SHALL
+remove. The shared OAuth foreground wrapper MUST NOT infer or flush a Codex
+state root unless the Codex entrypoint completed setup successfully.
+
+Provenance (consulted 2026-07-23): OpenAI's
+[Codex environment-variable reference](https://learn.chatgpt.com/docs/config-file/environment-variables.md)
+defines `CODEX_HOME` as the root for config, auth, logs, sessions, skills, and
+standalone package metadata, and defines `CODEX_SQLITE_HOME` as the supported
+SQLite state split. OpenAI's
+[Codex authentication reference](https://learn.chatgpt.com/docs/auth.md)
+documents file-backed `auth.json` as plaintext credential storage. The exact
+Tillandsias directory/file whitelist above is an observed, reviewed
+implementation policy—not an upstream guarantee—and MUST be re-audited when
+Codex changes its state layout.
+
+#### Scenario: Normal Codex exit checkpoints only reviewed metadata
+- **WHEN** a Codex forge entrypoint completes safe-state setup and its
+  foreground Codex process exits normally
+- **THEN** cache, sessions, and `CODEX_SQLITE_HOME` SHALL already be direct
+  under the worker namespace
+- **AND** the exact copied-file whitelist SHALL be checkpointed
+- **AND** provider auth/config/history and unknown files SHALL remain absent
+  from persistent state.
+
+#### Scenario: Failed setup remains available without widening persistence
+- **WHEN** a path, link, destination-type, or permission preflight fails
+- **THEN** the entrypoint SHALL keep the Codex lane available
+- **AND** SHALL clear readiness, root, and `CODEX_SQLITE_HOME` exports
+- **AND** SHALL roll back only helper-owned partial direct links
+- **AND** SHALL NOT copy or persist the provider auth document.
+
+#### Scenario: Provider login reuses only the Codex tool cache
+- **WHEN** `tillandsias --codex-login` launches its short-lived provider
+  container
+- **THEN** it SHALL mount a Codex-specific non-auth tool-cache volume at
+  `/home/forge/.cache/tillandsias-project`
+- **AND** it SHALL NOT persist `CODEX_HOME`
+- **AND** the one-shot device helper SHALL request only Codex installation,
+  not refresh every agent harness.
+
 ### Requirement: OpenCode consumes Vault authentication without credential files
 
 When the existing Gemini API-key producer at `secret/gemini/api-key` is
@@ -671,6 +790,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:harness-byte-cheap` — deterministic warm/current, concurrency, timeout, rollback, and cargo download-count fixtures
 - `litmus:forge-validation-profile` — non-destructive stable forge validation report
 - `litmus:opencode-vault-auth-content` — OpenCode Vault adapter, installed-binary positive assertion, no-file contract, and last-good rollback
+- `litmus:codex-safe-state-shape` — Codex provider-auth exclusion, worker namespace, path hardening, and normal-exit checkpoint contract
 
 Gating points:
 - Default forge image is pulled fresh; cached images are cleared on container stop

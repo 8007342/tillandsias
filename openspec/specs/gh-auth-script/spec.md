@@ -91,9 +91,16 @@ After interactive `gh auth login` succeeds, the git container MUST verify the se
 
 #### Scenario: Vault write from inside the container
 - **WHEN** the interactive `gh auth login` exits successfully
-- **THEN** the host MUST exec `TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write secret/github/token "token=$TOKEN"` inside the container via `podman exec`
+- **THEN** the host MUST exec an in-container command that requires
+  `gh auth token --hostname github.com` to succeed and return a non-empty token,
+  then streams that token to
+  `vault-cli.sh write-stdin secret/github/token token` on stdin via `podman exec`
 - **AND** MUST abort with an error if the Vault write fails
 - **AND** the token MUST NOT be captured or stored in host memory
+- **AND** token bytes MUST NOT enter the host/Podman command string or any
+  external-process argv
+- **AND** in-container shell-variable and shell-builtin staging MAY hold the
+  token only to validate it and feed `write-stdin`.
 
 #### Scenario: Vault write verification
 - **WHEN** the Vault write completes

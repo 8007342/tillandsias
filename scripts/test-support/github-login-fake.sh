@@ -43,7 +43,7 @@ printf '%s\n' "$LITMUS_FAKE_GITHUB_TOKEN" | \
 
 # Write token to Vault from inside the container (no host extraction)
 "$podman_bin" exec "$container_name" /bin/sh -c \
-  "TOKEN=\$(gh auth token --hostname github.com); vault-cli.sh write secret/github/token \"token=\$TOKEN\"" \
+  "TOKEN=\$(gh auth token --hostname github.com) || exit \$?; [ -n \"\$TOKEN\" ] || exit 1; printf '%s' \"\$TOKEN\" | vault-cli.sh write-stdin secret/github/token token" \
   >/dev/null 2>&1
 
 "$podman_bin" rm -f "$container_name" >/dev/null 2>&1
@@ -56,6 +56,6 @@ if grep -F 'podman exec --interactive --tty tillandsias-gh-login-shape /bin/bash
   printf 'stdin-token login unexpectedly allocated a TTY\n' >&2
   exit 1
 fi
-grep 'vault-cli.sh.*write.*secret/github/token' "$calls_file" >/dev/null
+grep 'vault-cli.sh.*write-stdin.*secret/github/token' "$calls_file" >/dev/null
 
 printf 'GitHub login smoke completed\n'

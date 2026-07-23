@@ -287,6 +287,88 @@ Limits:
   longer-horizon theme. The exception field should preserve that use without
   allowing it to silently override a newer active-release decision.
 
+## MOT-08 — Exact-packet mutation context plus immediate semantic assertion
+
+- **Proposal status**: proposed-for-upvote; independently reproduced twice
+- **Target methodology section**:
+  `skills/advance-work-from-plan/SKILL.md` → claim mutation and
+  `methodology/distributed-work.yaml` → ledger mutation discipline
+- **Finding**: two agents used an under-contextual patch against repeated
+  `status:` / `events:` shapes. The Codex-state worker briefly changed
+  order 278 and inserted its claim under order 252; the root's order-427 claim
+  briefly touched order 313 status and order 314 events. Immediate `git diff`
+  inspection caught and fully reverted both before commit. YAML validation
+  would have passed because both wrong documents remained structurally valid.
+- **Proposed rule**: ledger patches must anchor on the exact `packet_id` plus
+  neighboring immutable fields. Immediately after mutation, assert the target
+  packet's status/event/lease by exact ID and inspect the scoped diff before any
+  broader validator. A structural YAML pass is necessary but not semantic
+  evidence that the intended packet changed.
+- **Measurable adoption gate**: a fixture with repeated status/event blocks
+  rejects a mutation that lands under the wrong packet even though YAML parses.
+
+## MOT-09 — Diff-scoped semantic conflict-marker detection
+
+- **Proposal status**: proposed-for-upvote
+- **Target methodology section**:
+  `methodology/ci.yaml` → pre-push conflict-marker validation
+- **Finding**: a whole-tree scan for the bare `=======` token produces false
+  positives on legitimate visual separators and fixtures. That encourages
+  disabling the guard or reviewing a large irrelevant result set.
+- **Proposed rule**: inspect markers introduced by the current diff, and treat
+  them as a conflict only when the structural triplet is present:
+  `<<<<<<<`, `=======`, and `>>>>>>>` in the relevant hunk (with optional
+  nested-conflict handling). Existing literal separators outside the diff are
+  not a failure.
+- **Measurable adoption gate**: fixtures accept a newly added bare separator
+  but reject complete introduced conflict structure.
+
+## MOT-10 — Reusable ownership-token lock and bounded-child fixture
+
+- **Proposal status**: proposed-for-upvote
+- **Target methodology section**:
+  `methodology/ci.yaml` → concurrency fixture helpers
+- **Finding**: the Claude/Cargo installer work independently repeated the same
+  difficult fixture mechanics: signal cleanup, successor-lock ownership,
+  stale-owner recovery, bounded child termination, timeout handoff, and
+  immutable-last-good preservation. Hand-rolling this reasoning in each
+  installer increases both review cost and the chance of deleting a successor's
+  lock.
+- **Proposed rule**: provide one repo-native fixture/helper whose lock cleanup
+  requires an ownership token, whose child is always bounded and reaped, and
+  whose scenarios cover successor takeover, stale owner, TERM/INT, timeout, and
+  last-good immutability. Consumers supply only installer-specific probes.
+- **Measurable adoption gate**: at least two installer fixtures use the helper
+  and the successor-lock case proves the old owner cannot remove the new lock.
+
+## MOT-11 — Mechanically keep agents out of the human repeat supervisor
+
+- **Proposal status**: proposed-for-upvote
+- **Target methodology section**: forge supervisor entrypoint and static tests
+- **Finding**: despite the new human-only banner, root invoked
+  `./repeat --help` while verifying its text. It did not launch a repeat cycle,
+  but the invocation demonstrates that prose alone does not prevent an agent
+  from entering the human supervisor executable during routine verification.
+- **Proposed rule**: either make the supervisor refuse a machine-detectable
+  agent context before any loop setup, or provide a dedicated static fixture
+  that verifies the help/banner text without executing `./repeat`.
+- **Measurable adoption gate**: an agent-context fixture cannot start the
+  supervisor, while a human-context fixture retains current behavior.
+
+## Forge-used-as-intended verdict
+
+Verdict: **yes, with the MOT-11 help-only nuance above**. The orchestration and
+advance-work skills were invoked directly; no headless `./repeat` cycle was
+used. No Podman-dependent evidence was fabricated: unavailable live
+two-worker, hard-kill, max-TTL, and performance proofs stayed residual. After a
+capacity failure on the small `/tmp` tmpfs, isolated work moved under
+`/home/forge/worktrees`. Reviewed Git integration outcomes were clean
+fetch/fast-forward/push operations with no rejection or semantic merge
+conflict; one expected append-only ledger rebase overlap preserved both events.
+Repeated claim/final builds and rebases were the main overhead. Mandatory
+`./build.sh --check` immediately before each push and post-push remote parity
+remained the enforced exit contract.
+
 ## Suggested voting and promotion order
 
 Recommended first upvotes:

@@ -40,6 +40,9 @@ set -euo pipefail
 printf 'argv:' >>"$CALL_LOG"
 printf ' %q' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
+mkdir -p "${CODEX_HOME:-$HOME/.codex}"
+printf '{"models":["shared-wrapper-no-setup"]}\n' \
+    >"${CODEX_HOME:-$HOME/.codex}/models_cache.json"
 printf '{"access_token":"created-token"}\n' >"$TILLANDSIAS_CODEX_AUTH_FILE"
 sleep 0.2
 printf '{"access_token":"rotated-token"}\n' >"$TILLANDSIAS_CODEX_AUTH_FILE"
@@ -68,13 +71,21 @@ export HOME="$TMP/home"
 export PATH="$TMP/bin:$PATH"
 export TILLANDSIAS_CODEX_AUTH_FILE="$HOME/.codex/auth.json"
 export TILLANDSIAS_CODEX_VAULT_HELPER="$VAULT_HELPER"
+export TILLANDSIAS_CODEX_STATE_HELPER="$ROOT/images/default/codex-safe-state.sh"
+export PROJECT_CACHE="$TMP/project-cache"
 export TILLANDSIAS_OAUTH_POLL_SECS=0.05
 export VAULT_VALUE="$TMP/vault-value"
 export HISTORY_DIR="$TMP/history"
 export CALL_LOG="$TMP/calls.log"
 
+# Claude and Antigravity also call this shared foreground wrapper. Even with a
+# CODEX_HOME-shaped directory, merely sourcing the helper must not infer or
+# flush a Codex state root unless the Codex entrypoint completed setup.
+export CODEX_HOME="$HOME/.codex-shared-wrapper-fixture"
 printf '{"access_token":"initial-token"}\n' >"$TILLANDSIAS_CODEX_AUTH_FILE"
 "$SESSION" -- "$TMP/bin/codex-normal"
+[[ ! -e "$PROJECT_CACHE/codex-state" ]]
+unset CODEX_HOME
 
 grep -R -Fq created-token "$HISTORY_DIR"
 grep -R -Fq rotated-token "$HISTORY_DIR"

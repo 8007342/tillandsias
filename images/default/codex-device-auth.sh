@@ -8,13 +8,15 @@ set -euo pipefail
 # directory codex never consults — the same class of defect as order 430.
 AUTH_FILE="${TILLANDSIAS_CODEX_AUTH_FILE:-${CODEX_HOME:-$HOME/.codex}/auth.json}"
 CODEX_BIN="${TILLANDSIAS_CODEX_BIN:-}"
+LIB_COMMON="${TILLANDSIAS_LIB_COMMON:-/usr/local/lib/tillandsias/lib-common.sh}"
 
+# The login one-shot needs exactly one provider binary. Running the all-provider
+# updater here reinstalled unrelated tools and delayed the device code by about
+# 50 seconds. The provider-specific tool-cache volume mounted by
+# run_provider_login lets require_codex reuse the npm prefix on later logins.
+# shellcheck source=lib-common.sh
+source "$LIB_COMMON"
 if [[ -z "$CODEX_BIN" ]]; then
-    # The forge installs harnesses lazily, so a standalone login container must
-    # establish the same command before probing provider capabilities.
-    # shellcheck source=lib-common.sh
-    source /usr/local/lib/tillandsias/lib-common.sh
-    ensure_forge_harnesses
     require_codex
     CODEX_BIN="$CX_BIN"
 fi

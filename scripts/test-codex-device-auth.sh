@@ -6,9 +6,26 @@ SCRIPT="$ROOT/images/default/codex-device-auth.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-cmp "$ROOT/images/git/vault-cli.sh" "$ROOT/images/default/vault-cli.sh"
+for vault_helper in \
+    "$ROOT/images/git/vault-cli.sh" \
+    "$ROOT/images/default/vault-cli.sh"; do
+    grep -Fq 'write-stdin' "$vault_helper"
+    grep -Fq -- '--cacert "$VAULT_CACERT"' "$vault_helper"
+    grep -Fq -- '--header "@$header_file"' "$vault_helper"
+done
 
 mkdir -p "$TMP/bin" "$TMP/home/.codex"
+
+cat >"$TMP/lib-common.sh" <<'EOF'
+require_codex() {
+    printf 'require_codex\n' >>"$REQUIRE_LOG"
+    CX_BIN="$REQUIRE_CODEX_BIN"
+}
+ensure_forge_harnesses() {
+    echo "full harness updater must not run in the Codex login one-shot" >&2
+    exit 97
+}
+EOF
 
 cat >"$TMP/bin/codex-ok" <<'EOF'
 #!/usr/bin/env bash
@@ -57,6 +74,9 @@ export HOME="$TMP/home"
 export PATH="$TMP/bin:$PATH"
 export VAULT_CAPTURE="$TMP/vault-value"
 export VAULT_ARGV_LOG="$TMP/vault-argv.log"
+export REQUIRE_LOG="$TMP/require.log"
+export REQUIRE_CODEX_BIN="$TMP/bin/codex-ok"
+export TILLANDSIAS_LIB_COMMON="$TMP/lib-common.sh"
 
 TILLANDSIAS_CODEX_BIN="$TMP/bin/codex-ok" bash "$SCRIPT" >/dev/null
 base64 -d <"$VAULT_CAPTURE" >"$TMP/restored.json"
@@ -75,4 +95,14 @@ set -e
 grep -Fq "does not support 'codex login --device-auth'" <<<"$output"
 grep -Fq 'refusing browser or paste-token fallback' <<<"$output"
 
-echo "PASS: Codex device auth command, opaque schema, and fail-loud probe"
+[[ ! -e "$REQUIRE_LOG" ]]
+rm -f "$HOME/.codex/auth.json" "$VAULT_CAPTURE"
+bash "$SCRIPT" >/dev/null
+[[ "$(cat "$REQUIRE_LOG")" == require_codex ]]
+[[ -s "$HOME/.codex/auth.json" ]]
+if grep -Fq ensure_forge_harnesses "$SCRIPT"; then
+    echo "Codex login one-shot still calls the full harness updater" >&2
+    exit 1
+fi
+
+echo "PASS: Codex device auth command, require-only install, opaque schema, and fail-loud probe"

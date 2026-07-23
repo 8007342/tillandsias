@@ -195,6 +195,7 @@ specs:
   - litmus:harness-rollback-shape
   - litmus:forge-validation-profile
   - litmus:opencode-vault-auth-content
+  - litmus:codex-safe-state-shape
   coverage_ratio: 80
   last_verified: '2026-07-23'
 - spec_id: dev-build
@@ -943,6 +944,7 @@ specs:
   - litmus:vault-auto-unseal-no-prompt
   - litmus:codex-api-key-env-var
   - litmus:vault-cli-verifies-tls
+  - litmus:default-vault-cli-security
   - litmus:vault-policy-forge-cannot-read-github-token
   - litmus:git-mirror-safe-refspec-push
   - litmus:vault-github-token-capture-shape
