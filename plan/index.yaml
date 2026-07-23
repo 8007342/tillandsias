@@ -16431,6 +16431,149 @@ plan_index:
             fixture-only lane the plan flagged; the fail-loud guard held —
             no agent ran on an empty tree.
 
+    - packet_id: windows-exec-probe-timeout-not-damage
+      provisional_id: windows-260723-1
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "418 refinement: a probe TIMEOUT is not a damaged distro — do not destructively re-import on a transiently wedged WSL service"
+      status: ready
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs (probe timeout => bounded retry/wsl-service recovery, only probe FAILURE => self-heal)
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [windows, wsl, vm-lifecycle, safety]
+      estimated_hours: 2
+      outcome: >
+        Slowdown-audit verified finding: the order-418 exec probe is cheap
+        when healthy (141-161ms measured) but treats its 60s TIMEOUT the
+        same as an exec FAILURE — and a transiently wedged WSL service
+        (the is_wsl_service_sane/E_UNEXPECTED class, recoverable with
+        wsl --shutdown) would trigger the one-shot DESTRUCTIVE
+        unregister+reimport of a perfectly healthy distro. Distinguish:
+        timeout => run the existing perform_wsl_shutdown_recovery + retry
+        the probe once; only a real exec failure (or post-recovery
+        failure) engages the ephemeral self-heal.
+      events:
+        - type: filed
+          ts: "2026-07-23T04:20:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            From the 23-agent slowdown audit (finding verified MEDIUM):
+            safety refinement, not a performance item.
+
+    - packet_id: codex-lane-state-amnesia
+      provisional_id: windows-260723-2
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "P1: codex lane state amnesia — ephemeral CODEX_HOME replays codex FIRST-RUN every launch (281s silent stall, 80% of launch); login one-shot re-pulls 136MB + full ensure before the device code (50s)"
+      status: ready
+      kind: bug
+      deliverable: images/default/entrypoint-forge-codex.sh + codex-device-auth.sh + lib-common.sh (persist CODEX_HOME minus auth.json on the per-project cache volume; slim the login container's pre-auth work)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [codex, forge, launch, performance, images]
+      estimated_hours: 4
+      outcome: >
+        Measured on the operator's real 349s codex launch (fat-audit
+        2026-07-23, adversarially verified): after the banner, codex sits
+        SILENT 280.8s before its first TUI byte — CODEX_HOME is recreated
+        from scratch every launch (only auth.json is restored from
+        vault), so codex replays its first-run path every time: statsig
+        experiments gating (90s + 120s ab.chatgpt.com tunnels moving
+        <6KB each) + model-availability NUX + models_cache rebuild.
+        Separately the codex-login one-shot blocks 50s re-downloading
+        136MB of @openai/codex npm and running the FULL harness ensure
+        before `codex login` even starts. Fixes: persist CODEX_HOME
+        (minus auth.json — stays vault-managed) on the per-project
+        persistent cache volume next to the npm prefix; consider a
+        statsig/experiments offline flag for the forge; login container
+        installs ONLY codex (skip the full ensure) or reuses the
+        persistent prefix. Egress/proxy/host exonerated by measurement
+        (RTTs 96-160ms; 16 idle vCPUs; journal quiet).
+      events:
+        - type: filed
+          ts: "2026-07-23T04:20:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed live while Sol (gpt-5.6-sol) runs in this very codex
+            lane — claimable this cycle via the shared ledger. Full
+            timeline + numbers:
+            plan/issues/windows-stack-slowdown-audit-2026-07-23.md.
+
+    - packet_id: harness-refresh-not-byte-cheap
+      provisional_id: windows-260723-3
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "harness refresh moves ~1.09GB per lane launch — 273MB Claude dist downloaded TWICE in 7s; the 'warm cache makes this cheap' contract is broken"
+      status: ready
+      kind: bug
+      deliverable: images/default/lib-common.sh curl_install_claude/ensure_forge_harnesses (short-circuit when persistent versions/ is current; disable launcher self-update on the --version probe; same guard for cargo tools)
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, harness, launch, performance, images]
+      estimated_hours: 3
+      outcome: >
+        Measured (proxy byte accounting, launch window): 1,143,137,207
+        bytes over 142 CONNECTs on a launch with a WARM 1.3GB npm volume
+        — including two complete ~273MB Claude native dists 7s apart
+        (installer run + launcher self-update on the --version probe)
+        with exactly ONE dist on disk afterward; ephemeral
+        ~/.local/bin/claude + ~/.local/share/claude symlinks defeat the
+        persistent versions/ cache so install.sh re-runs fully every
+        launch. Make the refresh byte-cheap when current, as its own
+        comment promises (lib-common.sh:1373).
+      events:
+        - type: filed
+          ts: "2026-07-23T04:20:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Fat-audit verified. Numbers + breakdown in
+            plan/issues/windows-stack-slowdown-audit-2026-07-23.md.
+
+    - packet_id: proxy-cache-never-hits
+      provisional_id: windows-260723-4
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "P1: squid ssl_bump rule order makes bumping unreachable — 0% HTTPS cache hit rate ever; same 1.44GB ollama tarball tunneled 4x in 20 minutes"
+      status: ready
+      kind: bug
+      deliverable: images/proxy/squid.conf ssl_bump rule order + cache policy for immutable release-asset URLs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [proxy, squid, cache, performance, images]
+      estimated_hours: 3
+      outcome: >
+        Live-verified on the running proxy (squid 6.9): 846/846 HTTPS
+        requests in the 2.2h access log are TCP_TUNNEL/200 — zero bumped
+        requests, zero cache hits, ssl_db empty after 846 connections;
+        the ssl_bump rules at squid.conf:96-109 are ordered so the bump
+        step is unreachable. Consequence: NOTHING https is ever cached —
+        the same 1.44GB ollama release tarball was tunneled 4x in 20
+        minutes (5.76GB) during first-launch races, and every
+        harness/artifact re-download (windows-260723-3) hits origin.
+        Fix the rule order (peek at step1 -> bump for cacheable
+        allowlisted artifact hosts, splice the rest) + refresh_pattern
+        for immutable release-asset URLs, OR explicitly decide
+        tunnel-only and cache at a different layer — either way the
+        current config's cache is dead weight.
+      events:
+        - type: filed
+          ts: "2026-07-23T04:20:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Fat-audit verified (measurements in the audit doc). Security
+            note for the implementer: bumping changes the TLS trust
+            story per host — keep the allowlist minimal and deliberate.
+
     - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
       order: provisional

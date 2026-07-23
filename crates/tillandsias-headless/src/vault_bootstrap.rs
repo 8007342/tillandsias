@@ -116,6 +116,22 @@ pub fn get_pending_handover() -> (Option<String>, Option<String>) {
     (None, None)
 }
 
+/// Set once the first GetVaultHandover request has been answered (the
+/// handler always clears after replying). Steady-state connections check
+/// this to skip the first-boot poll loop entirely — the loop used to sleep
+/// its FULL 8s budget on EVERY fresh control-wire connection against an
+/// already-bootstrapped vault (slowdown audit 2026-07-23: 8.1-8.2s
+/// measured on every --status-once; the tray paid it twice serially at
+/// startup).
+#[cfg(feature = "vault")]
+pub static HANDOVER_DELIVERED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(feature = "vault")]
+pub fn handover_already_delivered() -> bool {
+    HANDOVER_DELIVERED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 #[cfg(feature = "vault")]
 #[allow(dead_code)]
 pub fn clear_pending_handover() {
@@ -123,6 +139,7 @@ pub fn clear_pending_handover() {
     if let Ok(mut guard) = cell.lock() {
         *guard = None;
     }
+    HANDOVER_DELIVERED.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[cfg(feature = "vault")]
@@ -159,6 +176,11 @@ pub fn get_pending_handover() -> (Option<String>, Option<String>) {
 
 #[cfg(not(feature = "vault"))]
 pub fn clear_pending_handover() {}
+
+#[cfg(not(feature = "vault"))]
+pub fn handover_already_delivered() -> bool {
+    true
+}
 
 #[cfg(not(feature = "vault"))]
 pub fn is_running_in_vm() -> bool {

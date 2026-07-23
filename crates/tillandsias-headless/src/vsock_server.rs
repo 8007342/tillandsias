@@ -1142,7 +1142,16 @@ async fn handle_connection(
                 // keychain, leaving subsequent boots unable to unseal (HTTP 400).
                 let (unseal_share_b64, root_token) = {
                     let mut result = crate::vault_bootstrap::get_pending_handover();
-                    if result.0.is_none() {
+                    // Slowdown audit 2026-07-23: only the FIRST request per
+                    // process may poll (genuine first-boot window). After a
+                    // handover reply has been delivered once, every later
+                    // fresh connection is steady state — the old
+                    // unconditional loop slept its full 8s on EVERY connect
+                    // (8.1s per --status-once; the tray start paid it twice
+                    // serially).
+                    if result.0.is_none()
+                        && !crate::vault_bootstrap::handover_already_delivered()
+                    {
                         for _ in 0..8u8 {
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                             result = crate::vault_bootstrap::get_pending_handover();
