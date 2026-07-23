@@ -16626,9 +16626,12 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "harness refresh moves ~1.09GB per lane launch — 273MB Claude dist downloaded TWICE in 7s; the 'warm cache makes this cheap' contract is broken"
-      status: claimed
+      status: in_progress
       kind: bug
-      deliverable: images/default/lib-common.sh curl_install_claude/ensure_forge_harnesses (short-circuit when persistent versions/ is current; disable launcher self-update on the --version probe; same guard for cargo tools)
+      deliverable: >
+        images/default/lib-common.sh curl_install_claude/install_prebuilt +
+        scripts/test-harness-byte-cheap.sh +
+        openspec/litmus-tests/litmus-harness-byte-cheap.yaml
       depends_on: []
       pickup_role: linux
       capability_tags: [forge, harness, launch, performance, images]
@@ -16644,6 +16647,60 @@ plan_index:
         launch. Make the refresh byte-cheap when current, as its own
         comment promises (lib-common.sh:1373).
       events:
+        - type: progress
+          ts: "2026-07-23T05:50:00Z"
+          agent_id: "forge-codex-harness-refresh-20260723T0526Z"
+          host: forge
+          host_id: "forge-tillandsias"
+          platform: linux
+          lease_id: "harness-refresh-not-byte-cheap-dcafd59c-20260723T0526Z"
+          phase: live_verification
+          summary: >
+            Implementation-complete offline: Claude restores persistent
+            versions and its ephemeral launcher before refresh, coalesces
+            same-container and sibling callers under an ownership-token lock,
+            short-circuits a matching validated refresh for a bounded 600s,
+            prevents probe-driven self-update without disabling the real
+            foreground updater, and retains an immutable last-good across
+            corrupt, failed, timed-out, and interrupted installers. Prebuilt
+            cargo tools keep their zero-network warm executable path and now
+            coalesce concurrent cold misses per tool.
+          partial_artifact_refs:
+            - "images/default/lib-common.sh"
+            - "scripts/test-harness-byte-cheap.sh"
+            - "openspec/litmus-tests/litmus-harness-byte-cheap.yaml"
+            - "openspec/specs/default-image/spec.md"
+            - "openspec/litmus-bindings.yaml"
+          evidence:
+            - "scripts/test-harness-byte-cheap.sh: 11 deterministic fixtures PASS"
+            - "same-container background+foreground: one installer invocation, zero warm distribution attempts"
+            - "distinct simulated sibling sessions: one installer invocation and one cold distribution attempt"
+            - "corrupt candidate selects independent last-good; owner mutation cannot invalidate foreground-selected path"
+            - "failed, 1s-timeout, interrupted, and 31m-stale owner cases leave no refresh.lock"
+            - "concurrent cargo cold misses fetch one fixture archive; warm executable fetches zero"
+            - "scripts/test-harness-rollback.sh: 6/6 PASS"
+            - "scripts/test-opencode-vault-auth-content.sh: installed OpenCode 1.18.4 positive/no-auth-file/rollback PASS"
+            - "litmus:harness-byte-cheap: 4/4 pre-build steps PASS"
+            - "default-image pre-build suite: 9 PASS, 1 known environment failure from the Podman-dependent containerfile test on a no-Podman forge"
+            - "YAML validation: new litmus, updated litmus binding, and plan index parse"
+          residual: >
+            This forge has no Podman runtime. Deterministic fixtures prove
+            policy, attempt counts, coalescing, and failure behavior, but do
+            not prove the real Anthropic install.sh avoids distribution bytes
+            after the 600s freshness record expires. Keep this packet open
+            until a mutable Podman host records cold, warm-current, and
+            post-expiry proxy byte accounting against a rebuilt image. The
+            Windows audit's unexplained 60MB cargo observation also needs that
+            live path correlation; this change does not guess it had Claude's
+            root cause.
+          next_action: >
+            Rebuild the default image on a mutable Podman host, launch two
+            concurrent Claude lanes against one project cache, and record
+            install.sh/distribution byte counts for cold, within-600s warm,
+            and post-600s refresh runs. Confirm warm current is zero
+            distribution bytes, cold concurrent is one distribution, and the
+            cargo tools perform no release-asset request when their persistent
+            executables already exist.
         - type: claim
           ts: "2026-07-23T05:26:25Z"
           agent_id: "forge-codex-harness-refresh-20260723T0526Z"

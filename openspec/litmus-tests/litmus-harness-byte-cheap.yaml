@@ -1,0 +1,58 @@
+# @trace spec:default-image
+name: litmus:harness-byte-cheap
+spec: default-image
+phase: pre-build
+size: instant
+severity: high
+description: >
+  Deterministically prove the v0.4 harness-refresh byte-cost policy without
+  claiming live Podman or proxy byte evidence: persistent Claude versions are
+  restored before refresh, same-container and sibling calls coalesce, a recent
+  validated version short-circuits installer network work, probes cannot
+  self-update, timeout/interrupt/corrupt-candidate paths retain last-good and
+  release their ownership-token lock, and cargo warm/cold paths avoid duplicate
+  release-asset downloads.
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains scripts/test-harness-byte-cheap.sh
+
+critical_path:
+  - step: "download-count, coalescing, currentness, rollback, and lock fixtures pass"
+    command: "scripts/test-harness-byte-cheap.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: harness byte-cheap fixtures"
+
+  - step: "Claude probes use official update guards without exporting them globally"
+    command: "grep -Fq 'DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1' images/default/lib-common.sh && ! grep -Eq '^export (DISABLE_AUTOUPDATER|DISABLE_UPDATES)=' images/default/lib-common.sh && echo 'ok: probe-only-update-guards'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe-only-update-guards"
+
+  - step: "official installer and ownership staleness have compatible hard bounds"
+    command: "grep -Fq 'timeout --kill-after=15 \"$install_timeout\" bash \"$tmp\"' images/default/lib-common.sh && grep -Fq 'mmin +30' images/default/lib-common.sh && grep -Fq 'wait_limit=\"${TILLANDSIAS_CLAUDE_REFRESH_WAIT_SECONDS:-900}\"' images/default/lib-common.sh && echo 'ok: installer-and-owner-bounded'"
+    timeout_ms: 3000
+    expected_behavior: "ok: installer-and-owner-bounded"
+
+  - step: "library and fixture parse"
+    command: "bash -n images/default/lib-common.sh && bash -n scripts/test-harness-byte-cheap.sh && echo 'ok: harness-byte-cheap-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: harness-byte-cheap-parses"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: >
+    Fixture reports one official-installer invocation for concurrent callers,
+    zero warm/current distribution downloads, one cold sibling distribution,
+    last-good selection for a corrupt candidate, clean timeout/interrupt/stale
+    locks, and one cargo release-asset fetch for concurrent cold misses.
+  log_fields:
+    spec: "default-image"
+    test: "harness-byte-cheap"
+    live_evidence_scope: "not claimed; real install.sh/proxy byte accounting remains a Podman-host residual"
+
+rollback:
+  on_failure: >
+    Restore the persistent launcher before any probe, retain probe-only update
+    guards, keep the official installer hard timeout below stale-lock age, and
+    require ownership-token cleanup before enabling concurrent refreshes.
+  command: "scripts/test-harness-byte-cheap.sh"

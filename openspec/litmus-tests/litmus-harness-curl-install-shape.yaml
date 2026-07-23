@@ -9,10 +9,11 @@ description: >
   installed at CONTAINER LAUNCH via their OFFICIAL vendor curl installers
   (image build cannot curl — the enclave network does not exist during
   podman build), persisted on the tool-cache volume, with ephemerality +
-  idempotency semantics: the installer refreshes to newer versions every
-  launch, warm restarts reuse the cache instantly, offline falls back to
-  the cached binary. Replaces the npm@latest channel for these two (the
-  order-284 breakage class); codex/openspec remain npm-managed.
+  idempotency semantics: the installer refreshes to newer versions, a recent
+  validated matching Claude version may short-circuit installer network work
+  for at most 600 seconds, warm restarts reuse the cache instantly, and
+  offline falls back to the cached binary. Replaces the npm@latest channel for
+  these two (the order-284 breakage class); codex/openspec remain npm-managed.
 preconditions:
   - workspace contains images/default/lib-common.sh
 
@@ -31,6 +32,11 @@ critical_path:
     command: "grep -q '^\\.opencode\\.ai$' images/proxy/allowlist.txt && grep -q '^\\.claude\\.ai$' images/proxy/allowlist.txt && echo 'ok: installer-egress-allowed'"
     timeout_ms: 5000
     expected_behavior: "ok: installer-egress-allowed"
+
+  - step: "Claude currentness is bounded and fixture-enforced"
+    command: "grep -Fq 'TILLANDSIAS_CLAUDE_REFRESH_MAX_AGE_SECONDS:-600' images/default/lib-common.sh && grep -Fq 'litmus:harness-byte-cheap' openspec/litmus-bindings.yaml && echo 'ok: claude-currentness-bounded'"
+    timeout_ms: 5000
+    expected_behavior: "ok: claude-currentness-bounded"
 
   - step: "lib-common parses"
     command: "bash -n images/default/lib-common.sh && echo 'ok: lib-common-parses'"
