@@ -20493,3 +20493,68 @@ plan_index:
             all four forge harnesses: OpenCode, Claude, Codex, and
             Antigravity; reconcile the stale active default-image spec and
             produce cold/warm live launch evidence on immutable Linux.
+
+    - packet_id: repeat-human-operator-only-supervisor
+      provisional_id: forge-260723-1
+      order: provisional
+      desired_release: v0.4
+      title: "Make ./repeat unmistakably human/operator-only for agent callers"
+      status: completed
+      kind: housekeeping
+      deliverable: repeat
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [forge, shell, testing, documentation]
+      estimated_hours: 0.25
+      operator_approval:
+        ts: "2026-07-23T03:37:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          Explicitly requested that agents never use the headless ./repeat
+          supervisor and that the script make this restriction clear.
+      direction_alignment: >
+        Supports the active v0.4 convergence cycle by keeping agents on the
+        bounded /meta-orchestration and /advance-work-from-plan skill paths;
+        it does not alter the operator-owned EXPERTS product direction.
+      outcome: >
+        The source header and --help output now identify ./repeat as a
+        HUMAN/OPERATOR-ONLY supervisor, tell agents not to run it, and direct
+        agents to invoke /meta-orchestration and /advance-work-from-plan
+        directly for bounded work cycles. Runtime behavior is unchanged; no
+        hard gate was added that could disrupt existing human schedulers.
+      next_action: >
+        None; retain the exact help assertions as the falsifiable regression
+        check whenever repeat is edited.
+      acceptance_evidence:
+        - "bash -n repeat"
+        - "./repeat --help emits the exact HUMAN/OPERATOR-ONLY SUPERVISOR heading"
+        - "./repeat --help emits both the do-not-run contract and direct skill paths"
+        - "tillandsias-policy validate-yaml plan/index.yaml"
+        - "./build.sh --check"
+      owned_files:
+        - repeat
+        - plan/index.yaml
+      events:
+        - type: filed
+          ts: "2026-07-23T03:52:00Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          summary: >
+            Cold-start packet filed from the operator's explicit request.
+            Non-coordinator order is provisional; desired_release is v0.4.
+        - type: claim
+          ts: "2026-07-23T03:52:05Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          lease_id: "58c4c354fffe"
+          expires_at: "2026-07-23T07:52:05Z"
+        - type: completed
+          ts: "2026-07-23T03:52:32Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          lease_id: "58c4c354fffe"
+          evidence_refs:
+            - "repeat source header and usage() contract"
+            - "bash -n repeat: pass"
+            - "exact ./repeat --help grep assertions: pass"
