@@ -1164,7 +1164,7 @@ fn print_status_json(r: &StatusReport) {
 /// on either side can't silently break the cross-tray UX-parity invariant —
 /// operators see the same text for the same failure class. Pinned by
 /// `wire_unreachable_chip_text_pinned`.
-pub const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
+pub const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F7E0} Reconnecting to your workspace\u{2026}";
 
 /// Edge-trigger flag for the wire-degraded → wire-recovered toast pair.
 /// `mark_wire_unreachable` sets it on the first transition into a degraded
@@ -1310,11 +1310,19 @@ async fn live_client_request(
     );
     match client.handshake().await {
         Ok((_, Some(guest_version))) => {
-            if guest_version != env!("CARGO_PKG_VERSION") {
+            // Compare WORKSPACE versions, normalized to the first three
+            // components (maj.min.yymmdd): CARGO_PKG_VERSION is the static
+            // crate version (0.1.0) and the guest may omit the build
+            // component — the original comparison WARN'd a false skew on
+            // EVERY handshake (and relayed the noise to the Event Log).
+            let normalize = |v: &str| {
+                v.split('.').take(3).collect::<Vec<_>>().join(".")
+            };
+            if normalize(&guest_version) != normalize(env!("WORKSPACE_VERSION")) {
                 tracing::warn!(
                     ctx,
                     "build version skew: tray={} guest={}",
-                    env!("CARGO_PKG_VERSION"),
+                    env!("WORKSPACE_VERSION"),
                     guest_version
                 );
             }
@@ -2856,9 +2864,9 @@ fn spawn_provisioning(hwnd: HWND) {
                             while terminal_rx.changed().await.is_ok() {
                                 let reason = terminal_rx.borrow_and_update().clone();
                                 if let Some(reason) = reason {
-                                    hwnd.status("\u{1F534} VM connection lost — Retry");
+                                    hwnd.status("\u{1F534} Workspace connection lost \u{2014} Retry");
                                     hwnd.balloon(
-                                        "Tillandsias — VM connection lost",
+                                        "Tillandsias \u{2014} workspace connection lost",
                                         &reason,
                                         BalloonSeverity::Error,
                                     );
@@ -4090,7 +4098,7 @@ mod tests {
             "Tillandsias 0.2.260528.1"
         );
         // Version + status (live tray after update_status_text).
-        let with_status = compose_tooltip("0.2.260528.1", "\u{1F534} Wire unreachable");
+        let with_status = compose_tooltip("0.2.260528.1", "\u{1F7E0} Reconnecting to your workspace\u{2026}");
         assert!(
             with_status.starts_with("Tillandsias 0.2.260528.1"),
             "tooltip should start with name + version: {with_status}"
@@ -4100,7 +4108,7 @@ mod tests {
             "tooltip should separate version and status with a newline: {with_status}"
         );
         assert!(
-            with_status.ends_with("\u{1F534} Wire unreachable"),
+            with_status.ends_with("\u{1F7E0} Reconnecting to your workspace\u{2026}"),
             "tooltip should end with the status text verbatim: {with_status}"
         );
         // Length sanity: realistic worst-case fits within szTip's 128 u16.
@@ -4384,17 +4392,17 @@ mod tests {
     /// three assertions — byte sequence, total length, leading codepoint.
     #[test]
     fn wire_unreachable_chip_text_pinned() {
-        assert_eq!(WIRE_UNREACHABLE_CHIP_TEXT, "\u{1F534} Wire unreachable");
+        // windows-260722-5 curated wording (Tlatoāni-approved 'Workspace'
+        // family; tray-ux governance): transient auto-reconnect state,
+        // ORANGE. Keep byte-identical with the macOS pin.
         assert_eq!(
-            WIRE_UNREACHABLE_CHIP_TEXT.len(),
-            21,
-            "byte length drift: {} bytes",
-            WIRE_UNREACHABLE_CHIP_TEXT.len()
+            WIRE_UNREACHABLE_CHIP_TEXT,
+            "\u{1F7E0} Reconnecting to your workspace\u{2026}"
         );
         assert_eq!(
             WIRE_UNREACHABLE_CHIP_TEXT.chars().next(),
-            Some('\u{1F534}'),
-            "first char must be U+1F534 LARGE RED CIRCLE (not U+23FA or other red glyph)"
+            Some('\u{1F7E0}'),
+            "first char must be U+1F7E0 LARGE ORANGE CIRCLE (transient, not the red terminal state)"
         );
     }
 
