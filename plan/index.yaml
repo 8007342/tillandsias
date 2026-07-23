@@ -18725,33 +18725,34 @@ plan_index:
     - order: 428
       packet_id: forge-delegation-worker-state-isolation
       desired_release: v0.4
-      title: "Forge delegation rung 2: per-worker in-RAM checkout and state isolation (tmpfs /home/forge/src, per-worker XDG_* and CODEX_HOME)"
-      status: in_progress
+      title: "Forge delegation rung 2: per-worker mutable agent-state isolation (XDG_DATA_HOME, XDG_STATE_HOME, CODEX_HOME)"
+      status: completed
       kind: feature
-      deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
+      deliverable: crates/tillandsias-headless/src/main.rs + images/default/codex-device-auth.sh + images/default/codex-oauth-vault.sh
       depends_on: [forge-delegation-instance-names]
+      split_into: [forge-src-tmpfs-topology]
       pickup_role: linux
       owner_host: linux
-      capability_tags: [linux, forge, tmpfs, delegation, concurrency, blocker]
+      capability_tags: [linux, forge, delegation, concurrency, credentials]
       estimated_hours: 8
       outcome: >
         RESEARCH GATE SATISFIED by plan/issues/forge-agent-delegation-research-2026-07-19.md.
-        openspec/specs/forge-hot-cold-split/spec.md requires /home/forge/src be
-        tmpfs; it is actually a read-write BIND MOUNT of the host checkout,
-        which already caused near-data-loss (forge-shared-checkout-destructive-clean-2026-07-13.md).
-        The sizing helpers compute_hot_budget, check_host_ram and
-        compute_memory_ceiling_mb already exist and are unit-tested but have
-        ZERO production callers, and --memory is never passed. Separately, both
-        agent tools have documented concurrency races on their credential files:
-        OpenCode's auth.json is not lock-protected, and Codex's is
-        truncate-then-write with no advisory lock (upstream #11435, #20213).
-        Per-worker XDG_DATA_HOME/XDG_STATE_HOME/XDG_CONFIG_HOME and CODEX_HOME
-        are therefore MANDATORY, not optional.
+        Each instance-scoped forge worker now receives unique XDG_DATA_HOME,
+        XDG_STATE_HOME, and CODEX_HOME paths, isolating the mutable state and
+        credential files implicated in the documented concurrent-agent races.
+        XDG_CONFIG_HOME deliberately remains unredirected: the baked OpenCode
+        permission overlay is shared configuration input, not mutable worker
+        state. The Codex device-auth and OAuth-vault helpers honor CODEX_HOME,
+        while an unset or empty forge instance preserves the pre-delegation
+        environment exactly. The larger source-tmpfs and container-memory slice
+        is tracked by forge-src-tmpfs-topology; concurrent live clone/push
+        proof remains with forge-delegation-instance-names and
+        concurrent-mirror-forges-current-checkout-and-coherence.
       exit_criteria:
-        - "/home/forge/src is tmpfs per worker; the host checkout is never mutated by a worker"
-        - "the existing memory-ceiling helpers gain production callers and --memory is passed"
-        - "each worker gets its own XDG_* and CODEX_HOME"
-        - "a litmus proves concurrent workers produce no cross-talk"
+        - "each non-empty forge instance gets unique XDG_DATA_HOME, XDG_STATE_HOME, and CODEX_HOME paths"
+        - "XDG_CONFIG_HOME is deliberately not redirected, preserving the baked shared configuration overlay"
+        - "the Codex device-auth and OAuth-vault helpers resolve auth.json through CODEX_HOME"
+        - "an unset or empty forge instance emits no worker-state overrides"
       events:
         - type: filed
           ts: "2026-07-19T01:30:00Z"
@@ -18788,6 +18789,39 @@ plan_index:
             Strictly additive: no instance emits NO overrides, so single-worker
             launches are byte-identical to pre-428 (asserted).
             REMAINING here: nothing. Mount topology moved to order 437.
+        - type: claim
+          ts: "2026-07-23T04:39:01Z"
+          agent_id: "forge-tillandsias-codex-20260723T043901Z"
+          host: forge
+          lease_id: "0682aef75e5e"
+          expires_at: "2026-07-23T08:39:01Z"
+          summary: >
+            Claimed for bounded plan-only reconciliation after verifying that
+            commit fd70ca15 implemented and pinned the complete mutable-state
+            slice. Source tmpfs and memory-ceiling wiring were already split to
+            order 437; concurrent live no-cross-talk evidence belongs to orders
+            427 and 452.
+        - type: completed
+          ts: "2026-07-23T04:40:53Z"
+          agent_id: "forge-tillandsias-codex-20260723T043901Z"
+          host: forge
+          commits: ["fd70ca15e1c66a76f48d53d011a015d7f19f45d0"]
+          summary: >
+            Reconciled the packet to its implemented slice. Production launch
+            arguments derive per-instance XDG_DATA_HOME, XDG_STATE_HOME, and
+            CODEX_HOME; XDG_CONFIG_HOME intentionally stays shared so the baked
+            OpenCode permission overlay remains active; both Codex auth helpers
+            honor CODEX_HOME; and absent instance identity produces no
+            overrides. The source-tmpfs and container-memory remainder stays in
+            order 437, while the concurrent live two-forge proof stays in
+            orders 427 and 452.
+          evidence:
+            - "cargo test -p tillandsias-headless forge_worker_state: 2 passed, 0 failed"
+            - "cargo test -p tillandsias-headless absent_forge_instance_emits_no_state_overrides: 1 passed, 0 failed"
+            - "implementation commit fd70ca15 is an ancestor of this reconciliation"
+            - "tillandsias-policy validate-yaml plan/index.yaml: ok"
+            - "tillandsias-plan check: 352 packets, ids unique, live references sound"
+            - "./build.sh --check: formatting, workspace type-check, strict clippy, and listen-vsock clippy passed"
     - order: 429
       packet_id: forge-delegation-result-retrieval
       desired_release: v0.4
@@ -19399,8 +19433,8 @@ plan_index:
     - order: 437
       packet_id: forge-src-tmpfs-topology
       desired_release: v0.5
-      title: "/home/forge/src is a host bind mount, but BOTH active specs forbid that — forge-hot-cold-split requires tmpfs and forge-offline requires clone-only"
-      status: done
+      title: "Finish forge hot-path RAM topology: production-sized /home/forge/src tmpfs, host RAM gate, and container memory ceiling"
+      status: in_progress
       operator_note: "operator workflow decision: /home/forge/src tmpfs+clone changes how edits reach the host"
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
@@ -19410,35 +19444,18 @@ plan_index:
       capability_tags: [linux, forge, tmpfs, topology, data-loss, operator-visible, operator-interactive]
       estimated_hours: 10
       outcome: >
-        CORRECTION to an earlier audit note that called these two specs
-        "incompatible topologies". They are NOT in conflict — they AGREE, and
-        the implementation is the outlier. openspec/specs/forge-hot-cold-split
-        requires /home/forge/src be kernel tmpfs sized by compute_hot_budget();
-        openspec/specs/forge-offline requires forge containers have NO host
-        project mount, with source obtained exclusively via git clone from the
-        mirror and "no bind mount from the host project directory". Those
-        compose cleanly: tmpfs mount, then clone into it. The code instead
-        read-write bind-mounts the host checkout, violating both.
-        This is not merely cosmetic. The shared host checkout already caused a
-        near-data-loss incident (plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md),
-        and it is the reason concurrent workers cannot be trusted with a project
-        even after orders 427 and 428 gave them isolated names and state. The
-        sizing helpers the spec references — compute_hot_budget, check_host_ram,
-        compute_memory_ceiling_mb — already EXIST and are unit-tested but have
-        ZERO production callers, and --memory is never passed, so the hot-budget
-        design was built and then never wired.
-        OPERATOR-VISIBLE: switching to tmpfs + clone changes the daily workflow.
-        Today an agent's edits appear directly in the host checkout; afterwards
-        work reaches the host only once committed and relayed through the
-        mirror. That is the intended design and it removes the destructive-clean
-        hazard, but it is a behaviour change the operator should agree to rather
-        than discover. Surface it before implementing.
+        The operator-approved clone-only half is implemented and live-verified:
+        a forge gets a clean tree from the mirror and does not bind-mount the
+        host checkout by default. Preserve that evidence. The remaining v0.5
+        slice is only the hot-path RAM and resource-ceiling wiring required by
+        forge-hot-cold-split: call compute_hot_budget in production to size a
+        /home/forge/src tmpfs; call check_host_ram before launch; derive a
+        container ceiling with compute_memory_ceiling_mb; emit equal --memory
+        and --memory-swap limits; and prove the live mount with findmnt.
       exit_criteria:
-        - "/home/forge/src is tmpfs sized by compute_hot_budget(), with --memory actually passed"
-        - "source arrives by clone from the mirror; no host project bind mount remains"
-        - "the existing sizing helpers gain production callers"
-        - "a litmus asserts findmnt -t tmpfs lists /home/forge/src inside a live forge"
-        - "operator has agreed to the workflow change before it lands"
+        - "a production compute_hot_budget caller sizes a /home/forge/src tmpfs mount"
+        - "production launch runs check_host_ram, derives compute_memory_ceiling_mb, and emits equal --memory and --memory-swap limits"
+        - "a live forge check proves findmnt -t tmpfs lists /home/forge/src"
       events:
         - type: filed
           ts: "2026-07-19T04:30:00Z"
@@ -19522,6 +19539,27 @@ plan_index:
             checkout. No dirty-worktree contamination. The clone-only keystone is
             confirmed working end to end. (The clone-vs-daemon-startup race it
             exposed was fixed as order 446.)
+        - type: reopened
+          ts: "2026-07-23T04:40:53Z"
+          agent_id: "forge-tillandsias-codex-20260723T043901Z"
+          host: forge
+          summary: >
+            Preserved the operator-approved, live-verified clone-only result but
+            reopened the packet because its RAM/resource slice is not
+            implemented. Repository audit found compute_hot_budget only in its
+            config definition/tests, and check_host_ram plus
+            compute_memory_ceiling_mb only in preflight definition/tests.
+            Production launch emits neither --memory nor --memory-swap and
+            declares no /home/forge/src tmpfs; no live findmnt proof is
+            recorded. This correction names only that residual and does not
+            disturb the completed clone-only behavior.
+          evidence:
+            - "no production caller of compute_hot_budget, check_host_ram, or compute_memory_ceiling_mb at reconciliation HEAD 8b98f93a"
+            - "no production --memory/--memory-swap emission or /home/forge/src tmpfs declaration at reconciliation HEAD 8b98f93a"
+          smallest_next_action: >
+            Wire the existing budget and preflight helpers into forge launch,
+            add the sized tmpfs and equal memory/swap ceiling arguments, pin
+            them with focused tests, then capture live findmnt evidence.
     - order: 438
       packet_id: test-transient-state-audit
       desired_release: v0.5

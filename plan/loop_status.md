@@ -406,14 +406,14 @@ dependent is assigned to a release earlier than its upstream). The following
 releases are sequential and stability-gated; the coordinator may slip
 individual packets with a reason event.
 
-- **v0.4 — ACTIVE (18 open / 55 total tagged): "the product doesn't
+- **v0.4 — ACTIVE (17 open / 55 total tagged): "the product doesn't
   crashloop, lose work, or corrupt forge/mirror state."** Finish forge
   checkout/mirror/push correctness, credential lifecycle and concurrency
-  safeguards, delegated-worker state/result handling, first-launch and harness
+  safeguards, delegated-worker instance/result handling, first-launch and harness
   resilience, and the cross-platform smoke queue. Ship only after the remaining
   stability packet gates and a qualifying host smoke PASS are complete, then
   bump Minor 0.3 → 0.4.
-- **v0.5 (82 open / 90 total tagged): "EXPERTS + cross-platform parity +
+- **v0.5 (83 open / 90 total tagged): "EXPERTS + cross-platform parity +
   streams/transport + security channel + audits."** Per the 2026-07-21
   operator decision, the forge-local EXPERTS family and its supporting
   plan/inference packets land here together with coupled packets 456–458,
