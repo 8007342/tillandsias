@@ -10636,6 +10636,16 @@ plan_index:
             shell. This packet is the release gate for any
             standard-user-facing Windows install.
 
+    # LIVE EVIDENCE 2026-07-23 (windows lane, first Windows forge launch,
+    # logs captured BEFORE teardown this time): inference Exited(1) with
+    # exactly the warm-up race — "curl: (7) Failed to connect to github.com
+    # port 443 via proxy after 1 ms" (proxy restarted alongside the lane,
+    # still cold), then the SINGLE 10s warm-up retry also failed, then the
+    # designed FATAL-exit-for-next-launch. The 10s one-shot retry ladder is
+    # too thin for a cold squid; wants the capped-exponential treatment
+    # (1,2,4,8,16..s) before giving up. Manual `podman start` against the
+    # warm proxy ~10 min later re-ran the install successfully (pending
+    # completion check). — windows-bullo-fable5-20260722
     - packet_id: inference-firstrun-install-resilience
       order: 313
       desired_release: v0.4
