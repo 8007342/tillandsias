@@ -16563,7 +16563,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: codex lane state amnesia — ephemeral CODEX_HOME replays codex FIRST-RUN every launch (281s silent stall, 80% of launch); login one-shot re-pulls 136MB + full ensure before the device code (50s)"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: images/default/entrypoint-forge-codex.sh + codex-device-auth.sh + lib-common.sh (persist CODEX_HOME minus auth.json on the per-project cache volume; slim the login container's pre-auth work)
       depends_on: []
@@ -16588,6 +16588,28 @@ plan_index:
         persistent prefix. Egress/proxy/host exonerated by measurement
         (RTTs 96-160ms; 16 idle vCPUs; journal quiet).
       events:
+        - type: claim
+          ts: "2026-07-23T05:44:27Z"
+          agent_id: "forge-codex-state-20260723T0544Z"
+          host: forge
+          host_id: "forge-tillandsias"
+          platform: linux
+          lease_id: "1b6c3e14-1382-4cd1-9507-b8cf2d195e5f"
+          expires_at: "2026-07-23T09:44:27Z"
+          worktree_path: "/home/forge/worktrees/tillandsias-codex-state-safe-20260723"
+          last_seen_commit: "2a0c057fdeb09aa7f937aecaa2d8d1c2a75a7e6c"
+          upstream_commit: "2a0c057fdeb09aa7f937aecaa2d8d1c2a75a7e6c"
+          observed_sibling_heads:
+            main: "667aca153b28faa88c8484faeb911aa5b8f2a895"
+            linux-next: "2a0c057fdeb09aa7f937aecaa2d8d1c2a75a7e6c"
+            windows-next: "d7d25e4d"
+            osx-next: "7bba9869"
+          summary: >
+            Claimed under the operator-directed v0.4 drain for one bounded
+            implementation cycle. Preserve per-worker ephemeral CODEX_HOME and
+            Vault-owned auth.json; persist only an explicit non-secret
+            project/worker state whitelist plus supported CODEX_SQLITE_HOME.
+            Avoid lib-common.sh while the harness byte-cost packet owns it.
         - type: filed
           ts: "2026-07-23T04:20:00Z"
           agent_id: "windows-bullo-fable5-20260722"
