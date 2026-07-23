@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
+# HUMAN/OPERATOR-ONLY SUPERVISOR.
+# Agents must never run this script. Agents invoke /meta-orchestration and
+# /advance-work-from-plan directly for their bounded work cycles; this script
+# exists only for a human operator to supervise repeated fresh agent sessions.
 set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
+HUMAN/OPERATOR-ONLY SUPERVISOR
+  This script is for a human operator to schedule fresh agent sessions.
+  Agents must not run ./repeat. Agents invoke /meta-orchestration and
+  /advance-work-from-plan directly for their bounded work cycles.
+
 Usage:
   ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--timeout <duration>] [--agent <agents>] [--model <provider/model-or-id>]
 
