@@ -3014,15 +3014,127 @@ async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<
     ))
 }
 
+/// Probe the served bare repository for a resolvable HEAD plus a concrete
+/// target-project head. The separate seam keeps the reachable-but-unseeded
+/// state deterministic in unit tests without consuming the bounded wait.
+/// @trace spec:git-mirror-service
+async fn probe_git_mirror_seeded(
+    client: &PodmanClient,
+    container_name: &str,
+    repo_path: &str,
+    expected_branch: Option<&str>,
+) -> Result<String, String> {
+    match client
+        .execute(
+            OperationKind::Container,
+            &[
+                "exec".into(),
+                "-i".into(),
+                container_name.into(),
+                "git".into(),
+                "-C".into(),
+                repo_path.into(),
+                "rev-parse".into(),
+                "--quiet".into(),
+                "--verify".into(),
+                "HEAD".into(),
+            ],
+        )
+        .await
+    {
+        Ok(out) if out.success() => {}
+        Ok(out) => {
+            return Err(format!(
+                "mirror HEAD not resolvable yet (exit {})",
+                out.status.unwrap_or(-1)
+            ));
+        }
+        Err(e) => return Err(format!("HEAD probe failed: {e}")),
+    }
+
+    if let Some(branch) = expected_branch {
+        let expected_ref = format!("refs/heads/{branch}");
+        return match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    container_name.into(),
+                    "git".into(),
+                    "-C".into(),
+                    repo_path.into(),
+                    "show-ref".into(),
+                    "--verify".into(),
+                    "--quiet".into(),
+                    expected_ref.clone(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => Ok(expected_ref),
+            Ok(out) => Err(format!(
+                "HEAD resolvable but expected branch {expected_ref} absent (exit {}) — seed still in progress",
+                out.status.unwrap_or(-1)
+            )),
+            Err(e) => Err(format!(
+                "HEAD resolvable but expected branch {expected_ref} is not concrete yet — seed still in progress: {e}"
+            )),
+        };
+    }
+
+    // Detached/git-less host checkout: ensure-mirror-head discovers the
+    // upstream's own default branch. Stay convention-neutral by accepting any
+    // concrete local head rather than importing Tillandsias' `main` convention.
+    match client
+        .execute(
+            OperationKind::Container,
+            &[
+                "exec".into(),
+                "-i".into(),
+                container_name.into(),
+                "git".into(),
+                "-C".into(),
+                repo_path.into(),
+                "for-each-ref".into(),
+                "--count=1".into(),
+                "--format=%(objectname)".into(),
+                "refs/heads".into(),
+            ],
+        )
+        .await
+    {
+        Ok(out) if out.success() && !out.stdout.trim().is_empty() => {
+            Ok("one or more refs/heads/*".to_string())
+        }
+        Ok(out) if out.success() => Err(
+            "HEAD resolvable but the mirror has no concrete heads — seed still in progress"
+                .to_string(),
+        ),
+        Ok(out) => Err(format!(
+            "HEAD resolvable but concrete-head probe exited {}",
+            out.status.unwrap_or(-1)
+        )),
+        Err(e) => Err(format!("concrete-head probe failed: {e}")),
+    }
+}
+
+/// The live Windows pristine-volume seed took roughly 12–15 minutes
+/// (mirror-first-seed-vs-launch-readiness-race). Twenty minutes preserves a
+/// finite launch refusal while covering the measured upper bound with room for
+/// proxy/cache variance. A seeded mirror returns before the first sleep.
+const GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS: u32 = 20 * 60;
+const GIT_MIRROR_SEED_POLL_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Order 452 slice 2: launcher-side git-mirror readiness gate.
 ///
 /// A clone-only forge (order 437) clones `git://tillandsias-git/<project>` the
 /// moment its entrypoint runs, but a FRESH mirror volume seeds in a background
 /// sweep — a full-repo fetch from upstream through the proxy that can take
 /// minutes — while the guest's clone backstop only waits ~60s. Block the
-/// launch until the mirror's bare repo has a resolvable HEAD (the exact ground
-/// truth `clone_project_from_mirror` asserts after its clone), mirroring the
-/// [`wait_for_inference_ready`] pattern: bounded, truthful, loud on timeout.
+/// launch until the mirror's bare repo has a resolvable HEAD and a concrete
+/// head, mirroring the [`wait_for_inference_ready`] pattern: bounded, truthful,
+/// and loud on timeout.
 ///
 /// Probes via `podman exec` inside the mirror container so readiness is
 /// measured on the served repo itself, not on network reachability.
@@ -3031,124 +3143,49 @@ async fn wait_for_git_mirror_ready(
     client: &PodmanClient,
     container_name: &str,
     project_name: &str,
+    expected_branch: Option<&str>,
     debug: bool,
 ) -> Result<(), String> {
-    use std::time::Duration;
     // First seed is a full-repo fetch through the proxy: minutes, not seconds
     // (this workspace's pack alone is >100 MiB). Bounded so a dead upstream
     // still fails the launch loudly instead of hanging forever.
     //
     // Race note (order: mirror-first-seed-vs-launch-readiness-race):
-    // `git rev-parse --verify HEAD` passes as soon as ensure-mirror-head
-    // symlinks HEAD to a ref — but the initial upstream fetch may still be
-    // in progress, leaving the ref empty. We therefore ALSO check for
-    // actual content via `git show-ref --verify refs/heads/main`; only when
-    // that ref exists and has a target SHA is the mirror truly seeded and
-    // cloneable. The check is additive — old images where refs/heads/main
-    // is absent fall through to the HEAD check.
-    const MAX_ATTEMPTS: u32 = 300;
+    // `git rev-parse --verify HEAD` can pass while the initial upstream fetch
+    // is still in progress. Require the launcher-declared host branch to be a
+    // concrete local head as well. When the host branch is unknowable
+    // (detached/git-less checkout), require at least one concrete local head;
+    // never assume the target project uses Tillandsias' `main` convention.
     let repo_path = format!("/srv/git/{project_name}");
     let mut last = String::from("no probe attempted");
-    for attempt in 1..=MAX_ATTEMPTS {
-        // Probe 1: HEAD resolvable (existing gate — catches unborn-HEAD on old images).
-        let head_ok = match client
-            .execute(
-                OperationKind::Container,
-                &[
-                    "exec".into(),
-                    "-i".into(),
-                    container_name.into(),
-                    "git".into(),
-                    "-C".into(),
-                    repo_path.clone(),
-                    "rev-parse".into(),
-                    "--quiet".into(),
-                    "--verify".into(),
-                    "HEAD".into(),
-                ],
-            )
-            .await
-        {
-            Ok(out) if out.success() => true,
-            Ok(out) => {
-                last = format!(
-                    "mirror HEAD not resolvable yet (exit {})",
-                    out.status.unwrap_or(-1)
-                );
-                false
-            }
-            Err(e) => {
-                last = format!("probe failed: {e}");
-                false
-            }
-        };
-        if !head_ok {
-            // HEAD not even resolvable — mirror is definitely not ready.
-            if attempt == 5 {
-                eprintln!(
-                    "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {MAX_ATTEMPTS}s max)..."
-                );
-            }
-            if debug {
-                eprintln!(
-                    "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
-                );
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            continue;
-        }
-        // Probe 2: refs/heads/main exists with a real SHA — the upstream
-        // seed has delivered content, not just an empty symref.
-        match client
-            .execute(
-                OperationKind::Container,
-                &[
-                    "exec".into(),
-                    "-i".into(),
-                    container_name.into(),
-                    "git".into(),
-                    "-C".into(),
-                    repo_path.clone(),
-                    "show-ref".into(),
-                    "--verify".into(),
-                    "--quiet".into(),
-                    "refs/heads/main".into(),
-                ],
-            )
-            .await
-        {
-            Ok(out) if out.success() => {
+    for attempt in 1..=GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS {
+        match probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await {
+            Ok(seeded_ref) => {
                 if debug {
                     eprintln!(
-                        "[tillandsias] [forge-launch] git mirror seeded on attempt {attempt}/{MAX_ATTEMPTS} (refs/heads/main present)"
+                        "[tillandsias] [forge-launch] git mirror seeded on attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS} ({seeded_ref} present)"
                     );
                 }
                 return Ok(());
             }
-            Ok(_) => {
-                last = "HEAD resolvable but refs/heads/main absent — seed still in progress"
-                    .to_string();
-            }
-            Err(e) => {
-                last = format!("show-ref probe failed: {e}");
-            }
+            Err(reason) => last = reason,
         }
         if attempt == 5 {
             // One non-debug notice so an operator watching a first launch
             // knows the wait is the mirror seed, not a hang.
             eprintln!(
-                "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {MAX_ATTEMPTS}s max)..."
+                "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s max)..."
             );
         }
         if debug {
             eprintln!(
-                "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+                "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}): {last}"
             );
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(GIT_MIRROR_SEED_POLL_INTERVAL).await;
     }
     Err(format!(
-        "git mirror {container_name} did not become cloneable within {MAX_ATTEMPTS}s: {last}. \
+        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}. \
          A forge launched now would land on an empty tree, so the launch is refused \
          (fresh-checkout invariant, \
          plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
@@ -9913,7 +9950,14 @@ pub(crate) fn ensure_enclave_for_project(
         // so an empty mirror there is a legitimate cold state the guest
         // handles fail-loud rather than a seed-in-progress worth waiting on.
         if project_remote_url.is_some() {
-            wait_for_git_mirror_ready(&client, &git_container_name, project_name, debug).await?;
+            wait_for_git_mirror_ready(
+                &client,
+                &git_container_name,
+                project_name,
+                project_default_branch.as_deref(),
+                debug,
+            )
+            .await?;
         }
         Ok::<(), String>(())
     })?;
@@ -12192,6 +12236,26 @@ pub(crate) async fn service_stop(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
+
+    fn fake_podman_output(status: i32, stdout: &str) -> CommandOutput {
+        CommandOutput {
+            operation: OperationKind::Container,
+            argv: Vec::new(),
+            redacted_argv: Vec::new(),
+            status: Some(status),
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            duration: std::time::Duration::ZERO,
+        }
+    }
+
+    fn fake_podman_failure(status: i32) -> CommandFailure {
+        CommandFailure {
+            output: Box::new(fake_podman_output(status, "")),
+            retry: RetryClass::Retryable,
+        }
+    }
 
     #[test]
     fn nvidia_cdi_available_honors_user_config_dir() {
@@ -12343,6 +12407,100 @@ mod tests {
         assert!(
             status.contains("WARNING: status-check mirror launching credential-less"),
             "status-check tolerance must be loud, not debug-gated"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_mirror_readiness_fast_path_accepts_non_main_branch() {
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Ok(fake_podman_output(0, "")));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        wait_for_git_mirror_ready(
+            &client,
+            "tillandsias-git-fixture",
+            "fixture",
+            Some("trunk"),
+            false,
+        )
+        .await
+        .expect("a concrete non-main target branch is seeded on the first probe");
+
+        let seen = backend.seen();
+        assert_eq!(
+            seen.len(),
+            2,
+            "seeded re-attach stays a two-probe fast path"
+        );
+        assert_eq!(
+            seen[1].1.last().map(String::as_str),
+            Some("refs/heads/trunk"),
+            "readiness must probe the target project's branch convention"
+        );
+        assert!(
+            !seen[1].1.iter().any(|arg| arg == "refs/heads/main"),
+            "Tillandsias' main branch convention must not leak into target projects"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_mirror_readiness_rejects_reachable_but_unseeded_branch() {
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Err(fake_podman_failure(1)));
+        let client = PodmanClient::with_backend(backend);
+
+        let result = probe_git_mirror_seeded(
+            &client,
+            "tillandsias-git-fixture",
+            "/srv/git/fixture",
+            Some("trunk"),
+        )
+        .await;
+
+        let reason = result.expect_err("reachable HEAD without the expected ref is unseeded");
+        assert!(
+            reason.contains("refs/heads/trunk") && reason.contains("seed still in progress"),
+            "negative probe must name the missing concrete branch: {reason}"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_mirror_readiness_without_branch_metadata_accepts_any_concrete_head() {
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Ok(fake_podman_output(
+            0,
+            "0123456789abcdef0123456789abcdef01234567\n",
+        )));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        let seeded =
+            probe_git_mirror_seeded(&client, "tillandsias-git-fixture", "/srv/git/fixture", None)
+                .await
+                .expect("a detached/git-less host falls back to a concrete target-project head");
+
+        assert_eq!(seeded, "one or more refs/heads/*");
+        let seen = backend.seen();
+        assert!(
+            seen[1].1.iter().any(|arg| arg == "for-each-ref")
+                && seen[1].1.iter().any(|arg| arg == "refs/heads"),
+            "metadata-free readiness must count concrete heads convention-neutrally"
+        );
+    }
+
+    #[test]
+    fn git_mirror_readiness_budget_covers_observed_cold_seed() {
+        assert_eq!(
+            GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS,
+            20 * 60,
+            "cold-seed wait must retain the reviewed 20-minute bound above the live 12–15 minute observation"
+        );
+        assert_eq!(
+            GIT_MIRROR_SEED_POLL_INTERVAL,
+            Duration::from_secs(1),
+            "attempt count and user-visible seconds must stay aligned"
         );
     }
 

@@ -3451,6 +3451,7 @@ plan_index:
 
     - packet_id: secure-channel-maturity-ladder
       order: 184
+      desired_release: v0.5
       title: "Master plan: e2e encrypted control channel — staged maturity ladder (M0-M4 gates, all platforms)"
       status: active
       kind: master-plan
@@ -16384,7 +16385,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: first forge launch races the mirror's initial upstream seed — readiness gate passes on 'reachable', clone retries exhaust minutes before refs arrive (live Windows repro for the 452/454 family)"
-      status: ready
+      status: in_progress
       kind: bug
       deliverable: headless launch-readiness gate (wait for SEEDED, not reachable) + first-seed progress surfacing
       depends_on: []
@@ -16430,6 +16431,52 @@ plan_index:
             the gate passed). This is the 455 smoke surfacing exactly the
             fixture-only lane the plan flagged; the fail-loud guard held —
             no agent ran on an empty tree.
+        - type: claim
+          ts: "2026-07-23T03:56:59Z"
+          agent_id: "forge-tillandsias-codex-20260723T0354Z"
+          host: forge
+          lease_id: "mirror-first-seed-forge-20260723T0354Z"
+          expires_at: "2026-07-23T07:56:59Z"
+          summary: >
+            Claimed one convention-neutral correction cycle after reviewing
+            dec1175e. The current gate hard-codes refs/heads/main even though
+            target repositories may use trunk, master, or another default;
+            the documented HEAD fallback also never returns success. Scope is
+            the seeded probe, fake-backend regression coverage, and precise
+            residual live-evidence handoff. Observed heads: main 667aca15,
+            linux-next 131dfc38, windows-next 303dc587, osx-next 66ccfa70.
+        - type: progress
+          ts: "2026-07-23T04:03:28Z"
+          agent_id: "forge-tillandsias-codex-20260723T0354Z"
+          host: forge
+          lease_id: "mirror-first-seed-forge-20260723T0354Z"
+          partial_artifact_refs:
+            - crates/tillandsias-headless/src/main.rs
+            - plan/issues/mirror-readiness-gate-seeded-not-reachable-2026-07-23.md
+          evidence:
+            - "cargo test -p tillandsias-headless git_mirror_readiness -- --nocapture: 4 passed"
+            - "cargo test -p tillandsias-headless: 241 passed, 1 ignored"
+            - "cargo fmt --all -- --check: passed"
+            - "cargo run -q -p tillandsias-policy -- validate-yaml plan/index.yaml: passed"
+            - "./build.sh --check: passed"
+            - "scripts/e2e-preflight.sh eligibility: skip:no-podman-binary"
+          summary: >
+            Implementation complete in this cycle: readiness now requires
+            resolvable HEAD plus the launcher-known target-project branch;
+            detached/git-less hosts require a nonzero concrete refs/heads set
+            without assuming main. The named 20-minute cold-seed bound exceeds
+            the live Windows 12–15 minute upper observation while seeded mirrors
+            still return before sleeping. Fake-backend coverage proves trunk
+            fast-path, reachable-but-unseeded refusal, and metadata-free
+            fallback. The packet remains in progress because this forge cannot
+            produce the pristine-guest first-launch or seeded-volume re-attach
+            evidence.
+          next_action: >
+            On a mutable Podman/Windows smoke host, build a revision containing
+            this checkpoint, wipe the project's mirror volume, launch a project
+            whose working/default branch is non-main, and record that the
+            bounded visible wait ends in a populated checkout; then re-attach
+            against the seeded volume and record the first-probe fast path.
 
     - packet_id: windows-exec-probe-timeout-not-damage
       provisional_id: windows-260723-1
@@ -16968,6 +17015,7 @@ plan_index:
     - packet_id: host-guest-project-src-mapping
       provisional_id: windows-260717-6
       order: provisional
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "Host<->guest project src mapping: cloud clones land in the guest VM (invisible to host); decide guest-native vs host-mapped + fail-loud clone"
       status: needs_clarification
@@ -17151,6 +17199,43 @@ plan_index:
             the backfill is tracked work, not an implicit expectation. Active
             release seeded to v0.4 (EXPERTS fat-host core); cross-platform +
             modest-hardware tiering seeded to v0.5.
+        - type: claim
+          ts: "2026-07-23T04:01:36Z"
+          agent_id: "forge-tillandsias-codex-20260723T040037Z"
+          host: forge
+          lease_id: "1ed36767840f"
+          expires_at: "2026-07-23T08:01:36Z"
+          summary: >
+            Cycle-scoped claim to structurally audit desired_release coverage,
+            correct the 2026-07-21 EXPERTS re-scope drift, and refresh the
+            active v0.4 counts and latest daily release in loop_status.
+        - type: progress
+          ts: "2026-07-23T04:07:39Z"
+          agent_id: "forge-tillandsias-codex-20260723T040037Z"
+          host: forge
+          lease_id: "1ed36767840f"
+          summary: >
+            COVERAGE CYCLE COMPLETE: structurally audited all 110 nonterminal
+            packets. Backfilled secure-channel-maturity-ladder and
+            host-guest-project-src-mapping to v0.5, and corrected orders
+            456-458 from a milestone slug to canonical v0.5 per the 2026-07-21
+            EXPERTS re-scope. Current open counts are v0.4=15, v0.5=81,
+            v0.6=11, and v0.7=3; all 110 carry canonical vX.Y assignments and
+            no nonterminal dependency targets an earlier release than its
+            upstream. Refreshed loop_status to the v0.3.260723.1 published
+            daily and current roadmap counts. This standing multi-cycle packet
+            remains ready for future filing cycles.
+          partial_artifact_refs:
+            - plan/index.yaml
+            - plan/loop_status.md
+        - type: released
+          ts: "2026-07-23T04:07:39Z"
+          agent_id: "forge-tillandsias-codex-20260723T040037Z"
+          host: forge
+          lease_id: "1ed36767840f"
+          reason: >
+            Coverage cycle complete; released the cycle-scoped lease while the
+            standing multi-cycle packet remains ready for future filings.
 
     - packet_id: gpu-passthrough-auto-enablement
       order: 408
@@ -20518,7 +20603,7 @@ plan_index:
 
     - packet_id: forge-plan-metadata-mcp-server
       order: 456
-      desired_release: forge-local-experts-milestone
+      desired_release: v0.5
       title: "Idiomatic compiled Rust layer MCP server in Ramdisk for deterministic plan/metadata queries"
       status: pending
       kind: implementation
@@ -20538,7 +20623,7 @@ plan_index:
 
     - packet_id: cheatsheet-expert-model-rung1
       order: 457
-      desired_release: forge-local-experts-milestone
+      desired_release: v0.5
       title: "CHEATSHEET EXPERT rung 1 — ephemeral build on forge launch for ground-truth querying"
       status: pending
       kind: implementation
@@ -20558,7 +20643,7 @@ plan_index:
 
     - packet_id: agent-forge-context-hooks
       order: 458
-      desired_release: forge-local-experts-milestone
+      desired_release: v0.5
       title: "Agent Context Initialization Hooks: auto-inject expert endpoints and MCP availability"
       status: pending
       kind: implementation
@@ -20636,3 +20721,68 @@ plan_index:
             all four forge harnesses: OpenCode, Claude, Codex, and
             Antigravity; reconcile the stale active default-image spec and
             produce cold/warm live launch evidence on immutable Linux.
+
+    - packet_id: repeat-human-operator-only-supervisor
+      provisional_id: forge-260723-1
+      order: provisional
+      desired_release: v0.4
+      title: "Make ./repeat unmistakably human/operator-only for agent callers"
+      status: completed
+      kind: housekeeping
+      deliverable: repeat
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [forge, shell, testing, documentation]
+      estimated_hours: 0.25
+      operator_approval:
+        ts: "2026-07-23T03:37:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          Explicitly requested that agents never use the headless ./repeat
+          supervisor and that the script make this restriction clear.
+      direction_alignment: >
+        Supports the active v0.4 convergence cycle by keeping agents on the
+        bounded /meta-orchestration and /advance-work-from-plan skill paths;
+        it does not alter the operator-owned EXPERTS product direction.
+      outcome: >
+        The source header and --help output now identify ./repeat as a
+        HUMAN/OPERATOR-ONLY supervisor, tell agents not to run it, and direct
+        agents to invoke /meta-orchestration and /advance-work-from-plan
+        directly for bounded work cycles. Runtime behavior is unchanged; no
+        hard gate was added that could disrupt existing human schedulers.
+      next_action: >
+        None; retain the exact help assertions as the falsifiable regression
+        check whenever repeat is edited.
+      acceptance_evidence:
+        - "bash -n repeat"
+        - "./repeat --help emits the exact HUMAN/OPERATOR-ONLY SUPERVISOR heading"
+        - "./repeat --help emits both the do-not-run contract and direct skill paths"
+        - "tillandsias-policy validate-yaml plan/index.yaml"
+        - "./build.sh --check"
+      owned_files:
+        - repeat
+        - plan/index.yaml
+      events:
+        - type: filed
+          ts: "2026-07-23T03:52:00Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          summary: >
+            Cold-start packet filed from the operator's explicit request.
+            Non-coordinator order is provisional; desired_release is v0.4.
+        - type: claim
+          ts: "2026-07-23T03:52:05Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          lease_id: "58c4c354fffe"
+          expires_at: "2026-07-23T07:52:05Z"
+        - type: completed
+          ts: "2026-07-23T03:52:32Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0352Z"
+          host: forge
+          lease_id: "58c4c354fffe"
+          evidence_refs:
+            - "repeat source header and usage() contract"
+            - "bash -n repeat: pass"
+            - "exact ./repeat --help grep assertions: pass"
