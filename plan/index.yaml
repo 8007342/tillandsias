@@ -18959,7 +18959,7 @@ plan_index:
       packet_id: forge-delegation-instance-names
       desired_release: v0.4
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
-      status: in_progress
+      status: claimed
       kind: fix
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: []
@@ -18979,6 +18979,20 @@ plan_index:
         - "a litmus proves two workers on one project coexist, with neither replacing the other"
         - "teardown targets only the intended worker"
       events:
+        - type: claim
+          ts: "2026-07-23T06:28:53Z"
+          agent_id: "forge-tillandsias-codex-root-20260723T0628Z"
+          host: forge
+          lease_id: "e9c3e4640639"
+          expires_at: "2026-07-23T10:28:53Z"
+          summary: >
+            Operator-directed non-Podman v0.4 drain: claim the source-only
+            identity-collision remainder discovered while integrating Codex
+            worker persistence. Distinct raw instance IDs currently collapse
+            through the lossy container-name sanitizer and can still target
+            the same --replace container. This cycle will make non-empty
+            instance names digest-stable and keep the packet open for its
+            explicitly live two-container Podman proof.
         - type: filed
           ts: "2026-07-19T01:30:00Z"
           agent_id: "linux-tillandsias-opus48-20260719T0000Z"
