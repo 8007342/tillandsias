@@ -16384,7 +16384,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: first forge launch races the mirror's initial upstream seed — readiness gate passes on 'reachable', clone retries exhaust minutes before refs arrive (live Windows repro for the 452/454 family)"
-      status: ready
+      status: in_progress
       kind: bug
       deliverable: headless launch-readiness gate (wait for SEEDED, not reachable) + first-seed progress surfacing
       depends_on: []
@@ -16430,6 +16430,52 @@ plan_index:
             the gate passed). This is the 455 smoke surfacing exactly the
             fixture-only lane the plan flagged; the fail-loud guard held —
             no agent ran on an empty tree.
+        - type: claim
+          ts: "2026-07-23T03:56:59Z"
+          agent_id: "forge-tillandsias-codex-20260723T0354Z"
+          host: forge
+          lease_id: "mirror-first-seed-forge-20260723T0354Z"
+          expires_at: "2026-07-23T07:56:59Z"
+          summary: >
+            Claimed one convention-neutral correction cycle after reviewing
+            dec1175e. The current gate hard-codes refs/heads/main even though
+            target repositories may use trunk, master, or another default;
+            the documented HEAD fallback also never returns success. Scope is
+            the seeded probe, fake-backend regression coverage, and precise
+            residual live-evidence handoff. Observed heads: main 667aca15,
+            linux-next 131dfc38, windows-next 303dc587, osx-next 66ccfa70.
+        - type: progress
+          ts: "2026-07-23T04:03:28Z"
+          agent_id: "forge-tillandsias-codex-20260723T0354Z"
+          host: forge
+          lease_id: "mirror-first-seed-forge-20260723T0354Z"
+          partial_artifact_refs:
+            - crates/tillandsias-headless/src/main.rs
+            - plan/issues/mirror-readiness-gate-seeded-not-reachable-2026-07-23.md
+          evidence:
+            - "cargo test -p tillandsias-headless git_mirror_readiness -- --nocapture: 4 passed"
+            - "cargo test -p tillandsias-headless: 241 passed, 1 ignored"
+            - "cargo fmt --all -- --check: passed"
+            - "cargo run -q -p tillandsias-policy -- validate-yaml plan/index.yaml: passed"
+            - "./build.sh --check: passed"
+            - "scripts/e2e-preflight.sh eligibility: skip:no-podman-binary"
+          summary: >
+            Implementation complete in this cycle: readiness now requires
+            resolvable HEAD plus the launcher-known target-project branch;
+            detached/git-less hosts require a nonzero concrete refs/heads set
+            without assuming main. The named 20-minute cold-seed bound exceeds
+            the live Windows 12–15 minute upper observation while seeded mirrors
+            still return before sleeping. Fake-backend coverage proves trunk
+            fast-path, reachable-but-unseeded refusal, and metadata-free
+            fallback. The packet remains in progress because this forge cannot
+            produce the pristine-guest first-launch or seeded-volume re-attach
+            evidence.
+          next_action: >
+            On a mutable Podman/Windows smoke host, build a revision containing
+            this checkpoint, wipe the project's mirror volume, launch a project
+            whose working/default branch is non-main, and record that the
+            bounded visible wait ends in a populated checkout; then re-attach
+            against the seeded volume and record the first-probe fast path.
 
     - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
