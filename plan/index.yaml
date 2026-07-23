@@ -17997,6 +17997,16 @@ plan_index:
             receive-pack via this change). Exit criteria 1-3 satisfied; criterion
             4 (per-container attributable credentials) is the order 322 rung E /
             order 424 scope, not this packet.
+    # LIVE max-TTL EVIDENCE 2026-07-23T03:03:47Z (windows lane, first
+    # long-running Windows forge session): "[vault-renewer] WARNING:
+    # git-mirror Vault token can no longer be renewed (max TTL reached or
+    # expired). Relaunch the forge to re-mint" — fired ~1h into the
+    # BigPickle in-forge session, exactly the litmus this packet says it
+    # needs ("a relay push after the original AppRole token would have
+    # expired"). Consequence pending observation: the next in-forge relay
+    # push should strand in the mirror volume until a lane relaunch
+    # re-mints + startup-reconcile flushes (449/450 machinery) — will be
+    # verified at the session's graceful end. — windows-bullo-fable5
     - order: 424
       packet_id: git-mirror-credential-lifecycle
       desired_release: v0.4
