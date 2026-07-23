@@ -13,6 +13,11 @@
 #   - apk add --no-cache (Alpine package manager)
 #   - adduser -D (Alpine user creation, not useradd)
 #   - nc from busybox (health check), not GNU netcat
+#
+# @trace spec:tillandsias-vault — use the same pinned upstream image as the
+# Vault service and copy only the official binary needed for Agent auto-auth.
+FROM docker.io/hashicorp/vault:1.18 AS vault-agent
+
 FROM docker.io/library/alpine:3.20
 
 # @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
@@ -45,6 +50,12 @@ RUN apk add --no-cache \
     && mkdir -p /srv/git /var/log/git-service /strategic \
     && chown -R git:git /srv/git /var/log/git-service /strategic
 
+# @trace spec:tillandsias-vault, spec:git-mirror-service
+# Vault Agent renews the git mirror's current 1h client token and performs a
+# fresh AppRole login after max_ttl. The AppRole SecretID never enters argv or
+# environment variables.
+COPY --from=vault-agent /bin/vault /usr/local/bin/vault
+
 # @trace spec:git-mirror-service, spec:user-runtime-lifecycle
 # Copy entrypoint script (orchestration entry point)
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -72,6 +83,10 @@ RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
 
+# @trace spec:tillandsias-vault, spec:git-mirror-service
+COPY vault-agent.hcl /etc/tillandsias/vault-agent.hcl
+COPY vault-agent-bootstrap.sh /usr/local/bin/vault-agent-bootstrap
+
 # @trace spec:secrets-management — order 424: keeps the upstream token off argv.
 COPY git-credential-tillandsias.sh /usr/local/bin/git-credential-tillandsias
 
@@ -87,6 +102,7 @@ COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 RUN chmod +x /usr/local/bin/entrypoint.sh \
               /usr/local/bin/vault-cli.sh \
               /usr/local/bin/vault-cli \
+              /usr/local/bin/vault-agent-bootstrap \
               /usr/local/bin/git-credential-tillandsias \
               /usr/local/share/git-service/post-receive-hook.sh \
               /usr/local/share/git-service/pre-receive-hook.sh \

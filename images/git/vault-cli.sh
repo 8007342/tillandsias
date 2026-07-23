@@ -8,9 +8,9 @@
 #
 # Lifecycle:
 #   * VAULT_ADDR        — e.g. https://vault:8200 (set by the launcher)
-#   * /run/secrets/vault-token — short-lived AppRole token (mounted by
-#     podman --secret <name>,target=vault-token; the launcher mints it via
-#     `vault-client::issue_approle_token("git-mirror")`).
+#   * /tmp/tillandsias-vault-token — renewable client-token sink maintained
+#     by Vault Agent from launch-scoped AppRole material. One-shot callers may
+#     override VAULT_TOKEN_FILE to retain the direct-token flow.
 #
 # Usage:
 #   vault-cli read -field=token secret/github/token
@@ -19,6 +19,7 @@
 # 3 malformed Vault response; 4 unknown subcommand.
 
 set -eu
+umask 077
 
 VAULT_ADDR="${VAULT_ADDR:-https://vault:8200}"
 VAULT_TOKEN_FILE="${VAULT_TOKEN_FILE:-/run/secrets/vault-token}"
@@ -61,6 +62,7 @@ Usage: vault-cli read [-field=<key>] <path>
        vault-cli write-stdin <path> <field>
        vault-cli renew-self [<increment-seconds>]
        vault-cli lookup-self [-field=<key>]
+       vault-cli revoke-self
        vault-cli health
 
 Examples:
@@ -70,6 +72,7 @@ Examples:
   printf '%s' opaque-value | vault-cli write-stdin secret/provider/oauth credentials_b64
   vault-cli renew-self 3600          # extend this token's lease (approle TTL heartbeat)
   vault-cli lookup-self -field=ttl   # remaining TTL in seconds; exit 2 if expired/invalid
+  vault-cli revoke-self              # best-effort graceful container shutdown
 EOF
 }
 
@@ -79,6 +82,36 @@ read_token() {
         exit 1
     fi
     cat "$VAULT_TOKEN_FILE"
+}
+
+# Invoke curl without placing the Vault client token in its argv. `--header`
+# accepts an `@file`; the short-lived file is mode 0600 on the container's
+# explicit /tmp tmpfs and is overwritten before removal. Request bodies remain
+# available on stdin, so write-stdin also keeps its secret payload off argv.
+curl_with_token() {
+    token="$(read_token)"
+    header_file="$(mktemp /tmp/tillandsias-vault-header.XXXXXX)" || {
+        echo "vault-cli: cannot create tmpfs token-header file" >&2
+        return 2
+    }
+    if ! printf 'X-Vault-Token: %s\n' "$token" > "$header_file"; then
+        rm -f "$header_file"
+        echo "vault-cli: cannot write tmpfs token-header file" >&2
+        return 2
+    fi
+    token=""
+
+    curl_status=0
+    curl --cacert "$VAULT_CACERT" -fsS --header "@$header_file" "$@" \
+        || curl_status=$?
+
+    header_size="$(wc -c < "$header_file" 2>/dev/null || printf '0')"
+    if [ "$header_size" -gt 0 ] 2>/dev/null; then
+        dd if=/dev/zero of="$header_file" bs=1 count="$header_size" \
+            conv=notrunc 2>/dev/null || true
+    fi
+    rm -f "$header_file"
+    return "$curl_status"
 }
 
 cmd_read() {
@@ -118,9 +151,7 @@ cmd_read() {
             fi
             ;;
     esac
-    token="$(read_token)"
-    if ! body="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
-        "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
+    if ! body="$(curl_with_token "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
         echo "vault-cli: HTTP error reading $kv_path: $body" >&2
         exit 2
     fi
@@ -155,9 +186,8 @@ write_json() {
             fi
             ;;
     esac
-    token="$(read_token)"
-    if ! response="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
-        -d "$json_body" "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
+    if ! response="$(printf '%s' "$json_body" \
+        | curl_with_token --data-binary @- "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
         echo "vault-cli: HTTP error writing $kv_path: $response" >&2
         exit 2
     fi
@@ -201,29 +231,25 @@ cmd_health() {
 }
 
 # @trace spec:tillandsias-vault, spec:git-mirror-service
-# Renew the mounted AppRole token against its own lease (token-auth endpoint,
-# NOT KV-v2 — no secret/data path normalisation). The git-mirror's approle
-# lease has a 1h default TTL and a 24h max TTL; a periodic renew-self keeps the
-# mirror's Vault access alive across a long forge session so the relay can read
-# the GitHub token for every push, not just the first hour. A renew on an
-# already-expired token 403s (exit 2); the caller treats that as "must re-mint"
-# (relaunch the forge) rather than a renewable heartbeat.
+# Renew the current token against its own lease (token-auth endpoint, NOT
+# KV-v2). Vault Agent normally owns renewal; this verb remains available to
+# one-shot/direct-token callers and diagnostics.
 cmd_renew_self() {
     increment="${1:-}"
     body=""
     if [ -n "$increment" ]; then
         body="{\"increment\": \"${increment}s\"}"
     fi
-    token="$(read_token)"
     if [ -n "$body" ]; then
-        if ! response="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
-            -d "$body" "$VAULT_ADDR/v1/auth/token/renew-self" 2>&1)"; then
+        if ! response="$(printf '%s' "$body" \
+            | curl_with_token --data-binary @- \
+                "$VAULT_ADDR/v1/auth/token/renew-self" 2>&1)"; then
             echo "vault-cli: HTTP error renewing token: $response" >&2
             exit 2
         fi
     else
-        if ! response="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
-            -X POST "$VAULT_ADDR/v1/auth/token/renew-self" 2>&1)"; then
+        if ! response="$(curl_with_token -X POST \
+            "$VAULT_ADDR/v1/auth/token/renew-self" 2>&1)"; then
             echo "vault-cli: HTTP error renewing token: $response" >&2
             exit 2
         fi
@@ -249,9 +275,7 @@ cmd_lookup_self() {
             *) break ;;
         esac
     done
-    token="$(read_token)"
-    if ! body="$(curl --cacert "$VAULT_CACERT" -fsS -H "X-Vault-Token: $token" \
-        "$VAULT_ADDR/v1/auth/token/lookup-self" 2>&1)"; then
+    if ! body="$(curl_with_token "$VAULT_ADDR/v1/auth/token/lookup-self" 2>&1)"; then
         echo "vault-cli: HTTP error on lookup-self (token expired or invalid): $body" >&2
         exit 2
     fi
@@ -267,11 +291,23 @@ cmd_lookup_self() {
     fi
 }
 
+# @trace spec:tillandsias-vault, spec:git-mirror-service
+# Revoke the current Vault Agent sink token during graceful container
+# shutdown. The host separately destroys the reusable AppRole SecretID by
+# accessor, closing both halves of the long-running credential lifecycle.
+cmd_revoke_self() {
+    if ! response="$(curl_with_token -X POST \
+        "$VAULT_ADDR/v1/auth/token/revoke-self" 2>&1)"; then
+        echo "vault-cli: HTTP error revoking current token: $response" >&2
+        exit 2
+    fi
+}
+
 # Gate every network-touching subcommand on a readable CA bundle in ONE place,
 # so no future subcommand can silently reach Vault unverified by forgetting to
 # call require_cacert itself. usage/help do no I/O and are exempt.
 case "${1:-}" in
-    read|write|write-stdin|renew-self|lookup-self|health) require_cacert ;;
+    read|write|write-stdin|renew-self|lookup-self|revoke-self|health) require_cacert ;;
 esac
 
 case "${1:-}" in
@@ -280,6 +316,7 @@ case "${1:-}" in
     write-stdin) shift; cmd_write_stdin "$@" ;;
     renew-self) shift; cmd_renew_self "$@" ;;
     lookup-self) shift; cmd_lookup_self "$@" ;;
+    revoke-self) shift; cmd_revoke_self "$@" ;;
     health) cmd_health ;;
     -h|--help|help|"") usage; exit 0 ;;
     *) echo "vault-cli: unknown subcommand: $1" >&2; usage; exit 4 ;;

@@ -162,33 +162,56 @@ restored.
 - **AND** the stranded commit SHALL be forwarded to upstream
 
 ### Requirement: GitHub token delivery uses Vault AppRole
-The git service container SHALL receive a short-lived Vault AppRole token scoped
-to `git-mirror-policy`. The launcher SHALL mount that token as a podman secret
-at `/run/secrets/vault-token`; the hook SHALL read the GitHub token from Vault
-at `secret/github/token` through `vault-cli` only at push time. No D-Bus socket,
-keyring API, bind-mounted token file, or askpass helper SHALL cross the enclave
-boundary. The deprecated `--legacy-keyring-secrets` fallback was removed in v0.3.
+The long-running git service container SHALL receive launch-scoped AppRole
+material for the dedicated `git-mirror-agent` role, which maps only to
+`git-mirror-policy`. The launcher SHALL mount that material as one Podman
+secret at `/run/secrets/vault-approle`; the official Vault Agent SHALL
+authenticate, renew each client token, and re-authenticate after the original
+token reaches its 24h maximum TTL. The reusable SecretID SHALL have a 48h
+server-side TTL so a lost host process cannot orphan it indefinitely. Agent
+SHALL write the current client token
+only to the tmpfs sink `/tmp/tillandsias-vault-token`. The hook SHALL read the
+GitHub token from Vault at `secret/github/token` through `vault-cli` only at
+push time. No AppRole value, Vault token, GitHub token, D-Bus socket, keyring
+API, bind-mounted token file, or askpass helper SHALL cross into a forge
+container or appear in process arguments, environment variables, or logs. The
+deprecated `--legacy-keyring-secrets` fallback was removed in v0.3.
 
 @trace spec:git-mirror-service
 
-#### Scenario: Vault token mount on launch
+#### Scenario: Vault Agent AppRole mount on launch
 - **WHEN** the git service container is launched and Vault is running
-- **THEN** the launcher SHALL mint an AppRole token scoped to `git-mirror-policy`
-- **AND** the container SHALL receive `--secret=<generated>,target=vault-token,mode=0400`
-- **AND** the container SHALL read `/run/secrets/vault-token`
-- **AND** the container SHALL receive `VAULT_ADDR=http://vault:8200` and
-  `VAULT_ROLE=git-mirror`
+- **THEN** the launcher SHALL issue a role ID and reusable SecretID for
+  `git-mirror-agent`, scoped to `git-mirror-policy`
+- **AND** the SecretID SHALL permit unlimited uses within a finite 48h TTL
+- **AND** the container SHALL receive
+  `--secret=<issuance-unique>,target=vault-approle,uid=1000,gid=1000,mode=0400`
+- **AND** the bootstrap SHALL split `/run/secrets/vault-approle` into mode-0400
+  role-ID and SecretID files on tmpfs without placing either value in argv or env
+- **AND** the container SHALL receive `VAULT_ADDR=https://vault:8200` and
+  `VAULT_ROLE=git-mirror-agent`
 
-#### Scenario: No Vault token means no credential mount
-- **WHEN** Vault has no GitHub token
-- **THEN** the git service container SHALL start without a token mount
-- **AND** authenticated pushes SHALL fail loudly until the user re-authenticates via "GitHub Login"
+#### Scenario: Mirror client token reaches max TTL
+- **WHEN** the current git-mirror Vault client token reaches max_ttl
+- **THEN** Vault Agent SHALL perform another AppRole login without restarting
+  the git service container
+- **AND** SHALL replace `/tmp/tillandsias-vault-token` with the new token
+- **AND** the next relay push SHALL obtain the current GitHub credential through
+  `git-credential-tillandsias`
+- **AND** that relay SHALL succeed without operator action when the upstream
+  credential and repository state are otherwise valid
+
+#### Scenario: AppRole auto-auth cannot be provisioned
+- **WHEN** the launcher cannot issue or mount `git-mirror-agent` AppRole material
+- **THEN** it SHALL refuse to launch a credentialed project mirror
+- **AND** SHALL name the auto-auth mint failure before a forge begins work
 
 #### Scenario: Relay helper reads the GitHub token from Vault
 - **WHEN** the git service's pre-receive relay pushes to an HTTPS origin
-- **AND** `/run/secrets/vault-token` is present
+- **AND** Vault Agent has written `/tmp/tillandsias-vault-token`
 - **THEN** the hook SHALL run `vault-cli read -field=token secret/github/token`
-- **AND** construct the HTTPS auth URL in memory only
+- **AND** Git SHALL obtain that token through the credential-helper stdin/stdout protocol
+- **AND** inherited credential helpers SHALL be reset before the Tillandsias helper
 - **AND** the token SHALL not appear in process arguments, environment variables, or logs
 
 ### Requirement: Git service container lifecycle
@@ -388,6 +411,9 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:git-mirror-relay-verified-ack` — Verify missing credentials fail the client push, successful relay converges, and multi-ref rejection is atomic.
 - `litmus:git-mirror-safe-refspec-push` — Verify pre-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and guard bulk deletes.
 - `litmus:git-mirror-ref-convergence` — Verify the reconcile fetch lands in remote-tracking refs only (one push converges mirror + upstream; startup retry forwards a stranded commit; empty-mirror seeding stays cloneable).
+- `litmus:git-mirror-vault-agent-auto-auth` — Verify AppRole material stays
+  off argv/env, a relay consumes a refreshed Agent token after the original
+  generation expires, and a missing sink fails closed before recovering.
 - `litmus:forge-gitconfig-bidirectional-quarantine` — Verify writable forge-local config isolation while fetch, commit, object/ref sharing, and push remain functional.
 - `litmus:forge-config-trust-cross-platform-parity` — Verify the shared VZ/WSL guest path has no host override and Linux live config/trust behavior passes; sibling-host packets own live macOS/Windows evidence.
 
@@ -398,7 +424,8 @@ Gating points:
 - Post-receive performs bookkeeping only and cannot establish relay success
 - Startup retry uses the same Vault-backed atomic relay helper, never `--mirror` or `--all`
 - Reconcile fetch maps upstream into `refs/remotes/origin/*` only; empty mirrors seeded with an explicit heads/tags refspec (one push converges mirror + upstream)
-- Vault AppRole token is the only credential path (legacy keyring fallback removed in v0.3)
+- Vault Agent auto-auth through the dedicated `git-mirror-agent` role is the
+  only long-running mirror credential path (legacy keyring fallback removed in v0.3)
 - Forge containers cannot access any credentials (no D-Bus, no token files, no git config)
 - Host and forge repository-local Git config are isolated through the writable `.git` facade while objects and refs remain shared
 - Mirror sync event-driven by filesystem watcher, zero polling

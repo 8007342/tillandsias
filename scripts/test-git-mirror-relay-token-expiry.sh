@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # @trace spec:git-mirror-service, spec:tillandsias-vault
-# Order-414 fixture: the relay must DISTINGUISH an expired mirror AppRole token
-# from a genuinely-absent GitHub token. Before this, an expired mirror token
-# (~1h AppRole TTL, never renewed) surfaced as "run GitHub Login" — a false
+# Order-414/424 fixture: the relay must DISTINGUISH an unavailable Vault Agent
+# client-token sink from a genuinely-absent GitHub token. Before this, an
+# expired mirror token surfaced as "run GitHub Login" — a false
 # error that sent operators to fix a GitHub credential that was actually fine
 # (blocker-git-mirror-relay-token-expiry-2026-07-18).
 #
-# The discriminator is `vault-cli lookup-self`: if the mirror's own token can't
-# look itself up, the mirror's Vault access expired (→ re-mint / relaunch),
-# not the GitHub credential (→ GitHub Login).
+# The discriminator is `vault-cli lookup-self`: if the current sink token
+# cannot look itself up, Agent is re-authenticating (or its AppRole material
+# failed), not the GitHub credential.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -71,21 +71,21 @@ run_relay() {
 }
 
 # ---------------------------------------------------------------------------
-# Case 1: mirror AppRole token EXPIRED. read + lookup-self + renew-self all 403.
-# Expect the honest expired-token diagnosis, NOT "run GitHub Login".
+# Case 1: Vault Agent sink token EXPIRED. read + lookup-self both 403.
+# Expect the honest auto-auth diagnosis, NOT "run GitHub Login".
 # ---------------------------------------------------------------------------
 export STUB_READ_RC=2 STUB_LOOKUP_RC=2 STUB_RENEW_RC=2
 if OUT="$(run_relay)"; then
     fail "case 1: relay returned success with an expired mirror token"
 fi
-echo "$OUT" | grep -Fq "expired or unrenewable" \
+echo "$OUT" | grep -Fq "expired or unavailable" \
     || fail "case 1: relay did not emit the expired-mirror-token diagnosis. Got: $OUT"
 # The false-error path emits "HTTPS upstream credential is unavailable"; the
 # honest path must not (its own text says "do NOT run GitHub Login").
 if echo "$OUT" | grep -Fq "HTTPS upstream credential is unavailable"; then
     fail "case 1: relay FALSELY reported a missing GitHub credential on an expired MIRROR token. Got: $OUT"
 fi
-echo "case 1 ok: expired mirror token → honest re-mint diagnosis, no false GitHub Login"
+echo "case 1 ok: expired Agent sink → honest auto-auth diagnosis, no false GitHub Login"
 
 # ---------------------------------------------------------------------------
 # Case 2: mirror token VALID (lookup-self ok) but the GitHub token read fails.
@@ -97,7 +97,7 @@ if OUT="$(run_relay)"; then
 fi
 echo "$OUT" | grep -Fq "HTTPS upstream credential is unavailable" \
     || fail "case 2: relay did not emit the GitHub-Login guidance for an absent GitHub token. Got: $OUT"
-if echo "$OUT" | grep -Fq "expired or unrenewable"; then
+if echo "$OUT" | grep -Fq "expired or unavailable"; then
     fail "case 2: relay misreported a valid mirror token as expired. Got: $OUT"
 fi
 echo "case 2 ok: valid mirror token + absent GitHub token → run GitHub Login"

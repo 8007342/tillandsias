@@ -189,40 +189,88 @@ Vault SHALL be configured idempotently with these ACL policies:
   `secret/github/token`, `secret/openai/api-key`, or a provider OAuth path
 - **THEN** the call SHALL return HTTP 403.
 
-### Requirement: Per-container tokens are short-lived AppRole tokens
-- **ID**: tillandsias-vault.security.short-lived-tokens@v2
+### Requirement: Per-container Vault authentication is short-lived and revocable
+- **ID**: tillandsias-vault.security.short-lived-tokens@v3
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [tillandsias-vault.invariant.token-ttl-1h, tillandsias-vault.invariant.tokens-revoked-on-stop]
+- **Invariants**: [tillandsias-vault.invariant.token-ttl-1h, tillandsias-vault.invariant.tokens-revoked-on-stop, tillandsias-vault.invariant.git-mirror-agent-reauth]
 
-At container startup, enclave containers that need Vault SHALL receive a fresh
-Vault token minted through the AppRole backend. Each role SHALL map to exactly
-one policy, tokens SHALL default to TTL 1h with a maximum TTL of 24h, and tokens
-SHALL be injected through a podman secret mounted at `/run/secrets/vault-token`.
-Tokens MUST NOT appear in environment variables, command-line arguments, or
-non-tmpfs bind mounts. On shutdown, the host SHALL revoke every tracked
-per-container token before exiting.
+Ordinary one-shot enclave containers that need Vault SHALL receive a fresh
+client token minted through a one-use AppRole SecretID that expires after 30
+seconds. Each role SHALL map to exactly one policy. Every client token,
+including tokens minted by Vault Agent, SHALL default to TTL 1h with a maximum
+TTL of 24h.
+
+The long-running git mirror is the sole SecretID-lifecycle exception. It SHALL
+use the dedicated `git-mirror-agent` AppRole, mapped only to
+`git-mirror-policy`, with `secret_id_num_uses=0` and `secret_id_ttl=48h` so the
+official Vault Agent can authenticate again after a client token reaches
+max_ttl. This TTL is twice the 24h client-token maximum, so at least one
+max-TTL re-authentication remains possible while a SIGKILL or host crash cannot
+orphan an unlimited server-side credential. The role SHALL explicitly set
+`token_num_uses=0`, because Agent auto-auth cannot operate with a limited-use
+client token. The AppRole document SHALL be injected through an
+issuance-unique Podman secret at
+`/run/secrets/vault-approle`; Agent's client-token sink SHALL exist only at
+`/tmp/tillandsias-vault-token`. AppRole values and client tokens MUST NOT
+appear in environment variables, command-line arguments, logs, or non-tmpfs
+bind mounts.
+
+On graceful shutdown, the container SHALL revoke Agent's current client token
+and the host SHALL destroy every issued `git-mirror-agent` SecretID through its
+retained accessor. Same-process relaunches SHALL use distinct Podman secret
+names and retain every accessor rather than overwriting prior lifecycle state.
+Ordinary tracked per-container client tokens SHALL continue to be revoked by
+the host before exit.
+
+If the process dies before accessor teardown can run, Vault's role-enforced
+SecretID TTL SHALL invalidate the orphan no later than 48h after issuance.
+Removing the local Podman secret is defense in depth, not the server-side
+expiration boundary. A client token minted before that expiry remains subject
+to the existing 24h maximum TTL.
 
 @trace spec:tillandsias-vault, spec:podman-secrets-integration
 
-#### Scenario: Git mirror container receives a 1h AppRole token
+#### Scenario: Git mirror container receives Vault Agent AppRole material
 - **WHEN** a git mirror container starts
-- **THEN** the launcher SHALL mint a `git-mirror` AppRole token scoped to
+- **THEN** the launcher SHALL issue `git-mirror-agent` AppRole material scoped to
   `git-mirror-policy`
 - **AND** SHALL create a podman secret named
-  `tillandsias-vault-token-git-mirror-<container-instance>`
-- **AND** SHALL mount that secret at `/run/secrets/vault-token`
+  `tillandsias-vault-approle-git-mirror-agent-<container-instance>-<issuance>`
+- **AND** SHALL mount that secret at `/run/secrets/vault-approle`
+- **AND** Vault Agent SHALL maintain the client-token sink at
+  `/tmp/tillandsias-vault-token`
 - **AND** SHALL set `VAULT_ADDR=https://vault:8200`
 - **AND** SHALL trust the enclave CA mounted at `/etc/tillandsias/ca.crt`.
 
-#### Scenario: Tokens are not exposed via env or args
-- **WHEN** `podman inspect <container>` is run
-- **THEN** the `Env` and `Args` arrays SHALL NOT contain a Vault token value.
+#### Scenario: Agent re-authenticates after client-token max TTL
+- **WHEN** the original 1h client token can no longer be renewed because it has
+  reached its 24h maximum TTL
+- **THEN** Vault Agent SHALL reuse the launch-scoped `git-mirror-agent` SecretID
+  for a fresh AppRole login
+- **AND** SHALL atomically refresh the tmpfs token sink
+- **AND** the next mirror relay SHALL succeed without a container relaunch
 
-#### Scenario: Token is revoked when container stops
+#### Scenario: Uncatchable crash loses the accessor registry
+- **WHEN** SIGKILL or host loss prevents graceful SecretID-accessor destruction
+- **THEN** the issued `git-mirror-agent` SecretID SHALL expire server-side no
+  later than 48h after issuance
+- **AND** no in-memory registry or local Podman-secret cleanup SHALL be the sole
+  expiration boundary
+- **AND** any client token minted before SecretID expiry SHALL still have
+  `token_max_ttl <= 24h`.
+
+#### Scenario: Credentials are not exposed via env or args
+- **WHEN** `podman inspect <container>` is run
+- **THEN** the `Env` and `Args` arrays SHALL NOT contain a role ID, SecretID,
+  Vault client token, or GitHub token value.
+
+#### Scenario: Agent credentials are revoked when container stops
 - **WHEN** the git mirror container stops
-- **THEN** the host SHALL revoke that container's Vault token
-- **AND** later Vault calls with that token SHALL return HTTP 403.
+- **THEN** the entrypoint SHALL revoke the current Agent client token
+- **AND** the host SHALL destroy each retained SecretID accessor and remove
+  each issuance-unique Podman secret
+- **AND** later AppRole logins with those SecretIDs SHALL fail.
 
 ### Requirement: Forge Vault access is optional and provider-scoped
 - **ID**: tillandsias-vault.security.forge-offline@v2
@@ -313,9 +361,14 @@ derived documents SHALL NOT cross the launcher boundary in argv or logs.
 - **Expression**: `vault_token.ttl EQ 3600s AND renewable AND max_ttl LE 86400s`
 - **Measurable**: true
 
+### Invariant: Git mirror Agent survives client-token max TTL
+- **ID**: tillandsias-vault.invariant.git-mirror-agent-reauth
+- **Expression**: `role git-mirror-agent MAPS_ONLY git-mirror-policy AND token_num_uses EQ 0 AND secret_id_num_uses EQ 0 AND secret_id_ttl EQ 48h AND crash_orphan_secret_id_lifetime LE 48h AND client_token_sink ON tmpfs AND max_ttl EVENT TRIGGERS reauth WITHOUT container_restart`
+- **Measurable**: true
+
 ### Invariant: Tokens are revoked on container stop
 - **ID**: tillandsias-vault.invariant.tokens-revoked-on-stop
-- **Expression**: `container.stop EVENT TRIGGERS vault.token.revoke FOR_THAT_CONTAINER`
+- **Expression**: `container.stop EVENT TRIGGERS vault.token.revoke FOR_THAT_CONTAINER AND git_mirror.stop TRIGGERS secret_id_accessor.destroy FOR_EACH_ISSUANCE`
 - **Measurable**: true
 
 ### Invariant: Forge has no broad Vault token
@@ -338,10 +391,16 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
   Vault-token mount shape and safe forwarding contract.
 - `litmus:opencode-vault-auth-content` - asserts the read-only OpenCode policy,
   scoped token mount, in-memory auth document, and no-file contract.
+- `litmus:git-mirror-vault-agent-auto-auth` - checks the dedicated reusable
+  role contract, issuance-unique mount, tmpfs sink refresh, relay recovery,
+  and credential non-disclosure.
 
 ## Litmus Chain
 
-Smallest actionable boundary: `cargo test -p tillandsias-vault-client`. Linux
+Smallest actionable boundaries:
+`scripts/test-opencode-vault-auth-content.sh`,
+`scripts/test-git-mirror-vault-agent-auto-auth.sh`, and
+`cargo test -p tillandsias-vault-client`. Linux
 default-flow boundary: `cargo test -p tillandsias-headless --features vault`
 for the argument/mount shape tests, then a local `tillandsias --init --debug`
 smoke to verify `127.0.0.1:8201` health, policy loading, AppRole provisioning,

@@ -3,14 +3,11 @@ name: litmus:git-mirror-relay-token-expiry
 spec: git-mirror-service
 phase: pre-build
 description: >
-  Offline fixture proving the relay distinguishes an EXPIRED mirror AppRole
-  token from an ABSENT GitHub token (order 414). The git-mirror's approle token
-  has a 1h default TTL; when it expired unrenewed, the relay's swallowed vault
-  read surfaced as "run GitHub Login" — a false error, since the GitHub token
-  was valid. The relay now probes `vault-cli lookup-self`: a failing self-lookup
-  means the mirror's Vault access expired (→ re-mint / relaunch the forge), not
-  the GitHub credential (→ GitHub Login). The entrypoint renews the token on a
-  heartbeat so a session past 1h keeps push capability.
+  Offline fixture proving the relay distinguishes an unavailable Vault Agent
+  client-token sink from an ABSENT GitHub token. A failing self-lookup means
+  the Agent is re-authenticating or its AppRole path failed, not that the
+  GitHub credential is absent. The positive max_ttl re-authentication path is
+  pinned separately by litmus:git-mirror-vault-agent-auto-auth.
 severity: critical
 size: instant
 
@@ -24,8 +21,8 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "PASS: git-mirror relay distinguishes expired mirror token from absent GitHub token (order 414)"
 
-  - step: "vault-cli exposes the token-lifecycle verbs used by the relay and renewer"
-    command: "grep -Fq 'renew-self)' images/git/vault-cli.sh && grep -Fq 'lookup-self)' images/git/vault-cli.sh && grep -Fq 'auth/token/renew-self' images/git/vault-cli.sh && grep -Fq 'auth/token/lookup-self' images/git/vault-cli.sh && echo 'ok: vault-cli token verbs'"
+  - step: "vault-cli exposes lookup and graceful current-token revocation"
+    command: "grep -Fq 'lookup-self)' images/git/vault-cli.sh && grep -Fq 'revoke-self)' images/git/vault-cli.sh && grep -Fq 'auth/token/lookup-self' images/git/vault-cli.sh && grep -Fq 'auth/token/revoke-self' images/git/vault-cli.sh && echo 'ok: vault-cli token verbs'"
     timeout_ms: 5000
     expected_behavior: "ok: vault-cli token verbs"
 
@@ -34,16 +31,16 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: relay discriminator"
 
-  - step: "entrypoint starts a background token renewer inside the 1h TTL"
-    command: "grep -Fq 'start_vault_token_renewer' images/git/entrypoint.sh && grep -Fq 'vault-cli renew-self' images/git/entrypoint.sh && echo 'ok: renewer heartbeat'"
+  - step: "entrypoint starts Vault Agent and waits for its renewable sink"
+    command: "grep -Fq 'start_vault_agent' images/git/entrypoint.sh && grep -Fq 'vault-agent-bootstrap' images/git/entrypoint.sh && grep -Fq 'exit_after_auth = false' images/git/vault-agent.hcl && echo 'ok: Vault Agent auto-auth'"
     timeout_ms: 5000
-    expected_behavior: "ok: renewer heartbeat"
+    expected_behavior: "ok: Vault Agent auto-auth"
 
 observability:
   traces:
     - "@trace spec:git-mirror-service"
     - "@trace spec:tillandsias-vault"
-  expected_log: "vault-renewer reports periodic renewal; relay names an expired mirror token distinctly from an absent GitHub token"
+  expected_log: "relay names an unavailable Vault Agent sink distinctly from an absent GitHub token"
   log_fields:
     spec: git-mirror-service
     test: git-mirror-relay-token-expiry
@@ -51,6 +48,6 @@ observability:
 rollback:
   on_failure: >
     Do not restore the swallowed `2>/dev/null || true` vault read that conflates
-    an expired mirror token with an absent GitHub token. Inspect the lookup-self
-    discriminator in relay-refs.sh and the renewer loop in entrypoint.sh.
+    an unavailable Agent sink with an absent GitHub token. Inspect the
+    lookup-self discriminator and Vault Agent bootstrap.
   command: "scripts/test-git-mirror-relay-token-expiry.sh"

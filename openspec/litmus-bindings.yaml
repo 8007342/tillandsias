@@ -397,12 +397,13 @@ specs:
   - litmus:git-mirror-ref-convergence
   - litmus:git-mirror-yaml-gate-shape
   - litmus:git-mirror-relay-verified-ack
+  - litmus:git-mirror-vault-agent-auto-auth
   - litmus:forge-gitconfig-bidirectional-quarantine
   - litmus:forge-standard-gitconfig-path
   - litmus:forge-config-trust-cross-platform-parity
   - litmus:forge-gitdir-staging-chown
   coverage_ratio: 83
-  last_verified: '2026-07-20'
+  last_verified: '2026-07-23'
 - spec_id: github-credential-health
   status: active
   litmus_tests:
@@ -931,6 +932,7 @@ specs:
   - litmus:credential-isolation
   - litmus:podman-secrets-integration-shape
   - litmus:opencode-vault-auth-content
+  - litmus:git-mirror-vault-agent-auto-auth
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: tillandsias-vault
@@ -948,6 +950,7 @@ specs:
   - litmus:vault-entrypoint-hardened-shape
   - litmus:vault-recreate-mutex
   - litmus:opencode-vault-auth-content
+  - litmus:git-mirror-vault-agent-auto-auth
   coverage_ratio: 100
   last_verified: '2026-07-23'
 - spec_id: headless-mode
