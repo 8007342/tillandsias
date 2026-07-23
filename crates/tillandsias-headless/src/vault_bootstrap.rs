@@ -116,30 +116,41 @@ pub fn get_pending_handover() -> (Option<String>, Option<String>) {
     (None, None)
 }
 
-/// Set once the first GetVaultHandover request has been answered (the
-/// handler always clears after replying). Steady-state connections check
-/// this to skip the first-boot poll loop entirely — the loop used to sleep
-/// its FULL 8s budget on EVERY fresh control-wire connection against an
-/// already-bootstrapped vault (slowdown audit 2026-07-23: 8.1-8.2s
-/// measured on every --status-once; the tray paid it twice serially at
-/// startup).
+/// Set once a GetVaultHandover reply actually carries the first-boot Shamir
+/// share. An empty reply is only a timeout observation, not delivery: a later
+/// request must retain the bounded first-boot retry window. Steady-state
+/// connections skip that window after real delivery — the loop used to sleep
+/// its full 8s budget on every fresh control-wire connection against an
+/// already-bootstrapped vault (slowdown audit 2026-07-23: 8.1-8.2s measured on
+/// every --status-once; the tray paid it twice serially at startup).
 #[cfg(feature = "vault")]
 pub static HANDOVER_DELIVERED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(feature = "vault")]
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
 pub fn handover_already_delivered() -> bool {
     HANDOVER_DELIVERED.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+/// A handover reply closes the first-boot retry window only when it contains
+/// the Shamir share the host must persist. Root-token-only or empty replies do
+/// not make a later unseal safe.
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+pub fn handover_reply_delivers_unseal_share(unseal_share_b64: Option<&str>) -> bool {
+    unseal_share_b64.is_some_and(|share| !share.trim().is_empty())
+}
+
 #[cfg(feature = "vault")]
 #[allow(dead_code)]
-pub fn clear_pending_handover() {
+pub fn clear_pending_handover(delivered_unseal_share: bool) {
     let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = cell.lock() {
         *guard = None;
     }
-    HANDOVER_DELIVERED.store(true, std::sync::atomic::Ordering::SeqCst);
+    if delivered_unseal_share {
+        HANDOVER_DELIVERED.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 #[cfg(feature = "vault")]
@@ -175,9 +186,10 @@ pub fn get_pending_handover() -> (Option<String>, Option<String>) {
 }
 
 #[cfg(not(feature = "vault"))]
-pub fn clear_pending_handover() {}
+pub fn clear_pending_handover(_delivered_unseal_share: bool) {}
 
 #[cfg(not(feature = "vault"))]
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
 pub fn handover_already_delivered() -> bool {
     true
 }
@@ -3047,6 +3059,15 @@ mod tests {
     use super::*;
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    #[test]
+    fn empty_handover_reply_does_not_close_first_boot_retry_window() {
+        assert!(!handover_reply_delivers_unseal_share(None));
+        assert!(!handover_reply_delivers_unseal_share(Some("  ")));
+        assert!(handover_reply_delivers_unseal_share(Some(
+            "c2hhbWlyLXNoYXJl"
+        )));
+    }
 
     #[test]
     fn policy_role_names_match_spec() {

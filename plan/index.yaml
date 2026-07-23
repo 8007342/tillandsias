@@ -16621,6 +16621,67 @@ plan_index:
             note for the implementer: bumping changes the TLS trust
             story per host — keep the allowlist minimal and deliberate.
 
+    - packet_id: vault-handover-empty-first-reply-suppresses-retry
+      provisional_id: forge-260723-2
+      order: provisional
+      desired_release: v0.4
+      title: "Empty first Vault handover timeout must not suppress every later first-boot retry"
+      status: completed
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs + crates/tillandsias-headless/src/vsock_server.rs
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [vault, control-wire, first-boot, regression, forge]
+      estimated_hours: 0.5
+      outcome: >
+        Preserve 0efd14b9's steady-state performance win while distinguishing
+        an actually delivered Shamir-share handover from an empty first-boot
+        timeout. Only real share delivery closes the process-wide retry window;
+        empty or root-token-only replies remain eligible for the next bounded
+        GetVaultHandover poll.
+      exit_criteria:
+        - "an empty first GetVaultHandover reply does not mark the handover delivered"
+        - "a reply carrying a non-empty Shamir share marks delivery"
+        - "after real delivery, later steady-state connections still skip the 8-second poll"
+      owned_files:
+        - crates/tillandsias-headless/src/vault_bootstrap.rs
+        - crates/tillandsias-headless/src/vsock_server.rs
+        - plan/issues/vault-handover-empty-first-reply-suppresses-retry-2026-07-23.md
+        - plan/index.yaml
+      events:
+        - type: filed
+          ts: "2026-07-23T04:20:47Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0420Z"
+          host: forge
+          summary: >
+            Adversarial review of 0efd14b9 found that its first implementation
+            treated an empty eight-second timeout as permanent handover
+            delivery, defeating the later retry that protects first-boot
+            Shamir-share persistence.
+        - type: claim
+          ts: "2026-07-23T04:20:48Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0420Z"
+          host: forge
+          lease_id: "ce6d1a85bb45"
+          expires_at: "2026-07-23T08:20:48Z"
+        - type: completed
+          ts: "2026-07-23T04:30:14Z"
+          agent_id: "forge-forge-tillandsias-codex-20260723T0420Z"
+          host: forge
+          lease_id: "ce6d1a85bb45"
+          evidence_refs:
+            - "vault_bootstrap::tests::empty_handover_reply_does_not_close_first_boot_retry_window"
+            - "vsock_server::tests::empty_vault_handover_reply_keeps_later_first_boot_retry_eligible"
+            - "cargo test -p tillandsias-headless: 242 passed, 1 ignored; integration targets passed"
+            - "cargo run -q -p tillandsias-policy -- validate-yaml plan/index.yaml: ok"
+          summary: >
+            Kept the steady-state no-wait optimization but made delivery
+            conditional on a non-empty Shamir-share field. Empty and
+            root-token-only replies no longer close the process-wide
+            first-boot retry window. Added the cfg-aware dead-code seam needed
+            for both default and listen-vsock strict builds.
+
     - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
       order: provisional

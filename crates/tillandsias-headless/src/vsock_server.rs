@@ -1162,7 +1162,11 @@ async fn handle_connection(
                     }
                     result
                 };
-                crate::vault_bootstrap::clear_pending_handover();
+                let delivered_unseal_share =
+                    crate::vault_bootstrap::handover_reply_delivers_unseal_share(
+                        unseal_share_b64.as_deref(),
+                    );
+                crate::vault_bootstrap::clear_pending_handover(delivered_unseal_share);
 
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
@@ -1596,6 +1600,25 @@ mod tests {
                 .count(),
             1,
             "handle_connection must have exactly one post-store PTY cleanup funnel"
+        );
+    }
+
+    #[test]
+    fn empty_vault_handover_reply_keeps_later_first_boot_retry_eligible() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
+        let handler = source
+            .split("ControlMessage::GetVaultHandover { seq } =>")
+            .nth(1)
+            .and_then(|tail| tail.split("ControlMessage::").next())
+            .expect("GetVaultHandover handler source");
+        assert!(
+            handler.contains("handover_reply_delivers_unseal_share(")
+                && handler.contains("unseal_share_b64.as_deref()"),
+            "the handler must classify actual share delivery before closing the retry window"
+        );
+        assert!(
+            handler.contains("clear_pending_handover(delivered_unseal_share)"),
+            "an empty timeout reply must not be recorded as a delivered handover"
         );
     }
 
