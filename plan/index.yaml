@@ -16563,9 +16563,9 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: codex lane state amnesia — ephemeral CODEX_HOME replays codex FIRST-RUN every launch (281s silent stall, 80% of launch); login one-shot re-pulls 136MB + full ensure before the device code (50s)"
-      status: claimed
+      status: in_progress
       kind: bug
-      deliverable: images/default/entrypoint-forge-codex.sh + codex-device-auth.sh + lib-common.sh (persist CODEX_HOME minus auth.json on the per-project cache volume; slim the login container's pre-auth work)
+      deliverable: images/default/codex-safe-state.sh + entrypoint-forge-codex.sh + codex-oauth-session.sh + codex-device-auth.sh + default vault-cli.sh + headless provider-login wiring + deterministic fixtures and bound OpenSpec litmus
       depends_on: []
       pickup_role: linux
       capability_tags: [codex, forge, launch, performance, images]
@@ -16579,14 +16579,15 @@ plan_index:
         experiments gating (90s + 120s ab.chatgpt.com tunnels moving
         <6KB each) + model-availability NUX + models_cache rebuild.
         Separately the codex-login one-shot blocks 50s re-downloading
-        136MB of @openai/codex npm and running the FULL harness ensure
-        before `codex login` even starts. Fixes: persist CODEX_HOME
-        (minus auth.json — stays vault-managed) on the per-project
-        persistent cache volume next to the npm prefix; consider a
-        statsig/experiments offline flag for the forge; login container
-        installs ONLY codex (skip the full ensure) or reuses the
-        persistent prefix. Egress/proxy/host exonerated by measurement
-        (RTTs 96-160ms; 16 idle vCPUs; journal quiet).
+        136MB of @openai/codex npm and running the full harness ensure
+        before `codex login` even starts. The static implementation now
+        keeps broad CODEX_HOME and provider auth ephemeral while persisting
+        only reviewed cache/session/SQLite/metadata classes in a
+        mode-0700 project/worker namespace; the one-shot requests only Codex
+        and reuses a Codex-specific tool cache. Egress/proxy/host were
+        exonerated by the original measurement. The packet remains
+        in_progress until a Podman-capable operator repeats the 281s/50s
+        timings and real kill/restart/TERM lifecycle.
       events:
         - type: claim
           ts: "2026-07-23T05:44:27Z"
@@ -16607,9 +16608,48 @@ plan_index:
           summary: >
             Claimed under the operator-directed v0.4 drain for one bounded
             implementation cycle. Preserve per-worker ephemeral CODEX_HOME and
-            Vault-owned auth.json; persist only an explicit non-secret
-            project/worker state whitelist plus supported CODEX_SQLITE_HOME.
+            Vault-owned auth.json; persist only explicit provider-auth-
+            excluding project/worker state classes plus supported
+            CODEX_SQLITE_HOME. Cache/session/SQLite remain sensitive project
+            data, not a content-level secret-scrubbed boundary.
             Avoid lib-common.sh while the harness byte-cost packet owns it.
+        - type: progress
+          ts: "2026-07-23T06:44:46Z"
+          agent_id: "forge-codex-state-20260723T0544Z"
+          host: forge
+          lease_id: "1b6c3e14-1382-4cd1-9507-b8cf2d195e5f"
+          summary: >
+            Static v0.4 implementation and adversarial closure complete in the
+            isolated worktree. A dedicated helper keeps CODEX_HOME ephemeral,
+            persists exact cache/session/SQLite and metadata classes beneath a
+            mode-0700 project/raw-worker-hash namespace, excludes provider auth
+            and unknown files, preflights canonical paths and all direct
+            classes, rolls back helper-owned partial links, and checkpoints
+            copied metadata only on normal foreground-wrapper exit. The shared
+            OAuth wrapper flushes only an explicit successful Codex setup, so
+            Claude/Antigravity cannot infer a root. Codex login mounts only its
+            non-auth tool cache and calls require_codex rather than the
+            all-provider updater. During the fixture update, the stale
+            git/default vault-cli byte-equality guard exposed a real default
+            helper regression: resident/login CA selection now verifies TLS,
+            the Vault client token reaches curl through a temporary header
+            file, and live provider/GitHub writes use stdin. No UX changed.
+          evidence:
+            - "scripts/test-codex-safe-state.sh: PASS (path/link/directory/temp attacks, strict permissions, rollback, provider-auth exclusion, pasted-sensitive-data honesty, raw-worker namespace, direct durability shape, normal-exit checkpoint)"
+            - "scripts/test-codex-oauth-harvest.sh: PASS (creation, rotation, signal-exit; shared-wrapper no-setup created no state root)"
+            - "scripts/test-codex-device-auth.sh: PASS (require-only install, opaque stdin schema, unsupported-device fail loud)"
+            - "scripts/test-default-vault-cli-security.sh: PASS (login/resident CA selection, fail-closed TLS, Vault-token curl-argv exclusion, stdin bodies, command-surface separation)"
+            - "scripts/test-support/github-login-fake.sh: GitHub login smoke completed (in-container producer success/nonempty check and stdin-only Vault write)"
+            - "focused tillandsias-headless unit tests: collision-resistant worker/container naming, scoped teardown constructor, exact raw state identity, and Codex-only provider cache each ran 1 passed"
+            - "OpenSpec requirements and bound litmus added for Codex state and default Vault transport; official Codex CODEX_HOME/CODEX_SQLITE_HOME/auth references recorded"
+            - "no Podman binary on this forge; no live 281s/50s performance, PID1 TERM forwarding, hard-kill restart, or two-worker coexistence evidence claimed"
+          next_action: >
+            On a Podman-capable Linux host, rebuild the default image and repeat
+            consecutive Codex launches plus the Codex device-login timing; then
+            kill/restart a lane to verify direct state restoration, exercise
+            TERM/PID1 behavior, and run the order-427 two-worker coexistence
+            litmus. Close only if the measured stalls are gone and no provider
+            auth document appears in the project cache.
         - type: filed
           ts: "2026-07-23T04:20:00Z"
           agent_id: "windows-bullo-fable5-20260722"
@@ -18959,7 +18999,7 @@ plan_index:
       packet_id: forge-delegation-instance-names
       desired_release: v0.4
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
-      status: claimed
+      status: in_progress
       kind: fix
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: []
@@ -19034,6 +19074,40 @@ plan_index:
             rules (4 tests, each verified to register exactly once); they do NOT
             prove Podman actually keeps both containers alive. Do not mark this
             done on the unit tests alone.
+        - type: progress
+          ts: "2026-07-23T06:44:46Z"
+          agent_id: "forge-codex-state-20260723T0544Z"
+          host: forge
+          summary: >
+            Closed the source-only identity-collision and teardown remainder
+            under the root coordinator's published claim 5e5fc8c1. Every
+            nonempty raw TILLANDSIAS_FORGE_INSTANCE now yields a capped readable
+            Podman component plus a SHA-256 suffix over the exact raw bytes;
+            only absent/exactly-empty remains unscoped. This is falsifiable
+            against real same-day ledger IDs:
+            forge-tillandsias-codex-20260723T043901Z and
+            forge-tillandsias-codex-20260723T062500Z both previously truncated
+            to forge-tillandsias-codex-20260723 but now differ. Container names,
+            hostnames, XDG/CODEX_HOME paths, and raw Codex persistence
+            namespaces therefore agree without lossy collision. Per-project
+            cleanup now calls forge_container_name(project_name), the same
+            instance-scoped constructor as launch, instead of hardcoding the
+            legacy unscoped forge. Focused unit tests each ran exactly one and
+            passed for adversarial normalization/case/length pairs, all five
+            lane names, host/state paths, and scoped teardown source shape.
+            Packet stays in_progress: this forge has no Podman binary, so the
+            required live two-worker coexistence/no-replacement proof remains.
+            The OpenCode Web upstream now uses the scoped forge constructor,
+            but its user-facing opencode.<project> route key still cannot select
+            among multiple Web workers. Legacy tray Stop/PTy lookups also
+            hardcode unscoped names and have no worker-selection contract; they
+            were recorded, not changed, because UX is locked and no operator
+            approval exists for a selection surface.
+          next_action: >
+            On a Podman-capable host, run the two-worker coexistence proof.
+            Separately obtain operator UX approval and define how tray Stop/PTy
+            and concurrent OpenCode Web routes select a worker, then replace
+            their legacy unscoped lookups without guessing.
     - order: 428
       packet_id: forge-delegation-worker-state-isolation
       desired_release: v0.4
@@ -19134,6 +19208,27 @@ plan_index:
             - "tillandsias-policy validate-yaml plan/index.yaml: ok"
             - "tillandsias-plan check: 352 packets, ids unique, live references sound"
             - "./build.sh --check: formatting, workspace type-check, strict clippy, and listen-vsock clippy passed"
+        - type: progress
+          ts: "2026-07-23T06:44:46Z"
+          agent_id: "forge-codex-state-20260723T0544Z"
+          host: forge
+          summary: >
+            Reconciled a defect in the completed uniqueness claim while closing
+            order 427's static collision remainder. The original state paths
+            inherited a lossy normalized/truncated instance component, so
+            nonempty IDs such as `a b`/`a-b`, invalid-only values, and real
+            same-day timestamp IDs could collide or become unscoped. Every
+            nonempty raw identity now gets a readable capped component plus a
+            128-bit SHA-256 suffix; absent/exactly-empty alone emits no
+            overrides. TILLANDSIAS_CODEX_STATE_WORKER additionally carries the
+            exact raw identity so Codex's project-cache namespace uses a full
+            digest rather than treating the presentation suffix as identity.
+            Focused tests each ran once and passed for the exact ledger pair
+            forge-tillandsias-codex-20260723T043901Z /
+            forge-tillandsias-codex-20260723T062500Z across container names,
+            hostnames, XDG paths, CODEX_HOME, and Codex persistence roots.
+            Status remains completed because this corrects the already-scoped
+            deliverable; the live multi-container proof remains order 427.
     - order: 429
       packet_id: forge-delegation-result-retrieval
       desired_release: v0.4

@@ -1,0 +1,59 @@
+# @trace spec:default-image, spec:tillandsias-vault
+name: litmus:codex-safe-state-shape
+spec: default-image
+phase: pre-build
+description: >
+  Pin Codex's explicit provider-auth-excluding state namespace: broad
+  CODEX_HOME stays ephemeral, exact cache/session/SQLite classes persist under
+  the project cache, copied metadata checkpoints only on normal wrapper exit,
+  and a shared non-Codex wrapper invocation cannot infer a state root.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains images/default/codex-safe-state.sh
+  - workspace contains images/default/entrypoint-forge-codex.sh
+  - workspace contains images/default/codex-oauth-session.sh
+  - workspace contains scripts/test-codex-safe-state.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+
+critical_path:
+  - step: "exercise path, permission, provider-auth, worker namespace, direct-state durability shape, and normal-exit fixtures"
+    command: "scripts/test-codex-safe-state.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: Codex state is explicit, provider-auth-excluding, worker-namespaced, and normally checkpointed"
+
+  - step: "ship and initialize the helper before any harness refresh"
+    command: "grep -Fq 'COPY codex-safe-state.sh /usr/local/lib/tillandsias/codex-safe-state.sh' images/default/Containerfile && awk '/codex_safe_state_setup/{setup=NR} /ensure_forge_harnesses/{harness=NR} END{exit !(setup && harness && setup < harness)}' images/default/entrypoint-forge-codex.sh && echo 'ok: safe state precedes refresh'"
+    timeout_ms: 3000
+    expected_behavior: "ok: safe state precedes refresh"
+
+  - step: "shared OAuth wrapper flushes only a successfully initialized Codex root"
+    command: "grep -Fq 'TILLANDSIAS_CODEX_SAFE_STATE_READY' images/default/codex-oauth-session.sh && grep -Fq 'TILLANDSIAS_CODEX_SAFE_STATE_ROOT' images/default/codex-oauth-session.sh && scripts/test-codex-oauth-harvest.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: Codex OAuth creation, rotation, and signal-exit harvest"
+
+  - step: "host passes exact raw identity and provider login persists only the Codex tool cache"
+    command: "grep -Fq 'TILLANDSIAS_CODEX_STATE_WORKER' crates/tillandsias-headless/src/main.rs && grep -Fq 'tillandsias-codex-login-tool-cache:/home/forge/.cache/tillandsias-project:rw' crates/tillandsias-headless/src/main.rs && echo 'ok: raw identity and Codex-only login cache'"
+    timeout_ms: 3000
+    expected_behavior: "ok: raw identity and Codex-only login cache"
+
+  - step: "worker names resist normalization collisions and teardown reuses the scoped constructor"
+    command: "cargo test -q -p tillandsias-headless tests::forge_instance_identifiers_are_sanitized -- --exact && cargo test -q -p tillandsias-headless tests::documented_timestamp_ids_differ_across_name_hostname_and_state -- --exact && cargo test -q -p tillandsias-headless tests::opencode_web_route_uses_the_instance_scoped_forge_upstream -- --exact && cargo test -q -p tillandsias-headless tests::scoped_cleanup_uses_the_same_stable_forge_name_constructor -- --exact && echo 'ok: collision-resistant worker lifecycle'"
+    timeout_ms: 60000
+    expected_behavior: "ok: collision-resistant worker lifecycle"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+    - "@trace spec:tillandsias-vault"
+  expected_log: "Codex restores only reviewed state classes and never persists its provider auth document"
+  log_fields:
+    spec: "default-image"
+    test: "codex-safe-state-shape"
+
+rollback:
+  on_failure: >
+    Keep CODEX_HOME fully ephemeral. Do not persist auth.json, config.toml, or
+    the whole Codex home as a fallback.
+  command: "scripts/test-codex-safe-state.sh"

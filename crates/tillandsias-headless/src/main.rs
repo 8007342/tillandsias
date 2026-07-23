@@ -4115,11 +4115,19 @@ fn resolve_cloud_project_checkout(_nwo: &str, _debug: bool) -> Result<String, St
     Err("--cloud requires a build with the tray or listen-vsock feature".to_string())
 }
 
-/// Sanitize a worker/instance identifier into something Podman accepts inside a
-/// container name (`[a-zA-Z0-9][a-zA-Z0-9_.-]*`). Anything else collapses to
-/// `-`, and the result is lowercased and length-capped so a caller cannot blow
-/// past Podman's name limits or smuggle separators.
+/// Convert a nonempty worker/instance identifier into a collision-resistant
+/// Podman name component (`[a-zA-Z0-9][a-zA-Z0-9_.-]*`).
+///
+/// The readable prefix is normalized and capped, but identity comes from a
+/// SHA-256 suffix over the exact raw bytes. This keeps `a b` distinct from
+/// `a-b`, case variants distinct, and values differing after the length cap
+/// distinct. Only a truly empty value preserves the legacy unscoped name.
 fn sanitize_forge_instance(raw: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    if raw.is_empty() {
+        return String::new();
+    }
     let cleaned: String = raw
         .trim()
         .to_ascii_lowercase()
@@ -4132,13 +4140,23 @@ fn sanitize_forge_instance(raw: &str) -> String {
             }
         })
         .collect();
-    cleaned
+    let readable = cleaned
         .trim_matches('-')
         .chars()
-        .take(32)
+        .take(15)
         .collect::<String>()
         .trim_end_matches('-')
-        .to_string()
+        .to_string();
+    let digest = format!("{:x}", Sha256::digest(raw.as_bytes()));
+    format!(
+        "{}-{}",
+        if readable.is_empty() {
+            "worker"
+        } else {
+            &readable
+        },
+        &digest[..32]
+    )
 }
 
 /// Optional worker/instance component for forge container names (order 427).
@@ -4255,11 +4273,20 @@ fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> St
 /// read-only input; the documented races are in mutable state (OpenCode's
 /// unlocked `auth.json`, Codex's truncate-then-write `auth.json` and SQLite).
 fn forge_worker_state_env(instance: Option<&str>) -> Vec<(String, String)> {
-    let worker = sanitize_forge_instance(instance.unwrap_or(""));
+    let raw_worker = instance.unwrap_or("");
+    let worker = sanitize_forge_instance(raw_worker);
     if worker.is_empty() {
         return Vec::new();
     }
     vec![
+        // Pass the exact dispatcher identity too. The host path component is
+        // collision-resistant, but the in-container persistence helper uses a
+        // full raw-identity digest and must not recover identity from a
+        // presentation-oriented CODEX_HOME suffix.
+        (
+            "TILLANDSIAS_CODEX_STATE_WORKER".to_string(),
+            raw_worker.to_string(),
+        ),
         (
             "XDG_DATA_HOME".to_string(),
             format!("/home/forge/.local/share/{worker}"),
@@ -4323,7 +4350,7 @@ async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
         .remove_container(&format!("tillandsias-git-{project_name}"))
         .await;
     let _ = client
-        .remove_container(&format!("tillandsias-{project_name}-forge"))
+        .remove_container(&forge_container_name(project_name))
         .await;
     let _ = client
         .remove_container(&format!("tillandsias-browser-{project_name}"))
@@ -6634,7 +6661,7 @@ if [ -z "$TOKEN" ]; then
   exit 1
 fi
 printf '\n\nSaving token to vault...\n' >&2
-TOKEN="$TOKEN" vault-cli.sh write {} "{}="\$TOKEN""
+printf '%s' "$TOKEN" | vault-cli.sh write-stdin {} {}
 "#,
         provider.name(),
         vault_path,
@@ -6811,6 +6838,16 @@ pub struct ProviderLoginConfig {
     pub input_mode: LoginInputMode,
 }
 
+fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
+    if matches!(provider, ProviderId::Codex) {
+        return Some(
+            "tillandsias-codex-login-tool-cache:/home/forge/.cache/tillandsias-project:rw"
+                .to_string(),
+        );
+    }
+    None
+}
+
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
     let provider_name = config.provider.name();
     let flag = format!("--{}-login", config.provider.id_str());
@@ -6865,6 +6902,11 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         name: container.clone(),
         debug,
     };
+    // Provider login homes stay container-ephemeral because they hold
+    // credentials. Only Codex's provider-auth-excluding package/tool cache is
+    // a named volume, so a later Codex login reuses its npm prefix without
+    // persisting CODEX_HOME or changing the other provider login lanes.
+    let tool_cache_mount = provider_login_tool_cache_mount(&config.provider);
 
     #[cfg(feature = "vault")]
     let vault_lease;
@@ -6910,6 +6952,9 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--mount",
             &ca_mount,
         ]);
+        if let Some(mount) = tool_cache_mount.as_deref() {
+            run.args(["--volume", mount]);
+        }
         run.args(proxy_env_args());
         run.args([
             "--entrypoint",
@@ -6935,6 +6980,11 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
+        ]);
+        if let Some(mount) = tool_cache_mount.as_deref() {
+            run.args(["--volume", mount]);
+        }
+        run.args([
             "--entrypoint",
             "/bin/sh",
             &image,
@@ -6993,7 +7043,9 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     {
         if matches!(config.provider, ProviderId::GitHub) {
             let vault_write_cmd = format!(
-                "TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write {} \"token=$TOKEN\"",
+                "TOKEN=$(gh auth token --hostname github.com) || exit $?; \
+                 [ -n \"$TOKEN\" ] || exit 1; \
+                 printf '%s' \"$TOKEN\" | vault-cli.sh write-stdin {} token",
                 config.provider.vault_path()
             );
             let mut vault_write = podman_command();
@@ -9660,7 +9712,7 @@ pub(crate) fn run_opencode_web_mode(
         // router upstream must target 4096 — not 8080, which is the router's own listener.
         let route = RouterRoute::new(
             format!("opencode.{}", project_name),
-            format!("tillandsias-{}-forge", project_name),
+            forge_container_name(project_name),
             4096u16,
         );
         upsert_router_route(route, debug)?;
@@ -13209,6 +13261,30 @@ mod tests {
         assert!(keys.contains(&"XDG_DATA_HOME"));
         assert!(keys.contains(&"XDG_STATE_HOME"));
         assert!(keys.contains(&"CODEX_HOME"));
+        assert!(keys.contains(&"TILLANDSIAS_CODEX_STATE_WORKER"));
+    }
+
+    #[test]
+    fn worker_identity_is_collision_resistant_at_host_and_state_boundary() {
+        let spaced = forge_worker_state_env(Some("a b"));
+        let dashed = forge_worker_state_env(Some("a-b"));
+        let value = |pairs: &[(String, String)], key: &str| -> String {
+            pairs
+                .iter()
+                .find(|(candidate, _)| candidate == key)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_else(|| panic!("{key} missing"))
+        };
+        assert_ne!(
+            value(&spaced, "CODEX_HOME"),
+            value(&dashed, "CODEX_HOME"),
+            "host state paths must not collide after readable-name normalization"
+        );
+        assert_ne!(
+            value(&spaced, "TILLANDSIAS_CODEX_STATE_WORKER"),
+            value(&dashed, "TILLANDSIAS_CODEX_STATE_WORKER"),
+            "the persistence helper needs the exact pre-sanitized identity"
+        );
     }
 
     /// XDG_CONFIG_HOME must NOT be isolated: the forge bakes OpenCode's
@@ -13230,10 +13306,16 @@ mod tests {
     /// single-worker launch is byte-identical to pre-428 behaviour.
     #[test]
     fn absent_forge_instance_emits_no_state_overrides() {
-        for raw in [None, Some(""), Some("   "), Some("---")] {
+        for raw in [None, Some("")] {
             assert!(
                 forge_worker_state_env(raw).is_empty(),
                 "instance {raw:?} must emit no state overrides"
+            );
+        }
+        for raw in [Some("   "), Some("---"), Some("///")] {
+            assert!(
+                !forge_worker_state_env(raw).is_empty(),
+                "explicit nonempty instance {raw:?} must not become unscoped"
             );
         }
     }
@@ -13284,8 +13366,14 @@ mod tests {
                 "{mode:?}: distinct workers must get distinct container names, \
                  otherwise --replace makes one destroy the other"
             );
-            assert!(w1.ends_with("-w1"), "{mode:?}: unexpected name {w1}");
-            assert!(w2.ends_with("-w2"), "{mode:?}: unexpected name {w2}");
+            assert!(
+                w1.contains("-w1-"),
+                "{mode:?}: readable identity missing from {w1}"
+            );
+            assert!(
+                w2.contains("-w2-"),
+                "{mode:?}: readable identity missing from {w2}"
+            );
         }
     }
 
@@ -13306,7 +13394,7 @@ mod tests {
             } else {
                 format!("tillandsias-proj-forge-{}", mode.slug())
             };
-            for raw in [None, Some(""), Some("   "), Some("---")] {
+            for raw in [None, Some("")] {
                 assert_eq!(
                     forge_container_name_for_mode_with_instance("proj", mode, raw),
                     legacy,
@@ -13320,15 +13408,35 @@ mod tests {
     /// separators, whitespace, or unbounded length past Podman.
     #[test]
     fn forge_instance_identifiers_are_sanitized() {
-        assert_eq!(sanitize_forge_instance("w1"), "w1");
-        assert_eq!(sanitize_forge_instance("  W1  "), "w1");
-        assert_eq!(sanitize_forge_instance("worker/1"), "worker-1");
-        assert_eq!(sanitize_forge_instance("a b:c"), "a-b-c");
-        assert_eq!(sanitize_forge_instance("--lead--"), "lead");
+        let w1 = sanitize_forge_instance("w1");
+        assert!(w1.starts_with("w1-"));
+        assert_eq!(w1.len(), 35);
         assert_eq!(sanitize_forge_instance(""), "");
-        assert_eq!(sanitize_forge_instance("///"), "");
+        for raw in ["  W1  ", "worker/1", "a b:c", "--lead--", "///", "   "] {
+            let sanitized = sanitize_forge_instance(raw);
+            assert!(!sanitized.is_empty(), "nonempty {raw:?} became unscoped");
+            assert!(sanitized.len() <= 48);
+        }
+        for (left, right) in [
+            ("a b", "a-b"),
+            ("Worker", "worker"),
+            (
+                "0123456789abcdef0123456789abcdef-a",
+                "0123456789abcdef0123456789abcdef-b",
+            ),
+            (
+                "forge-tillandsias-codex-20260723T043901Z",
+                "forge-tillandsias-codex-20260723T062500Z",
+            ),
+        ] {
+            assert_ne!(
+                sanitize_forge_instance(left),
+                sanitize_forge_instance(right),
+                "distinct raw identities {left:?}/{right:?} collided"
+            );
+        }
         assert!(
-            sanitize_forge_instance(&"x".repeat(200)).len() <= 32,
+            sanitize_forge_instance(&"x".repeat(200)).len() <= 48,
             "instance ids must be length-capped"
         );
         // A sanitized id must still be a legal Podman name component.
@@ -13337,6 +13445,72 @@ mod tests {
             s.chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-'),
             "sanitized id {s} contains characters Podman rejects"
+        );
+    }
+
+    #[test]
+    fn scoped_cleanup_uses_the_same_stable_forge_name_constructor() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let cleanup_window = source_window(
+            source,
+            "async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str)",
+        );
+        assert!(
+            cleanup_window.contains("remove_container(&forge_container_name(project_name))"),
+            "teardown must derive the same instance-scoped name as launch: {cleanup_window}"
+        );
+        assert!(
+            !cleanup_window.contains("format!(\"tillandsias-{project_name}-forge\")"),
+            "teardown must not fall back to the unscoped legacy name: {cleanup_window}"
+        );
+    }
+
+    #[test]
+    fn documented_timestamp_ids_differ_across_name_hostname_and_state() {
+        let early = "forge-tillandsias-codex-20260723T043901Z";
+        let late = "forge-tillandsias-codex-20260723T062500Z";
+        for mode in [
+            ForgeAgentMode::Maintenance,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Antigravity,
+        ] {
+            assert_ne!(
+                forge_container_name_for_mode_with_instance("proj", mode, Some(early)),
+                forge_container_name_for_mode_with_instance("proj", mode, Some(late)),
+                "{mode:?} collapsed real same-day worker IDs"
+            );
+        }
+        assert_ne!(
+            sanitize_hostname(&format!(
+                "forge-proj{}",
+                forge_instance_suffix_from(Some(early))
+            )),
+            sanitize_hostname(&format!(
+                "forge-proj{}",
+                forge_instance_suffix_from(Some(late))
+            )),
+            "forge hostnames collapsed real same-day worker IDs"
+        );
+        assert_ne!(
+            forge_worker_state_env(Some(early)),
+            forge_worker_state_env(Some(late)),
+            "worker state paths collapsed real same-day worker IDs"
+        );
+    }
+
+    #[test]
+    fn opencode_web_route_uses_the_instance_scoped_forge_upstream() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let web_window = source_window(source, "pub(crate) fn run_opencode_web_mode(");
+        assert!(
+            web_window.contains("forge_container_name(project_name),"),
+            "OpenCode Web route must target the instance-scoped forge: {web_window}"
+        );
+        assert!(
+            !web_window.contains("format!(\"tillandsias-{}-forge\", project_name)"),
+            "OpenCode Web route must not target the nonexistent legacy forge: {web_window}"
         );
     }
 
@@ -13734,6 +13908,43 @@ mod tests {
         assert!(
             login_window.contains("ensure_git_login(debug)?"),
             "run_provider_login must ensure enclave+egress+ca+vault+proxy via the dependency model: {login_window}"
+        );
+    }
+
+    #[test]
+    fn provider_login_persists_only_provider_scoped_tool_cache() {
+        let codex = provider_login_tool_cache_mount(&ProviderId::Codex).expect("codex cache mount");
+        assert_eq!(
+            codex,
+            "tillandsias-codex-login-tool-cache:/home/forge/.cache/tillandsias-project:rw"
+        );
+        assert!(
+            !codex.contains(".codex") && !codex.contains("auth.json"),
+            "Codex login auth home must remain ephemeral: {codex}"
+        );
+        for provider in [
+            ProviderId::GitHub,
+            ProviderId::Claude,
+            ProviderId::Antigravity,
+        ] {
+            assert_eq!(
+                provider_login_tool_cache_mount(&provider),
+                None,
+                "the new persistence scope is Codex-only"
+            );
+        }
+
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
+        assert_eq!(
+            login_window
+                .matches("run.args([\"--volume\", mount])")
+                .count(),
+            2,
+            "vault and no-vault login builders must both mount the provider cache"
         );
     }
 
@@ -15807,7 +16018,7 @@ mod tests {
             "run_provider_login must verify the containerized gh session"
         );
         assert!(
-            login_window.contains("vault-cli.sh write {}"),
+            login_window.contains("vault-cli.sh write-stdin {} token"),
             "run_provider_login must persist the token to Vault from inside the container"
         );
 
