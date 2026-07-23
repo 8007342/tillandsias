@@ -6706,6 +6706,20 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &container,
             debug,
         )?;
+        // windows-260722-4: the in-container token store talks TLS to
+        // https://vault:8200, and vault-cli refuses to run unverified —
+        // the CA bundle MUST be materialized and mounted like every other
+        // vault-talking container. On a fresh guest where login runs
+        // BEFORE any forge launch (the recommended order), nothing else
+        // has created /tmp/tillandsias-ca yet: without this the flow
+        // collected the operator's token and THEN died with "CA bundle
+        // not readable" (field repro 2026-07-22). ensure_ca_bundle is
+        // idempotent.
+        let certs_dir = ensure_ca_bundle(debug)?;
+        let ca_mount = format!(
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        );
         let mut run = podman_command();
         run.args([
             "run",
@@ -6723,6 +6737,8 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
+            "--mount",
+            &ca_mount,
         ]);
         run.args(proxy_env_args());
         run.args([

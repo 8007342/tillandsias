@@ -16195,6 +16195,54 @@ plan_index:
             download+SHA+extract+register live (also re-proving the
             encoding fix on the real flow).
 
+    - packet_id: github-login-vault-write-missing-ca-mount
+      provisional_id: windows-260722-4
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "P1: --github-login token store dies with 'CA bundle not readable' on a fresh guest — login container lacks the CA mount and never runs ensure_ca_bundle"
+      status: done
+      kind: bug
+      deliverable: crates/tillandsias-headless/src/main.rs run_provider_login (vault branch)
+      depends_on: []
+      pickup_role: windows
+      owner_host: windows
+      capability_tags: [auth, vault, tls, headless, fail-loud]
+      estimated_hours: 1
+      outcome: >
+        Operator live repro 2026-07-22 (fresh Windows guest, login FIRST —
+        the recommended order): identity prompts + token collected, then
+        "in-container vault write failed: vault-cli: CA bundle not
+        readable at /etc/tillandsias/ca.crt / refusing to talk to
+        https://vault:8200 without TLS verification". Root cause: the
+        provider-login container's podman run mounts the vault-token
+        secret but NOT the CA bundle, and run_provider_login never calls
+        ensure_ca_bundle — on a fresh guest nothing else has materialized
+        /tmp/tillandsias-ca yet (forge-launch does it; login-first hosts
+        never got it). vault-cli's TLS refusal is CORRECT fail-loud
+        behavior; the prerequisite was missing. Fix: ensure_ca_bundle
+        (idempotent) + the same readonly intermediate.crt bind-mount every
+        other vault-talking container uses, in the vault branch of
+        run_provider_login. Sibling of the 2026-07-19
+        login-before-vault-init sequencing bug — same lesson: --github-login
+        must ensure its FULL prerequisite chain itself.
+      exit_criteria:
+        - "fresh guest, login before any forge launch: token store writes to vault successfully (live-verified by the operator's retry)"
+        - "the login container's run args carry the CA mount (source-window or litmus pin)"
+      events:
+        - type: completed
+          ts: "2026-07-23T00:58:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Fixed in run_provider_login's vault branch (ensure_ca_bundle +
+            ca_mount identical to the git-daemon container's pattern);
+            cargo check green. GUEST-side code fixed from the windows lane
+            (cross-platform Rust); same-version hot-inject into the live
+            guest for the operator's immediate retry, and rides the next
+            daily for all platforms. Live retry verification pending the
+            operator's next login attempt (exit criterion 1).
+
     - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
       order: provisional
