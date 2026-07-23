@@ -19233,7 +19233,7 @@ plan_index:
       packet_id: forge-delegation-result-retrieval
       desired_release: v0.4
       title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
-      status: in_progress
+      status: claimed
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: [forge-delegation-instance-names]
@@ -19338,6 +19338,21 @@ plan_index:
             FAILED delegated run is reported as failed end-to-end through a real
             forge container. Unit tests prove the classification rules; they do
             not prove the wiring fires correctly against a real run.
+        - type: claim
+          ts: "2026-07-23T06:47:09Z"
+          agent_id: "forge-tillandsias-codex-root-20260723T0647Z"
+          host: forge
+          lease_id: "f2b8ced1e246"
+          expires_at: "2026-07-23T10:47:09Z"
+          summary: >
+            Operator-directed non-Podman v0.4 drain. A production data-path
+            audit disproved the prior wiring claim: neither launcher propagates
+            JSON mode into the container, attached stdout is inherited rather
+            than consumed, the host reads an unrelated/stale-capable path,
+            OpenCode has no consumer, nonzero status is lost, and timeout
+            cancellation can orphan the exact forge worker. This cycle owns the
+            bounded source fix and deterministic no-Podman fixtures; real
+            failed-task container evidence remains a live closure gate.
     - order: 430
       packet_id: codex-lane-api-key-env
       desired_release: v0.4
