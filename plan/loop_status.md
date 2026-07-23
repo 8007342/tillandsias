@@ -389,43 +389,43 @@ plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
 > loss, smoke-PASS evidence, then series bump 0.3 -> 0.4.
 
 Releases are sequential, stability-gated bundles (versioning.yaml Minor;
-methodology `version_aware_release_planning`). Current shipped line is v0.3
-(v0.3.260716.7). The **active release-in-progress is v0.4**: make the
-forge-local EXPERTS / local-inference architecture work END-TO-END on the fat
-GPU host (RTX A5000, tier:gpu-cuda). Cross-platform + modest-hardware tiering
-is gated to **v0.5** (orders 397 tiered-backends, 401 macOS tier, 402 Windows
-tier) so v0.4 can ship the capable-host architecture without waiting on the
-portability half.
+methodology `version_aware_release_planning`). The current published daily is
+**v0.3.260723.1**: workflow run 29977379850 completed successfully on
+2026-07-23 with the Linux, macOS, and Windows build/sign/publish jobs green.
+That is publication evidence only; a qualifying host smoke PASS is still
+required before v0.4 can close. The **active release-in-progress is v0.4**:
+finish the stability bundle — forge checkout/mirror/push correctness, no
+crashloops or work loss, and durable smoke-PASS evidence.
 
-### Release roadmap (FULL backfill 2026-07-18 — all 97 open packets bucketed; order 407)
+### Release roadmap (full backfill 2026-07-18; structural refresh 2026-07-23; order 407)
 
-Every open packet now carries `desired_release`. The following releases are
-sequential and stability-gated; the coordinator may slip individual packets
-with a reason event.
+All 110 nonterminal packets now carry a canonical `desired_release: vX.Y`.
+The 2026-07-23 structural audit found zero missing/malformed assignments and
+zero dependency-order violations among those nonterminal packets (no open
+dependent is assigned to a release earlier than its upstream). The following
+releases are sequential and stability-gated; the coordinator may slip
+individual packets with a reason event.
 
-- **v0.4 — ACTIVE (36 packets): "local inference works end-to-end on the
-  capable host + the product doesn't crashloop or lose work."** EXPERTS
-  fat-host core (391 milestone, 392–400, 406, 408), the in-flight
-  agent-workflow bugs/robustness (270, 273, 281, 313, 326, 328, 382, 384, the
-  git-mirror credential fixes 412/413/415/416, the mirror-no-credential P1),
-  the Windows crashloop (417–420), codex smoke (404/405), and the operator-
-  gated verifications (306/307). Ship when this bundle is stable → bump Minor
+- **v0.4 — ACTIVE (15 open / 50 total tagged): "the product doesn't
+  crashloop, lose work, or corrupt forge/mirror state."** Finish forge
+  checkout/mirror/push correctness, credential lifecycle and concurrency
+  safeguards, delegated-worker state/result handling, diagnostics isolation,
+  and the cross-platform smoke queue. Ship only after the remaining stability
+  packet gates and a qualifying host smoke PASS are complete, then bump Minor
   0.3 → 0.4.
-- **v0.5 (47): "cross-platform parity + streams/transport + security channel
-  + audits."** Tiered/modest-hardware inference (397, 401 macOS, 402 Windows,
-  409 VM-image GPU, 410 AMD research), the observable-streams/transport
-  refactor cluster (147, 151, 153–158, 161, 333), the encrypted vsock control
-  channel + auth (137, 141, 142, 145), the architecture audits (245–251), the
-  facade conformance (125/128/130/132), macOS/Windows lane parity (279, 348,
-  349, 350, 280), and macOS install polish (421). Cross-platform deps are
-  release-gated (the v0.5 macOS/Windows inference tiers depend on the v0.4
-  linux core).
-- **v0.6 (11): "web-share / publish-locally."** The web-container milestone
-  (373) + children (353, 360, 361, 375–379), Cloudflare tunnel/DNS/WARP
-  (377/378/388), and the API-key-entry track (143).
-- **v0.7 (3): "deploy lifecycle + advanced," Tlatoani-gated.** Evidence-gated
-  deploy ladder research (389), GitHub App research (390), and the zeroclaw
-  reintroduction roadmap (403).
+- **v0.5 (81 open / 89 total tagged): "EXPERTS + cross-platform parity +
+  streams/transport + security channel + audits."** Per the 2026-07-21
+  operator decision, the forge-local EXPERTS family and its supporting
+  plan/inference packets land here together with coupled packets 456–458,
+  alongside tiered/modest-hardware inference, observable streams and
+  transport, encrypted control-channel maturity, architecture audits, and
+  macOS/Windows lane parity.
+- **v0.6 (11 open / 11 total tagged): "web-share / publish-locally."** The
+  web-container milestone family, Cloudflare tunnel/DNS/WARP, and API-key
+  entry track.
+- **v0.7 (3 open / 3 total tagged): "deploy lifecycle + advanced,"
+  Tlatoani-gated.** Evidence-gated deploy-ladder research, GitHub App research,
+  and the zeroclaw reintroduction roadmap.
 - **Fat-host ground truth 2026-07-17**: RTX A5000 24GB, driver 595.80,
   `scripts/inference-tier-probe.sh` → `tier:gpu-cuda`. `tillandsias-inference`
   currently Exited(137) on a stale pre-392 image (v0.3.260716.4) — order 406

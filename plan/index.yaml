@@ -3451,6 +3451,7 @@ plan_index:
 
     - packet_id: secure-channel-maturity-ladder
       order: 184
+      desired_release: v0.5
       title: "Master plan: e2e encrypted control channel — staged maturity ladder (M0-M4 gates, all platforms)"
       status: active
       kind: master-plan
@@ -16871,6 +16872,7 @@ plan_index:
     - packet_id: host-guest-project-src-mapping
       provisional_id: windows-260717-6
       order: provisional
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "Host<->guest project src mapping: cloud clones land in the guest VM (invisible to host); decide guest-native vs host-mapped + fail-loud clone"
       status: needs_clarification
@@ -16994,7 +16996,7 @@ plan_index:
       order: 407
       desired_release: v0.4
       title: "Standing: backfill desired_release across open packets so every open packet carries a ship-bucket"
-      status: claimed
+      status: ready
       kind: housekeeping
       multi_cycle: true
       deliverable: plan/index.yaml (desired_release on open packets) + plan/loop_status.md active-release pointer kept current
@@ -17064,6 +17066,33 @@ plan_index:
             Cycle-scoped claim to structurally audit desired_release coverage,
             correct the 2026-07-21 EXPERTS re-scope drift, and refresh the
             active v0.4 counts and latest daily release in loop_status.
+        - type: progress
+          ts: "2026-07-23T04:07:39Z"
+          agent_id: "forge-tillandsias-codex-20260723T040037Z"
+          host: forge
+          lease_id: "1ed36767840f"
+          summary: >
+            COVERAGE CYCLE COMPLETE: structurally audited all 110 nonterminal
+            packets. Backfilled secure-channel-maturity-ladder and
+            host-guest-project-src-mapping to v0.5, and corrected orders
+            456-458 from a milestone slug to canonical v0.5 per the 2026-07-21
+            EXPERTS re-scope. Current open counts are v0.4=15, v0.5=81,
+            v0.6=11, and v0.7=3; all 110 carry canonical vX.Y assignments and
+            no nonterminal dependency targets an earlier release than its
+            upstream. Refreshed loop_status to the v0.3.260723.1 published
+            daily and current roadmap counts. This standing multi-cycle packet
+            remains ready for future filing cycles.
+          partial_artifact_refs:
+            - plan/index.yaml
+            - plan/loop_status.md
+        - type: released
+          ts: "2026-07-23T04:07:39Z"
+          agent_id: "forge-tillandsias-codex-20260723T040037Z"
+          host: forge
+          lease_id: "1ed36767840f"
+          reason: >
+            Coverage cycle complete; released the cycle-scoped lease while the
+            standing multi-cycle packet remains ready for future filings.
 
     - packet_id: gpu-passthrough-auto-enablement
       order: 408
@@ -20431,7 +20460,7 @@ plan_index:
 
     - packet_id: forge-plan-metadata-mcp-server
       order: 456
-      desired_release: forge-local-experts-milestone
+      desired_release: v0.5
       title: "Idiomatic compiled Rust layer MCP server in Ramdisk for deterministic plan/metadata queries"
       status: pending
       kind: implementation
@@ -20451,7 +20480,7 @@ plan_index:
 
     - packet_id: cheatsheet-expert-model-rung1
       order: 457
-      desired_release: forge-local-experts-milestone
+      desired_release: v0.5
       title: "CHEATSHEET EXPERT rung 1 — ephemeral build on forge launch for ground-truth querying"
       status: pending
       kind: implementation
@@ -20471,7 +20500,7 @@ plan_index:
 
     - packet_id: agent-forge-context-hooks
       order: 458
-      desired_release: forge-local-experts-milestone
+      desired_release: v0.5
       title: "Agent Context Initialization Hooks: auto-inject expert endpoints and MCP availability"
       status: pending
       kind: implementation
