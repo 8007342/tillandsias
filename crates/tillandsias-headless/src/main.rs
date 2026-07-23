@@ -13803,16 +13803,23 @@ mod tests {
 
     #[test]
     fn tray_credentialed_agents_delegate_to_cli_lane_for_tty_login() {
-        // The tray process has no TTY; Claude/Codex/Antigravity clicks must
-        // route through the CLI lane (ensure_provider_auth ladder) inside
-        // the popup terminal instead of a bare podman argv.
+        // The tray process has no TTY; Claude/Codex/OpenCode/Antigravity
+        // clicks must route through the CLI lane (ensure_provider_auth
+        // ladder) inside the popup terminal instead of a bare podman argv.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let start = source
             .find("pub(crate) fn launch_forge_agent(")
             .expect("launch_forge_agent must exist");
         let window = &source[start..start + 3000];
-        assert!(window.contains(
-            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity"
+        let arm: String = window
+            .chars()
+            .map(|c| if c.is_whitespace() { ' ' } else { c })
+            .collect::<String>()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(arm.contains(
+            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
         ));
     }
 
@@ -14968,12 +14975,16 @@ mod tests {
     #[test]
     fn tray_codex_launch_reexecs_cli_for_lease_lifetime() {
         // Extended 2026-07-15: the CLI-lane delegation now covers ALL
-        // credentialed agents (Claude/Codex/Antigravity), same reasoning —
-        // the tray has no TTY for the device-code login.
+        // credentialed agents (Claude/Codex/OpenCode/Antigravity), same
+        // reasoning — the tray has no TTY for the device-code login, and
+        // (order 431) OpenCode's Vault auth lease lifetime must be owned by
+        // the re-exec'd CLI process. Whitespace-normalized so rustfmt arm
+        // reflow cannot break the pin without a semantic change.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let body = source_window(source, "pub(crate) fn launch_forge_agent(");
-        assert!(body.contains(
-            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity"
+        let flat: String = body.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(flat.contains(
+            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
         ));
         assert!(body.contains("std::env::current_exe()"));
         assert!(body.contains("format!(\"--{}\", mode.slug())"));
