@@ -166,6 +166,32 @@ piped directly from `curl` into a shell. A network failure MAY reuse a
 previously validated cached binary, but the first launch SHALL fail loudly when
 no usable binary exists.
 
+Claude's ephemeral launcher and share symlink SHALL be restored from its
+persistent `versions/` cache before refresh. A completed official refresh SHALL
+record the validated local version and completion epoch. The same version MAY
+short-circuit installer network work for at most 600 seconds; an absent,
+expired, malformed, or version-mismatched record SHALL run the official
+installer. Background and foreground calls in one container, and concurrent
+containers sharing the project cache, SHALL serialize to one installer owner.
+The installer execution SHALL have a 600-second hard bound in addition to the
+download timeout. A warm foreground caller SHALL immediately use the
+independent validated last-good snapshot while an owner refreshes; it MUST NOT
+select the mutable launcher that owner may replace. A cold caller with no
+validated snapshot SHALL wait for the bounded owner instead of starting an npm
+or second installer fallback.
+
+Claude liveness/version probes SHALL set Anthropic's documented
+`DISABLE_AUTOUPDATER=1` guard and the supported strict `DISABLE_UPDATES=1`
+guard only for the probe process. The foreground Claude process SHALL inherit
+neither guard, preserving its official launch-time update behavior. A validated
+Claude candidate SHALL become last-good; a failed, timed-out, or interrupted
+refresh SHALL release its lock and reuse last-good when available.
+
+Prebuilt cargo tools SHALL take the executable-in-persistent-cache fast path
+without network access. Concurrent cold misses for the same tool SHALL
+serialize to one release-asset fetch; a dead owner lock SHALL be reclaimable
+after the bounded install window.
+
 OpenCode's cache SHALL additionally retain a known-good binary that passed the
 OpenCode liveness, flag, `OPENCODE_AUTH_CONTENT` parse, credential-count, and
 no-`auth.json` contracts. A freshly installed OpenCode that violates any of
@@ -173,9 +199,40 @@ those contracts SHALL be rejected and replaced by that last-good binary.
 
 #### Scenario: Launch refreshes harnesses through declared channels
 - **WHEN** a forge container starts with working egress
-- **THEN** OpenCode and Claude Code SHALL run their official installers
+- **THEN** OpenCode SHALL run its official installer
+- **AND** Claude Code SHALL run its official installer unless the same
+  validated version completed an official refresh within the preceding
+  600 seconds
 - **AND** Codex and OpenSpec SHALL check their declared npm channels
 - **AND** the selected executables SHALL live in the persistent tool cache.
+
+#### Scenario: Warm Claude refresh is byte-cheap and coalesced
+- **WHEN** persistent Claude `versions/` contains a validated current binary
+  but the ephemeral launcher and share symlink do not exist
+- **THEN** the launcher and share symlink SHALL be restored before any
+  installer or version probe runs
+- **AND** background ensure plus foreground require SHALL attempt at most one
+  installer execution
+- **AND** a warm foreground behind the installer owner SHALL select immutable
+  last-good and remain healthy if the owner later replaces the launcher
+- **AND** concurrent sibling containers SHALL attempt at most one distribution
+  download
+- **AND** a recent matching refresh record SHALL perform zero installer and
+  distribution downloads.
+
+#### Scenario: Claude probe cannot self-update
+- **WHEN** the cached Claude binary is probed with `--version`
+- **THEN** update-disable guards SHALL apply only to that probe
+- **AND** the probe SHALL NOT download or replace a distribution
+- **AND** the eventual foreground Claude process SHALL retain its official
+  update behavior.
+
+#### Scenario: Concurrent prebuilt-tool misses coalesce
+- **WHEN** two forge lanes request the same missing prebuilt cargo tool
+- **THEN** exactly one release asset SHALL be fetched
+- **AND** both lanes SHALL observe the resulting executable
+- **WHEN** that executable is already present in persistent `CARGO_HOME`
+- **THEN** no release-asset request SHALL occur.
 
 #### Scenario: OpenCode contract failure rolls back
 - **WHEN** a newly refreshed OpenCode starts but does not parse an isolated
@@ -603,12 +660,15 @@ as an explicit skip.
 
 - `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
 - `cheatsheets/build/cargo.md` — Cargo reference and patterns
+- [Anthropic Claude Code setup](https://docs.anthropic.com/en/docs/claude-code/getting-started) — official `DISABLE_AUTOUPDATER` and update behavior
+- [Anthropic Claude Code changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) — official `DISABLE_UPDATES` support
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:ephemeral-guarantee`
 - `litmus:claude-launch-stability-shape` — Claude TUI runtime and credential-free launch boundary
+- `litmus:harness-byte-cheap` — deterministic warm/current, concurrency, timeout, rollback, and cargo download-count fixtures
 - `litmus:forge-validation-profile` — non-destructive stable forge validation report
 - `litmus:opencode-vault-auth-content` — OpenCode Vault adapter, installed-binary positive assertion, no-file contract, and last-good rollback
 
