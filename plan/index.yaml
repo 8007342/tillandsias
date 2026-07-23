@@ -16359,6 +16359,59 @@ plan_index:
             layer) while the attach terminal showed nothing — the exact
             'is it stuck?' moment this packet eliminates.
 
+    - packet_id: mirror-first-seed-vs-launch-readiness-race
+      provisional_id: windows-260722-7
+      order: provisional
+      desired_release: v0.4
+      release_target: stable-milestone-v1
+      title: "P1: first forge launch races the mirror's initial upstream seed — readiness gate passes on 'reachable', clone retries exhaust minutes before refs arrive (live Windows repro for the 452/454 family)"
+      status: ready
+      kind: bug
+      deliverable: headless launch-readiness gate (wait for SEEDED, not reachable) + first-seed progress surfacing
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, forge, launch, race, windows-evidence]
+      estimated_hours: 4
+      outcome: >
+        Operator's first Windows forge attach 2026-07-23 (fresh guest,
+        first launch): cloud clone into /home/forge/src succeeded, missing
+        images built, then the forge's bounded in-container clone got
+        "empty repository" 12x and fail-loud aborted ("mirror is reachable
+        but advertised no cloneable refs — it has not finished seeding")
+        — the 452-slice-2 guard working as designed. VOLUME AUTOPSY
+        (windows lane, live): tillandsias-mirror-tillandsias created
+        01:37Z with the mirror container; the forge's retries exhausted
+        ~01:38-01:40; the mirror's initial upstream fetch COMPLETED at
+        01:52 (FETCH_HEAD mtime; refs/heads/audit + claude/* present in
+        the bare repo) — the seed simply takes minutes on first run
+        (large repo through the proxy) and NOTHING gates the launch on
+        it. wait_for_git_mirror_ready passes on reachability. Fix
+        direction: the readiness gate must wait for a SEEDED mirror
+        (HEAD resolvable / nonzero refs) with a first-launch-sized budget
+        and curated progress ("Preparing your project workspace..." —
+        pairs with windows-260722-6), or the clone retry budget must
+        scale to first-seed reality. Retry-after-seed works (volume
+        persists across the lane teardown) — recovery = re-attach.
+        Also observed same launch, evidence lost to teardown:
+        tillandsias-inference Exited(1) on first run — order 313's
+        pristine-substrate case; next run should capture its logs before
+        exit-cleanup.
+      exit_criteria:
+        - "first forge launch on a pristine guest waits (with visible progress) for the mirror's initial seed and lands the agent on a populated checkout — no empty-clone abort"
+        - "the readiness probe distinguishes reachable-but-unseeded from seeded (HEAD resolvable or refs > 0)"
+        - "a seeded-mirror re-attach continues to work unchanged (fast path)"
+      events:
+        - type: filed
+          ts: "2026-07-23T02:05:00Z"
+          agent_id: "windows-bullo-fable5-20260722"
+          host: windows
+          summary: >
+            Filed live from the operator's first Windows forge attach with
+            the volume autopsy as evidence (mirror seeded 12-15 min after
+            the gate passed). This is the 455 smoke surfacing exactly the
+            fixture-only lane the plan flagged; the fail-loud guard held —
+            no agent ran on an empty tree.
+
     - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
       order: provisional
