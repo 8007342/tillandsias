@@ -3037,11 +3037,21 @@ async fn wait_for_git_mirror_ready(
     // First seed is a full-repo fetch through the proxy: minutes, not seconds
     // (this workspace's pack alone is >100 MiB). Bounded so a dead upstream
     // still fails the launch loudly instead of hanging forever.
+    //
+    // Race note (order: mirror-first-seed-vs-launch-readiness-race):
+    // `git rev-parse --verify HEAD` passes as soon as ensure-mirror-head
+    // symlinks HEAD to a ref — but the initial upstream fetch may still be
+    // in progress, leaving the ref empty. We therefore ALSO check for
+    // actual content via `git show-ref --verify refs/heads/main`; only when
+    // that ref exists and has a target SHA is the mirror truly seeded and
+    // cloneable. The check is additive — old images where refs/heads/main
+    // is absent fall through to the HEAD check.
     const MAX_ATTEMPTS: u32 = 300;
     let repo_path = format!("/srv/git/{project_name}");
     let mut last = String::from("no probe attempted");
     for attempt in 1..=MAX_ATTEMPTS {
-        match client
+        // Probe 1: HEAD resolvable (existing gate — catches unborn-HEAD on old images).
+        let head_ok = match client
             .execute(
                 OperationKind::Container,
                 &[
@@ -3059,22 +3069,68 @@ async fn wait_for_git_mirror_ready(
             )
             .await
         {
-            Ok(out) if out.success() => {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] [forge-launch] git mirror ready on attempt {attempt}/{MAX_ATTEMPTS}"
-                    );
-                }
-                return Ok(());
-            }
+            Ok(out) if out.success() => true,
             Ok(out) => {
                 last = format!(
                     "mirror HEAD not resolvable yet (exit {})",
                     out.status.unwrap_or(-1)
                 );
+                false
             }
             Err(e) => {
                 last = format!("probe failed: {e}");
+                false
+            }
+        };
+        if !head_ok {
+            // HEAD not even resolvable — mirror is definitely not ready.
+            if attempt == 5 {
+                eprintln!(
+                    "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {MAX_ATTEMPTS}s max)..."
+                );
+            }
+            if debug {
+                eprintln!(
+                    "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+                );
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        // Probe 2: refs/heads/main exists with a real SHA — the upstream
+        // seed has delivered content, not just an empty symref.
+        match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    container_name.into(),
+                    "git".into(),
+                    "-C".into(),
+                    repo_path.clone(),
+                    "show-ref".into(),
+                    "--verify".into(),
+                    "--quiet".into(),
+                    "refs/heads/main".into(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [forge-launch] git mirror seeded on attempt {attempt}/{MAX_ATTEMPTS} (refs/heads/main present)"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(_) => {
+                last = "HEAD resolvable but refs/heads/main absent — seed still in progress"
+                    .to_string();
+            }
+            Err(e) => {
+                last = format!("show-ref probe failed: {e}");
             }
         }
         if attempt == 5 {
