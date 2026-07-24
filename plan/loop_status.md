@@ -1,5 +1,41 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T02:19Z (forge — v0.4 no-Podman closure and release-ledger audit)
+
+- **Order 429 source slice integrated locally**: prompted Codex and OpenCode
+  CLI runs now request and consume bounded current-run JSONL, preserve real
+  exit status, invalidate/atomically replace result files, and bound exact
+  instance-scoped timeout cleanup without touching siblings. OpenCode Web is
+  explicitly outside this capture path. Deterministic evidence: 11/11 focused
+  headless tests, 1/1 bounded-capture test, prompt-entrypoint fixture, and
+  `./build.sh --check` all PASS. The packet remains `in_progress` for real
+  failed-task and timeout evidence through a rebuilt Podman forge.
+- **Ledger reconciliation**: filed v0.5 orders 461 (scoped Vault capability
+  spec drift) and 462 (unknown result-format fail-closed hardening); moved the
+  standing order 407 duty to v0.5 after complete coverage; moved the
+  UX-governed first-launch progress surface to v0.5 pending exact wording
+  approval; normalized order 411 `success` → `done` and order 452
+  `in-progress` → `in_progress`. Final structural counts: 114 nonterminal,
+  v0.4=13, v0.5=87, v0.6=11, v0.7=3, with no missing canonical release or
+  dependency-order violation.
+- **Methodology audit**: extended
+  `plan/issues/optimization/meta-orchestration-technique-audit-2026-07-23.md`
+  with production-path evidence (MOT-12), resume-time write-relay readiness
+  (MOT-13), and a third independently caught exact-packet patching error
+  (MOT-08). No methodology rule was adopted; findings remain proposals for
+  independent upvote.
+- **Publication channel BLOCKED, work preserved**: this forge is still running
+  the v0.3.260723.1 mirror image. Its fixed AppRole client crossed max-TTL, so
+  the relay rejected the first resumed push after the mandatory build passed.
+  The supported recovery is a normal host forge relaunch that re-mints the
+  relay lease; do **not** run GitHub Login. The repository connector was
+  independently read-only (403). Exact local commits/worktrees remain intact;
+  remote parity must be re-established from an authorized lane before this
+  cycle is called published.
+- **E2E eligibility**: `skip:no-podman-binary`. No live evidence was
+  fabricated and no release was cut. Next: relaunch/publish, then run the
+  rebuilt-image mutable-Linux matrix and the platform smoke/reset gates.
+
 ## WINDOWS LANE 2026-07-22 (operator-attended v0.4 cycle — HOST/VM wrapper hardening)
 
 Windows v0.4 lane CODE-COMPLETE at c41c515c+. This cycle (operator at the
@@ -397,23 +433,23 @@ required before v0.4 can close. The **active release-in-progress is v0.4**:
 finish the stability bundle — forge checkout/mirror/push correctness, no
 crashloops or work loss, and durable smoke-PASS evidence.
 
-### Release roadmap (full backfill 2026-07-18; structural refresh 2026-07-23; order 407)
+### Release roadmap (full backfill 2026-07-18; structural refresh 2026-07-24; order 407)
 
-All 113 nonterminal packets now carry a canonical `desired_release: vX.Y`.
-The 2026-07-23 structural audit found zero missing/malformed assignments and
+All 114 nonterminal packets now carry a canonical `desired_release: vX.Y`.
+The 2026-07-24 structural audit found zero missing/malformed assignments and
 zero dependency-order violations among those nonterminal packets (no open
 dependent is assigned to a release earlier than its upstream). The following
 releases are sequential and stability-gated; the coordinator may slip
 individual packets with a reason event.
 
-- **v0.4 — ACTIVE (16 open / 55 total tagged): "the product doesn't
+- **v0.4 — ACTIVE (13 open / 53 total tagged): "the product doesn't
   crashloop, lose work, or corrupt forge/mirror state."** Finish forge
   checkout/mirror/push correctness, credential lifecycle and concurrency
-  safeguards, delegated-worker instance/result handling, first-launch and harness
-  resilience, and the cross-platform smoke queue. Ship only after the remaining
-  stability packet gates and a qualifying host smoke PASS are complete, then
-  bump Minor 0.3 → 0.4.
-- **v0.5 (83 open / 90 total tagged): "EXPERTS + cross-platform parity +
+  safeguards, delegated-worker instance/result handling, harness resilience,
+  and the cross-platform smoke queue. Ship only after the remaining stability
+  packet gates and a qualifying host smoke PASS are complete, then bump Minor
+  0.3 → 0.4.
+- **v0.5 (87 open / 94 total tagged): "EXPERTS + cross-platform parity +
   streams/transport + security channel + audits."** Per the 2026-07-21
   operator decision, the forge-local EXPERTS family and its supporting
   plan/inference packets land here together with coupled packets 456–458,
@@ -426,6 +462,14 @@ individual packets with a reason event.
 - **v0.7 (3 open / 3 total tagged): "deploy lifecycle + advanced,"
   Tlatoani-gated.** Evidence-gated deploy-ladder research, GitHub App research,
   and the zeroclaw reintroduction roadmap.
+- **v0.4 exact residual (2026-07-24)**: no further no-Podman source packet is
+  claimable from this forge. Eleven packets collapse into one rebuilt-image
+  mutable-Linux evidence matrix: orders 313, 384, 424, 427, 429, 452, 459 plus
+  `mirror-first-seed-vs-launch-readiness-race`, `codex-lane-state-amnesia`,
+  `harness-refresh-not-byte-cheap`, and `proxy-cache-never-hits`. The remaining
+  two are the live guest-reset packet and order 455 cross-platform smoke queue.
+  The first-launch progress UX was slipped to v0.5 because exact wording still
+  requires operator approval.
 - **Fat-host ground truth 2026-07-17**: RTX A5000 24GB, driver 595.80,
   `scripts/inference-tier-probe.sh` → `tier:gpu-cuda`. `tillandsias-inference`
   currently Exited(137) on a stale pre-392 image (v0.3.260716.4) — order 406
