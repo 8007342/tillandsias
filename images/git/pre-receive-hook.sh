@@ -97,6 +97,44 @@ is_ledger_yaml() {
     return 1
 }
 
+# --- Check if a path is in the frozen legacy archive (exempt from validation) ---
+is_legacy_archive() {
+    local path="$1"
+    case "$path" in
+        openspec/changes/archive/*) return 0 ;;
+    esac
+    return 1
+}
+
+# --- For a new branch, find the nearest existing ancestor ref to diff against ---
+# This avoids validating the entire inherited tree (which includes frozen legacy
+# archive files that intentionally have invalid YAML).
+find_diff_base() {
+    local newsra="$1"
+
+    # Try the repository's default branch (HEAD symbolic ref)
+    local default_ref
+    if default_ref="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)"; then
+        local base_sha
+        if base_sha="$(git merge-base "$newsra" "$default_ref" 2>/dev/null)"; then
+            echo "$base_sha"
+            return 0
+        fi
+    fi
+
+    # Fallback: try common branch names
+    local candidate
+    for candidate in origin/linux-next origin/main origin/master; do
+        local base_sha
+        if base_sha="$(git merge-base "$newsra" "$candidate" 2>/dev/null)"; then
+            echo "$base_sha"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # --- Temp directory for extracted blobs ---
 TMPDIR_WORK="$(mktemp -d 2>/dev/null || mktemp -d -t 'git-pre-receive')"
 trap 'rm -rf "$TMPDIR_WORK"' EXIT
@@ -118,10 +156,19 @@ while read -r OLDSHA NEWSHA REFNAME; do
         0000000000000000000000000000000000000000) continue ;;
     esac
 
-    # If this is the initial push (oldsha is zero), validate the whole tree
+    # Determine the set of changed files to validate
     case "$OLDSHA" in
         0000000000000000000000000000000000000000)
-            FILES="$(git ls-tree -r --name-only "$NEWSHA" 2>/dev/null)" || continue
+            # New branch or tag: find a diff-base ancestor to avoid validating
+            # the entire inherited tree (which includes frozen legacy archive
+            # files that intentionally have invalid YAML).
+            DIFF_BASE="$(find_diff_base "$NEWSHA" 2>/dev/null)"
+            if [ -n "$DIFF_BASE" ]; then
+                FILES="$(git diff --name-only "$DIFF_BASE" "$NEWSHA" 2>/dev/null)" || continue
+            else
+                # No ancestor found (true initial push): validate the whole tree
+                FILES="$(git ls-tree -r --name-only "$NEWSHA" 2>/dev/null)" || continue
+            fi
             ;;
         *)
             # Diff between old and new trees to find changed files
@@ -135,6 +182,7 @@ while read -r OLDSHA NEWSHA REFNAME; do
     while IFS= read -r FILEPATH; do
         [ -n "$FILEPATH" ] || continue
         is_ledger_yaml "$FILEPATH" || continue
+        is_legacy_archive "$FILEPATH" && continue
 
         # Extract the file content from the new tree
         CONTENT="$(git show "$NEWSHA:$FILEPATH" 2>/dev/null)" || {

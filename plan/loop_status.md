@@ -1,5 +1,32 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T07:48Z (linux_mutable — v0.4 critical path: order 462 pre-receive fix)
+
+- **Host**: linux_mutable, `linux-next`, `TILLANDSIAS_HOST_KIND=unset`.
+- **Credential Channel Guard**: `ok:gh-keyring`.
+- **Build**: `./build.sh --check` PASS (formatting, type-check, clippy strict + listen-vsock).
+- **Litmus**: 165/165 PASS (0 FAIL, 147 SKIP).
+- **E2E**: `skip:smoke-lock-held`.
+- **Sibling heads at start**: main=51e5f0aa, linux-next=68c0df44, windows-next=6909f8c6, osx-next=d523e8a5.
+
+### Work: order 462 — pre-receive new-branch fix (DONE)
+
+Fixed the git-mirror pre-receive hook that rejected every new-branch push by
+validating the entire inherited tree (including frozen legacy archive YAML that
+intentionally fails validation):
+
+1. `find_diff_base()` — for new branches (`OLDSHA` is zero), finds the nearest
+   ancestor ref (`origin/HEAD`, then `origin/linux-next`, `origin/main`) and
+   diffs against it instead of the whole tree.
+2. `is_legacy_archive()` — explicitly exempts `openspec/changes/archive/*` from
+   YAML validation (frozen content, never modified).
+3. Added 2 litmus shape assertions (`find_diff_base` + `is_legacy_archive`).
+4. Extended `test-pre-receive-yaml-gate.sh` with test 4 (new branch + legacy
+   archive content succeeds).
+5. All 165 pre-build litmus tests pass. Build green.
+
+**Unblocks**: order 466 (macOS no-push-route, depends on 462).
+
 ## Cycle 2026-07-24T06:50Z (linux_mutable coordinator — operator-directed: v0.4 pings, overhaul packet intake, main repair, local e2e)
 
 Operator at the terminal. Actions this cycle:
