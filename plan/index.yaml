@@ -10660,7 +10660,7 @@ plan_index:
       order: 313
       desired_release: v0.4
       title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
-      status: in_progress
+      status: done
       kind: bug
       deliverable: images/inference/entrypoint.sh
       depends_on: []
@@ -14067,7 +14067,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Deploy: rebuild tillandsias-git image and live-verify order-369 auto-reconcile"
-      status: ready
+      status: done
       kind: deployment
       deliverable: plan/issues/git-mirror-pre-reconcile-research-2026-07-15.md (live-verify addendum)
       depends_on: [git-mirror-pre-reconcile-impl]
@@ -15990,7 +15990,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Intentional EPHEMERAL RESET — one-click wipe+reprovision of the guest (destructive-by-design; re-auth is the only cost)"
-      status: in_progress
+      status: done
       kind: enhancement
       deliverable: tray menu + --reset-guest CLI + host reprovision path + e2e
       depends_on: [guest-crashloop-detection]
@@ -16395,7 +16395,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: first forge launch races the mirror's initial upstream seed — readiness gate passes on 'reachable', clone retries exhaust minutes before refs arrive (live Windows repro for the 452/454 family)"
-      status: in_progress
+      status: done
       kind: bug
       deliverable: headless launch-readiness gate (wait for SEEDED, not reachable) + first-seed progress surfacing
       depends_on: []
@@ -17454,7 +17454,7 @@ plan_index:
       order: 407
       desired_release: v0.5
       title: "Standing: backfill desired_release across open packets so every open packet carries a ship-bucket"
-      status: ready
+      status: done
       kind: housekeeping
       multi_cycle: true
       deliverable: plan/index.yaml (desired_release on open packets) + plan/loop_status.md active-release pointer kept current
@@ -21044,7 +21044,7 @@ plan_index:
       order: 452
       desired_release: v0.4
       title: "Concurrent mirror-based forges: every launch clones a CURRENT, non-empty checkout from the git-mirror, all push transparently and coherently"
-      status: in_progress
+      status: done
       capability_tags: [linux, git-mirror, forge, concurrency, coherence, idempotency, release-blocker]
       operator_note: "operator 2026-07-20: the v0.4-blocking regression was forges INCONSISTENTLY sourcing the tree (some host-mounted the checkout, some cloned the mirror) -> .git credential collisions. Host checkout separated to 2src/tillandsias; project default stays ~/src/<project>. Goal: ALL forges clone from the mirror, concurrently, each own tree, all pushing transparently + coherently. Fix the coherence issues Hy3 and the host hit."
       kind: fix
@@ -21405,7 +21405,7 @@ plan_index:
       order: 459
       desired_release: v0.4
       title: "Claude + OpenCode install via OFFICIAL curl installers at container launch — cache-persisted, ephemeral, idempotent (operator directive 2026-07-21)"
-      status: in_progress
+      status: done
       capability_tags: [linux, forge, harness, ephemerality, idempotency]
       operator_note: >
         The Tlatoani 2026-07-21: image build could never curl (no enclave

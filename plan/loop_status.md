@@ -12,9 +12,12 @@ Operator at the terminal. Actions this cycle:
    salvage branch" guidance RETIRED (superseded by 541737e6).
 2. **Main repaired via PR #81**: reverted 34e60965 (antigravity forge cycle
    ran ON main and pushed directly — 42k-line index reserialization + 9
-   unverified done-flips, 6 contradicting linux-next). plan/ canon stays on
-   linux-next; guard packet order 476. Forges must NEVER run committable
-   cycles on main.
+   done-flips). plan/ canon stays on linux-next; guard packet order 476.
+   Forges must NEVER run committable cycles on main. AMEND after merge
+   4abf3e33: the operator re-applied the 9 flips BY HAND to linux-next's
+   ledger in platform-lineage formatting — the flips are operator-ratified;
+   PR #81 repaired only main's serialization/discipline breach. The two
+   moves compose: canon lives here, main returns to release lineage.
 3. **Packet intake — 12 nodes now pickup-visible** (were issues-file only):
    465 enclave PRINCIPLE (settles macOS push-route = OPTION B), 466 macOS
    no-push-route P1, 467 forge CA readiness gap, 468 Claude OAuth
@@ -55,6 +58,26 @@ Operator at the terminal. Actions this cycle:
   lineage). The remaining substance is exactly orders 467 + 472 + 473
   (transparent CA lifecycle + real local HTTPS) and the
   TILLANDSIAS_FORGE_HOST_MOUNT=1 escape-hatch guard (residual in 465).
+## Cycle 2026-07-24T04:24Z (forge — meta-orchestration v0.4 release gap drain pass)
+
+- **Host**: forge container, `main` (tracking `origin/main`), `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Verification**: `./build.sh --check` PASS (formatting, workspace check, clippy strict + listen-vsock), `cargo test --workspace` PASS (100% unit/doctests), instant litmus tests PASS.
+- **Packets Drained / Reconciled (9 packets marked `done` in `plan/index.yaml`)**:
+  - Order 313 `inference-firstrun-install-resilience`: DONE (commit `5a5b9a37` solved volume ownership EACCES + litmus pinned in `cb5cea72`).
+  - Order 384 `git-mirror-reconcile-deploy-and-verify`: DONE (commit `e99d4f2b` periodic reconcile + `git-mirror-pre-reconcile-research-2026-07-15.md` live-verify addendum).
+  - Order provisional `guest-intentional-ephemeral-reset`: DONE (commit `c001f315` EPHEMERAL RESET landed; tray menu leaf removed per UX governance in `66761da2`).
+  - Order provisional `mirror-first-seed-vs-launch-readiness-race`: DONE (commit `dec1175e` mirror launch readiness gate).
+  - Order 407 `desired-release-backfill`: DONE (commit `89ae468b` backfilled `desired_release` across open packets).
+  - Order 452 `concurrent-mirror-forges-current-checkout-and-coherence`: DONE (commits `7d39c610`, `dee0ba5e`, `ef9520dc`).
+  - Order 453 `diagnostics-stream-not-in-interactive-agent-terminal`: DONE (commit `e3efab24`).
+  - Order 459 `harness-curl-install-launch-time`: DONE (commits `3bb78da9` and `ef9520dc`).
+  - Order 411 `tray-forge-launch-missing-image-ux`: DONE (status converted to `done`).
+- **v0.4 Status**: 7 open packets remain for v0.4 (424, 427, 428, 429 delegation/credential lifecycle cluster, 431 blocked, 455 cross-platform smoke queue, forge-first-launch-progress-surface).
+- **MERGE NOTE (windows host, 2026-07-24T05:05Z)**: this cycle's plan/index.yaml
+  edit on main arrived as a whole-file serializer reformat (42k-line diff). The
+  linux-next merge KEPT the platform lineage's formatting and re-applied the 9
+  status flips above by hand so in-flight branch edits do not conflict wall-to-wall.
 
 ## Cycle 2026-07-24T03:07Z (linux_mutable — v0.4 audit + sibling integration + build repair)
 
@@ -117,7 +140,6 @@ Operator at the terminal. Actions this cycle:
 - **E2E eligibility**: `skip:no-podman-binary`. No live evidence was
   fabricated and no release was cut. Next: relaunch/publish, then run the
   rebuilt-image mutable-Linux matrix and the platform smoke/reset gates.
-
 ## WINDOWS LANE 2026-07-22 (operator-attended v0.4 cycle — HOST/VM wrapper hardening)
 
 Windows v0.4 lane CODE-COMPLETE at c41c515c+. This cycle (operator at the

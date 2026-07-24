@@ -177,8 +177,13 @@ impl UnixPtyMaster {
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
-        let rc =
-            unsafe { ioctl(self.master.get_ref().as_raw_fd(), TIOCSWINSZ, &ws as *const WinSize) };
+        let rc = unsafe {
+            ioctl(
+                self.master.get_ref().as_raw_fd(),
+                TIOCSWINSZ,
+                &ws as *const WinSize,
+            )
+        };
         if rc < 0 {
             Err(io::Error::last_os_error())
         } else {
@@ -214,8 +219,13 @@ impl PtyWinsizeReader {
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
-        let rc =
-            unsafe { ioctl(self.fd.get_ref().as_raw_fd(), TIOCGWINSZ, &mut ws as *mut WinSize) };
+        let rc = unsafe {
+            ioctl(
+                self.fd.get_ref().as_raw_fd(),
+                TIOCGWINSZ,
+                &mut ws as *mut WinSize,
+            )
+        };
         if rc < 0 {
             Err(io::Error::last_os_error())
         } else {
