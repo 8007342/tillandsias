@@ -10660,7 +10660,7 @@ plan_index:
       order: 313
       desired_release: v0.4
       title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
-      status: in_progress
+      status: done
       kind: bug
       deliverable: images/inference/entrypoint.sh
       depends_on: []
@@ -14067,7 +14067,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Deploy: rebuild tillandsias-git image and live-verify order-369 auto-reconcile"
-      status: ready
+      status: done
       kind: deployment
       deliverable: plan/issues/git-mirror-pre-reconcile-research-2026-07-15.md (live-verify addendum)
       depends_on: [git-mirror-pre-reconcile-impl]
@@ -15990,7 +15990,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Intentional EPHEMERAL RESET — one-click wipe+reprovision of the guest (destructive-by-design; re-auth is the only cost)"
-      status: in_progress
+      status: done
       kind: enhancement
       deliverable: tray menu + --reset-guest CLI + host reprovision path + e2e
       depends_on: [guest-crashloop-detection]
@@ -16395,7 +16395,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: first forge launch races the mirror's initial upstream seed — readiness gate passes on 'reachable', clone retries exhaust minutes before refs arrive (live Windows repro for the 452/454 family)"
-      status: in_progress
+      status: done
       kind: bug
       deliverable: headless launch-readiness gate (wait for SEEDED, not reachable) + first-seed progress surfacing
       depends_on: []
@@ -17454,7 +17454,7 @@ plan_index:
       order: 407
       desired_release: v0.5
       title: "Standing: backfill desired_release across open packets so every open packet carries a ship-bucket"
-      status: ready
+      status: done
       kind: housekeeping
       multi_cycle: true
       deliverable: plan/index.yaml (desired_release on open packets) + plan/loop_status.md active-release pointer kept current
@@ -19467,6 +19467,23 @@ plan_index:
             OpenCode tasks with nonblank prompt, JSON format, and exact
             instance identity; prove each returns failure end to end and that
             an adjacent scoped worker survives timeout cleanup.
+        - type: progress
+          ts: "2026-07-24T06:40:00Z"
+          agent_id: "linux-tlatoani-fable5-20260724"
+          host: linux
+          summary: >
+            SALVAGE BRANCH SUPERSEDED - do NOT resume from
+            agent/result-channel-repair-20260723 (79792cb5/77afc4a8). Every
+            code change on that branch is byte-identical to or further
+            evolved by landed linux-next commit 541737e6 (main.rs evolved
+            +125 lines beyond it, plus specs and litmus bindings). The
+            branch is provenance only; the earlier event guidance to
+            "resume from the salvage branch" is retired. Residual scope
+            unchanged: live failed-delegation proof on a mutable Linux host
+            with Podman. Coordinator hygiene same cycle: duplicate order
+            462 resolved by renumbering
+            forge-result-format-unknown-value-fail-closed to order 464
+            (mirror-pre-receive-blocks-all-new-branches keeps 462).
     - order: 430
       packet_id: codex-lane-api-key-env
       desired_release: v0.4
@@ -21027,7 +21044,7 @@ plan_index:
       order: 452
       desired_release: v0.4
       title: "Concurrent mirror-based forges: every launch clones a CURRENT, non-empty checkout from the git-mirror, all push transparently and coherently"
-      status: in_progress
+      status: done
       capability_tags: [linux, git-mirror, forge, concurrency, coherence, idempotency, release-blocker]
       operator_note: "operator 2026-07-20: the v0.4-blocking regression was forges INCONSISTENTLY sourcing the tree (some host-mounted the checkout, some cloned the mirror) -> .git credential collisions. Host checkout separated to 2src/tillandsias; project default stays ~/src/<project>. Goal: ALL forges clone from the mirror, concurrently, each own tree, all pushing transparently + coherently. Fix the coherence issues Hy3 and the host hit."
       kind: fix
@@ -21388,7 +21405,7 @@ plan_index:
       order: 459
       desired_release: v0.4
       title: "Claude + OpenCode install via OFFICIAL curl installers at container launch — cache-persisted, ephemeral, idempotent (operator directive 2026-07-21)"
-      status: in_progress
+      status: done
       capability_tags: [linux, forge, harness, ephemerality, idempotency]
       operator_note: >
         The Tlatoani 2026-07-21: image build could never curl (no enclave
@@ -21487,6 +21504,69 @@ plan_index:
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
 
+    - packet_id: vault-host-endpoint-soak-fragility
+      order: 463
+      desired_release: v0.4
+      title: "25h soak broke every host->vault path: netavark DNAT loss on the internal enclave network, loopback bind EIO, first-restart unseal landmine, and lane-lock heal starvation"
+      status: ready
+      kind: fix
+      deliverable: vault host endpoint via enclave URL everywhere (drop the -p publish), entrypoint unseal-400 classification, bounded lane vault-lock scope
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, vault, netavark, wsl, resilience, locking]
+      estimated_hours: 4
+      operator_note: >
+        Live incident 2026-07-24 02:50-03:45Z on the windows host after a
+        25.5h stack soak; operator-visible symptom was the tray silently
+        regressing to "GitHub Login". Four stacked findings:
+        (1) The netavark DNAT for vault's host publish (127.0.0.1:8201)
+        vanished mid-soak and could not be reprogrammed: podman network
+        reload "succeeds" but passes NO port section for the internal
+        enclave network, so create/reload never restore the rule.
+        (2) Binding 127.0.0.1:8201 in the VM now fails with EIO (8202
+        binds fine) - loopback:8201 is poisoned kernel-side; a
+        systemd-socket-proxyd repair was impossible.
+        (3) First restart of any vault container hits an unseal 400 and
+        dies: the podman unseal secret NEVER matches the init-generated
+        Shamir key, so the first-restart path ALWAYS depends on the
+        recovery seam; the entrypoint's curl -f 400 death also skips the
+        wrong-key FATAL classification.
+        (4) The recovery seam could not run for 600s+ because the idle
+        codex lane launcher held the shared vault resource lock for its
+        entire multi-day lifetime - exclusive heal is starved exactly
+        when a long soak breaks vault. Repairs applied on this host:
+        graceful lane SIGTERM released the lock, the seam then healed the
+        unseal secret (verified sealed:false), and the deployed
+        0.3.260721.1 service now runs with drop-in
+        TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200 plus an
+        /etc/hosts vault->bridge-IP pin (both marked TEMP, die with next
+        deploy). Newer source already prefers the enclave URL in-VM
+        ("dodges a WSL2/netavark loopback TLS-hang") - finish that: no
+        host port publish at all, and the hosts-pin/alias resolution
+        must be owned by provisioning, not a hand edit.
+      outcome: >
+        A multi-day soaked stack keeps every host->vault path working:
+        the in-VM headless reaches vault via the enclave URL with no
+        loopback DNAT dependency; a vault container restart survives its
+        first unseal without entrypoint death; and an exclusive vault
+        heal cannot be starved indefinitely by an idle lane's shared
+        lock.
+      exit_criteria:
+        - "in-VM headless default vault URL has no 127.0.0.1 publish dependency and the -p publish is removed from launch_vault_container (or proven still required for a named consumer)"
+        - "vault entrypoint classifies an unseal 400 as wrong-key (FATAL log marker) instead of dying on curl -f, and the recovery seam's log classifier is pinned against that marker"
+        - "a lane launcher's shared vault lock is bounded or heal-priority exists: an exclusive ensure/heal makes progress within a bounded time while an idle lane is up"
+        - "a soak litmus or fixture reproduces the DNAT-loss class (or the publish removal makes it structurally impossible)"
+      events:
+        - type: filed
+          ts: "2026-07-24T03:50:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from the live 25.5h-soak incident; full forensics in the
+            session transcript. The socket-proxyd attempt died on finding
+            (2); the enclave-URL env override is the working repair.
+
     - packet_id: mirror-pre-receive-blocks-all-new-branches
       order: 462
       desired_release: v0.4
@@ -21568,7 +21648,7 @@ plan_index:
             upvote, and implement it without broadening the v0.4 source fix.
 
     - packet_id: forge-result-format-unknown-value-fail-closed
-      order: 462
+      order: 464
       desired_release: v0.5
       title: "Reject unknown delegated-result format values instead of silently disabling capture"
       status: ready

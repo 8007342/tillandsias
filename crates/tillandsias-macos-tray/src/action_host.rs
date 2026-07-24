@@ -2044,9 +2044,7 @@ fn apply_login_state(
 ) -> bool {
     use tillandsias_host_shell::menu_state::GithubLoginState;
     let mut guard = menu_state.lock().unwrap();
-    if matches!(login, GithubLoginState::LoggedOut)
-        && guard.login == GithubLoginState::LoggingIn
-    {
+    if matches!(login, GithubLoginState::LoggedOut) && guard.login == GithubLoginState::LoggingIn {
         let started = LOGIN_STARTED_AT_MS.load(std::sync::atomic::Ordering::SeqCst);
         if started != 0 && now_unix_ms().saturating_sub(started) < LOGIN_GRACE.as_millis() as u64 {
             // Still within the grace window — keep showing LoggingIn.
