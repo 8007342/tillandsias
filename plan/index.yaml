@@ -19353,6 +19353,31 @@ plan_index:
             cancellation can orphan the exact forge worker. This cycle owns the
             bounded source fix and deterministic no-Podman fixtures; real
             failed-task container evidence remains a live closure gate.
+        - type: progress
+          ts: "2026-07-24T02:19:07Z"
+          agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
+          host: forge
+          lease_id: "f2b8ced1e246"
+          summary: >
+            The prior lease expired after the delegated implementation and
+            adversarial review were interrupted by the agent runtime's usage
+            limit. The complete local checkpoint was salvaged as 77afc4a8 in
+            an isolated worktree; no unpublished bytes were lost. Operator
+            resumed the cycle on 2026-07-24, so the checkpoint is being
+            reclaimed for final review, plan evidence, validation, and push.
+          partial_artifact_refs:
+            - "agent/result-channel-repair-20260723@77afc4a8"
+        - type: claim
+          ts: "2026-07-24T02:19:07Z"
+          agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
+          host: forge
+          lease_id: "8728be0c631d"
+          expires_at: "2026-07-24T06:19:07Z"
+          summary: >
+            Fresh read and reclaim after the expired usage-limit-interrupted
+            lease. Scope remains the bounded no-Podman source closure and
+            deterministic production-adapter evidence; the real container
+            failure/timeout proof remains an explicit live residual.
     - order: 430
       packet_id: codex-lane-api-key-env
       desired_release: v0.4
