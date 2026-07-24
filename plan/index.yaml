@@ -6433,6 +6433,9 @@ plan_index:
       title: "Credential & Secrets Architecture Audit"
       status: ready
       kind: audit+security+design
+      split_into:
+        - "246a — credential-inventory-audit (inventory all credential flows: vault, github, podman secrets, agent tokens)"
+        - "246b — token-lifecycle-policy (token TTLs, rotation, revocation, quarantine litmus)"
       deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
       depends_on: [network-architecture-audit]
       pickup_role: any
@@ -6471,6 +6474,9 @@ plan_index:
       title: "Proxy & Git Mirror Configuration Audit"
       status: ready
       kind: audit+bug-fix
+      split_into:
+        - "247a — tls-certificate-chain-audit (CA generation -> podman secrets -> container trust stores)"
+        - "247b — git-mirror-forwarding-e2e (forge -> mirror -> GitHub, ref consistency litmus)"
       deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
       depends_on: [network-architecture-audit]
       pickup_role: any
@@ -6535,6 +6541,289 @@ plan_index:
         - "Reconciliation Plan for each contradiction (which spec supersedes or new unified spec)"
         - "Cheatsheet cross-reference against spec matrix"
         - "Minimum litmus set to prevent spec drift (litmus:spec-*)"
+
+    # --- Split children: order 427 (forge-delegation-instance-names) ---
+    - packet_id: delegation-instance-names-code
+      order: 427a
+      desired_release: v0.4
+      title: "Instance-scoped container naming: add worker/instance component to forge container names"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, podman, delegation, naming]
+      estimated_hours: 2
+      parent_order: 427
+      outcome: >
+        Container names change from tillandsias-{project}-forge-{mode} to
+        tillandsias-{project}-forge-{mode}-{instance_id} where instance_id
+        is a stable digest of the worker identity. The launcher no longer
+        passes --replace; each worker targets its own container name.
+      exit_criteria:
+        - "container name format includes instance component"
+        - "launcher uses instance-scoped name, no --replace flag"
+        - "unit test proves name uniqueness for distinct instance IDs"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 427 for forge cycle budget compliance."
+
+    - packet_id: delegation-coexistence-litmus
+      order: 427b
+      desired_release: v0.4
+      title: "Coexistence litmus: prove two workers on one project run simultaneously without replacing each other"
+      status: pending
+      kind: litmus
+      deliverable: openspec/litmus-tests/litmus-delegation-coexistence.yaml
+      depends_on: [427a]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, podman, delegation, litmus]
+      estimated_hours: 1
+      parent_order: 427
+      outcome: >
+        A litmus test that starts two forge containers on the same project
+        with different instance IDs, verifies both are running, and confirms
+        neither replaced the other.
+      exit_criteria:
+        - "litmus starts two named containers on the same project"
+        - "both containers are running after start"
+        - "neither container was replaced (original PID still alive)"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 427 for forge cycle budget compliance."
+
+    - packet_id: delegation-teardown-target
+      order: 427c
+      desired_release: v0.4
+      title: "Targeted teardown: stop/remove only the intended worker container, leave others intact"
+      status: pending
+      kind: fix+litmus
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: [427a]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, podman, delegation, teardown]
+      estimated_hours: 1
+      parent_order: 427
+      outcome: >
+        Teardown (stop + rm) targets only the container matching the specific
+        instance ID. A litmus proves that stopping worker A leaves worker B
+        untouched.
+      exit_criteria:
+        - "teardown accepts an instance ID and targets only that container"
+        - "litmus: stop worker A, verify worker B still running"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 427 for forge cycle budget compliance."
+
+    # --- Split children: order 429 (forge-delegation-result-retrieval) ---
+    - packet_id: delegation-jsonl-parser
+      order: 429a
+      desired_release: v0.4
+      title: "JSONL parser: consume opencode --format json and codex exec --json structured output"
+      status: ready
+      kind: implementation
+      deliverable: crates/tillandsias-headless/src/delegation/
+      depends_on: [427a]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, delegation, jsonl, parsing]
+      estimated_hours: 2
+      parent_order: 429
+      outcome: >
+        A Rust module that reads JSONL from child process stdout, parses
+        opencode step_start/text/step_finish and codex
+        thread.started/turn.*/item.*/error events, and emits a unified
+        WorkerEvent enum.
+      exit_criteria:
+        - "parses opencode JSONL into WorkerEvent variants"
+        - "parses codex JSONL into WorkerEvent variants"
+        - "unit tests for both parsers with fixture data"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 429 for forge cycle budget compliance."
+
+    - packet_id: delegation-outcome-surface
+      order: 429b
+      desired_release: v0.4
+      title: "Outcome surfacing: delegator reports per-worker success/failure/timeout to the calling agent"
+      status: pending
+      kind: feature
+      deliverable: crates/tillandsias-headless/src/delegation/
+      depends_on: [429a]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, delegation, observability]
+      estimated_hours: 2
+      parent_order: 429
+      outcome: >
+        After a delegated worker completes (or times out), the dispatcher
+        surfaces a structured WorkerOutcome { id, status, summary, duration }
+        to the delegating agent's context.
+      exit_criteria:
+        - "WorkerOutcome struct with success/failure/timeout variants"
+        - "timeout detection (configurable per-worker deadline)"
+        - "outcome logged to plan event and visible to delegating agent"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 429 for forge cycle budget compliance."
+
+    - packet_id: delegation-failed-task-litmus
+      order: 429c
+      desired_release: v0.4
+      title: "Failed-task litmus: a delegated task that fails is reported as failed, not silently dropped"
+      status: pending
+      kind: litmus
+      deliverable: openspec/litmus-tests/litmus-delegation-result-retrieval.yaml
+      depends_on: [429a, 429b]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, delegation, litmus, testing]
+      estimated_hours: 1
+      parent_order: 429
+      outcome: >
+        A litmus that delegates a deliberately-failing task (exit 1 or invalid
+        prompt), verifies the dispatcher surfaces a failure outcome, and
+        proves no silent drop occurred.
+      exit_criteria:
+        - "litmus delegates a failing task"
+        - "dispatcher surfaces failure outcome with non-zero exit code"
+        - "no silent drop: outcome is explicitly recorded in plan event"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 429 for forge cycle budget compliance."
+
+    # --- Split children: order 246 (credential-secrets-architecture-audit) ---
+    - packet_id: credential-inventory-audit
+      order: 246a
+      desired_release: v0.5
+      title: "Credential inventory: map every credential flow (vault, github, podman secrets, agent tokens)"
+      status: pending
+      kind: audit
+      deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
+      depends_on: [network-architecture-audit]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [security, vault, credentials, audit]
+      estimated_hours: 6
+      parent_order: 246
+      outcome: >
+        Complete inventory of all credential flows: creation, storage,
+        rotation, expiry, and revocation paths. Per-project credential scope
+        design ratified.
+      exit_criteria:
+        - "credential inventory table (source, storage, TTL, rotation, revocation)"
+        - "per-project credential scope design ratified"
+        - "spec/cheatsheet patch list published"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 246 for cycle budget compliance."
+
+    - packet_id: token-lifecycle-policy
+      order: 246b
+      desired_release: v0.5
+      title: "Token lifecycle policy: TTLs, rotation, revocation, quarantine litmus"
+      status: pending
+      kind: audit+design
+      deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
+      depends_on: [246a]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [security, vault, tokens, policy]
+      estimated_hours: 6
+      parent_order: 246
+      outcome: >
+        Token Lifecycle & Rotation Policy published with TTLs, renewal,
+        revocation rules. Credential Quarantine completion litmus added.
+      exit_criteria:
+        - "Token Lifecycle & Rotation Policy published (TTLs, renewal, revocation)"
+        - "Credential Quarantine completion litmus added"
+        - "spec/cheatsheet patch list published"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 246 for cycle budget compliance."
+
+    # --- Split children: order 247 (proxy-git-mirror-configuration-audit) ---
+    - packet_id: tls-certificate-chain-audit
+      order: 247a
+      desired_release: v0.5
+      title: "TLS certificate chain audit: CA generation -> podman secrets -> container trust stores"
+      status: pending
+      kind: audit
+      deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
+      depends_on: [network-architecture-audit]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [security, tls, certificates, audit]
+      estimated_hours: 5
+      parent_order: 247
+      outcome: >
+        End-to-end audit of the TLS certificate chain from CA generation
+        through podman secrets injection to container trust store usage.
+        Every link verified with a named check.
+      exit_criteria:
+        - "TLS Certificate Chain Audit complete (every link verified)"
+        - "spec/cheatsheet patch list published"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 247 for cycle budget compliance."
+
+    - packet_id: git-mirror-forwarding-e2e
+      order: 247b
+      desired_release: v0.5
+      title: "Git mirror forwarding e2e: forge -> mirror -> GitHub, ref consistency litmus"
+      status: pending
+      kind: audit+litmus
+      deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
+      depends_on: [247a]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [git, mirror, network, litmus]
+      estimated_hours: 5
+      parent_order: 247
+      outcome: >
+        End-to-end verification of the git mirror forwarding path:
+        forge push -> mirror relay -> GitHub acceptance, with ref
+        consistency litmus.
+      exit_criteria:
+        - "Git Mirror Forwarding end-to-end verified"
+        - "litmus:proxy-end-to-end-health added and green"
+        - "spec/cheatsheet patch list published"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 247 for cycle budget compliance."
 
     - packet_id: event-push-architecture
       order: 249
@@ -19034,6 +19323,10 @@ plan_index:
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
       status: in_progress
       kind: fix
+      split_into:
+        - "427a — delegation-instance-names-code (instance-scoped container naming in launcher)"
+        - "427b — delegation-coexistence-litmus (litmus: two workers coexist, neither replaces)"
+        - "427c — delegation-teardown-target (teardown targets only the intended worker)"
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: []
       pickup_role: linux
@@ -19268,6 +19561,10 @@ plan_index:
       title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
       status: in_progress
       kind: feature
+      split_into:
+        - "429a — delegation-jsonl-parser (JSONL parser for opencode + codex structured output)"
+        - "429b — delegation-outcome-surface (delegator surfaces per-worker success/failure/timeout)"
+        - "429c — delegation-failed-task-litmus (litmus: failed task reported, not silently dropped)"
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: [forge-delegation-instance-names]
       pickup_role: linux
@@ -21601,6 +21898,15 @@ plan_index:
       capability_tags: [linux, git-mirror, forge, hooks, validation]
       estimated_hours: 2
       events:
+        - type: filed
+          ts: "2026-07-23T09:05:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from live rejection evidence during the
+            forge-delegation-result-retrieval salvage (see that packet's
+            2026-07-23T09:05Z note and branch
+            agent/result-channel-repair-20260723).
         - type: completed
           ts: "2026-07-24T07:55:00Z"
           agent_id: "linux-opencode-bigpickle-20260724"
@@ -21637,16 +21943,6 @@ plan_index:
         - "pushing a new branch from inside a forge container succeeds when its changed files pass validation, regardless of legacy archive contents"
         - "a new branch introducing an invalid YAML file is still rejected (validator remains effective on the actual diff)"
         - "litmus or hook test pins the diff-base selection for new refs"
-      events:
-        - type: filed
-          ts: "2026-07-23T09:05:00Z"
-          agent_id: "windows-host-claude-observer"
-          host: windows
-          summary: >
-            Filed from live rejection evidence during the
-            forge-delegation-result-retrieval salvage (see that packet's
-            2026-07-23T09:05Z note and branch
-            agent/result-channel-repair-20260723).
     - packet_id: podman-idiomatic-forge-secret-contract-drift
       order: 461
       desired_release: v0.5
