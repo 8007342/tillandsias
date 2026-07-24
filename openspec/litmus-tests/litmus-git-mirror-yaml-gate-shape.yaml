@@ -67,6 +67,16 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "OK"
 
+  - step: "new-branch push uses merge-base diff instead of full-tree validation"
+    command: "grep -q 'merge-base' images/git/pre-receive-hook.sh && echo 'OK: hook uses merge-base for new branches' || { echo 'FAIL: hook does not use merge-base for new branches'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "new-branch push falls back to full-tree when no merge-base found"
+    command: "grep -q 'Fallback.*empty repo' images/git/pre-receive-hook.sh && echo 'OK: hook has fallback for empty repo' || { echo 'FAIL: hook missing empty-repo fallback'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
 observability:
   traces:
     - "@trace spec:git-mirror-service"

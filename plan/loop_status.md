@@ -1,5 +1,24 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T21:15Z (forge — clippy fix + order 462 pre-receive hook fix)
+
+- **Host**: forge container, `main` (tracking `origin/main`), `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Git network**: fetch ✅, push ✅ — forge mirror fully operational.
+- **Build repair**: 5 clippy `unneeded_wildcard_pattern` errors in `vsock_exec.rs`
+  and 1 in `transport.rs` — `build_version: _` redundant with `..`. Removed all 6
+  occurrences, ran `cargo fmt --all`. `./build.sh --check` passes.
+- **Packet advanced**: order 462 `mirror-pre-receive-blocks-all-new-branches` — DONE.
+  New-branch pushes now use `git merge-base` against HEAD to find the nearest
+  common ancestor, then validate only the diff between that ancestor and the new
+  tip — instead of validating the entire tree. Fallback to full-tree for empty
+  repos. Added two litmus steps to `litmus-git-mirror-yaml-gate-shape`
+  (steps 11-12). All 12 litmus steps pass.
+- **Litmus**: `litmus-git-mirror-yaml-gate-shape` 12/12 PASS (including 2 new steps).
+- **v0.4 status**: order 462 closed. Remaining open v0.4: orders 424, 427, 429
+  (delegation/credential cluster, in_progress), 455 (cross-platform smoke, pending).
+- **Pushed**: (pending commit + push)
+
 ## Cycle 2026-07-24T17:30Z (forge — smoke test + order 464 source fix)
 
 - **Host**: forge container, `main` (tracking `origin/main`), `TILLANDSIAS_HOST_KIND=forge`.

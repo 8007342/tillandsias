@@ -21602,6 +21602,21 @@ plan_index:
         - "a new branch introducing an invalid YAML file is still rejected (validator remains effective on the actual diff)"
         - "litmus or hook test pins the diff-base selection for new refs"
       events:
+        - type: completed
+          ts: "2026-07-24T21:15:00Z"
+          agent_id: "forge-bigpickle-opencode-20260724T2104Z"
+          host: forge
+          lease_id: "mirror-pre-receive-blocks-all-new-branches"
+          commits: ["(pending)"]
+          summary: >
+            Fixed: new-branch pushes now use git merge-base against HEAD to
+            find the nearest common ancestor, then validate only the diff
+            between that ancestor and the new tip — instead of validating the
+            entire tree. Fallback to full-tree validation for empty repos
+            (no common ancestor). Added two litmus steps to
+            litmus-git-mirror-yaml-gate-shape (steps 11-12) pinning the
+            merge-base usage and the empty-repo fallback. All 12 litmus
+            steps pass. ./build.sh --check passes (format + clippy).
         - type: filed
           ts: "2026-07-23T09:05:00Z"
           agent_id: "windows-host-claude-observer"

@@ -118,13 +118,26 @@ while read -r OLDSHA NEWSHA REFNAME; do
         0000000000000000000000000000000000000000) continue ;;
     esac
 
-    # If this is the initial push (oldsha is zero), validate the whole tree
+    # Determine the set of files to validate.
     case "$OLDSHA" in
         0000000000000000000000000000000000000000)
-            FILES="$(git ls-tree -r --name-only "$NEWSHA" 2>/dev/null)" || continue
+            # New branch: find the best merge-base with any existing ref so
+            # we only validate files the branch actually introduces or
+            # modifies — legacy broken YAML that pre-dates the branch must
+            # not block it.
+            MERGE_BASE="$(git merge-base "$NEWSHA" HEAD 2>/dev/null)" \
+                || MERGE_BASE="$(git rev-list --max-parents=0 --all 2>/dev/null | head -1)" \
+                || MERGE_BASE=""
+            if [ -n "$MERGE_BASE" ]; then
+                FILES="$(git diff --name-only "$MERGE_BASE" "$NEWSHA" 2>/dev/null)" || continue
+            else
+                # Fallback: no common ancestor found (empty repo). Validate
+                # the whole tree — there is nothing legacy to exempt.
+                FILES="$(git ls-tree -r --name-only "$NEWSHA" 2>/dev/null)" || continue
+            fi
             ;;
         *)
-            # Diff between old and new trees to find changed files
+            # Existing branch: diff between old and new trees.
             FILES="$(git diff --name-only "$OLDSHA" "$NEWSHA" 2>/dev/null)" || continue
             ;;
     esac
