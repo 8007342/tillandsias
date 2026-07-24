@@ -21504,6 +21504,49 @@ plan_index:
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
 
+    - packet_id: teardown-vs-liveness-proxy-scope-disagreement
+      order: 477
+      desired_release: v0.5
+      title: "Last-lane teardown and the liveness supervisor disagree on the proxy's scope: teardown removes it, liveness re-creates it 3s later"
+      status: ready
+      kind: fix
+      deliverable: one shared core-vs-lane-scoped container set consumed by both teardown and liveness (plus a test pinning the post-teardown steady-state container set)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, lifecycle, containers, liveness, teardown]
+      estimated_hours: 2
+      operator_note: >
+        Observed live 2026-07-24 06:50Z when the operator exited the
+        antigravity forge with nothing else running: teardown removed
+        git-mirror + inference + proxy (lane-scoped view) while vault +
+        router stayed up (core view), then
+        "[liveness] re-ensured 1 container(s): [tillandsias-proxy]"
+        re-created the proxy 3 seconds later as a FRESH container. No
+        crash - both actions were clean - but the two components hold
+        contradictory scope sets, so an idle host keeps a squid running
+        that teardown decided should die (and every last-lane exit
+        churns one container create). Decide proxy's true scope once,
+        derive both components from the same constant, and pin the
+        post-teardown steady state in a test.
+      outcome: >
+        After the last lane exits, the container set converges in one
+        step to a single agreed steady state; no component immediately
+        recreates what another just removed.
+      exit_criteria:
+        - "teardown and liveness consume one shared definition of core vs lane-scoped containers"
+        - "a test pins the post-last-lane steady-state container set (no create/remove churn within the settling window)"
+        - "the chosen proxy scope is recorded with rationale (idle footprint vs warm-start latency)"
+      events:
+        - type: filed
+          ts: "2026-07-24T07:05:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from live journal evidence during the antigravity
+            graceful-end validation; operator asked whether the proxy
+            restart was a crash - it was not, it was this disagreement.
+
     - packet_id: vault-host-endpoint-soak-fragility
       order: 463
       desired_release: v0.4
