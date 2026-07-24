@@ -90,11 +90,13 @@ Every platform's forge stack converges on the identical isolated posture:
 3. **git:// mirror push relay** — `TILLANDSIAS_GIT_SERVICE=tillandsias-git` → `relay-refs.sh` → `git-credential-tillandsias.sh`. *(Linux default + Windows have it; **macOS must add it**.)*
 4. **Vault-token credential injection at the relay only** — never in the forge. *(Already the design; macOS inherits it by wiring #3.)*
 5. **One container stack** — same forge image, same enclave, same proxy, same relay. Per-platform code confined to source-staging transport (git-daemon vs filesystem-mirror vs read-only virtiofs clone), never isolation or push route.
+6. **Ram-disk (tmpfs) working checkout cloned from the mirror** (operator target, 2026-07-23) — the working tree materialized on tmpfs, not the disk-backed container overlay, for speed + ephemerality + isolation. **Status: NET-NEW on every platform** — today all three lanes clone into the container overlay at `/home/forge/src/<project>` (`images/default/lib-common.sh:477`); no lane uses a tmpfs checkout (existing tmpfs mounts are `/tmp`, `/run/user`, credential-quarantine, and the host-mount gitdir facade only). An enhancement on top of the existing clone-from-mirror, uniform across platforms.
 
 **Concrete steps:**
 - **macOS:** wire `TILLANDSIAS_GIT_SERVICE` into the SRC-ISOLATION lane (`main.rs:4753-4766`) so the read-only clone forge pushes the SAME way Windows/Linux-default already do → the macOS no-push-route packet's **Option B**.
 - **Linux:** guard/retire the opt-in `TILLANDSIAS_FORGE_HOST_MOUNT=1` escape hatch so it cannot silently run a less-isolated forge; if kept for the solo live-edit workflow, it must be loud + opt-in-only, never a default and never reachable by an untrusted-agent launch.
-- **Docs:** correct the Linux row in `macos-forge-no-push-route-lane-decision-2026-07-23.md:24-30`.
+- **All platforms (ram-disk, net-new):** materialize the cloned working tree on a sized tmpfs (`--tmpfs /home/forge/src` or a checkout-specific mount) instead of the overlay, so `clone_project_from_mirror` (`lib-common.sh:472-477`) lands on ram-disk. Applies to the Linux/Windows clone-only default and the macOS lane alike.
+- **Docs:** ~~correct the Linux row in `macos-forge-no-push-route-lane-decision-2026-07-23.md:24-30`~~ — **DONE** (corrected + the ram-disk net-new finding added).
 
 ---
 
