@@ -21487,6 +21487,69 @@ plan_index:
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
 
+    - packet_id: vault-host-endpoint-soak-fragility
+      order: 463
+      desired_release: v0.4
+      title: "25h soak broke every host->vault path: netavark DNAT loss on the internal enclave network, loopback bind EIO, first-restart unseal landmine, and lane-lock heal starvation"
+      status: ready
+      kind: fix
+      deliverable: vault host endpoint via enclave URL everywhere (drop the -p publish), entrypoint unseal-400 classification, bounded lane vault-lock scope
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, vault, netavark, wsl, resilience, locking]
+      estimated_hours: 4
+      operator_note: >
+        Live incident 2026-07-24 02:50-03:45Z on the windows host after a
+        25.5h stack soak; operator-visible symptom was the tray silently
+        regressing to "GitHub Login". Four stacked findings:
+        (1) The netavark DNAT for vault's host publish (127.0.0.1:8201)
+        vanished mid-soak and could not be reprogrammed: podman network
+        reload "succeeds" but passes NO port section for the internal
+        enclave network, so create/reload never restore the rule.
+        (2) Binding 127.0.0.1:8201 in the VM now fails with EIO (8202
+        binds fine) - loopback:8201 is poisoned kernel-side; a
+        systemd-socket-proxyd repair was impossible.
+        (3) First restart of any vault container hits an unseal 400 and
+        dies: the podman unseal secret NEVER matches the init-generated
+        Shamir key, so the first-restart path ALWAYS depends on the
+        recovery seam; the entrypoint's curl -f 400 death also skips the
+        wrong-key FATAL classification.
+        (4) The recovery seam could not run for 600s+ because the idle
+        codex lane launcher held the shared vault resource lock for its
+        entire multi-day lifetime - exclusive heal is starved exactly
+        when a long soak breaks vault. Repairs applied on this host:
+        graceful lane SIGTERM released the lock, the seam then healed the
+        unseal secret (verified sealed:false), and the deployed
+        0.3.260721.1 service now runs with drop-in
+        TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200 plus an
+        /etc/hosts vault->bridge-IP pin (both marked TEMP, die with next
+        deploy). Newer source already prefers the enclave URL in-VM
+        ("dodges a WSL2/netavark loopback TLS-hang") - finish that: no
+        host port publish at all, and the hosts-pin/alias resolution
+        must be owned by provisioning, not a hand edit.
+      outcome: >
+        A multi-day soaked stack keeps every host->vault path working:
+        the in-VM headless reaches vault via the enclave URL with no
+        loopback DNAT dependency; a vault container restart survives its
+        first unseal without entrypoint death; and an exclusive vault
+        heal cannot be starved indefinitely by an idle lane's shared
+        lock.
+      exit_criteria:
+        - "in-VM headless default vault URL has no 127.0.0.1 publish dependency and the -p publish is removed from launch_vault_container (or proven still required for a named consumer)"
+        - "vault entrypoint classifies an unseal 400 as wrong-key (FATAL log marker) instead of dying on curl -f, and the recovery seam's log classifier is pinned against that marker"
+        - "a lane launcher's shared vault lock is bounded or heal-priority exists: an exclusive ensure/heal makes progress within a bounded time while an idle lane is up"
+        - "a soak litmus or fixture reproduces the DNAT-loss class (or the publish removal makes it structurally impossible)"
+      events:
+        - type: filed
+          ts: "2026-07-24T03:50:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from the live 25.5h-soak incident; full forensics in the
+            session transcript. The socket-proxyd attempt died on finding
+            (2); the enclave-URL env override is the working repair.
+
     - packet_id: mirror-pre-receive-blocks-all-new-branches
       order: 462
       desired_release: v0.4
