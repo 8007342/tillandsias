@@ -178,7 +178,7 @@ oc_auto_args=(--auto)
 # Structured output (order 429), opt-in. Delegated runs need a machine-readable
 # transcript so the dispatcher can tell success from failure from timeout;
 # interactive/human runs must keep the formatted default. `--format json` emits
-# raw JSON events (step_start / text / step_finish), each carrying sessionID.
+# raw JSON events with text and finish reasons nested under `part`.
 oc_format_args=()
 if [ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]; then
     oc_format_args=(--format json)

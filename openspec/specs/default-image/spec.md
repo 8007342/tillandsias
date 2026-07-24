@@ -54,6 +54,28 @@ The container entrypoint SHALL bootstrap the environment and launch OpenCode as 
 - **WHEN** the container starts with existing cache
 - **THEN** bootstrap MAY be skipped and OpenCode SHALL launch immediately
 
+### Requirement: Prompted CLI entrypoints emit structured results only on request
+
+The OpenCode CLI and Codex forge entrypoints MUST keep their ordinary
+human-formatted behavior unless the launcher supplies
+`TILLANDSIAS_AGENT_RESULT_FORMAT=json` for a prompted run. Under that request,
+OpenCode MUST invoke `run --format json` and Codex MUST invoke `exec --json`.
+Neither entrypoint MUST accept a host result-file path; current-run stdout
+capture and optional atomic export are host responsibilities governed by
+`forge-as-only-runtime`. Detached OpenCode Web mode invokes `opencode serve`,
+has no attached current-run result capture, and MUST NOT receive the structured
+result request.
+
+#### Scenario: Delegated entrypoints emit JSONL to stdout
+
+- **WHEN** a prompted OpenCode or Codex container receives
+  `TILLANDSIAS_AGENT_RESULT_FORMAT=json`
+- **THEN** its agent CLI MUST emit its JSON event stream on stdout
+- **AND** no `TILLANDSIAS_AGENT_RESULT_FILE` path MUST enter the container
+- **AND** removing the format request MUST preserve the formatted interactive
+  or ordinary prompted behavior
+- **AND** an OpenCode Web serve launch MUST omit the format request
+
 ### Requirement: Declarative image definition via embedded Containerfiles
 The default forge image SHALL be built from the embedded Containerfiles and supporting image sources using direct `podman build` calls. Containerfiles are the primary build path.
 

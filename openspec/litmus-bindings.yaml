@@ -150,7 +150,7 @@ specs:
   - litmus:codex-forge-yolo-shape
   - litmus:forge-agent-result-format
   coverage_ratio: 100
-  last_verified: '2026-07-04'
+  last_verified: '2026-07-24'
 - spec_id: cli-bash-mode
   status: obsolete
   litmus_tests: []
@@ -196,8 +196,9 @@ specs:
   - litmus:forge-validation-profile
   - litmus:opencode-vault-auth-content
   - litmus:codex-safe-state-shape
+  - litmus:forge-agent-result-format
   coverage_ratio: 80
-  last_verified: '2026-07-23'
+  last_verified: '2026-07-24'
 - spec_id: dev-build
   status: active
   litmus_tests:
@@ -290,8 +291,9 @@ specs:
   - litmus:forge-as-only-runtime
   - litmus:container-start-health
   - litmus:launch-artifacts-untracked
+  - litmus:forge-agent-result-format
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-07-24'
 - spec_id: forge-cache-architecture
   status: obsolete
   litmus_tests: []

@@ -4817,6 +4817,15 @@ fn build_opencode_forge_args(
             format!("TILLANDSIAS_OPENCODE_PROMPT={prompt}"),
         ]);
     }
+    // Order 429: only a real prompt + explicit JSON request creates a
+    // delegated run. The host-side timeout and result-file path are never
+    // propagated or mounted; stdout is captured fresh at the Podman seam.
+    if matches!(mode, ForgeMode::Cli) && delegated_json_requested(prompt) {
+        args.extend([
+            "--env".into(),
+            "TILLANDSIAS_AGENT_RESULT_FORMAT=json".into(),
+        ]);
+    }
 
     // Order 431: credential bytes never enter this Podman argv. When Vault
     // contains the OpenCode auth document, mount only a short-lived,
@@ -8344,10 +8353,339 @@ fn run_observatorium_mode(
     launch_observatorium_browser(&project_name, &certs_dir, router_host_port, debug)
 }
 
+/// Bounded default for a prompt-driven machine-readable agent run.
+///
+/// Callers may override it with a positive
+/// `TILLANDSIAS_AGENT_TIMEOUT_SECS`. Invalid/zero overrides fail before
+/// launch; an absent override never creates an unbounded delegated worker.
+/// @trace spec:forge-as-only-runtime
+const DEFAULT_DELEGATED_AGENT_TIMEOUT_SECS: u64 = 900;
+const DELEGATED_AGENT_REMOVE_TIMEOUT_SECS: u64 = 5;
+const DELEGATED_AGENT_REAP_TIMEOUT_SECS: u64 = 10;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DelegatedRunConfig {
+    timeout_secs: u64,
+    result_file: Option<PathBuf>,
+    instance_identity: String,
+}
+
+#[derive(Debug)]
+struct DelegatedRunReport {
+    outcome: crate::agent_result::AgentOutcome,
+    infrastructure_errors: Vec<String>,
+}
+
+fn delegated_report_result(report: &DelegatedRunReport) -> Result<String, String> {
+    let outcome_summary = report.outcome.summary();
+    if report.outcome.is_success() && report.infrastructure_errors.is_empty() {
+        return Ok(outcome_summary);
+    }
+
+    if report.outcome.is_success() {
+        return Err(format!(
+            "FAILED: delegated result handling failed: {}",
+            report.infrastructure_errors.join("; ")
+        ));
+    }
+
+    let mut reason = outcome_summary;
+    if !report.infrastructure_errors.is_empty() {
+        reason.push_str("; ");
+        reason.push_str(&report.infrastructure_errors.join("; "));
+    }
+    Err(reason)
+}
+
+fn delegated_json_requested(prompt: Option<&str>) -> bool {
+    prompt.is_some_and(|value| !value.trim().is_empty())
+        && std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() == Ok("json")
+}
+
+fn delegated_run_config(prompt: Option<&str>) -> Result<Option<DelegatedRunConfig>, String> {
+    if std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() != Ok("json") {
+        return Ok(None);
+    }
+    if prompt.is_none_or(|value| value.trim().is_empty()) {
+        return Err("TILLANDSIAS_AGENT_RESULT_FORMAT=json requires a non-empty prompt".to_string());
+    }
+
+    let timeout_secs = match std::env::var("TILLANDSIAS_AGENT_TIMEOUT_SECS") {
+        Ok(raw) => raw
+            .parse::<u64>()
+            .ok()
+            .filter(|secs| *secs > 0)
+            .ok_or_else(|| {
+                "TILLANDSIAS_AGENT_TIMEOUT_SECS must be a positive integer for a delegated JSON run"
+                    .to_string()
+            })?,
+        Err(std::env::VarError::NotPresent) => DEFAULT_DELEGATED_AGENT_TIMEOUT_SECS,
+        Err(std::env::VarError::NotUnicode(_)) => {
+            return Err(
+                "TILLANDSIAS_AGENT_TIMEOUT_SECS must be valid UTF-8 for a delegated JSON run"
+                    .to_string(),
+            );
+        }
+    };
+    let result_file = std::env::var_os("TILLANDSIAS_AGENT_RESULT_FILE")
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from);
+    let instance_identity = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            "delegated JSON agent run requires a non-empty TILLANDSIAS_FORGE_INSTANCE so timeout cleanup owns an exact worker"
+                .to_string()
+        })?;
+
+    Ok(Some(DelegatedRunConfig {
+        timeout_secs,
+        result_file,
+        instance_identity,
+    }))
+}
+
+fn atomically_export_agent_capture(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("agent result path has no file name: {}", path.display()))?;
+    if file_name.is_empty() {
+        return Err(format!(
+            "agent result path has an empty file name: {}",
+            path.display()
+        ));
+    }
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut temp = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|err| format!("create fresh agent result beside {}: {err}", path.display()))?;
+    temp.write_all(bytes)
+        .map_err(|err| format!("write fresh agent result {}: {err}", path.display()))?;
+    temp.flush()
+        .map_err(|err| format!("flush fresh agent result {}: {err}", path.display()))?;
+    temp.as_file()
+        .sync_all()
+        .map_err(|err| format!("sync fresh agent result {}: {err}", path.display()))?;
+    temp.persist(path).map_err(|err| {
+        format!(
+            "publish fresh agent result {}: {}",
+            path.display(),
+            err.error
+        )
+    })?;
+    Ok(())
+}
+
+async fn remove_delegated_container_exact(
+    client: &PodmanClient,
+    container_name: &str,
+) -> Option<String> {
+    let remove_args = vec![
+        "rm".to_string(),
+        "--force".to_string(),
+        "--ignore".to_string(),
+        container_name.to_string(),
+    ];
+    match tokio::time::timeout(
+        Duration::from_secs(DELEGATED_AGENT_REMOVE_TIMEOUT_SECS),
+        client.execute(OperationKind::Container, &remove_args),
+    )
+    .await
+    {
+        Ok(Ok(_)) => None,
+        Ok(Err(failure)) => Some(format!(
+            "timeout cleanup failed for exact container {container_name}: {failure}"
+        )),
+        Err(_) => Some(format!(
+            "timeout cleanup command for exact container {container_name} exceeded {DELEGATED_AGENT_REMOVE_TIMEOUT_SECS}s"
+        )),
+    }
+}
+
+async fn run_delegated_agent_container(
+    client: &PodmanClient,
+    stage: &str,
+    container_name: &str,
+    args: &[String],
+    debug: bool,
+    config: &DelegatedRunConfig,
+) -> Result<DelegatedRunReport, String> {
+    let required_suffix = forge_instance_suffix_from(Some(&config.instance_identity));
+    if required_suffix.is_empty() || !container_name.ends_with(&required_suffix) {
+        return Err(format!(
+            "delegated container {container_name} is not scoped to TILLANDSIAS_FORGE_INSTANCE={}",
+            config.instance_identity
+        ));
+    }
+
+    // Invalidate any caller-preseeded result before spawning. Classification
+    // never reads this file, and downstream readers see either this empty
+    // current-generation placeholder or bytes captured by this run.
+    if let Some(path) = config.result_file.as_deref() {
+        atomically_export_agent_capture(path, b"")?;
+    }
+
+    let mut run = Box::pin(client.run_container_attached_captured_observed(
+        stage,
+        container_name,
+        args,
+        debug,
+    ));
+    let deadline = tokio::time::sleep(Duration::from_secs(config.timeout_secs));
+    tokio::pin!(deadline);
+
+    tokio::select! {
+        result = &mut run => {
+            let output = match result {
+                Ok(output) => output,
+                Err(error) => {
+                    // Spawn/read/reap errors can occur after Podman accepted
+                    // the run. The future is complete, so one bounded exact
+                    // removal cannot race a later create and must be attempted
+                    // before surfacing the capture failure.
+                    drop(run);
+                    let cleanup = remove_delegated_container_exact(client, container_name).await;
+                    return Err(match cleanup {
+                        Some(cleanup_error) => format!("{error}; {cleanup_error}"),
+                        None => error,
+                    });
+                }
+            };
+            let mut infrastructure_errors = Vec::new();
+            if let Some(path) = config.result_file.as_deref()
+                && let Err(err) = atomically_export_agent_capture(path, &output.stdout)
+            {
+                infrastructure_errors.push(err);
+            }
+            let transcript = String::from_utf8_lossy(&output.stdout);
+            if output.stdout_truncated {
+                infrastructure_errors.push(
+                    "agent JSONL stdout exceeded the bounded capture limit; the stream was drained but is not eligible for classification"
+                        .to_string(),
+                );
+            }
+            Ok(DelegatedRunReport {
+                outcome: crate::agent_result::classify_captured_run(
+                    &transcript,
+                    &output.status,
+                    output.stdout_truncated,
+                ),
+                infrastructure_errors,
+            })
+        }
+        _ = &mut deadline => {
+            // Do not drop the `podman run` future on timeout. It stays pinned
+            // and awaitable while an independently checked removal targets
+            // only this digest-scoped worker name. Siblings are never listed,
+            // globbed, or inferred.
+            let mut infrastructure_errors = Vec::new();
+            if let Some(error) = remove_delegated_container_exact(client, container_name).await {
+                infrastructure_errors.push(error);
+            }
+
+            let reaped = tokio::time::timeout(
+                Duration::from_secs(DELEGATED_AGENT_REAP_TIMEOUT_SECS),
+                &mut run,
+            )
+            .await;
+            match reaped {
+                Ok(Ok(output)) => {
+                    if let Some(path) = config.result_file.as_deref()
+                        && let Err(err) = atomically_export_agent_capture(path, &output.stdout)
+                    {
+                        infrastructure_errors.push(err);
+                    }
+                    if output.stdout_truncated {
+                        infrastructure_errors.push(
+                            "timed-out agent JSONL stdout exceeded the bounded capture limit while draining"
+                                .to_string(),
+                        );
+                    }
+                }
+                Ok(Err(err)) => infrastructure_errors.push(format!(
+                    "timed-out container {container_name} removal was requested but its podman run failed while reaping: {err}"
+                )),
+                Err(_) => infrastructure_errors.push(format!(
+                    "timed-out container {container_name} did not reap within {DELEGATED_AGENT_REAP_TIMEOUT_SECS}s after exact-name removal"
+                )),
+            }
+            // Drop the captured run future here so kill_on_drop is an active
+            // CLI backstop before the second removal. The second exact-name
+            // pass closes the create-after-first-rm race: if the deadline
+            // fired before Podman finished creating the named container, it
+            // cannot survive this post-reap/backstop removal.
+            drop(run);
+            if let Some(error) = remove_delegated_container_exact(client, container_name).await {
+                infrastructure_errors.push(format!("post-reap {error}"));
+            }
+
+            Ok(DelegatedRunReport {
+                outcome: crate::agent_result::AgentOutcome::TimedOut {
+                    after_secs: config.timeout_secs,
+                },
+                infrastructure_errors,
+            })
+        }
+    }
+}
+
+async fn run_agent_container_attached(
+    client: &PodmanClient,
+    stage: &str,
+    container_name: &str,
+    args: &[String],
+    debug: bool,
+    delegated: Option<&DelegatedRunConfig>,
+) -> Result<(), String> {
+    let Some(config) = delegated else {
+        return client
+            .run_container_attached_observed(stage, container_name, args, debug)
+            .await;
+    };
+
+    let report = run_delegated_agent_container(
+        client,
+        stage,
+        container_name,
+        args,
+        debug,
+        config,
+    )
+    .await
+    .map_err(|err| {
+        eprintln!("[forge-result] {stage} FAILED: {err}");
+        eprintln!(
+            "[forge-result] {stage} DID NOT COMPLETE SUCCESSFULLY — do not treat this work as done"
+        );
+        err
+    })?;
+
+    match delegated_report_result(&report) {
+        Ok(summary) => {
+            eprintln!("[forge-result] {stage} {summary}");
+            Ok(())
+        }
+        Err(reason) => {
+            // Emit exactly one primary non-success verdict. In particular, a
+            // successful agent transcript followed by a failed atomic export
+            // must never print a standalone `succeeded` line that a
+            // line-oriented dispatcher could mistake for completion.
+            eprintln!("[forge-result] {stage} {reason}");
+            eprintln!(
+                "[forge-result] {stage} DID NOT COMPLETE SUCCESSFULLY — do not treat this work as done"
+            );
+            Err(reason)
+        }
+    }
+}
+
 /// Run in OpenCode mode — launch the full enclave stack and OpenCode TUI.
 ///
 /// @trace spec:cli-mode
 fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> Result<(), String> {
+    let delegated = delegated_run_config(prompt)?;
     require_desktop_user_session("tillandsias --opencode")?;
     report_runtime_lane("--opencode", debug);
 
@@ -8579,14 +8917,16 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             diagnostics,
             debug,
         );
-        let result = client
-            .run_container_attached_observed(
-                "opencode",
-                &forge_container_name(project_name),
-                &opencode_args,
-                debug,
-            )
-            .await;
+        let run_container_name = forge_container_name(project_name);
+        let result = run_agent_container_attached(
+            &client,
+            "opencode",
+            &run_container_name,
+            &opencode_args,
+            debug,
+            delegated.as_ref(),
+        )
+        .await;
         cleanup_shared_stack_if_no_running_forge(
             &client,
             project_name,
@@ -10423,6 +10763,9 @@ fn build_forge_agent_run_args_with_vault(
         && matches!(mode, ForgeAgentMode::Codex)
     {
         spec = spec.env("TILLANDSIAS_CODEX_PROMPT", prompt);
+        if delegated_json_requested(Some(prompt)) {
+            spec = spec.env("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        }
     }
 
     for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
@@ -10695,6 +11038,7 @@ fn run_forge_agent_cli_mode(
              use --codex --prompt or --opencode --prompt"
         ));
     }
+    let delegated = delegated_run_config(prompt)?;
     require_desktop_user_session(&format!("tillandsias {flag}"))?;
     report_runtime_lane(flag, debug);
 
@@ -10786,76 +11130,27 @@ fn run_forge_agent_cli_mode(
         // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
         let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
-        // Delegated runs get a deadline (order 429). A hung worker must not
-        // block a dispatcher forever, and "still running after N seconds" is a
-        // distinct outcome from success or failure — conflating it with either
-        // is how a stuck agent gets recorded as done. Interactive sessions are
-        // never deadlined: only a run that asked for machine-readable output
-        // and supplied a timeout is bounded.
-        let delegated = std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() == Ok("json");
-        let deadline_secs = std::env::var("TILLANDSIAS_AGENT_TIMEOUT_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .filter(|s| *s > 0);
-
         let run_container_name = forge_container_name_for_mode(project_name, mode);
-        let run_fut = client.run_container_attached_observed(
+        let result = run_agent_container_attached(
+            &client,
             mode.slug(),
             &run_container_name,
             &forge_args,
             debug,
-        );
-        let mut timed_out_after: Option<u64> = None;
-        let result = match (delegated, deadline_secs) {
-            (true, Some(secs)) => {
-                match tokio::time::timeout(std::time::Duration::from_secs(secs), run_fut).await {
-                    Ok(r) => r,
-                    Err(_) => {
-                        timed_out_after = Some(secs);
-                        Err(format!("delegated run exceeded {secs}s deadline"))
-                    }
-                }
-            }
-            _ => run_fut.await,
-        };
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, Some(&launch_marker), debug)
-            .await;
+            delegated.as_ref(),
+        )
+        .await;
+        cleanup_shared_stack_if_no_running_forge(
+            &client,
+            project_name,
+            Some(&launch_marker),
+            debug,
+        )
+        .await;
 
         if let Some(handle) = diag_emitter {
             handle.abort();
             let _ = handle.await;
-        }
-
-        // Delegated-run verdict (order 429). Only for runs that asked for
-        // machine-readable output — an interactive session must not be
-        // narrated at the operator.
-        //
-        // The verdict is deliberately conservative: with no transcript to read,
-        // classify_run reports INDETERMINATE even on a clean exit, because a
-        // CLI can exit 0 having done nothing. "Exited without error" is not
-        // evidence the delegated work happened, and a dispatcher that treats it
-        // as such silently marks abandoned runs as done.
-        if delegated {
-            let verdict = match timed_out_after {
-                Some(after_secs) => crate::agent_result::AgentOutcome::TimedOut { after_secs },
-                None => {
-                    let transcript = std::env::var("TILLANDSIAS_AGENT_RESULT_FILE")
-                        .ok()
-                        .and_then(|p| std::fs::read_to_string(p).ok())
-                        .unwrap_or_default();
-                    let exit_code = if result.is_ok() { Some(0) } else { None };
-                    crate::agent_result::classify_run(&transcript, exit_code)
-                }
-            };
-            // Non-success is stated loudly and separately, so a dispatcher
-            // scraping this line cannot mistake "ran" for "worked".
-            eprintln!("[forge-result] {} {}", mode.slug(), verdict.summary());
-            if !verdict.is_success() {
-                eprintln!(
-                    "[forge-result] {} DID NOT COMPLETE SUCCESSFULLY — do not treat this work as done",
-                    mode.slug()
-                );
-            }
         }
 
         result.map_err(|e| format!("[forge-launch] {} session exited: {e}", mode.slug()))
@@ -13013,6 +13308,44 @@ mod tests {
         crate::runtime_assets::env_lock()
     }
 
+    struct TestEnvRestore(Vec<(&'static str, Option<std::ffi::OsString>)>);
+
+    impl TestEnvRestore {
+        fn capture(names: &[&'static str]) -> Self {
+            Self(
+                names
+                    .iter()
+                    .map(|name| (*name, std::env::var_os(name)))
+                    .collect(),
+            )
+        }
+
+        fn set(&self, name: &'static str, value: impl AsRef<std::ffi::OsStr>) {
+            unsafe {
+                std::env::set_var(name, value);
+            }
+        }
+
+        fn remove(&self, name: &'static str) {
+            unsafe {
+                std::env::remove_var(name);
+            }
+        }
+    }
+
+    impl Drop for TestEnvRestore {
+        fn drop(&mut self) {
+            unsafe {
+                for (name, prior) in self.0.drain(..) {
+                    match prior {
+                        Some(value) => std::env::set_var(name, value),
+                        None => std::env::remove_var(name),
+                    }
+                }
+            }
+        }
+    }
+
     /// Order 437: run a test in the OPT-IN shared host-mount mode by setting
     /// TILLANDSIAS_FORGE_HOST_MOUNT=1 for the guard's lifetime, restoring the
     /// prior value on drop (panic path included). Acquire `env_lock()` first —
@@ -14908,6 +15241,466 @@ mod tests {
             "Error: cannot set up namespace: newuidmap returned exit status 1"
         ));
         assert!(!podman_runtime_blocker("podman run exited with status 125"));
+    }
+
+    #[test]
+    fn delegated_result_format_propagates_to_both_prompted_builders_only() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_AGENT_RESULT_FORMAT",
+            "TILLANDSIAS_AGENT_RESULT_FILE",
+            "TILLANDSIAS_AGENT_TIMEOUT_SECS",
+            "TILLANDSIAS_FORGE_INSTANCE",
+        ]);
+        restore.set("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        restore.set("TILLANDSIAS_AGENT_RESULT_FILE", "/host/only/result.jsonl");
+        restore.set("TILLANDSIAS_AGENT_TIMEOUT_SECS", "17");
+        restore.set(
+            "TILLANDSIAS_FORGE_INSTANCE",
+            "forge-alpha-codex-20260723T070000Z",
+        );
+
+        let project = PathBuf::from("/tmp/project");
+        let certs = PathBuf::from("/tmp/ca");
+        let opencode = build_opencode_forge_args(
+            &project,
+            "alpha",
+            Some("delegated opencode"),
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        let codex = build_forge_agent_run_args_with_vault(
+            &project,
+            "alpha",
+            &certs,
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            None,
+            Some("delegated codex"),
+        );
+        for (lane, args) in [("opencode", opencode), ("codex", codex)] {
+            assert!(
+                has_arg(&args, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+                "{lane} builder did not propagate JSON format: {args:?}"
+            );
+            assert!(
+                args.iter().all(|arg| {
+                    !arg.contains("TILLANDSIAS_AGENT_RESULT_FILE")
+                        && !arg.contains("/host/only/result.jsonl")
+                        && !arg.contains("TILLANDSIAS_AGENT_TIMEOUT_SECS")
+                }),
+                "{lane} builder leaked host-only timeout/result path into container argv: {args:?}"
+            );
+        }
+
+        let web = build_opencode_forge_args(
+            &project,
+            "alpha",
+            Some("detached web seed"),
+            &certs,
+            "1.2.3",
+            ForgeMode::Web,
+            None,
+            false,
+            false,
+        );
+        assert!(
+            !has_arg(&web, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+            "detached OpenCode Web serve has no current-run capture and must not receive the delegated result request: {web:?}"
+        );
+
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FORMAT");
+        let unstructured = build_opencode_forge_args(
+            &project,
+            "alpha",
+            Some("ordinary prompt"),
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        assert!(
+            !has_arg(&unstructured, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+            "ordinary prompted runs must retain human-formatted output"
+        );
+    }
+
+    #[test]
+    fn delegated_result_codex_entrypoint_appends_json_to_the_exec_command() {
+        let entrypoint = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/default/entrypoint-forge-codex.sh"
+        ));
+        assert!(
+            entrypoint.contains("codex_result_args+=(--json)"),
+            "the Codex entrypoint must append --json under the structured-result request"
+        );
+        assert!(
+            entrypoint.contains(
+                r#"codex exec "${codex_forge_args[@]}" "${codex_result_args[@]}" "$TILLANDSIAS_CODEX_PROMPT""#
+            ),
+            "the prompted codex exec command must consume codex_result_args"
+        );
+    }
+
+    #[test]
+    fn delegated_result_success_with_infrastructure_error_has_no_success_verdict() {
+        let result = delegated_report_result(&DelegatedRunReport {
+            outcome: crate::agent_result::AgentOutcome::Succeeded {
+                last_message: Some("agent claimed completion".to_string()),
+            },
+            infrastructure_errors: vec!["atomic result export failed".to_string()],
+        })
+        .expect_err("post-run infrastructure failure must dominate transcript success");
+        assert!(result.starts_with("FAILED:"), "{result}");
+        assert!(
+            !result.to_ascii_lowercase().contains("succeeded"),
+            "a line scraper must not see a success verdict before failure: {result}"
+        );
+    }
+
+    #[test]
+    fn delegated_result_timeout_defaults_bounded_and_rejects_invalid_override() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_AGENT_RESULT_FORMAT",
+            "TILLANDSIAS_AGENT_TIMEOUT_SECS",
+            "TILLANDSIAS_AGENT_RESULT_FILE",
+            "TILLANDSIAS_FORGE_INSTANCE",
+        ]);
+        restore.set("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        restore.remove("TILLANDSIAS_AGENT_TIMEOUT_SECS");
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FILE");
+        restore.set("TILLANDSIAS_FORGE_INSTANCE", "worker-config");
+
+        let config = delegated_run_config(Some("work"))
+            .expect("default config")
+            .expect("delegated config");
+        assert_eq!(config.timeout_secs, DEFAULT_DELEGATED_AGENT_TIMEOUT_SECS);
+        assert!(config.result_file.is_none());
+
+        for invalid in ["0", "-1", "nonsense"] {
+            restore.set("TILLANDSIAS_AGENT_TIMEOUT_SECS", invalid);
+            assert!(
+                delegated_run_config(Some("work")).is_err(),
+                "invalid timeout {invalid:?} must fail before launch"
+            );
+        }
+        assert!(
+            delegated_run_config(None).is_err(),
+            "JSON format without a prompt must fail instead of opening an interactive run"
+        );
+        assert!(delegated_run_config(Some(" \t")).is_err());
+        restore.set("TILLANDSIAS_AGENT_TIMEOUT_SECS", "3");
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let missing_instance = delegated_run_config(Some("work")).unwrap_err();
+        assert!(
+            missing_instance.contains("TILLANDSIAS_FORGE_INSTANCE"),
+            "{missing_instance}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_PODMAN_BIN",
+            "FAKE_PODMAN_MODE",
+            "FAKE_PODMAN_LOG",
+            "FAKE_PODMAN_RELEASE_DIR",
+            "FAKE_PODMAN_PID_FILE",
+            "FAKE_PODMAN_EXITED_FILE",
+        ]);
+        let scratch = tempfile::tempdir().expect("fake podman scratch");
+        let fake = scratch.path().join("podman");
+        let log = scratch.path().join("calls.log");
+        let release_dir = scratch.path().join("release");
+        let pid_file = scratch.path().join("run.pid");
+        let exited_file = scratch.path().join("run.exited");
+        fs::create_dir(&release_dir).expect("release dir");
+        fs::write(
+            &fake,
+            r#"#!/bin/sh
+command=
+name=
+previous=
+for arg in "$@"; do
+    if [ -z "$command" ]; then
+        case "$arg" in
+            run|rm) command=$arg ;;
+        esac
+    fi
+    if [ "$previous" = "--name" ]; then
+        name=$arg
+    fi
+    previous=$arg
+done
+
+if [ "$command" = "rm" ]; then
+    target=
+    for arg in "$@"; do target=$arg; done
+    case " $* " in
+        *" rm --force --ignore $target "*) ;;
+        *) exit 64 ;;
+    esac
+    printf 'rm --force --ignore %s\n' "$target" >> "$FAKE_PODMAN_LOG"
+    : > "$FAKE_PODMAN_RELEASE_DIR/$target"
+    exit 0
+fi
+
+if [ "$command" != "run" ]; then
+    exit 65
+fi
+
+printf '%s\n' "$$" > "$FAKE_PODMAN_PID_FILE"
+case "$FAKE_PODMAN_MODE" in
+    opencode-success)
+        printf '%s\n' \
+            '{"type":"step_start","sessionID":"s1"}' \
+            '{"type":"text","sessionID":"s1","part":{"text":"fresh opencode result"}}' \
+            '{"type":"step_finish","sessionID":"s1","part":{"reason":"stop"}}'
+        ;;
+    empty-success)
+        ;;
+    codex-exit-37)
+        printf '%s\n' \
+            '{"type":"thread.started","thread_id":"t1"}' \
+            '{"type":"item.completed","item":{"type":"agent_message","text":"looks successful"}}' \
+            '{"type":"turn.completed"}'
+        exit 37
+        ;;
+    timeout)
+        while [ ! -e "$FAKE_PODMAN_RELEASE_DIR/$name" ]; do
+            sleep 0.02
+        done
+        : > "$FAKE_PODMAN_EXITED_FILE"
+        ;;
+    *)
+        exit 66
+        ;;
+esac
+"#,
+        )
+        .expect("write fake podman");
+        let mut permissions = fs::metadata(&fake).expect("fake metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fake, permissions).expect("chmod fake podman");
+
+        restore.set("TILLANDSIAS_PODMAN_BIN", &fake);
+        restore.set("FAKE_PODMAN_LOG", &log);
+        restore.set("FAKE_PODMAN_RELEASE_DIR", &release_dir);
+        restore.set("FAKE_PODMAN_PID_FILE", &pid_file);
+        restore.set("FAKE_PODMAN_EXITED_FILE", &exited_file);
+
+        let client = PodmanClient::new();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("test runtime");
+        let run_args = |name: &str| {
+            vec![
+                "--rm".to_string(),
+                "--name".to_string(),
+                name.to_string(),
+                "localhost/tillandsias-forge:test".to_string(),
+            ]
+        };
+
+        let result_file = scratch.path().join("result.jsonl");
+        let opencode_identity = "worker-a";
+        let opencode_name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::OpenCode,
+            Some(opencode_identity),
+        );
+        fs::write(&result_file, b"STALE PRESEED").expect("preseed result");
+        restore.set("FAKE_PODMAN_MODE", "opencode-success");
+        let fresh = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "opencode",
+                &opencode_name,
+                &run_args(&opencode_name),
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: Some(result_file.clone()),
+                    instance_identity: opencode_identity.to_string(),
+                },
+            ))
+            .expect("fresh opencode run");
+        assert!(fresh.outcome.is_success(), "{fresh:?}");
+        assert!(fresh.infrastructure_errors.is_empty(), "{fresh:?}");
+        let exported = fs::read(&result_file).expect("fresh export");
+        assert!(exported.starts_with(br#"{"type":"step_start""#));
+        assert!(!exported.windows(5).any(|window| window == b"STALE"));
+
+        // A stale success transcript at RESULT_FILE must never influence an
+        // empty current capture. The fresh zero-byte export replaces it and
+        // classification remains indeterminate.
+        fs::write(
+            &result_file,
+            br#"{"type":"turn.completed"}
+"#,
+        )
+        .expect("stale success preseed");
+        let empty_identity = "worker-b";
+        let empty_name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(empty_identity),
+        );
+        restore.set("FAKE_PODMAN_MODE", "empty-success");
+        let empty = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "codex",
+                &empty_name,
+                &run_args(&empty_name),
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: Some(result_file.clone()),
+                    instance_identity: empty_identity.to_string(),
+                },
+            ))
+            .expect("empty current run");
+        assert!(matches!(
+            empty.outcome,
+            crate::agent_result::AgentOutcome::Indeterminate { .. }
+        ));
+        assert_eq!(fs::read(&result_file).expect("empty fresh export"), b"");
+
+        // Spawn failure still invalidates a caller-preseeded result before the
+        // attempted run, and the error path attempts exact cleanup.
+        let spawn_identity = "worker-spawn-error";
+        let spawn_name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(spawn_identity),
+        );
+        fs::write(&result_file, b"STALE SPAWN RESULT").expect("spawn preseed");
+        restore.set(
+            "TILLANDSIAS_PODMAN_BIN",
+            scratch.path().join("missing-podman"),
+        );
+        let spawn_error = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "codex",
+                &spawn_name,
+                &run_args(&spawn_name),
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: Some(result_file.clone()),
+                    instance_identity: spawn_identity.to_string(),
+                },
+            ))
+            .unwrap_err();
+        assert!(spawn_error.contains("could not spawn"), "{spawn_error}");
+        assert_eq!(
+            fs::read(&result_file).expect("spawn-error fresh marker"),
+            b""
+        );
+        restore.set("TILLANDSIAS_PODMAN_BIN", &fake);
+
+        let nonzero_identity = "worker-c";
+        let nonzero_name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(nonzero_identity),
+        );
+        restore.set("FAKE_PODMAN_MODE", "codex-exit-37");
+        let nonzero_error = runtime
+            .block_on(run_agent_container_attached(
+                &client,
+                "codex",
+                &nonzero_name,
+                &run_args(&nonzero_name),
+                false,
+                Some(&DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: None,
+                    instance_identity: nonzero_identity.to_string(),
+                }),
+            ))
+            .expect_err("the production verdict wrapper must reject a real exit 37");
+        assert!(
+            nonzero_error.contains("FAILED") && nonzero_error.contains("37"),
+            "wrapper lost the nonzero failure: {nonzero_error}"
+        );
+
+        let exact_identity = "forge-alpha-codex-20260723T070000Z";
+        let sibling_identity = "forge-alpha-codex-20260723T070001Z";
+        let exact = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(exact_identity),
+        );
+        let sibling = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(sibling_identity),
+        );
+        fs::write(release_dir.join(&sibling), b"sibling-alive").expect("sibling marker");
+        let _ = fs::remove_file(&exited_file);
+        restore.set("FAKE_PODMAN_MODE", "timeout");
+        let timeout = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "codex",
+                &exact,
+                &run_args(&exact),
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 1,
+                    result_file: None,
+                    instance_identity: exact_identity.to_string(),
+                },
+            ))
+            .expect("timeout report");
+        assert_eq!(
+            timeout.outcome,
+            crate::agent_result::AgentOutcome::TimedOut { after_secs: 1 }
+        );
+        assert!(
+            timeout.infrastructure_errors.is_empty(),
+            "exact removal/reap failed: {timeout:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(&log).expect("rm log"),
+            format!("rm --force --ignore {exact}\nrm --force --ignore {exact}\n")
+        );
+        assert_eq!(
+            fs::read(release_dir.join(&sibling)).expect("sibling survived"),
+            b"sibling-alive"
+        );
+        assert!(
+            exited_file.exists(),
+            "captured podman run process did not observe exact removal and exit"
+        );
+        let pid: i32 = fs::read_to_string(&pid_file)
+            .expect("run pid")
+            .trim()
+            .parse()
+            .expect("numeric pid");
+        assert_eq!(
+            unsafe { libc::kill(pid, 0) },
+            -1,
+            "captured podman run process {pid} survived bounded reap"
+        );
     }
 
     #[test]
