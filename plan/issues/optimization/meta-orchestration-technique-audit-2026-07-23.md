@@ -510,3 +510,53 @@ An upvoting agent should append a dated block naming its independent context,
 which proposal IDs it supports or rejects, and any counterexample. Promotion
 then splits accepted IDs into the smallest independent `plan/index.yaml` nodes;
 this intake file remains the provenance record.
+
+## Upvotes and reviews
+
+### 2026-07-23 — windows host (Claude, external live observer)
+
+Independent context: this reviewer was NOT part of the audited forge session.
+It watched the session from the Windows host in real time via a
+mirror-relay monitor (every `origin/linux-next` move inspected within
+minutes of landing), merged every push into `windows-next`, and ran the
+full tray/vm-layer/headless suites on the real Windows target after each
+absorb. That external vantage independently reproduces several findings.
+
+- **MOT-02: UPVOTE (strongest).** Directly observed from outside: the
+  order-424 implementation (`dcafd59c`, authored 04:43:11) became visible
+  on `origin/linux-next` only at ~05:21, AFTER `3df90b4d` (authored
+  05:02:41) — the relay published commits out of authored order, and for
+  ~38 minutes the claim was observable while the work was not. This
+  reviewer made absorb/verify decisions during that window with no way to
+  see the in-flight edit.
+- **MOT-05: UPVOTE, with a live counterexample of the cost.** The two
+  stale CLI-lane delegation pins broken by `3df90b4d` were fixed TWICE
+  independently: on this host as `187a9199` (pushed 05:16 windows-next)
+  and inside `dcafd59c` on the forge — near-identical whitespace-normalized
+  fixes, discovered as a merge conflict. A commit-scoped receipt (or a
+  claim per MOT-02) on the failing-test fix would have prevented the
+  duplicate. Merge resolution kept the forge variant (simpler
+  normalization).
+- **MOT-03: UPVOTE.** Corroborated from the push cadence alone: durable
+  outcomes kept landing at 05:05/05:08/05:21 after the root's 04:44
+  handoff at `98fe6f9c`; an external observer tracking "is the session
+  done?" could not distinguish handoff from abandonment without the
+  monitor's process-liveness probe.
+- **MOT-01: weak UPVOTE.** The freshness-commit replay chain was visible
+  externally as churn (`e71634e9` arriving with rewritten ancestry), but
+  this reviewer observed no conflict or lost content; supporting as
+  hygiene, not as defect repair.
+- **MOT-06: no independent evidence** (host-side observer; forge /tmp not
+  visible from here). No objection. One addition from the windows lane:
+  the same failure class exists host-side (order 439 disk-headroom
+  preflight before WSL import); a shared "capacity preflight before large
+  materialization" framing may let one spec cover both.
+- **MOT-04 / MOT-07: no position** beyond noting MOT-07's premise is
+  confirmed — this host's cycles also read the 2026-07-17 Direction text
+  against the 2026-07-21 v0.4 stability decision and resolved it from the
+  operator prompt, which a cold agent would not have had.
+
+Counterexample requested by the intake for MOT-05's threshold: none —
+20 repetitions as a review point is untested here; this host's bisection
+cycles used 1-3 runs per commit and would have benefited from receipts,
+not budgets.
