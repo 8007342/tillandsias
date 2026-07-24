@@ -67,6 +67,16 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "OK"
 
+  - step: "pre-receive hook finds diff base for new branches"
+    command: "grep -q 'find_diff_base' images/git/pre-receive-hook.sh && grep -q 'merge-base' images/git/pre-receive-hook.sh && echo 'OK: hook has diff-base logic for new branches' || { echo 'FAIL: hook missing diff-base logic'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "pre-receive hook exempts legacy archive from validation"
+    command: "grep -q 'is_legacy_archive' images/git/pre-receive-hook.sh && grep -qF 'openspec/changes/archive' images/git/pre-receive-hook.sh && echo 'OK: hook exempts legacy archive' || { echo 'FAIL: hook missing legacy archive exemption'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
 observability:
   traces:
     - "@trace spec:git-mirror-service"

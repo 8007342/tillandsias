@@ -21592,14 +21592,29 @@ plan_index:
       order: 462
       desired_release: v0.4
       title: "git-mirror pre-receive full-tree YAML validation rejects EVERY new-branch push — in-guest agents cannot create branches, stranding salvage/WIP flows"
-      status: ready
+      status: done
       kind: fix
-      deliverable: images/git/ pre-receive hook (validate only changed paths vs the nearest existing ref; treat legacy openspec/changes/archive as exempt)
+      deliverable: images/git/pre-receive-hook.sh (diff-base + legacy archive exemption)
       depends_on: []
       pickup_role: linux
       owner_host: linux
       capability_tags: [linux, git-mirror, forge, hooks, validation]
       estimated_hours: 2
+      events:
+        - type: completed
+          ts: "2026-07-24T07:55:00Z"
+          agent_id: "linux-opencode-bigpickle-20260724"
+          host: linux_mutable
+          commits: ["(this cycle)"]
+          summary: >
+            Fixed: (1) new-branch pushes now find a diff-base ancestor ref
+            via find_diff_base() instead of validating the entire inherited
+            tree; (2) legacy openspec/changes/archive/* paths are explicitly
+            exempted from YAML validation via is_legacy_archive(). Added
+            litmus assertions for both behaviors. Extended
+            test-pre-receive-yaml-gate.sh with test 4 (new branch + frozen
+            legacy archive). All 165 pre-build litmus tests pass. Build
+            green.
       operator_note: >
         Discovered live 2026-07-23 08:50Z by the windows observer while
         salvaging the usage-limit-stranded result-retrieval worktree: the
