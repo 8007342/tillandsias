@@ -34,19 +34,37 @@ End-to-end trace verdict (the stuck "Logging In" is NOT primarily a refresh gap)
   the failure, holding "Logging In" instead of falling back to the actionable
   leaf.
 
-### Fixes applied this pass
+### Resolution (root cause found + fixed 2026-07-23)
 
-1. **Visibility** — dropped `exec` (`pty/mod.rs`) so the `|| (…)` fallback catches
-   a non-zero headless exit, prints a marker, and holds the window ~10s so the
-   operator can read the headless error printed above. The failing step is now
-   observable.
-2. **Honesty** — `LOGIN_GRACE` 90s → 60s (`action_host.rs`) so a failed login is
-   not masked as long; the login terminal is the authoritative failure surface.
-3. **Root persistence fix — PENDING the revealed error.** The Vault write is
-   already synchronous + verified; the exposure is the pre-write gh egress/CA
-   steps (`main.rs:7022`/`7035`). Once the now-visible error names the failing
-   step, harden it (preflight egress/CA before the prompt, or persist to Vault
-   before the fallible `gh auth status` gate).
+**Root cause = missing SELinux relabel on the login container's CA mount.** The
+ephemeral `tillandsias-github-login-<pid>` container mounts the CA bundle WITHOUT
+`relabel=shared`/`label=disable`, so on the SELinux-enforcing Fedora guest the CA
+at `/etc/tillandsias/ca.crt` is present but UNREADABLE by `container_t`.
+`vault-cli.sh`'s `require_cacert()` gate trips ("CA bundle not readable") and the
+in-container Vault write (`main.rs:7051-7064`) aborts BEFORE any token bytes reach
+Vault. The status probe works because it sets `--security-opt=label=disable`, and
+every peer CA mount uses the canonical `relabel=shared` form (asserted
+`main.rs:~16733`) — the login container was the sole omission (the 2026-07-22 CA
+fix added the mount but missed the relabel). gh egress is NOT the cause: squid
+`ssl_bump splice all` splices github.com with public CAs, and the login container
+has the probe's exact network + proxy env.
+
+**Fix:** add `relabel=shared` to the CA mount (`main.rs:6941`). One line; matches
+the canonical form + the probe's readability.
+
+**Reverted (operator anti-polling / anti-self-DDoS directive):** the earlier
+tray-side "fast confirm" (a 2s cadence that made the GUEST run a
+`probe_github_username` CONTAINER every tick just to refresh a chip — literally
+self-DDoS) and the `exec`-removal (which risked breaking the interactive
+git-identity stdin read — the login hung there on the exec-removed build) were
+both REMOVED. Login-state reflection reverts to the existing push/fallback.
+PROMPT, event-driven reflection (a login-state event pushed WHEN the token is
+persisted — zero polling) is the flow-FSM/event-channel research
+(`plan/issues/research-flow-state-event-channel-2026-07-23.md`,
+`research-auth-flow-state-machines-2026-07-23.md`). The passive
+`apply_login_state` grace guard is retained (it performs no I/O). Idiomatic-layer
+call rate-limiting / coalescing is filed separately per the operator's
+anti-DDoS directive.
 
 ## UX-refresh work (secondary fix — still valid; grace now 60s)
 

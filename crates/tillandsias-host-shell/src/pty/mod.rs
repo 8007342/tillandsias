@@ -211,15 +211,7 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // vault launch, so no host-side podman wrapper is needed. The former
             // base64 podman shim was removed 2026-07-02 (base64_script_injection_ban).
             vm_login_shell_argv(
-                // NOTE: do NOT `exec` here. `exec` replaces the shell with
-                // tillandsias-headless, so a non-zero exit of a successfully
-                // exec'd headless would NOT trigger the `|| (…)` fallback — the
-                // window would vanish instantly with the error unread (the
-                // "closes too quickly after paste" failure mode). Running it as a
-                // child keeps the shell alive so the fallback catches the failure,
-                // prints a marker, and holds the window ~10s so the operator can
-                // read the headless error printed just above.
-                "tillandsias-headless --github-login || (echo '' && echo '[tillandsias] GitHub login did not complete — see the error above. This window closes in 10s.' && sleep 10 && false)",
+                "exec tillandsias-headless --github-login || (echo 'tillandsias-headless failed' && sleep 10 && false)",
             )
         }
         PtyIntent::Agent(agent) => {

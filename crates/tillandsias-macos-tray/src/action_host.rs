@@ -2615,36 +2615,6 @@ fn spawn_vm_status_poller(
             // both slow-changing relative to phase. Local goes first
             // because `~/src/` walks are virtually free vs `gh`.
             let mut rebuild_needed = false;
-
-            // Prompt login-confirm (login-stuck fix 2026-07-23): while the
-            // transitional LoggingIn chip is up, the guest may not emit a
-            // LoginStatePush for the interactive `gh auth login`, and the
-            // ~5-min fallback login poll below is suppressed under a healthy
-            // push subscription — so confirm login here on a fast (~2s) cadence,
-            // independent of both the tick%10 and push-health gates, until it
-            // resolves. apply_login_state's grace window keeps this from
-            // flipping LoggingIn→LoggedOut before the user finishes the paste.
-            let login_pending = menu_state
-                .lock()
-                .map(|s| {
-                    s.login == tillandsias_host_shell::menu_state::GithubLoginState::LoggingIn
-                })
-                .unwrap_or(false);
-            if login_pending {
-                match poll_github_login_once(&vz).await {
-                    Ok(login_state) => {
-                        if apply_login_state(login_state, &menu_state) {
-                            rebuild_needed = true;
-                        }
-                    }
-                    Err(e) => {
-                        if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
-                            eprintln!("[tillandsias-tray] pending-login confirm: {e}");
-                        }
-                    }
-                }
-            }
-
             if tick.is_multiple_of(10) {
                 // SC-07 (slice 3): local projects are now push-backed too
                 // (order 260 shipped LocalProjectsPush), so ALL three
@@ -2696,14 +2666,8 @@ fn spawn_vm_status_poller(
             // push subscription ends the wait immediately and rewinds to
             // tick 0, so the full fallback round (local + cloud + login
             // above, VmStatus below) runs now instead of up to 300s later.
-            // Fast cadence while a login is pending so the confirm-poll above
-            // lands in ~2s, not up to ~30s; normal 30s cadence otherwise.
-            let tick_interval = if login_pending {
-                Duration::from_secs(2)
-            } else {
-                Duration::from_secs(30)
-            };
-            let wake = wait_tick_or_subscription_drop(tick_interval, &mut health_rx).await;
+            let wake =
+                wait_tick_or_subscription_drop(Duration::from_secs(30), &mut health_rx).await;
             tick = tick_after_wake(tick, &wake);
 
             // SC-07: while the push subscription is delivering, the poll is

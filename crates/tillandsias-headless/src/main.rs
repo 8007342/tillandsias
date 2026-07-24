@@ -6938,7 +6938,14 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         // idempotent.
         let certs_dir = ensure_ca_bundle(debug)?;
         let ca_mount = format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+            // relabel=shared is load-bearing: on the SELinux-enforcing Fedora
+            // guest, a bind-mounted CA without an SELinux relabel is present but
+            // UNREADABLE by container_t, so vault-cli.sh's require_cacert() gate
+            // ("CA bundle not readable") trips and the token write aborts BEFORE
+            // any bytes reach Vault — the "collected the token, then died" repro.
+            // Every peer CA mount uses this canonical form (asserted main.rs
+            // ~16733); the login container was the sole omission.
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true",
             certs_dir.join("intermediate.crt").display()
         );
         let mut run = podman_command();
