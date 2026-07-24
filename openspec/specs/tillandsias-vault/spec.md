@@ -299,6 +299,41 @@ derived documents SHALL NOT cross the launcher boundary in argv or logs.
 - **THEN** the launcher SHALL NOT mint or mount an `opencode-forge` token
 - **AND** the free Zen and local-model lane SHALL remain available.
 
+### Requirement: Default-image Vault requests verify TLS and keep live tokens off argv
+
+The default forge image's `vault-cli.sh` SHALL verify Vault TLS explicitly and
+fail closed when no readable CA is available. Explicit `VAULT_CACERT` and
+`CURL_CA_BUNDLE` selections SHALL take precedence. Without either override, a
+provider-login container SHALL use its readable
+`/etc/tillandsias/ca.crt` mount, while a resident forge SHALL use the composed
+`/run/tillandsias/ca-bundle.crt`.
+
+Authenticated curl requests SHALL read the Vault client token from a mode-0600
+temporary header file rather than placing it in curl argv. `write-stdin` SHALL
+read the secret value and HTTP body from stdin. Live generic-provider and GitHub
+login flows SHALL use `write-stdin`; token bytes MUST NOT enter host/Podman
+command strings or external-process argv. In-container shell-variable and
+shell-builtin staging MAY validate the token and feed `write-stdin`. The
+default helper SHALL retain its smaller
+`read|write|write-stdin|health` surface and MUST NOT acquire git-mirror-only
+Vault Agent lifecycle verbs.
+
+@trace spec:tillandsias-vault, spec:gh-auth-script
+
+#### Scenario: Resident and one-shot login CA shapes both verify
+- **WHEN** a default-image Vault request runs without explicit CA environment
+  overrides
+- **THEN** a readable login-container `/etc` CA SHALL be preferred
+- **ELSE** the resident forge's composed `/run` CA bundle SHALL be used
+- **AND** absence of a readable selected CA SHALL stop the request before curl.
+
+#### Scenario: Live login token transport is stdin-only
+- **WHEN** a generic provider or GitHub login persists a token
+- **THEN** the token SHALL flow to `vault-cli.sh write-stdin` on stdin
+- **AND** neither the Vault client token nor the provider token SHALL appear in
+  curl argv
+- **AND** the stored value SHALL still be verified by a Vault read-back.
+
 ## Invariants
 
 ### Invariant: Vault listener is boundary-scoped
@@ -394,6 +429,11 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:git-mirror-vault-agent-auto-auth` - checks the dedicated reusable
   role contract, issuance-unique mount, tmpfs sink refresh, relay recovery,
   and credential non-disclosure.
+- `litmus:default-vault-cli-security` - checks resident/login CA selection,
+  fail-closed TLS, Vault-token curl-argv exclusion, stdin bodies, and command
+  surface separation.
+- `litmus:codex-device-auth-shape` - checks supported Codex device auth and
+  opaque stdin-to-Vault document storage.
 
 ## Litmus Chain
 

@@ -6,6 +6,8 @@
 # @trace spec:codex-tray-launcher, spec:forge-hot-cold-split
 
 source /usr/local/lib/tillandsias/lib-common.sh
+# shellcheck source=codex-safe-state.sh
+source /usr/local/lib/tillandsias/codex-safe-state.sh
 
 # @trace gap:ON-008
 # Load agent profile configuration from config overlay.
@@ -41,6 +43,21 @@ exit_pause() {
     fi
 }
 trap 'exit_pause' EXIT
+
+# Keep the broad CODEX_HOME ephemeral and worker-isolated while restoring only
+# the reviewed non-credential state whitelist. This must precede the
+# background harness probe as well as the foreground Codex launch. Persistence
+# is a performance aid, not an availability gate: if its narrow setup fails,
+# provider authentication remains ephemeral and helper-owned direct links are
+# rolled back when possible. Record detail only in the lifecycle log (no new
+# user-visible UX surface).
+if ! codex_safe_state_setup; then
+    unset CODEX_SQLITE_HOME TILLANDSIAS_CODEX_SAFE_STATE_ROOT \
+        TILLANDSIAS_CODEX_SAFE_STATE_READY
+    export TILLANDSIAS_CODEX_SAFE_STATE_DISABLED=1
+    printf '%s\n' "[codex-state] persistence setup incomplete; provider auth remains ephemeral" \
+        >>/tmp/forge-lifecycle.log
+fi
 
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.

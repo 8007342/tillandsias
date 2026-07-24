@@ -14,9 +14,9 @@ preconditions:
 
 critical_path:
   - step: "GitHub login writes the token from inside the container without host-side extraction"
-    command: "grep -F 'vault-cli.sh write {}' crates/tillandsias-headless/src/main.rs && grep -F 'token=$TOKEN' crates/tillandsias-headless/src/main.rs && grep -F 'ProviderId::GitHub => \"secret/github/token\"' crates/tillandsias-headless/src/main.rs"
+    command: "grep -F 'vault-cli.sh write-stdin {} token' crates/tillandsias-headless/src/main.rs && grep -F '[ -n \\\"$TOKEN\\\" ] || exit 1' crates/tillandsias-headless/src/main.rs && if grep -Fq 'token=$TOKEN' crates/tillandsias-headless/src/main.rs; then exit 1; fi && grep -F 'ProviderId::GitHub => \"secret/github/token\"' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
-    expected_behavior: "vault-cli.sh write"
+    expected_behavior: "vault-cli.sh write-stdin"
 
   - step: "Vault helper writes the canonical secret path"
     command: "grep -F 'client.write_secret(\"secret/github/token\"' crates/tillandsias-headless/src/vault_bootstrap.rs"
@@ -54,4 +54,4 @@ observability:
 
 rollback:
   on_failure: "restore Vault-only GitHub token capture and read-back verification"
-  command: "grep -nE 'vault-cli.sh read -field=token|vault-cli.sh write secret/github/token|in-container vault write' crates/tillandsias-headless/src/main.rs"
+  command: "grep -nE 'vault-cli.sh read -field=token|vault-cli.sh write-stdin|in-container vault write' crates/tillandsias-headless/src/main.rs"

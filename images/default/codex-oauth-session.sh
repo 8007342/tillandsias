@@ -22,14 +22,36 @@ shift
 [[ $# -gt 0 ]] || { echo "codex-oauth-session: missing command" >&2; exit 64; }
 
 VAULT_HELPER="${TILLANDSIAS_CODEX_VAULT_HELPER:-/usr/local/bin/codex-oauth-vault}"
+STATE_HELPER="${TILLANDSIAS_CODEX_STATE_HELPER:-/usr/local/lib/tillandsias/codex-safe-state.sh}"
+safe_state_loaded=0
+if [[ -r "$STATE_HELPER" ]]; then
+    # shellcheck source=codex-safe-state.sh
+    source "$STATE_HELPER"
+    safe_state_loaded=1
+else
+    # Persistence is an optimization. Keep the credential/TTY wrapper
+    # available with the already-safe ephemeral CODEX_HOME if the helper is
+    # unexpectedly absent.
+    export TILLANDSIAS_CODEX_SAFE_STATE_DISABLED=1
+fi
 initial_digest="$("$VAULT_HELPER" digest)"
 
 watch_pid=''
 final_harvest() {
+    local session_status="$?"
     [[ -n "$watch_pid" ]] && kill "$watch_pid" 2>/dev/null
     [[ -n "$watch_pid" ]] && wait "$watch_pid" 2>/dev/null
     timeout 10 "$VAULT_HELPER" harvest 2>/dev/null || \
         echo "WARNING: final credential harvest failed; rerun the provider login if the next launch requests authentication." >&2
+    if [[ "$safe_state_loaded" == 1 \
+        && "${TILLANDSIAS_CODEX_SAFE_STATE_READY:-0}" == 1 \
+        && -n "${TILLANDSIAS_CODEX_SAFE_STATE_ROOT:-}" \
+        && "${TILLANDSIAS_CODEX_SAFE_STATE_DISABLED:-0}" != 1 ]]; then
+        codex_safe_state_flush || printf '%s\n' \
+            "[codex-state] normal-exit checkpoint failed; direct state remains durable" \
+            >>/tmp/forge-lifecycle.log
+    fi
+    return "$session_status"
 }
 trap final_harvest EXIT
 

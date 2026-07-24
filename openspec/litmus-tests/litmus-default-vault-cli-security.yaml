@@ -1,0 +1,46 @@
+# @trace spec:tillandsias-vault
+name: litmus:default-vault-cli-security
+spec: tillandsias-vault
+phase: pre-build
+description: >
+  Pin fail-closed TLS verification, login/resident CA selection, Vault client
+  token exclusion from curl argv, stdin request bodies, and the default
+  helper's intentionally smaller command surface.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains images/default/vault-cli.sh
+  - workspace contains scripts/test-default-vault-cli-security.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+
+critical_path:
+  - step: "exercise both no-override CA shapes and transport-secret boundaries"
+    command: "scripts/test-default-vault-cli-security.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: default Vault CLI CA selection, Vault-token curl-argv secrecy, stdin bodies, and shared semantics"
+
+  - step: "default helper contains no insecure curl fallback"
+    command: "! grep -qE '^[^#]*curl[^|]*(\\s-k\\s|--insecure)' images/default/vault-cli.sh && grep -Fq '/etc/tillandsias/ca.crt' images/default/vault-cli.sh && grep -Fq '/run/tillandsias/ca-bundle.crt' images/default/vault-cli.sh && echo 'ok: verified dual CA shape'"
+    timeout_ms: 3000
+    expected_behavior: "ok: verified dual CA shape"
+
+  - step: "live provider token writes use stdin rather than shell argv"
+    command: "grep -Fq 'vault-cli.sh write-stdin {} token' crates/tillandsias-headless/src/main.rs && grep -Fq '[ -n \\\"$TOKEN\\\" ] || exit 1' crates/tillandsias-headless/src/main.rs && grep -Fq \"printf '%s' \\\"\\$TOKEN\\\" | vault-cli.sh write-stdin {} {}\" crates/tillandsias-headless/src/main.rs && if grep -Fq 'token=$TOKEN' crates/tillandsias-headless/src/main.rs; then exit 1; else echo 'ok: live token writes are stdin-only'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: live token writes are stdin-only"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "Default Vault requests verify TLS and keep client tokens and stdin secrets out of curl argv"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "default-vault-cli-security"
+
+rollback:
+  on_failure: >
+    Do not restore curl -k, token headers in argv, or shell-argument token
+    writes. Fix CA selection or stdin transport while preserving fail-closed
+    behavior.
+  command: "scripts/test-default-vault-cli-security.sh"

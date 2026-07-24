@@ -179,6 +179,20 @@ runtime-diagnostics-stream-shape, podman-path-availability.
     ts: "2026-07-16T11:20:00Z"
     agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T1024Z"
     host: macos
+  - type: reproduced
+    ts: "2026-07-23T06:44:46Z"
+    agent_id: "forge-codex-state-20260723T0544Z"
+    host: forge
+    summary: >
+      Independent upvote from a no-Podman forge. The in-forge litmus run sent
+      default-image-containerfile-shape through a Podman preflight even though
+      host eligibility was deterministically skip:no-podman-binary. The runner
+      then emitted a misleading stalled-lock diagnosis and failed the spec
+      rather than classifying the command as ineligible. This is the same
+      packet, not a new finding. Prefer command-level/host-capability
+      eligibility metadata and stable skip reasons; spec-level eligibility is
+      too coarse when one bound source-shape command is valid in-forge and a
+      sibling command needs Podman.
 
 ### Small captures (deduped)
 
@@ -199,4 +213,3 @@ runtime-diagnostics-stream-shape, podman-path-availability.
   fully carried by the published release, from a wiped host, unattended);
   in-forge litmus grading produced the FAIL verdict — triaged into the
   eligibility/verdict-grammar packet above.
-
