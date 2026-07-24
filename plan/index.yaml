@@ -16334,7 +16334,7 @@ plan_index:
     - packet_id: forge-first-launch-progress-surface
       provisional_id: windows-260722-6
       order: provisional
-      desired_release: v0.4
+      desired_release: v0.5
       release_target: stable-milestone-v1
       title: "Forge first launch: surface curated progress for the silent minutes (image build, inference first-run, harness installers) — 'the user must know that something is happening'"
       status: ready
@@ -16378,6 +16378,16 @@ plan_index:
             silence. The buildah stages were confirmed running (3.3 GB
             layer) while the attach terminal showed nothing — the exact
             'is it stuck?' moment this packet eliminates.
+        - type: slipped
+          ts: "2026-07-24T02:39:00Z"
+          agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
+          host: forge
+          summary: >
+            Slipped from v0.4 to v0.5 during the release-ledger audit. This
+            packet requires operator approval of the exact curated stage
+            wording before any UX implementation; the current completion
+            request did not provide that wording approval. No menu, label,
+            chip, notification, dialog, or progress string was changed.
 
     - packet_id: mirror-first-seed-vs-launch-readiness-race
       provisional_id: windows-260722-7
@@ -17442,7 +17452,7 @@ plan_index:
 
     - packet_id: desired-release-backfill
       order: 407
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Standing: backfill desired_release across open packets so every open packet carries a ship-bucket"
       status: ready
       kind: housekeeping
@@ -17457,11 +17467,13 @@ plan_index:
         packet SHOULD carry `desired_release: vX.Y`, defaulting to the active
         release until curated. This standing coordinator task backfills the
         field across the open backlog in small batches (a coordinator duty,
-        not a blocker), assigning the active release (v0.4) unless a packet is
-        cross-platform/modest-hardware/later-scope (then v0.5+), and keeps the
-        plan/loop_status.md active-release pointer current. Cross-platform
-        deps are the gating tool: a dependent gets a release >= its upstream.
-        Reduce in batches — do NOT try to tag all 260+ packets in one cycle.
+        not a blocker), assigning the active release unless a packet is
+        cross-platform/modest-hardware/later-scope, and keeps the
+        plan/loop_status.md active-release pointer current. Cross-platform deps
+        are the gating tool: a dependent gets a release >= its upstream. The
+        standing duty follows the next release once the current release's
+        coverage is complete. Reduce in batches — do NOT try to tag all 260+
+        packets in one cycle.
       exit_criteria:
         - "every OPEN packet (ready/pending/in_progress/blocked) carries a desired_release, batched across cycles with each batch committed"
         - "plan/loop_status.md names the ACTIVE release-in-progress and its remaining open-packet count each coordinator cycle"
@@ -17541,6 +17553,19 @@ plan_index:
           reason: >
             Coverage cycle complete; released the cycle-scoped lease while the
             standing multi-cycle packet remains ready for future filings.
+        - type: slipped
+          ts: "2026-07-24T02:39:00Z"
+          agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
+          host: forge
+          summary: >
+            v0.4 coverage reconciliation complete. All 114 nonterminal
+            packets carry canonical desired_release values with no dependency
+            assigned earlier than an open upstream: v0.4=13, v0.5=87,
+            v0.6=11, v0.7=3. New findings 461-462 are v0.5, and the
+            UX-governed first-launch progress packet was explicitly slipped to
+            v0.5 pending exact wording approval. This standing multi-cycle
+            coordinator duty remains ready and now follows v0.5; it is not a
+            v0.4 ship blocker.
 
     - packet_id: gpu-passthrough-auto-enablement
       order: 408
@@ -17681,7 +17706,7 @@ plan_index:
       order: 411
       desired_release: v0.4
       title: "Tray forge-launch on a missing forge image must build it (or say 'run --init'), not report a misleading 'initialization may be in progress'"
-      status: success
+      status: done
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/tray/mod.rs (forge-launch image gate) + optional --install/--init coupling
       depends_on: []
@@ -17750,6 +17775,14 @@ plan_index:
             - "handle_launch_project / handle_launch_cloud_project: missing-forge branch tries on-demand build first, then actionable refusal; no longer emits 'initialization may be in progress'."
             - "Unit test forge_missing_message_is_actionable_not_in_progress asserts the message names the version and `tillandsias --init` and never contains 'may be in progress'."
             - "cargo clippy -p tillandsias-headless --features tray --bin tillandsias: clean. cargo test --features tray: 266 passed (1 new); 2 pre-existing env-coupled failures unchanged from clean tree."
+        - type: progress
+          ts: "2026-07-24T02:39:00Z"
+          agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
+          host: forge
+          summary: >
+            Administrative vocabulary normalization only: changed the legacy
+            terminal status `success` to canonical `done`; the 2026-07-18
+            completion evidence and product behavior are unchanged.
 
     - packet_id: forge-base-cli-utils-gap
       order: 412
@@ -20994,7 +21027,7 @@ plan_index:
       order: 452
       desired_release: v0.4
       title: "Concurrent mirror-based forges: every launch clones a CURRENT, non-empty checkout from the git-mirror, all push transparently and coherently"
-      status: in-progress
+      status: in_progress
       capability_tags: [linux, git-mirror, forge, concurrency, coherence, idempotency, release-blocker]
       operator_note: "operator 2026-07-20: the v0.4-blocking regression was forges INCONSISTENTLY sourcing the tree (some host-mounted the checkout, some cloned the mirror) -> .git credential collisions. Host checkout separated to 2src/tillandsias; project default stays ~/src/<project>. Goal: ALL forges clone from the mirror, concurrently, each own tree, all pushing transparently + coherently. Fix the coherence issues Hy3 and the host hit."
       kind: fix
@@ -21081,6 +21114,15 @@ plan_index:
             included — the coherence fetch uses an explicit refs/heads/* refspec,
             never --mirror/--all). Slices 2 + 3 remain (readiness gate + reused-
             mirror currenting + concurrent-push live proof).
+        - type: progress
+          ts: "2026-07-24T02:39:00Z"
+          agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
+          host: forge
+          summary: >
+            Administrative vocabulary normalization only: changed the legacy
+            nonterminal status `in-progress` to canonical `in_progress`.
+            Slice completion, live residual, release assignment, and evidence
+            semantics are unchanged.
 
     - packet_id: diagnostics-stream-not-in-interactive-agent-terminal
       order: 453
@@ -21524,6 +21566,40 @@ plan_index:
             contradiction was observed during order429 review. Filed as a
             v0.5 independent methodology proposal so other agents can review,
             upvote, and implement it without broadening the v0.4 source fix.
+
+    - packet_id: forge-result-format-unknown-value-fail-closed
+      order: 462
+      desired_release: v0.5
+      title: "Reject unknown delegated-result format values instead of silently disabling capture"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/forge-result-format-unknown-value-fail-closed-2026-07-24.md
+      depends_on: []
+      pickup_role: any
+      owner_host: any
+      capability_tags: [forge, delegation, result-channel, robustness, rust]
+      estimated_hours: 2
+      outcome: >
+        Adversarial order429 review found that exact `json` correctly enables
+        structured capture and an unset variable correctly preserves ordinary
+        CLI behavior, but any other present value (including non-UTF8) silently
+        falls back to ordinary output. Current v0.4 specs define only exact
+        `json`, so this is shaped as v0.5 fail-closed hardening rather than
+        broadening the release fix.
+      exit_criteria:
+        - "unset preserves ordinary CLI behavior and exact json preserves current delegated capture"
+        - "any other present value, including non-UTF8, fails deterministically before container launch"
+        - "tests cover both CLI lanes and prove OpenCode Web omits the internal result-mode variable"
+        - "active specs state the fail-closed value grammar without adding an end-user UX surface"
+      events:
+        - type: filed
+          ts: "2026-07-24T02:39:00Z"
+          agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
+          host: forge
+          summary: >
+            Filed from the final order429 adversarial review. OpenCode Web
+            leakage was fixed in the v0.4 source slice; the remaining unknown
+            value grammar is an independent v0.5 hardening packet.
 
     - packet_id: repeat-human-operator-only-supervisor
       provisional_id: forge-260723-1

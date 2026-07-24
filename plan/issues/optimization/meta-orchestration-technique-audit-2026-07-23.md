@@ -61,9 +61,12 @@ Limits:
   not.
 - Agent-message evidence is explicitly identified below; it is not presented as
   independently reconstructable from Git.
-- The audit observed no push rejection and no merge conflict in the reviewed
-  window. It therefore proposes reducing avoidable rebases and invalidated
-  verification, not weakening conflict handling.
+- The initial 2026-07-23 review window observed no push rejection or merge
+  conflict. The resumed 2026-07-24 publication did observe a credential-layer
+  rejection after the deployed mirror's fixed AppRole token crossed its max
+  lifetime. No pull, ancestry, or semantic merge failure occurred. The
+  proposals therefore distinguish integration conflicts from write-channel
+  readiness rather than weakening either gate.
 - No claim is made that every test repetition was unnecessary. The first
   post-integration headless run found two real stale assertions; only the
   subsequent no-defect repetition count is questioned.
@@ -82,6 +85,10 @@ Limits:
 - Order 424 remained `in_progress` for the unavailable real-Podman/Vault
   max-TTL proof. The forge did not manufacture live-host evidence.
 - Remote parity was verified after the reviewed pushes.
+- When the resumed relay rejected the next checkpoint, the agents preserved
+  exact local commit SHAs, did not run GitHub Login, did not extract a GitHub
+  token, and continued through immutable local handoffs while the coordinator
+  investigated only sanctioned recovery surfaces.
 
 ## Evidence timeline
 
@@ -98,6 +105,12 @@ Limits:
 | post-integration lock diagnosis | in-session verification receipts | Parent ran the focused lock case five times; the audit child reported 100 separate-process focused runs plus 12 unit-binary repeats. No production lock defect reproduced. |
 | 05:26 audit setup | `df` plus failed `git worktree add` | `/tmp` was a 256 MiB tmpfs with 249 MiB used and 7.2 MiB free. Three approximately 61 MiB worktrees occupied it; a fourth checkout failed with repository-wide `unable to write file`. The same checkout succeeded under `/home/forge/worktrees` on the 932 GiB-free overlay. |
 | 05:31 audit probe | `command -v` | `ruby`, `tillandsias-policy`, and `sccache` were absent; `yq` and `cargo` were present. The validator portion is already filed in the existing forge-image issue named above. |
+| Codex landing handoff at `4ac678a6` | in-session worker receipt and coordinator command history | At the same tree and compatible forge environment, the coordinator began repeating the worker's already-green `./build.sh --check` just before the publication receipt arrived. The warm-cache repeat found no new defect; this is additional MOT-05 evidence for exact-SHA receipt reuse. |
+| 06:47 order-429 claim audit | current production call-chain inspection plus the durable claim event at `3367895f` | The prior “WIRED” claim had a compiled caller but no complete structured-result data path; MOT-12 distinguishes reachability from production-path evidence. |
+| order-429 usage-limit interruption and resume | salvage `77afc4a8`, reclaim `ec78e2d2`, final source commit `c60a112c` | The runtime stopped a worker after a coherent WIP checkpoint. Exact local commits and the plan lease made the work recoverable the next day; the resumed worker did not reconstruct 1,400+ changed lines from chat. The missing remote write channel still prevented the preferred durable handoff. |
+| order-429 final review | candidate `82860258`, reviewer finding, replacement `c60a112c` | A late cross-mode audit found the shared OpenCode builder leaking JSON result mode into detached Web runs after an earlier candidate and verification pass. The amendment was necessary and the final gate was correctly repeated, but placing the adversarial signoff before the expensive final gate would have avoided one invalidated receipt. |
+| 2026-07-24 02:20 resumed checkpoint | `ec78e2d2`, mandatory build receipt, rejected `git push`, deployed-tag inspection | `./build.sh --check` passed, but the pre-receive relay rejected the first write because the v0.3.260723.1 mirror's fixed AppRole token had crossed its max lifetime. `scripts/check-credential-channel.sh` still returned `ok:forge-git-mirror` because it proves read reachability, not relay credential readiness. |
+| post-rejection recovery audit | startup context, tag/current source comparison, repository-connector 403s | The supported deployed recovery is a normal host forge relaunch; GitHub Login is explicitly wrong. Current order-424 source adds Vault Agent re-auth but is not in the running image. The repository connector could read but had no Contents/Git Data write permission; both attempted writes failed before changing a ref. |
 
 ## MOT-01 — Coordinator landing train
 
@@ -216,19 +229,31 @@ Limits:
   a transient fork-to-exec window, but the team reached at least five parent
   repetitions plus 100 focused and 12 full child repetitions after no defect
   reproduced. Test commands/results were exchanged as prose rather than as a
-  reusable, commit-scoped receipt.
+  reusable, commit-scoped receipt. Later in the same session, the coordinator
+  repeated the worker's already-green `./build.sh --check` at exact commit
+  `4ac678a6` in a compatible forge environment before the publication receipt
+  arrived; the repeat found no new defect. During order 429, a designated
+  adversarial reviewer found a real Web/CLI scoping defect only after an
+  earlier candidate had completed its verification pass. The amendment
+  correctly invalidated that receipt and required another final build; the
+  avoidable part was gate ordering, not the second build after a changed tree.
 - **Proposed rule**: handoffs include a `verification_receipt` containing commit
   SHA, command, relevant environment fingerprint, result, repetition count,
   and hypothesis. Another agent may reuse a receipt only for the exact same
   tree and compatible environment. Default flake investigation has a bounded
   repetition budget; exceeding it requires a named probability/hypothesis or
-  operator reason. Changed trees invalidate the receipt.
+  operator reason. Changed trees invalidate the receipt. When a packet has a
+  named adversarial reviewer, obtain its static/semantic signoff before the
+  expensive final integration gate; focused compile/tests may still run
+  earlier to support review.
 - **Cross-context applicability**: flaky-test triage and expensive integration
   suites in any concurrent repository.
 - **Measurable adoption gate**: a two-agent fixture demonstrates that the
   second agent consumes an exact-SHA receipt instead of re-running; a changed
-  SHA forces revalidation. The initial suggested review threshold is 20
-  repetitions, to be calibrated rather than treated as a proven optimum.
+  SHA forces revalidation. A second fixture records reviewer signoff before
+  the final full gate and proves a post-signoff amendment invalidates both.
+  The initial suggested review threshold is 20 repetitions, to be calibrated
+  rather than treated as a proven optimum.
 - **Counterarguments / limits**: rare races may need hundreds of runs, and
   environment fingerprints can be incomplete. The threshold is an explicit
   review point, not a hard ban. The mandatory post-rebase `./build.sh --check`
@@ -289,16 +314,19 @@ Limits:
 
 ## MOT-08 — Exact-packet mutation context plus immediate semantic assertion
 
-- **Proposal status**: proposed-for-upvote; independently reproduced twice
+- **Proposal status**: proposed-for-upvote; independently reproduced three
+  times
 - **Target methodology section**:
   `skills/advance-work-from-plan/SKILL.md` → claim mutation and
   `methodology/distributed-work.yaml` → ledger mutation discipline
 - **Finding**: two agents used an under-contextual patch against repeated
   `status:` / `events:` shapes. The Codex-state worker briefly changed
   order 278 and inserted its claim under order 252; the root's order-427 claim
-  briefly touched order 313 status and order 314 events. Immediate `git diff`
-  inspection caught and fully reverted both before commit. YAML validation
-  would have passed because both wrong documents remained structurally valid.
+  briefly touched order 313 status and order 314 events. During the resumed
+  order-429 repair, another under-contextual status patch briefly touched order
+  360. Immediate exact-ID assertions and scoped `git diff` inspection caught
+  and fully reverted all three before commit. YAML validation would have passed
+  because the wrong documents remained structurally valid.
 - **Proposed rule**: ledger patches must anchor on the exact `packet_id` plus
   neighboring immutable fields. Immediately after mutation, assert the target
   packet's status/event/lease by exact ID and inspect the scoped diff before any
@@ -355,6 +383,96 @@ Limits:
 - **Measurable adoption gate**: an agent-context fixture cannot start the
   supervisor, while a human-context fixture retains current behavior.
 
+## MOT-12 — Require a claim-to-production-path trace before calling work wired
+
+- **Proposal status**: proposed-for-upvote; independently rediscovered by the
+  order-429 production audit
+- **Target methodology section**:
+  `skills/advance-work-from-plan/SKILL.md` → progress/completion evidence,
+  `methodology/distributed-work.yaml` → `agent_status_packet`, and
+  `methodology/ci.yaml` → execution contract
+- **Finding**: order 429's 2026-07-19 progress event called the result consumer
+  “WIRED” after the parser acquired a caller and compiled. A 2026-07-23 audit
+  at `3367895f` traced the actual launch path and found the claimed circuit was
+  not end to end: neither launcher requested structured output in the
+  container, attached stdout/stderr were inherited rather than consumed, the
+  host read an unrelated stale-capable result path, OpenCode had no result-file
+  consumer, the runner discarded nonzero exit status, and timeout cancellation
+  could leave the exact worker running. Compiler reachability prevented dead
+  code, but it did not prove ingress → tool invocation → fresh output ownership
+  → classification → surfaced result.
+- **Proposed rule**: a progress or completion event that says a feature is
+  `wired`, `production`, or consumed end to end must attach a commit-scoped
+  `production_path_trace`: the named production ingress, every
+  transport/transformation boundary, the external invocation or adapter,
+  ownership/freshness of returned bytes, exit/error/timeout handling, and the
+  observable egress. At least one deterministic fixture must enter through the
+  same production adapter and exercise the whole trace. A no-Podman adapter
+  fixture can prove source wiring; it must not be presented as live deployment
+  evidence when a packet separately requires a real container/host probe. A
+  helper unit test, source-presence assertion, or absence of `dead_code` is not
+  sufficient by itself.
+- **Cross-context applicability**: launchers, CLI wrappers, credential flows,
+  persistence helpers, and any feature assembled across process/container
+  boundaries.
+- **Measurable adoption gate**: a dual-lane result fixture enters through the
+  production delegated-run API and proves that the structured-output request
+  reaches each tool, only bytes from the current invocation are parsed,
+  nonzero exit becomes failure, missing terminal evidence stays indeterminate,
+  timeout kills/reaps the exact worker, and the verdict reaches the delegator.
+  Removing any boundary makes the fixture fail. The associated plan event
+  records the exact SHA and trace endpoints.
+- **Counterarguments / limits**: a path trace adds ceremony and can become
+  stale. Require it only for explicit wiring/production claims and keep it
+  compact; live e2e remains necessary where the exit criteria require deployed
+  behavior. This proposal defines evidence sufficiency, not a requirement to
+  run Podman in an ineligible forge.
+
+## MOT-13 — Resume-time write-relay readiness preflight
+
+- **Proposal status**: proposed-for-upvote; overlaps the runtime repair in
+  order 424 but owns the cross-repository workflow signal
+- **Target methodology section**:
+  `skills/meta-orchestration/SKILL.md` → Sync/Channel Guard and Finalization,
+  `methodology/multi-host-development.yaml` → pre-push gate, and
+  `methodology/agent-observability.yaml` → capability receipts
+- **Finding**: the forge started on v0.3.260723.1 at 03:37Z and resumed almost
+  23 hours later. Its deployed mirror used a fixed client token with a finite
+  max lifetime. At 02:20Z, `scripts/check-credential-channel.sh` reported
+  `ok:forge-git-mirror`, the mandatory full build passed, and only the real
+  push discovered that the relay credential was expired or unrenewable. The
+  guard checks mirror URL and read-only `git ls-remote`; `git push --dry-run`
+  also does not invoke the pre-receive relay. Neither can prove that the
+  mirror can currently read its GitHub credential. The sanctioned repository
+  connector was independently read-only (403), so it was not a recovery write
+  channel. Exact local handoffs prevented lost work, but publication and a
+  remote parity check were deferred; one full build was already spent against
+  a channel whose write credential was not ready.
+- **Proposed rule**: after a paused/resumed or long-lived forge session, and
+  before an expensive final build/commit sequence, consult a credential-opaque
+  relay-readiness surface owned by the mirror. It should classify at least
+  `ready`, `relay-client-expired`, `upstream-credential-absent`,
+  `upstream-auth-rejected`, and `unreachable`, without returning any token to
+  the forge. Until that surface exists, the coordinator should treat a
+  fixed-token forge approaching its documented max lifetime as requiring a
+  host relaunch before final publication. A connector fallback may be named
+  only after a non-mutating capability check proves repository write scope.
+  GitHub Login must not be suggested for an expired mirror client token.
+- **Cross-context applicability**: credential brokers, package registries,
+  deployment relays, and other systems where read connectivity can stay green
+  after a write credential expires.
+- **Measurable adoption gate**: a fixture with successful `git ls-remote`, a
+  valid upstream GitHub credential, and an expired mirror client token returns
+  `relay-client-expired` before the full build or commit. A second fixture
+  distinguishes a missing upstream credential. Neither exposes secret
+  material, and a dry-run push is explicitly rejected as sufficient evidence.
+  With the order-424 Vault Agent image deployed, a time-scaled live fixture
+  remains `ready` across client-token max-TTL re-authentication.
+- **Counterarguments / limits**: no non-mutating probe can guarantee that a
+  later atomic ref update will satisfy branch policy or avoid a race. This is
+  a credential/readiness signal, not a replacement for the real push,
+  mandatory build, ancestry check, or post-push parity verification.
+
 ## Forge-used-as-intended verdict
 
 Verdict: **yes, with the MOT-11 help-only nuance above**. The orchestration and
@@ -362,21 +480,27 @@ advance-work skills were invoked directly; no headless `./repeat` cycle was
 used. No Podman-dependent evidence was fabricated: unavailable live
 two-worker, hard-kill, max-TTL, and performance proofs stayed residual. After a
 capacity failure on the small `/tmp` tmpfs, isolated work moved under
-`/home/forge/worktrees`. Reviewed Git integration outcomes were clean
-fetch/fast-forward/push operations with no rejection or semantic merge
-conflict; one expected append-only ledger rebase overlap preserved both events.
-Repeated claim/final builds and rebases were the main overhead. Mandatory
-`./build.sh --check` immediately before each push and post-push remote parity
-remained the enforced exit contract.
+`/home/forge/worktrees`. The initial Git integrations were clean
+fetch/fast-forward/push operations; the resumed write failed at the deployed
+relay credential boundary, not during fetch, pull, merge, ancestry, or conflict
+resolution. The team followed the documented diagnosis, avoided GitHub Login
+and secret extraction, and preserved exact local commits, but final remote
+parity necessarily waits for the supported host relaunch. Repeated
+claim/final builds and rebases were the earlier overhead; the late credential
+failure added one avoidable full build and publication attempt. Mandatory
+`./build.sh --check` immediately before every real push remains the exit
+contract.
 
 ## Suggested voting and promotion order
 
 Recommended first upvotes:
 
-1. `MOT-02` remote-durable delegation and landing ownership;
-2. `MOT-01` landing train;
-3. `MOT-03` final-response join barrier;
-4. `MOT-06` worktree capacity preflight.
+1. `MOT-13` resume-time relay readiness;
+2. `MOT-02` remote-durable delegation and landing ownership;
+3. `MOT-01` landing train;
+4. `MOT-03` final-response join barrier;
+5. `MOT-06` worktree capacity preflight; and
+6. `MOT-12` production-path evidence for explicit wiring claims.
 
 `MOT-04`, `MOT-05`, and `MOT-07` should receive at least one independent
 reproduction/review before promotion because their best schema and threshold
