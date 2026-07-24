@@ -71,11 +71,20 @@ Operator at the terminal. Actions this cycle:
    FSM FlowSource (the .git whack-a-mole killer: push states observable
    end-to-end), 475 tray status-menu pretty events (presentation half,
    tray-ux governance applies), 476 main-branch direct-push guard.
-4. **Local e2e in flight this cycle**: /build-install-and-smoke-test-e2e at
-   ff0bb5f6 (build -> full podman reset -> cold --init -> forge lane with
-   in-forge opencode /meta-orchestration). Evidence lands in this cycle's
-   PASS/finding report and starts the rebuilt-image live matrix the 11
-   in_progress v0.4 packets need.
+4. **Local e2e COMPLETED (FINDINGS)**: /build-install-and-smoke-test-e2e,
+   final commit 25d7f26f, installed v0.3.260724.3. Gates 1-3 PASS on a
+   pristine substrate (17/17 checks after a five-iteration fix wave over
+   the merged lanes — env-lock race, --inference-tier CLI-mode kill bug,
+   is_held probe collision, 3 clippy lints, 8 stale litmus/policy repairs,
+   e2e-preflight fail-safe; live Linux 463 repro recorded). Gate 4 blocked
+   STRUCTURALLY: in-forge opencode "No provider available" —
+   secret/gemini/api-key has no owning login lane and dies with every
+   reset; ORDER 477 filed (P1 smoke-gate, linux + operator). Positive:
+   rebuilt-image mirror seed + in-forge enclave git:// clone WORKED
+   (452/454 live evidence). Report:
+   plan/issues/smoke-e2e-findings-local-build-linux-2026-07-24.md.
+   OPERATOR ASK: re-seed secret/gemini/api-key (477 interim), then the
+   forge leg re-runs to PASS in minutes.
 
 ### DIRECTION — pings for pickup (v0.4 critical path)
 
