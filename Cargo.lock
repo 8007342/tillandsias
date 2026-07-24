@@ -3109,7 +3109,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "0.3.260721"
+version = "0.3.260724"
 dependencies = [
  "base64 0.22.1",
  "bytes",

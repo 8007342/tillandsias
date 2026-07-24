@@ -1,4 +1,5 @@
 #!/bin/bash
+# freshness: refreshed 2026-07-24 forge-bigpickle-20260724
 set -uo pipefail
 
 # @trace spec:meta-orchestration
