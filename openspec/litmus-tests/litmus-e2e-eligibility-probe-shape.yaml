@@ -52,7 +52,7 @@ critical_path:
     expected_behavior: "ok: skill-consults-probe"
 
   - step: "a live tillandsias forge / shared stack yields skip:live-runtime-present (order 442)"
-    command: "tmp=$(mktemp -d); fake=\"$tmp/bin\"; mkdir -p \"$fake\"; printf '#!/usr/bin/env bash\n[ \"$1\" = ps ] && printf \"%%s\\\\n\" \"tillandsias-tillandsias-forge\"\n' >\"$fake/podman\"; chmod +x \"$fake/podman\"; PATH=\"$fake:$PATH\" XDG_RUNTIME_DIR=\"$tmp\" bash scripts/e2e-preflight.sh eligibility; rc=$?; rm -rf \"$tmp\"; exit \"$rc\""
+    command: "tmp=$(mktemp -d); fake=\"$tmp/bin\"; mkdir -p \"$fake\"; printf '#!/usr/bin/env bash\nif [ \"$1\" = ps ]; then printf \"%%s\\\\n\" \"tillandsias-tillandsias-forge\"; fi\nexit 0\n' >\"$fake/podman\"; chmod +x \"$fake/podman\"; PATH=\"$fake:$PATH\" XDG_RUNTIME_DIR=\"$tmp\" TILLANDSIAS_DESTRUCTIVE_RESET_OK= bash scripts/e2e-preflight.sh eligibility; rc=$?; rm -rf \"$tmp\"; exit \"$rc\""
     timeout_ms: 5000
     expected_behavior: "skip:live-runtime-present"
 
