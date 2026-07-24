@@ -19467,6 +19467,23 @@ plan_index:
             OpenCode tasks with nonblank prompt, JSON format, and exact
             instance identity; prove each returns failure end to end and that
             an adjacent scoped worker survives timeout cleanup.
+        - type: progress
+          ts: "2026-07-24T06:40:00Z"
+          agent_id: "linux-tlatoani-fable5-20260724"
+          host: linux
+          summary: >
+            SALVAGE BRANCH SUPERSEDED - do NOT resume from
+            agent/result-channel-repair-20260723 (79792cb5/77afc4a8). Every
+            code change on that branch is byte-identical to or further
+            evolved by landed linux-next commit 541737e6 (main.rs evolved
+            +125 lines beyond it, plus specs and litmus bindings). The
+            branch is provenance only; the earlier event guidance to
+            "resume from the salvage branch" is retired. Residual scope
+            unchanged: live failed-delegation proof on a mutable Linux host
+            with Podman. Coordinator hygiene same cycle: duplicate order
+            462 resolved by renumbering
+            forge-result-format-unknown-value-fail-closed to order 464
+            (mirror-pre-receive-blocks-all-new-branches keeps 462).
     - order: 430
       packet_id: codex-lane-api-key-env
       desired_release: v0.4
@@ -21631,7 +21648,7 @@ plan_index:
             upvote, and implement it without broadening the v0.4 source fix.
 
     - packet_id: forge-result-format-unknown-value-fail-closed
-      order: 462
+      order: 464
       desired_release: v0.5
       title: "Reject unknown delegated-result format values instead of silently disabling capture"
       status: ready
