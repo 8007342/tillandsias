@@ -21522,6 +21522,56 @@ plan_index:
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
 
+    - packet_id: inference-coldstart-races-proxy-egress-and-hard-gates-launch
+      order: 478
+      desired_release: v0.4
+      title: "Inference first-run self-install races proxy egress readiness, and its 60s readiness probe hard-aborts a lane launch that runs fine without it"
+      status: ready
+      kind: fix
+      deliverable: images/inference/entrypoint.sh bounded retry-with-backoff gated on proxy egress health; launcher soft-degrade (warn + continue) when inference is unavailable; readiness ordering proxy-before-inference
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, inference, proxy, launch, resilience]
+      estimated_hours: 3
+      operator_note: >
+        Live 2026-07-24 07:2xZ, operator's first post-purge cloud attach
+        (v0.3.260724.1, fully cold volumes). Verbatim evidence captured by
+        a continuous log trap
+        (guest /root/.cache/tillandsias/inference-evidence-20260724.log):
+        attempt 1 "curl: (7) Failed to connect to github.com port 443 via
+        proxy after 0 ms" (proxy not yet serving); the entrypoint's SINGLE
+        10s warm-up retry then got "curl: (60) SSL certificate ...
+        self-signed certificate in certificate chain" - that is squid
+        serving its TLS error page with its own cert because upstream
+        egress was STILL not ready, not a real CA problem. Entrypoint then
+        exits FATAL ("will retry next launch") and the launcher's 60s
+        inference readiness probe ABORTED the entire first lane launch
+        (terminal exited code 1). The operator's immediate relaunch came
+        up fine and the forge session runs WITHOUT local inference -
+        proving the component is soft-degradable. The order-477
+        teardown/liveness proxy churn widens the race window (proxy was
+        observed "Up 1 second" repeatedly during the failure window).
+      outcome: >
+        A fully cold first launch succeeds deterministically: inference
+        waits for proven proxy egress (bounded), retries its self-install
+        with backoff instead of one 10s nap, and a still-unready inference
+        degrades the launch to a warning instead of aborting it; launch
+        attempt 1 and attempt 2 behave identically.
+      exit_criteria:
+        - "inference entrypoint distinguishes proxy-unready (retry with bounded backoff) from genuine download failure, and never treats squid's bumped error page as a CA problem"
+        - "lane launch continues with a curated warning when inference is unavailable; no hard abort on an optional component"
+        - "a cold-volume litmus or fixture reproduces the race (or readiness ordering makes it structurally impossible)"
+      events:
+        - type: filed
+          ts: "2026-07-24T07:55:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from the live post-purge 455 smoke session; evidence
+            trap output preserved in-guest; launch #2 (identical inputs)
+            proceeded without inference, confirming soft-degradability.
+
     - packet_id: teardown-vs-liveness-proxy-scope-disagreement
       order: 477
       desired_release: v0.5
