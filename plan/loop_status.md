@@ -1,5 +1,61 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T06:50Z (linux_mutable coordinator — operator-directed: v0.4 pings, overhaul packet intake, main repair, local e2e)
+
+Operator at the terminal. Actions this cycle:
+
+1. **Merged** `origin/osx-next` (SELinux `relabel=shared` login fix in SHARED
+   code — v0.4 ships broken login without it; PTY resize; status-UX parity;
+   version-skew fix; enclave PRINCIPLE; d89fac3d research trio) and
+   `origin/windows-next` (packet 463) into `linux-next`. Hygiene: duplicate
+   order 462 resolved (forge-result-format -> 464); order-429 "resume from
+   salvage branch" guidance RETIRED (superseded by 541737e6).
+2. **Main repaired via PR #81**: reverted 34e60965 (antigravity forge cycle
+   ran ON main and pushed directly — 42k-line index reserialization + 9
+   unverified done-flips, 6 contradicting linux-next). plan/ canon stays on
+   linux-next; guard packet order 476. Forges must NEVER run committable
+   cycles on main.
+3. **Packet intake — 12 nodes now pickup-visible** (were issues-file only):
+   465 enclave PRINCIPLE (settles macOS push-route = OPTION B), 466 macOS
+   no-push-route P1, 467 forge CA readiness gap, 468 Claude OAuth
+   vault-inject (operator sign-off gate), 469-471 d89fac3d trio (auth FSMs /
+   unified dependency+state graph / FlowState event channel), 472
+   cert-lifecycle state-graph (CA propagation as first-class state — the
+   containers-crashing-on-awkward-CA class), 473 local HTTPS via apache +
+   enclave CA (real-HTTPS local dev, "portable cloud"), 474 push-transaction
+   FSM FlowSource (the .git whack-a-mole killer: push states observable
+   end-to-end), 475 tray status-menu pretty events (presentation half,
+   tray-ux governance applies), 476 main-branch direct-push guard.
+4. **Local e2e in flight this cycle**: /build-install-and-smoke-test-e2e at
+   ff0bb5f6 (build -> full podman reset -> cold --init -> forge lane with
+   in-forge opencode /meta-orchestration). Evidence lands in this cycle's
+   PASS/finding report and starts the rebuilt-image live matrix the 11
+   in_progress v0.4 packets need.
+
+### DIRECTION — pings for pickup (v0.4 critical path)
+
+- **WINDOWS**: order-455 re-smoke vs **v0.3.260723.1** (the PASS-candidate,
+  first build >= 58b58322; expected ~3 min e2e). The deploy will remove the
+  two TEMP vault repairs from the 463 soak — expected; the structural 463
+  fix (pickup_role LINUX, ready, 4h) rides the next daily.
+- **LINUX**: claim order 463 (vault host-endpoint fragility — drop -p
+  publish/enclave-URL everywhere, unseal-400 FATAL, bounded lane vault
+  lock). Then order 467 (CA readiness gate) and 462 (pre-receive new-branch
+  fix — unblocks 466 macOS wiring AND salvage flows).
+- **MACOS**: order-455 curl-install smoke vs v0.3.260723.1 (the 07-23
+  local-build PASS explicitly does NOT close 455); then order 466 push-route
+  wiring per OPTION B once 462 lands.
+- **OPERATOR decisions queued**: (a) confirm OPTION B ratification (465
+  records it as settled); (b) sign-off on 468 Claude OAuth vault-inject;
+  (c) 475 tray pretty-events is filed v0.5 — pull forward if wanted for
+  v0.4; (d) 0.3 -> 0.4 series bump once 455 has Windows+macOS PASS and the
+  live evidence matrix closes.
+- **Enclave-restoration ask, resolved framing**: the Linux forge does NOT
+  skip the enclave at HEAD (465 PRINCIPLE trace refutes it; order-437
+  lineage). The remaining substance is exactly orders 467 + 472 + 473
+  (transparent CA lifecycle + real local HTTPS) and the
+  TILLANDSIAS_FORGE_HOST_MOUNT=1 escape-hatch guard (residual in 465).
+
 ## Cycle 2026-07-24T03:07Z (linux_mutable — v0.4 audit + sibling integration + build repair)
 
 - **Build repair**: HEAD (9dd82784) was broken by a clippy `collapsible_match`
