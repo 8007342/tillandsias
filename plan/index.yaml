@@ -12541,6 +12541,13 @@ plan_index:
       order: 342
       title: "macOS forge: isolate in-forge agents from the operator checkout"
       status: completed
+      superseded_by: [macos-forge-no-push-route-lane-decision]
+      supersession_note: >
+        Tlatoani-approved 2026-07-24 (recorded on order 466): the
+        SRC-ISOLATION=clone lane this packet built is superseded by the
+        order-437 clone-only default, which provides the same isolation
+        property PLUS the git:// mirror push route. The isolation GOAL of
+        this packet stands; only the mechanism is retired.
       kind: design+implementation
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
       depends_on: []
@@ -21925,14 +21932,47 @@ plan_index:
       pickup_role: macos
       capability_tags: [macos, forge, git-mirror, work-loss, p1]
       estimated_hours: 4
+      operator_approval:
+        ts: "2026-07-24T08:20:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          SUPERSEDE the order-342 macOS SRC-ISOLATION direction with the
+          modern proven order-437 clone-only default. The operator
+          reviewed the windows-lane context (2026-07-24 addendum in the
+          deliverable doc) and approved replacing the obsolete lane
+          override with the mechanism Windows runs in production.
       outcome: >
         macOS lane sets GIT_MIRROR_PATH but never TILLANDSIAS_GIT_SERVICE
         (main.rs:4753-4766), so in-forge commits have no relay route and die
-        with the --rm container. Decision SETTLED by order 465 PRINCIPLE:
-        OPTION B (wire the git:// mirror push relay, keep isolation); OPTION A
-        host-mount is the wrong direction. Depends on order 462 because a
-        newly wired macOS mirror push immediately hits the pre-receive
-        new-branch rejection. Promoted to the index 2026-07-24.
+        with the --rm container. Decision SETTLED by order 465 PRINCIPLE and
+        Tlatoani approval 2026-07-24: take the order-437 clone-only DEFAULT
+        (mirror clone + mirror push in one mechanism) by REMOVING the
+        TILLANDSIAS_FORGE_SRC_ISOLATION=clone override in
+        diagnose.rs:1191-1200 — not by wiring push into the 342 lane.
+        Order-342's isolation property is preserved by construction (the
+        default is also clone-based, no host mount, no facade; mirror
+        seeding needs only read access to the virtiofs staging). OPTION A
+        host-mount is the wrong direction. Dependency order 462 is
+        SATISFIED (322d3026, 2026-07-24). Promoted to the index 2026-07-24.
+      events:
+        - type: note
+          ts: "2026-07-24T08:20:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Windows-lane context filed in the deliverable doc with exact
+            wiring pins (main.rs 4754/4768/4783 three-way branch;
+            lib-common.sh:584 consumer; diagnose.rs:1191 override) and the
+            live-verified relay properties the macOS lane inherits for
+            free (48h vault-agent credential dcafd59c, SEEDED readiness
+            gate dec1175e, new-branch pre-receive 322d3026, 21-push +
+            concurrent-multi-host soak). Implementation checklist before
+            declaring parity: one attended macOS e2e
+            (clone->commit->push->relay->GitHub), run the two
+            test-git-mirror-*.sh scripts in the VZ guest, and check
+            netavark state per order 463 (VZ VMs soak the same way).
+            Inherit consciously: relay publication can be out-of-order vs
+            author time (MOT-02).
 
     - packet_id: forge-trust-ca-source-readiness-gap
       order: 467

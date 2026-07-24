@@ -125,3 +125,19 @@ attended macOS lane e2e (clone → commit → push → relay → GitHub) before
 declaring parity, and reuse
 `scripts/test-git-mirror-relay-token-expiry.sh` +
 `scripts/test-git-mirror-vault-agent-auto-auth.sh` in the macOS guest.
+
+## OPERATOR DECISION — RESOLVED (Tlatoāni, 2026-07-24)
+
+**Approved: supersede the order-342 SRC-ISOLATION direction with the
+order-437 clone-only default** (the mechanism Windows runs in
+production). Implementation is the reduced Option B from the
+windows-lane context above: remove the
+`TILLANDSIAS_FORGE_SRC_ISOLATION=clone` override
+(`diagnose.rs:1191-1200`) so the macOS lane takes the shared default
+branch (`main.rs:4783-4797`) — mirror clone + mirror push in one
+mechanism. Order 342's isolation goal is preserved by construction;
+only its mechanism is retired (supersession recorded on the order-342
+ledger entry). Dependency order 462 is satisfied (322d3026). Before
+declaring parity: one attended macOS e2e push chain, the two
+test-git-mirror-*.sh scripts in the VZ guest, and an order-463
+netavark-state check.
