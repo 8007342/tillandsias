@@ -1,4 +1,5 @@
 #!/bin/bash
+# freshness: refreshed 2026-07-24 forge-bigpickle-20260724
 set -uo pipefail
 
 if grep -qi "microsoft" /proc/version 2>/dev/null && pwd | grep -q '^/mnt/[c-z]/'; then
