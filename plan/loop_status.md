@@ -1,5 +1,59 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T09:42Z (forge — drain wave: delegation v0.4 completion)
+
+- **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Build**: Already green from prior cycles.
+- **Drain wave**: Claimed and verified 4 delegation packets already implemented:
+  - 427a (instance-scoped container naming) — `forge_container_name_with_instance()` already in main.rs, 4 tests pass.
+  - 429a (JSONL parser) — `agent_result.rs` has full opencode+codex parsers, 18 tests pass.
+  - 429b (outcome surfacing) — `DelegatedRunReport` + `delegated_report_result()` already surfaces success/failure/timeout.
+  - 429c (failed-task litmus) — `litmus-forge-agent-result-format.yaml` already covers all exit criteria.
+- **Ready queue**: 88 packets (8 v0.4, 80 v0.5+). Plan: 85 completed, 166 done.
+
+## Cycle 2026-07-24T08:15Z (forge — meta-orchestration: packet splitting + drain orchestration)
+
+- **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Build**: Already green from prior cycle (clippy 1.97 fixes landed).
+- **Packet splitting**: Split 4 large in-progress/ready packets into 12 smaller child slices:
+  - Order 427 (forge-delegation-instance-names) → 427a (code), 427b (coexistence litmus), 427c (teardown target)
+  - Order 429 (forge-delegation-result-retrieval) → 429a (JSONL parser), 429b (outcome surfacing), 429c (failed-task litmus)
+  - Order 246 (credential-secrets-architecture-audit) → 246a (credential inventory), 246b (token lifecycle)
+  - Order 247 (proxy-git-mirror-configuration-audit) → 247a (TLS chain audit), 247b (git mirror forwarding)
+- **Drain orchestration**: Created `scripts/drain-queue.sh` — local sequential agent queue drain with --release, --tag, --limit filters and claim/release per packet.
+- **Fix**: Merged duplicate `events:` YAML key in order 462 (plan/index.yaml validation error).
+- **Freshness audit**: Refreshed `scripts/claim-ledger-node.sh` and `scripts/check-credential-channel.sh`.
+- **Ready queue**: 88 packets ready (8 v0.4, 80 v0.5+).
+
+## Cycle 2026-07-24T07:48Z (linux_mutable — v0.4 critical path: order 462 pre-receive fix)
+
+- **Host**: linux_mutable, `linux-next`, `TILLANDSIAS_HOST_KIND=unset`.
+- **Credential Channel Guard**: `ok:gh-keyring`.
+- **Build**: `./build.sh --check` PASS (formatting, type-check, clippy strict + listen-vsock).
+- **Litmus**: 165/165 PASS (0 FAIL, 147 SKIP).
+- **E2E**: `skip:smoke-lock-held`.
+- **Sibling heads at start**: main=51e5f0aa, linux-next=68c0df44, windows-next=6909f8c6, osx-next=d523e8a5.
+
+### Work: order 462 — pre-receive new-branch fix (DONE)
+
+Fixed the git-mirror pre-receive hook that rejected every new-branch push by
+validating the entire inherited tree (including frozen legacy archive YAML that
+intentionally fails validation):
+
+1. `find_diff_base()` — for new branches (`OLDSHA` is zero), finds the nearest
+   ancestor ref (`origin/HEAD`, then `origin/linux-next`, `origin/main`) and
+   diffs against it instead of the whole tree.
+2. `is_legacy_archive()` — explicitly exempts `openspec/changes/archive/*` from
+   YAML validation (frozen content, never modified).
+3. Added 2 litmus shape assertions (`find_diff_base` + `is_legacy_archive`).
+4. Extended `test-pre-receive-yaml-gate.sh` with test 4 (new branch + legacy
+   archive content succeeds).
+5. All 165 pre-build litmus tests pass. Build green.
+
+**Unblocks**: order 466 (macOS no-push-route, depends on 462).
+
 ## Cycle 2026-07-24T06:50Z (linux_mutable coordinator — operator-directed: v0.4 pings, overhaul packet intake, main repair, local e2e)
 
 Operator at the terminal. Actions this cycle:
@@ -29,11 +83,20 @@ Operator at the terminal. Actions this cycle:
    FSM FlowSource (the .git whack-a-mole killer: push states observable
    end-to-end), 475 tray status-menu pretty events (presentation half,
    tray-ux governance applies), 476 main-branch direct-push guard.
-4. **Local e2e in flight this cycle**: /build-install-and-smoke-test-e2e at
-   ff0bb5f6 (build -> full podman reset -> cold --init -> forge lane with
-   in-forge opencode /meta-orchestration). Evidence lands in this cycle's
-   PASS/finding report and starts the rebuilt-image live matrix the 11
-   in_progress v0.4 packets need.
+4. **Local e2e COMPLETED (FINDINGS)**: /build-install-and-smoke-test-e2e,
+   final commit 25d7f26f, installed v0.3.260724.3. Gates 1-3 PASS on a
+   pristine substrate (17/17 checks after a five-iteration fix wave over
+   the merged lanes — env-lock race, --inference-tier CLI-mode kill bug,
+   is_held probe collision, 3 clippy lints, 8 stale litmus/policy repairs,
+   e2e-preflight fail-safe; live Linux 463 repro recorded). Gate 4 blocked
+   STRUCTURALLY: in-forge opencode "No provider available" —
+   secret/gemini/api-key has no owning login lane and dies with every
+   reset; ORDER 477 filed (P1 smoke-gate, linux + operator). Positive:
+   rebuilt-image mirror seed + in-forge enclave git:// clone WORKED
+   (452/454 live evidence). Report:
+   plan/issues/smoke-e2e-findings-local-build-linux-2026-07-24.md.
+   OPERATOR ASK: re-seed secret/gemini/api-key (477 interim), then the
+   forge leg re-runs to PASS in minutes.
 
 ### DIRECTION — pings for pickup (v0.4 critical path)
 

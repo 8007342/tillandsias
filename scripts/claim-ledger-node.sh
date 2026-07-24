@@ -1,30 +1,31 @@
 #!/bin/bash
+# freshness: refreshed 2026-07-24 forge-bigpickle-20260724
 set -uo pipefail
 
 # @trace spec:meta-orchestration
+#
+##Agent-Affordance:
+##  use_when: "you need to claim/release/check a plan/index.yaml node before editing it"
+##  cost: "instant (mkdir-based, no network)"
+##  output: "one line matching ^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$"
+##  see_also: "scripts/drain-queue.sh (orchestrates sequential claims)"
+##  example: "scripts/claim-ledger-node.sh claim order-427a"
+##  example: "scripts/claim-ledger-node.sh status order-427a"
+##  example: "scripts/claim-ledger-node.sh release order-427a"
+#
 # claim-ledger-node.sh: lightweight in-flight claim/lease for plan/index.yaml
 # node-closure (ledger-hygiene) edits (plan order 62).
 #
-# Today only destructive e2e work is serialized (scripts/with-smoke-lock.sh).
-# Read-only meta-orch cycles that close or hygiene-edit a plan/index.yaml node
-# have no way to see that a concurrent cycle is already re-deriving the same
-# closure, so two agents independently produce the identical edit (see
-# plan/issues/agent-concurrency-collisions-2026-06-20.md, Observation
-# 2026-06-20T19:05Z). The collision is idempotent (no data loss) but wastes a
-# whole cycle's effort — exactly the velocity drag the reduction engine must
-# capture and reduce.
+# WHY: Read-only meta-orch cycles that close or hygiene-edit a plan/index.yaml
+# node have no way to see that a concurrent cycle is already re-deriving the
+# same closure, so two agents independently produce the identical edit. The
+# collision is idempotent but wastes a whole cycle's effort. This script
+# serializes node-closure claims so concurrent agents skip work that is
+# already in flight.
 #
-# This is a CRDT-friendly *advisory* lease, not a mutex on the file: it respects
-# the stable-ID + idempotent-merge preconditions in
-# methodology/between-commits-work-discipline.yaml. A claimant atomically
-# reserves a node ID before re-deriving its closure; a concurrent claimant on
-# the same ID is told the closure is already in flight and can skip it. The
-# underlying plan-merge remains idempotent, so a missed/expired lease never
-# corrupts state — at worst two agents converge on the same edit, which is safe.
-#
-# Atomicity primitive: mkdir(2) of a per-node lease directory (same primitive
-# the lockdir fallback in with-smoke-lock.sh relies on). Exactly one of N
-# concurrent mkdir calls on the same path succeeds.
+# HOW: Atomic mkdir(2) of a per-node lease directory. Leases expire after 4h
+# (configurable via TILLANDSIAS_LEDGER_LEASE_TTL_SECS). Stale leases are
+# auto-reclaimed. This is advisory (CRDT-friendly), not a mutex.
 #
 # Verdict grammar (exactly one line on stdout, falsifiable):
 #   ^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$
@@ -52,7 +53,28 @@ LEASE_ID="${TILLANDSIAS_LEDGER_LEASE_ID:-$(hostname 2>/dev/null || echo unknown)
 usage() {
   cat >&2 <<'EOF'
 Usage: scripts/claim-ledger-node.sh [claim|release|status] NODE_ID
+
 Reserve a plan/index.yaml node closure to avoid duplicated ledger-hygiene work.
+
+Subcommands:
+  claim   <node-id>   Try to reserve the node (exit 0 on success, 1 if in-flight)
+  release <node-id>   Drop a lease this host holds (exit 0)
+  status  <node-id>   Report in-flight:<id> (exit 0) or free:<id> (exit 1)
+
+Options:
+  -h, --help    Show this help message
+
+Verdict (exactly one line on stdout):
+  claimed:<id>     lease acquired by this caller
+  reclaimed:<id>   stale/expired lease was taken over
+  in-flight:<id>   live lease held by another caller — SKIP this node
+  released:<id>    this caller's lease was released
+  free:<id>        no live lease is held
+
+Env:
+  TILLANDSIAS_LEDGER_LEASE_ROOT       lease root dir (default /tmp/tillandsias-locks/ledger-nodes)
+  TILLANDSIAS_LEDGER_LEASE_TTL_SECS   lease TTL seconds (default 14400 = 4h)
+  TILLANDSIAS_LEDGER_LEASE_ID         opaque lease/agent id (default hostname-pid)
 EOF
 }
 
