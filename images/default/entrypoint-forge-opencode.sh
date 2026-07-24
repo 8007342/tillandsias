@@ -154,6 +154,26 @@ if [ -w "$(dirname "$OPENCODE_INIT_PROMPT")" ]; then
     export OPENCODE_INIT_PROMPT_FILE="$OPENCODE_INIT_PROMPT"
 fi
 
+# ── Renderer environment: full-TUI parity with native Linux / WSL2 ─────────
+# The macOS attach chain (Terminal.app -> screen -> vsock -> guest PTY ->
+# container) delivers only TERM to the child (host-shell env_clear), so OpenCode
+# renders without truecolor and can fall back to a reduced layout (no sidebar).
+# Advertise a capable terminal explicitly so OpenCode uses the SAME renderer it
+# does on Linux/WSL2: FORCE_COLOR pins Node/Ink color depth, COLORTERM signals
+# truecolor, TERM stays a real 256-color entry if none arrived.
+export TERM="${TERM:-xterm-256color}"
+export COLORTERM="${COLORTERM:-truecolor}"
+export FORCE_COLOR="${FORCE_COLOR:-3}"
+# One-line renderer self-diagnostic: size/colors/terminfo say instantly whether a
+# still-degraded render is a WIDTH problem (screen-on-serial winsize not seeding
+# the guest) or a MISSING-TERMINFO problem (ncurses-term absent in the image).
+{
+    _oc_size="$(stty size </dev/tty 2>/dev/null || echo '? ?')"
+    _oc_colors="$(tput colors 2>/dev/null || echo '?')"
+    _oc_tinfo="$(infocmp "$TERM" >/dev/null 2>&1 && echo present || echo MISSING)"
+    echo "[opencode] renderer: TERM=$TERM COLORTERM=$COLORTERM FORCE_COLOR=$FORCE_COLOR size(rows cols)=[$_oc_size] colors=$_oc_colors terminfo=$_oc_tinfo" >&2
+} 2>/dev/null || true
+
 # ── Launch OpenCode ─────────────────────────────────────────
 trace_lifecycle "entrypoint" "opencode launching"
 
