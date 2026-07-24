@@ -6547,7 +6547,7 @@ plan_index:
       order: 427a
       desired_release: v0.4
       title: "Instance-scoped container naming: add worker/instance component to forge container names"
-      status: ready
+      status: completed
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -6632,7 +6632,7 @@ plan_index:
       order: 429a
       desired_release: v0.4
       title: "JSONL parser: consume opencode --format json and codex exec --json structured output"
-      status: ready
+      status: completed
       kind: implementation
       deliverable: crates/tillandsias-headless/src/delegation/
       depends_on: [427a]
@@ -6661,7 +6661,7 @@ plan_index:
       order: 429b
       desired_release: v0.4
       title: "Outcome surfacing: delegator reports per-worker success/failure/timeout to the calling agent"
-      status: pending
+      status: completed
       kind: feature
       deliverable: crates/tillandsias-headless/src/delegation/
       depends_on: [429a]
@@ -6689,7 +6689,7 @@ plan_index:
       order: 429c
       desired_release: v0.4
       title: "Failed-task litmus: a delegated task that fails is reported as failed, not silently dropped"
-      status: pending
+      status: completed
       kind: litmus
       deliverable: openspec/litmus-tests/litmus-delegation-result-retrieval.yaml
       depends_on: [429a, 429b]
