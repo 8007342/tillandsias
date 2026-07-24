@@ -21718,21 +21718,6 @@ plan_index:
       owner_host: linux
       capability_tags: [linux, git-mirror, forge, hooks, validation]
       estimated_hours: 2
-      events:
-        - type: completed
-          ts: "2026-07-24T07:55:00Z"
-          agent_id: "linux-opencode-bigpickle-20260724"
-          host: linux_mutable
-          commits: ["(this cycle)"]
-          summary: >
-            Fixed: (1) new-branch pushes now find a diff-base ancestor ref
-            via find_diff_base() instead of validating the entire inherited
-            tree; (2) legacy openspec/changes/archive/* paths are explicitly
-            exempted from YAML validation via is_legacy_archive(). Added
-            litmus assertions for both behaviors. Extended
-            test-pre-receive-yaml-gate.sh with test 4 (new branch + frozen
-            legacy archive). All 165 pre-build litmus tests pass. Build
-            green.
       operator_note: >
         Discovered live 2026-07-23 08:50Z by the windows observer while
         salvaging the usage-limit-stranded result-retrieval worktree: the
@@ -21765,6 +21750,20 @@ plan_index:
             forge-delegation-result-retrieval salvage (see that packet's
             2026-07-23T09:05Z note and branch
             agent/result-channel-repair-20260723).
+        - type: completed
+          ts: "2026-07-24T07:55:00Z"
+          agent_id: "linux-opencode-bigpickle-20260724"
+          host: linux_mutable
+          commits: ["(this cycle)"]
+          summary: >
+            Fixed: (1) new-branch pushes now find a diff-base ancestor ref
+            via find_diff_base() instead of validating the entire inherited
+            tree; (2) legacy openspec/changes/archive/* paths are explicitly
+            exempted from YAML validation via is_legacy_archive(). Added
+            litmus assertions for both behaviors. Extended
+            test-pre-receive-yaml-gate.sh with test 4 (new branch + frozen
+            legacy archive). All 165 pre-build litmus tests pass. Build
+            green.
     - packet_id: podman-idiomatic-forge-secret-contract-drift
       order: 461
       desired_release: v0.5
