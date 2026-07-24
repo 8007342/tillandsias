@@ -1120,12 +1120,10 @@ impl TrayActionHost {
                 let _project_launch_lease = project_launch_lease;
                 match result {
                     Ok(slave_path) => {
+                        // Terminal.app + `screen` are now spawned inside
+                        // run_pty_attach (before the guest launch) so the forge
+                        // is seeded at the operator's real terminal geometry.
                         eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
-                        if let Err(e) =
-                            crate::terminal_attach::spawn_terminal_pty_attach(&slave_path)
-                        {
-                            eprintln!("[tillandsias-tray] {label}: terminal spawn failed: {e}");
-                        }
                     }
                     Err(e) => {
                         eprintln!("[tillandsias-tray] {label} failed: {e}");
@@ -1191,7 +1189,40 @@ async fn run_pty_attach(
     let master = UnixPtyMaster::open(24, 80).map_err(|e| format!("openpty: {e}"))?;
     let slave_path = master.slave_path().to_string();
 
-    let opts = launch_spec(&intent, project.as_deref(), 24, 80);
+    // Terminal-size fidelity: seed the guest forge at the operator's REAL
+    // terminal geometry. Spawn Terminal.app + `screen` on the slave FIRST, then
+    // wait briefly for the real winsize to land on the shared PTY before
+    // launching. Launching at the old hardcoded 24x80 made the container's
+    // `podman -it` PTY be born at 80 cols, and a later grow to the true width
+    // did not reliably take — so the TUI clipped at 80 forever. Seeding the
+    // launch at the real size makes the FIRST frame correct and never relies on
+    // a grow. `spawn_terminal_pty_attach` is an osascript subprocess (safe off
+    // the main thread); the main-thread caller no longer spawns it.
+    if let Err(e) = crate::terminal_attach::spawn_terminal_pty_attach(&slave_path) {
+        eprintln!("[tillandsias-tray] terminal spawn failed: {e}");
+    }
+    let mut seed: (u16, u16) = (24, 80);
+    {
+        let probe = master.winsize_reader();
+        // ~3s bounded: `screen` normally attaches sub-second; a never-attached
+        // path still launches promptly at the 24x80 fallback.
+        for _ in 0..30 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            match probe.get() {
+                Ok(sz) if sz.0 > 0 && sz.1 > 0 && sz != (24, 80) => {
+                    seed = sz;
+                    break;
+                }
+                _ => {}
+            }
+        }
+    }
+    eprintln!(
+        "[tillandsias-tray] pty-attach: seeding forge at {}x{} (real terminal geometry)",
+        seed.0, seed.1
+    );
+
+    let opts = launch_spec(&intent, project.as_deref(), seed.0, seed.1);
     let session = PtySession::open(Arc::new(transport), &alloc, &router, &opts)
         .map_err(|e| format!("PtyOpen: {e}"))?;
 
@@ -1209,7 +1240,7 @@ async fn run_pty_attach(
         let winsize_reader = master.winsize_reader();
         let resize_sender = session.resize_sender();
         tokio::spawn(async move {
-            let mut last: (u16, u16) = (24, 80);
+            let mut last: (u16, u16) = seed;
             loop {
                 tokio::time::sleep(Duration::from_millis(400)).await;
                 match winsize_reader.get() {

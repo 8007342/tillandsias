@@ -10430,15 +10430,20 @@ pub(crate) fn ensure_enclave_for_project(
         .await?;
         let git_container_name = format!("tillandsias-git-{project_name}");
 
-        // Order 392: deterministic inference readiness. The forge agent must
-        // not boot into an indeterminate "inference may still be starting"
-        // state. Block until the ollama API answers inside the enclave (the
-        // probe runs from the container's own network namespace where
-        // 127.0.0.1:11434 is reachable), with a truthful bounded wait and a
-        // loud reason on timeout. Models may still be pulling in the
-        // background — the API is up the moment ollama `serve` is listening,
-        // which is all the agent needs to query it.
-        wait_for_inference_ready(&client, debug).await?;
+        // Local inference readiness (order 392) is BEST-EFFORT, not a launch
+        // gate. The harnesses use cloud models (operator, 2026-07-24: OpenCode
+        // = BigPickle/Hy3/free cloud); local ollama is a FUTURE expert-system
+        // feature nothing consumes yet. A missing/failed inference (e.g. the
+        // uid-1000 ollama self-install TLS failure on a fresh substrate,
+        // inference-ollama-selfinstall-tls-uid1000-2026-07-24) must NOT abort
+        // the forge — warn and continue so cloud-model harnesses launch
+        // regardless. When local models land, re-gate behind an opt-in.
+        if let Err(e) = wait_for_inference_ready(&client, debug).await {
+            eprintln!(
+                "[tillandsias] [forge-launch] WARNING: local inference not ready ({e}); \
+                 continuing — local models are optional (harnesses use cloud models)."
+            );
+        }
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
