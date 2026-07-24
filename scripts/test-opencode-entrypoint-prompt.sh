@@ -45,6 +45,8 @@ clone_project_from_mirror() { :; }
 require_opencode() { :; }
 require_openspec() { :; }
 apply_opencode_config_overlay() { :; }
+prepare_opencode_vault_auth() { :; }
+opencode_actual_auth_ok() { :; }
 ensure_forge_prebuilt_tools() { :; }
 ensure_forge_harnesses() { :; }
 inject_startup_context() { :; }

@@ -153,15 +153,11 @@ if [ -n "${TILLANDSIAS_CODEX_PROMPT:-}" ]; then
     # machine-readable transcript so the dispatcher can distinguish success from
     # failure from timeout; interactive/human runs keep the formatted default.
     # `codex exec --json` emits JSONL (thread.started, turn.started/completed/
-    # failed, item.*, error). Verified present in codex-cli 0.144.4.
+    # failed, item.completed with nested agent_message text, error). The host
+    # captures this stdout directly; no container result path is accepted.
     codex_result_args=()
     if [ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]; then
         codex_result_args+=(--json)
-        # -o writes just the final assistant message, which is what a
-        # dispatcher usually wants to report back without re-parsing the stream.
-        if [ -n "${TILLANDSIAS_AGENT_RESULT_FILE:-}" ]; then
-            codex_result_args+=(--output-last-message "$TILLANDSIAS_AGENT_RESULT_FILE")
-        fi
     fi
     exec /usr/local/bin/codex-oauth-session -- \
         codex exec "${codex_forge_args[@]}" "${codex_result_args[@]}" "$TILLANDSIAS_CODEX_PROMPT"

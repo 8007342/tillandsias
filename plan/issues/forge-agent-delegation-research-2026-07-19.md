@@ -217,3 +217,35 @@ That is not an unverified exit criterion: the producer/path and mount shapes
 are covered hermetically, while the undocumented OpenCode consumer contract is
 proved against the locally installed 1.18.4 binary without a committed or live
 credential.
+
+## Order 429 current-run result repair — 2026-07-24
+
+The earlier consumption claim was structurally false: launch builders did not
+propagate JSON mode, attached stdout was inherited rather than captured,
+OpenCode had no host consumer, a caller-selected result path could contribute
+stale evidence, nonzero status was discarded, and timeout cancellation could
+orphan the worker. The repaired source path now:
+
+- opts only nonblank prompted JSON runs into fresh bounded stdout capture for
+  OpenCode CLI and Codex while preserving the inherited TUI path and omitting
+  the unsupported request from detached OpenCode Web serve;
+- parses the current nested CLI schemas, keeps failure sticky, and treats the
+  real nonzero/signal process status as authoritative;
+- invalidates and atomically replaces any optional host result file without
+  ever reading it as evidence;
+- retains at most 16 MiB while draining stdout, and makes overflow ineligible
+  for success; and
+- requires an exact instance-scoped worker identity, then performs bounded
+  checked exact-name removal, reap, Podman-CLI kill-on-drop backstop, and a
+  second exact removal at timeout without listing or touching siblings.
+
+Deterministic no-Podman evidence covers both CLI builders, Web omission, the
+exact Codex `--json` entrypoint command seam, actual Codex/OpenCode event
+shapes, stale preseed rejection, production-wrapper rejection of a
+success-looking exit 37, and exact timeout cleanup with sibling survival. The
+selected headless tests pass 11/11 and the bounded-capture helper passes 1/1.
+
+Order 429 remains in progress. Closure still requires a built forge with real
+Podman to run genuinely failed delegated Codex and OpenCode tasks and prove the
+delegating process reports failure end to end while an adjacent scoped worker
+survives.
