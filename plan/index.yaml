@@ -21320,6 +21320,24 @@ plan_index:
         - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
       events:
         - type: progress
+          ts: "2026-07-24T07:30:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            WINDOWS PASS against v0.3.260724.1 (operator at the terminal,
+            live-monitored):
+            plan/issues/smoke-455-windows-v0.3.260724.1-2026-07-24.md.
+            Full purge (clean residue audit incl. registry + Event Log
+            source) then pinned curl-install from the published release:
+            sha-verified, VERSIONINFO 0.3.260724.1 (51e5f0aa), rootfs
+            download 3.4s, wipe-to-VM-ready 74s, handshake attempt 1,
+            NO version skew (guest --help confirms 0.3.260724.1), no
+            errors. Saved-file installer run doubled as the smart-quote
+            P1 regression test - parsed correctly. Non-blocking findings:
+            uninstall docs need the ExecutionPolicy bypass invocation;
+            purge should mention it removes saved logins. The v0.4
+            smoke gate's WINDOWS column is COMPLETE.
+        - type: progress
           ts: "2026-07-22T22:15:00Z"
           agent_id: "windows-bullo-fable5-20260722"
           host: windows
