@@ -386,6 +386,7 @@ fn main() {
         || observatorium
         || init
         || status_check
+        || inference_tier
         || github_login
         || claude_login
         || codex_login
@@ -520,6 +521,16 @@ fn main() {
         return;
     }
 
+    if inference_tier {
+        // Order 392: the launch-authoritative tier verdict, in the
+        // pinned falsifiable grammar. scripts/inference-tier-probe.sh
+        // defers to this when the binary is installed so the two
+        // detection surfaces can never drift; the sibling lanes
+        // (orders 401/402) grade their guests against it.
+        println!("tier:{}", detect_inference_tier());
+        std::process::exit(0);
+    }
+
     // Intentional EPHEMERAL RESET (windows-260717-4): the Linux `podman
     // equivalent` of the Windows `wsl --unregister` + reprovision. Wipes the
     // guest substrate (vault + enclave), then re-runs the same init + vault
@@ -553,16 +564,6 @@ fn main() {
             if debug {
                 eprintln!("[tillandsias] vault feature not compiled; continuing without Vault");
             }
-        }
-
-        if inference_tier {
-            // Order 392: the launch-authoritative tier verdict, in the
-            // pinned falsifiable grammar. scripts/inference-tier-probe.sh
-            // defers to this when the binary is installed so the two
-            // detection surfaces can never drift; the sibling lanes
-            // (orders 401/402) grade their guests against it.
-            println!("tier:{}", detect_inference_tier());
-            std::process::exit(0);
         }
 
         if status_check {
@@ -13157,6 +13158,7 @@ mod tests {
             "antigravity",
             "opencode_web",
             "observatorium",
+            "inference_tier",
             "github_login",
             "claude_login",
             "codex_login",
@@ -17917,7 +17919,9 @@ esac
 
     #[cfg(feature = "tray")]
     #[test]
+    #[ignore = "e2e: drives the live host podman/vault stack; run with --ignored on a healthy stack (order-463 host-endpoint class)"]
     fn publish_local_service_starts_container_and_returns_url() {
+        let _env = env_lock();
         use std::sync::Once;
         static INIT: Once = Once::new();
         INIT.call_once(|| {
