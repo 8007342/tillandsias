@@ -19386,6 +19386,24 @@ plan_index:
             cancellation can orphan the exact forge worker. This cycle owns the
             bounded source fix and deterministic no-Podman fixtures; real
             failed-task container evidence remains a live closure gate.
+        - type: note
+          ts: "2026-07-23T09:05:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            LEASE STRANDED BY PROVIDER USAGE LIMIT, WORK SALVAGED. The forge
+            codex session hit its ChatGPT usage limit at 07:16:11Z
+            mid-implementation (rollout error: retry Jul 29 or purchase
+            credits) and idled without committing. The windows observer
+            salvaged the in-progress worktree (11 files, +1264/-154,
+            UNVERIFIED - no test run recorded after the edits) as WIP commit
+            79792cb5 on branch agent/result-channel-repair-20260723, pushed
+            to GitHub directly. The in-guest mirror push was REJECTED by the
+            pre-receive hook: a NEW-branch push has no diff base, so the hook
+            validates the full tree and legacy openspec/changes/archive
+            YAML predating the validator fails (ruby). Follow-up finding
+            filed as order 462. Packet remains claimable after lease expiry;
+            resume from the salvage branch, verify before trusting.
         - type: progress
           ts: "2026-07-24T02:19:07Z"
           agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
@@ -21469,6 +21487,50 @@ plan_index:
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
 
+    - packet_id: mirror-pre-receive-blocks-all-new-branches
+      order: 462
+      desired_release: v0.4
+      title: "git-mirror pre-receive full-tree YAML validation rejects EVERY new-branch push — in-guest agents cannot create branches, stranding salvage/WIP flows"
+      status: ready
+      kind: fix
+      deliverable: images/git/ pre-receive hook (validate only changed paths vs the nearest existing ref; treat legacy openspec/changes/archive as exempt)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, git-mirror, forge, hooks, validation]
+      estimated_hours: 2
+      operator_note: >
+        Discovered live 2026-07-23 08:50Z by the windows observer while
+        salvaging the usage-limit-stranded result-retrieval worktree: the
+        WIP branch push was rejected with dozens of
+        "openspec/changes/archive/2026-03-22-*/.openspec.yaml failed YAML
+        validation (ruby)" errors for files the branch never touched. A
+        new ref has no old-sha diff base, so the hook validates the whole
+        tree, and the pre-validator legacy archive can never pass. Every
+        one of tonight's 21 successful forge pushes rode the EXISTING
+        linux-next ref; branch creation from inside the enclave is
+        impossible until this is fixed. Workaround used: format-patch out
+        to the host and push the branch to GitHub directly.
+      outcome: >
+        A new-branch push validates only paths changed relative to the
+        nearest existing ancestor ref (or merge-base with the default
+        ref), with the legacy archive explicitly exempted; in-guest
+        agents can durably publish WIP/salvage branches through the
+        mirror.
+      exit_criteria:
+        - "pushing a new branch from inside a forge container succeeds when its changed files pass validation, regardless of legacy archive contents"
+        - "a new branch introducing an invalid YAML file is still rejected (validator remains effective on the actual diff)"
+        - "litmus or hook test pins the diff-base selection for new refs"
+      events:
+        - type: filed
+          ts: "2026-07-23T09:05:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from live rejection evidence during the
+            forge-delegation-result-retrieval salvage (see that packet's
+            2026-07-23T09:05Z note and branch
+            agent/result-channel-repair-20260723).
     - packet_id: podman-idiomatic-forge-secret-contract-drift
       order: 461
       desired_release: v0.5
