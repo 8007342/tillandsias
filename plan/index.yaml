@@ -22485,7 +22485,7 @@ plan_index:
         litmus-pinned). Protects the imminent v0.4 promotion.
 
     - packet_id: forge-opencode-provider-seed-missing-after-reset
-      order: 477
+      order: 479
       desired_release: v0.4
       title: "P1 smoke-gate: in-forge OpenCode has no provider bootstrap on a pristine substrate — secret/gemini/api-key has no owning flow and dies with every reset"
       status: ready

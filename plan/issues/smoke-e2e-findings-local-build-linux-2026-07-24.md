@@ -1,4 +1,4 @@
-# Linux local-build e2e smoke 2026-07-24 — FINDINGS: gates 1-3 PASS on the merged v0.4 wave; gate 4 blocked on a structural provider-seed gap (order 477)
+# Linux local-build e2e smoke 2026-07-24 — FINDINGS: gates 1-3 PASS on the merged v0.4 wave; gate 4 blocked on a structural provider-seed gap (order 479)
 
 - Date: 2026-07-24 (UTC 06:29Z-08:20Z)
 - Host: linux_mutable (operator machine), branch `linux-next`
@@ -66,7 +66,7 @@ observed: the fresh vault still advertises `base_url:
 https://127.0.0.1:8201` — the order-463 structural fix (enclave-URL
 everywhere) remains ready/unclaimed.
 
-## Gate 4 — forge lane: FAIL (structural, order 477 filed)
+## Gate 4 — forge lane: FAIL (structural, order 479 filed)
 
 Forge launched clean; enclave `git://` mirror clone of the project SUCCEEDED
 on the rebuilt image (positive 452/454-lineage evidence); opencode died:
@@ -76,7 +76,7 @@ reads only `secret/gemini/api-key`, which has NO login lane
 reset, and is unrecoverable from host state. Every pristine-substrate smoke
 fails this gate until a seed path exists. Packet:
 `plan/issues/forge-opencode-provider-seed-missing-after-reset-2026-07-24.md`
-(order 477) — interim operator reseed + durable provider-seed framework
+(order 479) — interim operator reseed + durable provider-seed framework
 generalizing order 468. Known cosmetic residual reproduced: forge OpenSpec
 init WARNING (existing 2026-07-12 packet class, not re-filed).
 
