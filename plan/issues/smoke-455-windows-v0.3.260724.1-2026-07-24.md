@@ -62,3 +62,21 @@ observer: windows-host Claude session (live log monitor + Event Log).
 **PASS** — the v0.4 cross-platform smoke evidence gate's Windows column
 is complete against v0.3.260724.1 (first daily carrying the full
 07-23/24 stability wave).
+
+## Addendum — first-launch full-stack cost (operator scoping correction)
+
+The 74s figure is wipe-to-VM-READY (control wire) only. The first
+enclave launch after it (triggered by GitHub Login at 07:22:30Z) paid
+the one-time image-preparation cost with no visible progress:
+
+| Milestone | Time | Delta from VM ready |
+|---|---|---|
+| VM ready | 07:21:43Z | 0 |
+| vault container created (auto-ensure) | 07:21:55Z | +12s |
+| proxy container created | 07:25:05Z | +3m22s |
+| login identity prompts reachable | ~07:25+ | operator saw "a few minutes" of quiet |
+
+This wait is EXACTLY the motivation for order windows-260722-6
+(forge-first-launch-progress-surface, status ready): meaningful
+spinners/progress for first-boot image preparation instead of a silent
+terminal. This smoke's timings are its live evidence block.
