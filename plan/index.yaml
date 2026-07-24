@@ -22036,3 +22036,27 @@ plan_index:
         (b) LINUX — meta-orchestration/advance-work bootstrap refuses
         committable cycles when branch == main (executable check,
         litmus-pinned). Protects the imminent v0.4 promotion.
+
+    - packet_id: forge-opencode-provider-seed-missing-after-reset
+      order: 477
+      desired_release: v0.4
+      title: "P1 smoke-gate: in-forge OpenCode has no provider bootstrap on a pristine substrate — secret/gemini/api-key has no owning flow and dies with every reset"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/forge-opencode-provider-seed-missing-after-reset-2026-07-24.md
+      depends_on: []
+      pickup_role: "linux + operator"
+      capability_tags: [linux, forge, opencode, vault, credentials, smoke-gate, p1]
+      estimated_hours: 4
+      outcome: >
+        Found by the 2026-07-24 linux local-build e2e (gates 1-3 PASS on a
+        pristine substrate, gate 4 blocked): order-431 opencode vault auth
+        reads only secret/gemini/api-key, which has NO login lane
+        (GitHub/Claude/Codex/Antigravity only, main.rs:442-472), is wiped by
+        podman system reset, and is unrecoverable from host state -> "No
+        provider available". Interim: documented operator reseed + pre-reset
+        destruction warning in the smoke runbook. Durable: provider-seed
+        framework generalizing order 468's transparent capture to a
+        gemini/opencode login lane; --diagnose names the missing seed before
+        launch. Until fixed the Linux 455-family forge gate cannot pass
+        unattended.
