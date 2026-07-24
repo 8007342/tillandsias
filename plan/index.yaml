@@ -21651,7 +21651,7 @@ plan_index:
       order: 464
       desired_release: v0.5
       title: "Reject unknown delegated-result format values instead of silently disabling capture"
-      status: ready
+      status: in_progress
       kind: fix
       deliverable: plan/issues/forge-result-format-unknown-value-fail-closed-2026-07-24.md
       depends_on: []
@@ -21680,6 +21680,25 @@ plan_index:
             Filed from the final order429 adversarial review. OpenCode Web
             leakage was fixed in the v0.4 source slice; the remaining unknown
             value grammar is an independent v0.5 hardening packet.
+        - type: progress
+          ts: "2026-07-24T17:30:00Z"
+          agent_id: "opencode-bigpickle-forge-20260724"
+          host: forge
+          commits: []
+          summary: >
+            Source fix landed in delegated_run_config (main.rs): the function
+            now match-guards on the env var value — exact "json" proceeds, unset
+            returns Ok(None) (ordinary path), any other present text returns a
+            deterministic error naming the unsupported value, and non-UTF8
+            returns a Unicode error. Test
+            delegated_result_format_unknown_value_fails_closed covers: unset
+            preserves ordinary path, exact json activates delegated capture, 7
+            bad text values (xml/yaml/jsonl/Json/JSON/json-space/space-json)
+            all fail with "unsupported value" in the error, and non-UTF8 bytes
+            fail with "UTF-8" in the error. cargo clippy -p tillandsias-headless
+            -D warnings clean. Remaining exit criteria: (3) OpenCode Web omission
+            proof and (4) spec wording — left for the next agent with full
+            build/litmus access.
 
     - packet_id: repeat-human-operator-only-supervisor
       provisional_id: forge-260723-1

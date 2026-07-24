@@ -8410,8 +8410,21 @@ fn delegated_json_requested(prompt: Option<&str>) -> bool {
 }
 
 fn delegated_run_config(prompt: Option<&str>) -> Result<Option<DelegatedRunConfig>, String> {
-    if std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() != Ok("json") {
-        return Ok(None);
+    match std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT") {
+        Ok(value) if value == "json" => { /* proceed below */ }
+        Ok(other) => {
+            return Err(format!(
+                "TILLANDSIAS_AGENT_RESULT_FORMAT must be unset or exactly \"json\"; \
+                 got unsupported value {other:?} — refusing to launch a delegated run \
+                 with an unknown result format"
+            ));
+        }
+        Err(std::env::VarError::NotPresent) => return Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            return Err("TILLANDSIAS_AGENT_RESULT_FORMAT must be valid UTF-8; \
+                 refusing to launch a delegated run with non-Unicode result format"
+                .to_string());
+        }
     }
     if prompt.is_none_or(|value| value.trim().is_empty()) {
         return Err("TILLANDSIAS_AGENT_RESULT_FORMAT=json requires a non-empty prompt".to_string());
@@ -15412,6 +15425,65 @@ mod tests {
             missing_instance.contains("TILLANDSIAS_FORGE_INSTANCE"),
             "{missing_instance}"
         );
+    }
+
+    #[test]
+    fn delegated_result_format_unknown_value_fails_closed() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_AGENT_RESULT_FORMAT",
+            "TILLANDSIAS_AGENT_RESULT_FILE",
+            "TILLANDSIAS_AGENT_TIMEOUT_SECS",
+            "TILLANDSIAS_FORGE_INSTANCE",
+        ]);
+        restore.set("TILLANDSIAS_FORGE_INSTANCE", "format-gate");
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FILE");
+        restore.remove("TILLANDSIAS_AGENT_TIMEOUT_SECS");
+
+        // Unset → ordinary (non-delegated) path, no error.
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FORMAT");
+        assert!(
+            delegated_run_config(Some("work")).unwrap().is_none(),
+            "unset result format must preserve the ordinary interactive path"
+        );
+
+        // Exact "json" → delegated path.
+        restore.set("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        assert!(
+            delegated_run_config(Some("work"))
+                .expect("json must not error")
+                .is_some(),
+            "exact json must activate the delegated capture path"
+        );
+
+        // Any other present text value → fail-closed before launch.
+        for bad in ["xml", "yaml", "jsonl", "Json", "JSON", "json ", " json"] {
+            restore.set("TILLANDSIAS_AGENT_RESULT_FORMAT", bad);
+            let err = delegated_run_config(Some("work"))
+                .expect_err("unknown format value must fail before launch");
+            assert!(
+                err.contains("unsupported value"),
+                "error for {bad:?} should name the unsupported-value class: {err}"
+            );
+        }
+
+        // Non-Unicode bytes → fail-closed.
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            restore.set(
+                "TILLANDSIAS_AGENT_RESULT_FORMAT",
+                std::ffi::OsStr::from_bytes(b"json\xfe\xff"),
+            );
+            let err = delegated_run_config(Some("work"))
+                .expect_err("non-UTF8 format must fail before launch");
+            assert!(
+                err.contains("UTF-8") || err.contains("Unicode"),
+                "non-UTF8 error should name the encoding class: {err}"
+            );
+        }
+
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FORMAT");
     }
 
     #[cfg(unix)]
