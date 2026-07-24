@@ -6576,7 +6576,7 @@ plan_index:
       order: 427b
       desired_release: v0.4
       title: "Coexistence litmus: prove two workers on one project run simultaneously without replacing each other"
-      status: pending
+      status: completed
       kind: litmus
       deliverable: openspec/litmus-tests/litmus-delegation-coexistence.yaml
       depends_on: [427a]
@@ -6604,7 +6604,7 @@ plan_index:
       order: 427c
       desired_release: v0.4
       title: "Targeted teardown: stop/remove only the intended worker container, leave others intact"
-      status: pending
+      status: completed
       kind: fix+litmus
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: [427a]
@@ -19328,7 +19328,7 @@ plan_index:
       packet_id: forge-delegation-instance-names
       desired_release: v0.4
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
-      status: in_progress
+      status: completed
       kind: fix
       split_into:
         - "427a — delegation-instance-names-code (instance-scoped container naming in launcher)"
@@ -19566,7 +19566,7 @@ plan_index:
       packet_id: forge-delegation-result-retrieval
       desired_release: v0.4
       title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
-      status: in_progress
+      status: completed
       kind: feature
       split_into:
         - "429a — delegation-jsonl-parser (JSONL parser for opencode + codex structured output)"
@@ -22274,7 +22274,7 @@ plan_index:
       order: 467
       desired_release: v0.4
       title: "Forge trust: runtime proxy CA not mounted at forge launch -> silent vendor-roots fallback breaks in-forge GitHub asset downloads"
-      status: ready
+      status: completed
       kind: fix
       deliverable: plan/issues/forge-trust-ca-source-readiness-gap-2026-07-23.md
       depends_on: []
@@ -22488,7 +22488,7 @@ plan_index:
       order: 479
       desired_release: v0.4
       title: "P1 smoke-gate: in-forge OpenCode has no provider bootstrap on a pristine substrate — secret/gemini/api-key has no owning flow and dies with every reset"
-      status: ready
+      status: completed
       kind: fix
       deliverable: plan/issues/forge-opencode-provider-seed-missing-after-reset-2026-07-24.md
       depends_on: []
