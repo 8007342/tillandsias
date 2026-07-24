@@ -158,3 +158,22 @@ suppressed), so it shows the TRUE login state within its first status cycle:
 2. Click GitHub Login; complete `gh auth login` in the popup terminal.
 3. Observe chip stuck "Logging In" (does not resolve within seconds/minutes while
    the push subscription is healthy).
+
+## Windows evidence 2026-07-24 (cross-platform confirmation + mechanism)
+
+Reproduced on windows with tray 0.3.260724.1 against guest 0.3.260721.1
+(operator live): login CLI succeeded end-to-end (vault write + "GitHub
+authentication complete"), menu stayed login-gated indefinitely. Event
+Log shows exactly ONE github-login refresh at tray start (00:12:10, ctx
+flagged by the version-skew WARN) and none after. Mechanism (windows
+notify_icon.rs): steady-state polls are SUPPRESSED while the push
+subscription is healthy (SC-07/SC-16, should_poll_login_and_cloud);
+the login transition must be PUSHED by the guest, and a guest that
+predates the login-state publisher (or a login performed by a separate
+CLI process the guest service does not observe) never pushes it. So the
+gate is healthy-push + silent-guest = permanently stale menu. Fix
+directions: (a) the login PTY intent already tells the tray a login was
+attempted — fire a bounded fast-poll burst after the login terminal
+closes; (b) guest-side: the CLI login path should poke the service
+publisher (or the service should watch the vault token path). Restarting
+the tray (startup poll) or reprovisioning to a current guest clears it.
