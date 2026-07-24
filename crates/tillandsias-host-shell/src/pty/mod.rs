@@ -447,6 +447,16 @@ impl PtySession {
         })
     }
 
+    /// A detachable resize sender that clones the transport + session id, so a
+    /// winsize watcher can relay `PtyResize` for the life of the session after
+    /// the `PtySession` itself has been moved into [`pump_io`].
+    pub fn resize_sender(&self) -> PtyResizeSender {
+        PtyResizeSender {
+            transport: self.transport.clone(),
+            session_id: self.session_id,
+        }
+    }
+
     /// Host-initiated close (§3.6): tell the guest to terminate the child.
     pub fn close(&self, exit: PtyExit) -> Result<(), PtyError> {
         self.transport.send(ControlMessage::PtyClose {
@@ -459,6 +469,27 @@ impl PtySession {
     /// `None` once the router drops the session and the channel closes.
     pub async fn recv(&mut self) -> Option<SessionEvent> {
         self.inbound.recv().await
+    }
+}
+
+/// Detachable `PtyResize` sender — see [`PtySession::resize_sender`]. Sends a
+/// resize on a discrete change (never polled on the wire); the host winsize
+/// watcher owns the change detection locally.
+pub struct PtyResizeSender {
+    transport: Arc<dyn PtyTransport>,
+    session_id: u32,
+}
+
+impl PtyResizeSender {
+    /// Relay a terminal resize to the guest child (it applies `TIOCSWINSZ`
+    /// and raises SIGWINCH so the TUI repaints). Errors once the transport
+    /// is gone (session ended).
+    pub fn resize(&self, rows: u16, cols: u16) -> Result<(), PtyError> {
+        self.transport.send(ControlMessage::PtyResize {
+            session_id: self.session_id,
+            rows,
+            cols,
+        })
     }
 }
 

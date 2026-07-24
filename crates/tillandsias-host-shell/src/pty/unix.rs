@@ -177,11 +177,49 @@ impl UnixPtyMaster {
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
-        let rc = unsafe { ioctl_setwinsz(self.master.get_ref().as_raw_fd(), TIOCSWINSZ, &ws) };
+        let rc =
+            unsafe { ioctl(self.master.get_ref().as_raw_fd(), TIOCSWINSZ, &ws as *const WinSize) };
         if rc < 0 {
             Err(io::Error::last_os_error())
         } else {
             Ok(())
+        }
+    }
+
+    /// A detachable reader of the PTY master's current window size. It clones
+    /// the shared master fd, so it stays usable AFTER the `UnixPtyMaster` is
+    /// moved into `pump_io`. The tray is a GUI process with no controlling tty
+    /// and never receives SIGWINCH, so the resize watcher reads this to learn
+    /// the real terminal size that `screen`/Terminal.app apply to the slave
+    /// after attach (and on every later window resize).
+    pub fn winsize_reader(&self) -> PtyWinsizeReader {
+        PtyWinsizeReader {
+            fd: self.master.clone(),
+        }
+    }
+}
+
+/// Detachable `TIOCGWINSZ` reader — see [`UnixPtyMaster::winsize_reader`].
+pub struct PtyWinsizeReader {
+    fd: Arc<AsyncFd<FdHolder>>,
+}
+
+impl PtyWinsizeReader {
+    /// Current `(rows, cols)` from the PTY master via `TIOCGWINSZ`. Returns an
+    /// error once the underlying fd is closed (session ended).
+    pub fn get(&self) -> io::Result<(u16, u16)> {
+        let mut ws = WinSize {
+            ws_row: 0,
+            ws_col: 0,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        let rc =
+            unsafe { ioctl(self.fd.get_ref().as_raw_fd(), TIOCGWINSZ, &mut ws as *mut WinSize) };
+        if rc < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok((ws.ws_row, ws.ws_col))
         }
     }
 }
@@ -278,6 +316,13 @@ const TIOCSWINSZ: u64 = 0x80087467;
 #[cfg(target_os = "linux")]
 const TIOCSWINSZ: u64 = 0x5414;
 
+// TIOCGWINSZ (read window size). macOS Darwin _IOR('t', 104, struct winsize);
+// Linux fixed value. Counterpart to TIOCSWINSZ above.
+#[cfg(target_os = "macos")]
+const TIOCGWINSZ: u64 = 0x40087468;
+#[cfg(target_os = "linux")]
+const TIOCGWINSZ: u64 = 0x5413;
+
 #[link(name = "c")]
 unsafe extern "C" {
     fn openpty(
@@ -296,8 +341,11 @@ unsafe extern "C" {
     // a static buffer.
     fn ptsname_r(fd: c_int, buf: *mut c_char, buflen: usize) -> c_int;
 
-    #[link_name = "ioctl"]
-    fn ioctl_setwinsz(fd: c_int, request: u64, argp: *const WinSize) -> c_int;
+    // `ioctl` is variadic in C; one binding serves both TIOCSWINSZ (kernel
+    // reads the winsize we hand it) and TIOCGWINSZ (kernel writes it back).
+    // Two fixed-signature bindings to the same symbol trip
+    // `clashing_extern_declarations`, so bind the variadic form once.
+    fn ioctl(fd: c_int, request: u64, ...) -> c_int;
 
     // Terminal attribute manipulation used to put the host PTY into raw mode.
     // All three are POSIX and present on macOS and Linux.

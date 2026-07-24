@@ -1195,6 +1195,37 @@ async fn run_pty_attach(
     let session = PtySession::open(Arc::new(transport), &alloc, &router, &opts)
         .map_err(|e| format!("PtyOpen: {e}"))?;
 
+    // Window-resize forwarding. The guest child starts at the 24x80 default
+    // above; once Terminal.app + `screen` attach to the slave, the operator's
+    // REAL terminal size (and every later resize) lands on the shared PTY
+    // winsize. The tray is a GUI process with no controlling tty, so it never
+    // receives SIGWINCH — read the master winsize locally and relay changes to
+    // the guest so the child TUI repaints at the true size instead of clipping
+    // at 24x80. This is a cheap LOCAL ioctl, not a guest round-trip: it only
+    // touches the wire (one `PtyResize`) on an actual change. The detached
+    // handles outlive the `pump_io` move below; the loop ends when the master
+    // fd closes or the transport drops (session over).
+    {
+        let winsize_reader = master.winsize_reader();
+        let resize_sender = session.resize_sender();
+        tokio::spawn(async move {
+            let mut last: (u16, u16) = (24, 80);
+            loop {
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                match winsize_reader.get() {
+                    Ok(size) if size != last && size.0 > 0 && size.1 > 0 => {
+                        last = size;
+                        if resize_sender.resize(size.0, size.1).is_err() {
+                            break; // transport gone → session ended
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => break, // master fd closed → session ended
+                }
+            }
+        });
+    }
+
     let _pump_join = pump_io(session, master);
     Ok(slave_path)
 }
