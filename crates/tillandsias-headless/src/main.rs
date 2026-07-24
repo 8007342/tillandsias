@@ -4763,6 +4763,16 @@ fn build_opencode_forge_args(
             ),
             "--env".into(),
             format!("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
+            // macOS push route (2026-07-23): the staged source is read-only +
+            // non-bare and cannot accept a push, but the enclave `tillandsias-git`
+            // mirror IS started + seeded on this launch path (run_opencode_mode)
+            // and relays to GitHub via the Vault token. Declaring the service
+            // lets clone_project_from_mirror route pushes there while keeping the
+            // fast local filesystem clone. The filesystem branch returns before
+            // the network-clone branch, so this env only feeds the push-URL
+            // redirect, never a re-clone.
+            "--env".into(),
+            "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
         ]);
     } else if forge_uses_host_mount() {
         // Opt-in legacy shared host-mount (TILLANDSIAS_FORGE_HOST_MOUNT=1):
