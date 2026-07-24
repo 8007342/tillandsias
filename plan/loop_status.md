@@ -1,5 +1,20 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T08:15Z (forge — meta-orchestration: packet splitting + drain orchestration)
+
+- **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Build**: Already green from prior cycle (clippy 1.97 fixes landed).
+- **Packet splitting**: Split 4 large in-progress/ready packets into 12 smaller child slices:
+  - Order 427 (forge-delegation-instance-names) → 427a (code), 427b (coexistence litmus), 427c (teardown target)
+  - Order 429 (forge-delegation-result-retrieval) → 429a (JSONL parser), 429b (outcome surfacing), 429c (failed-task litmus)
+  - Order 246 (credential-secrets-architecture-audit) → 246a (credential inventory), 246b (token lifecycle)
+  - Order 247 (proxy-git-mirror-configuration-audit) → 247a (TLS chain audit), 247b (git mirror forwarding)
+- **Drain orchestration**: Created `scripts/drain-queue.sh` — local sequential agent queue drain with --release, --tag, --limit filters and claim/release per packet.
+- **Fix**: Merged duplicate `events:` YAML key in order 462 (plan/index.yaml validation error).
+- **Freshness audit**: Refreshed `scripts/claim-ledger-node.sh` and `scripts/check-credential-channel.sh`.
+- **Ready queue**: 88 packets ready (8 v0.4, 80 v0.5+).
+
 ## Cycle 2026-07-24T07:48Z (linux_mutable — v0.4 critical path: order 462 pre-receive fix)
 
 - **Host**: linux_mutable, `linux-next`, `TILLANDSIAS_HOST_KIND=unset`.
