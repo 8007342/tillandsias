@@ -21745,3 +21745,258 @@ plan_index:
             - "repeat source header and usage() contract"
             - "bash -n repeat: pass"
             - "exact ./repeat --help grep assertions: pass"
+
+    - packet_id: forge-enclave-isolation-uniform-principle
+      order: 465
+      desired_release: v0.4
+      title: "PRINCIPLE: every forge stack MUST be enclave-isolated + git:// mirror push on ALL platforms (uniform container stack)"
+      status: ready
+      kind: architecture
+      deliverable: plan/issues/forge-enclave-isolation-uniform-principle-2026-07-23.md
+      depends_on: []
+      pickup_role: "macos + linux"
+      capability_tags: [security, enclave, forge, architecture, principle]
+      estimated_hours: 2
+      outcome: >
+        Operator directive codified 2026-07-23 with a read-only cross-platform
+        trace: the feared Linux-forge-skips-enclave P1 is REFUTED at HEAD
+        (enclave attach main.rs:4664/10684, proxy-only egress, credential
+        quarantine, mirror push default per order 437). Settles the macOS
+        push-route decision toward OPTION B (mirror push). Residuals: guard or
+        retire the opt-in TILLANDSIAS_FORGE_HOST_MOUNT=1 escape hatch; converge
+        macOS push wiring (order 466). Promoted to the index by the linux
+        coordinator 2026-07-24 (was issues-file only, invisible to pickup).
+
+    - packet_id: macos-forge-no-push-route-lane-decision
+      order: 466
+      desired_release: v0.4
+      title: "P1: macOS SRC-ISOLATION forge lane has NO push route — agents commit but work strands in the --rm overlay"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/macos-forge-no-push-route-lane-decision-2026-07-23.md
+      depends_on: [mirror-pre-receive-blocks-all-new-branches]
+      pickup_role: macos
+      capability_tags: [macos, forge, git-mirror, work-loss, p1]
+      estimated_hours: 4
+      outcome: >
+        macOS lane sets GIT_MIRROR_PATH but never TILLANDSIAS_GIT_SERVICE
+        (main.rs:4753-4766), so in-forge commits have no relay route and die
+        with the --rm container. Decision SETTLED by order 465 PRINCIPLE:
+        OPTION B (wire the git:// mirror push relay, keep isolation); OPTION A
+        host-mount is the wrong direction. Depends on order 462 because a
+        newly wired macOS mirror push immediately hits the pre-receive
+        new-branch rejection. Promoted to the index 2026-07-24.
+
+    - packet_id: forge-trust-ca-source-readiness-gap
+      order: 467
+      desired_release: v0.4
+      title: "Forge trust: runtime proxy CA not mounted at forge launch -> silent vendor-roots fallback breaks in-forge GitHub asset downloads"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/forge-trust-ca-source-readiness-gap-2026-07-23.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, forge, ca-trust, proxy, enclave]
+      estimated_hours: 3
+      outcome: >
+        macOS-observed, linux-owned: lib-common.sh:47 silently falls back to
+        vendor roots when the proxy CA is not yet a PEM at mount time
+        (main.rs:4743-4747). Smallest actions: host-side PEM gate before forge
+        create, loud failure for stack-connected forges, ensure_ca_bundle
+        adjacent to create, move CA off tmpfs. Feeds the order-472
+        cert-lifecycle state-graph research. Promoted to the index 2026-07-24.
+
+    - packet_id: forge-claude-transparent-oauth-token-vault-inject
+      order: 468
+      desired_release: v0.4
+      title: "Transparent Claude OAuth-token capture -> Vault -> inject -> refresh (harness-auth parity with Codex/GitHub)"
+      status: ready
+      kind: feature
+      deliverable: plan/issues/forge-claude-transparent-oauth-token-vault-inject-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [forge, vault, credentials, claude-harness]
+      estimated_hours: 5
+      outcome: >
+        OPERATOR SIGN-OFF REQUIRED before implementation (packet header).
+        Unblocks the Claude forge lane on all three hosts: claude setup-token
+        inside run_provider_login (main.rs:6860) mirroring
+        codex-device-auth.sh:24-40, token to secret/claude/oauth-token,
+        injected + refreshed transparently. Promoted to the index 2026-07-24.
+
+    - packet_id: research-auth-flow-state-machines
+      order: 469
+      desired_release: v0.5
+      title: "Research: explicit auth-flow state machines (login FSM per provider) replacing implicit poll/retry states"
+      status: ready
+      kind: research
+      deliverable: plan/issues/research-auth-flow-state-machines-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [research, auth, fsm, architecture]
+      estimated_hours: 6
+      outcome: >
+        First of the d89fac3d osx-next research trio (filed after the SELinux
+        relabel login root cause + anti-polling directive). Model each login
+        flow as an explicit FSM with named states/transitions instead of
+        implicit polling. Promoted to the index by the linux coordinator
+        2026-07-24 (was osx-next issues-file only, invisible to pickup).
+
+    - packet_id: research-unified-runtime-data-dependency-graph
+      order: 470
+      desired_release: v0.5
+      title: "Research: unified runtime data/dependency graph — containers, volumes, mounts, secrets, CAs as one state-aware graph"
+      status: ready
+      kind: research
+      deliverable: plan/issues/research-unified-runtime-data-dependency-graph-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [research, orchestration, dependency-graph, architecture]
+      estimated_hours: 8
+      outcome: >
+        Second of the d89fac3d trio: one queryable dependency graph over the
+        container stack where nodes carry STATE (not just edges), so
+        orchestration decisions (start order, restart cascades, readiness)
+        derive from the graph instead of scattered ad-hoc checks. The
+        operator's dependency+state-flow-graph overhaul ask lands here.
+        Cross-ref orders 469, 471, 472. Promoted to the index 2026-07-24.
+
+    - packet_id: research-flow-state-event-channel
+      order: 471
+      desired_release: v0.5
+      title: "Research: FlowState event channel — async push of state transitions over the control wire (kills polling)"
+      status: ready
+      kind: research
+      deliverable: plan/issues/research-flow-state-event-channel-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [research, events, control-wire, architecture]
+      estimated_hours: 8
+      outcome: >
+        Third of the d89fac3d trio: a FlowStatePush topic on the existing
+        control wire carrying ordered state transitions (transport only;
+        presentation is order 475). The operator's async event-driven
+        communication channel ask lands here. FlowSource today covers
+        Login{provider} and DependencyNode{node}; order 474 adds
+        PushTransaction. Cross-ref orders 469, 470, 472, 474, 475. Promoted
+        to the index 2026-07-24.
+
+    - packet_id: research-cert-lifecycle-state-graph
+      order: 472
+      desired_release: v0.5
+      title: "RESEARCH+IMPL: certificate lifecycle as first-class state in the dependency graph — defer-until-trusted, restart-on-rotation, FlowState transitions"
+      status: ready
+      kind: research
+      deliverable: plan/issues/research-cert-lifecycle-state-graph-2026-07-24.md
+      depends_on: [research-unified-runtime-data-dependency-graph, research-flow-state-event-channel]
+      pickup_role: linux
+      capability_tags: [linux, research, ca-trust, dependency-graph, control-wire, lifecycle]
+      estimated_hours: 6
+      outcome: >
+        Operator synthesis: the enclave CA chain historically propagated
+        awkwardly and containers crashed or silently degraded on stale/missing
+        CA state (SELinux relabel fix 1dda3032; vendor-roots fallback order
+        467; rotation pins the old mounted inode). Today CaBundle is an
+        edge-less file-exists node satisfied once (container_deps.rs:33,70)
+        and never re-probed. This packet gives cert nodes a lifecycle FSM
+        (minted/mounted/propagating/trusted/expiring/rotated + absent/
+        unreadable), emits transitions on the FlowState channel, and makes
+        orchestration REACT: consumers defer until trusted, rotation
+        re-ensures the transitive consumer closure. Same lifecycle-awareness
+        class as orders 424 and 463. Five verifiable exit gates incl.
+        tmpfs-wipe defer-until-trusted litmus and in-container inode-match
+        rotation check. Research gate mandatory before implementation.
+
+    - packet_id: local-https-apache-enclave-ca-serving
+      order: 473
+      desired_release: v0.5
+      title: "Local HTTPS: apache enclave member serves the developer's project with enclave-CA-minted certs, trusted transparently by forge + browser"
+      status: ready
+      kind: research
+      deliverable: plan/issues/local-https-apache-enclave-ca-serving-2026-07-24.md
+      depends_on: [research-cert-lifecycle-state-graph]
+      pickup_role: linux
+      capability_tags: [web, https, tls, ca, apache, containers, enclave, trust]
+      estimated_hours: 10
+      outcome: >
+        Operator vision: many libraries refuse to load or emit CORS warnings
+        without real HTTPS; the only way to properly reproduce a real working
+        environment is real HTTPS serving locally — "it runs on my machine"
+        takes on a whole new level when "my machine" is a portable cloud: now
+        "it also runs on the cloud". An apache (httpd) container joins the
+        enclave serving https://www.<project>.localhost with a leaf minted
+        from the enclave CA (today squid's sslcrtd mints leaves only for
+        bumped upstream hosts; the web/router path is plain HTTP with
+        auto_https off). Forge trust rides the runtime CA fold; host-browser
+        trust is a scripted revocable opt-in. Minting/rotation ride order
+        472's lifecycle graph. Research decides termination topology and
+        chain shape (30-day rotating root is browser-UX-hostile) before impl.
+
+    - packet_id: push-transaction-fsm-flow-source
+      order: 474
+      desired_release: v0.5
+      title: "PushTransaction FSM FlowSource: forge->mirror->GitHub push pipeline states on the FlowState channel — stuck pushes visible in seconds"
+      status: ready
+      kind: research
+      deliverable: plan/issues/push-transaction-fsm-flow-source-2026-07-24.md
+      depends_on: [mirror-relay-verified-acks]
+      pickup_role: linux
+      capability_tags: [git-mirror, control-wire, fsm, observability, tray, research]
+      estimated_hours: 6
+      outcome: >
+        Operator: stop playing whack-a-mole with .git states. The push
+        pipeline (forge commit -> git:// mirror push -> pre-receive ->
+        relay-refs.sh -> credential mint -> GitHub ack) has NO modeled
+        states; failures surface as strandings discovered later (order 462
+        new-branch rejection, order 424 AppRole max-TTL, MOT-02 38-min
+        out-of-order publication). Define states (committed ->
+        mirror-accepted -> relay-queued -> github-acked | rejected{reason} |
+        stranded{cause}), emit FlowSource::PushTransaction{repo,ref}
+        (extends order 471's Login/DependencyNode coverage), unify with
+        orders 318 (verified ack = sole github-acked ground truth), 322,
+        330. Exit criteria verifiable: table-driven transition tests,
+        postcard round-trip without WIRE_VERSION bump, litmus replays of the
+        three motivating incidents, measured visibility-latency bound.
+
+    - packet_id: tray-status-menu-pretty-events
+      order: 475
+      desired_release: v0.5
+      title: "Pretty events in the status menu: ordered human-readable FlowState transition feed in all three trays (presentation half; operator-gated)"
+      status: ready
+      kind: feature
+      deliverable: plan/issues/tray-status-menu-pretty-events-2026-07-24.md
+      depends_on: [research-flow-state-event-channel]
+      pickup_role: any
+      capability_tags: [tray, ux, events, cross-platform, governance]
+      estimated_hours: 8
+      outcome: >
+        The presentation half deliberately excluded from order 471 (transport
+        only): last-N state transitions with relative timestamps + severity
+        glyphs rendered in all three tray status menus, event-driven, zero
+        polling. Precedent: macOS status-UX parity (a4512c9d). Tray-ux
+        curation governance applies — any new menu leaf needs Tlatoani
+        sign-off; cross-tray parity row in openspec/tray-parity-matrix.yaml
+        on implementation. Filed v0.5; operator may pull the first slice
+        forward.
+
+    - packet_id: main-branch-direct-push-guard
+      order: 476
+      desired_release: v0.4
+      title: "Guard main against direct pushes and forge cycles running ON main (breach 34e60965 record + branch protection + bootstrap guard)"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/main-branch-direct-push-guard-2026-07-24.md
+      depends_on: []
+      pickup_role: "linux + operator"
+      capability_tags: [release-discipline, governance, git, harness, p1]
+      estimated_hours: 3
+      outcome: >
+        Breach record: 34e60965 (antigravity forge cycle running ON main)
+        pushed directly to origin/main, reserializing plan/index.yaml
+        (~42k-line diff) and flipping 9 v0.4 packets done — 6 contradicting
+        linux-next, 1 release-assignment conflict (407). Reverted via PR #81
+        (merged 2026-07-24). Remaining prongs: (a) OPERATOR — GitHub branch
+        protection on main requiring PR (exact gh api call in the packet);
+        (b) LINUX — meta-orchestration/advance-work bootstrap refuses
+        committable cycles when branch == main (executable check,
+        litmus-pinned). Protects the imminent v0.4 promotion.
