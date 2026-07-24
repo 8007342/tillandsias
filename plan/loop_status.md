@@ -1,5 +1,17 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T09:42Z (forge — drain wave: delegation v0.4 completion)
+
+- **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Build**: Already green from prior cycles.
+- **Drain wave**: Claimed and verified 4 delegation packets already implemented:
+  - 427a (instance-scoped container naming) — `forge_container_name_with_instance()` already in main.rs, 4 tests pass.
+  - 429a (JSONL parser) — `agent_result.rs` has full opencode+codex parsers, 18 tests pass.
+  - 429b (outcome surfacing) — `DelegatedRunReport` + `delegated_report_result()` already surfaces success/failure/timeout.
+  - 429c (failed-task litmus) — `litmus-forge-agent-result-format.yaml` already covers all exit criteria.
+- **Ready queue**: 88 packets (8 v0.4, 80 v0.5+). Plan: 85 completed, 166 done.
+
 ## Cycle 2026-07-24T08:15Z (forge — meta-orchestration: packet splitting + drain orchestration)
 
 - **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
