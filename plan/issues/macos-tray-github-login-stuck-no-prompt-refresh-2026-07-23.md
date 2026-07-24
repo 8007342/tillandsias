@@ -7,6 +7,24 @@
 - **Relates to:** order 155 `macos-tray-stream-refactor`; `wave-review-findings-tray-chain-2026-07-22.md` findings #2 (Windows LOGIN_STARTED_AT grace window) and #5 (macOS LoggingIn flip); m8 residual F-C/F-D
 - **Governance:** the fix changes tray login-state transition *behavior* → tray-ux
   governance; needs operator (Tlatoāni) approval before implementation.
+- **Status: IMPLEMENTED 2026-07-23** (operator-approved). See "Implemented" below.
+
+## Implemented (2026-07-23, operator-approved)
+
+Ported the Windows pattern into `crates/tillandsias-macos-tray/src/action_host.rs`:
+1. **Grace window** in `apply_login_state` (the single choke for all login-state
+   updates, poll + push): a fresh `LoggingIn` is not downgraded to `LoggedOut`
+   for `LOGIN_GRACE` (90 s) — anchored by `mark_login_started()` on the login
+   click (`LOGIN_STARTED_AT_MS`). `LoggedIn` always applies immediately.
+2. **Prompt confirm poll** in the vm-status poller loop: while
+   `login == LoggingIn`, `poll_github_login_once` runs every ~2 s independent of
+   the tick%10 cadence AND the push-health suppression gate, until login resolves.
+3. **Fast tick** (2 s vs 30 s) while a login is pending.
+
+Net: a completed interactive `gh auth login` flips the chip to "Logged in" in
+~1-2 s instead of minutes/never. Verified: `cargo build`/`cargo test -p
+tillandsias-macos-tray` green (77 passed). Final "~2 s" latency confirmation is
+operator-attended (requires a real PAT paste on relaunch).
 
 ## Symptom
 
