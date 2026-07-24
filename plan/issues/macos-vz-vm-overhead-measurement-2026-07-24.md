@@ -20,6 +20,10 @@
 | VM CPU (active use) | **~0.55–0.90 of ONE core** | sustained during BigPickle's active work; NOT idle |
 | Overall system | **~88% idle** | the VM used <1 of 10 cores; the Mac was not saturated |
 
+**20s CPU characterization:** 33–74% of one core, **sustained — no near-zero troughs** (BigPickle was continuously active in the window), so it cannot be read as idle overhead. A ~33% floor *if it persisted at true idle* would be a concern; that is exactly what the controlled idle test resolves.
+
+**Host memory:** **0 swapouts / 0 swapins** — the ~4 GiB VM is absorbed via compression (~1.4 GB compressed, ~1.6 GB free) on this 16 GB Mac, NOT thrashing. But a fixed 4 GiB commitment would pressure into swap on a smaller/busier host — the memory tax is real even when currently free.
+
 ## Assessment (preliminary)
 
 - **Compute efficiency looks good.** Apple's hypervisor is hardware-accelerated; the VM used <1 core while the system stayed ~88% idle. No sign of a runaway.
