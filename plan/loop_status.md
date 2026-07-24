@@ -1,5 +1,31 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T03:07Z (linux_mutable — v0.4 audit + sibling integration + build repair)
+
+- **Build repair**: HEAD (9dd82784) was broken by a clippy `collapsible_match`
+  warning in `agent_result.rs:141` treated as error under `-D warnings`. Fixed
+  by collapsing the nested if into a match guard per clippy suggestion. Build
+  green after fix.
+- **Sibling integration**: Merged `origin/osx-next` (3 plan/finding commits:
+  macos smoke findings, guest-version diagnose gap, github login stuck finding)
+  and `origin/windows-next` (4 commits: test fix for embedded-asset COPY
+  --from, plan audit upvotes, Sol session salvage, delegation pins update)
+  into `linux-next`. Both merges clean, build verified green.
+- **Workspace tests**: All pass after merges.
+- **v0.4 release audit**:
+  - 54 total v0.4 packets: 40 terminal, 14 non-terminal
+  - 11 in_progress (source-complete, need podman evidence matrix)
+  - 2 ready (384 git-mirror deploy, 462 pre-receive hook fix)
+  - 1 pending (455 cross-platform smoke queue)
+  - Source work: COMPLETE per forge cycle 2026-07-24T02:19Z
+  - Verification: needs rebuilt-image mutable-Linux evidence matrix
+  - Cross-platform smoke: order 455 needs Windows + macOS PASS
+  - VERSION bump: 0.3 → 0.4 pending operator action
+- **Forge status**: Publication channel blocked (AppRole max-TTL expired).
+  Needs relaunch to re-mint relay lease.
+- **E2E eligibility**: `skip:live-runtime-present` (vault + proxy running).
+- **Pushed**: 1d46390d to origin/linux-next (23 commits including merges).
+
 ## Cycle 2026-07-24T02:19Z (forge — v0.4 no-Podman closure and release-ledger audit)
 
 - **Order 429 source slice integrated locally**: prompted Codex and OpenCode
