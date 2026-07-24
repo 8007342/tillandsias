@@ -1,0 +1,63 @@
+# @trace spec:git-mirror-service, spec:tillandsias-vault, spec:podman-secrets-integration
+name: litmus:git-mirror-vault-agent-auto-auth
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Falsifiable, offline max_ttl lifecycle boundary for order 424. A stub at
+  only the official Vault Agent process seam rotates the tmpfs client-token
+  sink while the production AppRole bootstrap, relay, and Git credential
+  helper run unchanged. The second full relay transaction must consume the
+  refreshed generation without restarting Agent. An absent sink must fail
+  closed and recover on the next re-auth generation. Source assertions pin
+  the dedicated reusable-within-48h SecretID role and one-use ordinary-role
+  contrast, including the server-side bound when crash loses the accessor.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains the git image Vault Agent config and bootstrap
+  - workspace contains scripts/test-git-mirror-vault-agent-auto-auth.sh
+  - bash, git, jq, sed, and standard POSIX utilities are available
+
+critical_path:
+  - step: "relay survives original client-token expiry through in-place Agent re-auth"
+    command: "scripts/test-git-mirror-vault-agent-auto-auth.sh"
+    timeout_ms: 15000
+    expected_behavior: "PASS: git-mirror Vault Agent auto-auth survives max_ttl fixture (order 424)"
+
+  - step: "Agent role crosses max_ttl but crash-orphans are finite; ordinary SecretIDs remain one-use/30s"
+    command: "grep -Fq 'create_approle_agent_role' crates/tillandsias-vault-client/src/lib.rs && grep -Fq '\"token_num_uses\": 0' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq '\"secret_id_num_uses\": 0' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq '\"secret_id_ttl\": \"48h\"' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq '\"secret_id_num_uses\": 1' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq '\"secret_id_ttl\": \"30s\"' crates/tillandsias-vault-client/tests/http_roundtrip.rs && grep -Fq 'crash_orphan_secret_id_lifetime LE 48h' openspec/specs/tillandsias-vault/spec.md && echo 'ok: bounded split SecretID lifecycle'"
+    timeout_ms: 5000
+    expected_behavior: "ok: bounded split SecretID lifecycle"
+
+  - step: "Vault Agent retains AppRole material for max_ttl re-auth and writes only a tmpfs sink"
+    command: "grep -Fq 'exit_after_auth = false' images/git/vault-agent.hcl && grep -Fq 'remove_secret_id_file_after_reading = false' images/git/vault-agent.hcl && grep -Fq 'path = \"/tmp/tillandsias-vault-token\"' images/git/vault-agent.hcl && grep -Fq '\"/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777\"' crates/tillandsias-headless/src/main.rs && echo 'ok: Agent re-auth config'"
+    timeout_ms: 5000
+    expected_behavior: "ok: Agent re-auth config"
+
+  - step: "shutdown closes current-token and reusable-SecretID lifecycle"
+    command: "grep -Fq 'vault-cli revoke-self' images/git/entrypoint.sh && grep -Fq 'destroy_approle_secret_id_accessor' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -Fq 'next_approle_auto_auth_secret_name' crates/tillandsias-headless/src/vault_bootstrap.rs && echo 'ok: Agent credential teardown'"
+    timeout_ms: 5000
+    expected_behavior: "ok: Agent credential teardown"
+
+  - step: "Vault client token is supplied to curl through a tmpfs header file, never argv"
+    command: "grep -Fq 'curl_with_token()' images/git/vault-cli.sh && grep -Fq -- '--header \"@$header_file\"' images/git/vault-cli.sh && ! grep -Eq '^[^#]*curl .*X-Vault-Token' images/git/vault-cli.sh && echo 'ok: Vault token off curl argv'"
+    timeout_ms: 5000
+    expected_behavior: "ok: Vault token off curl argv"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+    - "@trace spec:tillandsias-vault"
+    - "@trace spec:podman-secrets-integration"
+  expected_log: "Agent generation 2 is consumed by a successful relay; absent sink fails closed; generation 3 recovers; curl argv contains no client token"
+  log_fields:
+    spec: git-mirror-service
+    test: git-mirror-vault-agent-auto-auth
+
+rollback:
+  on_failure: >
+    Do not restore a fixed client-token mount or weaken the stdin/stdout
+    credential helper. Inspect the dedicated git-mirror-agent role body,
+    Vault Agent file sink, and issuance-unique accessor registry.
+  command: "scripts/test-git-mirror-vault-agent-auto-auth.sh"

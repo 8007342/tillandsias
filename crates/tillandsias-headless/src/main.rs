@@ -88,6 +88,36 @@ mod runtime_phase;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
+/// Run a foreground/one-shot lane and drain every Vault credential it minted
+/// before returning to the CLI dispatcher.
+///
+/// The long-running headless/tray process owns its registry until application
+/// shutdown, and detached web lanes intentionally keep their mirror alive
+/// after this launcher returns. Interactive CLI lanes and status-check are
+/// different: their project mirror is stopped before the lane returns, so
+/// leaving its AppRole accessor in this short-lived process would turn a
+/// graceful container stop into the same 48h orphan window reserved for
+/// SIGKILL/host loss.
+fn run_cli_with_vault_credential_cleanup<T>(
+    debug: bool,
+    action: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let result = action();
+
+    #[cfg(feature = "vault")]
+    match podman_runtime() {
+        Ok(runtime) => runtime.block_on(vault_bootstrap::revoke_pending_container_tokens(debug)),
+        Err(e) => eprintln!(
+            "[tillandsias-vault] WARNING: could not create a cleanup runtime after a foreground \
+             lane: {e}; local and server-side credential cleanup could not be completed"
+        ),
+    }
+    #[cfg(not(feature = "vault"))]
+    let _ = debug;
+
+    result
+}
+
 fn main() {
     #[cfg(unix)]
     {
@@ -536,7 +566,8 @@ fn main() {
         }
 
         if status_check {
-            if let Err(e) = run_status_check(debug) {
+            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_status_check(debug))
+            {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -561,7 +592,7 @@ fn main() {
     }
 
     if status_check && !init {
-        if let Err(e) = run_status_check(debug) {
+        if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_status_check(debug)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -588,7 +619,9 @@ fn main() {
     if opencode {
         maybe_spawn_detached_tray_for_cli(tray, debug);
         if let Some(project_path) = config_path {
-            if let Err(e) = run_opencode_mode(&project_path, prompt.as_deref(), debug) {
+            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
+                run_opencode_mode(&project_path, prompt.as_deref(), debug)
+            }) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -611,9 +644,9 @@ fn main() {
             (ForgeAgentMode::Maintenance, "--bash")
         };
         if let Some(project_path) = config_path {
-            if let Err(e) =
+            if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || {
                 run_forge_agent_cli_mode(&project_path, mode, flag, prompt.as_deref(), debug)
-            {
+            }) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -2578,10 +2611,15 @@ fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
     {
         let trimmed = url.trim();
         if !trimmed.is_empty() {
-            return Some(trimmed.to_string());
+            // The mirror authenticates through its Vault-backed credential
+            // helper. Never forward legacy HTTP userinfo into podman argv,
+            // container environment, debug logs, or the bare-repo config.
+            return sanitize_forge_origin_url(trimmed);
         }
     }
     parse_gitdir_origin_url(project_path)
+        .as_deref()
+        .and_then(sanitize_forge_origin_url)
 }
 
 /// Minimal `.git/config` reader for `remote.origin.url`, used when no
@@ -2694,18 +2732,7 @@ fn read_host_project_current_branch(project_path: &Path) -> Option<String> {
     sanitize(head.trim().strip_prefix("ref: refs/heads/")?)
 }
 
-/// Best-effort mint of a Vault AppRole token for a git-mirror container.
-///
-/// Returns `Some(secret_name)` when Vault is up and the AppRole login
-/// succeeds; the caller passes that name to `build_git_run_args` to mount
-/// the token into the container. Returns `None` on any failure or when the
-/// `vault` feature is not compiled — the caller then falls back to the
-/// legacy `tillandsias-github-token` podman secret.
-///
-/// @trace spec:tillandsias-vault
-#[allow(unused_variables)]
-/// Mint the per-project git-mirror relay credential (vault AppRole token,
-/// delivered to the container as a podman secret).
+/// Mint the per-project git-mirror Vault Agent auto-auth credential.
 ///
 /// windows-260716-2 (P1, live repro on the WSL2 lane 2026-07-16): this
 /// used to return `Option<String>` and swallow mint failures behind a
@@ -2715,21 +2742,35 @@ fn read_host_project_current_branch(project_path: &Path) -> Option<String> {
 /// when relay-refs.sh correctly fail-closed at push time, blocking the
 /// whole in-forge cycle. A mirror without a relay credential is a broken
 /// push channel by construction: fail LOUD at create time instead.
-async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Result<String, String> {
+///
+/// Order 424 replaces the fixed client-token mount with reusable AppRole
+/// login material consumed by Vault Agent. The Agent renews its current 1h
+/// token and re-authenticates after the 24h max TTL without a container
+/// relaunch. The role ID and secret ID remain in one Podman secret and never
+/// enter argv or the environment.
+///
+/// @trace spec:tillandsias-vault, spec:git-mirror-service
+async fn mint_git_mirror_vault_auto_auth(
+    project_name: &str,
+    debug: bool,
+) -> Result<String, String> {
     #[cfg(feature = "vault")]
     {
         let instance = format!("{project_name}-{}", std::process::id());
-        vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug)
-            .await
-            .map(|(_token, secret_name)| secret_name)
-            .map_err(|e| {
-                format!(
-                    "vault AppRole mint for the git-mirror relay credential failed: {e}. \
+        vault_bootstrap::mint_approle_auto_auth_for_container(
+            vault_bootstrap::GIT_MIRROR_AGENT_ROLE,
+            &instance,
+            debug,
+        )
+        .await
+        .map_err(|e| {
+            format!(
+                "vault AppRole auto-auth mint for the git-mirror relay credential failed: {e}. \
                      Refusing to launch a credential-less mirror — every in-forge push \
                      would fail-close at relay time (windows-260716-2). Check vault \
                      health (tillandsias-vault container, unseal state) and retry."
-                )
-            })
+            )
+        })
     }
     #[cfg(not(feature = "vault"))]
     {
@@ -2738,7 +2779,7 @@ async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Result<
     }
 }
 
-/// Podman `--secret` mount options for the per-launch Vault AppRole token.
+/// Podman `--secret` mount options for a direct per-launch Vault token.
 ///
 /// `uid=1000,gid=1000` is REQUIRED, not cosmetic. The git image runs its
 /// workload as the unprivileged `git` user (uid/gid 1000 — see
@@ -2754,15 +2795,20 @@ async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Result<
 pub(crate) const GIT_VAULT_TOKEN_SECRET_OPTS: &str =
     "target=vault-token,uid=1000,gid=1000,mode=0400";
 
+/// Podman mount options for the git mirror's Vault Agent AppRole document.
+///
+/// The document contains `role_id` and `secret_id` fields. It stays read-only
+/// under `/run/secrets`; the bootstrap copies each value to a mode-0400 tmpfs
+/// file for Vault Agent without putting either value in argv or the
+/// environment.
+const GIT_VAULT_APPROLE_SECRET_OPTS: &str = "target=vault-approle,uid=1000,gid=1000,mode=0400";
+
 /// Build the podman launch args for the per-project git-mirror container.
 ///
-/// `vault_token_secret` is the name of the podman secret holding a fresh
-/// AppRole-issued Vault token scoped to `git-mirror-policy`. When supplied
-/// (the Phase 6 default flow), the container mounts it at
-/// `/run/secrets/vault-token` and reads the GitHub token from Vault at hook
-/// time via `vault-cli`. When `None`, the launcher is running in legacy
-/// keyring mode: the container instead mounts `tillandsias-github-token`
-/// and the hook reads it directly from disk.
+/// `vault_approle_secret` is the Podman secret holding launch-scoped AppRole
+/// material for Vault Agent. Agent writes renewable client tokens to a tmpfs
+/// sink, and `vault-cli` reads the GitHub token from Vault at hook time. When
+/// `None`, the mirror has no authenticated upstream credential path.
 ///
 /// @trace spec:tillandsias-vault, spec:git-mirror-service
 fn build_git_run_args(
@@ -2771,7 +2817,7 @@ fn build_git_run_args(
     image: &str,
     project_remote_url: Option<&str>,
     project_default_branch: Option<&str>,
-    vault_token_secret: Option<&str>,
+    vault_approle_secret: Option<&str>,
 ) -> Vec<String> {
     // Named podman volume for the bare repo. Persists across container
     // restarts so the mirror's "startup retry-push" loop has stranded commits
@@ -2800,6 +2846,12 @@ fn build_git_run_args(
         "--userns=keep-id".into(),
         "--pids-limit=64".into(),
         "--read-only".into(),
+        // Vault Agent's role/SecretID working files, PID file, and client-token
+        // sink must live on writable volatile storage. The root filesystem is
+        // read-only, so /tmp must be an explicit tmpfs rather than an assumed
+        // image directory.
+        "--tmpfs".into(),
+        "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777".into(),
         "--volume".into(),
         format!("{mirror_volume}:/srv/git"),
         "--env".into(),
@@ -2813,7 +2865,7 @@ fn build_git_run_args(
     // list — not a shorter hand-rolled one.
     // See cheatsheets/runtime/enclave-proxy-patterns.md for justification.
     args.extend(proxy_env_args());
-    if let Some(url) = project_remote_url
+    if let Some(url) = project_remote_url.and_then(sanitize_forge_origin_url)
         && !url.is_empty()
     {
         args.push("--env".into());
@@ -2832,28 +2884,25 @@ fn build_git_run_args(
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_PROJECT_DEFAULT_BRANCH={branch}"));
     }
-    if let Some(secret_name) = vault_token_secret {
-        // @trace spec:tillandsias-vault — git-mirror reads the GitHub token
-        // via vault-cli using this short-lived AppRole token at hook time.
-        // The token is mounted as a podman secret (owned by the git user,
-        // mode 0400 — see GIT_VAULT_TOKEN_SECRET_OPTS) at the stable path
-        // /run/secrets/vault-token regardless of the per-launch secret name;
-        // podman's --secret target= rewrites the mount.
+    if let Some(secret_name) = vault_approle_secret {
+        // @trace spec:tillandsias-vault — Vault Agent consumes launch-scoped
+        // AppRole material and maintains the tmpfs client-token sink used by
+        // vault-cli. The reusable login credential is what lets the Agent
+        // re-authenticate after a client token reaches max_ttl.
         args.push("--secret".into());
-        args.push(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
+        args.push(format!("{secret_name},{GIT_VAULT_APPROLE_SECRET_OPTS}"));
         args.push("--env".into());
         args.push("VAULT_ADDR=https://vault:8200".into());
         args.push("--env".into());
         args.push("CURL_CA_BUNDLE=/etc/tillandsias/ca.crt".into());
         args.push("--env".into());
-        args.push("VAULT_ROLE=git-mirror".into());
+        args.push(format!(
+            "VAULT_ROLE={}",
+            vault_bootstrap::GIT_MIRROR_AGENT_ROLE
+        ));
+        args.push("--env".into());
+        args.push("VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token".into());
     }
-    // Legacy fallback: when no vault secret is supplied AND the launcher is
-    // configured to fall back to the keyring path, the runtime layer pushes
-    // the token via a separate `SecretKind::GitHubToken` mount in
-    // `container_profile`. We do NOT attach the legacy secret here because
-    // it may not exist on a fresh install — the post-receive hook tolerates
-    // a missing token by failing the upstream push and exiting 0.
     args.push("--mount".into());
     args.push(format!(
         "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
@@ -3014,15 +3063,127 @@ async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<
     ))
 }
 
+/// Probe the served bare repository for a resolvable HEAD plus a concrete
+/// target-project head. The separate seam keeps the reachable-but-unseeded
+/// state deterministic in unit tests without consuming the bounded wait.
+/// @trace spec:git-mirror-service
+async fn probe_git_mirror_seeded(
+    client: &PodmanClient,
+    container_name: &str,
+    repo_path: &str,
+    expected_branch: Option<&str>,
+) -> Result<String, String> {
+    match client
+        .execute(
+            OperationKind::Container,
+            &[
+                "exec".into(),
+                "-i".into(),
+                container_name.into(),
+                "git".into(),
+                "-C".into(),
+                repo_path.into(),
+                "rev-parse".into(),
+                "--quiet".into(),
+                "--verify".into(),
+                "HEAD".into(),
+            ],
+        )
+        .await
+    {
+        Ok(out) if out.success() => {}
+        Ok(out) => {
+            return Err(format!(
+                "mirror HEAD not resolvable yet (exit {})",
+                out.status.unwrap_or(-1)
+            ));
+        }
+        Err(e) => return Err(format!("HEAD probe failed: {e}")),
+    }
+
+    if let Some(branch) = expected_branch {
+        let expected_ref = format!("refs/heads/{branch}");
+        return match client
+            .execute(
+                OperationKind::Container,
+                &[
+                    "exec".into(),
+                    "-i".into(),
+                    container_name.into(),
+                    "git".into(),
+                    "-C".into(),
+                    repo_path.into(),
+                    "show-ref".into(),
+                    "--verify".into(),
+                    "--quiet".into(),
+                    expected_ref.clone(),
+                ],
+            )
+            .await
+        {
+            Ok(out) if out.success() => Ok(expected_ref),
+            Ok(out) => Err(format!(
+                "HEAD resolvable but expected branch {expected_ref} absent (exit {}) — seed still in progress",
+                out.status.unwrap_or(-1)
+            )),
+            Err(e) => Err(format!(
+                "HEAD resolvable but expected branch {expected_ref} is not concrete yet — seed still in progress: {e}"
+            )),
+        };
+    }
+
+    // Detached/git-less host checkout: ensure-mirror-head discovers the
+    // upstream's own default branch. Stay convention-neutral by accepting any
+    // concrete local head rather than importing Tillandsias' `main` convention.
+    match client
+        .execute(
+            OperationKind::Container,
+            &[
+                "exec".into(),
+                "-i".into(),
+                container_name.into(),
+                "git".into(),
+                "-C".into(),
+                repo_path.into(),
+                "for-each-ref".into(),
+                "--count=1".into(),
+                "--format=%(objectname)".into(),
+                "refs/heads".into(),
+            ],
+        )
+        .await
+    {
+        Ok(out) if out.success() && !out.stdout.trim().is_empty() => {
+            Ok("one or more refs/heads/*".to_string())
+        }
+        Ok(out) if out.success() => Err(
+            "HEAD resolvable but the mirror has no concrete heads — seed still in progress"
+                .to_string(),
+        ),
+        Ok(out) => Err(format!(
+            "HEAD resolvable but concrete-head probe exited {}",
+            out.status.unwrap_or(-1)
+        )),
+        Err(e) => Err(format!("concrete-head probe failed: {e}")),
+    }
+}
+
+/// The live Windows pristine-volume seed took roughly 12–15 minutes
+/// (mirror-first-seed-vs-launch-readiness-race). Twenty minutes preserves a
+/// finite launch refusal while covering the measured upper bound with room for
+/// proxy/cache variance. A seeded mirror returns before the first sleep.
+const GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS: u32 = 20 * 60;
+const GIT_MIRROR_SEED_POLL_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Order 452 slice 2: launcher-side git-mirror readiness gate.
 ///
 /// A clone-only forge (order 437) clones `git://tillandsias-git/<project>` the
 /// moment its entrypoint runs, but a FRESH mirror volume seeds in a background
 /// sweep — a full-repo fetch from upstream through the proxy that can take
 /// minutes — while the guest's clone backstop only waits ~60s. Block the
-/// launch until the mirror's bare repo has a resolvable HEAD (the exact ground
-/// truth `clone_project_from_mirror` asserts after its clone), mirroring the
-/// [`wait_for_inference_ready`] pattern: bounded, truthful, loud on timeout.
+/// launch until the mirror's bare repo has a resolvable HEAD and a concrete
+/// head, mirroring the [`wait_for_inference_ready`] pattern: bounded, truthful,
+/// and loud on timeout.
 ///
 /// Probes via `podman exec` inside the mirror container so readiness is
 /// measured on the served repo itself, not on network reachability.
@@ -3031,124 +3192,49 @@ async fn wait_for_git_mirror_ready(
     client: &PodmanClient,
     container_name: &str,
     project_name: &str,
+    expected_branch: Option<&str>,
     debug: bool,
 ) -> Result<(), String> {
-    use std::time::Duration;
     // First seed is a full-repo fetch through the proxy: minutes, not seconds
     // (this workspace's pack alone is >100 MiB). Bounded so a dead upstream
     // still fails the launch loudly instead of hanging forever.
     //
     // Race note (order: mirror-first-seed-vs-launch-readiness-race):
-    // `git rev-parse --verify HEAD` passes as soon as ensure-mirror-head
-    // symlinks HEAD to a ref — but the initial upstream fetch may still be
-    // in progress, leaving the ref empty. We therefore ALSO check for
-    // actual content via `git show-ref --verify refs/heads/main`; only when
-    // that ref exists and has a target SHA is the mirror truly seeded and
-    // cloneable. The check is additive — old images where refs/heads/main
-    // is absent fall through to the HEAD check.
-    const MAX_ATTEMPTS: u32 = 300;
+    // `git rev-parse --verify HEAD` can pass while the initial upstream fetch
+    // is still in progress. Require the launcher-declared host branch to be a
+    // concrete local head as well. When the host branch is unknowable
+    // (detached/git-less checkout), require at least one concrete local head;
+    // never assume the target project uses Tillandsias' `main` convention.
     let repo_path = format!("/srv/git/{project_name}");
     let mut last = String::from("no probe attempted");
-    for attempt in 1..=MAX_ATTEMPTS {
-        // Probe 1: HEAD resolvable (existing gate — catches unborn-HEAD on old images).
-        let head_ok = match client
-            .execute(
-                OperationKind::Container,
-                &[
-                    "exec".into(),
-                    "-i".into(),
-                    container_name.into(),
-                    "git".into(),
-                    "-C".into(),
-                    repo_path.clone(),
-                    "rev-parse".into(),
-                    "--quiet".into(),
-                    "--verify".into(),
-                    "HEAD".into(),
-                ],
-            )
-            .await
-        {
-            Ok(out) if out.success() => true,
-            Ok(out) => {
-                last = format!(
-                    "mirror HEAD not resolvable yet (exit {})",
-                    out.status.unwrap_or(-1)
-                );
-                false
-            }
-            Err(e) => {
-                last = format!("probe failed: {e}");
-                false
-            }
-        };
-        if !head_ok {
-            // HEAD not even resolvable — mirror is definitely not ready.
-            if attempt == 5 {
-                eprintln!(
-                    "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {MAX_ATTEMPTS}s max)..."
-                );
-            }
-            if debug {
-                eprintln!(
-                    "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
-                );
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            continue;
-        }
-        // Probe 2: refs/heads/main exists with a real SHA — the upstream
-        // seed has delivered content, not just an empty symref.
-        match client
-            .execute(
-                OperationKind::Container,
-                &[
-                    "exec".into(),
-                    "-i".into(),
-                    container_name.into(),
-                    "git".into(),
-                    "-C".into(),
-                    repo_path.clone(),
-                    "show-ref".into(),
-                    "--verify".into(),
-                    "--quiet".into(),
-                    "refs/heads/main".into(),
-                ],
-            )
-            .await
-        {
-            Ok(out) if out.success() => {
+    for attempt in 1..=GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS {
+        match probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await {
+            Ok(seeded_ref) => {
                 if debug {
                     eprintln!(
-                        "[tillandsias] [forge-launch] git mirror seeded on attempt {attempt}/{MAX_ATTEMPTS} (refs/heads/main present)"
+                        "[tillandsias] [forge-launch] git mirror seeded on attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS} ({seeded_ref} present)"
                     );
                 }
                 return Ok(());
             }
-            Ok(_) => {
-                last = "HEAD resolvable but refs/heads/main absent — seed still in progress"
-                    .to_string();
-            }
-            Err(e) => {
-                last = format!("show-ref probe failed: {e}");
-            }
+            Err(reason) => last = reason,
         }
         if attempt == 5 {
             // One non-debug notice so an operator watching a first launch
             // knows the wait is the mirror seed, not a hang.
             eprintln!(
-                "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {MAX_ATTEMPTS}s max)..."
+                "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s max)..."
             );
         }
         if debug {
             eprintln!(
-                "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{MAX_ATTEMPTS}): {last}"
+                "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}): {last}"
             );
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(GIT_MIRROR_SEED_POLL_INTERVAL).await;
     }
     Err(format!(
-        "git mirror {container_name} did not become cloneable within {MAX_ATTEMPTS}s: {last}. \
+        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}. \
          A forge launched now would land on an empty tree, so the launch is refused \
          (fresh-checkout invariant, \
          plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
@@ -4029,11 +4115,19 @@ fn resolve_cloud_project_checkout(_nwo: &str, _debug: bool) -> Result<String, St
     Err("--cloud requires a build with the tray or listen-vsock feature".to_string())
 }
 
-/// Sanitize a worker/instance identifier into something Podman accepts inside a
-/// container name (`[a-zA-Z0-9][a-zA-Z0-9_.-]*`). Anything else collapses to
-/// `-`, and the result is lowercased and length-capped so a caller cannot blow
-/// past Podman's name limits or smuggle separators.
+/// Convert a nonempty worker/instance identifier into a collision-resistant
+/// Podman name component (`[a-zA-Z0-9][a-zA-Z0-9_.-]*`).
+///
+/// The readable prefix is normalized and capped, but identity comes from a
+/// SHA-256 suffix over the exact raw bytes. This keeps `a b` distinct from
+/// `a-b`, case variants distinct, and values differing after the length cap
+/// distinct. Only a truly empty value preserves the legacy unscoped name.
 fn sanitize_forge_instance(raw: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    if raw.is_empty() {
+        return String::new();
+    }
     let cleaned: String = raw
         .trim()
         .to_ascii_lowercase()
@@ -4046,13 +4140,23 @@ fn sanitize_forge_instance(raw: &str) -> String {
             }
         })
         .collect();
-    cleaned
+    let readable = cleaned
         .trim_matches('-')
         .chars()
-        .take(32)
+        .take(15)
         .collect::<String>()
         .trim_end_matches('-')
-        .to_string()
+        .to_string();
+    let digest = format!("{:x}", Sha256::digest(raw.as_bytes()));
+    format!(
+        "{}-{}",
+        if readable.is_empty() {
+            "worker"
+        } else {
+            &readable
+        },
+        &digest[..32]
+    )
 }
 
 /// Optional worker/instance component for forge container names (order 427).
@@ -4169,11 +4273,20 @@ fn forge_container_name_for_mode(project_name: &str, mode: ForgeAgentMode) -> St
 /// read-only input; the documented races are in mutable state (OpenCode's
 /// unlocked `auth.json`, Codex's truncate-then-write `auth.json` and SQLite).
 fn forge_worker_state_env(instance: Option<&str>) -> Vec<(String, String)> {
-    let worker = sanitize_forge_instance(instance.unwrap_or(""));
+    let raw_worker = instance.unwrap_or("");
+    let worker = sanitize_forge_instance(raw_worker);
     if worker.is_empty() {
         return Vec::new();
     }
     vec![
+        // Pass the exact dispatcher identity too. The host path component is
+        // collision-resistant, but the in-container persistence helper uses a
+        // full raw-identity digest and must not recover identity from a
+        // presentation-oriented CODEX_HOME suffix.
+        (
+            "TILLANDSIAS_CODEX_STATE_WORKER".to_string(),
+            raw_worker.to_string(),
+        ),
         (
             "XDG_DATA_HOME".to_string(),
             format!("/home/forge/.local/share/{worker}"),
@@ -4237,7 +4350,7 @@ async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
         .remove_container(&format!("tillandsias-git-{project_name}"))
         .await;
     let _ = client
-        .remove_container(&format!("tillandsias-{project_name}-forge"))
+        .remove_container(&forge_container_name(project_name))
         .await;
     let _ = client
         .remove_container(&format!("tillandsias-browser-{project_name}"))
@@ -4532,6 +4645,7 @@ fn build_opencode_forge_args(
     certs_dir: &Path,
     version: &str,
     mode: ForgeMode,
+    opencode_vault_secret: Option<&str>,
     diagnostics: bool,
     debug: bool,
 ) -> Vec<String> {
@@ -4703,19 +4817,29 @@ fn build_opencode_forge_args(
             format!("TILLANDSIAS_OPENCODE_PROMPT={prompt}"),
         ]);
     }
-
-    // Inject Gemini API key for OpenCode harness
-    if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(
-        crate::vault_bootstrap::ProviderId::Gemini,
-        debug,
-    ) && !key.is_empty()
-    {
+    // Order 429: only a real prompt + explicit JSON request creates a
+    // delegated run. The host-side timeout and result-file path are never
+    // propagated or mounted; stdout is captured fresh at the Podman seam.
+    if matches!(mode, ForgeMode::Cli) && delegated_json_requested(prompt) {
         args.extend([
             "--env".into(),
-            format!(
-                "{}={key}",
-                crate::vault_bootstrap::ProviderId::Gemini.env_var()
-            ),
+            "TILLANDSIAS_AGENT_RESULT_FORMAT=json".into(),
+        ]);
+    }
+
+    // Order 431: credential bytes never enter this Podman argv. When Vault
+    // contains the OpenCode auth document, mount only a short-lived,
+    // provider-scoped AppRole token. The entrypoint reads the document from
+    // Vault directly into OPENCODE_AUTH_CONTENT and positively proves the
+    // installed harness parsed it without creating auth.json.
+    if let Some(secret_name) = opencode_vault_secret {
+        args.extend([
+            "--secret".into(),
+            format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"),
+            "--env".into(),
+            "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1".into(),
+            "--env".into(),
+            "VAULT_ROLE=opencode-forge".into(),
         ]);
     }
     if debug {
@@ -6312,7 +6436,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = match mint_git_mirror_vault_token(project_name, debug).await {
+        let git_vault_secret = match mint_git_mirror_vault_auto_auth(project_name, debug).await {
             Ok(secret) => Some(secret),
             Err(e) => {
                 // Status-check mirror is a throwaway bare repo (no pushes) —
@@ -6546,7 +6670,7 @@ if [ -z "$TOKEN" ]; then
   exit 1
 fi
 printf '\n\nSaving token to vault...\n' >&2
-TOKEN="$TOKEN" vault-cli.sh write {} "{}="\$TOKEN""
+printf '%s' "$TOKEN" | vault-cli.sh write-stdin {} {}
 "#,
         provider.name(),
         vault_path,
@@ -6723,6 +6847,16 @@ pub struct ProviderLoginConfig {
     pub input_mode: LoginInputMode,
 }
 
+fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
+    if matches!(provider, ProviderId::Codex) {
+        return Some(
+            "tillandsias-codex-login-tool-cache:/home/forge/.cache/tillandsias-project:rw"
+                .to_string(),
+        );
+    }
+    None
+}
+
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
     let provider_name = config.provider.name();
     let flag = format!("--{}-login", config.provider.id_str());
@@ -6777,6 +6911,11 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         name: container.clone(),
         debug,
     };
+    // Provider login homes stay container-ephemeral because they hold
+    // credentials. Only Codex's provider-auth-excluding package/tool cache is
+    // a named volume, so a later Codex login reuses its npm prefix without
+    // persisting CODEX_HOME or changing the other provider login lanes.
+    let tool_cache_mount = provider_login_tool_cache_mount(&config.provider);
 
     #[cfg(feature = "vault")]
     let vault_lease;
@@ -6799,7 +6938,14 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         // idempotent.
         let certs_dir = ensure_ca_bundle(debug)?;
         let ca_mount = format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+            // relabel=shared is load-bearing: on the SELinux-enforcing Fedora
+            // guest, a bind-mounted CA without an SELinux relabel is present but
+            // UNREADABLE by container_t, so vault-cli.sh's require_cacert() gate
+            // ("CA bundle not readable") trips and the token write aborts BEFORE
+            // any bytes reach Vault — the "collected the token, then died" repro.
+            // Every peer CA mount uses this canonical form (asserted main.rs
+            // ~16733); the login container was the sole omission.
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true",
             certs_dir.join("intermediate.crt").display()
         );
         let mut run = podman_command();
@@ -6822,6 +6968,9 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--mount",
             &ca_mount,
         ]);
+        if let Some(mount) = tool_cache_mount.as_deref() {
+            run.args(["--volume", mount]);
+        }
         run.args(proxy_env_args());
         run.args([
             "--entrypoint",
@@ -6847,6 +6996,11 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
+        ]);
+        if let Some(mount) = tool_cache_mount.as_deref() {
+            run.args(["--volume", mount]);
+        }
+        run.args([
             "--entrypoint",
             "/bin/sh",
             &image,
@@ -6905,7 +7059,9 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     {
         if matches!(config.provider, ProviderId::GitHub) {
             let vault_write_cmd = format!(
-                "TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write {} \"token=$TOKEN\"",
+                "TOKEN=$(gh auth token --hostname github.com) || exit $?; \
+                 [ -n \"$TOKEN\" ] || exit 1; \
+                 printf '%s' \"$TOKEN\" | vault-cli.sh write-stdin {} token",
                 config.provider.vault_path()
             );
             let mut vault_write = podman_command();
@@ -8204,10 +8360,339 @@ fn run_observatorium_mode(
     launch_observatorium_browser(&project_name, &certs_dir, router_host_port, debug)
 }
 
+/// Bounded default for a prompt-driven machine-readable agent run.
+///
+/// Callers may override it with a positive
+/// `TILLANDSIAS_AGENT_TIMEOUT_SECS`. Invalid/zero overrides fail before
+/// launch; an absent override never creates an unbounded delegated worker.
+/// @trace spec:forge-as-only-runtime
+const DEFAULT_DELEGATED_AGENT_TIMEOUT_SECS: u64 = 900;
+const DELEGATED_AGENT_REMOVE_TIMEOUT_SECS: u64 = 5;
+const DELEGATED_AGENT_REAP_TIMEOUT_SECS: u64 = 10;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DelegatedRunConfig {
+    timeout_secs: u64,
+    result_file: Option<PathBuf>,
+    instance_identity: String,
+}
+
+#[derive(Debug)]
+struct DelegatedRunReport {
+    outcome: crate::agent_result::AgentOutcome,
+    infrastructure_errors: Vec<String>,
+}
+
+fn delegated_report_result(report: &DelegatedRunReport) -> Result<String, String> {
+    let outcome_summary = report.outcome.summary();
+    if report.outcome.is_success() && report.infrastructure_errors.is_empty() {
+        return Ok(outcome_summary);
+    }
+
+    if report.outcome.is_success() {
+        return Err(format!(
+            "FAILED: delegated result handling failed: {}",
+            report.infrastructure_errors.join("; ")
+        ));
+    }
+
+    let mut reason = outcome_summary;
+    if !report.infrastructure_errors.is_empty() {
+        reason.push_str("; ");
+        reason.push_str(&report.infrastructure_errors.join("; "));
+    }
+    Err(reason)
+}
+
+fn delegated_json_requested(prompt: Option<&str>) -> bool {
+    prompt.is_some_and(|value| !value.trim().is_empty())
+        && std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() == Ok("json")
+}
+
+fn delegated_run_config(prompt: Option<&str>) -> Result<Option<DelegatedRunConfig>, String> {
+    if std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() != Ok("json") {
+        return Ok(None);
+    }
+    if prompt.is_none_or(|value| value.trim().is_empty()) {
+        return Err("TILLANDSIAS_AGENT_RESULT_FORMAT=json requires a non-empty prompt".to_string());
+    }
+
+    let timeout_secs = match std::env::var("TILLANDSIAS_AGENT_TIMEOUT_SECS") {
+        Ok(raw) => raw
+            .parse::<u64>()
+            .ok()
+            .filter(|secs| *secs > 0)
+            .ok_or_else(|| {
+                "TILLANDSIAS_AGENT_TIMEOUT_SECS must be a positive integer for a delegated JSON run"
+                    .to_string()
+            })?,
+        Err(std::env::VarError::NotPresent) => DEFAULT_DELEGATED_AGENT_TIMEOUT_SECS,
+        Err(std::env::VarError::NotUnicode(_)) => {
+            return Err(
+                "TILLANDSIAS_AGENT_TIMEOUT_SECS must be valid UTF-8 for a delegated JSON run"
+                    .to_string(),
+            );
+        }
+    };
+    let result_file = std::env::var_os("TILLANDSIAS_AGENT_RESULT_FILE")
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from);
+    let instance_identity = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            "delegated JSON agent run requires a non-empty TILLANDSIAS_FORGE_INSTANCE so timeout cleanup owns an exact worker"
+                .to_string()
+        })?;
+
+    Ok(Some(DelegatedRunConfig {
+        timeout_secs,
+        result_file,
+        instance_identity,
+    }))
+}
+
+fn atomically_export_agent_capture(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("agent result path has no file name: {}", path.display()))?;
+    if file_name.is_empty() {
+        return Err(format!(
+            "agent result path has an empty file name: {}",
+            path.display()
+        ));
+    }
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut temp = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|err| format!("create fresh agent result beside {}: {err}", path.display()))?;
+    temp.write_all(bytes)
+        .map_err(|err| format!("write fresh agent result {}: {err}", path.display()))?;
+    temp.flush()
+        .map_err(|err| format!("flush fresh agent result {}: {err}", path.display()))?;
+    temp.as_file()
+        .sync_all()
+        .map_err(|err| format!("sync fresh agent result {}: {err}", path.display()))?;
+    temp.persist(path).map_err(|err| {
+        format!(
+            "publish fresh agent result {}: {}",
+            path.display(),
+            err.error
+        )
+    })?;
+    Ok(())
+}
+
+async fn remove_delegated_container_exact(
+    client: &PodmanClient,
+    container_name: &str,
+) -> Option<String> {
+    let remove_args = vec![
+        "rm".to_string(),
+        "--force".to_string(),
+        "--ignore".to_string(),
+        container_name.to_string(),
+    ];
+    match tokio::time::timeout(
+        Duration::from_secs(DELEGATED_AGENT_REMOVE_TIMEOUT_SECS),
+        client.execute(OperationKind::Container, &remove_args),
+    )
+    .await
+    {
+        Ok(Ok(_)) => None,
+        Ok(Err(failure)) => Some(format!(
+            "timeout cleanup failed for exact container {container_name}: {failure}"
+        )),
+        Err(_) => Some(format!(
+            "timeout cleanup command for exact container {container_name} exceeded {DELEGATED_AGENT_REMOVE_TIMEOUT_SECS}s"
+        )),
+    }
+}
+
+async fn run_delegated_agent_container(
+    client: &PodmanClient,
+    stage: &str,
+    container_name: &str,
+    args: &[String],
+    debug: bool,
+    config: &DelegatedRunConfig,
+) -> Result<DelegatedRunReport, String> {
+    let required_suffix = forge_instance_suffix_from(Some(&config.instance_identity));
+    if required_suffix.is_empty() || !container_name.ends_with(&required_suffix) {
+        return Err(format!(
+            "delegated container {container_name} is not scoped to TILLANDSIAS_FORGE_INSTANCE={}",
+            config.instance_identity
+        ));
+    }
+
+    // Invalidate any caller-preseeded result before spawning. Classification
+    // never reads this file, and downstream readers see either this empty
+    // current-generation placeholder or bytes captured by this run.
+    if let Some(path) = config.result_file.as_deref() {
+        atomically_export_agent_capture(path, b"")?;
+    }
+
+    let mut run = Box::pin(client.run_container_attached_captured_observed(
+        stage,
+        container_name,
+        args,
+        debug,
+    ));
+    let deadline = tokio::time::sleep(Duration::from_secs(config.timeout_secs));
+    tokio::pin!(deadline);
+
+    tokio::select! {
+        result = &mut run => {
+            let output = match result {
+                Ok(output) => output,
+                Err(error) => {
+                    // Spawn/read/reap errors can occur after Podman accepted
+                    // the run. The future is complete, so one bounded exact
+                    // removal cannot race a later create and must be attempted
+                    // before surfacing the capture failure.
+                    drop(run);
+                    let cleanup = remove_delegated_container_exact(client, container_name).await;
+                    return Err(match cleanup {
+                        Some(cleanup_error) => format!("{error}; {cleanup_error}"),
+                        None => error,
+                    });
+                }
+            };
+            let mut infrastructure_errors = Vec::new();
+            if let Some(path) = config.result_file.as_deref()
+                && let Err(err) = atomically_export_agent_capture(path, &output.stdout)
+            {
+                infrastructure_errors.push(err);
+            }
+            let transcript = String::from_utf8_lossy(&output.stdout);
+            if output.stdout_truncated {
+                infrastructure_errors.push(
+                    "agent JSONL stdout exceeded the bounded capture limit; the stream was drained but is not eligible for classification"
+                        .to_string(),
+                );
+            }
+            Ok(DelegatedRunReport {
+                outcome: crate::agent_result::classify_captured_run(
+                    &transcript,
+                    &output.status,
+                    output.stdout_truncated,
+                ),
+                infrastructure_errors,
+            })
+        }
+        _ = &mut deadline => {
+            // Do not drop the `podman run` future on timeout. It stays pinned
+            // and awaitable while an independently checked removal targets
+            // only this digest-scoped worker name. Siblings are never listed,
+            // globbed, or inferred.
+            let mut infrastructure_errors = Vec::new();
+            if let Some(error) = remove_delegated_container_exact(client, container_name).await {
+                infrastructure_errors.push(error);
+            }
+
+            let reaped = tokio::time::timeout(
+                Duration::from_secs(DELEGATED_AGENT_REAP_TIMEOUT_SECS),
+                &mut run,
+            )
+            .await;
+            match reaped {
+                Ok(Ok(output)) => {
+                    if let Some(path) = config.result_file.as_deref()
+                        && let Err(err) = atomically_export_agent_capture(path, &output.stdout)
+                    {
+                        infrastructure_errors.push(err);
+                    }
+                    if output.stdout_truncated {
+                        infrastructure_errors.push(
+                            "timed-out agent JSONL stdout exceeded the bounded capture limit while draining"
+                                .to_string(),
+                        );
+                    }
+                }
+                Ok(Err(err)) => infrastructure_errors.push(format!(
+                    "timed-out container {container_name} removal was requested but its podman run failed while reaping: {err}"
+                )),
+                Err(_) => infrastructure_errors.push(format!(
+                    "timed-out container {container_name} did not reap within {DELEGATED_AGENT_REAP_TIMEOUT_SECS}s after exact-name removal"
+                )),
+            }
+            // Drop the captured run future here so kill_on_drop is an active
+            // CLI backstop before the second removal. The second exact-name
+            // pass closes the create-after-first-rm race: if the deadline
+            // fired before Podman finished creating the named container, it
+            // cannot survive this post-reap/backstop removal.
+            drop(run);
+            if let Some(error) = remove_delegated_container_exact(client, container_name).await {
+                infrastructure_errors.push(format!("post-reap {error}"));
+            }
+
+            Ok(DelegatedRunReport {
+                outcome: crate::agent_result::AgentOutcome::TimedOut {
+                    after_secs: config.timeout_secs,
+                },
+                infrastructure_errors,
+            })
+        }
+    }
+}
+
+async fn run_agent_container_attached(
+    client: &PodmanClient,
+    stage: &str,
+    container_name: &str,
+    args: &[String],
+    debug: bool,
+    delegated: Option<&DelegatedRunConfig>,
+) -> Result<(), String> {
+    let Some(config) = delegated else {
+        return client
+            .run_container_attached_observed(stage, container_name, args, debug)
+            .await;
+    };
+
+    let report = run_delegated_agent_container(
+        client,
+        stage,
+        container_name,
+        args,
+        debug,
+        config,
+    )
+    .await
+    .map_err(|err| {
+        eprintln!("[forge-result] {stage} FAILED: {err}");
+        eprintln!(
+            "[forge-result] {stage} DID NOT COMPLETE SUCCESSFULLY — do not treat this work as done"
+        );
+        err
+    })?;
+
+    match delegated_report_result(&report) {
+        Ok(summary) => {
+            eprintln!("[forge-result] {stage} {summary}");
+            Ok(())
+        }
+        Err(reason) => {
+            // Emit exactly one primary non-success verdict. In particular, a
+            // successful agent transcript followed by a failed atomic export
+            // must never print a standalone `succeeded` line that a
+            // line-oriented dispatcher could mistake for completion.
+            eprintln!("[forge-result] {stage} {reason}");
+            eprintln!(
+                "[forge-result] {stage} DID NOT COMPLETE SUCCESSFULLY — do not treat this work as done"
+            );
+            Err(reason)
+        }
+    }
+}
+
 /// Run in OpenCode mode — launch the full enclave stack and OpenCode TUI.
 ///
 /// @trace spec:cli-mode
 fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> Result<(), String> {
+    let delegated = delegated_run_config(prompt)?;
     require_desktop_user_session("tillandsias --opencode")?;
     report_runtime_lane("--opencode", debug);
 
@@ -8366,7 +8851,23 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         tokio::task::spawn_blocking(move || vault_bootstrap::ensure_vault_running(debug))
             .await
             .map_err(|e| format!("[OpenCode] vault ensure task panicked: {e}"))??;
-        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+        #[cfg(feature = "vault")]
+        let opencode_vault_lease = if vault_bootstrap::opencode_auth_content_available(debug)? {
+            Some(vault_bootstrap::mint_approle_secret_lease(
+                "opencode-forge",
+                &forge_container_name(project_name),
+                debug,
+            )?)
+        } else {
+            None
+        };
+        #[cfg(feature = "vault")]
+        let opencode_vault_secret = opencode_vault_lease
+            .as_ref()
+            .map(|lease| lease.secret_name());
+        #[cfg(not(feature = "vault"))]
+        let opencode_vault_secret: Option<&str> = None;
+        let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(
                 "opencode-git",
@@ -8419,17 +8920,20 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             &certs_dir,
             version,
             ForgeMode::Cli,
+            opencode_vault_secret,
             diagnostics,
             debug,
         );
-        let result = client
-            .run_container_attached_observed(
-                "opencode",
-                &forge_container_name(project_name),
-                &opencode_args,
-                debug,
-            )
-            .await;
+        let run_container_name = forge_container_name(project_name);
+        let result = run_agent_container_attached(
+            &client,
+            "opencode",
+            &run_container_name,
+            &opencode_args,
+            debug,
+            delegated.as_ref(),
+        )
+        .await;
         cleanup_shared_stack_if_no_running_forge(
             &client,
             project_name,
@@ -9424,7 +9928,27 @@ pub(crate) fn run_opencode_web_mode(
             Some(&versioned_image_tag("proxy", version)),
         )?;
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+        #[cfg(feature = "vault")]
+        tokio::task::spawn_blocking(move || vault_bootstrap::ensure_vault_running(debug))
+            .await
+            .map_err(|e| format!("[OpenCode Web] vault ensure task panicked: {e}"))??;
+        #[cfg(feature = "vault")]
+        let opencode_vault_lease = if vault_bootstrap::opencode_auth_content_available(debug)? {
+            Some(vault_bootstrap::mint_approle_secret_lease(
+                "opencode-forge",
+                &forge_container_name(project_name),
+                debug,
+            )?)
+        } else {
+            None
+        };
+        #[cfg(feature = "vault")]
+        let opencode_vault_secret = opencode_vault_lease
+            .as_ref()
+            .map(|lease| lease.secret_name());
+        #[cfg(not(feature = "vault"))]
+        let opencode_vault_secret: Option<&str> = None;
+        let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(
                 "opencode-web-git",
@@ -9478,6 +10002,7 @@ pub(crate) fn run_opencode_web_mode(
             &certs_dir,
             version,
             ForgeMode::Web,
+            opencode_vault_secret,
             false,
             debug,
         );
@@ -9534,7 +10059,7 @@ pub(crate) fn run_opencode_web_mode(
         // router upstream must target 4096 — not 8080, which is the router's own listener.
         let route = RouterRoute::new(
             format!("opencode.{}", project_name),
-            format!("tillandsias-{}-forge", project_name),
+            forge_container_name(project_name),
             4096u16,
         );
         upsert_router_route(route, debug)?;
@@ -9913,7 +10438,14 @@ pub(crate) fn ensure_enclave_for_project(
         // so an empty mirror there is a legitimate cold state the guest
         // handles fail-loud rather than a seed-in-progress worth waiting on.
         if project_remote_url.is_some() {
-            wait_for_git_mirror_ready(&client, &git_container_name, project_name, debug).await?;
+            wait_for_git_mirror_ready(
+                &client,
+                &git_container_name,
+                project_name,
+                project_default_branch.as_deref(),
+                debug,
+            )
+            .await?;
         }
         Ok::<(), String>(())
     })?;
@@ -10039,7 +10571,7 @@ async fn ensure_shared_git_and_inference_for_launch(
             );
         }
     } else {
-        let git_vault_secret = Some(mint_git_mirror_vault_token(project_name, debug).await?);
+        let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(
                 "forge-launch-git",
@@ -10216,13 +10748,10 @@ fn build_forge_agent_run_args_with_vault(
     } else {
         spec.env("TILLANDSIAS_GIT_SERVICE", "tillandsias-git")
     };
-    // Every credentialed agent lane (Codex/Claude/Antigravity) mounts a
-    // scoped Vault token so its entrypoint can restore the opaque OAuth
-    // document from Vault. Gating this on Codex alone (the original
-    // orders-338/340 wiring) left Claude/Antigravity lanes with no token,
-    // so their `provider-oauth-vault restore` failed "no Vault token at
-    // /run/secrets/vault-token" and killed the launch (operator repro
-    // 2026-07-15). OpenCode/Maintenance are credential-free and get none.
+    // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
+    // entrypoint can restore the opaque provider document. OpenCode re-execs
+    // through its existing CLI lane and uses the separate raw OpenCode/Web
+    // builder's scoped opencode-forge lease.
     if mode_provider_pair(mode).is_some()
         && let Some(secret_name) = vault_secret
     {
@@ -10241,6 +10770,9 @@ fn build_forge_agent_run_args_with_vault(
         && matches!(mode, ForgeAgentMode::Codex)
     {
         spec = spec.env("TILLANDSIAS_CODEX_PROMPT", prompt);
+        if delegated_json_requested(Some(prompt)) {
+            spec = spec.env("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        }
     }
 
     for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
@@ -10423,7 +10955,8 @@ pub(crate) fn build_forge_agent_run_argv(
 }
 
 /// Map an agent mode to its (OAuth provider, API-key provider) pair.
-/// OpenCode/Maintenance lanes are credential-free by design.
+/// OpenCode has a separate Gemini-to-auth-content adapter; Maintenance needs
+/// no provider credential.
 fn mode_provider_pair(
     mode: ForgeAgentMode,
 ) -> Option<(ProviderId, crate::vault_bootstrap::ProviderId)> {
@@ -10512,6 +11045,7 @@ fn run_forge_agent_cli_mode(
              use --codex --prompt or --opencode --prompt"
         ));
     }
+    let delegated = delegated_run_config(prompt)?;
     require_desktop_user_session(&format!("tillandsias {flag}"))?;
     report_runtime_lane(flag, debug);
 
@@ -10550,9 +11084,8 @@ fn run_forge_agent_cli_mode(
         ensure_enclave_for_project(project_name, Some(&canonical), Some(&launch_marker), debug)?;
     ensure_provider_auth(mode, debug)?;
 
-    // Mint a scoped Vault token lease for any credentialed lane so its
-    // entrypoint can restore the OAuth document. Was Codex-only; generalized
-    // to all provider lanes 2026-07-15 (see build_forge_agent_run_args_with_vault).
+    // Mint a scoped Vault token lease for any OAuth-credentialed lane so its
+    // entrypoint can restore the provider document.
     #[cfg(feature = "vault")]
     let provider_vault_lease = if mode_provider_pair(mode).is_some() {
         Some(vault_bootstrap::mint_approle_secret_lease(
@@ -10604,76 +11137,27 @@ fn run_forge_agent_cli_mode(
         // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
         let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
-        // Delegated runs get a deadline (order 429). A hung worker must not
-        // block a dispatcher forever, and "still running after N seconds" is a
-        // distinct outcome from success or failure — conflating it with either
-        // is how a stuck agent gets recorded as done. Interactive sessions are
-        // never deadlined: only a run that asked for machine-readable output
-        // and supplied a timeout is bounded.
-        let delegated = std::env::var("TILLANDSIAS_AGENT_RESULT_FORMAT").as_deref() == Ok("json");
-        let deadline_secs = std::env::var("TILLANDSIAS_AGENT_TIMEOUT_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .filter(|s| *s > 0);
-
         let run_container_name = forge_container_name_for_mode(project_name, mode);
-        let run_fut = client.run_container_attached_observed(
+        let result = run_agent_container_attached(
+            &client,
             mode.slug(),
             &run_container_name,
             &forge_args,
             debug,
-        );
-        let mut timed_out_after: Option<u64> = None;
-        let result = match (delegated, deadline_secs) {
-            (true, Some(secs)) => {
-                match tokio::time::timeout(std::time::Duration::from_secs(secs), run_fut).await {
-                    Ok(r) => r,
-                    Err(_) => {
-                        timed_out_after = Some(secs);
-                        Err(format!("delegated run exceeded {secs}s deadline"))
-                    }
-                }
-            }
-            _ => run_fut.await,
-        };
-        cleanup_shared_stack_if_no_running_forge(&client, project_name, Some(&launch_marker), debug)
-            .await;
+            delegated.as_ref(),
+        )
+        .await;
+        cleanup_shared_stack_if_no_running_forge(
+            &client,
+            project_name,
+            Some(&launch_marker),
+            debug,
+        )
+        .await;
 
         if let Some(handle) = diag_emitter {
             handle.abort();
             let _ = handle.await;
-        }
-
-        // Delegated-run verdict (order 429). Only for runs that asked for
-        // machine-readable output — an interactive session must not be
-        // narrated at the operator.
-        //
-        // The verdict is deliberately conservative: with no transcript to read,
-        // classify_run reports INDETERMINATE even on a clean exit, because a
-        // CLI can exit 0 having done nothing. "Exited without error" is not
-        // evidence the delegated work happened, and a dispatcher that treats it
-        // as such silently marks abandoned runs as done.
-        if delegated {
-            let verdict = match timed_out_after {
-                Some(after_secs) => crate::agent_result::AgentOutcome::TimedOut { after_secs },
-                None => {
-                    let transcript = std::env::var("TILLANDSIAS_AGENT_RESULT_FILE")
-                        .ok()
-                        .and_then(|p| std::fs::read_to_string(p).ok())
-                        .unwrap_or_default();
-                    let exit_code = if result.is_ok() { Some(0) } else { None };
-                    crate::agent_result::classify_run(&transcript, exit_code)
-                }
-            };
-            // Non-success is stated loudly and separately, so a dispatcher
-            // scraping this line cannot mistake "ran" for "worked".
-            eprintln!("[forge-result] {} {}", mode.slug(), verdict.summary());
-            if !verdict.is_success() {
-                eprintln!(
-                    "[forge-result] {} DID NOT COMPLETE SUCCESSFULLY — do not treat this work as done",
-                    mode.slug()
-                );
-            }
         }
 
         result.map_err(|e| format!("[forge-launch] {} session exited: {e}", mode.slug()))
@@ -10685,9 +11169,9 @@ fn run_forge_agent_cli_mode(
 ///
 /// Flow:
 /// 1. Resolve project name + canonical path.
-/// 2. For Codex, re-exec the CLI lane in the terminal so its scoped Vault
-///    lease lives for the attached session. Other modes build the forge
-///    `podman run` argv via `ContainerSpec` after bringing up the enclave.
+/// 2. Credential-capable agents re-exec the CLI lane in the terminal so their
+///    scoped Vault lease lives for the attached session. Maintenance builds
+///    the forge `podman run` argv directly after bringing up the enclave.
 /// 3. Detect host terminal, spawn it detached with the argv appended.
 ///
 /// The terminal window is the user-facing surface. When the user closes it,
@@ -10716,7 +11200,7 @@ pub(crate) fn launch_forge_agent(
         );
     }
 
-    // Credentialed agents (Claude/Codex/Antigravity) delegate to the CLI
+    // Credential-capable agents delegate to the CLI
     // lane inside the popup terminal: the tray process has no TTY, so the
     // ensure_provider_auth ladder (vault check -> device-code login in an
     // ephemeral container -> vault write -> forge launch with injection)
@@ -10724,7 +11208,10 @@ pub(crate) fn launch_forge_agent(
     // Flow specified by The Tlatoāni 2026-07-15 (order 303 lineage).
     let argv = if matches!(
         mode,
-        ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity
+        ForgeAgentMode::Codex
+            | ForgeAgentMode::Claude
+            | ForgeAgentMode::OpenCode
+            | ForgeAgentMode::Antigravity
     ) {
         eprintln!(
             "[tillandsias] launch_forge_agent: opening the {} terminal for '{project_name}'; the CLI lane prepares the enclave and scoped credential lease",
@@ -12192,6 +12679,26 @@ pub(crate) async fn service_stop(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
+
+    fn fake_podman_output(status: i32, stdout: &str) -> CommandOutput {
+        CommandOutput {
+            operation: OperationKind::Container,
+            argv: Vec::new(),
+            redacted_argv: Vec::new(),
+            status: Some(status),
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            duration: std::time::Duration::ZERO,
+        }
+    }
+
+    fn fake_podman_failure(status: i32) -> CommandFailure {
+        CommandFailure {
+            output: Box::new(fake_podman_output(status, "")),
+            retry: RetryClass::Retryable,
+        }
+    }
 
     #[test]
     fn nvidia_cdi_available_honors_user_config_dir() {
@@ -12313,7 +12820,7 @@ mod tests {
         // relay time. The mint is Result now; real lanes propagate (`?`),
         // only the throwaway status-check mirror tolerates, loudly.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let mint = source_window(source, "async fn mint_git_mirror_vault_token(");
+        let mint = source_window(source, "async fn mint_git_mirror_vault_auto_auth(");
         assert!(
             mint.contains("Result<String, String>"),
             "mint must be Result — silent Option was the fail-open vector"
@@ -12335,7 +12842,7 @@ mod tests {
         ] {
             let window = source_window(source, lane);
             assert!(
-                window.contains("mint_git_mirror_vault_token(project_name, debug).await?"),
+                window.contains("mint_git_mirror_vault_auto_auth(project_name, debug).await?"),
                 "{lane} must hard-fail on a missing relay credential"
             );
         }
@@ -12343,6 +12850,124 @@ mod tests {
         assert!(
             status.contains("WARNING: status-check mirror launching credential-less"),
             "status-check tolerance must be loud, not debug-gated"
+        );
+    }
+
+    #[test]
+    fn foreground_git_mirror_lanes_revoke_issued_approle_accessors_on_return() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let cleanup = source_window(source, "fn run_cli_with_vault_credential_cleanup<T>(");
+        assert!(
+            cleanup.contains("revoke_pending_container_tokens(debug)"),
+            "foreground lane wrapper must drain token and AppRole-accessor registries"
+        );
+
+        let main_window = source_window(source, "fn main()");
+        assert_eq!(
+            main_window
+                .matches("run_cli_with_vault_credential_cleanup(debug")
+                .count(),
+            4,
+            "both status dispatches plus OpenCode and forge-agent CLI dispatches must clean up"
+        );
+        assert!(
+            !main_window
+                .contains("run_cli_with_vault_credential_cleanup(debug, || run_opencode_web_mode"),
+            "detached web sessions must retain their AppRole accessor while the mirror stays alive"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_mirror_readiness_fast_path_accepts_non_main_branch() {
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Ok(fake_podman_output(0, "")));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        wait_for_git_mirror_ready(
+            &client,
+            "tillandsias-git-fixture",
+            "fixture",
+            Some("trunk"),
+            false,
+        )
+        .await
+        .expect("a concrete non-main target branch is seeded on the first probe");
+
+        let seen = backend.seen();
+        assert_eq!(
+            seen.len(),
+            2,
+            "seeded re-attach stays a two-probe fast path"
+        );
+        assert_eq!(
+            seen[1].1.last().map(String::as_str),
+            Some("refs/heads/trunk"),
+            "readiness must probe the target project's branch convention"
+        );
+        assert!(
+            !seen[1].1.iter().any(|arg| arg == "refs/heads/main"),
+            "Tillandsias' main branch convention must not leak into target projects"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_mirror_readiness_rejects_reachable_but_unseeded_branch() {
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Err(fake_podman_failure(1)));
+        let client = PodmanClient::with_backend(backend);
+
+        let result = probe_git_mirror_seeded(
+            &client,
+            "tillandsias-git-fixture",
+            "/srv/git/fixture",
+            Some("trunk"),
+        )
+        .await;
+
+        let reason = result.expect_err("reachable HEAD without the expected ref is unseeded");
+        assert!(
+            reason.contains("refs/heads/trunk") && reason.contains("seed still in progress"),
+            "negative probe must name the missing concrete branch: {reason}"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_mirror_readiness_without_branch_metadata_accepts_any_concrete_head() {
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Ok(fake_podman_output(
+            0,
+            "0123456789abcdef0123456789abcdef01234567\n",
+        )));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        let seeded =
+            probe_git_mirror_seeded(&client, "tillandsias-git-fixture", "/srv/git/fixture", None)
+                .await
+                .expect("a detached/git-less host falls back to a concrete target-project head");
+
+        assert_eq!(seeded, "one or more refs/heads/*");
+        let seen = backend.seen();
+        assert!(
+            seen[1].1.iter().any(|arg| arg == "for-each-ref")
+                && seen[1].1.iter().any(|arg| arg == "refs/heads"),
+            "metadata-free readiness must count concrete heads convention-neutrally"
+        );
+    }
+
+    #[test]
+    fn git_mirror_readiness_budget_covers_observed_cold_seed() {
+        assert_eq!(
+            GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS,
+            20 * 60,
+            "cold-seed wait must retain the reviewed 20-minute bound above the live 12–15 minute observation"
+        );
+        assert_eq!(
+            GIT_MIRROR_SEED_POLL_INTERVAL,
+            Duration::from_secs(1),
+            "attempt count and user-visible seconds must stay aligned"
         );
     }
 
@@ -12690,6 +13315,44 @@ mod tests {
         crate::runtime_assets::env_lock()
     }
 
+    struct TestEnvRestore(Vec<(&'static str, Option<std::ffi::OsString>)>);
+
+    impl TestEnvRestore {
+        fn capture(names: &[&'static str]) -> Self {
+            Self(
+                names
+                    .iter()
+                    .map(|name| (*name, std::env::var_os(name)))
+                    .collect(),
+            )
+        }
+
+        fn set(&self, name: &'static str, value: impl AsRef<std::ffi::OsStr>) {
+            unsafe {
+                std::env::set_var(name, value);
+            }
+        }
+
+        fn remove(&self, name: &'static str) {
+            unsafe {
+                std::env::remove_var(name);
+            }
+        }
+    }
+
+    impl Drop for TestEnvRestore {
+        fn drop(&mut self) {
+            unsafe {
+                for (name, prior) in self.0.drain(..) {
+                    match prior {
+                        Some(value) => std::env::set_var(name, value),
+                        None => std::env::remove_var(name),
+                    }
+                }
+            }
+        }
+    }
+
     /// Order 437: run a test in the OPT-IN shared host-mount mode by setting
     /// TILLANDSIAS_FORGE_HOST_MOUNT=1 for the guard's lifetime, restoring the
     /// prior value on drop (panic path included). Acquire `env_lock()` first —
@@ -12938,6 +13601,30 @@ mod tests {
         assert!(keys.contains(&"XDG_DATA_HOME"));
         assert!(keys.contains(&"XDG_STATE_HOME"));
         assert!(keys.contains(&"CODEX_HOME"));
+        assert!(keys.contains(&"TILLANDSIAS_CODEX_STATE_WORKER"));
+    }
+
+    #[test]
+    fn worker_identity_is_collision_resistant_at_host_and_state_boundary() {
+        let spaced = forge_worker_state_env(Some("a b"));
+        let dashed = forge_worker_state_env(Some("a-b"));
+        let value = |pairs: &[(String, String)], key: &str| -> String {
+            pairs
+                .iter()
+                .find(|(candidate, _)| candidate == key)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_else(|| panic!("{key} missing"))
+        };
+        assert_ne!(
+            value(&spaced, "CODEX_HOME"),
+            value(&dashed, "CODEX_HOME"),
+            "host state paths must not collide after readable-name normalization"
+        );
+        assert_ne!(
+            value(&spaced, "TILLANDSIAS_CODEX_STATE_WORKER"),
+            value(&dashed, "TILLANDSIAS_CODEX_STATE_WORKER"),
+            "the persistence helper needs the exact pre-sanitized identity"
+        );
     }
 
     /// XDG_CONFIG_HOME must NOT be isolated: the forge bakes OpenCode's
@@ -12959,10 +13646,16 @@ mod tests {
     /// single-worker launch is byte-identical to pre-428 behaviour.
     #[test]
     fn absent_forge_instance_emits_no_state_overrides() {
-        for raw in [None, Some(""), Some("   "), Some("---")] {
+        for raw in [None, Some("")] {
             assert!(
                 forge_worker_state_env(raw).is_empty(),
                 "instance {raw:?} must emit no state overrides"
+            );
+        }
+        for raw in [Some("   "), Some("---"), Some("///")] {
+            assert!(
+                !forge_worker_state_env(raw).is_empty(),
+                "explicit nonempty instance {raw:?} must not become unscoped"
             );
         }
     }
@@ -13013,8 +13706,14 @@ mod tests {
                 "{mode:?}: distinct workers must get distinct container names, \
                  otherwise --replace makes one destroy the other"
             );
-            assert!(w1.ends_with("-w1"), "{mode:?}: unexpected name {w1}");
-            assert!(w2.ends_with("-w2"), "{mode:?}: unexpected name {w2}");
+            assert!(
+                w1.contains("-w1-"),
+                "{mode:?}: readable identity missing from {w1}"
+            );
+            assert!(
+                w2.contains("-w2-"),
+                "{mode:?}: readable identity missing from {w2}"
+            );
         }
     }
 
@@ -13035,7 +13734,7 @@ mod tests {
             } else {
                 format!("tillandsias-proj-forge-{}", mode.slug())
             };
-            for raw in [None, Some(""), Some("   "), Some("---")] {
+            for raw in [None, Some("")] {
                 assert_eq!(
                     forge_container_name_for_mode_with_instance("proj", mode, raw),
                     legacy,
@@ -13049,15 +13748,35 @@ mod tests {
     /// separators, whitespace, or unbounded length past Podman.
     #[test]
     fn forge_instance_identifiers_are_sanitized() {
-        assert_eq!(sanitize_forge_instance("w1"), "w1");
-        assert_eq!(sanitize_forge_instance("  W1  "), "w1");
-        assert_eq!(sanitize_forge_instance("worker/1"), "worker-1");
-        assert_eq!(sanitize_forge_instance("a b:c"), "a-b-c");
-        assert_eq!(sanitize_forge_instance("--lead--"), "lead");
+        let w1 = sanitize_forge_instance("w1");
+        assert!(w1.starts_with("w1-"));
+        assert_eq!(w1.len(), 35);
         assert_eq!(sanitize_forge_instance(""), "");
-        assert_eq!(sanitize_forge_instance("///"), "");
+        for raw in ["  W1  ", "worker/1", "a b:c", "--lead--", "///", "   "] {
+            let sanitized = sanitize_forge_instance(raw);
+            assert!(!sanitized.is_empty(), "nonempty {raw:?} became unscoped");
+            assert!(sanitized.len() <= 48);
+        }
+        for (left, right) in [
+            ("a b", "a-b"),
+            ("Worker", "worker"),
+            (
+                "0123456789abcdef0123456789abcdef-a",
+                "0123456789abcdef0123456789abcdef-b",
+            ),
+            (
+                "forge-tillandsias-codex-20260723T043901Z",
+                "forge-tillandsias-codex-20260723T062500Z",
+            ),
+        ] {
+            assert_ne!(
+                sanitize_forge_instance(left),
+                sanitize_forge_instance(right),
+                "distinct raw identities {left:?}/{right:?} collided"
+            );
+        }
         assert!(
-            sanitize_forge_instance(&"x".repeat(200)).len() <= 32,
+            sanitize_forge_instance(&"x".repeat(200)).len() <= 48,
             "instance ids must be length-capped"
         );
         // A sanitized id must still be a legal Podman name component.
@@ -13066,6 +13785,72 @@ mod tests {
             s.chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-'),
             "sanitized id {s} contains characters Podman rejects"
+        );
+    }
+
+    #[test]
+    fn scoped_cleanup_uses_the_same_stable_forge_name_constructor() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let cleanup_window = source_window(
+            source,
+            "async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str)",
+        );
+        assert!(
+            cleanup_window.contains("remove_container(&forge_container_name(project_name))"),
+            "teardown must derive the same instance-scoped name as launch: {cleanup_window}"
+        );
+        assert!(
+            !cleanup_window.contains("format!(\"tillandsias-{project_name}-forge\")"),
+            "teardown must not fall back to the unscoped legacy name: {cleanup_window}"
+        );
+    }
+
+    #[test]
+    fn documented_timestamp_ids_differ_across_name_hostname_and_state() {
+        let early = "forge-tillandsias-codex-20260723T043901Z";
+        let late = "forge-tillandsias-codex-20260723T062500Z";
+        for mode in [
+            ForgeAgentMode::Maintenance,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::Antigravity,
+        ] {
+            assert_ne!(
+                forge_container_name_for_mode_with_instance("proj", mode, Some(early)),
+                forge_container_name_for_mode_with_instance("proj", mode, Some(late)),
+                "{mode:?} collapsed real same-day worker IDs"
+            );
+        }
+        assert_ne!(
+            sanitize_hostname(&format!(
+                "forge-proj{}",
+                forge_instance_suffix_from(Some(early))
+            )),
+            sanitize_hostname(&format!(
+                "forge-proj{}",
+                forge_instance_suffix_from(Some(late))
+            )),
+            "forge hostnames collapsed real same-day worker IDs"
+        );
+        assert_ne!(
+            forge_worker_state_env(Some(early)),
+            forge_worker_state_env(Some(late)),
+            "worker state paths collapsed real same-day worker IDs"
+        );
+    }
+
+    #[test]
+    fn opencode_web_route_uses_the_instance_scoped_forge_upstream() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let web_window = source_window(source, "pub(crate) fn run_opencode_web_mode(");
+        assert!(
+            web_window.contains("forge_container_name(project_name),"),
+            "OpenCode Web route must target the instance-scoped forge: {web_window}"
+        );
+        assert!(
+            !web_window.contains("format!(\"tillandsias-{}-forge\", project_name)"),
+            "OpenCode Web route must not target the nonexistent legacy forge: {web_window}"
         );
     }
 
@@ -13467,6 +14252,43 @@ mod tests {
     }
 
     #[test]
+    fn provider_login_persists_only_provider_scoped_tool_cache() {
+        let codex = provider_login_tool_cache_mount(&ProviderId::Codex).expect("codex cache mount");
+        assert_eq!(
+            codex,
+            "tillandsias-codex-login-tool-cache:/home/forge/.cache/tillandsias-project:rw"
+        );
+        assert!(
+            !codex.contains(".codex") && !codex.contains("auth.json"),
+            "Codex login auth home must remain ephemeral: {codex}"
+        );
+        for provider in [
+            ProviderId::GitHub,
+            ProviderId::Claude,
+            ProviderId::Antigravity,
+        ] {
+            assert_eq!(
+                provider_login_tool_cache_mount(&provider),
+                None,
+                "the new persistence scope is Codex-only"
+            );
+        }
+
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
+        assert_eq!(
+            login_window
+                .matches("run.args([\"--volume\", mount])")
+                .count(),
+            2,
+            "vault and no-vault login builders must both mount the provider cache"
+        );
+    }
+
+    #[test]
     fn github_login_non_tty_requires_explicit_stdin_mode() {
         assert_eq!(
             select_github_login_input_mode(false, true),
@@ -13605,7 +14427,7 @@ mod tests {
 
     #[test]
     fn tray_credentialed_agents_delegate_to_cli_lane_for_tty_login() {
-        // The tray process has no TTY; Claude/Codex/Antigravity clicks must
+        // The tray process has no TTY; Claude/Codex/OpenCode/Antigravity clicks must
         // route through the CLI lane (ensure_provider_auth ladder) inside
         // the popup terminal instead of a bare podman argv.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
@@ -13613,8 +14435,9 @@ mod tests {
             .find("pub(crate) fn launch_forge_agent(")
             .expect("launch_forge_agent must exist");
         let window = &source[start..start + 3000];
-        assert!(window.contains(
-            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity"
+        let normalized = window.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(normalized.contains(
+            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
         ));
     }
 
@@ -14271,10 +15094,35 @@ mod tests {
     }
 
     #[test]
-    fn git_run_args_mount_vault_token_when_supplied() {
-        // @trace spec:tillandsias-vault — Phase 6 default flow
+    fn git_run_args_strip_embedded_http_credentials_before_container_env() {
         let certs = PathBuf::from("/tmp/ca");
-        let secret = "tillandsias-vault-token-git-mirror-alpha-1234";
+        let args = build_git_run_args(
+            "alpha",
+            &certs,
+            "tillandsias-git:v1",
+            Some("https://host-user:host-secret@github.com/example/repo.git"),
+            Some("main"),
+            Some("tillandsias-vault-approle-git-mirror-agent-alpha-1"),
+        );
+        assert!(
+            has_arg(
+                &args,
+                "TILLANDSIAS_PROJECT_REMOTE_URL=https://github.com/example/repo.git"
+            ),
+            "mirror must receive a credential-free upstream URL: {args:?}"
+        );
+        assert!(
+            args.iter()
+                .all(|arg| !arg.contains("host-user") && !arg.contains("host-secret")),
+            "host URL credentials must never enter podman argv or container env: {args:?}"
+        );
+    }
+
+    #[test]
+    fn git_run_args_mount_vault_agent_approle_when_supplied() {
+        // @trace spec:tillandsias-vault — long-running mirror auto-auth flow
+        let certs = PathBuf::from("/tmp/ca");
+        let secret = "tillandsias-vault-approle-git-mirror-agent-alpha-1234-1";
         let args = build_git_run_args(
             "alpha",
             &certs,
@@ -14284,36 +15132,24 @@ mod tests {
             Some(secret),
         );
 
-        // The vault token secret MUST be mounted at the stable path
-        // /run/secrets/vault-token, owned by the git user (uid 1000) so the
-        // in-container vault-cli helper can actually read it under keep-id.
-        let secret_arg = format!("{secret},{GIT_VAULT_TOKEN_SECRET_OPTS}");
+        // Vault Agent's reusable AppRole document must be mounted at the
+        // stable path /run/secrets/vault-approle and owned by the git user.
+        let secret_arg = format!("{secret},{GIT_VAULT_APPROLE_SECRET_OPTS}");
         assert!(
             args.iter().any(|a| a == &secret_arg),
-            "expected vault token secret arg `{secret_arg}` in args: {args:?}"
+            "expected Vault Agent AppRole secret arg `{secret_arg}` in args: {args:?}"
         );
 
-        // Regression pin (literal, NOT derived from the constant): the secret
-        // MUST be owned by the git user (uid/gid 1000). Podman defaults
-        // `--secret` to root:root, and a root-owned mode 0400 file is
-        // unreadable by the container's unprivileged `git` user under
-        // `--userns=keep-id` — `vault-cli` then reports "no Vault token at
-        // /run/secrets/vault-token" and the git-mirror push silently falls back
-        // to interactive auth. Asserting the literal here (rather than
-        // reformatting the constant) is what actually catches a regression.
-        // @trace spec:git-mirror-service, spec:tillandsias-vault
         let mounted = args
             .iter()
-            .find(|a| a.contains("target=vault-token"))
-            .expect("vault-token secret must be mounted");
+            .find(|a| a.contains("target=vault-approle"))
+            .expect("vault-approle secret must be mounted");
         assert!(
             mounted.contains("uid=1000") && mounted.contains("gid=1000"),
-            "vault-token secret must be owned by the git user (uid/gid 1000) \
+            "vault-approle secret must be owned by the git user (uid/gid 1000) \
              so it is readable under keep-id; got `{mounted}`"
         );
 
-        // The container needs VAULT_ADDR + VAULT_ROLE to know how to talk
-        // to Vault and which role to authenticate as.
         assert!(
             has_arg(&args, "VAULT_ADDR=https://vault:8200"),
             "missing VAULT_ADDR env: {args:?}"
@@ -14323,8 +15159,18 @@ mod tests {
             "missing Vault CA env: {args:?}"
         );
         assert!(
-            has_arg(&args, "VAULT_ROLE=git-mirror"),
+            has_arg(&args, "VAULT_ROLE=git-mirror-agent"),
             "missing VAULT_ROLE env: {args:?}"
+        );
+        assert!(
+            has_arg(&args, "VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token"),
+            "vault-cli must follow Vault Agent's tmpfs token sink: {args:?}"
+        );
+        assert!(
+            args.windows(2).any(|pair| {
+                pair[0] == "--tmpfs" && pair[1] == "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777"
+            }),
+            "read-only git container must provide writable volatile /tmp for Vault Agent: {args:?}"
         );
 
         // The legacy github-token podman secret MUST NOT be mounted in the
@@ -14338,10 +15184,10 @@ mod tests {
     }
 
     #[test]
-    fn git_run_args_omit_vault_secret_when_none() {
-        // Companion negative case to git_run_args_mount_vault_token_when_supplied
+    fn git_run_args_omit_vault_auto_auth_when_none() {
+        // Companion negative case to git_run_args_mount_vault_agent_approle_when_supplied
         // (windows-260716-2, exit criterion 1). Without this pin a regression
-        // could hardcode/always-mount a stale vault-token secret name (or the
+        // could hardcode/always-mount a stale vault-approle secret name (or the
         // VAULT_ADDR/VAULT_ROLE envs) regardless of what — if anything — the
         // caller actually minted, silently defeating the fail-loud mint
         // discipline enforced upstream by `?` propagation.
@@ -14349,16 +15195,20 @@ mod tests {
         let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
 
         assert!(
-            !args.iter().any(|a| a.contains("target=vault-token")),
-            "vault_token_secret was None — must not mount any vault-token secret: {args:?}"
+            !args.iter().any(|a| a.contains("target=vault-approle")),
+            "vault_approle_secret was None — must not mount AppRole material: {args:?}"
         );
         assert!(
             !has_arg(&args, "VAULT_ADDR=https://vault:8200"),
-            "vault_token_secret was None — must not set VAULT_ADDR: {args:?}"
+            "vault_approle_secret was None — must not set VAULT_ADDR: {args:?}"
         );
         assert!(
-            !has_arg(&args, "VAULT_ROLE=git-mirror"),
-            "vault_token_secret was None — must not set VAULT_ROLE: {args:?}"
+            !has_arg(&args, "VAULT_ROLE=git-mirror-agent"),
+            "vault_approle_secret was None — must not set VAULT_ROLE: {args:?}"
+        );
+        assert!(
+            !has_arg(&args, "VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token"),
+            "vault_approle_secret was None — must not set a token sink: {args:?}"
         );
     }
 
@@ -14401,6 +15251,466 @@ mod tests {
     }
 
     #[test]
+    fn delegated_result_format_propagates_to_both_prompted_builders_only() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_AGENT_RESULT_FORMAT",
+            "TILLANDSIAS_AGENT_RESULT_FILE",
+            "TILLANDSIAS_AGENT_TIMEOUT_SECS",
+            "TILLANDSIAS_FORGE_INSTANCE",
+        ]);
+        restore.set("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        restore.set("TILLANDSIAS_AGENT_RESULT_FILE", "/host/only/result.jsonl");
+        restore.set("TILLANDSIAS_AGENT_TIMEOUT_SECS", "17");
+        restore.set(
+            "TILLANDSIAS_FORGE_INSTANCE",
+            "forge-alpha-codex-20260723T070000Z",
+        );
+
+        let project = PathBuf::from("/tmp/project");
+        let certs = PathBuf::from("/tmp/ca");
+        let opencode = build_opencode_forge_args(
+            &project,
+            "alpha",
+            Some("delegated opencode"),
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        let codex = build_forge_agent_run_args_with_vault(
+            &project,
+            "alpha",
+            &certs,
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            None,
+            Some("delegated codex"),
+        );
+        for (lane, args) in [("opencode", opencode), ("codex", codex)] {
+            assert!(
+                has_arg(&args, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+                "{lane} builder did not propagate JSON format: {args:?}"
+            );
+            assert!(
+                args.iter().all(|arg| {
+                    !arg.contains("TILLANDSIAS_AGENT_RESULT_FILE")
+                        && !arg.contains("/host/only/result.jsonl")
+                        && !arg.contains("TILLANDSIAS_AGENT_TIMEOUT_SECS")
+                }),
+                "{lane} builder leaked host-only timeout/result path into container argv: {args:?}"
+            );
+        }
+
+        let web = build_opencode_forge_args(
+            &project,
+            "alpha",
+            Some("detached web seed"),
+            &certs,
+            "1.2.3",
+            ForgeMode::Web,
+            None,
+            false,
+            false,
+        );
+        assert!(
+            !has_arg(&web, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+            "detached OpenCode Web serve has no current-run capture and must not receive the delegated result request: {web:?}"
+        );
+
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FORMAT");
+        let unstructured = build_opencode_forge_args(
+            &project,
+            "alpha",
+            Some("ordinary prompt"),
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        assert!(
+            !has_arg(&unstructured, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+            "ordinary prompted runs must retain human-formatted output"
+        );
+    }
+
+    #[test]
+    fn delegated_result_codex_entrypoint_appends_json_to_the_exec_command() {
+        let entrypoint = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/default/entrypoint-forge-codex.sh"
+        ));
+        assert!(
+            entrypoint.contains("codex_result_args+=(--json)"),
+            "the Codex entrypoint must append --json under the structured-result request"
+        );
+        assert!(
+            entrypoint.contains(
+                r#"codex exec "${codex_forge_args[@]}" "${codex_result_args[@]}" "$TILLANDSIAS_CODEX_PROMPT""#
+            ),
+            "the prompted codex exec command must consume codex_result_args"
+        );
+    }
+
+    #[test]
+    fn delegated_result_success_with_infrastructure_error_has_no_success_verdict() {
+        let result = delegated_report_result(&DelegatedRunReport {
+            outcome: crate::agent_result::AgentOutcome::Succeeded {
+                last_message: Some("agent claimed completion".to_string()),
+            },
+            infrastructure_errors: vec!["atomic result export failed".to_string()],
+        })
+        .expect_err("post-run infrastructure failure must dominate transcript success");
+        assert!(result.starts_with("FAILED:"), "{result}");
+        assert!(
+            !result.to_ascii_lowercase().contains("succeeded"),
+            "a line scraper must not see a success verdict before failure: {result}"
+        );
+    }
+
+    #[test]
+    fn delegated_result_timeout_defaults_bounded_and_rejects_invalid_override() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_AGENT_RESULT_FORMAT",
+            "TILLANDSIAS_AGENT_TIMEOUT_SECS",
+            "TILLANDSIAS_AGENT_RESULT_FILE",
+            "TILLANDSIAS_FORGE_INSTANCE",
+        ]);
+        restore.set("TILLANDSIAS_AGENT_RESULT_FORMAT", "json");
+        restore.remove("TILLANDSIAS_AGENT_TIMEOUT_SECS");
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FILE");
+        restore.set("TILLANDSIAS_FORGE_INSTANCE", "worker-config");
+
+        let config = delegated_run_config(Some("work"))
+            .expect("default config")
+            .expect("delegated config");
+        assert_eq!(config.timeout_secs, DEFAULT_DELEGATED_AGENT_TIMEOUT_SECS);
+        assert!(config.result_file.is_none());
+
+        for invalid in ["0", "-1", "nonsense"] {
+            restore.set("TILLANDSIAS_AGENT_TIMEOUT_SECS", invalid);
+            assert!(
+                delegated_run_config(Some("work")).is_err(),
+                "invalid timeout {invalid:?} must fail before launch"
+            );
+        }
+        assert!(
+            delegated_run_config(None).is_err(),
+            "JSON format without a prompt must fail instead of opening an interactive run"
+        );
+        assert!(delegated_run_config(Some(" \t")).is_err());
+        restore.set("TILLANDSIAS_AGENT_TIMEOUT_SECS", "3");
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let missing_instance = delegated_run_config(Some("work")).unwrap_err();
+        assert!(
+            missing_instance.contains("TILLANDSIAS_FORGE_INSTANCE"),
+            "{missing_instance}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_PODMAN_BIN",
+            "FAKE_PODMAN_MODE",
+            "FAKE_PODMAN_LOG",
+            "FAKE_PODMAN_RELEASE_DIR",
+            "FAKE_PODMAN_PID_FILE",
+            "FAKE_PODMAN_EXITED_FILE",
+        ]);
+        let scratch = tempfile::tempdir().expect("fake podman scratch");
+        let fake = scratch.path().join("podman");
+        let log = scratch.path().join("calls.log");
+        let release_dir = scratch.path().join("release");
+        let pid_file = scratch.path().join("run.pid");
+        let exited_file = scratch.path().join("run.exited");
+        fs::create_dir(&release_dir).expect("release dir");
+        fs::write(
+            &fake,
+            r#"#!/bin/sh
+command=
+name=
+previous=
+for arg in "$@"; do
+    if [ -z "$command" ]; then
+        case "$arg" in
+            run|rm) command=$arg ;;
+        esac
+    fi
+    if [ "$previous" = "--name" ]; then
+        name=$arg
+    fi
+    previous=$arg
+done
+
+if [ "$command" = "rm" ]; then
+    target=
+    for arg in "$@"; do target=$arg; done
+    case " $* " in
+        *" rm --force --ignore $target "*) ;;
+        *) exit 64 ;;
+    esac
+    printf 'rm --force --ignore %s\n' "$target" >> "$FAKE_PODMAN_LOG"
+    : > "$FAKE_PODMAN_RELEASE_DIR/$target"
+    exit 0
+fi
+
+if [ "$command" != "run" ]; then
+    exit 65
+fi
+
+printf '%s\n' "$$" > "$FAKE_PODMAN_PID_FILE"
+case "$FAKE_PODMAN_MODE" in
+    opencode-success)
+        printf '%s\n' \
+            '{"type":"step_start","sessionID":"s1"}' \
+            '{"type":"text","sessionID":"s1","part":{"text":"fresh opencode result"}}' \
+            '{"type":"step_finish","sessionID":"s1","part":{"reason":"stop"}}'
+        ;;
+    empty-success)
+        ;;
+    codex-exit-37)
+        printf '%s\n' \
+            '{"type":"thread.started","thread_id":"t1"}' \
+            '{"type":"item.completed","item":{"type":"agent_message","text":"looks successful"}}' \
+            '{"type":"turn.completed"}'
+        exit 37
+        ;;
+    timeout)
+        while [ ! -e "$FAKE_PODMAN_RELEASE_DIR/$name" ]; do
+            sleep 0.02
+        done
+        : > "$FAKE_PODMAN_EXITED_FILE"
+        ;;
+    *)
+        exit 66
+        ;;
+esac
+"#,
+        )
+        .expect("write fake podman");
+        let mut permissions = fs::metadata(&fake).expect("fake metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fake, permissions).expect("chmod fake podman");
+
+        restore.set("TILLANDSIAS_PODMAN_BIN", &fake);
+        restore.set("FAKE_PODMAN_LOG", &log);
+        restore.set("FAKE_PODMAN_RELEASE_DIR", &release_dir);
+        restore.set("FAKE_PODMAN_PID_FILE", &pid_file);
+        restore.set("FAKE_PODMAN_EXITED_FILE", &exited_file);
+
+        let client = PodmanClient::new();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("test runtime");
+        let run_args = |name: &str| {
+            vec![
+                "--rm".to_string(),
+                "--name".to_string(),
+                name.to_string(),
+                "localhost/tillandsias-forge:test".to_string(),
+            ]
+        };
+
+        let result_file = scratch.path().join("result.jsonl");
+        let opencode_identity = "worker-a";
+        let opencode_name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::OpenCode,
+            Some(opencode_identity),
+        );
+        fs::write(&result_file, b"STALE PRESEED").expect("preseed result");
+        restore.set("FAKE_PODMAN_MODE", "opencode-success");
+        let fresh = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "opencode",
+                &opencode_name,
+                &run_args(&opencode_name),
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: Some(result_file.clone()),
+                    instance_identity: opencode_identity.to_string(),
+                },
+            ))
+            .expect("fresh opencode run");
+        assert!(fresh.outcome.is_success(), "{fresh:?}");
+        assert!(fresh.infrastructure_errors.is_empty(), "{fresh:?}");
+        let exported = fs::read(&result_file).expect("fresh export");
+        assert!(exported.starts_with(br#"{"type":"step_start""#));
+        assert!(!exported.windows(5).any(|window| window == b"STALE"));
+
+        // A stale success transcript at RESULT_FILE must never influence an
+        // empty current capture. The fresh zero-byte export replaces it and
+        // classification remains indeterminate.
+        fs::write(
+            &result_file,
+            br#"{"type":"turn.completed"}
+"#,
+        )
+        .expect("stale success preseed");
+        let empty_identity = "worker-b";
+        let empty_name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(empty_identity),
+        );
+        restore.set("FAKE_PODMAN_MODE", "empty-success");
+        let empty = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "codex",
+                &empty_name,
+                &run_args(&empty_name),
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: Some(result_file.clone()),
+                    instance_identity: empty_identity.to_string(),
+                },
+            ))
+            .expect("empty current run");
+        assert!(matches!(
+            empty.outcome,
+            crate::agent_result::AgentOutcome::Indeterminate { .. }
+        ));
+        assert_eq!(fs::read(&result_file).expect("empty fresh export"), b"");
+
+        // Spawn failure still invalidates a caller-preseeded result before the
+        // attempted run, and the error path attempts exact cleanup.
+        let spawn_identity = "worker-spawn-error";
+        let spawn_name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(spawn_identity),
+        );
+        fs::write(&result_file, b"STALE SPAWN RESULT").expect("spawn preseed");
+        restore.set(
+            "TILLANDSIAS_PODMAN_BIN",
+            scratch.path().join("missing-podman"),
+        );
+        let spawn_error = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "codex",
+                &spawn_name,
+                &run_args(&spawn_name),
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: Some(result_file.clone()),
+                    instance_identity: spawn_identity.to_string(),
+                },
+            ))
+            .unwrap_err();
+        assert!(spawn_error.contains("could not spawn"), "{spawn_error}");
+        assert_eq!(
+            fs::read(&result_file).expect("spawn-error fresh marker"),
+            b""
+        );
+        restore.set("TILLANDSIAS_PODMAN_BIN", &fake);
+
+        let nonzero_identity = "worker-c";
+        let nonzero_name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(nonzero_identity),
+        );
+        restore.set("FAKE_PODMAN_MODE", "codex-exit-37");
+        let nonzero_error = runtime
+            .block_on(run_agent_container_attached(
+                &client,
+                "codex",
+                &nonzero_name,
+                &run_args(&nonzero_name),
+                false,
+                Some(&DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: None,
+                    instance_identity: nonzero_identity.to_string(),
+                }),
+            ))
+            .expect_err("the production verdict wrapper must reject a real exit 37");
+        assert!(
+            nonzero_error.contains("FAILED") && nonzero_error.contains("37"),
+            "wrapper lost the nonzero failure: {nonzero_error}"
+        );
+
+        let exact_identity = "forge-alpha-codex-20260723T070000Z";
+        let sibling_identity = "forge-alpha-codex-20260723T070001Z";
+        let exact = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(exact_identity),
+        );
+        let sibling = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::Codex,
+            Some(sibling_identity),
+        );
+        fs::write(release_dir.join(&sibling), b"sibling-alive").expect("sibling marker");
+        let _ = fs::remove_file(&exited_file);
+        restore.set("FAKE_PODMAN_MODE", "timeout");
+        let timeout = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "codex",
+                &exact,
+                &run_args(&exact),
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 1,
+                    result_file: None,
+                    instance_identity: exact_identity.to_string(),
+                },
+            ))
+            .expect("timeout report");
+        assert_eq!(
+            timeout.outcome,
+            crate::agent_result::AgentOutcome::TimedOut { after_secs: 1 }
+        );
+        assert!(
+            timeout.infrastructure_errors.is_empty(),
+            "exact removal/reap failed: {timeout:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(&log).expect("rm log"),
+            format!("rm --force --ignore {exact}\nrm --force --ignore {exact}\n")
+        );
+        assert_eq!(
+            fs::read(release_dir.join(&sibling)).expect("sibling survived"),
+            b"sibling-alive"
+        );
+        assert!(
+            exited_file.exists(),
+            "captured podman run process did not observe exact removal and exit"
+        );
+        let pid: i32 = fs::read_to_string(&pid_file)
+            .expect("run pid")
+            .trim()
+            .parse()
+            .expect("numeric pid");
+        assert_eq!(
+            unsafe { libc::kill(pid, 0) },
+            -1,
+            "captured podman run process {pid} survived bounded reap"
+        );
+    }
+
+    #[test]
     fn opencode_args_mount_workspace_and_prompt() {
         // Order 437: this test validates the shared host-mount workspace mount,
         // which is now opt-in. Run it in host-mount mode; the clone-only default
@@ -14415,6 +15725,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             false,
             true,
         );
@@ -14496,6 +15807,7 @@ mod tests {
 
     #[test]
     fn opencode_args_mount_persistent_tool_cache_named_volume() {
+        let _env = env_lock();
         // Order 220: OpenCode/OpenCode Web launches must mount the same
         // per-project persistent cache volume as Claude/Codex/Antigravity/
         // Maintenance (order 179), or FIRST_RUN tool installs (orders
@@ -14512,6 +15824,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             false,
             true,
         );
@@ -14523,7 +15836,61 @@ mod tests {
     }
 
     #[test]
+    fn opencode_vault_auth_mount_is_scoped_and_contains_no_credential_bytes() {
+        let _env = env_lock();
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            Some("opencode-forge-lease"),
+            false,
+            false,
+        );
+        assert!(has_arg(&args, "--secret"));
+        assert!(has_arg(
+            &args,
+            &format!("opencode-forge-lease,{GIT_VAULT_TOKEN_SECRET_OPTS}")
+        ));
+        assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
+        assert!(has_arg(&args, "VAULT_ROLE=opencode-forge"));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("OPENCODE_AUTH_CONTENT="))
+        );
+        assert!(!args.iter().any(|arg| arg.starts_with("GEMINI_API_KEY=")));
+    }
+
+    #[test]
+    fn opencode_without_vault_key_preserves_credential_free_lane() {
+        let _env = env_lock();
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        assert!(!has_arg(&args, "--secret"));
+        assert!(!has_arg(&args, "TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1"));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("OPENCODE_AUTH_CONTENT="))
+        );
+        assert!(!args.iter().any(|arg| arg.starts_with("GEMINI_API_KEY=")));
+    }
+
+    #[test]
     fn opencode_args_diagnostics_mode() {
+        let _env = env_lock();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
@@ -14531,6 +15898,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             true,
             true,
         );
@@ -14716,12 +16084,13 @@ mod tests {
     #[test]
     fn tray_codex_launch_reexecs_cli_for_lease_lifetime() {
         // Extended 2026-07-15: the CLI-lane delegation now covers ALL
-        // credentialed agents (Claude/Codex/Antigravity), same reasoning —
+        // credentialed agents (Claude/Codex/OpenCode/Antigravity), same reasoning —
         // the tray has no TTY for the device-code login.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let body = source_window(source, "pub(crate) fn launch_forge_agent(");
-        assert!(body.contains(
-            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity"
+        let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(normalized.contains(
+            "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
         ));
         assert!(body.contains("std::env::current_exe()"));
         assert!(body.contains("format!(\"--{}\", mode.slug())"));
@@ -15179,6 +16548,7 @@ mod tests {
             &tmp.path().join("ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             false,
             false,
         );
@@ -15237,6 +16607,7 @@ mod tests {
             &tmp.path().join("ca"),
             "1.2.3",
             ForgeMode::Cli,
+            None,
             false,
             false,
         );
@@ -15447,7 +16818,7 @@ mod tests {
             "run_provider_login must verify the containerized gh session"
         );
         assert!(
-            login_window.contains("vault-cli.sh write {}"),
+            login_window.contains("vault-cli.sh write-stdin {} token"),
             "run_provider_login must persist the token to Vault from inside the container"
         );
 

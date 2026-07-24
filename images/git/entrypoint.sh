@@ -21,52 +21,56 @@ echo "========================================"
 
 # GitHub token credential discovery.
 # @trace spec:tillandsias-vault, spec:podman-secrets-integration, spec:git-mirror-service
-# The launcher mints a short-lived AppRole token scoped to `git-mirror-policy`
-# and mounts it at /run/secrets/vault-token. The relay helper calls
-# `vault-cli read -field=token secret/github/token` at push time to fetch the
-# real GitHub token. The token never lives on disk; it is read into a
-# process-scoped variable, consumed by `git push`, and unset.
-if [ -r /run/secrets/vault-token ]; then
-    echo "Vault AppRole token loaded; GitHub token will be read at push time via vault-cli."
-else
-    echo "No credential source available; authenticated git operations will fail."
-fi
-
-# @trace spec:tillandsias-vault, spec:git-mirror-service
-# Background token-renewer (order 414). The launcher mints the git-mirror's
-# AppRole token with a 1h default TTL (APPROLE_TOKEN_TTL_SECS=3600) and a 24h
-# max TTL. The mirror container outlives 1h, but nothing renewed the token, so
-# every forge session past the first hour lost push capability: the relay's
-# `vault-cli read secret/github/token` 403'd, the failure was swallowed, and
-# the push was rejected as "run GitHub Login" — a FALSE error, since the GitHub
-# token in Vault was fine (blocker-git-mirror-relay-token-expiry-2026-07-18).
 #
-# This heartbeat renews the token well inside its TTL so it stays valid up to
-# the 24h ceiling. Renewal MUST happen while the token is still live — once it
-# has expired, renew-self 403s and only a re-mint (relaunch the forge, which
-# uses `--replace`) recovers. Interval defaults to 30 min (< the 1h TTL);
-# override with VAULT_TOKEN_RENEW_INTERVAL for tests.
-VAULT_TOKEN_RENEW_INTERVAL="${VAULT_TOKEN_RENEW_INTERVAL:-1800}"
-start_vault_token_renewer() {
-    if [ ! -r /run/secrets/vault-token ] || ! command -v vault-cli >/dev/null 2>&1; then
+# The launcher mounts a launch-scoped AppRole document, not a fixed Vault
+# client token. The official Vault Agent renews each 1h client token and
+# re-authenticates after the 24h max TTL, atomically refreshing this tmpfs
+# sink. vault-cli and every git credential-helper request read the current
+# sink, so the original token expiring does not require a container relaunch.
+VAULT_TOKEN_FILE="${VAULT_TOKEN_FILE:-/tmp/tillandsias-vault-token}"
+VAULT_AGENT_BOOTSTRAP="${VAULT_AGENT_BOOTSTRAP:-/usr/local/bin/vault-agent-bootstrap}"
+VAULT_AGENT_START_TIMEOUT="${VAULT_AGENT_START_TIMEOUT:-30}"
+VAULT_AGENT_PID=""
+export VAULT_TOKEN_FILE
+
+start_vault_agent() {
+    if [ ! -r /run/secrets/vault-approle ]; then
+        if [ -n "${VAULT_ROLE:-}" ]; then
+            echo "[vault-agent] AppRole mount is missing although VAULT_ROLE=${VAULT_ROLE}; refusing a credentialed mirror" >&2
+            return 1
+        fi
+        echo "No Vault AppRole auto-auth source available; authenticated git operations will fail."
         return 0
     fi
-    (
-        while true; do
-            sleep "$VAULT_TOKEN_RENEW_INTERVAL"
-            if lease="$(vault-cli renew-self "$VAULT_TOKEN_RENEW_INTERVAL" 2>/dev/null)"; then
-                echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') [vault-renewer] git-mirror token renewed (lease_duration=${lease:-?}s)"
-            else
-                # renew-self failed: the token hit its 24h max TTL or already
-                # expired. It can no longer be kept alive from inside the
-                # container — surface the honest remedy loudly; the next push
-                # will reject with the same expired-token diagnosis.
-                echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') [vault-renewer] WARNING: git-mirror Vault token can no longer be renewed (max TTL reached or expired). Relaunch the forge to re-mint (build_git_run_args --replace)." >&2
-            fi
-        done
-    ) &
-    VAULT_RENEWER_PID=$!
-    echo "[git-service] vault token-renewer started (pid=$VAULT_RENEWER_PID, every ${VAULT_TOKEN_RENEW_INTERVAL}s)"
+
+    [ -x "$VAULT_AGENT_BOOTSTRAP" ] || {
+        echo "[vault-agent] bootstrap missing or not executable: $VAULT_AGENT_BOOTSTRAP" >&2
+        return 1
+    }
+    rm -f "$VAULT_TOKEN_FILE"
+    "$VAULT_AGENT_BOOTSTRAP" &
+    VAULT_AGENT_PID=$!
+
+    waited=0
+    while [ "$waited" -lt "$VAULT_AGENT_START_TIMEOUT" ]; do
+        if [ -s "$VAULT_TOKEN_FILE" ]; then
+            echo "[git-service] Vault Agent auto-auth ready (pid=$VAULT_AGENT_PID; renewable sink=$VAULT_TOKEN_FILE)"
+            return 0
+        fi
+        if ! kill -0 "$VAULT_AGENT_PID" 2>/dev/null; then
+            wait "$VAULT_AGENT_PID" || true
+            echo "[vault-agent] exited before writing a client-token sink" >&2
+            return 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    echo "[vault-agent] timed out after ${VAULT_AGENT_START_TIMEOUT}s waiting for auto-auth" >&2
+    kill -TERM "$VAULT_AGENT_PID" 2>/dev/null || true
+    wait "$VAULT_AGENT_PID" 2>/dev/null || true
+    VAULT_AGENT_PID=""
+    return 1
 }
 
 # CA certificate from podman secret.
@@ -247,12 +251,48 @@ start_mirror_reconciler() {
 # forge launched during the sweep failed its clone with "connection refused"
 # and crashed (live 2026-07-20: Codex and OpenCode both died on clone). The
 # sweep is a BACKGROUND recovery task and must not gate the daemon that serves
-# clones. So: renewer + trap + daemon come up here; the sweep runs afterwards
+# clones. So: Vault Agent + trap + daemon come up here; the sweep runs afterwards
 # while the daemon already serves.
-VAULT_RENEWER_PID=""
-start_vault_token_renewer
+shutdown_git_service() {
+    exit_status="${1:-0}"
+    # This function is also the EXIT trap. Clear every trap before its final
+    # exit so a startup error or daemon failure cannot recurse through cleanup,
+    # and preserve the original nonzero status rather than hiding it as success.
+    trap - EXIT SIGTERM SIGINT
+    echo "[git-service] shutting down..."
+    # Stop Agent before revoking its current sink token. Revoking first leaves
+    # a race in which Agent observes the invalid token, re-authenticates, and
+    # writes a fresh token between revoke-self and process termination.
+    if [ -n "$VAULT_AGENT_PID" ]; then
+        kill -TERM "$VAULT_AGENT_PID" 2>/dev/null || true
+        agent_waited=0
+        while kill -0 "$VAULT_AGENT_PID" 2>/dev/null && [ "$agent_waited" -lt 5 ]; do
+            sleep 1
+            agent_waited=$((agent_waited + 1))
+        done
+        kill -KILL "$VAULT_AGENT_PID" 2>/dev/null || true
+        wait "$VAULT_AGENT_PID" 2>/dev/null || true
+        VAULT_AGENT_PID=""
+    fi
+    # With re-auth now quiesced, revoke the stable current sink token. The host
+    # independently destroys the reusable SecretID accessor and removes its
+    # Podman secret.
+    if [ -s "$VAULT_TOKEN_FILE" ] && command -v vault-cli >/dev/null 2>&1; then
+        vault-cli revoke-self >/dev/null 2>&1 || true
+    fi
+    for pid in "${GIT_DAEMON_PID:-}" "$VAULT_AGENT_PID" "$MIRROR_RECONCILER_PID"; do
+        [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
+    done
+    exit "$exit_status"
+}
+trap 'shutdown_git_service $?' EXIT
+trap 'shutdown_git_service 0' SIGTERM SIGINT
+
+# Install cleanup before the first long-lived child starts. A signal or
+# bootstrap error during Agent's bounded readiness wait must still quiesce the
+# child, revoke any token sink it wrote, and leave a failing exit status.
+start_vault_agent
 start_mirror_reconciler
-trap 'echo "[git-service] shutting down..."; kill -TERM "$GIT_DAEMON_PID" $VAULT_RENEWER_PID $MIRROR_RECONCILER_PID 2>/dev/null; exit 0' SIGTERM SIGINT
 # receive-pack IS enabled — it is the forge's live push path (order 450).
 #
 # Order 423 removed --enable=receive-pack to close an "anonymous write path",
@@ -395,7 +435,7 @@ done
 
 echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"
 
-# The git daemon, vault renewer, and shutdown trap were all started ABOVE, before
+# The git daemon, Vault Agent, and shutdown trap were all started ABOVE, before
 # the startup sweep, so clones are served the instant the container is up (order
 # 437/441). Nothing to start here — just wait on the daemon we already launched.
 

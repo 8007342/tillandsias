@@ -8,7 +8,7 @@
 
 use serde_json::json;
 use tillandsias_vault_client::{VaultClient, VaultError};
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{body_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
@@ -137,6 +137,111 @@ async fn issue_approle_token_returns_client_token_field() {
 }
 
 #[tokio::test]
+async fn issue_approle_credentials_returns_reauth_material_without_logging_in() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/auth/approle/role/git-mirror/role-id"))
+        .and(header("X-Vault-Token", "tray-root"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": { "role_id": "rid-agent" }
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/auth/approle/role/git-mirror/secret-id"))
+        .and(header("X-Vault-Token", "tray-root"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": {
+                "secret_id": "sid-agent",
+                "secret_id_accessor": "sid-accessor-agent"
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    // This boundary deliberately returns AppRole material to Vault Agent; the
+    // host must not consume it by logging in and mounting another fixed token.
+    Mock::given(method("POST"))
+        .and(path("/v1/auth/approle/login"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let client = VaultClient::new(server.uri(), "tray-root");
+    let credentials = client
+        .issue_approle_credentials("git-mirror")
+        .await
+        .expect("credential issuance should succeed without an AppRole login");
+    assert_eq!(credentials.role_id(), "rid-agent");
+    assert_eq!(credentials.secret_id(), "sid-agent");
+    assert_eq!(credentials.secret_id_accessor(), "sid-accessor-agent");
+}
+
+#[tokio::test]
+async fn malformed_approle_response_never_echoes_secret_id() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/auth/approle/role/git-mirror/role-id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": { "role_id": "rid-agent" }
+        })))
+        .mount(&server)
+        .await;
+
+    let issued_secret = "sid-must-never-enter-an-error";
+    Mock::given(method("POST"))
+        .and(path("/v1/auth/approle/role/git-mirror/secret-id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": { "secret_id": issued_secret }
+        })))
+        .mount(&server)
+        .await;
+
+    let error = match VaultClient::new(server.uri(), "tray-root")
+        .issue_approle_credentials("git-mirror")
+        .await
+    {
+        Ok(_) => panic!("missing accessor must reject the malformed response"),
+        Err(error) => error.to_string(),
+    };
+    assert!(
+        error.contains("missing secret_id_accessor"),
+        "schema error must name the missing field: {error}"
+    );
+    assert!(
+        !error.contains(issued_secret),
+        "schema error must never echo the adjacent SecretID: {error}"
+    );
+}
+
+#[tokio::test]
+async fn destroy_approle_secret_id_accessor_posts_accessor_with_root_auth() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path(
+            "/v1/auth/approle/role/git-mirror/secret-id-accessor/destroy",
+        ))
+        .and(header("X-Vault-Token", "tray-root"))
+        .and(body_json(json!({
+            "secret_id_accessor": "sid-accessor-agent"
+        })))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    VaultClient::new(server.uri(), "tray-root")
+        .destroy_approle_secret_id_accessor("git-mirror", "sid-accessor-agent")
+        .await
+        .expect("accessor destruction should accept Vault's 204");
+}
+
+#[tokio::test]
 async fn revoke_token_handles_204_no_content() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -199,7 +304,16 @@ async fn create_approle_role_posts_policies_and_ttls() {
     Mock::given(method("POST"))
         .and(path("/v1/auth/approle/role/git-mirror"))
         .and(header("X-Vault-Token", "tray-root"))
+        .and(body_json(json!({
+            "token_policies": "git-mirror-policy",
+            "token_ttl": "3600s",
+            "token_max_ttl": "86400s",
+            "token_num_uses": 0,
+            "secret_id_num_uses": 1,
+            "secret_id_ttl": "30s"
+        })))
         .respond_with(ResponseTemplate::new(204))
+        .expect(1)
         .mount(&server)
         .await;
 
@@ -208,6 +322,31 @@ async fn create_approle_role_posts_policies_and_ttls() {
         .create_approle_role("git-mirror", &["git-mirror-policy"], 3_600, 86_400)
         .await
         .expect("create_approle_role should accept 204");
+}
+
+#[tokio::test]
+async fn create_approle_agent_role_posts_reusable_secret_id_lifecycle() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/auth/approle/role/git-mirror-agent"))
+        .and(header("X-Vault-Token", "tray-root"))
+        .and(body_json(json!({
+            "token_policies": "git-mirror-policy",
+            "token_ttl": "3600s",
+            "token_max_ttl": "86400s",
+            "token_num_uses": 0,
+            "secret_id_num_uses": 0,
+            "secret_id_ttl": "48h"
+        })))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    VaultClient::new(server.uri(), "tray-root")
+        .create_approle_agent_role("git-mirror-agent", &["git-mirror-policy"], 3_600, 86_400)
+        .await
+        .expect("long-running Agent role should accept 204");
 }
 
 #[tokio::test]

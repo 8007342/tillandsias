@@ -31,6 +31,7 @@ mod installation_uuid;
 mod notify_icon;
 #[cfg(target_os = "windows")]
 mod wsl_lifecycle;
+mod wsl_probe_policy;
 
 // Linux stub modules so unit tests + portable code paths compile cleanly.
 #[cfg(not(target_os = "windows"))]
@@ -269,6 +270,63 @@ mod tests {
         assert!(
             wsl.contains("pub async fn wipe_guest("),
             "WslLifecycle must expose the user-invokable wipe primitive"
+        );
+    }
+
+    /// windows-260723-1: the registered-distro integrity probe's Windows
+    /// bodies are cfg-gated away on Linux. Keep a portable wiring pin so the
+    /// Linux-host test suite still proves that timeouts remain inconclusive,
+    /// recovery is bounded to one attempt, and only an independently
+    /// service-sane failed exec may reach the destructive reprovision
+    /// disposition.
+    #[test]
+    fn registered_distro_probe_timeout_policy_is_wired_non_destructively() {
+        let src = include_str!("wsl_lifecycle.rs");
+        let policy = include_str!("wsl_probe_policy.rs");
+        let vm_layer = include_str!("../../tillandsias-vm-layer/src/wsl.rs");
+
+        assert!(
+            policy.contains("DistroExecProbeAttempt::Initial")
+                && policy.contains(
+                    "DistroExecProbeClass::Timeout | DistroExecProbeClass::ServiceFailure",
+                )
+                && policy.contains("DistroExecProbeDecision::RecoverAndRetry"),
+            "the initial timeout must select one recovery+retry"
+        );
+        assert!(
+            policy.contains("DistroExecProbeAttempt::AfterShutdownRecovery")
+                && policy.contains("DistroExecProbeDecision::FailNonDestructively"),
+            "a second timeout/service failure and infrastructure failures must fail non-destructively"
+        );
+        assert!(
+            src.contains("WslRuntime::perform_wsl_shutdown_recovery()")
+                && vm_layer.contains("cmd.kill_on_drop(true)")
+                && vm_layer.contains("WSL_SHUTDOWN_RECOVERY_TIMEOUT_SECS"),
+            "the existing shutdown recovery must own a hard child-process bound"
+        );
+        assert!(
+            src.contains("WslRuntime::is_wsl_service_sane().await")
+                && src.contains("classify_nonzero_distro_exec(&stderr, service_sane)")
+                && policy.contains("E_UNEXPECTED")
+                && policy.contains("DistroExecProbeClass::DistroFailure")
+                && src.contains("DistroExecProbeDecision::ReprovisionDamaged"),
+            "only nonzero exec plus independent service-sane classification may authorize reprovisioning"
+        );
+
+        let provision = src
+            .split("pub async fn provision_via_recipe")
+            .nth(1)
+            .and_then(|tail| tail.split("let manifest =").next())
+            .expect("registered-distro fast path");
+        assert!(
+            provision.contains("registered_distro_disposition().await?")
+                && provision.contains("RegisteredDistroDisposition::ReprovisionDamaged")
+                && provision.contains("self.unregister_distro().await?"),
+            "unregister must remain behind the conclusive damaged disposition"
+        );
+        assert!(
+            !provision.contains("if self.distro_exec_probe().await"),
+            "the provisioning path must not collapse probe outcomes back to bool"
         );
     }
 

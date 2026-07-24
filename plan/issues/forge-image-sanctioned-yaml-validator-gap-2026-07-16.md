@@ -46,3 +46,17 @@ Pick one (podman-capable host or forge-image owner):
   exits 0 naming an available sanctioned validator.
 - The pre-receive fixture run in-forge no longer emits the
   no-validator WARNING.
+
+## Independent reproduction / upvote — 2026-07-23
+
+The v0.4 forge orchestration independently reproduced the same PATH gap:
+`ruby` and `tillandsias-policy` were absent. The repo-native implementation is
+usable through `cargo run -p tillandsias-policy -- validate-yaml ...`, and it
+successfully validated the changed plan/litmus YAML, but that requires Cargo
+setup/compilation and is not the named ready-to-run finalization command.
+
+Upvote the existing packet; do not file a duplicate. Preferred closure is one
+shared repo-native integration-tree validation helper backed by the Rust policy
+tool, available uniformly to agents and hooks. Baking Ruby remains a valid
+smaller alternative, but adding more per-call fallback logic would perpetuate
+the divergence this packet documents.

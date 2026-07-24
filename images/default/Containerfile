@@ -47,6 +47,7 @@ COPY cheatsheet-sources/ /opt/cheatsheet-sources/
 # ── Shared library ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/lib/tillandsias
 COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
+COPY codex-safe-state.sh /usr/local/lib/tillandsias/codex-safe-state.sh
 COPY brew-tools-allowlist.txt /usr/local/lib/tillandsias/brew-tools-allowlist.txt
 COPY brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh

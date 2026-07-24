@@ -834,31 +834,68 @@ install_prebuilt() {
     local bindir="${CARGO_HOME:-/usr/local/cargo}/bin"
     [ -x "$bindir/$check_bin" ] && return 0
     mkdir -p "$bindir" 2>/dev/null || true
-    local tmp archive
-    tmp="$(mktemp -d 2>/dev/null)" || return 0
-    archive="$tmp/asset"
-    if ! curl -fsSL --max-time 120 --retry 2 --retry-delay 3 "$url" -o "$archive" 2>/dev/null; then
-        trace_lifecycle "tools" "prebuilt fetch failed (non-fatal, retry next launch): $check_bin"
-        rm -rf "$tmp"
+    # Multiple forge lanes for the same project share CARGO_HOME. Keep the
+    # executable fast-path above first (a warm launch performs zero network
+    # work), then serialize the cold miss per tool so concurrent lane starts
+    # cannot fetch the same release asset repeatedly.
+    local lock_root="${PROJECT_CACHE:-$HOME/.cache/tillandsias-project}/prebuilt-locks"
+    local tool_lock="$lock_root/$check_bin.lock" waited=0
+    mkdir -p "$lock_root" 2>/dev/null || true
+    if ! mkdir "$tool_lock" 2>/dev/null; then
+        # A killed cold installer may leave its empty mkdir lock behind.
+        # Reclaim only after a generous bound; ordinary downloads are capped
+        # at 120 seconds and must never be mistaken for stale work.
+        if [ -d "$tool_lock" ] \
+            && [ -n "$(find "$tool_lock" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then
+            rm -f "$tool_lock/owner.pid" 2>/dev/null || true
+            rmdir "$tool_lock" 2>/dev/null || true
+        fi
+        while [ -d "$tool_lock" ] && [ "$waited" -lt 420 ]; do
+            [ -x "$bindir/$check_bin" ] && return 0
+            sleep 1
+            waited=$((waited + 1))
+        done
+        [ -x "$bindir/$check_bin" ] && return 0
+        mkdir "$tool_lock" 2>/dev/null || return 0
+    fi
+
+    (
+        local tmp="" archive lock_owner="$BASHPID"
+        printf '%s\n' "$lock_owner" >"$tool_lock/owner.pid" 2>/dev/null || true
+        # shellcheck disable=SC2329 # invoked indirectly by trap
+        _prebuilt_lock_cleanup() {
+            [ -n "$tmp" ] && rm -rf "$tmp"
+            if [ "$(cat "$tool_lock/owner.pid" 2>/dev/null || true)" = "$lock_owner" ]; then
+                rm -f "$tool_lock/owner.pid" 2>/dev/null || true
+                rmdir "$tool_lock" 2>/dev/null || true
+            fi
+        }
+        trap _prebuilt_lock_cleanup EXIT
+        trap 'exit 130' HUP INT TERM
+
+        tmp="$(mktemp -d 2>/dev/null)" || return 0
+        archive="$tmp/asset"
+        if ! curl -fsSL --max-time 120 --retry 2 --retry-delay 3 "$url" -o "$archive" 2>/dev/null; then
+            trace_lifecycle "tools" "prebuilt fetch failed (non-fatal, retry next launch): $check_bin"
+            return 0
+        fi
+        case "$url" in
+            *.tar.gz | *.tgz) tar -xzf "$archive" -C "$tmp" 2>/dev/null || true ;;
+            *.tar.xz) tar -xJf "$archive" -C "$tmp" 2>/dev/null || true ;;
+            *.zip) unzip -qo "$archive" -d "$tmp" 2>/dev/null || true ;;
+        esac
+        # Install every regular executable the archive carries (these are bare binary
+        # distributions). basename-placed onto the persistent cache PATH.
+        find "$tmp" -type f -perm -u+x ! -name asset 2>/dev/null | while read -r f; do
+            install -m 0755 "$f" "$bindir/$(basename "$f")" 2>/dev/null || true
+        done
+        if [ -x "$bindir/$check_bin" ]; then
+            trace_lifecycle "tools" "installed prebuilt $check_bin ($(uname -m))"
+        else
+            trace_lifecycle "tools" "prebuilt install incomplete (non-fatal, retry next launch): $check_bin"
+        fi
         return 0
-    fi
-    case "$url" in
-        *.tar.gz | *.tgz) tar -xzf "$archive" -C "$tmp" 2>/dev/null || true ;;
-        *.tar.xz) tar -xJf "$archive" -C "$tmp" 2>/dev/null || true ;;
-        *.zip) unzip -qo "$archive" -d "$tmp" 2>/dev/null || true ;;
-    esac
-    # Install every regular executable the archive carries (these are bare binary
-    # distributions). basename-placed onto the persistent cache PATH.
-    find "$tmp" -type f -perm -u+x ! -name asset 2>/dev/null | while read -r f; do
-        install -m 0755 "$f" "$bindir/$(basename "$f")" 2>/dev/null || true
-    done
-    if [ -x "$bindir/$check_bin" ]; then
-        trace_lifecycle "tools" "installed prebuilt $check_bin ($(uname -m))"
-    else
-        trace_lifecycle "tools" "prebuilt install incomplete (non-fatal, retry next launch): $check_bin"
-    fi
-    rm -rf "$tmp"
-    return 0
+    )
 }
 
 # ensure_dart_sdk: FIRST_RUN, ARCH-AWARE install of the Dart SDK into the order-179
@@ -1015,6 +1052,170 @@ ensure_forge_prebuilt_tools() {
 # Keep these lists in sync with the entrypoints that pass the flags. A flag
 # listed here and absent upstream is a LOUD failure by design — that is the
 # whole point.
+
+# OpenCode Vault auth (order 431) ─────────────────────────────
+# The existing credential producer remains secret/gemini/api-key. Every
+# interactive/Web path reaches the scoped CLI launch and mounts an
+# opencode-forge AppRole token. This function reads that source and adapts it to
+# OPENCODE_AUTH_CONTENT in memory. No credential document is materialized under
+# XDG_DATA_HOME.
+opencode_auth_file_path() {
+    printf '%s/opencode/auth.json\n' "${XDG_DATA_HOME:-$HOME/.local/share}"
+}
+
+opencode_remove_stale_auth_file() {
+    local auth_file
+    auth_file="$(opencode_auth_file_path)"
+    if [ -e "$auth_file" ] || [ -L "$auth_file" ]; then
+        if ! rm -f -- "$auth_file" 2>/dev/null; then
+            trace_lifecycle "credentials" "opencode: refusing launch; stale auth.json could not be removed"
+            return 1
+        fi
+    fi
+    if [ -e "$auth_file" ] || [ -L "$auth_file" ]; then
+        trace_lifecycle "credentials" "opencode: refusing launch; stale auth.json remains"
+        return 1
+    fi
+    return 0
+}
+
+prepare_opencode_vault_auth() {
+    opencode_remove_stale_auth_file || return 1
+
+    if [ "${TILLANDSIAS_OPENCODE_AUTH_EXPECTED:-0}" != "1" ]; then
+        # Never honor an ambient, non-Vault credential.
+        unset OPENCODE_AUTH_CONTENT
+        return 0
+    fi
+
+    local gemini_key auth_content
+    # The marker is launcher-owned, but the surrounding process environment
+    # is not a credential source. Always replace any ambient document with the
+    # value read through this lane's scoped Vault token.
+    unset OPENCODE_AUTH_CONTENT
+    if ! gemini_key="$(vault-cli.sh read -field=key secret/gemini/api-key 2>/dev/null)" \
+        || [ -z "$gemini_key" ]; then
+        trace_lifecycle "credentials" "opencode: Vault credential was expected but could not be read"
+        return 1
+    fi
+    if ! auth_content="$(printf '%s' "$gemini_key" \
+        | jq -Rsc '{google:{type:"api",key:.}}' 2>/dev/null)"; then
+        unset gemini_key
+        trace_lifecycle "credentials" "opencode: could not assemble Vault auth content"
+        return 1
+    fi
+    unset gemini_key
+
+    if ! printf '%s' "$auth_content" \
+        | jq -e 'type == "object" and length > 0' >/dev/null 2>&1; then
+        trace_lifecycle "credentials" "opencode: Vault auth content is malformed"
+        return 1
+    fi
+    OPENCODE_AUTH_CONTENT="$auth_content"
+    export OPENCODE_AUTH_CONTENT
+    unset auth_content
+    return 0
+}
+
+# Probe the undocumented environment contract itself, independent of any real
+# credential. The sentinel is generated at runtime, used only in an isolated
+# temp state tree, and never printed or committed as fixture data.
+opencode_auth_contract_ok() {
+    local bin_path="$1" probe_root probe_key probe_content probe_output auth_file
+    local probe_status=0
+    probe_root="$(mktemp -d /tmp/tillandsias-opencode-auth-probe.XXXXXX)" || return 1
+    probe_key="tillandsias-probe-${RANDOM:-0}-$$-$(date +%s%N 2>/dev/null || date +%s)"
+    probe_content="$(printf '%s' "$probe_key" \
+        | jq -Rsc '{"tillandsias-contract-probe":{type:"api",key:.}}')" \
+        || probe_status=1
+    if [ "$probe_status" -eq 0 ]; then
+        probe_output="$(
+            XDG_DATA_HOME="$probe_root/data" \
+            XDG_STATE_HOME="$probe_root/state" \
+            OPENCODE_DB=:memory: \
+            OPENCODE_AUTH_CONTENT="$probe_content" \
+            timeout 30 "$bin_path" auth list 2>&1
+        )" || probe_status=1
+    fi
+    auth_file="$probe_root/data/opencode/auth.json"
+    if [ "$probe_status" -eq 0 ] \
+        && { [ -e "$auth_file" ] || [ -L "$auth_file" ]; }; then
+        probe_status=1
+    fi
+    if [ "$probe_status" -eq 0 ] \
+        && ! printf '%s' "$probe_output" | grep -qF "tillandsias-contract-probe"; then
+        probe_status=1
+    fi
+    if [ "$probe_status" -eq 0 ] \
+        && ! printf '%s' "$probe_output" | grep -Eq '(^|[^0-9])1 credentials?([^0-9]|$)'; then
+        probe_status=1
+    fi
+    if [ "$probe_status" -eq 0 ] \
+        && grep -R -a -F -f <(printf '%s' "$probe_key") \
+            "$probe_root" >/dev/null 2>&1; then
+        probe_status=1
+    fi
+    rm -rf -- "$probe_root"
+    if [ "$probe_status" -ne 0 ] || [ -e "$probe_root" ]; then
+        trace_lifecycle "harness" "opencode AUTH CONTRACT BROKEN — env credential was not parsed cleanly without disk state"
+        return 1
+    fi
+    return 0
+}
+
+# Positive assertion for the credential actually injected into this lane. The
+# isolated probe compares OpenCode's reported count and provider IDs with the
+# in-memory JSON, checks both probe and real XDG paths for auth.json, and never
+# emits command output or credential values.
+opencode_actual_auth_ok() {
+    local bin_path="$1" expected_count providers provider
+    local probe_root probe_output normalized_output auth_file real_auth_file status=0
+    [ "${TILLANDSIAS_OPENCODE_AUTH_EXPECTED:-0}" = "1" ] || return 0
+    [ -n "${OPENCODE_AUTH_CONTENT:-}" ] || return 1
+
+    expected_count="$(printf '%s' "$OPENCODE_AUTH_CONTENT" \
+        | jq -er 'if type == "object" and length > 0 then length else error("empty") end')" \
+        || return 1
+    providers="$(printf '%s' "$OPENCODE_AUTH_CONTENT" | jq -er 'keys[]')" || return 1
+    probe_root="$(mktemp -d /tmp/tillandsias-opencode-auth-actual.XXXXXX)" || return 1
+    probe_output="$(
+        XDG_DATA_HOME="$probe_root/data" \
+        XDG_STATE_HOME="$probe_root/state" \
+        OPENCODE_DB=:memory: \
+        timeout 30 "$bin_path" auth list 2>&1
+    )" || status=1
+    normalized_output="$(printf '%s' "$probe_output" \
+        | sed $'s/\033\\[[0-9;]*[[:alpha:]]//g' \
+        | tr '[:upper:]' '[:lower:]')"
+    auth_file="$probe_root/data/opencode/auth.json"
+    real_auth_file="$(opencode_auth_file_path)"
+    if [ -e "$auth_file" ] || [ -L "$auth_file" ] \
+        || [ -e "$real_auth_file" ] || [ -L "$real_auth_file" ]; then
+        status=1
+    fi
+    if [ "$status" -eq 0 ] \
+        && ! printf '%s' "$normalized_output" \
+            | grep -Eq "(^|[^0-9])${expected_count} credentials?([^0-9]|$)"; then
+        status=1
+    fi
+    if [ "$status" -eq 0 ]; then
+        while IFS= read -r provider; do
+            if ! printf '%s' "$normalized_output" \
+                | grep -qF -- "$(printf '%s' "$provider" | tr '[:upper:]' '[:lower:]')"; then
+                status=1
+                break
+            fi
+        done <<<"$providers"
+    fi
+    rm -rf -- "$probe_root"
+    if [ "$status" -ne 0 ] || [ -e "$probe_root" ]; then
+        trace_lifecycle "credentials" "opencode: injected Vault credential failed the no-auth.json contract"
+        return 1
+    fi
+    trace_lifecycle "credentials" "opencode: Vault auth content parsed; auth.json absent"
+    return 0
+}
+
 harness_contract_help_cmd() {
     # Flags live on subcommands, so each harness needs its own help invocation.
     case "$1" in
@@ -1035,13 +1236,11 @@ harness_contract_flags() {
 }
 
 harness_contract_ok() {
-    # $1 = binary name. Returns 0 when every flag we pass still exists, or when
-    # no contract is declared for this harness. Never fails merely because help
-    # output could not be captured (offline/slow): a contract check that fails
-    # open on infrastructure noise would cause spurious rollbacks, so ambiguity
-    # is treated as "not disproven" and only a POSITIVE absence fails.
+    # $1 = binary name, optional $2 = exact binary path. Returns 0 when every
+    # flag we pass still exists, or when no contract is declared for this
+    # harness.
     local bin="$1"
-    local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
+    local bin_path="${2:-${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin}"
     local help_cmd flags help_out missing=""
     help_cmd="$(harness_contract_help_cmd "$bin")"
     flags="$(harness_contract_flags "$bin")"
@@ -1065,9 +1264,10 @@ harness_probe() {
     # $1 = binary name. Liveness (--version within a short timeout) AND the
     # contracts we depend on (order 439). Both must hold: a harness that starts
     # but silently ignores our flags is not usable, it just fails invisibly.
-    local bin_path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1"
+    local bin_path="${2:-${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1}"
     [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1 \
-        && harness_contract_ok "$1"
+        && harness_contract_ok "$1" "$bin_path" \
+        && { [ "$1" != "opencode" ] || opencode_auth_contract_ok "$bin_path"; }
 }
 
 harness_last_good_file() {
@@ -1084,8 +1284,8 @@ harness_record_last_good() {
     return 0
 }
 
-# ensure_forge_harnesses: npm-install/update agent harnesses (codex, claude-code,
-# opencode, openspec) to the LATEST version at every launch. Runs in the background
+# ensure_forge_harnesses: refresh agent harnesses through their declared channels
+# at launch. Runs in the background
 # so it never blocks the agent launch. Fail-soft: if npm is offline or the proxy
 # is unreachable, the baked/cached version is used silently (no hard fail).
 # A fresh install that fails the health probe rolls back to the recorded
@@ -1130,8 +1330,9 @@ ensure_forge_harnesses() {
     date +%s > "$update_stamp" 2>/dev/null || true
 
     # Official vendor installers are the source of truth for OpenCode and
-    # Claude.  They write only into the persistent harness-curl cache and are
-    # intentionally attempted on every launch; a warm cache makes this cheap.
+    # Claude. They write only into the persistent harness-curl cache. OpenCode
+    # is attempted every launch; Claude may use its bounded, version-matched
+    # currentness record so a recent warm launch performs zero network work.
     if declare -F curl_install_opencode >/dev/null 2>&1; then
         curl_install_opencode || trace_lifecycle "harness" "opencode curl refresh failed (using cache)"
     fi
@@ -1368,9 +1569,9 @@ harness_missing_fatal() {
 # enclave network/proxy does not exist during `podman build` (the original
 # reason these installers "failed in the Containerfile") — so the install
 # runs at LAUNCH with ephemerality + idempotency semantics:
-#   - the official installer runs every launch and is itself the idempotency
-#     layer: it resolves the current release and replaces the cached binary
-#     only when a NEWER one exists (warm restarts reuse instantly);
+#   - the official installer is the refresh source of truth; Claude may skip
+#     it for 600s only when the same locally validated version completed a
+#     prior official refresh (warm/current restarts reuse instantly);
 #   - installs land on the PERSISTENT tool-cache volume
 #     ($HOME/.cache/tillandsias-project), surviving container restarts;
 #   - offline / proxy-down: fall back to the cached binary silently
@@ -1379,69 +1580,403 @@ harness_missing_fatal() {
 # Codex/Antigravity stay on npm for now (operator: "maybe later").
 HARNESS_CURL_ROOT="$HOME/.cache/tillandsias-project/harness-curl"
 
+opencode_curl_last_good_path() {
+    printf '%s/opencode/last-good/opencode\n' "$HARNESS_CURL_ROOT"
+}
+
+opencode_record_curl_last_good() {
+    local bin_path="$1" last_good tmp
+    harness_probe opencode "$bin_path" || return 1
+    last_good="$(opencode_curl_last_good_path)"
+    mkdir -p "$(dirname "$last_good")" || return 1
+    tmp="${last_good}.tmp.$$"
+    if install -m 0755 "$bin_path" "$tmp" 2>/dev/null \
+        && mv -f -- "$tmp" "$last_good" 2>/dev/null; then
+        return 0
+    fi
+    rm -f -- "$tmp" 2>/dev/null || true
+    return 1
+}
+
+opencode_restore_curl_last_good() {
+    local target="$1" last_good
+    last_good="$(opencode_curl_last_good_path)"
+    [ -x "$last_good" ] || return 1
+    install -m 0755 "$last_good" "$target" 2>/dev/null || return 1
+    harness_probe opencode "$target"
+}
+
+opencode_validate_or_rollback() {
+    local bin="$1"
+    OPENCODE_ROLLBACK_USED=0
+    if [ -x "$bin" ] && harness_probe opencode "$bin"; then
+        opencode_record_curl_last_good "$bin" >/dev/null 2>&1 || true
+        return 0
+    fi
+    trace_lifecycle "harness" "opencode refresh FAILED auth contract — rolling back to last-good"
+    if opencode_restore_curl_last_good "$bin"; then
+        OPENCODE_ROLLBACK_USED=1
+        trace_lifecycle "harness" "opencode rollback to last-good OK"
+        return 0
+    fi
+    return 1
+}
+
 curl_install_opencode() {
     OC_BIN=""
-    local dir="$HARNESS_CURL_ROOT/opencode/bin" tmp errlog
+    local dir="$HARNESS_CURL_ROOT/opencode/bin" tmp errlog bin
+    local refresh_ok=0
     mkdir -p "$dir" 2>/dev/null || true
+    bin="$dir/opencode"
+    # Snapshot only a binary that passes liveness, flag, and the isolated
+    # OPENCODE_AUTH_CONTENT/no-auth.json contract. This survives an official
+    # installer replacing the cached binary with a release that starts but
+    # silently dropped the undocumented credential primitive.
+    if [ -x "$bin" ]; then
+        opencode_record_curl_last_good "$bin" >/dev/null 2>&1 || true
+    fi
     tmp="$(mktemp /tmp/opencode-install.XXXXXX 2>/dev/null || echo /tmp/opencode-install.sh)"
     errlog="$(mktemp /tmp/opencode-install-log.XXXXXX 2>/dev/null || echo /tmp/opencode-install.err)"
     # OPENCODE_INSTALL_DIR is the installer's documented target override; the
     # binary downloads from GitHub releases (opencode.ai + github.com are
     # both in the egress allowlist).
-    if curl -fsSL --max-time 60 https://opencode.ai/install -o "$tmp" 2>"$errlog" \
-       && OPENCODE_INSTALL_DIR="$dir" bash "$tmp" >>"$errlog" 2>&1 \
-       && [ -x "$dir/opencode" ]; then
-        trace_lifecycle "harness" "opencode curl-install OK ($("$dir/opencode" --version 2>/dev/null || echo '?'))"
-        rm -f "$tmp" "$errlog" 2>/dev/null || true
-    elif [ -x "$dir/opencode" ]; then
-        trace_lifecycle "harness" "opencode curl-install unreachable — reusing cached ($("$dir/opencode" --version 2>/dev/null || echo '?'))"
-        rm -f "$tmp" 2>/dev/null || true
-    else
-        trace_lifecycle "harness" "opencode curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
-        rm -f "$tmp" 2>/dev/null || true
-        return 1
+    if env -u OPENCODE_AUTH_CONTENT \
+        curl -fsSL --max-time 60 https://opencode.ai/install -o "$tmp" 2>"$errlog" \
+       && env -u OPENCODE_AUTH_CONTENT OPENCODE_INSTALL_DIR="$dir" \
+        bash "$tmp" >>"$errlog" 2>&1 \
+       && [ -x "$bin" ]; then
+        refresh_ok=1
     fi
-    OC_BIN="$dir/opencode"
-    return 0
+
+    if opencode_validate_or_rollback "$bin"; then
+        if [ "${OPENCODE_ROLLBACK_USED:-0}" -eq 1 ]; then
+            trace_lifecycle "harness" "opencode refresh rejected — reusing last-good ($("$bin" --version 2>/dev/null || echo '?'))"
+            rm -f "$tmp" "$errlog" 2>/dev/null || true
+        elif [ "$refresh_ok" -eq 1 ]; then
+            trace_lifecycle "harness" "opencode curl-install OK ($("$bin" --version 2>/dev/null || echo '?'))"
+            rm -f "$tmp" "$errlog" 2>/dev/null || true
+        else
+            trace_lifecycle "harness" "opencode curl-install unreachable — reusing cached ($("$bin" --version 2>/dev/null || echo '?'))"
+            rm -f "$tmp" 2>/dev/null || true
+        fi
+        OC_BIN="$bin"
+        return 0
+    fi
+
+    if [ ! -x "$bin" ]; then
+        trace_lifecycle "harness" "opencode curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+    else
+        trace_lifecycle "harness" "opencode auth contract FAILED and no usable last-good binary remains"
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+    return 1
 }
+
+claude_probe() {
+    # Claude's native launcher checks for and may install updates even for a
+    # `--version` health probe. Anthropic documents DISABLE_AUTOUPDATER=1;
+    # newer releases additionally support DISABLE_UPDATES=1 as the strict
+    # all-update-path guard. Scope both to probes only. The real foreground
+    # Claude process inherits neither variable, so its official launch-time
+    # updater remains enabled.
+    local bin="$1"
+    [ -x "$bin" ] \
+        && timeout 30 env DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1 \
+            "$bin" --version >/dev/null 2>&1
+}
+
+claude_version() {
+    local bin="$1" version
+    version="$(timeout 30 env DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1 \
+        "$bin" --version 2>/dev/null | head -1)" || version="?"
+    printf '%s\n' "${version:-?}"
+}
+
+claude_last_good_path() {
+    printf '%s/claude/bin/claude\n' "$HARNESS_CURL_ROOT"
+}
+
+claude_last_good_version_file() {
+    printf '%s/claude/last-good.version\n' "$HARNESS_CURL_ROOT"
+}
+
+claude_refresh_record_file() {
+    printf '%s/claude/refreshed.version-epoch\n' "$HARNESS_CURL_ROOT"
+}
+
+claude_record_refresh_current() {
+    local bin="$1" record version now tmp
+    claude_probe "$bin" || return 1
+    record="$(claude_refresh_record_file)"
+    version="$(claude_version "$bin" | awk '{print $1}')"
+    now="$(date +%s)"
+    [ -n "$version" ] || return 1
+    tmp="${record}.tmp.$$"
+    printf '%s %s\n' "$version" "$now" >"$tmp" 2>/dev/null \
+        && mv -f -- "$tmp" "$record" 2>/dev/null
+}
+
+claude_refresh_is_current() {
+    # "Current" is deliberately bounded: only a locally validated version
+    # that completed the official installer recently may skip install.sh.
+    # A foreground Claude launch keeps its own updater enabled; if that changes
+    # the version, the version mismatch forces a new official refresh here.
+    local bin="$1" record recorded_version recorded_at version now age
+    local max_age="${TILLANDSIAS_CLAUDE_REFRESH_MAX_AGE_SECONDS:-600}"
+    record="$(claude_refresh_record_file)"
+    [ -r "$record" ] && claude_probe "$bin" || return 1
+    read -r recorded_version recorded_at <"$record" || return 1
+    version="$(claude_version "$bin" | awk '{print $1}')"
+    now="$(date +%s)"
+    case "$recorded_at:$max_age" in
+        *[!0-9:]* | :* | *:) return 1 ;;
+    esac
+    age=$((now - recorded_at))
+    [ "$age" -ge 0 ] && [ "$age" -le "$max_age" ] \
+        && [ "$version" = "$recorded_version" ]
+}
+
+claude_session_refresh_stamp() {
+    # Background ensure + foreground require run in the same container and
+    # therefore share /tmp and `$$` (Bash keeps $$ stable in subshells).
+    # Sibling forge containers have isolated /tmp, while the persistent lock
+    # below coalesces their simultaneous refreshes.
+    printf '%s\n' "${TILLANDSIAS_CLAUDE_REFRESH_STAMP:-/tmp/tillandsias-claude-refresh.$$.done}"
+}
+
+claude_restore_cached_launcher() {
+    local share="$HARNESS_CURL_ROOT/claude/share"
+    local launcher="$HOME/.local/bin/claude" version
+    mkdir -p "$share" "$HOME/.local/bin" "$HOME/.local/share" 2>/dev/null || true
+
+    # The share path itself is ephemeral in each forge container. Reattach it
+    # to the persistent versions/ directory before asking the official
+    # installer whether an update is needed; otherwise the installer sees a
+    # fresh machine and downloads the complete ~273 MB distribution again.
+    if [ -e "$HOME/.local/share/claude" ] && [ ! -L "$HOME/.local/share/claude" ]; then
+        rm -rf "$HOME/.local/share/claude" 2>/dev/null || true
+    fi
+    ln -sfn "$share" "$HOME/.local/share/claude" 2>/dev/null || true
+
+    [ -x "$launcher" ] && return 0
+    version="$(find "$share/versions" -mindepth 1 -maxdepth 1 -type f \
+        -perm -u+x -printf '%f\n' 2>/dev/null | LC_ALL=C sort -V | tail -1)"
+    [ -n "$version" ] || return 1
+    ln -sfn "$HOME/.local/share/claude/versions/$version" "$launcher" 2>/dev/null
+    [ -x "$launcher" ]
+}
+
+claude_record_curl_last_good() {
+    local bin="$1" last_good version_file version recorded resolved tmp
+    claude_probe "$bin" || return 1
+    last_good="$(claude_last_good_path)"
+    version_file="$(claude_last_good_version_file)"
+    version="$(claude_version "$bin" | awk '{print $1}')"
+    recorded="$(cat "$version_file" 2>/dev/null || true)"
+    if [ -x "$last_good" ] && [ -n "$version" ] && [ "$version" = "$recorded" ]; then
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$last_good")" || return 1
+    resolved="$(readlink -f "$bin" 2>/dev/null || printf '%s' "$bin")"
+    tmp="${last_good}.tmp.$$"
+    if install -m 0755 "$resolved" "$tmp" 2>/dev/null \
+        && mv -f -- "$tmp" "$last_good" 2>/dev/null; then
+        printf '%s\n' "$version" >"$version_file" 2>/dev/null || true
+        return 0
+    fi
+    rm -f -- "$tmp" 2>/dev/null || true
+    return 1
+}
+
+claude_validate_or_rollback() {
+    local candidate="$1" last_good
+    CLAUDE_ROLLBACK_USED=0
+    if claude_probe "$candidate"; then
+        claude_record_curl_last_good "$candidate" >/dev/null 2>&1 || true
+        CC_BIN="$candidate"
+        return 0
+    fi
+
+    last_good="$(claude_last_good_path)"
+    if claude_probe "$last_good"; then
+        CLAUDE_ROLLBACK_USED=1
+        CC_BIN="$last_good"
+        trace_lifecycle "harness" "claude refresh FAILED health probe — reusing last-good"
+        return 0
+    fi
+    return 1
+}
+
+claude_run_locked_refresh() (
+    # Subshell ownership lets the lock cleanup trap cover every return and
+    # HUP/INT/TERM path without overwriting the entrypoint's own traps.
+    local refresh_lock="$1" result_file="$2" session_stamp="$3"
+    local owner_file="$refresh_lock/owner.pid" lock_owner="$BASHPID"
+    local launcher="$HOME/.local/bin/claude"
+    local tmp="" errlog="" refresh_ok=0
+    local installer_pid=""
+    local install_timeout="${TILLANDSIAS_CLAUDE_INSTALL_TIMEOUT_SECONDS:-600}"
+    case "$install_timeout" in
+        *[!0-9]* | 0 | "") install_timeout=600 ;;
+    esac
+    mkdir "$refresh_lock" 2>/dev/null || return 75
+    printf '%s\n' "$lock_owner" >"$owner_file" 2>/dev/null || true
+
+    # shellcheck disable=SC2329 # invoked indirectly by trap
+    _claude_refresh_cleanup() {
+        if [ -n "$installer_pid" ]; then
+            kill "$installer_pid" 2>/dev/null || true
+            wait "$installer_pid" 2>/dev/null || true
+        fi
+        [ -n "$tmp" ] && rm -f "$tmp" 2>/dev/null || true
+        [ -n "$errlog" ] && rm -f "$errlog" 2>/dev/null || true
+        if [ "$(cat "$owner_file" 2>/dev/null || true)" = "$lock_owner" ]; then
+            rm -f "$owner_file" 2>/dev/null || true
+            rmdir "$refresh_lock" 2>/dev/null || true
+        fi
+    }
+    trap _claude_refresh_cleanup EXIT
+    trap 'exit 130' HUP INT TERM
+
+    # Preserve the current validated binary before the installer is allowed to
+    # replace its launcher or versions directory.
+    if claude_probe "$launcher"; then
+        claude_record_curl_last_good "$launcher" >/dev/null 2>&1 || true
+    fi
+
+    tmp="$(mktemp /tmp/claude-install.XXXXXX 2>/dev/null || echo /tmp/claude-install.sh)"
+    errlog="$(mktemp /tmp/claude-install-log.XXXXXX 2>/dev/null || echo /tmp/claude-install.err)"
+    if curl -fsSL --max-time 60 https://claude.ai/install.sh -o "$tmp" 2>"$errlog"; then
+        timeout --kill-after=15 "$install_timeout" bash "$tmp" >>"$errlog" 2>&1 &
+        installer_pid=$!
+        if wait "$installer_pid"; then
+            installer_pid=""
+            [ -x "$launcher" ] && refresh_ok=1
+        else
+            installer_pid=""
+        fi
+    fi
+
+    if claude_validate_or_rollback "$launcher"; then
+        : >"$session_stamp"
+        printf '%s\n' "$CC_BIN" >"$result_file"
+        if [ "${CLAUDE_ROLLBACK_USED:-0}" -eq 1 ]; then
+            trace_lifecycle "harness" "claude refresh rejected — reusing last-good ($(claude_version "$CC_BIN"))"
+        elif [ "$refresh_ok" -eq 1 ]; then
+            claude_record_refresh_current "$CC_BIN" >/dev/null 2>&1 || true
+            trace_lifecycle "harness" "claude curl-install OK ($(claude_version "$CC_BIN"))"
+        else
+            trace_lifecycle "harness" "claude curl-install unreachable — reusing cached ($(claude_version "$CC_BIN"))"
+        fi
+        return 0
+    fi
+
+    trace_lifecycle "harness" "claude curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+    return 1
+)
 
 curl_install_claude() {
     CC_BIN=""
-    local share="$HARNESS_CURL_ROOT/claude/share" bindir="$HARNESS_CURL_ROOT/claude/bin"
-    local tmp errlog resolved launcher="$HOME/.local/bin/claude"
-    mkdir -p "$share" "$bindir" "$HOME/.local/bin" "$HOME/.local/share" 2>/dev/null || true
-    # The native installer writes versioned dists into ~/.local/share/claude
-    # and a launcher at ~/.local/bin/claude. Point the share dir at the
-    # persistent volume BEFORE the installer runs so every version it lays
-    # down survives the container.
-    if [ ! -L "$HOME/.local/share/claude" ]; then
-        rm -rf "$HOME/.local/share/claude" 2>/dev/null || true
-        ln -sfn "$share" "$HOME/.local/share/claude" 2>/dev/null || true
-    fi
-    tmp="$(mktemp /tmp/claude-install.XXXXXX 2>/dev/null || echo /tmp/claude-install.sh)"
-    errlog="$(mktemp /tmp/claude-install-log.XXXXXX 2>/dev/null || echo /tmp/claude-install.err)"
-    if curl -fsSL --max-time 60 https://claude.ai/install.sh -o "$tmp" 2>"$errlog" \
-       && bash "$tmp" >>"$errlog" 2>&1 \
-       && [ -x "$launcher" ]; then
-        trace_lifecycle "harness" "claude curl-install OK ($("$launcher" --version 2>/dev/null || echo '?'))"
-        # Cache the resolved launcher for offline restarts (it may be a
-        # binary or a symlink into the share dir — resolve, then copy).
-        resolved="$(readlink -f "$launcher" 2>/dev/null || echo "$launcher")"
-        install -m 0755 "$resolved" "$bindir/claude" 2>/dev/null || true
-        rm -f "$tmp" "$errlog" 2>/dev/null || true
-        CC_BIN="$launcher"
+    local root="$HARNESS_CURL_ROOT/claude" launcher="$HOME/.local/bin/claude"
+    local refresh_lock="$root/refresh.lock" session_stamp result_file
+    local refresh_status waited=0 stale_reclaimed=0
+    local wait_limit="${TILLANDSIAS_CLAUDE_REFRESH_WAIT_SECONDS:-900}"
+    case "$wait_limit" in
+        *[!0-9]* | 0 | "") wait_limit=900 ;;
+    esac
+    session_stamp="$(claude_session_refresh_stamp)"
+    result_file="$(mktemp /tmp/claude-refresh-result.XXXXXX 2>/dev/null \
+        || echo "/tmp/claude-refresh-result.$$")"
+    rm -f "$result_file" 2>/dev/null || true
+    mkdir -p "$root" "$root/bin" 2>/dev/null || true
+    claude_restore_cached_launcher >/dev/null 2>&1 || true
+
+    # A different container may already have completed and validated the same
+    # official version moments ago. The bounded version+epoch record makes this
+    # warm/current path zero-network across launches, not merely coalesced
+    # within one process.
+    if claude_refresh_is_current "$launcher" \
+        && claude_validate_or_rollback "$launcher"; then
+        : >"$session_stamp"
+        rm -f "$result_file" 2>/dev/null || true
+        trace_lifecycle "harness" "claude refresh current — reusing persistent version ($(claude_version "$CC_BIN"))"
         return 0
     fi
-    rm -f "$tmp" 2>/dev/null || true
-    if [ -x "$bindir/claude" ]; then
-        trace_lifecycle "harness" "claude curl-install unreachable — reusing cached ($("$bindir/claude" --version 2>/dev/null || echo '?'))"
-        install -m 0755 "$bindir/claude" "$launcher" 2>/dev/null || true
-        CC_BIN="$launcher"
-        [ -x "$CC_BIN" ] || CC_BIN="$bindir/claude"
+
+    # The selected entrypoint calls require_claude in the foreground while
+    # ensure_forge_harnesses is already refreshing in the background. A
+    # successful refresh in this container satisfies both calls.
+    if [ -f "$session_stamp" ] && claude_validate_or_rollback "$launcher"; then
+        rm -f "$result_file" 2>/dev/null || true
         return 0
     fi
-    trace_lifecycle "harness" "claude curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
-    return 1
+
+    # Serialize the official installer across both calls and across sibling
+    # forge containers sharing the project tool cache.
+    if claude_run_locked_refresh "$refresh_lock" "$result_file" "$session_stamp"; then
+        IFS= read -r CC_BIN <"$result_file"
+        rm -f "$result_file" 2>/dev/null || true
+        return 0
+    else
+        refresh_status=$?
+    fi
+
+    if [ "$refresh_status" -ne 75 ]; then
+        rm -f "$result_file" 2>/dev/null || true
+        return "$refresh_status"
+    fi
+
+    if [ -d "$refresh_lock" ] \
+        && [ -n "$(find "$refresh_lock" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then
+        rm -f "$refresh_lock/owner.pid" 2>/dev/null || true
+        if rmdir "$refresh_lock" 2>/dev/null; then
+            stale_reclaimed=1
+        fi
+    fi
+
+    # A warm foreground launch must not wait behind the background refresh,
+    # but the live launcher is mutable while that owner runs. Select only the
+    # independent last-good snapshot here; never hand the foreground a symlink
+    # the owner may replace between this probe and exec. Only a true cold cache
+    # with no validated snapshot waits for the bounded owner result.
+    if [ "$stale_reclaimed" -eq 0 ]; then
+        local active_last_good
+        active_last_good="$(claude_last_good_path)"
+        if claude_probe "$active_last_good"; then
+            CC_BIN="$active_last_good"
+            rm -f "$result_file" 2>/dev/null || true
+            return 0
+        fi
+    fi
+
+    while [ -d "$refresh_lock" ] && [ "$waited" -lt "$wait_limit" ]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    # A sibling completed while we waited. Reattach its persistent version
+    # and use it without invoking the installer a second time.
+    if [ "$stale_reclaimed" -eq 0 ]; then
+        claude_restore_cached_launcher >/dev/null 2>&1 || true
+        if claude_validate_or_rollback "$launcher"; then
+            : >"$session_stamp"
+            rm -f "$result_file" 2>/dev/null || true
+            return 0
+        fi
+    fi
+
+    # The owner failed without leaving a usable candidate. Make one bounded
+    # retry as the new owner; the helper still guarantees lock cleanup.
+    if claude_run_locked_refresh "$refresh_lock" "$result_file" "$session_stamp"; then
+        IFS= read -r CC_BIN <"$result_file"
+        rm -f "$result_file" 2>/dev/null || true
+        return 0
+    else
+        refresh_status=$?
+    fi
+    rm -f "$result_file" 2>/dev/null || true
+    return "$refresh_status"
 }
 
 require_opencode() {

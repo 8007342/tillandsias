@@ -373,6 +373,15 @@ mod tests {
             for line in cf_content.lines() {
                 let trimmed = line.trim();
                 if trimmed.starts_with("COPY ") {
+                    // `COPY --from=<stage|image>` sources come from another
+                    // build stage, not the build context — the embedded-asset
+                    // contract does not apply to them.
+                    if trimmed
+                        .split_whitespace()
+                        .any(|token| token.starts_with("--from="))
+                    {
+                        continue;
+                    }
                     let tokens = trimmed.split_whitespace().skip(1);
                     let mut sources = Vec::new();
                     let mut dest = None;

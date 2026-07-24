@@ -70,6 +70,8 @@ require_opencode
 [ -x "$OC_BIN" ] || harness_missing_fatal opencode
 apply_opencode_config_overlay
 require_openspec
+prepare_opencode_vault_auth
+opencode_actual_auth_ok "$OC_BIN"
 
 trace_lifecycle "entrypoint" "opencode web ready"
 

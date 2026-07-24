@@ -150,7 +150,7 @@ specs:
   - litmus:codex-forge-yolo-shape
   - litmus:forge-agent-result-format
   coverage_ratio: 100
-  last_verified: '2026-07-04'
+  last_verified: '2026-07-24'
 - spec_id: cli-bash-mode
   status: obsolete
   litmus_tests: []
@@ -189,12 +189,16 @@ specs:
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
   - litmus:harness-curl-install-shape
+  - litmus:harness-byte-cheap
   - litmus:forge-firstrun-prebuilt-tools-arch-shape
   - litmus:brew-ondemand-tools-shape
   - litmus:harness-rollback-shape
   - litmus:forge-validation-profile
+  - litmus:opencode-vault-auth-content
+  - litmus:codex-safe-state-shape
+  - litmus:forge-agent-result-format
   coverage_ratio: 80
-  last_verified: '2026-07-14'
+  last_verified: '2026-07-24'
 - spec_id: dev-build
   status: active
   litmus_tests:
@@ -287,8 +291,9 @@ specs:
   - litmus:forge-as-only-runtime
   - litmus:container-start-health
   - litmus:launch-artifacts-untracked
+  - litmus:forge-agent-result-format
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-07-24'
 - spec_id: forge-cache-architecture
   status: obsolete
   litmus_tests: []
@@ -396,12 +401,13 @@ specs:
   - litmus:git-mirror-ref-convergence
   - litmus:git-mirror-yaml-gate-shape
   - litmus:git-mirror-relay-verified-ack
+  - litmus:git-mirror-vault-agent-auto-auth
   - litmus:forge-gitconfig-bidirectional-quarantine
   - litmus:forge-standard-gitconfig-path
   - litmus:forge-config-trust-cross-platform-parity
   - litmus:forge-gitdir-staging-chown
   coverage_ratio: 83
-  last_verified: '2026-07-20'
+  last_verified: '2026-07-23'
 - spec_id: github-credential-health
   status: active
   litmus_tests:
@@ -558,8 +564,9 @@ specs:
   - litmus:podman-build-command-shape
   - litmus:podman-web-launch-profile
   - litmus:podman-path-availability
+  - litmus:opencode-vault-auth-content
   coverage_ratio: 77
-  last_verified: '2026-05-12'
+  last_verified: '2026-07-23'
 - spec_id: nix-builder
   status: active
   litmus_tests:
@@ -663,13 +670,14 @@ specs:
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
   coverage_ratio: 75
-  last_verified: '2026-05-30'
+  last_verified: '2026-07-23'
 - spec_id: transparent-https-caching
   status: active
   litmus_tests:
   - litmus:forge-runtime-ca-trust
+  - litmus:proxy-container-shape
   coverage_ratio: 100
-  last_verified: '2026-07-14'
+  last_verified: '2026-07-23'
 - spec_id: remote-projects
   status: active
   litmus_tests:
@@ -928,14 +936,17 @@ specs:
   litmus_tests:
   - litmus:credential-isolation
   - litmus:podman-secrets-integration-shape
+  - litmus:opencode-vault-auth-content
+  - litmus:git-mirror-vault-agent-auto-auth
   coverage_ratio: 75
-  last_verified: '2026-06-08'
+  last_verified: '2026-07-23'
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
   - litmus:vault-auto-unseal-no-prompt
   - litmus:codex-api-key-env-var
   - litmus:vault-cli-verifies-tls
+  - litmus:default-vault-cli-security
   - litmus:vault-policy-forge-cannot-read-github-token
   - litmus:git-mirror-safe-refspec-push
   - litmus:vault-github-token-capture-shape
@@ -944,8 +955,10 @@ specs:
   - litmus:vault-https-shape
   - litmus:vault-entrypoint-hardened-shape
   - litmus:vault-recreate-mutex
+  - litmus:opencode-vault-auth-content
+  - litmus:git-mirror-vault-agent-auto-auth
   coverage_ratio: 100
-  last_verified: '2026-07-09'
+  last_verified: '2026-07-23'
 - spec_id: headless-mode
   status: active
   litmus_tests:

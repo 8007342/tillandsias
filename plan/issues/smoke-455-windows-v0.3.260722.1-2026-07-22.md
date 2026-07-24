@@ -86,3 +86,19 @@ Login-state 3-state flip verified live post-reset (menu advanced past
 GitHub Login after one login on a healthy vault); the earlier
 login-succeeds-but-menu-stuck shape was the windows-260717-2 vault skew
 (annotated on that packet), not the login flow.
+
+## Session-close findings (2026-07-23, BigPickle graceful-end validation)
+
+- GRACEFUL END: VERIFIED. Mirror refs == GitHub heads at session close
+  (f55ba9b9 + dec1175e relayed pre-expiry, nothing stranded); lane
+  containers cleaned; shared stack retained for the operator's next lane.
+- Order 424 max-TTL: renewer expired ~1h in (evidence on the packet); the
+  RECOVERY path proved live — the operator's next lane launch re-minted
+  the mirror token (fresh git container + refreshed receive hooks).
+- Order 313: inference now Up and serving (qwen2.5:0.5b) after the
+  volume-ownership fix — first fully-green enclave on Windows.
+- NEW DAILY v0.3.260723.1 appeared (linux coordinator) — the 455 Windows
+  PASS re-smoke target now exists.
+- Terminal steal (operator report): `wt new-tab` without `-w` targeted the
+  most-recent window — codex lane opened inside BigPickle's finished
+  terminal. Fixed: `-w new` per lane (own window), test pinned.

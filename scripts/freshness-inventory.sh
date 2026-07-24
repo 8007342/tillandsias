@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# freshness: auditor=forge-forge-tillandsias-codex-20260723T0402Z date=2026-07-23 verdict=refreshed scope=revalidated inventory paths, first-record grammar, advisory output contract, local-ci consumer, and 931-component runtime
 # =============================================================================
 # freshness-inventory.sh — FRESHNESS rung 2: component inventory + coverage
 #

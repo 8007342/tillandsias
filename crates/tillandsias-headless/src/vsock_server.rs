@@ -651,7 +651,13 @@ async fn handle_connection(
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
-            build_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            // Report the workspace VERSION (repo-root VERSION file), NOT this
+            // crate's CARGO_PKG_VERSION. The host tray displays + compares
+            // against workspace_version() (menu "(Update Pending)" gate,
+            // menu_state.rs); reporting the per-crate version here (e.g.
+            // "0.3.260721" vs the host's "0.3.260721.1") produced a permanent
+            // spurious version-skew. Both ends must speak the one product version.
+            build_version: Some(tillandsias_secure_channel::workspace_version().to_string()),
         },
     };
     if let Err(err) = write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await {
@@ -1142,7 +1148,16 @@ async fn handle_connection(
                 // keychain, leaving subsequent boots unable to unseal (HTTP 400).
                 let (unseal_share_b64, root_token) = {
                     let mut result = crate::vault_bootstrap::get_pending_handover();
-                    if result.0.is_none() {
+                    // Slowdown audit 2026-07-23: only the FIRST request per
+                    // process may poll (genuine first-boot window). After a
+                    // handover reply has been delivered once, every later
+                    // fresh connection is steady state — the old
+                    // unconditional loop slept its full 8s on EVERY connect
+                    // (8.1s per --status-once; the tray start paid it twice
+                    // serially).
+                    if result.0.is_none()
+                        && !crate::vault_bootstrap::handover_already_delivered()
+                    {
                         for _ in 0..8u8 {
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                             result = crate::vault_bootstrap::get_pending_handover();
@@ -1153,7 +1168,11 @@ async fn handle_connection(
                     }
                     result
                 };
-                crate::vault_bootstrap::clear_pending_handover();
+                let delivered_unseal_share =
+                    crate::vault_bootstrap::handover_reply_delivers_unseal_share(
+                        unseal_share_b64.as_deref(),
+                    );
+                crate::vault_bootstrap::clear_pending_handover(delivered_unseal_share);
 
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
@@ -1587,6 +1606,25 @@ mod tests {
                 .count(),
             1,
             "handle_connection must have exactly one post-store PTY cleanup funnel"
+        );
+    }
+
+    #[test]
+    fn empty_vault_handover_reply_keeps_later_first_boot_retry_eligible() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
+        let handler = source
+            .split("ControlMessage::GetVaultHandover { seq } =>")
+            .nth(1)
+            .and_then(|tail| tail.split("ControlMessage::").next())
+            .expect("GetVaultHandover handler source");
+        assert!(
+            handler.contains("handover_reply_delivers_unseal_share(")
+                && handler.contains("unseal_share_b64.as_deref()"),
+            "the handler must classify actual share delivery before closing the retry window"
+        );
+        assert!(
+            handler.contains("clear_pending_handover(delivered_unseal_share)"),
+            "an empty timeout reply must not be recorded as a delivered handover"
         );
     }
 

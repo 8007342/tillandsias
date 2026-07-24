@@ -3505,6 +3505,12 @@ fn terminal_title(intent: &PtyIntent, project: Option<&str>) -> String {
 /// wrapper feeds this to `wt.exe` (with a bare-console fallback if wt is absent).
 fn wt_terminal_argv(distro: &str, title: &str, in_vm_argv: &[String]) -> Vec<String> {
     let mut v = vec![
+        // `-w new`: every lane gets its OWN Terminal window. Bare `new-tab`
+        // targets the most-recent wt window — the operator's fresh codex
+        // lane opened as a tab inside the finished BigPickle terminal and
+        // "stole" it (live report 2026-07-23).
+        "-w".to_string(),
+        "new".to_string(),
         "new-tab".to_string(),
         "--title".to_string(),
         title.to_string(),
@@ -4508,6 +4514,8 @@ mod tests {
         assert_eq!(
             argv,
             vec![
+                "-w",
+                "new",
                 "new-tab",
                 "--title",
                 "Tillandsias \u{2014} foo",

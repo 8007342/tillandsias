@@ -130,7 +130,15 @@ fn apply_status_text_main_thread(
     if let Some(handle) = status_item.lock().unwrap().as_ref()
         && let Some(button) = unsafe { handle.0.button(mtm) }
     {
-        unsafe { button.setToolTip(Some(&label)) };
+        // Tooltip carries the build version + status so a hover confirms both
+        // (parity with windows-tray `compose_tooltip`). The menu row shows the
+        // bare chip; the tooltip prefixes "Tillandsias <version>".
+        let tooltip = NSString::from_str(&format!(
+            "Tillandsias {}\n{}",
+            tillandsias_secure_channel::workspace_version(),
+            text
+        ));
+        unsafe { button.setToolTip(Some(&tooltip)) };
     }
 }
 
@@ -774,6 +782,13 @@ const TILLANDSIAS_GUEST_CID: u32 = 3;
 /// LARGE ORANGE CIRCLE + " Reconnecting to your workspace…").
 const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F7E0} Reconnecting to your workspace\u{2026}";
 
+/// Curated chip shown after the VM process starts, while the host waits for the
+/// in-VM headless to answer on vsock (spec vm-provisioning-lifecycle
+/// ux.condensed-status "Connecting…"). Distinct from
+/// `WIRE_UNREACHABLE_CHIP_TEXT`, which is a *mid-session* loss after the guest
+/// was already ready.
+const CONNECTING_CHIP_TEXT: &str = "\u{1F535} Connecting\u{2026}";
+
 /// How long `VzRuntime::stop` waits for an orderly drain before
 /// escalating to a force-stop. Documented in
 /// `cheatsheets/runtime/tray-state-machine.md` as 60s for the
@@ -1180,6 +1195,37 @@ async fn run_pty_attach(
     let session = PtySession::open(Arc::new(transport), &alloc, &router, &opts)
         .map_err(|e| format!("PtyOpen: {e}"))?;
 
+    // Window-resize forwarding. The guest child starts at the 24x80 default
+    // above; once Terminal.app + `screen` attach to the slave, the operator's
+    // REAL terminal size (and every later resize) lands on the shared PTY
+    // winsize. The tray is a GUI process with no controlling tty, so it never
+    // receives SIGWINCH — read the master winsize locally and relay changes to
+    // the guest so the child TUI repaints at the true size instead of clipping
+    // at 24x80. This is a cheap LOCAL ioctl, not a guest round-trip: it only
+    // touches the wire (one `PtyResize`) on an actual change. The detached
+    // handles outlive the `pump_io` move below; the loop ends when the master
+    // fd closes or the transport drops (session over).
+    {
+        let winsize_reader = master.winsize_reader();
+        let resize_sender = session.resize_sender();
+        tokio::spawn(async move {
+            let mut last: (u16, u16) = (24, 80);
+            loop {
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                match winsize_reader.get() {
+                    Ok(size) if size != last && size.0 > 0 && size.1 > 0 => {
+                        last = size;
+                        if resize_sender.resize(size.0, size.1).is_err() {
+                            break; // transport gone → session ended
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => break, // master fd closed → session ended
+                }
+            }
+        });
+    }
+
     let _pump_join = pump_io(session, master);
     Ok(slave_path)
 }
@@ -1241,7 +1287,14 @@ async fn run_start(
         eprintln!("[tillandsias-tray] Start VM: Fedora Cloud image ready");
     }
 
+    // Host-visible boot phases (parity with windows-tray's StartingVm/
+    // Connecting reports): the guest OS boot + first vsock-agent handshake is a
+    // multi-second (longer when cold) window that was previously silent on the
+    // chip. Emit the curated phases so the status keeps moving instead of
+    // looking stalled.
+    on_phase("Starting Fedora Linux");
     vz.start().await?;
+    on_phase("Connecting");
     *vm_slot.lock().unwrap() = Some(vz);
     Ok(())
 }
@@ -1442,6 +1495,10 @@ impl TrayActionHost {
                     }
                 };
                 if flipped {
+                    // Anchor the login grace window (see apply_login_state) so the
+                    // prompt confirm-poll doesn't revert this fresh LoggingIn to
+                    // LoggedOut before the user finishes the interactive paste.
+                    mark_login_started();
                     let ivars = self.ivars();
                     dispatch_rebuild(
                         &ivars.menu_state,
@@ -1512,6 +1569,12 @@ impl TrayActionHost {
         let ivars = self.ivars();
         let text = clamp_tray_status_chip(text.into());
         *ivars.status_text.lock().unwrap() = text.clone();
+        // Keep MenuState's status row in sync so a menu rebuild during this
+        // phase doesn't snap the chip back to a stale label (parity with
+        // apply_vm_status, which already syncs it on the poll/push path).
+        if let Ok(mut guard) = ivars.menu_state.lock() {
+            guard.status_text = text.clone();
+        }
         let status_item = ivars.status_item.clone();
         let status_menu_item = ivars.status_menu_item.clone();
         dispatch_to_main_thread(move || {
@@ -1590,12 +1653,18 @@ impl TrayActionHost {
         let phase_status_text = status_text_slot.clone();
         let phase_status_item = status_item_slot.clone();
         let phase_status_menu_item = status_menu_item_slot.clone();
+        let phase_menu_state = menu_state_slot.clone();
         let on_phase: Box<dyn Fn(&str) + Send + Sync> = Box::new(move |phase: &str| {
             let text = format!("\u{1F535} {phase}\u{2026}");
             let text_for_dispatch = text.clone();
             let status_text = phase_status_text.clone();
             let status_item = phase_status_item.clone();
             let status_menu_item = phase_status_menu_item.clone();
+            // Sync MenuState so a mid-provision rebuild keeps this live phase
+            // instead of snapping back to the initial boot label.
+            if let Ok(mut guard) = phase_menu_state.lock() {
+                guard.status_text = text.clone();
+            }
             dispatch_to_main_thread(move || {
                 *status_text.lock().unwrap() = text_for_dispatch.clone();
                 apply_status_text_main_thread(&text_for_dispatch, &status_item, &status_menu_item);
@@ -1618,7 +1687,12 @@ impl TrayActionHost {
             let initial_text = match &result {
                 Ok(()) => {
                     eprintln!("[tillandsias-tray] {label_done}: VM is running");
-                    vm_phase_status_text(tillandsias_control_wire::VmPhase::Starting, false)
+                    // The VM process is up; we're now waiting for the in-VM
+                    // headless to answer on vsock. Show "Connecting…" (not a
+                    // static "Starting…") so the boot→ready window reads as
+                    // active progress, not a stall. The poller/push flips this
+                    // to the live VmPhase the moment the guest replies.
+                    CONNECTING_CHIP_TEXT.to_string()
                 }
                 Err(e) => {
                     eprintln!("[tillandsias-tray] {label_done} failed: {e}");
@@ -1922,19 +1996,69 @@ fn map_login_state(
     }
 }
 
+/// Unix-epoch milliseconds of the most recent GitHub-login click that flipped
+/// the chip to the transitional `LoggingIn` state (0 = no login in flight).
+/// Anchors the grace window in [`apply_login_state`] so the prompt login-confirm
+/// poll doesn't downgrade a fresh `LoggingIn` to `LoggedOut` while the user is
+/// still completing the interactive `gh auth login` paste. macOS analog of the
+/// windows-tray login fast-poll guard (wave-review 2026-07-22 finding #2).
+static LOGIN_STARTED_AT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How long after a login click a `LoggedOut` observation is treated as "the
+/// user hasn't finished the interactive paste yet" and ignored. `LoggedIn` is
+/// always applied immediately, so a real login still resolves in ~1-2s.
+///
+/// Kept modest (covers the name+email+PAT prompt sequence) but bounded: if the
+/// login FAILS to persist a token, this window would otherwise mask the failure
+/// as "Logging In". The authoritative failure surface is the login terminal
+/// itself (it now stays open ~10s with the error — see pty/mod.rs), so the chip
+/// only needs to hold long enough to avoid mid-interaction flicker, then fall
+/// back to the actionable "GitHub Login" leaf. (A tighter fix — ending the grace
+/// exactly when the login PTY session closes — is a follow-up.)
+const LOGIN_GRACE: Duration = Duration::from_secs(60);
+
+/// Record that a GitHub-login flow just started (chip flipped to `LoggingIn`).
+fn mark_login_started() {
+    LOGIN_STARTED_AT_MS.store(now_unix_ms(), std::sync::atomic::Ordering::SeqCst);
+}
+
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// Apply a live login-state observation — from a poll reply or an
 /// unrequested `LoginStatePush` frame — to the shared `MenuState`. Returns
 /// whether the menu needs a rebuild (state changed); idempotent on repeat.
+///
+/// Grace window (login-stuck fix 2026-07-23): while a login click is fresh, a
+/// `LoggedOut` observation means "the interactive paste isn't done yet", not
+/// "logged out" — ignore it so the ~2s prompt-confirm poll can't flip the
+/// transitional `LoggingIn` chip back to `LoggedOut` mid-flow. `LoggedIn` is
+/// always applied immediately; `LoggedOut` applies once the grace window ends.
 fn apply_login_state(
     login: tillandsias_host_shell::menu_state::GithubLoginState,
     menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
 ) -> bool {
+    use tillandsias_host_shell::menu_state::GithubLoginState;
     let mut guard = menu_state.lock().unwrap();
+    if matches!(login, GithubLoginState::LoggedOut) && guard.login == GithubLoginState::LoggingIn {
+        let started = LOGIN_STARTED_AT_MS.load(std::sync::atomic::Ordering::SeqCst);
+        if started != 0 && now_unix_ms().saturating_sub(started) < LOGIN_GRACE.as_millis() as u64 {
+            // Still within the grace window — keep showing LoggingIn.
+            return false;
+        }
+    }
     if guard.login == login {
         return false;
     }
     guard.login = login;
     drop(guard);
+    // Login resolved (or otherwise changed) — clear the grace anchor so later
+    // observations apply immediately.
+    LOGIN_STARTED_AT_MS.store(0, std::sync::atomic::Ordering::SeqCst);
     eprintln!("[tillandsias-tray] github-login: menu_state updated");
     true
 }
@@ -2229,10 +2353,10 @@ async fn run_push_listener(
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
             if let Some(ref gv) = guest_version {
-                if gv != env!("CARGO_PKG_VERSION") {
+                if gv != tillandsias_secure_channel::workspace_version() {
                     tracing::warn!(
                         "build version skew: tray={} guest={}",
-                        env!("CARGO_PKG_VERSION"),
+                        tillandsias_secure_channel::workspace_version(),
                         gv
                     );
                 }
@@ -2621,33 +2745,41 @@ fn spawn_vm_status_poller(
                     // actual error ticks, no flapping when the wire
                     // is steady-state ok or steady-state broken.
                     eprintln!("[tillandsias-tray] vm-status poll: {e}");
-                    {
-                        let mut guard = menu_state.lock().unwrap();
-                        if guard.podman_ready || guard.login_runtime_ready {
-                            guard.podman_ready = false;
-                            guard.login_runtime_ready = false;
-                            rebuild_needed = true;
+                    // First-boot poll errors mean the guest vsock agent hasn't
+                    // bound yet — that is "still Connecting…", NOT a lost
+                    // connection. Only show the reconnecting chip once the guest
+                    // has answered at least once (vm_ever_ready); before that,
+                    // leave the curated Starting/Connecting chip in place so a
+                    // slow first boot never looks unhealthy.
+                    if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
+                        {
+                            let mut guard = menu_state.lock().unwrap();
+                            if guard.podman_ready || guard.login_runtime_ready {
+                                guard.podman_ready = false;
+                                guard.login_runtime_ready = false;
+                                rebuild_needed = true;
+                            }
+                            // Keep MenuState's status row in sync so the rebuild
+                            // below doesn't resurrect a stale label (same clobber
+                            // class apply_vm_status fixes for the healthy path).
+                            if guard.status_text != WIRE_UNREACHABLE_CHIP_TEXT {
+                                guard.status_text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
+                            }
                         }
-                        // Keep MenuState's status row in sync so the rebuild
-                        // below doesn't resurrect a stale label (same clobber
-                        // class apply_vm_status fixes for the healthy path).
-                        if guard.status_text != WIRE_UNREACHABLE_CHIP_TEXT {
-                            guard.status_text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
-                        }
+                        let text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
+                        let text_for_dispatch = text.clone();
+                        let chip_status_text = status_text.clone();
+                        let chip_status_item = status_item.clone();
+                        let chip_status_menu_item = status_menu_item.clone();
+                        dispatch_to_main_thread(move || {
+                            *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
+                            apply_status_text_main_thread(
+                                &text_for_dispatch,
+                                &chip_status_item,
+                                &chip_status_menu_item,
+                            );
+                        });
                     }
-                    let text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
-                    let text_for_dispatch = text.clone();
-                    let chip_status_text = status_text.clone();
-                    let chip_status_item = status_item.clone();
-                    let chip_status_menu_item = status_menu_item.clone();
-                    dispatch_to_main_thread(move || {
-                        *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
-                        apply_status_text_main_thread(
-                            &text_for_dispatch,
-                            &chip_status_item,
-                            &chip_status_menu_item,
-                        );
-                    });
                 }
             }
 

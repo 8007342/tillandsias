@@ -9,12 +9,15 @@ active
 
 Tillandsias SHALL use podman's native secret mechanism (`podman secret`) as the
 transport for credential material that must cross the host-container boundary
-(CA certificates, Vault unseal key, per-container Vault tokens). Secrets are
+(CA certificates, Vault unseal key, per-container Vault tokens, and the git
+mirror's launch-scoped AppRole material). Secrets are
 created at tray startup as ephemeral tmpfs-backed artifacts, mounted into
 containers via `--secret` flag (not bind mounts or environment variables), and
-cleaned up on tray shutdown. Long-lived credentials (the GitHub token) live
-inside Vault and are read at push time via Vault CLI inside the container;
-they never cross the host-container boundary as podman secrets.
+cleaned up on tray shutdown. Long-lived credentials (including the GitHub token
+and provider credentials) live inside Vault and are read only by a service or
+provider lane whose AppRole policy names the exact path. Long-lived credential
+values never cross the host-container boundary as podman secrets; the mounted
+secret contains only the short-lived Vault token.
 
 @trace spec:podman-secrets-integration
 
@@ -32,7 +35,8 @@ and MUST match across all references (creation, mounting, entrypoint reading).
 | `tillandsias-vault-tls-cert` | Vault HTTPS leaf certificate | `vault_bootstrap.rs:ensure_vault_tls_leaf()` | vault container | `/run/secrets/tillandsias-vault-tls-cert` |
 | `tillandsias-vault-tls-key` | Vault HTTPS leaf private key | `vault_bootstrap.rs:ensure_vault_tls_leaf()` | vault container | `/run/secrets/tillandsias-vault-tls-key` |
 | `tillandsias-vault-tls-ca` | Vault HTTPS issuer CA certificate | `vault_bootstrap.rs:refresh_vault_tls_secrets()` | vault container | `/run/secrets/tillandsias-vault-tls-ca` |
-| `tillandsias-vault-token-<role>-<id>` | Per-container AppRole token | `vault_bootstrap.rs:mint_container_token()` | git service | `/run/secrets/vault-token` |
+| `tillandsias-vault-token-<role>-<id>` | One-shot per-container AppRole client token | `vault_bootstrap.rs:mint_approle_token_for_container()` | provider one-shot and explicitly credentialed forge containers | `/run/secrets/vault-token` |
+| `tillandsias-vault-approle-git-mirror-agent-<id>-<issuance>` | Reusable-within-48h, accessor-revoked AppRole material | `vault_bootstrap.rs:mint_approle_auto_auth_for_container()` | git service | `/run/secrets/vault-approle` |
 
 **Critical**: Secret name references MUST be identical in:
 1. `crates/tillandsias-headless/src/main.rs` / `vault_bootstrap.rs` — creation
@@ -65,13 +69,18 @@ explicitly removed.
 - **AND** the unseal key SHALL be stored in the host OS keychain for reuse
   across restarts.
 
-#### Scenario: Vault token secret created per container launch
+#### Scenario: Vault Agent AppRole secret created per git-mirror launch
 - **WHEN** a git-mirror container is launched and Vault is running
-- **THEN** the tray MUST mint a `git-mirror-policy` scoped AppRole token with
-  TTL 1h
-- **AND** MUST call `podman secret create tillandsias-vault-token-git-mirror-<id> <token>`
-- **AND** MUST mount it at `/run/secrets/vault-token`
-- **AND** the token SHALL be revoked when the container stops.
+- **THEN** the tray MUST issue `git-mirror-agent` role ID and SecretID material
+  scoped only to `git-mirror-policy`
+- **AND** MUST call
+  `podman secret create tillandsias-vault-approle-git-mirror-agent-<id>-<issuance> -`
+  with the JSON document on stdin
+- **AND** MUST mount it at `/run/secrets/vault-approle`
+- **AND** same-process relaunches MUST use a new issuance suffix rather than
+  replacing and forgetting a prior SecretID accessor
+- **AND** the current Agent token plus every retained SecretID accessor SHALL
+  be revoked when the container/session stops.
 
 #### Scenario: CA certificate and key secrets created
 - **WHEN** the tray initializes
@@ -104,18 +113,35 @@ MUST_NOT be used.
 - **AND** the vault entrypoint MUST read the unseal key from `/run/secrets/vault-unseal`
 - **AND** the unseal key SHALL NOT appear in environment variables or bind mounts.
 
-#### Scenario: Git service container receives Vault AppRole token
+#### Scenario: Git service container receives Vault Agent AppRole material
 - **WHEN** the git service container is launched and Vault is running
-- **THEN** the tray MUST add `--secret=tillandsias-vault-token-<id>,target=vault-token,mode=0400`
-- **AND** the container's entrypoint MUST read the token from `/run/secrets/vault-token`
-- **AND** the container MUST receive `VAULT_ADDR=http://vault:8200` and
-  `VAULT_ROLE=git-mirror`
-- **AND** the container MUST NOT receive the token via environment variables or bind mounts
+- **THEN** the tray MUST add
+  `--secret=tillandsias-vault-approle-git-mirror-agent-<id>-<issuance>,target=vault-approle,uid=1000,gid=1000,mode=0400`
+- **AND** the container bootstrap MUST read the document from
+  `/run/secrets/vault-approle`
+- **AND** Vault Agent MUST write its client token only to
+  `/tmp/tillandsias-vault-token`
+- **AND** the container MUST receive `VAULT_ADDR=https://vault:8200` and
+  `VAULT_ROLE=git-mirror-agent`
+- **AND** the container MUST NOT receive AppRole or token values via
+  environment variables, command arguments, or bind mounts
 
-#### Scenario: Forge containers receive no credentials
-- **WHEN** a forge container (opencode, claude) is launched
-- **THEN** the tray MUST NOT add any `--secret` flags
-- **AND** the forge container MUST have zero credential mounts
+#### Scenario: Configured OpenCode receives a provider-scoped AppRole token
+- **WHEN** a Gemini API key exists in Vault and an OpenCode or OpenCode Web
+  forge is launched
+- **THEN** the tray MUST add
+  `--secret=tillandsias-vault-token-opencode-forge-<id>,target=vault-token,uid=1000,gid=1000,mode=0400`
+- **AND** the container MUST receive `VAULT_ROLE=opencode-forge`
+- **AND** the Gemini key and derived `OPENCODE_AUTH_CONTENT` document MUST NOT
+  appear in Podman argv or launcher logs
+- **AND** the entrypoint MAY export the derived document only inside the
+  OpenCode process environment after reading Vault.
+
+#### Scenario: Provider-free forge containers receive no credential mount
+- **WHEN** a maintenance forge or an OpenCode forge without a configured
+  Gemini key is launched
+- **THEN** the tray MUST NOT add any provider `--secret` flag
+- **AND** the forge container MUST have zero provider credential mounts
 - **AND** an accountability log entry MUST record
   `credential-free (no token mounts)`, `spec="podman-secrets-integration"`
 
@@ -133,8 +159,9 @@ implementation MUST NOT assume custom mount paths or symlinks.
 @trace spec:podman-secrets-integration
 
 #### Scenario: Secret file is readable
-- **WHEN** a container with `--secret=tillandsias-vault-token-<id>` starts
-- **THEN** `/run/secrets/vault-token` MUST exist and be readable (mode `0400` or tighter)
+- **WHEN** a git mirror with
+  `--secret=tillandsias-vault-approle-<id>,target=vault-approle` starts
+- **THEN** `/run/secrets/vault-approle` MUST exist and be readable (mode `0400` or tighter)
 - **AND** the file content MUST match the secret value created on the host
 
 #### Scenario: Secret file is read-only
@@ -201,9 +228,19 @@ MUST be idempotent.
   `podman secret rm tillandsias-vault-tls-ca`
 - **AND** `tillandsias-vault-token-*` secrets are revoked by Vault token
   revocation in `revoke_pending_container_tokens()`
+- **AND** every `tillandsias-vault-approle-*` Podman secret is removed and its
+  retained SecretID accessor is destroyed in `revoke_pending_container_tokens()`
 - **AND** accountability log entries MUST record `action="secret_cleanup"`,
   `spec="podman-secrets-integration"` for each secret removed
 - **AND** the tray MUST exit after all secrets are cleaned
+
+#### Scenario: Uncatchable exit cannot run accessor cleanup
+- **WHEN** SIGKILL or host loss destroys the in-memory AppRole accessor registry
+- **THEN** each `git-mirror-agent` SecretID SHALL expire in Vault no later than
+  48h after its issuance
+- **AND** a later local cleanup MAY remove the stranded Podman secret but SHALL
+  NOT treat local deletion as server-side revocation
+- **AND** the finite Vault TTL SHALL remain the authoritative crash-orphan bound
 
 #### Scenario: Secrets removed on panic
 - **WHEN** the tray panics or crashes
@@ -304,12 +341,16 @@ and immediately converted to podman secrets.
 
 The following automated tests verify the implementation:
 
+- `litmus:opencode-vault-auth-content` verifies the provider-scoped token
+  mount shape while credential bytes remain absent from launcher argv, and
+  verifies the free lane has no token mount.
+
 ### Test 1: Secrets created on startup
 ```bash
 # After tray starts, verify secrets exist
-podman secret ls | grep -E "tillandsias-(ca-cert|ca-key|vault-unseal|vault-token-)"
+podman secret ls | grep -E "tillandsias-(ca-cert|ca-key|vault-unseal|vault-token-|vault-approle-)"
 # Expected: 3+ lines (ca-cert, ca-key, vault-unseal; vault-token lines appear
-# when git containers launch)
+# for one-shot consumers and vault-approle lines when git mirrors launch)
 ```
 
 ### Test 2: Secrets not visible in inspect

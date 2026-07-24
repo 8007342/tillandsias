@@ -24,6 +24,11 @@ use crate::{ProvisionManifest, VmError, VmRuntime};
 /// still link against it.
 pub const DEFAULT_WSL_DISTRO: &str = "tillandsias";
 
+/// Hard wall for the broad WSL-service shutdown recovery. `kill_on_drop`
+/// terminates the host child if the wall fires, so callers do not merely stop
+/// awaiting an unbounded `wsl.exe --shutdown`.
+const WSL_SHUTDOWN_RECOVERY_TIMEOUT_SECS: u64 = 60;
+
 /// The order-326 forge-user + `/home/forge/src` ownership contract as one
 /// idempotent root shell script (uid 1000 + rootless-podman subordinate
 /// ranges per `images/default/cheatsheets/runtime/fedora-minimal-wsl2.md`).
@@ -457,11 +462,25 @@ impl WslRuntime {
 
     pub async fn perform_wsl_shutdown_recovery() -> Result<(), String> {
         tracing::warn!("WSL service appears wedged. Attempting recovery via wsl --shutdown...");
-        let status = wsl_cmd()
-            .arg("--shutdown")
-            .status()
-            .await
-            .map_err(|e| format!("wsl --shutdown failed to spawn: {e}"))?;
+        let mut cmd = wsl_cmd();
+        cmd.kill_on_drop(true);
+        let status = match tokio::time::timeout(
+            Duration::from_secs(WSL_SHUTDOWN_RECOVERY_TIMEOUT_SECS),
+            cmd.arg("--shutdown").status(),
+        )
+        .await
+        {
+            Ok(Ok(status)) => status,
+            Ok(Err(error)) => {
+                return Err(format!("wsl --shutdown failed to spawn or wait: {error}"));
+            }
+            Err(_) => {
+                return Err(format!(
+                    "wsl --shutdown timed out after \
+                     {WSL_SHUTDOWN_RECOVERY_TIMEOUT_SECS}s"
+                ));
+            }
+        };
         if status.success() {
             tracing::info!("wsl --shutdown completed successfully");
             tokio::time::sleep(Duration::from_secs(2)).await;
@@ -1097,6 +1116,20 @@ impl VmRuntime for WslRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wsl_shutdown_recovery_owns_a_hard_process_bound() {
+        let source = include_str!("wsl.rs");
+        let recovery = source
+            .split("pub async fn perform_wsl_shutdown_recovery")
+            .nth(1)
+            .and_then(|tail| tail.split("\n    }\n}").next())
+            .expect("shutdown recovery body");
+        assert!(recovery.contains("cmd.kill_on_drop(true)"));
+        assert!(recovery.contains("tokio::time::timeout("));
+        assert!(recovery.contains("WSL_SHUTDOWN_RECOVERY_TIMEOUT_SECS"));
+        assert!(recovery.contains("cmd.arg(\"--shutdown\").status()"));
+    }
 
     /// The legacy tarball-path unit writer (`WslRuntime::provision` step 4)
     /// must pin the same lock-namespace environment as the recipe-path unit

@@ -54,6 +54,28 @@ The container entrypoint SHALL bootstrap the environment and launch OpenCode as 
 - **WHEN** the container starts with existing cache
 - **THEN** bootstrap MAY be skipped and OpenCode SHALL launch immediately
 
+### Requirement: Prompted CLI entrypoints emit structured results only on request
+
+The OpenCode CLI and Codex forge entrypoints MUST keep their ordinary
+human-formatted behavior unless the launcher supplies
+`TILLANDSIAS_AGENT_RESULT_FORMAT=json` for a prompted run. Under that request,
+OpenCode MUST invoke `run --format json` and Codex MUST invoke `exec --json`.
+Neither entrypoint MUST accept a host result-file path; current-run stdout
+capture and optional atomic export are host responsibilities governed by
+`forge-as-only-runtime`. Detached OpenCode Web mode invokes `opencode serve`,
+has no attached current-run result capture, and MUST NOT receive the structured
+result request.
+
+#### Scenario: Delegated entrypoints emit JSONL to stdout
+
+- **WHEN** a prompted OpenCode or Codex container receives
+  `TILLANDSIAS_AGENT_RESULT_FORMAT=json`
+- **THEN** its agent CLI MUST emit its JSON event stream on stdout
+- **AND** no `TILLANDSIAS_AGENT_RESULT_FILE` path MUST enter the container
+- **AND** removing the format request MUST preserve the formatted interactive
+  or ordinary prompted behavior
+- **AND** an OpenCode Web serve launch MUST omit the format request
+
 ### Requirement: Declarative image definition via embedded Containerfiles
 The default forge image SHALL be built from the embedded Containerfiles and supporting image sources using direct `podman build` calls. Containerfiles are the primary build path.
 
@@ -156,28 +178,96 @@ together.
   commit)
 - **THEN** the instructions SHALL keep the work on the Zen tool-caller
 
-### Requirement: Coding agents are image-baked, not runtime-installed
+### Requirement: Coding-agent harnesses refresh at launch with persistent fallback
 
-Claude Code, OpenCode, and OpenSpec MUST be installed into the forge
-image at `podman build` time. The binaries SHALL live under
-`/opt/agents/{claude,opencode,openspec}/` with symlinks at
-`/usr/local/bin/{claude,opencode,openspec}`. No runtime installer
-(npm, curl | bash) MUST run on each attach.
+Agent harnesses SHALL be refreshed at container launch into the persistent
+project tool cache. OpenCode and Claude Code SHALL use their official curl
+installers; Codex and OpenSpec SHALL use their declared npm channels. Installer
+scripts SHALL be downloaded to a temporary file and executed separately, never
+piped directly from `curl` into a shell. A network failure MAY reuse a
+previously validated cached binary, but the first launch SHALL fail loudly when
+no usable binary exists.
 
-Rationale: the prior runtime tools overlay re-installed these agents on
-every launch into a bind-mounted `/home/forge/.tools` directory. It
-added ~7s to every attach, routinely failed the OpenCode install
-(dropping the binary outside the overlay target path), and duplicated
-work whose output was already in the image. Hard-install gives
-deterministic agent versions per forge image tag, zero runtime
-network for agents, and one fewer failure surface.
+Claude's ephemeral launcher and share symlink SHALL be restored from its
+persistent `versions/` cache before refresh. A completed official refresh SHALL
+record the validated local version and completion epoch. The same version MAY
+short-circuit installer network work for at most 600 seconds; an absent,
+expired, malformed, or version-mismatched record SHALL run the official
+installer. Background and foreground calls in one container, and concurrent
+containers sharing the project cache, SHALL serialize to one installer owner.
+The installer execution SHALL have a 600-second hard bound in addition to the
+download timeout. A warm foreground caller SHALL immediately use the
+independent validated last-good snapshot while an owner refreshes; it MUST NOT
+select the mutable launcher that owner may replace. A cold caller with no
+validated snapshot SHALL wait for the bounded owner instead of starting an npm
+or second installer fallback.
 
-#### Scenario: Agents resolve from image at attach time
-- **WHEN** a forge container is freshly spawned
-- **THEN** `which claude opencode openspec` inside the container SHALL
-  return `/usr/local/bin/{claude,opencode,openspec}` respectively
-- **AND** the binaries SHALL be present without any runtime install
-  step running on the host
+Claude liveness/version probes SHALL set Anthropic's documented
+`DISABLE_AUTOUPDATER=1` guard and the supported strict `DISABLE_UPDATES=1`
+guard only for the probe process. The foreground Claude process SHALL inherit
+neither guard, preserving its official launch-time update behavior. A validated
+Claude candidate SHALL become last-good; a failed, timed-out, or interrupted
+refresh SHALL release its lock and reuse last-good when available.
+
+Prebuilt cargo tools SHALL take the executable-in-persistent-cache fast path
+without network access. Concurrent cold misses for the same tool SHALL
+serialize to one release-asset fetch; a dead owner lock SHALL be reclaimable
+after the bounded install window.
+
+OpenCode's cache SHALL additionally retain a known-good binary that passed the
+OpenCode liveness, flag, `OPENCODE_AUTH_CONTENT` parse, credential-count, and
+no-`auth.json` contracts. A freshly installed OpenCode that violates any of
+those contracts SHALL be rejected and replaced by that last-good binary.
+
+#### Scenario: Launch refreshes harnesses through declared channels
+- **WHEN** a forge container starts with working egress
+- **THEN** OpenCode SHALL run its official installer
+- **AND** Claude Code SHALL run its official installer unless the same
+  validated version completed an official refresh within the preceding
+  600 seconds
+- **AND** Codex and OpenSpec SHALL check their declared npm channels
+- **AND** the selected executables SHALL live in the persistent tool cache.
+
+#### Scenario: Warm Claude refresh is byte-cheap and coalesced
+- **WHEN** persistent Claude `versions/` contains a validated current binary
+  but the ephemeral launcher and share symlink do not exist
+- **THEN** the launcher and share symlink SHALL be restored before any
+  installer or version probe runs
+- **AND** background ensure plus foreground require SHALL attempt at most one
+  installer execution
+- **AND** a warm foreground behind the installer owner SHALL select immutable
+  last-good and remain healthy if the owner later replaces the launcher
+- **AND** concurrent sibling containers SHALL attempt at most one distribution
+  download
+- **AND** a recent matching refresh record SHALL perform zero installer and
+  distribution downloads.
+
+#### Scenario: Claude probe cannot self-update
+- **WHEN** the cached Claude binary is probed with `--version`
+- **THEN** update-disable guards SHALL apply only to that probe
+- **AND** the probe SHALL NOT download or replace a distribution
+- **AND** the eventual foreground Claude process SHALL retain its official
+  update behavior.
+
+#### Scenario: Concurrent prebuilt-tool misses coalesce
+- **WHEN** two forge lanes request the same missing prebuilt cargo tool
+- **THEN** exactly one release asset SHALL be fetched
+- **AND** both lanes SHALL observe the resulting executable
+- **WHEN** that executable is already present in persistent `CARGO_HOME`
+- **THEN** no release-asset request SHALL occur.
+
+#### Scenario: OpenCode contract failure rolls back
+- **WHEN** a newly refreshed OpenCode starts but does not parse an isolated
+  runtime `OPENCODE_AUTH_CONTENT` record without creating `auth.json`
+- **THEN** that candidate SHALL fail its contract probe
+- **AND** the launcher SHALL restore the last-good OpenCode binary
+- **AND** a fixed, credential-free rollback message SHALL be logged.
+
+#### Scenario: Offline launch reuses validated cache
+- **WHEN** an installer is unreachable and a validated cached binary exists
+- **THEN** the forge SHALL reuse the cached binary
+- **WHEN** neither a fresh nor cached binary is usable
+- **THEN** the forge SHALL fail loudly before trying to launch the harness.
 
 #### Scenario: No runtime overlay build runs
 - **WHEN** the user runs `tillandsias <project>` with a fresh or
@@ -187,6 +277,164 @@ network for agents, and one fewer failure surface.
 - **AND** no temporary forge container MUST spawn to populate
   `/home/forge/.tools`
 - **AND** no `[tools-overlay]` log lines SHALL appear at attach time
+
+### Requirement: Forge worker identities are collision-resistant across launch and teardown
+
+Every nonempty `TILLANDSIAS_FORGE_INSTANCE` value SHALL produce a
+collision-resistant Podman-safe component consisting of a readable capped
+prefix plus a stable SHA-256 suffix over the exact raw identity. Normalization,
+case folding, punctuation replacement, and length capping MUST NOT make two
+distinct raw identities share a container name, hostname, or mutable state
+path. Only an absent or exactly empty value SHALL preserve the legacy unscoped
+name.
+
+The instance-aware headless launch path, OpenCode Web router upstream, and
+per-project headless cleanup SHALL derive forge names through the same
+constructor. In particular, cleanup MUST NOT remove an unscoped legacy forge
+when the active process owns an instance-scoped forge.
+
+The legacy tray Stop/PTy lookup surfaces do not yet carry a worker-selection
+contract and therefore remain a tracked order-427 residual; they MUST NOT be
+represented as instance-safe until that contract exists. Multiple OpenCode Web
+instances also currently share the user-facing `opencode.<project>` route key,
+so concurrent-Web routing remains residual rather than silently choosing a
+worker.
+
+#### Scenario: Host-normalized identities remain distinct
+- **WHEN** two launchers use raw identities such as `a b` and `a-b`, case
+  variants, or values which differ after the readable prefix cap
+- **THEN** their forge container names, hostnames, and mutable state paths
+  SHALL differ
+- **AND** `--replace` in one launch SHALL NOT target the sibling worker.
+
+Observed provenance: the real ledger identities
+`forge-tillandsias-codex-20260723T043901Z` and
+`forge-tillandsias-codex-20260723T062500Z` previously both truncated to
+`forge-tillandsias-codex-20260723`; the collision fixture MUST retain this
+pair.
+
+#### Scenario: Scoped teardown removes only the scoped forge
+- **WHEN** an instance-scoped forge exits or fails
+- **THEN** cleanup SHALL derive its target through the same raw-identity
+  constructor used for launch
+- **AND** SHALL NOT fall back to `tillandsias-<project>-forge`.
+
+#### Scenario: OpenCode Web routes to the scoped forge
+- **WHEN** an instance-scoped OpenCode Web forge registers its router upstream
+- **THEN** the upstream container SHALL come from the same scoped constructor
+  as launch
+- **AND** SHALL NOT target a nonexistent unscoped legacy forge.
+
+### Requirement: Codex state persistence excludes provider authentication and is worker-namespaced
+
+The broad Codex state root (`CODEX_HOME`) SHALL remain ephemeral and, when a
+forge instance is present, per-worker. Tillandsias SHALL persist only explicitly
+reviewed state classes beneath
+`/home/forge/.cache/tillandsias-project/codex-state/<worker-or-default>`:
+`cache/` and `sessions/` as direct directories, SQLite-backed state through the
+supported `CODEX_SQLITE_HOME` split, and the exact copied-file whitelist
+`models_cache.json`, `version.json`, `installation_id`, and
+`.sandbox_migration`.
+
+`auth.json`, `config.toml`, history, logs, shell snapshots, skills, and unknown
+future `CODEX_HOME` content MUST NOT be copied into this state namespace.
+Provider authentication SHALL remain owned by the existing scoped Vault
+restore/harvest path. This is not a content-level secret scrubber:
+cache/session/SQLite state can contain sensitive project or conversation data
+and MUST use mode-0700 directories. Worker roots prevent automatic
+cross-restore, but are namespace separation rather than access control because
+forge workers share the project cache as the same UID.
+
+The host SHALL pass the exact pre-sanitized forge-instance identity to the
+container. Non-default persistence keys SHALL be a full SHA-256 digest of that
+identity so host-normalized or length-capped names cannot collide. Setup SHALL
+validate canonical paths, reject links and non-regular copied-file
+destinations, enforce permissions, preflight all direct classes before linking,
+and roll back helper-owned links on failure. Persistence failure MUST NOT block
+the Codex lane or cause the provider auth document to persist.
+
+Direct cache/session/SQLite state MAY survive an uncatchable container kill
+because it writes to the project cache directly. Copied metadata SHALL be
+checkpointed only on normal foreground-wrapper exit; a hard kill MAY lose
+changes since that checkpoint and MAY leave a reserved regular checkpoint temp
+containing only one whitelisted metadata file, which the next setup SHALL
+remove. The shared OAuth foreground wrapper MUST NOT infer or flush a Codex
+state root unless the Codex entrypoint completed setup successfully.
+
+Provenance (consulted 2026-07-23): OpenAI's
+[Codex environment-variable reference](https://learn.chatgpt.com/docs/config-file/environment-variables.md)
+defines `CODEX_HOME` as the root for config, auth, logs, sessions, skills, and
+standalone package metadata, and defines `CODEX_SQLITE_HOME` as the supported
+SQLite state split. OpenAI's
+[Codex authentication reference](https://learn.chatgpt.com/docs/auth.md)
+documents file-backed `auth.json` as plaintext credential storage. The exact
+Tillandsias directory/file whitelist above is an observed, reviewed
+implementation policy—not an upstream guarantee—and MUST be re-audited when
+Codex changes its state layout.
+
+#### Scenario: Normal Codex exit checkpoints only reviewed metadata
+- **WHEN** a Codex forge entrypoint completes safe-state setup and its
+  foreground Codex process exits normally
+- **THEN** cache, sessions, and `CODEX_SQLITE_HOME` SHALL already be direct
+  under the worker namespace
+- **AND** the exact copied-file whitelist SHALL be checkpointed
+- **AND** provider auth/config/history and unknown files SHALL remain absent
+  from persistent state.
+
+#### Scenario: Failed setup remains available without widening persistence
+- **WHEN** a path, link, destination-type, or permission preflight fails
+- **THEN** the entrypoint SHALL keep the Codex lane available
+- **AND** SHALL clear readiness, root, and `CODEX_SQLITE_HOME` exports
+- **AND** SHALL roll back only helper-owned partial direct links
+- **AND** SHALL NOT copy or persist the provider auth document.
+
+#### Scenario: Provider login reuses only the Codex tool cache
+- **WHEN** `tillandsias --codex-login` launches its short-lived provider
+  container
+- **THEN** it SHALL mount a Codex-specific non-auth tool-cache volume at
+  `/home/forge/.cache/tillandsias-project`
+- **AND** it SHALL NOT persist `CODEX_HOME`
+- **AND** the one-shot device helper SHALL request only Codex installation,
+  not refresh every agent harness.
+
+### Requirement: OpenCode consumes Vault authentication without credential files
+
+When the existing Gemini API-key producer at `secret/gemini/api-key` is
+configured, OpenCode and OpenCode Web SHALL derive exactly one
+`OPENCODE_AUTH_CONTENT` `google` API record inside the forge. The credential
+value SHALL flow from Vault to `jq` on stdin and then exist only in the OpenCode
+process environment. It SHALL NOT appear in launcher argv, lifecycle logs,
+committed fixtures, or persistent files.
+
+Before every OpenCode launch, the entrypoint SHALL remove any real file or
+symlink at `$XDG_DATA_HOME/opencode/auth.json` and fail if it cannot prove the
+path absent. It SHALL run the selected installed OpenCode against isolated XDG
+state and positively assert that `auth list` reports the injected provider and
+credential count while no `auth.json` exists. A parse, count, provider, or
+no-file failure SHALL stop the launch loudly. When the Gemini key is absent,
+the free Zen/local lane SHALL remain available with no Vault token and no
+ambient `OPENCODE_AUTH_CONTENT`.
+
+#### Scenario: Configured OpenCode proves in-memory authentication
+- **WHEN** `secret/gemini/api-key` exists and an OpenCode entrypoint starts
+- **THEN** the entrypoint SHALL derive `{google:{type:"api",key:<value>}}`
+  without placing `<value>` in a process argument
+- **AND** the selected OpenCode binary SHALL report provider `google` and the
+  expected credential count in an isolated positive assertion
+- **AND** `$XDG_DATA_HOME/opencode/auth.json` and the assertion's isolated
+  `auth.json` SHALL both remain absent.
+
+#### Scenario: Stale credential file fails closed
+- **WHEN** `$XDG_DATA_HOME/opencode/auth.json` exists as a file or symlink
+- **THEN** the entrypoint SHALL remove it before deriving auth content
+- **AND** SHALL refuse to launch if removal or the absence check fails.
+
+#### Scenario: Unconfigured OpenCode preserves the free lane
+- **WHEN** Vault contains no Gemini API key
+- **THEN** the OpenCode container SHALL receive no provider Vault token
+- **AND** the entrypoint SHALL discard ambient `OPENCODE_AUTH_CONTENT`
+- **AND** OpenCode SHALL remain available through configured credential-free
+  providers.
 
 ### Requirement: Agent instructions document subdomain routing convention
 
@@ -475,10 +723,12 @@ The containment boundaries that make default-grant safe are:
    through the enclave proxy (Squid), which enforces a strict domain allowlist.
    An agent that can write arbitrary files cannot exfiltrate data because no
    unproxied egress path exists.
-5. **Credential indirection** (git mirror): the forge has no raw GitHub token
-   or provider API keys. All git operations go through the git mirror service,
-   which holds the credential. An agent that can read `/home/forge/.gitconfig`
-   sees only the mirror URL, not the credential.
+5. **Credential indirection and scoping**: the forge has no raw GitHub token;
+   git operations go through the mirror service. Provider credentials are
+   absent unless the owning provider contract explicitly mounts a
+   least-privilege Vault token. OpenCode's optional Gemini source is adapted
+   only into its process environment, never launcher argv, logs, fixtures, or
+   `auth.json`.
 6. **Source-mount credential quarantine** (order 170): when the forge source
    mount overlaps the host checkout, host `~/.gitconfig`, `~/.config/gh`, and
    `~/.ssh` are masked with forge-owned empty overlays. Host credentials never
@@ -551,13 +801,18 @@ as an explicit skip.
 
 - `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns
 - `cheatsheets/build/cargo.md` — Cargo reference and patterns
+- [Anthropic Claude Code setup](https://docs.anthropic.com/en/docs/claude-code/getting-started) — official `DISABLE_AUTOUPDATER` and update behavior
+- [Anthropic Claude Code changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) — official `DISABLE_UPDATES` support
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:ephemeral-guarantee`
 - `litmus:claude-launch-stability-shape` — Claude TUI runtime and credential-free launch boundary
+- `litmus:harness-byte-cheap` — deterministic warm/current, concurrency, timeout, rollback, and cargo download-count fixtures
 - `litmus:forge-validation-profile` — non-destructive stable forge validation report
+- `litmus:opencode-vault-auth-content` — OpenCode Vault adapter, installed-binary positive assertion, no-file contract, and last-good rollback
+- `litmus:codex-safe-state-shape` — Codex provider-auth exclusion, worker namespace, path hardening, and normal-exit checkpoint contract
 
 Gating points:
 - Default forge image is pulled fresh; cached images are cleared on container stop

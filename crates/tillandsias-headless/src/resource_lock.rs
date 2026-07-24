@@ -363,10 +363,22 @@ mod tests {
             "scanner must list exactly the live lock with the prefix"
         );
         drop(_held);
-        assert!(
-            held_resources_with_prefix(&prefix).is_empty(),
-            "released locks must vanish from the scan"
-        );
+        // A concurrent test may fork while the guard fd is open. O_CLOEXEC
+        // closes that inherited fd at exec, but there is a brief fork-to-exec
+        // window in which the conservative scanner correctly still sees the
+        // lock as held. Bound the wait so a genuinely leaked fd still fails.
+        let deadline = Instant::now() + Duration::from_millis(500);
+        loop {
+            let remaining = held_resources_with_prefix(&prefix);
+            if remaining.is_empty() {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "released locks must vanish from the scan; still held: {remaining:?}"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     /// An exclusive holder excludes shared acquirers (recreate blocks new
