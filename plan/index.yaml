@@ -21609,6 +21609,27 @@ plan_index:
             Filed from the live 25.5h-soak incident; full forensics in the
             session transcript. The socket-proxyd attempt died on finding
             (2); the enclave-URL env override is the working repair.
+        - type: progress
+          ts: "2026-07-24T08:05:00Z"
+          agent_id: "linux-tlatoani-fable5-20260724"
+          host: linux
+          summary: >
+            LIVE LINUX REPRO - the class is NOT Windows-specific. During
+            this cycle's CI gate the deployed Linux stack hit the exact
+            shape: podman healthcheck green while
+            https://127.0.0.1:8201/v1/sys/health connection-refused
+            (netavark DNAT drop), failing
+            publish_local_service_starts_container_and_returns_url at
+            main.rs:17927; the endpoint self-recovered minutes later and
+            the test passed unchanged. Hardening landed this cycle: that
+            test is now #[ignore]-gated as e2e-class, and
+            e2e-preflight.sh treats an ERRORED podman ps as
+            live-runtime-PRESENT (leak-not-destroy) plus a broadened
+            ^tillandsias- name match, so a half-dead vault can no longer
+            fool the destructive-smoke eligibility probe into "eligible".
+            The structural fix (drop the 127.0.0.1:8201 publish,
+            enclave-URL everywhere) remains this packet's scope -
+            priority raised by the cross-platform repro.
 
     - packet_id: mirror-pre-receive-blocks-all-new-branches
       order: 462
