@@ -133,14 +133,12 @@ pub fn parse_transcript(transcript: &str) -> AgentOutcome {
 
             // ---- opencode ----
             "step_start" => saw_start = true,
-            "step_finish" => {
-                // OpenCode may emit an intermediate `tool-calls` finish before
-                // continuing with another step. Only an explicit `stop` is a
-                // terminal success. Missing and unknown reasons remain
-                // non-terminal so a truncated stream cannot manufacture done.
-                if v.pointer("/part/reason").and_then(Value::as_str) == Some("stop") {
-                    saw_terminal_success = true;
-                }
+            // OpenCode may emit an intermediate `tool-calls` finish before
+            // continuing with another step. Only an explicit `stop` is a
+            // terminal success. Missing and unknown reasons remain
+            // non-terminal so a truncated stream cannot manufacture done.
+            "step_finish" if v.pointer("/part/reason").and_then(Value::as_str) == Some("stop") => {
+                saw_terminal_success = true;
             }
             "text" => {
                 if let Some(t) = v.pointer("/part/text").and_then(Value::as_str)
