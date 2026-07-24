@@ -651,7 +651,13 @@ async fn handle_connection(
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
-            build_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            // Report the workspace VERSION (repo-root VERSION file), NOT this
+            // crate's CARGO_PKG_VERSION. The host tray displays + compares
+            // against workspace_version() (menu "(Update Pending)" gate,
+            // menu_state.rs); reporting the per-crate version here (e.g.
+            // "0.3.260721" vs the host's "0.3.260721.1") produced a permanent
+            // spurious version-skew. Both ends must speak the one product version.
+            build_version: Some(tillandsias_secure_channel::workspace_version().to_string()),
         },
     };
     if let Err(err) = write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await {

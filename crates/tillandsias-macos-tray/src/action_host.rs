@@ -135,7 +135,7 @@ fn apply_status_text_main_thread(
         // bare chip; the tooltip prefixes "Tillandsias <version>".
         let tooltip = NSString::from_str(&format!(
             "Tillandsias {}\n{}",
-            env!("CARGO_PKG_VERSION"),
+            tillandsias_secure_channel::workspace_version(),
             text
         ));
         unsafe { button.setToolTip(Some(&tooltip)) };
@@ -1976,7 +1976,15 @@ static LOGIN_STARTED_AT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::At
 /// How long after a login click a `LoggedOut` observation is treated as "the
 /// user hasn't finished the interactive paste yet" and ignored. `LoggedIn` is
 /// always applied immediately, so a real login still resolves in ~1-2s.
-const LOGIN_GRACE: Duration = Duration::from_secs(90);
+///
+/// Kept modest (covers the name+email+PAT prompt sequence) but bounded: if the
+/// login FAILS to persist a token, this window would otherwise mask the failure
+/// as "Logging In". The authoritative failure surface is the login terminal
+/// itself (it now stays open ~10s with the error — see pty/mod.rs), so the chip
+/// only needs to hold long enough to avoid mid-interaction flicker, then fall
+/// back to the actionable "GitHub Login" leaf. (A tighter fix — ending the grace
+/// exactly when the login PTY session closes — is a follow-up.)
+const LOGIN_GRACE: Duration = Duration::from_secs(60);
 
 /// Record that a GitHub-login flow just started (chip flipped to `LoggingIn`).
 fn mark_login_started() {
@@ -2316,10 +2324,10 @@ async fn run_push_listener(
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
             if let Some(ref gv) = guest_version {
-                if gv != env!("CARGO_PKG_VERSION") {
+                if gv != tillandsias_secure_channel::workspace_version() {
                     tracing::warn!(
                         "build version skew: tray={} guest={}",
-                        env!("CARGO_PKG_VERSION"),
+                        tillandsias_secure_channel::workspace_version(),
                         gv
                     );
                 }

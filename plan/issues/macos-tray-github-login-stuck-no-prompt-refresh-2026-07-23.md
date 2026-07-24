@@ -7,9 +7,48 @@
 - **Relates to:** order 155 `macos-tray-stream-refactor`; `wave-review-findings-tray-chain-2026-07-22.md` findings #2 (Windows LOGIN_STARTED_AT grace window) and #5 (macOS LoggingIn flip); m8 residual F-C/F-D
 - **Governance:** the fix changes tray login-state transition *behavior* → tray-ux
   governance; needs operator (Tlatoāni) approval before implementation.
-- **Status: IMPLEMENTED 2026-07-23** (operator-approved). See "Implemented" below.
+- **Status: root cause CORRECTED 2026-07-23** — the original "no prompt refresh"
+  framing was SECONDARY; the primary cause is a lost-token-persistence failure
+  hidden by an `exec`-swallowed error. See "Correction" below.
 
-## Implemented (2026-07-23, operator-approved)
+## Correction (2026-07-23): the real root cause is lost token persistence
+
+End-to-end trace verdict (the stuck "Logging In" is NOT primarily a refresh gap):
+
+- macOS GitHub Login runs `tillandsias-headless --github-login`
+  (`crates/tillandsias-headless/src/main.rs` `run_provider_login`): prompts git
+  name/email + PAT, runs `gh auth login` / `gh auth status`, THEN writes the token
+  to Vault `secret/github/token` (`main.rs:7051-7076`, synchronous + read-back
+  verified).
+- If any post-paste step fails (gh egress/proxy, CA, or the vault write), the
+  process exits **before** the Vault write — the PAT is collected but never
+  persisted.
+- The launcher wrapped it as `exec tillandsias-headless … || (echo … && sleep 10
+  && false)` (`crates/tillandsias-host-shell/src/pty/mod.rs`). Because of `exec`,
+  the `|| (…)` fallback is DEAD CODE — a non-zero exit vanishes with no message
+  and no pause = "terminal closes too quickly after paste".
+- The status probe (`probe_github_username` → Vault `secret/github/token`,
+  `remote_projects.rs:384`) is CORRECT and reads the same path; with nothing
+  written it returns logged-out forever, so the chip never reaches LoggedIn.
+- The prompt ~2s poll + 90s grace (the "UX-refresh work" below) then **masked**
+  the failure, holding "Logging In" instead of falling back to the actionable
+  leaf.
+
+### Fixes applied this pass
+
+1. **Visibility** — dropped `exec` (`pty/mod.rs`) so the `|| (…)` fallback catches
+   a non-zero headless exit, prints a marker, and holds the window ~10s so the
+   operator can read the headless error printed above. The failing step is now
+   observable.
+2. **Honesty** — `LOGIN_GRACE` 90s → 60s (`action_host.rs`) so a failed login is
+   not masked as long; the login terminal is the authoritative failure surface.
+3. **Root persistence fix — PENDING the revealed error.** The Vault write is
+   already synchronous + verified; the exposure is the pre-write gh egress/CA
+   steps (`main.rs:7022`/`7035`). Once the now-visible error names the failing
+   step, harden it (preflight egress/CA before the prompt, or persist to Vault
+   before the fallible `gh auth status` gate).
+
+## UX-refresh work (secondary fix — still valid; grace now 60s)
 
 Ported the Windows pattern into `crates/tillandsias-macos-tray/src/action_host.rs`:
 1. **Grace window** in `apply_login_state` (the single choke for all login-state
