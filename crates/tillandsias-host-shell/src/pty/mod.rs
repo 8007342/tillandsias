@@ -354,7 +354,7 @@ impl PtyRouter {
     /// `PtyClose` → a terminal `Closed` event (and the route is removed).
     /// Returns `Err` on an oversized `PtyData` frame (protocol violation);
     /// non-PTY messages and unknown session ids are ignored.
-    pub fn route(&self, msg: &ControlMessage) -> Result<(), PtyError> {
+    pub async fn route(&self, msg: &ControlMessage) -> Result<(), PtyError> {
         match msg {
             ControlMessage::PtyData {
                 session_id,
@@ -373,17 +373,30 @@ impl PtyRouter {
                         MAX_PTY_FRAME_BYTES
                     ));
                 }
-                if let Some(tx) = self.sessions.lock().unwrap().get(session_id) {
-                    // try_send: a full session channel applies backpressure to
-                    // the guest via the connection reader (§D3); we never block
-                    // the router on one slow session.
-                    let _ = tx.try_send(SessionEvent::Data(bytes.clone()));
+                // Terminal output MUST NOT be dropped. The former `try_send`
+                // silently discarded frames when the 256-deep channel filled —
+                // exactly what happens during a full-screen TUI redraw burst when
+                // the consumer (screen → Terminal.app) drains slower than the
+                // guest produces. A dropped frame both scrambles the render AND
+                // splits a multi-byte UTF-8 sequence (the "encoding" corruption).
+                // Instead, clone the Sender, RELEASE the lock (never held across
+                // the await), and `send().await`: a full channel now blocks the
+                // vsock reader, applying real backpressure through the guest PTY
+                // to the writing process — proper terminal flow control, lossless,
+                // and bounded host memory (unlike an unbounded channel, which a
+                // runaway forge process could OOM).
+                // @trace macos-forge-opencode-events-lost (reconstructed from
+                //        BigPickle in-forge research; forge died before push)
+                let tx = self.sessions.lock().unwrap().get(session_id).cloned();
+                if let Some(tx) = tx {
+                    let _ = tx.send(SessionEvent::Data(bytes.clone())).await;
                 }
                 Ok(())
             }
             ControlMessage::PtyClose { session_id, exit } => {
-                if let Some(tx) = self.sessions.lock().unwrap().remove(session_id) {
-                    let _ = tx.try_send(SessionEvent::Closed(*exit));
+                let tx = self.sessions.lock().unwrap().remove(session_id);
+                if let Some(tx) = tx {
+                    let _ = tx.send(SessionEvent::Closed(*exit)).await;
                 }
                 Ok(())
             }
@@ -695,6 +708,7 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: vec![],
         })
+        .await
         .unwrap();
         assert!(s.inbound.try_recv().is_err());
 
@@ -704,6 +718,7 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: b"hi\n".to_vec(),
         })
+        .await
         .unwrap();
         assert_eq!(s.recv().await, Some(SessionEvent::Data(b"hi\n".to_vec())));
 
@@ -716,6 +731,7 @@ mod tests {
             session_id: 1,
             exit,
         })
+        .await
         .unwrap();
         assert_eq!(s.recv().await, Some(SessionEvent::Closed(exit)));
 
@@ -758,20 +774,22 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: b"two".to_vec(),
         })
+        .await
         .unwrap();
         r.route(&ControlMessage::PtyData {
             session_id: 1,
             direction: PtyDirection::ToHost,
             bytes: b"one".to_vec(),
         })
+        .await
         .unwrap();
         assert_eq!(s1.recv().await, Some(SessionEvent::Data(b"one".to_vec())));
         assert_eq!(s2.recv().await, Some(SessionEvent::Data(b"two".to_vec())));
     }
 
     /// §3.8: an inbound frame larger than the cap is a protocol violation.
-    #[test]
-    fn oversized_inbound_frame_rejected() {
+    #[tokio::test]
+    async fn oversized_inbound_frame_rejected() {
         let r = PtyRouter::new();
         let _rx = r.register(1);
         let oversized = ControlMessage::PtyData {
@@ -779,7 +797,7 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: vec![0u8; MAX_PTY_FRAME_BYTES + 1],
         };
-        assert!(r.route(&oversized).is_err());
+        assert!(r.route(&oversized).await.is_err());
     }
 
     #[test]
@@ -1025,15 +1043,15 @@ mod tests {
     }
 
     /// An unknown session id is ignored, not an error.
-    #[test]
-    fn unknown_session_is_ignored() {
+    #[tokio::test]
+    async fn unknown_session_is_ignored() {
         let r = PtyRouter::new();
         let ok = ControlMessage::PtyData {
             session_id: 999,
             direction: PtyDirection::ToHost,
             bytes: b"x".to_vec(),
         };
-        assert!(r.route(&ok).is_ok());
+        assert!(r.route(&ok).await.is_ok());
     }
 
     /// Fake PTY master backed by two in-memory duplex pipes — no real terminal.
@@ -1088,6 +1106,7 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: b"file1\n".to_vec(),
         })
+        .await
         .unwrap();
         let mut buf = [0u8; 6];
         out_reader.read_exact(&mut buf).await.unwrap();
@@ -1101,6 +1120,7 @@ mod tests {
                 signal: None,
             },
         })
+        .await
         .unwrap();
         let joined = tokio::time::timeout(Duration::from_secs(2), handle).await;
         assert!(joined.is_ok(), "pump output task should finish after close");

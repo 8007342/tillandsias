@@ -316,7 +316,7 @@ where
                 _ => {}
             }
         }
-        if let Err(e) = router.route(&envelope.body) {
+        if let Err(e) = router.route(&envelope.body).await {
             // PtyRouter rejects unrouted ControlMessages — non-fatal
             // for non-PTY traffic (handshake replies, status, etc.).
             eprintln!("[pty-vsock-bridge] route returned: {e}");
