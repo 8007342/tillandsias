@@ -21,6 +21,9 @@
   (`246a`, `247a`); 203 pre-build litmus tests passed and 2 plan-engine checks
   failed. Install, Podman reset, cold init, and forge launch were not run.
   Report: `plan/issues/smoke-e2e-findings-local-build-linux-2026-07-25.md`.
+  Same-cycle repair replaced both order-like references with stable packet IDs;
+  plan tests pass 8/8 and the focused plan-engine litmus passes 4/4. Full Gate 1
+  retry is next.
 - **Ledger repair**: concurrent branch allocation duplicated live orders 478
   and 479; v0.4 packets were renumbered to 486/487 with stable packet IDs.
 - **Canonical v0.4 state before this source checkpoint**: 68 tagged, 57

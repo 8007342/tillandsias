@@ -6749,7 +6749,7 @@ plan_index:
       status: pending
       kind: audit+design
       deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
-      depends_on: [246a]
+      depends_on: [credential-inventory-audit]
       pickup_role: any
       owner_host: any
       capability_tags: [security, vault, tokens, policy]
@@ -6763,6 +6763,20 @@ plan_index:
         - "Credential Quarantine completion litmus added"
         - "spec/cheatsheet patch list published"
       events:
+        - type: verified
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            cargo test -p tillandsias-plan --lib passed 8/8; the focused
+            plan-engine-invariants-shape litmus passed all 4 steps.
+        - type: fixed
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            Replaced order-like dependency 246a with stable packet ID
+            credential-inventory-audit.
         - type: filed
           ts: "2026-07-24T08:10:00Z"
           agent_id: "forge-bigpickle"
@@ -6804,7 +6818,7 @@ plan_index:
       status: pending
       kind: audit+litmus
       deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
-      depends_on: [247a]
+      depends_on: [tls-certificate-chain-audit]
       pickup_role: any
       owner_host: any
       capability_tags: [git, mirror, network, litmus]
@@ -6819,6 +6833,20 @@ plan_index:
         - "litmus:proxy-end-to-end-health added and green"
         - "spec/cheatsheet patch list published"
       events:
+        - type: verified
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            cargo test -p tillandsias-plan --lib passed 8/8; the focused
+            plan-engine-invariants-shape litmus passed all 4 steps.
+        - type: fixed
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            Replaced order-like dependency 247a with stable packet ID
+            tls-certificate-chain-audit.
         - type: filed
           ts: "2026-07-24T08:10:00Z"
           agent_id: "forge-bigpickle"

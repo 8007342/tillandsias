@@ -3,7 +3,7 @@
 **Filed**: 2026-07-23T02:10Z
 **Host**: forge (TILLANDSIAS_HOST_KIND=forge)
 **Classification**: enhancement
-**Status**: reopened 2026-07-25 (same defect class recurred)
+**Status**: resolved 2026-07-25
 **Order**: n/a (routine finding)
 
 ## Symptom
@@ -53,3 +53,11 @@ as dependencies. This failed both `tillandsias-plan` integrity tests and
 `litmus:plan-engine-invariants-shape`, stopping the 2026-07-25 local-build e2e
 at Gate 1 before install/reset. The smallest repair is the same as the original:
 depend on stable packet IDs and rerun the two exact gates.
+
+## Recurrence resolution
+
+Replaced `246a` with `credential-inventory-audit` and `247a` with
+`tls-certificate-chain-audit`. Verification on the repaired live ledger:
+
+- `cargo test -p tillandsias-plan --lib` -> 8 passed, 0 failed
+- `./scripts/run-litmus-test.sh spec-traceability --phase pre-build --size quick --compact` -> `litmus:plan-engine-invariants-shape` passed 4/4 steps; runner summary 7 passed, 0 failed

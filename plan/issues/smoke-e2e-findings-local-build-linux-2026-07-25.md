@@ -40,3 +40,12 @@ already-committed order 463 source change are retained for checkpointing.
 
 No Podman reset, install, cold init, agent launch, release action, tag, or
 workflow dispatch occurred.
+
+## Same-cycle repair
+
+The two dependencies now use stable packet IDs:
+`credential-inventory-audit` and `tls-certificate-chain-audit`.
+`cargo test -p tillandsias-plan --lib` passes 8/8, and the focused
+`spec-traceability` quick run passes 7/7 including all four
+`litmus:plan-engine-invariants-shape` steps. A full Gate 1 retry remains the
+next action before any destructive reset.
