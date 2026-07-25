@@ -49,3 +49,24 @@ The two dependencies now use stable packet IDs:
 `spec-traceability` quick run passes 7/7 including all four
 `litmus:plan-engine-invariants-shape` steps. A full Gate 1 retry remains the
 next action before any destructive reset.
+
+## Gate 1 retries
+
+The first retry passed the repaired plan engine but failed one pre-build check:
+the ignored/generated image cheatsheet tree lacked the newly added
+`enclave-service-catalog-research.md`. Refreshing that tree made the focused
+sync litmus pass 2/2 and the next pre-build run pass 205/205. This recurrence is
+recorded on existing order 448.
+
+The final retry completed pre-build, built and installed local version
+`0.3.260725.1`, and then failed two post-build litmus tests:
+
+- `litmus:running-image-freshness`: stale canonical tag masked by an inherited
+  source-digest label; filed as order 488.
+- `litmus:opencode-prompt-e2e-shape`: full meta-orchestration correctly refused
+  the build-generated dirty checkout, so HEAD did not advance; filed as order
+  489.
+
+The checkout's transient version/dashboard generation was not accepted as
+source state. The dedicated Gate 2 Podman reset, cold init, and final forge leg
+were not run. No release action occurred.

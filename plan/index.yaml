@@ -21167,6 +21167,17 @@ plan_index:
             cleanly on stale local state), not "make it generated" (it already
             is). Consider folding 448 into 447 as one "litmus must regenerate
             generated artifacts before asserting freshness" packet.
+        - type: progress
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Local-build Gate 1 reproduced the stale generated-copy class after
+            enclave-service-catalog-research.md landed only in canonical
+            cheatsheets/. Refreshing the ignored image staging tree made the
+            focused cheatsheet-tooling litmus pass 2/2 and the next full
+            pre-build run pass 205/205. The permanent regenerate-before-check
+            exit criterion remains open.
 
     - packet_id: host-direct-push-bypasses-mirror-strands-agents
       order: 449
@@ -22795,3 +22806,64 @@ plan_index:
         repo root. Exit: one canonical event directory (other merged +
         tombstoned), one note line, @methodology explained or removed.
         Details in the deliverable.
+
+    - packet_id: running-image-freshness-label-precedence-fixture
+      order: 488
+      desired_release: v0.4
+      title: "Running-image freshness negative control becomes INDETERMINATE when a stale canonical tag inherits a source-digest label"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/running-image-freshness-label-precedence-fixture-2026-07-25.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, podman, image-freshness, litmus, release-gate]
+      estimated_hours: 2
+      outcome: >
+        A synthetic image carrying a positive stale canonical hash tag fails
+        the freshness gate even when it inherits the current base image's Rust
+        source-digest label; the current-image and genuinely indeterminate
+        controls retain their honest verdicts.
+      exit_criteria:
+        - "scripts/test-running-image-freshness.sh passes every case and prints its order-422 PASS marker"
+        - "positive current tag wins as current; positive different canonical hash tag wins as stale; label-only identity remains indeterminate"
+        - "litmus:running-image-freshness passes against a locally built git image"
+      events:
+        - type: filed
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Reproduced in local-build post-build Gate 1 after 205/205 pre-build
+            checks passed; the fixture's case 3 exited 0 as indeterminate.
+
+    - packet_id: postbuild-meta-orchestration-dirty-start-contract
+      order: 489
+      desired_release: v0.4
+      title: "Post-build OpenCode E2E deterministically dirty-start blocks because --ci-full --install mutates VERSION, Cargo manifests/lock, and dashboards"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/postbuild-meta-orchestration-dirty-start-contract-2026-07-25.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, build, meta-orchestration, e2e, dirty-worktree, release-gate]
+      estimated_hours: 4
+      outcome: >
+        The post-build full meta-orchestration litmus starts from a clean
+        checkout boundary while still testing the freshly installed binary;
+        ordinary meta-orchestration continues to refuse genuinely dirty
+        operator/sibling worktrees.
+      exit_criteria:
+        - "./build.sh --ci-full --install does not hand generated VERSION/dashboard mutations to the in-forge meta-orchestration checkout"
+        - "litmus:opencode-prompt-e2e-shape full mode advances local and remote linux-next with a plan result, while smoke mode still expects no delta"
+        - "litmus:meta-orchestration-dirty-tree-safety continues to prove fail-closed ordinary dirty starts"
+      events:
+        - type: filed
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Full-mode forge exited 0 after correctly refusing dirty-start on
+            eight build-generated tracked paths; delta step then failed because
+            HEAD appropriately remained unchanged.
