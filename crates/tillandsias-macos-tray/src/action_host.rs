@@ -1204,9 +1204,11 @@ async fn run_pty_attach(
     let mut seed: (u16, u16) = (24, 80);
     {
         let probe = master.winsize_reader();
-        // ~3s bounded: `screen` normally attaches sub-second; a never-attached
-        // path still launches promptly at the 24x80 fallback.
-        for _ in 0..30 {
+        // ~5s bounded: the Terminal.app wrapper stamps the slave winsize (stty)
+        // then attaches `screen`; a cold Terminal.app launch can take a couple
+        // seconds before that lands. Breaks out the instant a real size appears;
+        // a never-attached path still launches promptly at the 24x80 fallback.
+        for _ in 0..50 {
             tokio::time::sleep(Duration::from_millis(100)).await;
             match probe.get() {
                 Ok(sz) if sz.0 > 0 && sz.1 > 0 && sz != (24, 80) => {
