@@ -22507,3 +22507,229 @@ plan_index:
         gemini/opencode login lane; --diagnose names the missing seed before
         launch. Until fixed the Linux 455-family forge gate cannot pass
         unattended.
+
+    - packet_id: heterogeneous-inference-landscape-research
+      order: 478
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Research: CPU/GPU/NPU heterogeneous inference — vendor landscape, engine matrix, policy prior art (operator-directed, 2026-07-24)"
+      status: done
+      kind: research
+      deliverable: plan/issues/heterogeneous-inference-cpu-gpu-npu-research-2026-07-24.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [inference, research, npu, gpu, cpu, ollama, llama-cpp]
+      estimated_hours: 0
+      outcome: >
+        Completed 2026-07-24 (1 code-survey + 3 deep-research agents,
+        adversarially cross-verified). Headlines: ollama can never use an NPU
+        and is a weakening embed target; llama.cpp/llama-server is the correct
+        default engine on every host class (NPU backends land there upstream:
+        OpenVINO, Hexagon); Vulkan via /dev/dri is the universal
+        near-zero-config Linux GPU path; NPUs and macOS acceleration belong in
+        a HOST-NATIVE sidecar slot behind the enclave proxy (NPUs are
+        structurally unreachable from WSL2; container Venus on macOS caps at
+        ~75-85% of native Metal); decode is bandwidth-bound so NPU wins on
+        watts not speed, and only with a mature graph-compiled stack —
+        measure, never trust vendor TOPS. Full findings, risks (FastFlowLM
+        license gate, XRT/firmware lockstep), and the PROBE/CLASS/ROUTE/ADAPT
+        requirement seeds live in the deliverable. Spawns orders 479-484.
+
+    - packet_id: heterogeneous-inference-specs
+      order: 479
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Spec: openspec deltas for accel capability probe, engine slots, policy router + NPU rows in the inference-container tier table"
+      status: ready
+      kind: spec
+      deliverable: openspec specs (accel-capability-probe, inference-engine-slots, inference-policy-router) + amended inference-container spec + litmus bindings
+      depends_on: [heterogeneous-inference-landscape-research]
+      pickup_role: linux
+      capability_tags: [inference, openspec, npu, gpu, architecture]
+      estimated_hours: 6
+      outcome: >
+        Turn order 478's requirement seeds into authoritative specs BEFORE
+        implementation: (1) accel-capability-probe — host-side structured
+        probe (CPU flags/topology, /sys/class/drm GPUs, /sys/class/accel NPUs
+        with driver-name vendor resolution, bandwidth class, engine inventory,
+        capabilities.json cache, usable=false without a mature engine,
+        microbench scoring, roofline sanity check); (2) inference-engine-slots
+        — pluggable OpenAI-compatible engine slots (ollama today, llama-server
+        variants, host-native sidecars) behind one stable enclave endpoint;
+        (3) inference-policy-router — workload classes background/interactive/
+        quality/sustained, data-driven routing table, ordered fallback chains
+        terminating in CPU tier-S, adaptive battery/thermal signals, NEG
+        non-goals (no per-op splitting, no vendor-TOPS routing, no idle
+        residency on battery). Must answer the enclave-boundary question for
+        sidecars (proxy-mediated egress, isolation invariant) and add NPU
+        rows to the T0-T5 tier table. SHALL statements + scenarios + litmus
+        bindings per spec-system rules.
+
+    - packet_id: accel-capability-probe
+      order: 480
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: structured hardware capability probe (CPU/GPU/NPU/bandwidth) replacing the string inference tier"
+      status: ready
+      kind: implementation
+      deliverable: capabilities probe in tillandsias-headless + capabilities.json surface + unit tests + litmus shape test
+      depends_on: [heterogeneous-inference-specs]
+      pickup_role: linux
+      capability_tags: [inference, rust, npu, gpu, linux, probe]
+      estimated_hours: 8
+      outcome: >
+        Replace detect_inference_tier()'s single string (main.rs:2931) with a
+        structured probe per the accel-capability-probe spec: enumerate
+        /sys/class/accel/accel* (uevent DRIVER= amdxdna|intel_vpu, fw_version
+        where exposed), /sys/class/drm + vulkaninfo presence, CPU flags
+        (avx512/NEON) and topology, RAM, battery presence; emit versioned
+        capabilities.json under the app cache; keep the legacy tier string as
+        a derived field for backward compatibility (order 392 CDI downgrade
+        logic preserved). NPU marked usable only when a mature engine lane
+        exists (per spec). Host-side only; no container changes in this
+        packet. Rust, no Python (tlatoani_hard_no_python).
+
+    - packet_id: npu-device-passthrough
+      order: 481
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: NPU /dev/accel passthrough plumbing for the inference container (AMD XDNA2 first lane)"
+      status: ready
+      kind: implementation
+      deliverable: build_inference_run_args NPU args + entrypoint NPU detection/log line + docs for udev/render-group + litmus shape test
+      depends_on: [accel-capability-probe]
+      pickup_role: linux
+      capability_tags: [inference, podman, npu, amd-xdna, linux, containers]
+      estimated_hours: 6
+      outcome: >
+        When the probe reports a usable NPU, build_inference_run_args
+        (main.rs:3305) adds --device /dev/accel/accelN, render --group-add,
+        and --ulimit memlock=-1:-1 (XDNA2 requirement), mirroring the
+        existing ROCm /dev/kfd pattern; entrypoint.sh logs an npu= line next
+        to tier= (spec: tier classification logged once at boot). Graceful
+        no-op on hosts without /dev/accel or with unreadable permissions —
+        document the udev 0660 root:render convention and Silverblue
+        specifics instead of requiring root. Knowingly ships plumbing ahead
+        of the engine (order 483) so passthrough can be litmus-verified
+        independently (device visible in container, group mapping correct,
+        no permission errors in logs). Complements 408/410's GPU CDI work;
+        consider a Tillandsias-generated CDI spec for accel nodes as the
+        stretch goal.
+
+    - packet_id: llama-server-engine-slot
+      order: 482
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: llama-server as a first-class engine slot beside ollama (Vulkan-first image variant)"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: engine-slot abstraction + llama-server inference image variant + tier-model mapping externalized from entrypoint shell + smoke evidence
+      depends_on: [heterogeneous-inference-specs]
+      pickup_role: linux
+      capability_tags: [inference, llama-cpp, vulkan, podman, containers, forge]
+      estimated_hours: 16
+      outcome: >
+        Per order 478: llama-server now carries OpenAI + Anthropic-compatible
+        APIs, built-in model router with LRU load/unload, speculative
+        decoding, and is where NPU backends land upstream. Implement the
+        inference-engine-slots spec: the enclave keeps ONE stable endpoint
+        (OLLAMA_HOST contract preserved for forge consumers) while the engine
+        behind it becomes selectable (ollama | llama-server); add a
+        Vulkan-first llama-server image variant (Mesa in image, --device
+        /dev/dri, no ROCm/CUDA host stack — RamaLama's proven pattern) and
+        move the T0-T5 model table out of inline entrypoint shell into a
+        data file both engines consume. Ollama remains the default until the
+        llama-server lane has smoke evidence; flakiness lessons from order
+        168 (no --rm, OOM guards, readiness probe) carry over. Multi-cycle:
+        slot abstraction, image variant, model-table externalization, and
+        engine-parity smoke are separable checkpoints.
+
+    - packet_id: host-native-sidecar-endpoints
+      order: 483
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: host-native inference sidecar registry (macOS Metal/MLX, AMD XDNA2 flm/Lemonade, Intel NPU OpenVINO) behind the enclave proxy"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: sidecar registration protocol + proxy route + one working lane (XDNA2 flm or macOS Metal) with evidence + license-gate record for FastFlowLM
+      depends_on: [heterogeneous-inference-specs, accel-capability-probe]
+      pickup_role: "linux (XDNA2 lane) + macos (Metal lane)"
+      capability_tags: [inference, npu, macos, metal, mlx, amd-xdna, openvino, proxy, enclave]
+      estimated_hours: 20
+      outcome: >
+        The research verdict: NPUs and Apple-Silicon acceleration do not
+        belong IN the container — macOS containers cap at ~75-85% of native
+        Metal via Venus (and the default applehv provider has no GPU at
+        all), WSL2 cannot see NPUs, and AMD/Intel NPU stacks want host-side
+        firmware lockstep. Implement the sidecar slot from the
+        inference-engine-slots spec: a host-native OpenAI-compatible server
+        (llama-server --metal or mlx-lm on macOS; FastFlowLM/Lemonade on
+        XDNA2 Linux; OpenVINO GenAI on Intel NPU) registers with the tray,
+        which exposes it to forge containers through the enclave proxy under
+        the same endpoint contract, preserving egress discipline and the
+        privacy/isolation invariant (spec question resolved in order 479).
+        HARD GATE before bundling FastFlowLM: read its shipped LICENSE
+        (closed NPU kernels; README says free-for-commercial but sources
+        conflict) — record the verdict in this packet; Lemonade is
+        Apache-2.0. Relates to order 401's macOS tier decision — this packet
+        supersedes the in-VM llama.cpp option there if the sidecar lane
+        proves out. Multi-cycle: protocol, proxy route, first lane, second
+        lane are separable checkpoints.
+
+    - packet_id: inference-policy-router
+      order: 484
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: workload-class policy router with adaptive power/thermal signals (what's-best-for-every-scenario)"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: policy router in tillandsias-headless (data-driven routing table, fallback chains, D-Bus power signal watcher) + policy status surface + unit tests over serialized fixtures
+      depends_on: [accel-capability-probe, llama-server-engine-slot]
+      pickup_role: linux
+      capability_tags: [inference, rust, policy, power, battery, dbus, scheduling]
+      estimated_hours: 20
+      outcome: >
+        The operator's transparent what's-best layer, per the
+        inference-policy-router spec: workload classes (background=J/token +
+        preemptible, interactive=TTFT default, quality=biggest fitting model,
+        sustained=throttle-proof), placements as ordered fallback chains
+        always terminating in CPU tier-S, model-fits-memory with >=10%
+        headroom, first-request served from a resident small model while the
+        preferred loads. Adaptive signals: subscribe to UPower +
+        PowerProfiles D-Bus PropertiesChanged (works with power-profiles-
+        daemon AND Fedora tuned-ppd), poll battery/thermal-trip/GPU-busy; on
+        battery or power-saver suspend background work checkpointed within
+        5s and downgrade interactive; resume only on AC + thermal-nominal +
+        interactive-idle >=60s; self-tag background engines SCHED_IDLE.
+        Routing table is DATA (TOML) not code, route() is a pure testable
+        function over serialized capability+signal fixtures. NEG scope
+        guards from the research are binding: no per-op graph splitting, no
+        vendor-TOPS-based routing, no idle model residency on battery.
+        Nobody in the local-LLM ecosystem ships battery-aware routing — this
+        is the forge's differentiator. Multi-cycle: classes+table, signal
+        watcher, preemption, observability surface are separable
+        checkpoints.
+
+    - packet_id: plan-yaml-duplicate-note-lines
+      order: 485
+      desired_release: v0.5
+      title: "Housekeeping: plan.yaml duplicate bootstrap-note lines + methodology/event vs methodology/events directory split"
+      status: ready
+      kind: housekeeping
+      deliverable: plan/issues/plan-yaml-duplicate-note-lines-2026-07-24.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [plan-hygiene, methodology]
+      estimated_hours: 1
+      outcome: >
+        Observed during the order-478 research wave (issue_filing_mandate):
+        plan.yaml carries two near-duplicate notes lines differing only in
+        methodology/events/ vs methodology/event/, and BOTH directories
+        exist on disk while methodology.yaml declares the singular one as
+        the unknown_event_register. Also a stray @methodology directory at
+        repo root. Exit: one canonical event directory (other merged +
+        tombstoned), one note line, @methodology explained or removed.
+        Details in the deliverable.
