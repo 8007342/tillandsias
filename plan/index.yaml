@@ -12830,6 +12830,13 @@ plan_index:
       order: 342
       title: "macOS forge: isolate in-forge agents from the operator checkout"
       status: completed
+      superseded_by: [macos-forge-no-push-route-lane-decision]
+      supersession_note: >
+        Tlatoani-approved 2026-07-24 (recorded on order 466): the
+        SRC-ISOLATION=clone lane this packet built is superseded by the
+        order-437 clone-only default, which provides the same isolation
+        property PLUS the git:// mirror push route. The isolation GOAL of
+        this packet stands; only the mechanism is retired.
       kind: design+implementation
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
       depends_on: []
@@ -21617,6 +21624,24 @@ plan_index:
         - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
       events:
         - type: progress
+          ts: "2026-07-24T07:30:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            WINDOWS PASS against v0.3.260724.1 (operator at the terminal,
+            live-monitored):
+            plan/issues/smoke-455-windows-v0.3.260724.1-2026-07-24.md.
+            Full purge (clean residue audit incl. registry + Event Log
+            source) then pinned curl-install from the published release:
+            sha-verified, VERSIONINFO 0.3.260724.1 (51e5f0aa), rootfs
+            download 3.4s, wipe-to-VM-ready 74s, handshake attempt 1,
+            NO version skew (guest --help confirms 0.3.260724.1), no
+            errors. Saved-file installer run doubled as the smart-quote
+            P1 regression test - parsed correctly. Non-blocking findings:
+            uninstall docs need the ExecutionPolicy bypass invocation;
+            purge should mention it removes saved logins. The v0.4
+            smoke gate's WINDOWS column is COMPLETE.
+        - type: progress
           ts: "2026-07-22T22:15:00Z"
           agent_id: "windows-bullo-fable5-20260722"
           host: windows
@@ -21800,6 +21825,99 @@ plan_index:
             integer order, 460, for order 453's operator-deferred Slice 2.
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
+
+    - packet_id: inference-coldstart-races-proxy-egress-and-hard-gates-launch
+      order: 478
+      desired_release: v0.4
+      title: "Inference first-run self-install races proxy egress readiness, and its 60s readiness probe hard-aborts a lane launch that runs fine without it"
+      status: ready
+      kind: fix
+      deliverable: images/inference/entrypoint.sh bounded retry-with-backoff gated on proxy egress health; launcher soft-degrade (warn + continue) when inference is unavailable; readiness ordering proxy-before-inference
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, inference, proxy, launch, resilience]
+      estimated_hours: 3
+      operator_note: >
+        Live 2026-07-24 07:2xZ, operator's first post-purge cloud attach
+        (v0.3.260724.1, fully cold volumes). Verbatim evidence captured by
+        a continuous log trap
+        (guest /root/.cache/tillandsias/inference-evidence-20260724.log):
+        attempt 1 "curl: (7) Failed to connect to github.com port 443 via
+        proxy after 0 ms" (proxy not yet serving); the entrypoint's SINGLE
+        10s warm-up retry then got "curl: (60) SSL certificate ...
+        self-signed certificate in certificate chain" - that is squid
+        serving its TLS error page with its own cert because upstream
+        egress was STILL not ready, not a real CA problem. Entrypoint then
+        exits FATAL ("will retry next launch") and the launcher's 60s
+        inference readiness probe ABORTED the entire first lane launch
+        (terminal exited code 1). The operator's immediate relaunch came
+        up fine and the forge session runs WITHOUT local inference -
+        proving the component is soft-degradable. The order-477
+        teardown/liveness proxy churn widens the race window (proxy was
+        observed "Up 1 second" repeatedly during the failure window).
+      outcome: >
+        A fully cold first launch succeeds deterministically: inference
+        waits for proven proxy egress (bounded), retries its self-install
+        with backoff instead of one 10s nap, and a still-unready inference
+        degrades the launch to a warning instead of aborting it; launch
+        attempt 1 and attempt 2 behave identically.
+      exit_criteria:
+        - "inference entrypoint distinguishes proxy-unready (retry with bounded backoff) from genuine download failure, and never treats squid's bumped error page as a CA problem"
+        - "lane launch continues with a curated warning when inference is unavailable; no hard abort on an optional component"
+        - "a cold-volume litmus or fixture reproduces the race (or readiness ordering makes it structurally impossible)"
+      events:
+        - type: filed
+          ts: "2026-07-24T07:55:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from the live post-purge 455 smoke session; evidence
+            trap output preserved in-guest; launch #2 (identical inputs)
+            proceeded without inference, confirming soft-degradability.
+
+    - packet_id: teardown-vs-liveness-proxy-scope-disagreement
+      order: 477
+      desired_release: v0.5
+      title: "Last-lane teardown and the liveness supervisor disagree on the proxy's scope: teardown removes it, liveness re-creates it 3s later"
+      status: ready
+      kind: fix
+      deliverable: one shared core-vs-lane-scoped container set consumed by both teardown and liveness (plus a test pinning the post-teardown steady-state container set)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, lifecycle, containers, liveness, teardown]
+      estimated_hours: 2
+      operator_note: >
+        Observed live 2026-07-24 06:50Z when the operator exited the
+        antigravity forge with nothing else running: teardown removed
+        git-mirror + inference + proxy (lane-scoped view) while vault +
+        router stayed up (core view), then
+        "[liveness] re-ensured 1 container(s): [tillandsias-proxy]"
+        re-created the proxy 3 seconds later as a FRESH container. No
+        crash - both actions were clean - but the two components hold
+        contradictory scope sets, so an idle host keeps a squid running
+        that teardown decided should die (and every last-lane exit
+        churns one container create). Decide proxy's true scope once,
+        derive both components from the same constant, and pin the
+        post-teardown steady state in a test.
+      outcome: >
+        After the last lane exits, the container set converges in one
+        step to a single agreed steady state; no component immediately
+        recreates what another just removed.
+      exit_criteria:
+        - "teardown and liveness consume one shared definition of core vs lane-scoped containers"
+        - "a test pins the post-last-lane steady-state container set (no create/remove churn within the settling window)"
+        - "the chosen proxy scope is recorded with rationale (idle footprint vs warm-start latency)"
+      events:
+        - type: filed
+          ts: "2026-07-24T07:05:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from live journal evidence during the antigravity
+            graceful-end validation; operator asked whether the proxy
+            restart was a crash - it was not, it was this disagreement.
 
     - packet_id: vault-host-endpoint-soak-fragility
       order: 463
@@ -22110,14 +22228,47 @@ plan_index:
       pickup_role: macos
       capability_tags: [macos, forge, git-mirror, work-loss, p1]
       estimated_hours: 4
+      operator_approval:
+        ts: "2026-07-24T08:20:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          SUPERSEDE the order-342 macOS SRC-ISOLATION direction with the
+          modern proven order-437 clone-only default. The operator
+          reviewed the windows-lane context (2026-07-24 addendum in the
+          deliverable doc) and approved replacing the obsolete lane
+          override with the mechanism Windows runs in production.
       outcome: >
         macOS lane sets GIT_MIRROR_PATH but never TILLANDSIAS_GIT_SERVICE
         (main.rs:4753-4766), so in-forge commits have no relay route and die
-        with the --rm container. Decision SETTLED by order 465 PRINCIPLE:
-        OPTION B (wire the git:// mirror push relay, keep isolation); OPTION A
-        host-mount is the wrong direction. Depends on order 462 because a
-        newly wired macOS mirror push immediately hits the pre-receive
-        new-branch rejection. Promoted to the index 2026-07-24.
+        with the --rm container. Decision SETTLED by order 465 PRINCIPLE and
+        Tlatoani approval 2026-07-24: take the order-437 clone-only DEFAULT
+        (mirror clone + mirror push in one mechanism) by REMOVING the
+        TILLANDSIAS_FORGE_SRC_ISOLATION=clone override in
+        diagnose.rs:1191-1200 — not by wiring push into the 342 lane.
+        Order-342's isolation property is preserved by construction (the
+        default is also clone-based, no host mount, no facade; mirror
+        seeding needs only read access to the virtiofs staging). OPTION A
+        host-mount is the wrong direction. Dependency order 462 is
+        SATISFIED (322d3026, 2026-07-24). Promoted to the index 2026-07-24.
+      events:
+        - type: note
+          ts: "2026-07-24T08:20:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Windows-lane context filed in the deliverable doc with exact
+            wiring pins (main.rs 4754/4768/4783 three-way branch;
+            lib-common.sh:584 consumer; diagnose.rs:1191 override) and the
+            live-verified relay properties the macOS lane inherits for
+            free (48h vault-agent credential dcafd59c, SEEDED readiness
+            gate dec1175e, new-branch pre-receive 322d3026, 21-push +
+            concurrent-multi-host soak). Implementation checklist before
+            declaring parity: one attended macOS e2e
+            (clone->commit->push->relay->GitHub), run the two
+            test-git-mirror-*.sh scripts in the VZ guest, and check
+            netavark state per order 463 (VZ VMs soak the same way).
+            Inherit consciously: relay publication can be out-of-order vs
+            author time (MOT-02).
 
     - packet_id: forge-trust-ca-source-readiness-gap
       order: 467
@@ -22334,7 +22485,7 @@ plan_index:
         litmus-pinned). Protects the imminent v0.4 promotion.
 
     - packet_id: forge-opencode-provider-seed-missing-after-reset
-      order: 477
+      order: 479
       desired_release: v0.4
       title: "P1 smoke-gate: in-forge OpenCode has no provider bootstrap on a pristine substrate — secret/gemini/api-key has no owning flow and dies with every reset"
       status: completed
