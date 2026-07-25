@@ -17,6 +17,10 @@
   the exact wrong-key FATAL classifier; idle AppRole leases no longer retain the
   Vault lock. Focused tests, 12/12 Vault litmus, shell syntax, and full check
   pass. Status remains `in_progress` for rebuilt-image restart/heal/soak proof.
+- **Local-build e2e**: FAIL at Gate 1 on two unresolved ledger dependencies
+  (`246a`, `247a`); 203 pre-build litmus tests passed and 2 plan-engine checks
+  failed. Install, Podman reset, cold init, and forge launch were not run.
+  Report: `plan/issues/smoke-e2e-findings-local-build-linux-2026-07-25.md`.
 - **Ledger repair**: concurrent branch allocation duplicated live orders 478
   and 479; v0.4 packets were renumbered to 486/487 with stable packet IDs.
 - **Canonical v0.4 state before this source checkpoint**: 68 tagged, 57
