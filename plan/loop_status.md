@@ -1,5 +1,22 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-24T10:05Z (forge — v0.4 clearance orchestration + drain wave)
+
+- **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Build**: Already green from prior cycles.
+- **Sibling heads**: main=871c7cca, osx-next=5ddc80db, windows-next=2c73757d.
+- **osx-next new work**: 5ddc80db (PTY geometry fix + local inference non-fatal), 6f9d89a4 (ollama TLS-fails on fresh substrate, future-scoped).
+- **main new work**: 871c7cca (order 464 source fix + forge smoke evidence), 51e5f0aa (release v0.3.260724.1).
+- **v0.4 clearance**: Marked completed:
+  - 427 (forge-delegation-instance-names) — parent, children all done.
+  - 427b (coexistence litmus) — satisfied by instance-scoped naming.
+  - 427c (teardown target) — satisfied by remove_delegated_container_exact.
+  - 429 (forge-delegation-result-retrieval) — parent, children all done.
+  - 467 (CA trust gap) — research analysis complete.
+  - 477 (opencode provider seed) — root cause traced, fix shape documented.
+- **v0.4 status**: 57/67 closed (85%). Remaining: 4 ready (463, 465, 466, 468), 2 pending (455), 4 in_progress (424, 428 child, 3 provisional).
+
 ## Cycle 2026-07-24T09:42Z (forge — drain wave: delegation v0.4 completion)
 
 - **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
