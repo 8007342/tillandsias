@@ -22879,6 +22879,26 @@ plan_index:
         - "litmus:meta-orchestration-dirty-tree-safety continues to prove fail-closed ordinary dirty starts"
       events:
         - type: progress
+          ts: "2026-07-25T05:41:55Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          checkpoint_commit: 02503422287eaf71346e7b53ba321682e81fae97
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 02503422287eaf71346e7b53ba321682e81fae97
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Reviewed implementation checkpoint pushed and claim released. The
+            required local-build e2e probe returned skip:live-runtime-present
+            for pre-existing tillandsias-vault and tillandsias-router
+            containers, so the forced full install was not started and the
+            completed order-442 destruction guard was not bypassed. Order 489
+            remains ready for the same clean-checkout command once the live
+            stack exits or the operator explicitly authorizes its destruction.
+        - type: progress
           ts: "2026-07-25T05:39:10Z"
           agent_id: "linux-opencode-metaorch-20260725"
           host: linux

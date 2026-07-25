@@ -71,3 +71,25 @@ The final retry completed pre-build, built and installed local version
 The checkout's transient version/dashboard generation was not accepted as
 source state. The dedicated Gate 2 Podman reset, cold init, and final forge leg
 were not run. No release action occurred.
+
+## Order 489 checkpoint retry
+
+At `linux-next` checkpoint `02503422`, order 489's focused fixtures, 8/8
+meta-orchestration instant litmus, 2/2 clickable-trace-index quick litmus, and
+`./build.sh --check` pass. The checkpoint is pushed and the worktree is clean.
+
+Before retrying the forced full install chain, the required structured probe
+returned:
+
+```text
+$ scripts/e2e-preflight.sh eligibility
+skip:live-runtime-present
+```
+
+The live containers are `tillandsias-vault` and `tillandsias-router`; they
+predate this retry. Per completed order 442, the cycle did not bypass the guard
+or destroy that operator/shared runtime. Consequently
+`TILLANDSIAS_E2E_FORCE=1 ./build.sh --ci-full --install --strict --filter
+meta-orchestration` was not started, and reset/init/forge gates remain not run.
+The smallest next action is to rerun after the live stack exits, or for the
+operator to explicitly authorize this invocation to destroy it.

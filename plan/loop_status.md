@@ -31,7 +31,10 @@
   the same redirected helper. Focused fixtures, 8/8 meta-orchestration instant
   litmus, 2/2 clickable-trace-index quick litmus, YAML parsing, and
   `./build.sh --check` pass; the full clean-checkout install rerun remains.
-  Dedicated reset/init/forge gates were not run.
+  Checkpoint `02503422` is pushed. The required e2e eligibility probe then
+  returned `skip:live-runtime-present` for the pre-existing Vault/router stack,
+  so the forced full-install command was not started and the order-442 guard was
+  not bypassed. Dedicated reset/init/forge gates were not run.
 - **Ledger repair**: concurrent branch allocation duplicated live orders 478
   and 479; v0.4 packets were renumbered to 486/487 with stable packet IDs.
 - **Canonical v0.4 state before this source checkpoint**: 71 tagged, 58
