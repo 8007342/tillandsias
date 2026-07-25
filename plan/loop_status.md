@@ -1,5 +1,34 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-25T04:18Z (linux_mutable - v0.4 agent drain + Windows integration)
+
+- **Host/branch**: mutable Linux, `linux-next`; credential guard
+  `ok:gh-keyring`; startup boundary clean.
+- **Sibling integration**: merged and pushed `origin/windows-next`, including
+  the v0.3.260724.1 Windows smoke PASS evidence and plan repairs. The merge
+  absorbed a concurrent linux-next advance without reminting published sibling
+  commits. `./build.sh --check` and YAML parse passed on the integrated tree.
+- **macOS hold**: `origin/osx-next` remains unintegrated pending macOS-side
+  reconciliation of an unapproved renderer diagnostic, the push-route policy
+  decision, and an unindexed methodology file. The branch is drift-frozen until
+  it merges current linux-next and records focused evidence.
+- **Order 463**: delegated source slice implemented and reviewed. VM-backed
+  Vault now uses enclave DNS with no host publish; HTTP 400 unseal responses get
+  the exact wrong-key FATAL classifier; idle AppRole leases no longer retain the
+  Vault lock. Focused tests, 12/12 Vault litmus, shell syntax, and full check
+  pass. Status remains `in_progress` for rebuilt-image restart/heal/soak proof.
+- **Ledger repair**: concurrent branch allocation duplicated live orders 478
+  and 479; v0.4 packets were renumbered to 486/487 with stable packet IDs.
+- **Canonical v0.4 state before this source checkpoint**: 68 tagged, 57
+  terminal, 11 nonterminal (5 ready, 5 in_progress, 1 pending). Order 455 remains
+  platform-owned and its pre-tag/post-tag circular wording needs operator
+  clarification; no release action was run.
+- **Next assignments**: Linux live-evidence matrix starts with 463 then 424 and
+  the three provisional packets; macOS owns 466 plus route/UX reconciliation;
+  Windows/macOS own 455 after the candidate-build rule is clarified. Order 468
+  remains sign-off-gated and order 476 still needs the Linux guard plus operator
+  branch protection.
+
 ## Cycle 2026-07-24T10:05Z (forge — v0.4 clearance orchestration + drain wave)
 
 - **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.

@@ -128,13 +128,31 @@ SEALED="$(curl -fsS "$VAULT_ADDR/v1/sys/seal-status" | jq -r '.sealed')"
 if [ "$SEALED" = "true" ]; then
     log "unsealing vault"
     UNSEAL_KEY_HEX_UPPER="$(echo "$UNSEAL_HEX" | tr 'a-f' 'A-F')"
-    # Vault accepts hex or base64; send hex.
-    RESPONSE="$(curl -fsS -X POST \
+    # Vault accepts hex or base64; send hex. Do not use curl -f here: Vault
+    # returns HTTP 400 for a wrong key, and the recovery seam requires the
+    # explicit FATAL marker below rather than curl's generic exit-22 text.
+    RESPONSE_AND_CODE="$(curl -sS -X POST \
         -d "{\"key\":\"$UNSEAL_KEY_HEX_UPPER\"}" \
+        -w '\n%{http_code}' \
         "$VAULT_ADDR/v1/sys/unseal")"
+    UNSEAL_HTTP_CODE="${RESPONSE_AND_CODE##*$'\n'}"
+    RESPONSE="${RESPONSE_AND_CODE%$'\n'*}"
+    case "$UNSEAL_HTTP_CODE" in
+        2*) ;;
+        400)
+            log "FATAL: unseal request returned HTTP 400: wrong key"
+            kill "$VAULT_PID" 2>/dev/null || true
+            exit 1
+            ;;
+        *)
+            log "FATAL: unseal request returned HTTP $UNSEAL_HTTP_CODE"
+            kill "$VAULT_PID" 2>/dev/null || true
+            exit 1
+            ;;
+    esac
     NOW_SEALED="$(echo "$RESPONSE" | jq -r '.sealed')"
     if [ "$NOW_SEALED" != "false" ]; then
-        log "FATAL: unseal call returned sealed=$NOW_SEALED — wrong key"
+        log "FATAL: unseal call returned sealed=$NOW_SEALED: wrong key"
         kill "$VAULT_PID" 2>/dev/null || true
         exit 1
     fi

@@ -52,3 +52,14 @@ manual eyeballing during conflict resolution; nothing fails loud.
 
 `pickup_role: any` — pure-Rust policy subcommand + ledger edit; no host
 substrate needed.
+
+## 2026-07-25 recurrence
+
+The windows-next integration and a concurrent linux-next research wave each
+allocated orders 478 and 479 from a stale shared maximum. The integration gate
+parsed the YAML but did not reject the semantic collision. The v0.4 packets
+`inference-coldstart-races-proxy-egress-and-hard-gates-launch` and
+`forge-opencode-provider-seed-missing-after-reset` were renumbered to 486 and
+487; the v0.5 research sequence retains 478-485. This recurrence keeps the
+proposed executable uniqueness check open and raises its value: YAML parsing
+alone is insufficient.

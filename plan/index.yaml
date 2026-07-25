@@ -21827,7 +21827,7 @@ plan_index:
             hold the v0.4 no-spill stability closure.
 
     - packet_id: inference-coldstart-races-proxy-egress-and-hard-gates-launch
-      order: 478
+      order: 486
       desired_release: v0.4
       title: "Inference first-run self-install races proxy egress readiness, and its 60s readiness probe hard-aborts a lane launch that runs fine without it"
       status: ready
@@ -21867,6 +21867,15 @@ plan_index:
         - "lane launch continues with a curated warning when inference is unavailable; no hard abort on an optional component"
         - "a cold-volume litmus or fixture reproduces the race (or readiness ordering makes it structurally impossible)"
       events:
+        - type: renumbered
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Renumbered 478 to 486 after the windows-next integration and a
+            concurrent linux-next research wave independently allocated 478.
+            Stable packet_id is unchanged; the repair restores unique live
+            order references without rewriting either published lineage.
         - type: filed
           ts: "2026-07-24T07:55:00Z"
           agent_id: "windows-host-claude-observer"
@@ -21923,7 +21932,7 @@ plan_index:
       order: 463
       desired_release: v0.4
       title: "25h soak broke every host->vault path: netavark DNAT loss on the internal enclave network, loopback bind EIO, first-restart unseal landmine, and lane-lock heal starvation"
-      status: ready
+      status: in_progress
       kind: fix
       deliverable: vault host endpoint via enclave URL everywhere (drop the -p publish), entrypoint unseal-400 classification, bounded lane vault-lock scope
       depends_on: []
@@ -22002,6 +22011,22 @@ plan_index:
             The structural fix (drop the 127.0.0.1:8201 publish,
             enclave-URL everywhere) remains this packet's scope -
             priority raised by the cross-platform repro.
+        - type: progress
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          lease_id: "linux-opencode-metaorch-20260725T0344Z"
+          summary: >
+            Source slice implemented and reviewed: VM-backed launches now use
+            https://vault:8200 without a host publish; native rootless Linux is
+            the sole named loopback compatibility consumer. The Vault
+            entrypoint emits an exact wrong-key FATAL marker for HTTP 400 and
+            recovery requires it. AppRole minting retains the shared lock only
+            for bounded mint/secret creation, so an idle lane cannot starve an
+            exclusive heal. Focused headless tests, 12/12 tillandsias-vault
+            litmus checks, shell syntax, formatting, and ./build.sh --check
+            pass. Remaining closure is live restarted-Vault, idle-lane/heal,
+            and soak evidence on the rebuilt image.
 
     - packet_id: mirror-pre-receive-blocks-all-new-branches
       order: 462
@@ -22485,7 +22510,7 @@ plan_index:
         litmus-pinned). Protects the imminent v0.4 promotion.
 
     - packet_id: forge-opencode-provider-seed-missing-after-reset
-      order: 479
+      order: 487
       desired_release: v0.4
       title: "P1 smoke-gate: in-forge OpenCode has no provider bootstrap on a pristine substrate — secret/gemini/api-key has no owning flow and dies with every reset"
       status: completed
@@ -22507,6 +22532,15 @@ plan_index:
         gemini/opencode login lane; --diagnose names the missing seed before
         launch. Until fixed the Linux 455-family forge gate cannot pass
         unattended.
+      events:
+        - type: renumbered
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Renumbered 479 to 487 after the windows-next integration and a
+            concurrent linux-next research wave independently allocated 479.
+            Stable packet_id and completion state are unchanged.
 
     - packet_id: heterogeneous-inference-landscape-research
       order: 478

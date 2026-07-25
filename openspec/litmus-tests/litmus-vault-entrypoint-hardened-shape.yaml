@@ -2,7 +2,7 @@
 name: litmus:vault-entrypoint-hardened-shape
 spec: tillandsias-vault
 phase: pre-build
-description: Pin the hardened Vault entrypoint shape and tmpfs secret handover contract
+description: Pin the hardened Vault entrypoint, explicit unseal-400 classification, and tmpfs secret handover contract
 severity: high
 size: instant
 
@@ -25,6 +25,11 @@ critical_path:
     command: "grep -F 'HANDOVER_DIR=\"/run/vault-handover\"' images/vault/entrypoint.sh && grep -F 'echo \"$SHAMIR_KEY_B64\" > \"$HANDOVER_DIR/unseal.key\"' images/vault/entrypoint.sh && grep -F 'echo \"$ROOT_TOKEN\" > \"$HANDOVER_DIR/root.token\"' images/vault/entrypoint.sh"
     timeout_ms: 3000
     expected_behavior: "$HANDOVER_DIR/root.token"
+
+  - step: "Unseal HTTP 400 emits the wrong-key marker consumed by recovery"
+    command: "grep -F 'UNSEAL_HTTP_CODE=' images/vault/entrypoint.sh && grep -F '400)' images/vault/entrypoint.sh && grep -F 'FATAL: unseal request returned HTTP 400: wrong key' images/vault/entrypoint.sh && grep -F 'UNSEAL_LOG_WRONG_KEY' crates/tillandsias-headless/src/vault_bootstrap.rs"
+    timeout_ms: 3000
+    expected_behavior: "UNSEAL_LOG_WRONG_KEY"
 
   - step: "Host bootstrap reads token and unseal key from tmpfs and shreds them before unlinking"
     command: "grep -F '\"cat\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '/run/vault-handover/{name}' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'dd if=/dev/zero' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key' crates/tillandsias-headless/src/vault_bootstrap.rs"
