@@ -22878,6 +22878,48 @@ plan_index:
         - "litmus:opencode-prompt-e2e-shape full mode advances local and remote linux-next with a plan result, while smoke mode still expects no delta"
         - "litmus:meta-orchestration-dirty-tree-safety continues to prove fail-closed ordinary dirty starts"
       events:
+        - type: progress
+          ts: "2026-07-25T05:39:10Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Main-agent review retained required trace regeneration and routed
+            the release-build local CI branch through the same target/dashboard
+            helper. Focused preparation and dirty-boundary fixtures pass; the
+            bound meta-orchestration instant suite passes 8/8; clickable trace
+            quick litmus passes 2/2; YAML, shell syntax, diff checks, and
+            ./build.sh --check pass. The pre-existing non-install trace dispatch
+            gap is filed separately as order 490. Full install e2e remains the
+            completion boundary.
+        - type: progress
+          ts: "2026-07-25T05:30:17Z"
+          agent_id: "linux-opencode-order489-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Smallest non-mutating slice implemented: build/install no longer
+            bumps VERSION/Cargo metadata; required trace-index regeneration is
+            retained per the clickable-trace-index spec;
+            build-driven local CI dashboards and evidence references are routed
+            under target/convergence while post-build still initializes and
+            tests INSTALL_BIN. The focused clean-boundary check passed, the
+            fail-closed dirty-start fixture passed, the bound meta-orchestration
+            instant suite passed 8/8, and ./build.sh --check passed. Completion
+            remains pending a clean-checkout ./build.sh --ci-full --install rerun
+            proving the full local/remote plan delta with the installed binary.
         - type: filed
           ts: "2026-07-25T05:12:06Z"
           agent_id: "linux-opencode-metaorch-20260725"
@@ -22886,3 +22928,41 @@ plan_index:
             Full-mode forge exited 0 after correctly refusing dirty-start on
             eight build-generated tracked paths; delta step then failed because
             HEAD appropriately remained unchanged.
+
+    - packet_id: clickable-trace-index-build-dispatch-gap
+      order: 490
+      desired_release: v0.4
+      title: "Regenerate clickable trace indexes from every build-producing build.sh mode"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/clickable-trace-index-build-dispatch-gap-2026-07-25.md
+      depends_on: [postbuild-meta-orchestration-dirty-start-contract]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, build, traces, litmus]
+      estimated_hours: 2
+      outcome: >
+        Debug, release, install, observatorium, and init build modes regenerate
+        trace indexes exactly once, while test-only and check-only modes preserve
+        the indexes byte-identically.
+      exit_criteria:
+        - "an executable fixture proves each build-producing build.sh mode invokes generate-traces.sh exactly once"
+        - "test-only and check-only build.sh modes do not invoke generate-traces.sh"
+        - "litmus:clickable-trace-index-generation and ./build.sh --check pass"
+      events:
+        - type: filed
+          ts: "2026-07-25T05:36:01Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Order 489 review found the active clickable-trace-index build
+            integration requirement is only implemented by install paths;
+            shaped the residual as a separate executable-fixture packet so the
+            dirty-start fix stays focused.

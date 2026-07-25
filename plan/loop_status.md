@@ -25,13 +25,19 @@
   plan tests pass 8/8 and the focused plan-engine litmus passes 4/4. Full Gate 1
   retries reached 205/205 pre-build PASS and local install, then stopped on two
   post-build blockers. Order 488 (freshness evidence precedence) was fixed and
-  focused-verified in the same cycle; order 489 (build-generated dirty checkout
-  blocks full meta-orchestration) remains ready. Dedicated reset/init/forge
-  gates were not run.
+  focused-verified in the same cycle. Order 489 now has a reviewed implementation
+  checkpoint: local build/install no longer bumps release metadata, local CI and
+  evidence dashboards route under `target/`, and the release-build CI branch uses
+  the same redirected helper. Focused fixtures, 8/8 meta-orchestration instant
+  litmus, 2/2 clickable-trace-index quick litmus, YAML parsing, and
+  `./build.sh --check` pass; the full clean-checkout install rerun remains.
+  Dedicated reset/init/forge gates were not run.
 - **Ledger repair**: concurrent branch allocation duplicated live orders 478
   and 479; v0.4 packets were renumbered to 486/487 with stable packet IDs.
-- **Canonical v0.4 state before this source checkpoint**: 70 tagged, 58
-  terminal, 12 nonterminal (6 ready, 5 in_progress, 1 pending). Order 455 remains
+- **Canonical v0.4 state before this source checkpoint**: 71 tagged, 58
+  terminal, 13 nonterminal (7 ready, 5 in_progress, 1 pending). Order 490 records
+  the separately observed pre-existing gap where non-install build modes do not
+  regenerate clickable trace indexes. Order 455 remains
   platform-owned and its pre-tag/post-tag circular wording needs operator
   clarification; no release action was run.
 - **Next assignments**: Linux live-evidence matrix starts with 463 then 424 and

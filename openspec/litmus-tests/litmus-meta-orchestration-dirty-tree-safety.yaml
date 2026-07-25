@@ -6,7 +6,9 @@ description: >
   Pin the order-341 startup worktree boundary: pre-existing tracked edits and
   status-visible untracked files are immutable operator state. A dirty-start
   blocked cycle writes disposable diagnostics only under its unique external
-  boundary directory and never deletes or restores a worktree path.
+  boundary directory and never deletes or restores a worktree path. Local
+  build/install preparation must preserve that clean boundary rather than
+  weakening the guard.
 severity: critical
 size: instant
 
@@ -16,6 +18,7 @@ preconditions:
   - workspace contains scripts/hash-image-sources.sh
   - workspace contains scripts/meta-orchestration-worktree-guard.sh
   - workspace contains scripts/test-meta-orchestration-dirty-tree-safety.sh
+  - workspace contains scripts/test-build-sh-ci-full-install-prep.sh
 
 critical_path:
   - step: "worktree boundary guard and fixture are executable"
@@ -33,6 +36,11 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "PASS: blocked cycle preserved startup tracked and untracked bytes"
 
+  - step: "local full-install preparation preserves tracked release and dashboard state"
+    command: "scripts/test-build-sh-ci-full-install-prep.sh"
+    timeout_ms: 10000
+    expected_behavior: "ci-full-install-prep: ok"
+
   - step: "canonical skills invalidate the forge image cache key"
     command: "scripts/test-hash-image-sources.sh"
     timeout_ms: 10000
@@ -45,7 +53,7 @@ observability:
   log_fields:
     spec: "meta-orchestration"
     test: "meta-orchestration-dirty-tree-safety"
-    artifact: "skills/meta-orchestration/SKILL.md + worktree guard + default-image skill copy path"
+    artifact: "skills/meta-orchestration/SKILL.md + worktree guard + non-mutating local build preparation + default-image skill copy path"
 
 rollback:
   on_failure: >
