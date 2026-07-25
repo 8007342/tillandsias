@@ -22811,7 +22811,7 @@ plan_index:
       order: 488
       desired_release: v0.4
       title: "Running-image freshness negative control becomes INDETERMINATE when a stale canonical tag inherits a source-digest label"
-      status: ready
+      status: completed
       kind: fix
       deliverable: plan/issues/running-image-freshness-label-precedence-fixture-2026-07-25.md
       depends_on: []
@@ -22836,6 +22836,25 @@ plan_index:
           summary: >
             Reproduced in local-build post-build Gate 1 after 205/205 pre-build
             checks passed; the fixture's case 3 exited 0 as indeterminate.
+        - type: completed
+          ts: "2026-07-25T05:18:45Z"
+          agent_id: "linux-opencode-order488-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: d7b9ef93ea0b85b9bb5d9b4191326c540edbc51b
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Reordered the freshness evidence checks so the expected canonical
+            tag proves current, a different canonical 64-hex tag proves stale
+            before any inherited source-digest label can defer the verdict, and
+            label-only identity remains indeterminate. The direct six-case
+            fixture passed with its case 5 and strict-mode case 6 controls
+            unchanged; the focused git-mirror-service post-build litmus passed
+            1/1 executed tests (four steps, 18 phase skips).
 
     - packet_id: postbuild-meta-orchestration-dirty-start-contract
       order: 489

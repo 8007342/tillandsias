@@ -62,7 +62,8 @@ The final retry completed pre-build, built and installed local version
 `0.3.260725.1`, and then failed two post-build litmus tests:
 
 - `litmus:running-image-freshness`: stale canonical tag masked by an inherited
-  source-digest label; filed as order 488.
+  source-digest label; filed and same-cycle fixed as order 488. The six-case
+  fixture and focused four-step post-build litmus now pass.
 - `litmus:opencode-prompt-e2e-shape`: full meta-orchestration correctly refused
   the build-generated dirty checkout, so HEAD did not advance; filed as order
   489.

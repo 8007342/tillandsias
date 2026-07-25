@@ -85,6 +85,9 @@ STALE_ID="$(podman inspect -f '{{.Id}}' "$STALE_TAG" 2>/dev/null || true)"
 CURRENT_ID="$(podman inspect -f '{{.Id}}' localhost/tillandsias-git:latest 2>/dev/null || true)"
 [ -n "$STALE_ID" ] && [ "$STALE_ID" != "$CURRENT_ID" ] \
     || fail "case3 setup: synthetic image is not distinct from the current image"
+STALE_SOURCE_DIGEST="$(podman inspect -f '{{index .Labels "io.tillandsias.image.source-digest"}}' "$STALE_TAG" 2>/dev/null || true)"
+[ -n "$STALE_SOURCE_DIGEST" ] && [ "$STALE_SOURCE_DIGEST" != "<no value>" ] \
+    || fail "case3 setup: synthetic stale image did not inherit the source-digest label"
 
 podman run -d --name "$C_NAME" --entrypoint sleep "$STALE_TAG" 300 >/dev/null 2>&1 \
     || fail "case3 setup: could not start a container from the synthetic stale image"
@@ -112,7 +115,7 @@ set -e
 [ "$RC" -eq 0 ] || fail "case4: current image should pass, got exit $RC. Output: $OUT"
 echo "case 4 ok: current running image passes"
 
-# --- case 5: an image with NO identity is INDETERMINATE, never stale ---------
+# --- case 5: label-only identity is INDETERMINATE, never stale ---------------
 # Tag absence does not imply stale content: build-image.sh prunes tags on later
 # builds, and the Rust image_builder identifies images by a source-digest LABEL
 # that shell cannot recompute. Claiming STALE here would be asserting more than
@@ -126,6 +129,9 @@ podman build -q -t "$UNIDENTIFIED_TAG" "$WORK" >/dev/null 2>&1 \
 podman inspect -f '{{range .RepoTags}}{{.}} {{end}}' "$UNIDENTIFIED_TAG" 2>/dev/null \
     | grep -qE 'tillandsias-git:[0-9a-f]{64}' \
     && fail "case5 setup: the unidentified image unexpectedly carries a canonical hash tag"
+UNIDENTIFIED_SOURCE_DIGEST="$(podman inspect -f '{{index .Labels "io.tillandsias.image.source-digest"}}' "$UNIDENTIFIED_TAG" 2>/dev/null || true)"
+[ -n "$UNIDENTIFIED_SOURCE_DIGEST" ] && [ "$UNIDENTIFIED_SOURCE_DIGEST" != "<no value>" ] \
+    || fail "case5 setup: unidentified image did not inherit the source-digest label"
 podman run -d --name "$C_NAME" --entrypoint sleep "$UNIDENTIFIED_TAG" 300 >/dev/null 2>&1 \
     || fail "case5 setup: could not start the unidentified container"
 

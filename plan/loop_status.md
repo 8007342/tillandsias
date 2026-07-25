@@ -24,13 +24,14 @@
   Same-cycle repair replaced both order-like references with stable packet IDs;
   plan tests pass 8/8 and the focused plan-engine litmus passes 4/4. Full Gate 1
   retries reached 205/205 pre-build PASS and local install, then stopped on two
-  post-build blockers: orders 488 (freshness evidence precedence) and 489
-  (build-generated dirty checkout blocks full meta-orchestration). Dedicated
-  reset/init/forge gates were not run.
+  post-build blockers. Order 488 (freshness evidence precedence) was fixed and
+  focused-verified in the same cycle; order 489 (build-generated dirty checkout
+  blocks full meta-orchestration) remains ready. Dedicated reset/init/forge
+  gates were not run.
 - **Ledger repair**: concurrent branch allocation duplicated live orders 478
   and 479; v0.4 packets were renumbered to 486/487 with stable packet IDs.
-- **Canonical v0.4 state before this source checkpoint**: 70 tagged, 57
-  terminal, 13 nonterminal (7 ready, 5 in_progress, 1 pending). Order 455 remains
+- **Canonical v0.4 state before this source checkpoint**: 70 tagged, 58
+  terminal, 12 nonterminal (6 ready, 5 in_progress, 1 pending). Order 455 remains
   platform-owned and its pre-tag/post-tag circular wording needs operator
   clarification; no release action was run.
 - **Next assignments**: Linux live-evidence matrix starts with 463 then 424 and
