@@ -181,12 +181,22 @@ impl PtySessionStore {
         // would type blind) keep it — see `argv_wants_kernel_echo`.
         // @trace plan/issues/macos-terminal-management-audit-2026-07-27.md (D2),
         //        plan/issues/macos-tray-scroll-arrowkey-spill-during-build-2026-07-23.md
-        if !argv_wants_kernel_echo(&argv) {
-            if let Err(err) = clear_slave_echo_family(&slave) {
-                // Best-effort: a cooked-echo PTY is degraded UX, not a
-                // launch blocker.
-                warn!(session_id, %err, "guest PTY echo-family clear failed");
-            }
+        if !argv_wants_kernel_echo(&argv)
+            && let Err(err) = clear_slave_echo_family(&slave)
+        {
+            // Best-effort: a cooked-echo PTY is degraded UX, not a
+            // launch blocker.
+            warn!(session_id, %err, "guest PTY echo-family clear failed");
+        }
+        // 1c) UTF-8-aware cooked-mode editing (order-491 in-forge probe 1):
+        // the kernel default leaves IUTF8 off, so a canonical-mode erase
+        // (backspace in github-login prompts, `read` lines) can split a
+        // multibyte sequence even though the session env is UTF-8
+        // (LANG=C.UTF-8 / en_US.UTF-8). Linux-only flag; the guest is
+        // always Linux — the cfg keeps macOS dev-host unit builds green.
+        #[cfg(target_os = "linux")]
+        if let Err(err) = set_slave_iutf8(&slave) {
+            warn!(session_id, %err, "guest PTY IUTF8 set failed");
         }
 
         // 2) Build the child Command. Slave fd becomes child stdin/out/err
@@ -507,6 +517,17 @@ fn clear_slave_echo_family(slave: &OwnedFd) -> nix::Result<()> {
         | LocalFlags::ECHOK
         | LocalFlags::ECHONL
         | LocalFlags::ECHOCTL);
+    tcsetattr(slave, SetArg::TCSANOW, &t)
+}
+
+/// Mark the guest PTY line discipline UTF-8-aware (`IUTF8`) so canonical-
+/// mode erase treats multibyte sequences as one character instead of
+/// splitting them byte-wise. Linux-only flag (absent on Darwin).
+#[cfg(target_os = "linux")]
+fn set_slave_iutf8(slave: &OwnedFd) -> nix::Result<()> {
+    use nix::sys::termios::{InputFlags, SetArg, tcgetattr, tcsetattr};
+    let mut t = tcgetattr(slave)?;
+    t.input_flags |= InputFlags::IUTF8;
     tcsetattr(slave, SetArg::TCSANOW, &t)
 }
 

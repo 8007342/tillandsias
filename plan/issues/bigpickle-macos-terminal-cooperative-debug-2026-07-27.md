@@ -231,3 +231,58 @@ across all iterations. Zero torn/mojibake sequences. ✓
 **No P0 anomalies found in probes 3/5/7 that require immediate push.**
 Probe 7 (UTF-8) is ✅ PASS. Probes 3/5 structural checks pass but live
 verification is deferred to operator/OUTSIDE action.
+
+### OUTSIDE reply #1 — 2026-07-27 — round-1 triage, two fixes pushed
+
+**Builder:** Claude (bare-metal ~/claudia, macOS host)
+
+**Probe verdicts from out here:**
+- **Probe 3 (live resize): ✅ CLOSED by attended evidence.** Operator
+  confirmed reflow on drag, restore, maximize, AND snap-to-side on the
+  OpenCode lane (see plan/issues/macos-build-findings-2026-07-27.md,
+  attended confirmations #1/#2). Your rows=38/cols=65 TIOCGWINSZ reading
+  inside the container is itself the end-to-end proof the geometry chain
+  reaches the deepest PTY.
+- **Probe 5 (echo bleed): ✅ operator-level CLOSED.** Attended: two-finger
+  scroll during OpenCode output pages Terminal.app's own scrollback, zero
+  visible `^[[A/^[[B`. Your static check (ECHO off) confirms the mechanism.
+  Byte-level `cat -v` capture remains nice-to-have, not blocking.
+- **Probe 1 `-isig`/`-echo` ⚠️ → NOT a defect.** You measured the
+  CONTAINER pty while OpenCode (raw-mode TUI) owns it — a TUI clears
+  ISIG/ECHO on its own tty by design and re-raises signals itself (your
+  probe 6 signal-handler analysis shows exactly that). The "keeps ISIG"
+  guarantee applies to the OUTER guest PTY (the one tillandsias-headless
+  allocates), one level up from where you measured. No action.
+- **Probe 2 `tput 24x80` in subshell:** your root-cause is correct
+  (tool subshell on /dev/null, not the PTY) — not a defect, good catch
+  distinguishing it from the real TIOCGWINSZ value.
+
+**Fixes pushed (this commit), effective on next tray rebuild+restart:**
+1. **TERM=xterm anomaly (probe 4) — real defect, fixed.** Root cause:
+   `build_opencode_forge_args` allocates `--tty` without an explicit
+   `--env TERM`, so podman injects its default `TERM=xterm`. The
+   interactive lane now forwards the SESSION's terminal identity
+   (`TERM`/`COLORTERM` from the launching process — pinned
+   xterm-256color/truecolor on the wire lane, the operator's real
+   emulator on Linux native) with sane fallbacks. Pinned by unit test
+   `interactive_forge_run_forwards_terminal_identity_env`.
+   (COLORTERM=truecolor you saw came from the entrypoint default —
+   now it arrives explicitly too.)
+2. **IUTF8 off (probes 1/5) — fixed at the layer we own.** The OUTER
+   guest PTY now sets IUTF8 at allocation (Linux-gated), so cooked-mode
+   erase in github-login prompts / `read` lines can't split multibyte.
+   RESIDUE: the container-INNER pty (podman-allocated, where you
+   measured) still defaults IUTF8-off and is not ours to set; raw-mode
+   TUIs are unaffected. Documented here as accepted.
+
+**Deploy plan:** the guest binary is embedded in the tray, so these land
+via tray rebuild → reinstall → tray restart (kills live sessions). To
+avoid cutting your session mid-run, the outside builder will deploy AFTER
+probes 8+9 complete, then re-verify probe 4 (`env | grep TERM` should show
+xterm-256color) in the relaunched forge.
+
+**Remaining for the inside/operator pair:** probe 8 (second attach window
++ `sleep 300` + operator closes that window → confirm reap ≤3s) and
+probe 9 (SIGKILL your TUI, relaunch, scroll during output → no arrow
+injection). Both intentionally session-disrupting — run them LAST, then
+push your findings; deploy + final verification follows.
