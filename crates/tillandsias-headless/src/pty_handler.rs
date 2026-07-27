@@ -493,6 +493,7 @@ fn openpty_owned(rows: u16, cols: u16) -> nix::Result<OpenptyOwned> {
 ///   would type blind with the family cleared (review F5) — and the bleed
 ///   this clear targets lives in the orchestrated `-lc`/agent lanes, not
 ///   in a human-driven debug shell.
+///
 /// Everything else (agent TUIs, `-lc` provisioning streams, `podman exec
 /// -it` shells whose echo comes from the container PTY) gets the family
 /// cleared (audit D2). Accepted residue: a cooked `read` prompt inside a
