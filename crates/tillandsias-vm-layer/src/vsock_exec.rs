@@ -454,7 +454,7 @@ where
         ControlMessage::HelloAck { wire_version, .. } => {
             if wire_version != WIRE_VERSION {
                 return Err(format!(
-                    "probe_vm_phase: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
+                    "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
                 ));
             }
         }

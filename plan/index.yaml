@@ -22103,6 +22103,21 @@ plan_index:
             test-pre-receive-yaml-gate.sh with test 4 (new branch + frozen
             legacy archive). All 165 pre-build litmus tests pass. Build
             green.
+        - type: completed
+          ts: "2026-07-24T21:15:00Z"
+          agent_id: "forge-bigpickle-opencode-20260724T2104Z"
+          host: forge
+          lease_id: "mirror-pre-receive-blocks-all-new-branches"
+          commits: ["2acc20f9"]
+          summary: >
+            Concurrent duplicate fix landed on main (merge-base against HEAD
+            with empty-repo fallback + 2 litmus steps). Superseded at the
+            2026-07-27 linux-next/main reconciliation merge: the
+            find_diff_base() + is_legacy_archive() implementation from
+            linux-next was kept as canonical because it also exempts the
+            frozen legacy archive and carries the extended hook test; the
+            merge-base ancestor search semantics are preserved inside
+            find_diff_base().
       operator_note: >
         Discovered live 2026-07-23 08:50Z by the windows observer while
         salvaging the usage-limit-stranded result-retrieval worktree: the
@@ -22165,7 +22180,7 @@ plan_index:
       order: 464
       desired_release: v0.5
       title: "Reject unknown delegated-result format values instead of silently disabling capture"
-      status: ready
+      status: in_progress
       kind: fix
       deliverable: plan/issues/forge-result-format-unknown-value-fail-closed-2026-07-24.md
       depends_on: []
@@ -22194,6 +22209,25 @@ plan_index:
             Filed from the final order429 adversarial review. OpenCode Web
             leakage was fixed in the v0.4 source slice; the remaining unknown
             value grammar is an independent v0.5 hardening packet.
+        - type: progress
+          ts: "2026-07-24T17:30:00Z"
+          agent_id: "opencode-bigpickle-forge-20260724"
+          host: forge
+          commits: []
+          summary: >
+            Source fix landed in delegated_run_config (main.rs): the function
+            now match-guards on the env var value — exact "json" proceeds, unset
+            returns Ok(None) (ordinary path), any other present text returns a
+            deterministic error naming the unsupported value, and non-UTF8
+            returns a Unicode error. Test
+            delegated_result_format_unknown_value_fails_closed covers: unset
+            preserves ordinary path, exact json activates delegated capture, 7
+            bad text values (xml/yaml/jsonl/Json/JSON/json-space/space-json)
+            all fail with "unsupported value" in the error, and non-UTF8 bytes
+            fail with "UTF-8" in the error. cargo clippy -p tillandsias-headless
+            -D warnings clean. Remaining exit criteria: (3) OpenCode Web omission
+            proof and (4) spec wording — left for the next agent with full
+            build/litmus access.
 
     - packet_id: repeat-human-operator-only-supervisor
       provisional_id: forge-260723-1

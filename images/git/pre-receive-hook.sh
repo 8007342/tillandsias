@@ -171,7 +171,7 @@ while read -r OLDSHA NEWSHA REFNAME; do
             fi
             ;;
         *)
-            # Diff between old and new trees to find changed files
+            # Existing branch: diff between old and new trees.
             FILES="$(git diff --name-only "$OLDSHA" "$NEWSHA" 2>/dev/null)" || continue
             ;;
     esac
