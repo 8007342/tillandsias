@@ -118,8 +118,8 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `lin
 ## Start Of Cycle
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
-2. `git fetch origin --prune`, then run the Credential Channel Guard below
-   before any committable work.
+2. `git fetch origin --prune`, then run the Credential Channel Guard and the
+   Committable Branch Guard below before any committable work.
 3. Snapshot the startup boundary before classifying or changing any path:
    ```bash
    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
@@ -173,6 +173,32 @@ velocity-killer this guard prevents.
 
 Reads (`git fetch`/`git ls-remote`) succeeding is NOT evidence of a credential
 channel — public-repo reads are anonymous. Verify write capability explicitly.
+
+## Committable Branch Guard
+
+Run alongside the Credential Channel Guard, before any committable work.
+Direct commits/pushes to `main` are forbidden — `main` advances only through
+PR merges. Breach record: 34e60965, an antigravity forge cycle running ON
+`main` that pushed a ~42k-line `plan/index.yaml` reserialization straight to
+`origin/main` (reverted via PR #81; see
+`plan/issues/main-branch-direct-push-guard-2026-07-24.md`).
+
+Run the executable guard instead of re-deriving the check in prose:
+
+```bash
+scripts/check-committable-branch.sh
+```
+
+It prints exactly one line matching the falsifiable grammar
+`^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo))$`
+and exits `0` when HEAD is on a committable branch (any named branch except
+`main`), non-zero when the checkout is on `main`, detached, or not a git
+repository (fail closed). On any `blocked:*` verdict do NOT proceed into
+worker drain or any committable work: switch to the host's canonical branch
+(`linux-next`, `windows-next`, `osx-next`) or run the cycle read-only.
+Read-only/inspection cycles on a `main` checkout remain allowed — the guard
+gates committable cycles only. Pinned by
+`litmus:committable-branch-guard-shape`.
 
 ## Reduction Engine
 

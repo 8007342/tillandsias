@@ -16,7 +16,17 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     git fetch origin
     git checkout linux-next
     git pull --ff-only origin linux-next
+    scripts/check-committable-branch.sh
     ```
+    The last line is the executable Committable Branch Guard (order 476,
+    pinned by `litmus:committable-branch-guard-shape`): it prints one verdict
+    line and exits `0` only when HEAD is on a committable branch (any named
+    branch except `main`). On `blocked:committable-cycle-on-main` (or any
+    other `blocked:*` verdict — detached HEAD, non-repo) do NOT claim,
+    commit, or push anything this cycle: `main` advances only via PR
+    (breach record 34e60965,
+    `plan/issues/main-branch-direct-push-guard-2026-07-24.md`). Switch to
+    your host's canonical branch or run the cycle read-only.
 2.  **Host and Identity**: Identify your platform (`linux`, `windows`, `macos`, `forge`), your agent name, and your intended capabilities (`rust`, `podman`, `docs`, `testing`, etc.).
 3.  **Host Detection Table**:
     | uname/$OS / env | Platform Name | Canonical Branch |
