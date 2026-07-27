@@ -335,7 +335,7 @@ _info "Location: $OUTPUT_DIR/$BUNDLE_NAME"
 # ============================================================================
 # 7. Update dashboard reference
 # ============================================================================
-DASHBOARD_FILE="$PROJECT_ROOT/docs/convergence/centicolon-dashboard.json"
+DASHBOARD_FILE="${DASHBOARD_FILE:-$PROJECT_ROOT/docs/convergence/centicolon-dashboard.json}"
 if [[ -f "$DASHBOARD_FILE" ]]; then
     # Update evidence_bundle_path in dashboard (if field exists)
     if grep -q '"evidence_bundle_path"' "$DASHBOARD_FILE"; then

@@ -6749,7 +6749,7 @@ plan_index:
       status: pending
       kind: audit+design
       deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
-      depends_on: [246a]
+      depends_on: [credential-inventory-audit]
       pickup_role: any
       owner_host: any
       capability_tags: [security, vault, tokens, policy]
@@ -6763,6 +6763,20 @@ plan_index:
         - "Credential Quarantine completion litmus added"
         - "spec/cheatsheet patch list published"
       events:
+        - type: verified
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            cargo test -p tillandsias-plan --lib passed 8/8; the focused
+            plan-engine-invariants-shape litmus passed all 4 steps.
+        - type: fixed
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            Replaced order-like dependency 246a with stable packet ID
+            credential-inventory-audit.
         - type: filed
           ts: "2026-07-24T08:10:00Z"
           agent_id: "forge-bigpickle"
@@ -6804,7 +6818,7 @@ plan_index:
       status: pending
       kind: audit+litmus
       deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
-      depends_on: [247a]
+      depends_on: [tls-certificate-chain-audit]
       pickup_role: any
       owner_host: any
       capability_tags: [git, mirror, network, litmus]
@@ -6819,6 +6833,20 @@ plan_index:
         - "litmus:proxy-end-to-end-health added and green"
         - "spec/cheatsheet patch list published"
       events:
+        - type: verified
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            cargo test -p tillandsias-plan --lib passed 8/8; the focused
+            plan-engine-invariants-shape litmus passed all 4 steps.
+        - type: fixed
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            Replaced order-like dependency 247a with stable packet ID
+            tls-certificate-chain-audit.
         - type: filed
           ts: "2026-07-24T08:10:00Z"
           agent_id: "forge-bigpickle"
@@ -12830,6 +12858,13 @@ plan_index:
       order: 342
       title: "macOS forge: isolate in-forge agents from the operator checkout"
       status: completed
+      superseded_by: [macos-forge-no-push-route-lane-decision]
+      supersession_note: >
+        Tlatoani-approved 2026-07-24 (recorded on order 466): the
+        SRC-ISOLATION=clone lane this packet built is superseded by the
+        order-437 clone-only default, which provides the same isolation
+        property PLUS the git:// mirror push route. The isolation GOAL of
+        this packet stands; only the mechanism is retired.
       kind: design+implementation
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
       depends_on: []
@@ -21132,6 +21167,17 @@ plan_index:
             cleanly on stale local state), not "make it generated" (it already
             is). Consider folding 448 into 447 as one "litmus must regenerate
             generated artifacts before asserting freshness" packet.
+        - type: progress
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Local-build Gate 1 reproduced the stale generated-copy class after
+            enclave-service-catalog-research.md landed only in canonical
+            cheatsheets/. Refreshing the ignored image staging tree made the
+            focused cheatsheet-tooling litmus pass 2/2 and the next full
+            pre-build run pass 205/205. The permanent regenerate-before-check
+            exit criterion remains open.
 
     - packet_id: host-direct-push-bypasses-mirror-strands-agents
       order: 449
@@ -21617,6 +21663,24 @@ plan_index:
         - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
       events:
         - type: progress
+          ts: "2026-07-24T07:30:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            WINDOWS PASS against v0.3.260724.1 (operator at the terminal,
+            live-monitored):
+            plan/issues/smoke-455-windows-v0.3.260724.1-2026-07-24.md.
+            Full purge (clean residue audit incl. registry + Event Log
+            source) then pinned curl-install from the published release:
+            sha-verified, VERSIONINFO 0.3.260724.1 (51e5f0aa), rootfs
+            download 3.4s, wipe-to-VM-ready 74s, handshake attempt 1,
+            NO version skew (guest --help confirms 0.3.260724.1), no
+            errors. Saved-file installer run doubled as the smart-quote
+            P1 regression test - parsed correctly. Non-blocking findings:
+            uninstall docs need the ExecutionPolicy bypass invocation;
+            purge should mention it removes saved logins. The v0.4
+            smoke gate's WINDOWS column is COMPLETE.
+        - type: progress
           ts: "2026-07-22T22:15:00Z"
           agent_id: "windows-bullo-fable5-20260722"
           host: windows
@@ -21801,11 +21865,113 @@ plan_index:
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
 
+    - packet_id: inference-coldstart-races-proxy-egress-and-hard-gates-launch
+      order: 486
+      desired_release: v0.4
+      title: "Inference first-run self-install races proxy egress readiness, and its 60s readiness probe hard-aborts a lane launch that runs fine without it"
+      status: ready
+      kind: fix
+      deliverable: images/inference/entrypoint.sh bounded retry-with-backoff gated on proxy egress health; launcher soft-degrade (warn + continue) when inference is unavailable; readiness ordering proxy-before-inference
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, inference, proxy, launch, resilience]
+      estimated_hours: 3
+      operator_note: >
+        Live 2026-07-24 07:2xZ, operator's first post-purge cloud attach
+        (v0.3.260724.1, fully cold volumes). Verbatim evidence captured by
+        a continuous log trap
+        (guest /root/.cache/tillandsias/inference-evidence-20260724.log):
+        attempt 1 "curl: (7) Failed to connect to github.com port 443 via
+        proxy after 0 ms" (proxy not yet serving); the entrypoint's SINGLE
+        10s warm-up retry then got "curl: (60) SSL certificate ...
+        self-signed certificate in certificate chain" - that is squid
+        serving its TLS error page with its own cert because upstream
+        egress was STILL not ready, not a real CA problem. Entrypoint then
+        exits FATAL ("will retry next launch") and the launcher's 60s
+        inference readiness probe ABORTED the entire first lane launch
+        (terminal exited code 1). The operator's immediate relaunch came
+        up fine and the forge session runs WITHOUT local inference -
+        proving the component is soft-degradable. The order-477
+        teardown/liveness proxy churn widens the race window (proxy was
+        observed "Up 1 second" repeatedly during the failure window).
+      outcome: >
+        A fully cold first launch succeeds deterministically: inference
+        waits for proven proxy egress (bounded), retries its self-install
+        with backoff instead of one 10s nap, and a still-unready inference
+        degrades the launch to a warning instead of aborting it; launch
+        attempt 1 and attempt 2 behave identically.
+      exit_criteria:
+        - "inference entrypoint distinguishes proxy-unready (retry with bounded backoff) from genuine download failure, and never treats squid's bumped error page as a CA problem"
+        - "lane launch continues with a curated warning when inference is unavailable; no hard abort on an optional component"
+        - "a cold-volume litmus or fixture reproduces the race (or readiness ordering makes it structurally impossible)"
+      events:
+        - type: renumbered
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Renumbered 478 to 486 after the windows-next integration and a
+            concurrent linux-next research wave independently allocated 478.
+            Stable packet_id is unchanged; the repair restores unique live
+            order references without rewriting either published lineage.
+        - type: filed
+          ts: "2026-07-24T07:55:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from the live post-purge 455 smoke session; evidence
+            trap output preserved in-guest; launch #2 (identical inputs)
+            proceeded without inference, confirming soft-degradability.
+
+    - packet_id: teardown-vs-liveness-proxy-scope-disagreement
+      order: 477
+      desired_release: v0.5
+      title: "Last-lane teardown and the liveness supervisor disagree on the proxy's scope: teardown removes it, liveness re-creates it 3s later"
+      status: ready
+      kind: fix
+      deliverable: one shared core-vs-lane-scoped container set consumed by both teardown and liveness (plus a test pinning the post-teardown steady-state container set)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, lifecycle, containers, liveness, teardown]
+      estimated_hours: 2
+      operator_note: >
+        Observed live 2026-07-24 06:50Z when the operator exited the
+        antigravity forge with nothing else running: teardown removed
+        git-mirror + inference + proxy (lane-scoped view) while vault +
+        router stayed up (core view), then
+        "[liveness] re-ensured 1 container(s): [tillandsias-proxy]"
+        re-created the proxy 3 seconds later as a FRESH container. No
+        crash - both actions were clean - but the two components hold
+        contradictory scope sets, so an idle host keeps a squid running
+        that teardown decided should die (and every last-lane exit
+        churns one container create). Decide proxy's true scope once,
+        derive both components from the same constant, and pin the
+        post-teardown steady state in a test.
+      outcome: >
+        After the last lane exits, the container set converges in one
+        step to a single agreed steady state; no component immediately
+        recreates what another just removed.
+      exit_criteria:
+        - "teardown and liveness consume one shared definition of core vs lane-scoped containers"
+        - "a test pins the post-last-lane steady-state container set (no create/remove churn within the settling window)"
+        - "the chosen proxy scope is recorded with rationale (idle footprint vs warm-start latency)"
+      events:
+        - type: filed
+          ts: "2026-07-24T07:05:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from live journal evidence during the antigravity
+            graceful-end validation; operator asked whether the proxy
+            restart was a crash - it was not, it was this disagreement.
+
     - packet_id: vault-host-endpoint-soak-fragility
       order: 463
       desired_release: v0.4
       title: "25h soak broke every host->vault path: netavark DNAT loss on the internal enclave network, loopback bind EIO, first-restart unseal landmine, and lane-lock heal starvation"
-      status: ready
+      status: in_progress
       kind: fix
       deliverable: vault host endpoint via enclave URL everywhere (drop the -p publish), entrypoint unseal-400 classification, bounded lane vault-lock scope
       depends_on: []
@@ -21884,6 +22050,22 @@ plan_index:
             The structural fix (drop the 127.0.0.1:8201 publish,
             enclave-URL everywhere) remains this packet's scope -
             priority raised by the cross-platform repro.
+        - type: progress
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          lease_id: "linux-opencode-metaorch-20260725T0344Z"
+          summary: >
+            Source slice implemented and reviewed: VM-backed launches now use
+            https://vault:8200 without a host publish; native rootless Linux is
+            the sole named loopback compatibility consumer. The Vault
+            entrypoint emits an exact wrong-key FATAL marker for HTTP 400 and
+            recovery requires it. AppRole minting retains the shared lock only
+            for bounded mint/secret creation, so an idle lane cannot starve an
+            exclusive heal. Focused headless tests, 12/12 tillandsias-vault
+            litmus checks, shell syntax, formatting, and ./build.sh --check
+            pass. Remaining closure is live restarted-Vault, idle-lane/heal,
+            and soak evidence on the rebuilt image.
 
     - packet_id: mirror-pre-receive-blocks-all-new-branches
       order: 462
@@ -22110,14 +22292,47 @@ plan_index:
       pickup_role: macos
       capability_tags: [macos, forge, git-mirror, work-loss, p1]
       estimated_hours: 4
+      operator_approval:
+        ts: "2026-07-24T08:20:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          SUPERSEDE the order-342 macOS SRC-ISOLATION direction with the
+          modern proven order-437 clone-only default. The operator
+          reviewed the windows-lane context (2026-07-24 addendum in the
+          deliverable doc) and approved replacing the obsolete lane
+          override with the mechanism Windows runs in production.
       outcome: >
         macOS lane sets GIT_MIRROR_PATH but never TILLANDSIAS_GIT_SERVICE
         (main.rs:4753-4766), so in-forge commits have no relay route and die
-        with the --rm container. Decision SETTLED by order 465 PRINCIPLE:
-        OPTION B (wire the git:// mirror push relay, keep isolation); OPTION A
-        host-mount is the wrong direction. Depends on order 462 because a
-        newly wired macOS mirror push immediately hits the pre-receive
-        new-branch rejection. Promoted to the index 2026-07-24.
+        with the --rm container. Decision SETTLED by order 465 PRINCIPLE and
+        Tlatoani approval 2026-07-24: take the order-437 clone-only DEFAULT
+        (mirror clone + mirror push in one mechanism) by REMOVING the
+        TILLANDSIAS_FORGE_SRC_ISOLATION=clone override in
+        diagnose.rs:1191-1200 — not by wiring push into the 342 lane.
+        Order-342's isolation property is preserved by construction (the
+        default is also clone-based, no host mount, no facade; mirror
+        seeding needs only read access to the virtiofs staging). OPTION A
+        host-mount is the wrong direction. Dependency order 462 is
+        SATISFIED (322d3026, 2026-07-24). Promoted to the index 2026-07-24.
+      events:
+        - type: note
+          ts: "2026-07-24T08:20:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Windows-lane context filed in the deliverable doc with exact
+            wiring pins (main.rs 4754/4768/4783 three-way branch;
+            lib-common.sh:584 consumer; diagnose.rs:1191 override) and the
+            live-verified relay properties the macOS lane inherits for
+            free (48h vault-agent credential dcafd59c, SEEDED readiness
+            gate dec1175e, new-branch pre-receive 322d3026, 21-push +
+            concurrent-multi-host soak). Implementation checklist before
+            declaring parity: one attended macOS e2e
+            (clone->commit->push->relay->GitHub), run the two
+            test-git-mirror-*.sh scripts in the VZ guest, and check
+            netavark state per order 463 (VZ VMs soak the same way).
+            Inherit consciously: relay publication can be out-of-order vs
+            author time (MOT-02).
 
     - packet_id: forge-trust-ca-source-readiness-gap
       order: 467
@@ -22334,7 +22549,7 @@ plan_index:
         litmus-pinned). Protects the imminent v0.4 promotion.
 
     - packet_id: forge-opencode-provider-seed-missing-after-reset
-      order: 477
+      order: 487
       desired_release: v0.4
       title: "P1 smoke-gate: in-forge OpenCode has no provider bootstrap on a pristine substrate — secret/gemini/api-key has no owning flow and dies with every reset"
       status: completed
@@ -22356,9 +22571,424 @@ plan_index:
         gemini/opencode login lane; --diagnose names the missing seed before
         launch. Until fixed the Linux 455-family forge gate cannot pass
         unattended.
+      events:
+        - type: renumbered
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Renumbered 479 to 487 after the windows-next integration and a
+            concurrent linux-next research wave independently allocated 479.
+            Stable packet_id and completion state are unchanged.
+
+    - packet_id: heterogeneous-inference-landscape-research
+      order: 478
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Research: CPU/GPU/NPU heterogeneous inference — vendor landscape, engine matrix, policy prior art (operator-directed, 2026-07-24)"
+      status: done
+      kind: research
+      deliverable: plan/issues/heterogeneous-inference-cpu-gpu-npu-research-2026-07-24.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [inference, research, npu, gpu, cpu, ollama, llama-cpp]
+      estimated_hours: 0
+      outcome: >
+        Completed 2026-07-24 (1 code-survey + 3 deep-research agents,
+        adversarially cross-verified). Headlines: ollama can never use an NPU
+        and is a weakening embed target; llama.cpp/llama-server is the correct
+        default engine on every host class (NPU backends land there upstream:
+        OpenVINO, Hexagon); Vulkan via /dev/dri is the universal
+        near-zero-config Linux GPU path; NPUs and macOS acceleration belong in
+        a HOST-NATIVE sidecar slot behind the enclave proxy (NPUs are
+        structurally unreachable from WSL2; container Venus on macOS caps at
+        ~75-85% of native Metal); decode is bandwidth-bound so NPU wins on
+        watts not speed, and only with a mature graph-compiled stack —
+        measure, never trust vendor TOPS. Full findings, risks (FastFlowLM
+        license gate, XRT/firmware lockstep), and the PROBE/CLASS/ROUTE/ADAPT
+        requirement seeds live in the deliverable. Spawns orders 479-484.
+
+    - packet_id: heterogeneous-inference-specs
+      order: 479
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Spec: openspec deltas for accel capability probe, engine slots, policy router + NPU rows in the inference-container tier table"
+      status: ready
+      kind: spec
+      deliverable: openspec specs (accel-capability-probe, inference-engine-slots, inference-policy-router) + amended inference-container spec + litmus bindings
+      depends_on: [heterogeneous-inference-landscape-research]
+      pickup_role: linux
+      capability_tags: [inference, openspec, npu, gpu, architecture]
+      estimated_hours: 6
+      outcome: >
+        Turn order 478's requirement seeds into authoritative specs BEFORE
+        implementation: (1) accel-capability-probe — host-side structured
+        probe (CPU flags/topology, /sys/class/drm GPUs, /sys/class/accel NPUs
+        with driver-name vendor resolution, bandwidth class, engine inventory,
+        capabilities.json cache, usable=false without a mature engine,
+        microbench scoring, roofline sanity check); (2) inference-engine-slots
+        — pluggable OpenAI-compatible engine slots (ollama today, llama-server
+        variants, host-native sidecars) behind one stable enclave endpoint;
+        (3) inference-policy-router — workload classes background/interactive/
+        quality/sustained, data-driven routing table, ordered fallback chains
+        terminating in CPU tier-S, adaptive battery/thermal signals, NEG
+        non-goals (no per-op splitting, no vendor-TOPS routing, no idle
+        residency on battery). Must answer the enclave-boundary question for
+        sidecars (proxy-mediated egress, isolation invariant) and add NPU
+        rows to the T0-T5 tier table. SHALL statements + scenarios + litmus
+        bindings per spec-system rules.
+
+    - packet_id: accel-capability-probe
+      order: 480
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: structured hardware capability probe (CPU/GPU/NPU/bandwidth) replacing the string inference tier"
+      status: ready
+      kind: implementation
+      deliverable: capabilities probe in tillandsias-headless + capabilities.json surface + unit tests + litmus shape test
+      depends_on: [heterogeneous-inference-specs]
+      pickup_role: linux
+      capability_tags: [inference, rust, npu, gpu, linux, probe]
+      estimated_hours: 8
+      outcome: >
+        Replace detect_inference_tier()'s single string (main.rs:2931) with a
+        structured probe per the accel-capability-probe spec: enumerate
+        /sys/class/accel/accel* (uevent DRIVER= amdxdna|intel_vpu, fw_version
+        where exposed), /sys/class/drm + vulkaninfo presence, CPU flags
+        (avx512/NEON) and topology, RAM, battery presence; emit versioned
+        capabilities.json under the app cache; keep the legacy tier string as
+        a derived field for backward compatibility (order 392 CDI downgrade
+        logic preserved). NPU marked usable only when a mature engine lane
+        exists (per spec). Host-side only; no container changes in this
+        packet. Rust, no Python (tlatoani_hard_no_python).
+
+    - packet_id: npu-device-passthrough
+      order: 481
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: NPU /dev/accel passthrough plumbing for the inference container (AMD XDNA2 first lane)"
+      status: ready
+      kind: implementation
+      deliverable: build_inference_run_args NPU args + entrypoint NPU detection/log line + docs for udev/render-group + litmus shape test
+      depends_on: [accel-capability-probe]
+      pickup_role: linux
+      capability_tags: [inference, podman, npu, amd-xdna, linux, containers]
+      estimated_hours: 6
+      outcome: >
+        When the probe reports a usable NPU, build_inference_run_args
+        (main.rs:3305) adds --device /dev/accel/accelN, render --group-add,
+        and --ulimit memlock=-1:-1 (XDNA2 requirement), mirroring the
+        existing ROCm /dev/kfd pattern; entrypoint.sh logs an npu= line next
+        to tier= (spec: tier classification logged once at boot). Graceful
+        no-op on hosts without /dev/accel or with unreadable permissions —
+        document the udev 0660 root:render convention and Silverblue
+        specifics instead of requiring root. Knowingly ships plumbing ahead
+        of the engine (order 483) so passthrough can be litmus-verified
+        independently (device visible in container, group mapping correct,
+        no permission errors in logs). Complements 408/410's GPU CDI work;
+        consider a Tillandsias-generated CDI spec for accel nodes as the
+        stretch goal.
+
+    - packet_id: llama-server-engine-slot
+      order: 482
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: llama-server as a first-class engine slot beside ollama (Vulkan-first image variant)"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: engine-slot abstraction + llama-server inference image variant + tier-model mapping externalized from entrypoint shell + smoke evidence
+      depends_on: [heterogeneous-inference-specs]
+      pickup_role: linux
+      capability_tags: [inference, llama-cpp, vulkan, podman, containers, forge]
+      estimated_hours: 16
+      outcome: >
+        Per order 478: llama-server now carries OpenAI + Anthropic-compatible
+        APIs, built-in model router with LRU load/unload, speculative
+        decoding, and is where NPU backends land upstream. Implement the
+        inference-engine-slots spec: the enclave keeps ONE stable endpoint
+        (OLLAMA_HOST contract preserved for forge consumers) while the engine
+        behind it becomes selectable (ollama | llama-server); add a
+        Vulkan-first llama-server image variant (Mesa in image, --device
+        /dev/dri, no ROCm/CUDA host stack — RamaLama's proven pattern) and
+        move the T0-T5 model table out of inline entrypoint shell into a
+        data file both engines consume. Ollama remains the default until the
+        llama-server lane has smoke evidence; flakiness lessons from order
+        168 (no --rm, OOM guards, readiness probe) carry over. Multi-cycle:
+        slot abstraction, image variant, model-table externalization, and
+        engine-parity smoke are separable checkpoints.
+
+    - packet_id: host-native-sidecar-endpoints
+      order: 483
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: host-native inference sidecar registry (macOS Metal/MLX, AMD XDNA2 flm/Lemonade, Intel NPU OpenVINO) behind the enclave proxy"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: sidecar registration protocol + proxy route + one working lane (XDNA2 flm or macOS Metal) with evidence + license-gate record for FastFlowLM
+      depends_on: [heterogeneous-inference-specs, accel-capability-probe]
+      pickup_role: "linux (XDNA2 lane) + macos (Metal lane)"
+      capability_tags: [inference, npu, macos, metal, mlx, amd-xdna, openvino, proxy, enclave]
+      estimated_hours: 20
+      outcome: >
+        The research verdict: NPUs and Apple-Silicon acceleration do not
+        belong IN the container — macOS containers cap at ~75-85% of native
+        Metal via Venus (and the default applehv provider has no GPU at
+        all), WSL2 cannot see NPUs, and AMD/Intel NPU stacks want host-side
+        firmware lockstep. Implement the sidecar slot from the
+        inference-engine-slots spec: a host-native OpenAI-compatible server
+        (llama-server --metal or mlx-lm on macOS; FastFlowLM/Lemonade on
+        XDNA2 Linux; OpenVINO GenAI on Intel NPU) registers with the tray,
+        which exposes it to forge containers through the enclave proxy under
+        the same endpoint contract, preserving egress discipline and the
+        privacy/isolation invariant (spec question resolved in order 479).
+        HARD GATE before bundling FastFlowLM: read its shipped LICENSE
+        (closed NPU kernels; README says free-for-commercial but sources
+        conflict) — record the verdict in this packet; Lemonade is
+        Apache-2.0. Relates to order 401's macOS tier decision — this packet
+        supersedes the in-VM llama.cpp option there if the sidecar lane
+        proves out. Multi-cycle: protocol, proxy route, first lane, second
+        lane are separable checkpoints.
+
+    - packet_id: inference-policy-router
+      order: 484
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: workload-class policy router with adaptive power/thermal signals (what's-best-for-every-scenario)"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: policy router in tillandsias-headless (data-driven routing table, fallback chains, D-Bus power signal watcher) + policy status surface + unit tests over serialized fixtures
+      depends_on: [accel-capability-probe, llama-server-engine-slot]
+      pickup_role: linux
+      capability_tags: [inference, rust, policy, power, battery, dbus, scheduling]
+      estimated_hours: 20
+      outcome: >
+        The operator's transparent what's-best layer, per the
+        inference-policy-router spec: workload classes (background=J/token +
+        preemptible, interactive=TTFT default, quality=biggest fitting model,
+        sustained=throttle-proof), placements as ordered fallback chains
+        always terminating in CPU tier-S, model-fits-memory with >=10%
+        headroom, first-request served from a resident small model while the
+        preferred loads. Adaptive signals: subscribe to UPower +
+        PowerProfiles D-Bus PropertiesChanged (works with power-profiles-
+        daemon AND Fedora tuned-ppd), poll battery/thermal-trip/GPU-busy; on
+        battery or power-saver suspend background work checkpointed within
+        5s and downgrade interactive; resume only on AC + thermal-nominal +
+        interactive-idle >=60s; self-tag background engines SCHED_IDLE.
+        Routing table is DATA (TOML) not code, route() is a pure testable
+        function over serialized capability+signal fixtures. NEG scope
+        guards from the research are binding: no per-op graph splitting, no
+        vendor-TOPS-based routing, no idle model residency on battery.
+        Nobody in the local-LLM ecosystem ships battery-aware routing — this
+        is the forge's differentiator. Multi-cycle: classes+table, signal
+        watcher, preemption, observability surface are separable
+        checkpoints.
+
+    - packet_id: plan-yaml-duplicate-note-lines
+      order: 485
+      desired_release: v0.5
+      title: "Housekeeping: plan.yaml duplicate bootstrap-note lines + methodology/event vs methodology/events directory split"
+      status: ready
+      kind: housekeeping
+      deliverable: plan/issues/plan-yaml-duplicate-note-lines-2026-07-24.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [plan-hygiene, methodology]
+      estimated_hours: 1
+      outcome: >
+        Observed during the order-478 research wave (issue_filing_mandate):
+        plan.yaml carries two near-duplicate notes lines differing only in
+        methodology/events/ vs methodology/event/, and BOTH directories
+        exist on disk while methodology.yaml declares the singular one as
+        the unknown_event_register. Also a stray @methodology directory at
+        repo root. Exit: one canonical event directory (other merged +
+        tombstoned), one note line, @methodology explained or removed.
+        Details in the deliverable.
+
+    - packet_id: running-image-freshness-label-precedence-fixture
+      order: 488
+      desired_release: v0.4
+      title: "Running-image freshness negative control becomes INDETERMINATE when a stale canonical tag inherits a source-digest label"
+      status: completed
+      kind: fix
+      deliverable: plan/issues/running-image-freshness-label-precedence-fixture-2026-07-25.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, podman, image-freshness, litmus, release-gate]
+      estimated_hours: 2
+      outcome: >
+        A synthetic image carrying a positive stale canonical hash tag fails
+        the freshness gate even when it inherits the current base image's Rust
+        source-digest label; the current-image and genuinely indeterminate
+        controls retain their honest verdicts.
+      exit_criteria:
+        - "scripts/test-running-image-freshness.sh passes every case and prints its order-422 PASS marker"
+        - "positive current tag wins as current; positive different canonical hash tag wins as stale; label-only identity remains indeterminate"
+        - "litmus:running-image-freshness passes against a locally built git image"
+      events:
+        - type: filed
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Reproduced in local-build post-build Gate 1 after 205/205 pre-build
+            checks passed; the fixture's case 3 exited 0 as indeterminate.
+        - type: completed
+          ts: "2026-07-25T05:18:45Z"
+          agent_id: "linux-opencode-order488-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: d7b9ef93ea0b85b9bb5d9b4191326c540edbc51b
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Reordered the freshness evidence checks so the expected canonical
+            tag proves current, a different canonical 64-hex tag proves stale
+            before any inherited source-digest label can defer the verdict, and
+            label-only identity remains indeterminate. The direct six-case
+            fixture passed with its case 5 and strict-mode case 6 controls
+            unchanged; the focused git-mirror-service post-build litmus passed
+            1/1 executed tests (four steps, 18 phase skips).
+
+    - packet_id: postbuild-meta-orchestration-dirty-start-contract
+      order: 489
+      desired_release: v0.4
+      title: "Post-build OpenCode E2E deterministically dirty-start blocks because --ci-full --install mutates VERSION, Cargo manifests/lock, and dashboards"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/postbuild-meta-orchestration-dirty-start-contract-2026-07-25.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, build, meta-orchestration, e2e, dirty-worktree, release-gate]
+      estimated_hours: 4
+      outcome: >
+        The post-build full meta-orchestration litmus starts from a clean
+        checkout boundary while still testing the freshly installed binary;
+        ordinary meta-orchestration continues to refuse genuinely dirty
+        operator/sibling worktrees.
+      exit_criteria:
+        - "./build.sh --ci-full --install does not hand generated VERSION/dashboard mutations to the in-forge meta-orchestration checkout"
+        - "litmus:opencode-prompt-e2e-shape full mode advances local and remote linux-next with a plan result, while smoke mode still expects no delta"
+        - "litmus:meta-orchestration-dirty-tree-safety continues to prove fail-closed ordinary dirty starts"
+      events:
+        - type: progress
+          ts: "2026-07-25T05:41:55Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          checkpoint_commit: 02503422287eaf71346e7b53ba321682e81fae97
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 02503422287eaf71346e7b53ba321682e81fae97
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Reviewed implementation checkpoint pushed and claim released. The
+            required local-build e2e probe returned skip:live-runtime-present
+            for pre-existing tillandsias-vault and tillandsias-router
+            containers, so the forced full install was not started and the
+            completed order-442 destruction guard was not bypassed. Order 489
+            remains ready for the same clean-checkout command once the live
+            stack exits or the operator explicitly authorizes its destruction.
+        - type: progress
+          ts: "2026-07-25T05:39:10Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Main-agent review retained required trace regeneration and routed
+            the release-build local CI branch through the same target/dashboard
+            helper. Focused preparation and dirty-boundary fixtures pass; the
+            bound meta-orchestration instant suite passes 8/8; clickable trace
+            quick litmus passes 2/2; YAML, shell syntax, diff checks, and
+            ./build.sh --check pass. The pre-existing non-install trace dispatch
+            gap is filed separately as order 490. Full install e2e remains the
+            completion boundary.
+        - type: progress
+          ts: "2026-07-25T05:30:17Z"
+          agent_id: "linux-opencode-order489-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Smallest non-mutating slice implemented: build/install no longer
+            bumps VERSION/Cargo metadata; required trace-index regeneration is
+            retained per the clickable-trace-index spec;
+            build-driven local CI dashboards and evidence references are routed
+            under target/convergence while post-build still initializes and
+            tests INSTALL_BIN. The focused clean-boundary check passed, the
+            fail-closed dirty-start fixture passed, the bound meta-orchestration
+            instant suite passed 8/8, and ./build.sh --check passed. Completion
+            remains pending a clean-checkout ./build.sh --ci-full --install rerun
+            proving the full local/remote plan delta with the installed binary.
+        - type: filed
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Full-mode forge exited 0 after correctly refusing dirty-start on
+            eight build-generated tracked paths; delta step then failed because
+            HEAD appropriately remained unchanged.
+
+    - packet_id: clickable-trace-index-build-dispatch-gap
+      order: 490
+      desired_release: v0.4
+      title: "Regenerate clickable trace indexes from every build-producing build.sh mode"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/clickable-trace-index-build-dispatch-gap-2026-07-25.md
+      depends_on: [postbuild-meta-orchestration-dirty-start-contract]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, build, traces, litmus]
+      estimated_hours: 2
+      outcome: >
+        Debug, release, install, observatorium, and init build modes regenerate
+        trace indexes exactly once, while test-only and check-only modes preserve
+        the indexes byte-identically.
+      exit_criteria:
+        - "an executable fixture proves each build-producing build.sh mode invokes generate-traces.sh exactly once"
+        - "test-only and check-only build.sh modes do not invoke generate-traces.sh"
+        - "litmus:clickable-trace-index-generation and ./build.sh --check pass"
+      events:
+        - type: filed
+          ts: "2026-07-25T05:36:01Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Order 489 review found the active clickable-trace-index build
+            integration requirement is only implemented by install paths;
+            shaped the residual as a separate executable-fixture packet so the
+            dirty-start fix stays focused.
 
     - packet_id: bigpickle-macos-terminal-cooperative-debug
-      order: 478
+      order: 491
       desired_release: v0.4
       title: "P0: in-forge cooperative verification of terminal-attach@v2 (BigPickle inside the forge + outside builder loop via push/pull)"
       status: ready
@@ -22378,7 +23008,7 @@ plan_index:
         Gate for v0.4 macOS terminal-UX stability.
 
     - packet_id: host-pty-slave-retention-eof-teardown
-      order: 479
+      order: 492
       desired_release: v0.4
       title: "Host PTY split() retains the slave fd — EOF/teardown defeated (audit D5 full fix; mitigated by attach-client detach)"
       status: ready
@@ -22395,7 +23025,7 @@ plan_index:
         and keep the blank-terminal ATTACH_GRACE regression guard green.
 
     - packet_id: guest-pty-write-wedge
-      order: 480
+      order: 493
       desired_release: v0.4
       title: "Guest write_to_guest blocks unboundedly inline in the connection loop — wedge kills session/connection (audit D6)"
       status: ready

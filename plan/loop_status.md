@@ -1,5 +1,54 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-25T04:18Z (linux_mutable - v0.4 agent drain + Windows integration)
+
+- **Host/branch**: mutable Linux, `linux-next`; credential guard
+  `ok:gh-keyring`; startup boundary clean.
+- **Sibling integration**: merged and pushed `origin/windows-next`, including
+  the v0.3.260724.1 Windows smoke PASS evidence and plan repairs. The merge
+  absorbed a concurrent linux-next advance without reminting published sibling
+  commits. `./build.sh --check` and YAML parse passed on the integrated tree.
+- **macOS hold**: `origin/osx-next` remains unintegrated pending macOS-side
+  reconciliation of an unapproved renderer diagnostic, the push-route policy
+  decision, and an unindexed methodology file. The branch is drift-frozen until
+  it merges current linux-next and records focused evidence.
+- **Order 463**: delegated source slice implemented and reviewed. VM-backed
+  Vault now uses enclave DNS with no host publish; HTTP 400 unseal responses get
+  the exact wrong-key FATAL classifier; idle AppRole leases no longer retain the
+  Vault lock. Focused tests, 12/12 Vault litmus, shell syntax, and full check
+  pass. Status remains `in_progress` for rebuilt-image restart/heal/soak proof.
+- **Local-build e2e**: FAIL at Gate 1 on two unresolved ledger dependencies
+  (`246a`, `247a`); 203 pre-build litmus tests passed and 2 plan-engine checks
+  failed. Install, Podman reset, cold init, and forge launch were not run.
+  Report: `plan/issues/smoke-e2e-findings-local-build-linux-2026-07-25.md`.
+  Same-cycle repair replaced both order-like references with stable packet IDs;
+  plan tests pass 8/8 and the focused plan-engine litmus passes 4/4. Full Gate 1
+  retries reached 205/205 pre-build PASS and local install, then stopped on two
+  post-build blockers. Order 488 (freshness evidence precedence) was fixed and
+  focused-verified in the same cycle. Order 489 now has a reviewed implementation
+  checkpoint: local build/install no longer bumps release metadata, local CI and
+  evidence dashboards route under `target/`, and the release-build CI branch uses
+  the same redirected helper. Focused fixtures, 8/8 meta-orchestration instant
+  litmus, 2/2 clickable-trace-index quick litmus, YAML parsing, and
+  `./build.sh --check` pass; the full clean-checkout install rerun remains.
+  Checkpoint `02503422` is pushed. The required e2e eligibility probe then
+  returned `skip:live-runtime-present` for the pre-existing Vault/router stack,
+  so the forced full-install command was not started and the order-442 guard was
+  not bypassed. Dedicated reset/init/forge gates were not run.
+- **Ledger repair**: concurrent branch allocation duplicated live orders 478
+  and 479; v0.4 packets were renumbered to 486/487 with stable packet IDs.
+- **Canonical v0.4 state before this source checkpoint**: 71 tagged, 58
+  terminal, 13 nonterminal (7 ready, 5 in_progress, 1 pending). Order 490 records
+  the separately observed pre-existing gap where non-install build modes do not
+  regenerate clickable trace indexes. Order 455 remains
+  platform-owned and its pre-tag/post-tag circular wording needs operator
+  clarification; no release action was run.
+- **Next assignments**: Linux live-evidence matrix starts with 463 then 424 and
+  the three provisional packets; macOS owns 466 plus route/UX reconciliation;
+  Windows/macOS own 455 after the candidate-build rule is clarified. Order 468
+  remains sign-off-gated and order 476 still needs the Linux guard plus operator
+  branch protection.
+
 ## Cycle 2026-07-24T10:05Z (forge — v0.4 clearance orchestration + drain wave)
 
 - **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.

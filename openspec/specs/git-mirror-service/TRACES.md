@@ -28,7 +28,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/main.rs#L4874](../../../crates/tillandsias-headless/src/main.rs#L4874)
 - [crates/tillandsias-headless/src/main.rs#L6378](../../../crates/tillandsias-headless/src/main.rs#L6378)
 - [crates/tillandsias-headless/src/main.rs#L7591](../../../crates/tillandsias-headless/src/main.rs#L7591)
-- [crates/tillandsias-headless/src/vault_bootstrap.rs#L1185](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L1185)
+- [crates/tillandsias-headless/src/vault_bootstrap.rs#L1194](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L1194)
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)
 - [images/default/config-overlay/mcp/git-tools.sh#L37](../../../images/default/config-overlay/mcp/git-tools.sh#L37)
 - [images/default/config-overlay/mcp/git-tools.sh#L51](../../../images/default/config-overlay/mcp/git-tools.sh#L51)

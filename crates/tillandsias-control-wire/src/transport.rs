@@ -245,11 +245,7 @@ mod tests {
             let ack = read_envelope(&mut stream).await.expect("client read ack");
             assert_eq!(ack.seq, 7);
             match ack.body {
-                ControlMessage::HelloAck {
-                    wire_version,
-                    build_version: _,
-                    ..
-                } => {
+                ControlMessage::HelloAck { wire_version, .. } => {
                     assert_eq!(wire_version, WIRE_VERSION);
                 }
                 other => panic!("expected HelloAck, got {other:?}"),
