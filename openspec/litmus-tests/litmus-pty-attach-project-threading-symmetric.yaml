@@ -55,9 +55,13 @@ critical_path:
     expected_behavior: "launch_spec(&intent, project.as_deref(), 24, 80)"
     timeout_ms: 3000
 
+  # macOS threads a live seed size since 3d1cba4c/terminal-attach@v2 (the
+  # attach client's Hello geometry), so the pin matches the argv threading
+  # only — the invariant is `project.as_deref()` as the second positional,
+  # not the size literals.
   - step: "macos-tray calls launch_spec with project.as_deref()"
-    command: "grep -F 'launch_spec(&intent, project.as_deref(), 24, 80)' crates/tillandsias-macos-tray/src/action_host.rs"
-    expected_behavior: "launch_spec(&intent, project.as_deref(), 24, 80)"
+    command: "grep -F 'launch_spec(&intent, project.as_deref(),' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "launch_spec(&intent, project.as_deref(),"
     timeout_ms: 3000
 
   - step: "neither tray has a stray launch_spec call with None as the project"

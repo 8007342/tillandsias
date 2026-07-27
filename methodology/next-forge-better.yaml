@@ -1,0 +1,82 @@
+# The "Next Forge Will Have It Better" philosophy.
+#
+# Authority: methodology.yaml is the source of truth; this file is a canonical
+# methodology component it references. Introduced 2026-07-24 (operator directive)
+# after the encoding/format flip-flop pattern was traced to substrate defaults
+# (forge-locale-missing-glibc-langpack-2026-07-24).
+
+next_forge_better:
+  principle: >
+    A forge is not a one-shot sandbox — it is ONE iteration of a long-running
+    optimization process. Every forge run must leave the NEXT run better: faster,
+    more powerful, more efficient, more correct, more deterministic. An agent's
+    job is not only to complete its task, but to ensure the forge it ran in
+    improves for whoever runs next. "The next forge will have it better."
+
+  # The load-bearing distinction every in-forge agent MUST make the moment it hits
+  # a rough edge, a missing default, a non-determinism, or a bug it wants to fix.
+  fix_classification:
+
+    in_forge_fixable:
+      definition: >
+        The issue lives in state an in-forge agent can change AND persist through
+        the forge's normal output channel (a git push through the enclave mirror).
+        Project source, tests, docs, plan/, and repo-tracked config all qualify —
+        fixing them in-run and pushing makes the fix available to the next run by
+        construction (the next forge clones the improved tree).
+      action: fix in-run, commit, push. Done.
+      examples:
+        - a code/logic bug in the project
+        - a missing test, a stale doc, a wrong default in a repo-tracked config
+        - a plan/ finding or a methodology refinement
+
+    out_of_forge_builder_fix:
+      definition: >
+        The issue lives in the IMAGE, the BUILD, or the SUBSTRATE that a running
+        forge CANNOT durably change — because it is baked before the forge exists,
+        or lives outside the pushed tree. An in-forge `dnf install`, `export`, or
+        in-container edit is a per-run WORKAROUND that dies with the container and
+        must be re-applied every run.
+      action: >
+        Do NOT paper over it with a per-run hack. DOCUMENT the root cause as a
+        builder-fix finding in plan/issues/ (class optimization/ or the correct
+        class) with exact file:line and the one-time build change required. A
+        builder OUTSIDE the forge implements it; the next forge BUILD inherits it
+        permanently.
+      examples:
+        - a missing package in the Containerfile (e.g. glibc-langpack-en — the
+          UTF-8 locale that garbles the terminal and file I/O)
+        - an unpinned toolchain producing non-deterministic lint/format output
+          (e.g. Rust/clippy version drift)
+        - charset / byte-encoding / line-ending / endianness defaults absent
+          through the nested abstraction layers (ramdisk, checkout, PTY, container)
+        - the guest binary, the base image, the enclave wiring, the tray
+
+  # The single tell, so agents don't misclassify.
+  litmus: >
+    "If I fix this and push, does the fix survive into the next forge run on its
+    own?" YES -> in_forge_fixable. NO (it would be wiped when the container/image
+    is rebuilt, because it lives in the image/build/substrate) ->
+    out_of_forge_builder_fix: document it, do not hack it.
+
+  anti_pattern:
+    name: encoding/format flip-flop
+    description: >
+      Repeated in-forge "fixes" for the same class of problem (encoding, locale,
+      formatting, lint) that each get "un-fixed" by the next agent on a slightly
+      different stack, each needing different hacks/escapes. This is the signature
+      of an out_of_forge_builder_fix being mistreated as in_forge_fixable: the real
+      cause is a missing or unpinned SUBSTRATE default, not the code each agent
+      keeps touching.
+    remedy: >
+      Stop patching symptoms in-forge. Trace to the substrate default (locale,
+      toolchain pin, charset, endianness, line-ending policy), file it as a
+      builder-fix, and let the next build carry the permanent fix.
+
+  convergence: >
+    Out-of-forge findings feed the builders; in-forge fixes feed the tree. Each
+    pass monotonically reduces the residual roughness of the forge itself, so over
+    many runs the forge converges toward a fast, deterministic, fully-defaulted
+    substrate. Forge-substrate findings are FIRST-CLASS burndown, not incidental
+    noise — track and drain them like any other reduction step
+    (methodology/philosophy.yaml Monotonic Reduction of Uncertainty).

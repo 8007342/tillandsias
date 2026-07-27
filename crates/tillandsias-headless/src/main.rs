@@ -4638,6 +4638,15 @@ fn forge_src_isolation_requested() -> bool {
     std::env::var("TILLANDSIAS_FORGE_SRC_ISOLATION").is_ok_and(|v| v == "clone")
 }
 
+/// This process's `name` env var when set and non-empty, else `fallback`.
+/// Used to forward the session's terminal identity into the forge container.
+fn env_or(name: &str, fallback: &str) -> String {
+    std::env::var(name)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| fallback.to_string())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
@@ -4682,6 +4691,20 @@ fn build_opencode_forge_args(
             if !diagnostics && prompt.is_none() {
                 args.push("--interactive".into());
                 args.push("--tty".into());
+                // Terminal identity for the interactive TUI: with --tty,
+                // podman injects its default TERM=xterm unless one is set
+                // explicitly, downgrading the in-forge palette (order-491
+                // in-forge probe 4 caught exactly this). Forward the
+                // SESSION's real terminal identity — this process runs on
+                // the terminal the container renders into: Linux native
+                // inherits the operator's emulator env; the macOS/Windows
+                // wire lane carries the pinned xterm-256color/truecolor via
+                // the PtyOpen env. Fallbacks keep a bare env sane.
+                // @trace plan/issues/bigpickle-macos-terminal-cooperative-debug-2026-07-27.md
+                args.push("--env".into());
+                args.push(format!("TERM={}", env_or("TERM", "xterm-256color")));
+                args.push("--env".into());
+                args.push(format!("COLORTERM={}", env_or("COLORTERM", "truecolor")));
             }
         }
         ForgeMode::Web => {
@@ -4764,6 +4787,16 @@ fn build_opencode_forge_args(
             ),
             "--env".into(),
             format!("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
+            // macOS push route (2026-07-23): the staged source is read-only +
+            // non-bare and cannot accept a push, but the enclave `tillandsias-git`
+            // mirror IS started + seeded on this launch path (run_opencode_mode)
+            // and relays to GitHub via the Vault token. Declaring the service
+            // lets clone_project_from_mirror route pushes there while keeping the
+            // fast local filesystem clone. The filesystem branch returns before
+            // the network-clone branch, so this env only feeds the push-URL
+            // redirect, never a re-clone.
+            "--env".into(),
+            "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
         ]);
     } else if forge_uses_host_mount() {
         // Opt-in legacy shared host-mount (TILLANDSIAS_FORGE_HOST_MOUNT=1):
@@ -10433,15 +10466,20 @@ pub(crate) fn ensure_enclave_for_project(
         .await?;
         let git_container_name = format!("tillandsias-git-{project_name}");
 
-        // Order 392: deterministic inference readiness. The forge agent must
-        // not boot into an indeterminate "inference may still be starting"
-        // state. Block until the ollama API answers inside the enclave (the
-        // probe runs from the container's own network namespace where
-        // 127.0.0.1:11434 is reachable), with a truthful bounded wait and a
-        // loud reason on timeout. Models may still be pulling in the
-        // background — the API is up the moment ollama `serve` is listening,
-        // which is all the agent needs to query it.
-        wait_for_inference_ready(&client, debug).await?;
+        // Local inference readiness (order 392) is BEST-EFFORT, not a launch
+        // gate. The harnesses use cloud models (operator, 2026-07-24: OpenCode
+        // = BigPickle/Hy3/free cloud); local ollama is a FUTURE expert-system
+        // feature nothing consumes yet. A missing/failed inference (e.g. the
+        // uid-1000 ollama self-install TLS failure on a fresh substrate,
+        // inference-ollama-selfinstall-tls-uid1000-2026-07-24) must NOT abort
+        // the forge — warn and continue so cloud-model harnesses launch
+        // regardless. When local models land, re-gate behind an opt-in.
+        if let Err(e) = wait_for_inference_ready(&client, debug).await {
+            eprintln!(
+                "[tillandsias] [forge-launch] WARNING: local inference not ready ({e}); \
+                 continuing — local models are optional (harnesses use cloud models)."
+            );
+        }
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -15263,6 +15301,55 @@ mod tests {
             "Error: cannot set up namespace: newuidmap returned exit status 1"
         ));
         assert!(!podman_runtime_blocker("podman run exited with status 125"));
+    }
+
+    /// Order-491 probe-4 pin: the interactive forge run must carry an
+    /// explicit terminal-identity env — with `--tty` and no `--env TERM`,
+    /// podman injects its default `TERM=xterm`, downgrading the in-forge
+    /// palette. The value is FORWARDED from this process (the session's
+    /// real terminal: operator emulator on Linux native, pinned
+    /// xterm-256color via PtyOpen env on the wire lanes), with fallbacks.
+    #[test]
+    fn interactive_forge_run_forwards_terminal_identity_env() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TERM", "COLORTERM"]);
+        restore.set("TERM", "tmux-256color");
+        restore.remove("COLORTERM");
+
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None, // no prompt → interactive lane
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        assert!(has_arg(&args, "--tty"));
+        assert!(
+            has_arg(&args, "TERM=tmux-256color"),
+            "interactive run must FORWARD the session TERM: {args:?}"
+        );
+        assert!(
+            has_arg(&args, "COLORTERM=truecolor"),
+            "unset COLORTERM must fall back to truecolor: {args:?}"
+        );
+
+        // Prompted (non-interactive) lane allocates no tty and needs none.
+        let prompted = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            Some("one shot"),
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        assert!(!prompted.iter().any(|a| a.starts_with("TERM=")));
     }
 
     #[test]

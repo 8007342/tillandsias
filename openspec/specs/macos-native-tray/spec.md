@@ -147,34 +147,58 @@ machine" is a convergence signal to watch, not a dependency. Full evaluation:
 - **AND** the host↔guest channel SHALL be virtio-vsock via `VZVirtioSocketDevice`
   (no dependency on the `container` CLI, its XPC daemon, or a macOS-26 floor)
 
-### Requirement: Terminal attach routes through Terminal.app or iTerm2 via `vm-exec`
-- **ID**: macos-native-tray.lifecycle.terminal-attach@v1
+### Requirement: Terminal attach runs the tray's own attach client in the window
+- **ID**: macos-native-tray.lifecycle.terminal-attach@v2
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [macos-native-tray.invariant.terminal-attach-no-ssh, macos-native-tray.invariant.terminal-uses-iterm2-when-default]
+- **Invariants**: [macos-native-tray.invariant.terminal-attach-no-ssh]
+- **Note**: `terminal-uses-iterm2-when-default` governs the stub-window
+  fallback flow only (the sole remaining `detect_terminal` consumer); the
+  @v2 live attach drives Terminal.app. An iTerm2 attach-client lane is
+  future work, not a v2 requirement.
 
-When the user clicks "Attach Here" on a project, the binary SHALL invoke
-`vm-exec` (see `vm-idiomatic-layer`) to spawn `podman exec -it
-tillandsias-<project>-forge bash` inside the VM, with the host-side terminal
-hosted by iTerm2 when it is the user's default terminal (detected via
-`defaults read com.apple.LaunchServices LSHandlers` or `osascript -e 'get
-default application of (info for ((path to me) as alias))'`) and by
-Terminal.app otherwise. The implementation SHALL NOT use SSH.
+A live PTY attach SHALL compose: host `UnixPtyMaster` ↔ `pump_io` ↔ the
+control-wire PTY verbs over vsock ↔ the in-VM `pty_handler` child — and the
+terminal window SHALL run the tray binary's own attach client
+(`--attach-pty <slave> --session-sock <sock>`), NOT a `screen <device>`
+serial attach (which carries no winsize, no SIGWINCH, no mode hygiene —
+superseded 2026-07-27, see
+plan/issues/macos-terminal-management-audit-2026-07-27.md).
 
-@trace spec:macos-native-tray, spec:vm-idiomatic-layer
+The attach client OWNS the window's controlling tty and SHALL: put it in
+raw mode (transparent conduit; the guest line discipline keeps `ISIG` and
+owns Ctrl+C) and restore it on exit; pump bytes tty↔slave transparently;
+send `Hello{rows,cols}` on the per-session unix socket at startup and
+`Resize{rows,cols}` per received `SIGWINCH`, also stamping `TIOCSWINSZ` on
+the slave; emit a scoped mode reset (mouse reporting off, alt-screen off,
+cursor visible) at entry and exit; and exit on slave EOF or tty hangup.
 
-#### Scenario: iTerm2 is preferred when set as default
-- **WHEN** iTerm2 is the user's default terminal handler and the user clicks "Attach Here"
-- **THEN** the binary SHALL use AppleScript to ask iTerm2 to open a new tab
-  running `/usr/local/bin/vm-exec podman exec -it
-  tillandsias-<project>-forge bash`
-- **AND** the user SHALL see an iTerm2 tab with an interactive forge shell
+The tray SHALL bind the per-session socket before spawning the terminal,
+gate `PtyOpen` on the client's `Hello` (bounded fallback to 24x80),
+forward each `Resize` as a wire `PtyResize`, and treat client disconnect
+as detach → `PtyClose` (the guest child is reaped, never leaked). Geometry
+SHALL move only on discrete events — winsize polling (any interval) is
+FORBIDDEN on this path per the no-polling policy. The implementation SHALL
+NOT use SSH.
 
-#### Scenario: Terminal.app fallback when iTerm2 is not default
-- **WHEN** iTerm2 is not present or is not the default
-- **THEN** the binary SHALL invoke `open -a Terminal.app
-  /tmp/tillandsias-vm-exec-launcher.sh` after writing a launcher script
-- **AND** the user SHALL see a Terminal.app window with the same shell
+@trace spec:macos-native-tray, spec:vsock-transport,
+       plan/issues/macos-terminal-management-audit-2026-07-27.md
+
+#### Scenario: First frame at true geometry
+- **WHEN** the operator opens a tray terminal lane in a non-80x24 window
+- **THEN** the attach client's `Hello` SHALL deliver the true rows/cols
+  before `PtyOpen`, and the guest PTY SHALL be born at that size
+
+#### Scenario: Live resize reflows the in-guest TUI
+- **WHEN** the operator resizes the terminal window mid-session
+- **THEN** the client SHALL receive `SIGWINCH`, send one `Resize` event,
+  and the guest child SHALL receive `SIGWINCH` via `TIOCSWINSZ` so the TUI
+  repaints at the new geometry — with zero polling on either side
+
+#### Scenario: Window close reaps the guest child
+- **WHEN** the operator closes the terminal window mid-session
+- **THEN** the session-socket disconnect SHALL drive a `PtyClose` and the
+  guest SHALL terminate the child (SIGTERM, 2s grace, SIGKILL)
 
 #### Scenario: SSH is never invoked
 - **WHEN** `crates/tillandsias-macos-tray/src/**.rs` and
