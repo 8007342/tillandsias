@@ -286,3 +286,28 @@ xterm-256color) in the relaunched forge.
 probe 9 (SIGKILL your TUI, relaunch, scroll during output → no arrow
 injection). Both intentionally session-disrupting — run them LAST, then
 push your findings; deploy + final verification follows.
+
+### OUTSIDE note #2 — 2026-07-27 — in-forge agent died (upstream Bun segfault); round-1 fixes DEPLOYED
+
+- The order-491 agent (BigPickle/OpenCode) was killed mid-run by a Bun
+  v1.3.14 runtime segfault (upstream bug, filed separately:
+  plan/issues/forge-opencode-bun-segfault-2026-07-27.md). Round-1 findings
+  survived because they were already pushed — the push-early rule earned
+  its keep on its second day.
+- Crash stack recovered FROM THE HOST via Terminal.app scrollback
+  (`osascript` `history of tab`) — note for future in-forge forensics: the
+  host can always exfiltrate a dead session's visible text this way.
+- **Probe-9 field data (natural occurrence):** after the unclean TUI death,
+  the operator could NOT mouse-select text in the still-attached window —
+  consistent with leftover mouse-reporting, the documented mid-session
+  boundary the host-side reset cannot observe (audit D4 verifier caveat).
+  The attach client's exit reset (DECRST family) fires when the session
+  ends; expected to restore selection in that window at teardown. Probe 9
+  verification continues on the relaunched session: scroll during output →
+  no arrow injection.
+- **Round-1 fixes deployed:** tray 5d29a1c2 installed + restarted (session
+  was already dead). Next lane launch runs with TERM/COLORTERM forwarding
+  + guest-PTY IUTF8. Re-verify probe 4 in the fresh forge:
+  `env | grep -E 'TERM|COLORTERM'` → xterm-256color / truecolor.
+- Remaining: probes 8 (second window close → reap ≤3s) and 9 (scroll after
+  relaunch) on the fresh session; then this packet can complete.
