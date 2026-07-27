@@ -2,7 +2,7 @@
 tags: [tray, pty, vsock, macos, virtualization-framework, terminal-attach, tillandsias]
 languages: [rust]
 since: 2026-05-26
-last_verified: 2026-05-26
+last_verified: 2026-07-27
 sources:
   - internal
   - https://developer.apple.com/documentation/virtualization/vzvirtiosocketdevice
@@ -72,52 +72,81 @@ and `6d9a2201` (`connect_pty_bridge` handshake composer).
                 │  - O_NONBLOCK + AsyncFd                  │
                 │  - master fd / slave path captured       │
                 ▼                                          │
-   launch_spec(intent, project, 24, 80)                    │
+   bind per-session unix socket                            │
+   ($TMPDIR/tillandsias-pty-<pid>-<seq>.sock)              │
+                │                                          │
+                ▼                                          │
+   terminal_attach::spawn_terminal_pty_attach(slave, sock) │
+                │  - applescript_for_attach_client(...)    │
+                │  - osascript: do script                  │
+                │    "'<tray-exe>' --attach-pty <slave>    │
+                │      --session-sock <sock>; banner; exit"│
+                ▼                                          │
+   await attach-client Hello{rows,cols} (10s gate)         │
+                │  - event-driven initial geometry;        │
+                │    24x80 fallback if no client            │
+                ▼                                          │
+   launch_spec(intent, project, rows, cols)                │
                 │  - PtyIntent::Shell      → /bin/bash -l  │
-                │  - PtyIntent::GithubLogin → gh auth login│
-                │  - project=Some(p)       → wraps argv as │
-                │    podman exec -it tillandsias-${p}-forge│
-                │  - project=None          → bare-VM cmd   │
+                │  - PtyIntent::GithubLogin → login flow   │
+                │  - project=Some(p)       → orchestrated  │
+                │    tillandsias-headless --cloud lane     │
+                │  - env: TERM/COLORTERM/LANG (pinned)     │
                 ▼                                          │
    PtySession::open(transport, alloc, router, &opts)       │
                 │  - allocates session_id                  │
                 │  - sends ControlMessage::PtyOpen         │
                 ▼                                          │
-   pump_io(session, master)                                │
-                │  - input task: master reader →           │
-                │    PtyData{ToGuest} frames               │
-                │  - output task: PtyData{ToHost} →        │
-                │    master writer                         │
-                ▼ (returns slave_path as Result)           │
-   dispatch_to_main_thread(|| { … })  ─────────────────────┘
-                │  (libdispatch dispatch_async_f
-                │   via _dispatch_main_q)
-                ▼
-   terminal_attach::spawn_terminal_pty_attach(slave_path)
-                │  - applescript_for_screen_attach(slave_path)
-                │  - osascript -e 'tell application "Terminal"
-                │      do script "screen /dev/ttysNN"
-                │      activate'
-                ▼
-   Terminal.app window with `screen` attached to the slave PTY,
-   bridged to /bin/bash (or gh auth login) inside the in-VM
-   tillandsias-<project>-forge podman container.
+   session-control task                                    │
+                │  - socket Resize → PtyResize (lossless)  │
+                │  - socket EOF → PtyClose + bridge abort  │
+                ▼                                          │
+   pump_io(session, master)  ──────────────────────────────┘
+                   - input task: master reader →
+                     PtyData{ToGuest} frames (lossless)
+                   - output task: PtyData{ToHost} →
+                     master writer
+
+   Terminal.app window runs the tray's OWN attach client on the slave:
+   raw tty (transparent conduit), SIGWINCH → TIOCSWINSZ + Resize event,
+   DECRST mode reset at entry/exit, banner + exit on session end.
 ```
 
-## Why `screen <slave>` in Terminal.app
+## Why the tray's own attach client (terminal-attach@v2, 2026-07-27)
 
-AppleScript can't natively attach Terminal.app to an external PTY device
-(no `tty=<path>; exec <$tty >$tty` primitive in AS). `screen <slave_path>`
-opens the slave device as a serial-style terminal, reading + writing the
-device — which is the master fd that `pump_io` drives. `screen` ships with
-every modern macOS (since at least 10.6), so no extra dependency.
+AppleScript can't natively attach Terminal.app to an external PTY device,
+and the v0.0.1 answer — `screen <slave>` — turned out to be the root cause
+of the "macOS skips terminal management" defect class: `screen` on a device
+path is a SERIAL attach with no winsize concept, no SIGWINCH forwarding,
+and no mode hygiene, so geometry and terminal state died at that link
+(plan/issues/macos-terminal-management-audit-2026-07-27.md, D1/D4 — full
+matrix + seven confirmed defects).
+
+The v2 window process is `tillandsias-tray --attach-pty <slave>
+--session-sock <sock>` (`pty::attach_client` in host-shell — protocol pure
++ testable everywhere, engine `cfg(unix)`), mirroring the wsl.exe
+helper-in-the-window pattern Windows already proved:
+
+- owns the window's controlling tty: saves termios, `cfmakeraw`, restores
+  on exit (the conduit is raw; the GUEST keeps `ISIG` and owns Ctrl+C);
+- pumps `/dev/tty` ↔ slave byte-transparently (two plain threads);
+- `Hello{rows,cols}` at startup gates the tray's `PtyOpen` (event-driven
+  initial geometry — no seed poll), `Resize{rows,cols}` per SIGWINCH with
+  a post-registration TOCTOU re-read (no winsize poll anywhere: forbidden);
+- 5-byte fixed frames on the session socket (tag 'H'/'R' + rows/cols BE);
+  socket writes carry a 1s timeout so a wedged tray can't freeze the loop;
+- DECRST 1000/1002/1003/1006/1007/1049 + cursor-show at entry AND exit
+  (scroll never turns into arrow-key spam over an output-only stream);
+- exit on slave EOF (session over) or tty HUP (window closed); the socket
+  disconnect is the tray's detach signal → `PtyClose` + bridge abort, so
+  the guest child is reaped, never leaked.
 
 Alternatives considered + rejected:
-- **`script(1)`**: would work but creates a typescript file; clutters the UX.
-- **iTerm2 cross-process attach via Python API**: requires extra setup;
-  not portable to Terminal.app users.
-- **Custom Cocoa terminal emulator embedded in the tray**: massive scope
-  expansion; punted to v0.2+.
+- **Keep `screen` + poll the master winsize**: non-functional (nothing
+  re-stamps the pair post-attach; no kernel event exists on a master) AND
+  polling is policy-forbidden. This was the deleted 100ms/400ms-poll design.
+- **`script(1)`**: typescript-file clutter, same serial-attach blindness.
+- **Custom Cocoa terminal emulator in the tray**: massive scope expansion.
 
 ## Frame format
 
@@ -172,7 +201,8 @@ tail -f /tmp/tillandsias-tray.stderr.log  # (or run binary directly to see stder
 # 4. Click Open Shell → expected stderr:
 #      [tillandsias-tray] Open Shell: spawning attach worker
 #      [tillandsias-tray] Open Shell: PTY attached at /dev/ttys005
-#    And: Terminal.app opens with `screen /dev/ttys005`.
+#    And: Terminal.app opens running the attach client
+#    (`tillandsias-tray --attach-pty /dev/ttys005 --session-sock …`).
 
 # 5. Click GitHub login → same path with PtyIntent::GithubLogin →
 #    Terminal.app window runs `gh auth login` device-code flow.
