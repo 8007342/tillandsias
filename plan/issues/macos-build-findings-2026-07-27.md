@@ -24,3 +24,26 @@ plan/issues/bigpickle-macos-terminal-cooperative-debug-2026-07-27.md
 (plan/index.yaml order 491, P0). The freshly provisioned substrate on this
 host is staged for exactly that attended run (operator launches the tray →
 OpenCode lane; BigPickle runs the nine probes from inside).
+
+## Attended confirmation (operator, 2026-07-27, post-provision first launch)
+
+Operator launched the OpenCode lane from the fresh tray (e90634c4 build):
+rendering correct at first frame AND live window resize reflows the TUI —
+terminal-attach@v2 probes 2 (geometry) and 3 (live SIGWINCH resize)
+confirmed attended on the outside. In-forge verification (order 491)
+running: BigPickle claimed the DEBUG_PROMPT and is executing the nine
+probes from inside the forge.
+
+## Attended confirmation #2 (operator, 2026-07-27, mid-session)
+
+While order-491 in-forge probes run, the operator additionally confirmed on
+the OpenCode lane:
+- resize STRESS cases all reflow live: restore, maximize, snap-to-side
+  (rapid/large SIGWINCH bursts through attach-client → session socket →
+  PtyResize — not just gentle drags);
+- two-finger scroll pages Terminal.app's OWN scrollback through previous
+  OpenCode output (probe 5's enabling condition gone: scroll no longer
+  synthesizes arrow-key input — no `^[[A`/`^[[B` bleed observed);
+- mouse-click fidelity: clicking the X on OpenCode's providers panel closed
+  the panel correctly (mouse-reporting DECSET modes + click coordinates
+  survive the raw conduit both ways).
