@@ -20,6 +20,11 @@ if [ -f /etc/tillandsias/ca.crt ]; then
     mkdir -p /etc/pki/ca-trust/source/anchors/ 2>/dev/null || true
     cp /etc/tillandsias/ca.crt /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null || true
     update-ca-trust 2>/dev/null || true
+    # Order 486: the anchor + update-ca-trust above is fail-soft — as uid 1000
+    # it can fail silently (root-owned trust store), leaving curl unable to
+    # verify squid's TLS bump (curl exit 60). Point curl at the mounted
+    # enclave CA directly so downloads verify regardless of trust-store state.
+    export CURL_CA_BUNDLE=/etc/tillandsias/ca.crt
 fi
 
 # Bind to all interfaces — reachable from other containers in the enclave.
@@ -69,20 +74,38 @@ if [ ! -x "$OLLAMA_BIN" ]; then
         TMP_O="$(mktemp -d 2>/dev/null)" || true
         if [ -n "$TMP_O" ]; then
             # The image bakes HTTP(S)_PROXY=http://proxy:3128 for enclave
-            # operation. On first launch the proxy may not be fully warmed
-            # up yet (order 313: proxy warm-up race). Inside the enclave the
-            # proxy IS the only egress path (no direct DNS), so a "retry
-            # direct" fallback is dead by design — retry the proxied route
-            # after a short delay instead.
+            # operation. Inside the enclave the proxy IS the only egress path
+            # (no direct DNS), so a "retry direct" fallback is dead by design.
+            # Order 486 (cold-start evidence 2026-07-24): a single fixed 10s
+            # nap races proxy egress readiness — curl (7) means squid is not
+            # serving yet, and curl (60) is squid bumping its OWN error page
+            # because UPSTREAM egress is still unready, NOT a real CA problem.
+            # Gate the download on a proven egress probe with bounded backoff;
+            # an egress that never comes up fails loud but stays non-fatal
+            # (the fail-loud guard below + launcher soft-degrade handle it).
             OLLAMA_URL="https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${OLLAMA_ARCH}.tar.zst"
-            _ollama_dl=0
-            curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
-                "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst" \
-                || { echo "[inference] proxied download failed — retrying after 10s proxy warm-up delay" >&2; \
-                     sleep 10; \
-                     curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
-                         "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst"; } \
-                || _ollama_dl=1
+            _egress_ok=0
+            _egress_delay=2
+            for _attempt in 1 2 3 4 5; do
+                if curl -fsSI --max-time 15 -o /dev/null https://github.com/; then
+                    _egress_ok=1
+                    break
+                fi
+                if [ "$_attempt" -lt 5 ]; then
+                    echo "[inference] proxy egress not ready (attempt $_attempt/5) — retrying in ${_egress_delay}s" >&2
+                    sleep "$_egress_delay"
+                    _egress_delay=$((_egress_delay * 2))
+                fi
+            done
+            _ollama_dl=1
+            if [ "$_egress_ok" -eq 1 ]; then
+                curl -fsSL --max-time 600 --retry 2 --retry-delay 3 \
+                    "$OLLAMA_URL" -o "$TMP_O/ollama.tar.zst" \
+                    && _ollama_dl=0 \
+                    || echo "[inference] download failed AFTER proven egress — genuine failure, not a proxy race" >&2
+            else
+                echo "[inference] FATAL: proxy egress never became ready within bounded backoff (5 probes) — skipping self-install this launch" >&2
+            fi
             if [ "$_ollama_dl" -eq 0 ]; then
                 if zstd -d "$TMP_O/ollama.tar.zst" -o "$TMP_O/ollama.tar" \
                     && tar -xf "$TMP_O/ollama.tar" -C "$TMP_O" bin/ollama \
