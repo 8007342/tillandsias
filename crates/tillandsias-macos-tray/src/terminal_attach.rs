@@ -2,12 +2,16 @@
 //!
 //! Two flows live here:
 //!
-//! 1. **Live PTY attach** (production path, post-slice-4c.2): the
+//! 1. **Live PTY attach** (production path, terminal-attach@v2): the
 //!    action-host opens a host-side `UnixPtyMaster`, `pump_io` bridges
 //!    it to the in-VM forge over vsock, and this module spawns
-//!    Terminal.app via `osascript "tell ... do script \"screen
-//!    <slave>\""` — the only way to point Terminal.app at an
-//!    external PTY device.
+//!    Terminal.app via `osascript "tell ... do script"` running the
+//!    tray binary's own attach client (`--attach-pty <slave>
+//!    --session-sock <sock>`). The client owns the window's tty (raw
+//!    mode, real SIGWINCH → event-driven resize, boundary mode resets)
+//!    — the terminal-management half `screen <slave>` could never
+//!    carry, because a device attach is a serial line to screen
+//!    (plan/issues/macos-terminal-management-audit-2026-07-27.md).
 //! 2. **Stub-window fallback** (pre-VM / error UX): the action-host
 //!    surfaces error context by spawning Terminal.app with an
 //!    `echo '<message>'` body so the user always sees concrete
@@ -18,7 +22,7 @@
 //! all AppleScript formatters are pure-Rust functions so the Linux
 //! dev box can run unit tests against them.
 //!
-//! @trace spec:macos-native-tray.lifecycle.terminal-attach@v1,
+//! @trace spec:macos-native-tray.lifecycle.terminal-attach@v2,
 //!        spec:macos-native-tray.invariant.terminal-attach-no-ssh,
 //!        cheatsheets/runtime/macos-pty-attach.md
 
@@ -78,7 +82,7 @@ pub trait InstalledTerminals {
 /// matches the spec scenario "Terminal.app fallback when iTerm2 is not
 /// default".
 ///
-/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
 pub fn detect_terminal(installed: &dyn InstalledTerminals) -> Terminal {
     for candidate in Terminal::priority_order() {
         if installed.is_installed(candidate.bundle_id()) {
@@ -92,7 +96,7 @@ pub fn detect_terminal(installed: &dyn InstalledTerminals) -> Terminal {
 /// quotes. AppleScript string literals are `"…"` with `\\` and `\"` as the
 /// escape sequences for backslash and double-quote respectively.
 ///
-/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
 pub fn applescript_escape(input: &str) -> String {
     let mut out = String::with_capacity(input.len() + 2);
     for c in input.chars() {
@@ -129,59 +133,66 @@ pub fn applescript_for_open_shell_stub(message: &str) -> String {
 /// AppleScript snippet for Terminal.app — `do script` opens a new window
 /// and runs the command interactively.
 ///
-/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
 pub fn applescript_for_terminal_app(command: &str) -> String {
     let escaped = applescript_escape(command);
     format!("tell application \"Terminal\"\n    do script \"{escaped}\"\n    activate\nend tell")
 }
 
-/// AppleScript that opens a Terminal.app window and attaches it to
-/// the external PTY device at `slave_path` via GNU `screen`. The
-/// macOS host's `UnixPtyMaster` owns the master fd; the bytes that
-/// `pump_io` writes to the master surface as bytes readable on
-/// `slave_path`. By running `screen <slave>` inside Terminal.app,
-/// the user's keystrokes go INTO the slave (read by pump_io on the
-/// master, forwarded over vsock to the in-VM shell) and the in-VM
-/// shell's output comes back via pump_io → master → slave → screen
-/// → Terminal.app.
+/// Shell-quote `s` for a POSIX shell: wrap in single quotes, escaping any
+/// embedded single quote as `'\''`. Used for paths interpolated into the
+/// Terminal.app `do script` command line.
+pub fn shell_single_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// The shell command Terminal.app runs for a live PTY attach: the tray
+/// binary's own attach client on the slave device + per-session socket,
+/// then the unmistakable end-of-session banner, then `exit`.
 ///
-/// This is the v0.0.1 macOS answer to "attach Terminal.app to an
-/// external PTY device" — AppleScript can't do `tty=<path>; exec
-/// <$tty >$tty` directly. `screen` is preinstalled on every macOS
-/// since at least 10.6, so no extra dependency.
+/// Why our own client instead of `screen <slave>` (v0.0.1..2026-07-27):
+/// `screen` attached to a device path treats it as a SERIAL line — no
+/// winsize concept, no SIGWINCH forwarding, no mode hygiene — so every
+/// terminal-management hop died at that link (the audit's root insight:
+/// the working platforms all put a real client in the window; macOS
+/// didn't). The attach client owns the window's controlling tty: raw mode
+/// (transparent conduit; the guest keeps ISIG and owns Ctrl+C), real
+/// SIGWINCH → `TIOCSWINSZ` on the slave + an event on the session socket
+/// (no polling anywhere), scoped DECRST mode reset at entry/exit, and its
+/// exit is the tray's detach signal (guest child gets reaped, not leaked).
 ///
-/// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
-pub fn applescript_for_screen_attach(slave_path: &str) -> String {
-    let escaped = applescript_escape(slave_path);
-    // WINSIZE SEED (macos-forge-opencode-clips-at-80): `screen <device>` treats
-    // the slave as a SERIAL line, which has no winsize concept — so screen never
-    // propagates Terminal.app's real window geometry onto the PTY. The slave
-    // stays at the host `UnixPtyMaster::open(24, 80)` default, the tray's seed
-    // poll times out at 24x80, the guest forge PTY is born at 80 cols, and the
-    // OpenCode TUI clips at 80 forever (the operator sees leftover output in the
-    // uncovered right columns). Fix: BEFORE screen attaches, stamp the slave's
-    // winsize from Terminal.app's true size (`tput lines/cols` read this shell's
-    // controlling tty; BSD `stty -f <dev>` writes TIOCSWINSZ to the slave). The
-    // tray's seed poll then reads the real geometry off the shared master and
-    // launches the forge at the correct size — first frame correct, no grow.
-    //
-    // Order 269 (F-G): when the PTY session ends, `screen` exits and the window
-    // used to strand the operator at a bare prompt showing only '[screen is
-    // terminating]' — indistinguishable from a crash. Print an unmistakable
-    // end-of-session banner, then `exit` so Terminal profiles configured to
-    // close-on-clean-exit reclaim the window automatically.
+/// Order 269 (F-G) preserved: when the session ends the client exits, the
+/// banner prints, and the wrapping shell `exit`s so close-on-clean-exit
+/// Terminal profiles reclaim the window.
+///
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2,
+///        plan/issues/macos-terminal-management-audit-2026-07-27.md (D1, D4)
+pub fn attach_client_shell_command(exe_path: &str, slave_path: &str, sock_path: &str) -> String {
     format!(
-        "tell application \"Terminal\"\n    do script \"_r=$(tput lines); _c=$(tput cols); \
-         stty -f {escaped} rows ${{_r:-24}} cols ${{_c:-80}} 2>/dev/null; screen {escaped}; \
-         echo '[tillandsias] session ended \u{2014} you may close this window.'; exit\"\n    \
-         activate\nend tell"
+        "{} --attach-pty {} --session-sock {}; \
+         echo '[tillandsias] session ended \u{2014} you may close this window.'; exit",
+        shell_single_quote(exe_path),
+        shell_single_quote(slave_path),
+        shell_single_quote(sock_path),
     )
+}
+
+/// AppleScript that opens a Terminal.app window running the attach client
+/// against the host PTY at `slave_path` — see [`attach_client_shell_command`].
+/// The macOS host's `UnixPtyMaster` owns the master fd; `pump_io` bridges
+/// master ↔ vsock, the client bridges the window's tty ↔ slave.
+///
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
+pub fn applescript_for_attach_client(exe_path: &str, slave_path: &str, sock_path: &str) -> String {
+    applescript_for_terminal_app(&attach_client_shell_command(
+        exe_path, slave_path, sock_path,
+    ))
 }
 
 /// AppleScript snippet for iTerm2 — Cocoa Scripting API creates a new
 /// window and writes the command into the active session.
 ///
-/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
 pub fn applescript_for_iterm2(command: &str) -> String {
     let escaped = applescript_escape(command);
     format!(
@@ -209,7 +220,7 @@ mod live {
 
     /// Live implementation backed by `NSWorkspace`.
     ///
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     pub struct LiveInstalledTerminals;
 
     impl InstalledTerminals for LiveInstalledTerminals {
@@ -263,19 +274,27 @@ mod live {
         Ok(())
     }
 
-    /// Spawn Terminal.app and attach it to the host PTY at `slave_path`
-    /// via `screen`. The attached session reads + writes the device,
-    /// which on the host side is the master fd that pump_io drives
-    /// against the vsock-bridged in-VM shell.
+    /// Spawn Terminal.app running the tray binary's attach client on the
+    /// host PTY at `slave_path`, reporting geometry events on the
+    /// per-session socket at `sock_path`. The window's tty is owned by
+    /// the client (raw mode + SIGWINCH); on the host side the master fd
+    /// is what pump_io drives against the vsock-bridged in-VM shell.
     ///
     /// macOS only; spec invariant `terminal-attach-no-ssh` honored
     /// (no SSH, no podman exec — the bytes flow via vsock + the
     /// in-VM `pty_handler` per control-wire-pty-attach §3.2).
     ///
-    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2),
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2,
     ///        spec:macos-native-tray.invariant.terminal-attach-no-ssh
-    pub fn spawn_terminal_pty_attach(slave_path: &str) -> std::io::Result<()> {
-        let snippet = applescript_for_screen_attach(slave_path);
+    pub fn spawn_terminal_pty_attach(slave_path: &str, sock_path: &str) -> std::io::Result<()> {
+        let exe = std::env::current_exe()?;
+        let exe = exe.to_str().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "tray executable path is not valid UTF-8",
+            )
+        })?;
+        let snippet = applescript_for_attach_client(exe, slave_path, sock_path);
         std::process::Command::new("osascript")
             .arg("-e")
             .arg(&snippet)
@@ -303,28 +322,28 @@ mod tests {
         MockInstalled(ids.iter().map(|s| (*s).to_string()).collect())
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
     fn terminal_detection_returns_iterm2_preferred_when_present() {
         let host = installed(&[bundle_ids::ITERM2, bundle_ids::TERMINAL_APP]);
         assert_eq!(detect_terminal(&host), Terminal::ITerm2);
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
     fn terminal_detection_falls_back_to_warp_when_iterm2_absent() {
         let host = installed(&[bundle_ids::WARP, bundle_ids::TERMINAL_APP]);
         assert_eq!(detect_terminal(&host), Terminal::Warp);
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
     fn terminal_detection_falls_back_to_terminal_app_when_only_default_present() {
         let host = installed(&[bundle_ids::TERMINAL_APP]);
         assert_eq!(detect_terminal(&host), Terminal::TerminalApp);
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
     fn terminal_detection_falls_back_to_terminal_app_when_none_installed() {
         let host = installed(&[]);
@@ -333,7 +352,7 @@ mod tests {
         assert_eq!(detect_terminal(&host), Terminal::TerminalApp);
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
     fn applescript_escape_doubles_backslashes_and_quotes() {
         assert_eq!(applescript_escape(r#"no specials"#), "no specials");
@@ -345,7 +364,7 @@ mod tests {
         );
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
     fn apple_script_for_terminal_app_escapes_quotes_correctly() {
         let command = r#"echo "hello world""#;
@@ -357,7 +376,7 @@ mod tests {
         assert!(snippet.contains("activate"));
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
     fn applescript_for_iterm2_writes_text_into_current_session() {
         let command = "tillandsias-vm-layer-exec podman exec -it tillandsias-foo-forge bash";
@@ -367,57 +386,60 @@ mod tests {
         assert!(snippet.contains("tillandsias-foo-forge"));
     }
 
-    /// Spec invariant: the live PTY attach path (slice 4c.2) connects
-    /// via vsock + a host UnixPtyMaster + `screen <slave_path>` — no
-    /// SSH anywhere. Asserting on `applescript_for_screen_attach`
+    /// Spec invariant: the live PTY attach path connects via vsock + a
+    /// host UnixPtyMaster + the tray's own attach client in the window —
+    /// no SSH anywhere. Asserting on `applescript_for_attach_client`
     /// proves the user-facing osascript snippet doesn't sneak ssh in.
     ///
     /// @trace spec:macos-native-tray.invariant.terminal-attach-no-ssh
     #[test]
-    fn screen_attach_never_invokes_ssh() {
-        let snippet = applescript_for_screen_attach("/dev/ttys001");
+    fn attach_client_never_invokes_ssh() {
+        let snippet = applescript_for_attach_client(
+            "/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray",
+            "/dev/ttys001",
+            "/tmp/tillandsias-pty-1.sock",
+        );
         assert!(
             !snippet.contains("ssh"),
             "live PTY attach must never use ssh: {snippet}"
         );
-        assert!(snippet.contains("screen /dev/ttys001"));
+        assert!(snippet.contains("--attach-pty '/dev/ttys001'"));
     }
 
-    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
+    /// terminal-attach@v2: the window runs OUR client — no `screen`, no
+    /// `stty` seed hack (the client owns geometry via SIGWINCH events).
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
-    fn screen_attach_wraps_slave_path_in_do_script() {
-        let snippet = applescript_for_screen_attach("/dev/ttys005");
-        assert!(snippet.contains("tell application \"Terminal\""));
-        assert!(snippet.contains("screen /dev/ttys005;"));
-        assert!(snippet.contains("activate"));
-    }
-
-    /// macos-forge-opencode-clips-at-80: the attach must stamp the slave's
-    /// winsize from Terminal.app's real geometry BEFORE screen (which, on a
-    /// serial device, never propagates it) so the guest forge PTY is born at
-    /// the true size instead of clipping at 24x80.
-    #[test]
-    fn screen_attach_seeds_winsize_before_screen() {
-        let snippet = applescript_for_screen_attach("/dev/ttys005");
+    fn attach_client_replaces_screen_and_stty() {
+        let cmd = attach_client_shell_command("/usr/local/bin/tray", "/dev/ttys005", "/tmp/s.sock");
         assert!(
-            snippet.contains("stty -f /dev/ttys005 rows"),
-            "winsize seed missing: {snippet}"
+            !cmd.contains("screen ") && !cmd.contains("stty "),
+            "screen/stty must be gone from the attach command: {cmd}"
         );
-        // The seed must precede the screen attach in the command sequence.
-        let stty_at = snippet.find("stty -f /dev/ttys005").expect("stty present");
-        let screen_at = snippet.find("screen /dev/ttys005").expect("screen present");
-        assert!(stty_at < screen_at, "stty must run before screen: {snippet}");
+        assert!(cmd.contains("--attach-pty '/dev/ttys005'"));
+        assert!(cmd.contains("--session-sock '/tmp/s.sock'"));
+        // The client must run before the banner (it IS the session).
+        let client_at = cmd.find("--attach-pty").expect("client present");
+        let banner_at = cmd.find("session ended").expect("banner present");
+        assert!(client_at < banner_at, "client must precede banner: {cmd}");
     }
 
-    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
+    /// The do-script envelope survives paths with shell/AppleScript
+    /// specials: single quotes are shell-escaped (`'\''`), then the whole
+    /// command is AppleScript-escaped (backslashes doubled, quotes escaped).
     #[test]
-    fn screen_attach_escapes_path_with_specials() {
-        // Unrealistic path with embedded quotes — verify AppleScript
-        // escaping survives so the `do script` literal parses.
-        let snippet = applescript_for_screen_attach(r#"/tmp/with"weird\path"#);
-        assert!(snippet.contains(r#"screen /tmp/with\"weird\\path;"#));
-        // The winsize-seed stty gets the same escaped path.
-        assert!(snippet.contains(r#"stty -f /tmp/with\"weird\\path rows"#));
+    fn attach_client_escapes_paths_with_specials() {
+        assert_eq!(shell_single_quote("/plain/path"), "'/plain/path'");
+        assert_eq!(shell_single_quote("with'quote"), r#"'with'\''quote'"#);
+        let snippet = applescript_for_attach_client(
+            "/Applications/My App.app/Contents/MacOS/tray",
+            "/dev/ttys005",
+            "/tmp/tillandsias sock's.sock",
+        );
+        // Space-bearing exe path stays inside one shell word.
+        assert!(snippet.contains("'/Applications/My App.app/Contents/MacOS/tray'"));
+        assert!(snippet.contains("tell application \"Terminal\""));
+        assert!(snippet.contains("activate"));
     }
 
     /// Order 269 (F-G) pin: session end must be unmistakable — the
@@ -425,15 +447,16 @@ mod tests {
     /// close-on-exit Terminal profiles reclaim the window) instead of
     /// stranding the operator at a dead prompt.
     #[test]
-    fn screen_attach_ends_with_banner_and_exit() {
-        let snippet = applescript_for_screen_attach("/dev/ttys005");
+    fn attach_client_ends_with_banner_and_exit() {
+        let snippet =
+            applescript_for_attach_client("/usr/local/bin/tray", "/dev/ttys005", "/tmp/s");
         assert!(
             snippet.contains("session ended"),
             "end-of-session banner missing: {snippet}"
         );
         assert!(
             snippet.contains("; exit\""),
-            "wrapping shell must exit after screen ends: {snippet}"
+            "wrapping shell must exit after the client ends: {snippet}"
         );
     }
 
@@ -454,7 +477,7 @@ mod tests {
         assert!(snippet.contains("do script"));
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
     #[test]
     fn bundle_ids_match_spec_scenario() {
         assert_eq!(Terminal::ITerm2.bundle_id(), "com.googlecode.iterm2");

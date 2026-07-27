@@ -135,16 +135,7 @@ impl UnixPtyMaster {
         // cfmakeraw clears all of the above flags and makes the PTY a
         // transparent byte conduit. The in-VM guest manages its own line
         // discipline; we must not double-process here.
-        unsafe {
-            // 128 bytes is an over-allocation for struct termios on both
-            // macOS aarch64 (≈72 bytes) and Linux aarch64 (≈60 bytes).
-            let mut t = [0u8; 128];
-            let t_ptr = t.as_mut_ptr() as *mut std::ffi::c_void;
-            if tcgetattr(slave_fd, t_ptr) == 0 {
-                cfmakeraw(t_ptr);
-                let _ = tcsetattr(slave_fd, TCSANOW, t_ptr);
-            }
-        }
+        let _ = fd_set_raw(slave_fd);
 
         set_nonblocking(master_owned.as_raw_fd())?;
 
@@ -166,73 +157,16 @@ impl UnixPtyMaster {
     pub fn slave_path(&self) -> &str {
         &self.slave_path
     }
-
-    /// Resize the PTY window — caller invokes when the local terminal app
-    /// reports a SIGWINCH. The in-VM child will see its own SIGWINCH via
-    /// a separate `PtyResize` envelope on the wire (see `pty::mod.rs`).
-    pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
-        let ws = WinSize {
-            ws_row: rows,
-            ws_col: cols,
-            ws_xpixel: 0,
-            ws_ypixel: 0,
-        };
-        let rc = unsafe {
-            ioctl(
-                self.master.get_ref().as_raw_fd(),
-                TIOCSWINSZ,
-                &ws as *const WinSize,
-            )
-        };
-        if rc < 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
-    }
-
-    /// A detachable reader of the PTY master's current window size. It clones
-    /// the shared master fd, so it stays usable AFTER the `UnixPtyMaster` is
-    /// moved into `pump_io`. The tray is a GUI process with no controlling tty
-    /// and never receives SIGWINCH, so the resize watcher reads this to learn
-    /// the real terminal size that `screen`/Terminal.app apply to the slave
-    /// after attach (and on every later window resize).
-    pub fn winsize_reader(&self) -> PtyWinsizeReader {
-        PtyWinsizeReader {
-            fd: self.master.clone(),
-        }
-    }
 }
 
-/// Detachable `TIOCGWINSZ` reader — see [`UnixPtyMaster::winsize_reader`].
-pub struct PtyWinsizeReader {
-    fd: Arc<AsyncFd<FdHolder>>,
-}
-
-impl PtyWinsizeReader {
-    /// Current `(rows, cols)` from the PTY master via `TIOCGWINSZ`. Returns an
-    /// error once the underlying fd is closed (session ended).
-    pub fn get(&self) -> io::Result<(u16, u16)> {
-        let mut ws = WinSize {
-            ws_row: 0,
-            ws_col: 0,
-            ws_xpixel: 0,
-            ws_ypixel: 0,
-        };
-        let rc = unsafe {
-            ioctl(
-                self.fd.get_ref().as_raw_fd(),
-                TIOCGWINSZ,
-                &mut ws as *mut WinSize,
-            )
-        };
-        if rc < 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok((ws.ws_row, ws.ws_col))
-        }
-    }
-}
+// NOTE (terminal-attach@v2, 2026-07-27): the former master-side winsize
+// machinery (`UnixPtyMaster::resize`, `winsize_reader`, `PtyWinsizeReader`)
+// was deleted with the tray's poll loops — geometry now moves ONLY on the
+// attach client's SIGWINCH events (it stamps `TIOCSWINSZ` on the slave and
+// notifies the tray on the session socket; see `pty::attach_client` and
+// `fd_winsize`/`fd_set_winsize` below). Do not reintroduce a master-side
+// winsize watcher: there is no kernel event to subscribe to on a PTY
+// master, so any watcher degenerates into a forbidden poll.
 
 /// Read half handed out by `split()`. Wraps `Arc<AsyncFd>` so both halves
 /// share the same kqueue registration.
@@ -304,6 +238,88 @@ impl super::PtyMaster for UnixPtyMaster {
         let r = UnixPtyReader(self.master.clone(), Some(self._slave));
         let w = UnixPtyWriter(self.master);
         (r, w)
+    }
+}
+
+// ─── shared fd-level termios/winsize helpers ──────────────────────────────
+//
+// Used by `UnixPtyMaster` above and by `pty::attach_client` (the in-terminal
+// client that owns the operator-facing tty). All operate on a raw fd so the
+// caller decides ownership; none of them poll — they are one-shot ioctls.
+
+/// Read `(rows, cols)` from any tty fd via `TIOCGWINSZ`.
+pub(crate) fn fd_winsize(fd: RawFd) -> io::Result<(u16, u16)> {
+    let mut ws = WinSize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    let rc = unsafe { ioctl(fd, TIOCGWINSZ, &mut ws as *mut WinSize) };
+    if rc < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok((ws.ws_row, ws.ws_col))
+    }
+}
+
+/// Stamp `rows`x`cols` onto any tty fd via `TIOCSWINSZ`. The kernel raises
+/// `SIGWINCH` in the fd's foreground process group (if any).
+pub(crate) fn fd_set_winsize(fd: RawFd, rows: u16, cols: u16) -> io::Result<()> {
+    let ws = WinSize {
+        ws_row: rows,
+        ws_col: cols,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    let rc = unsafe { ioctl(fd, TIOCSWINSZ, &ws as *const WinSize) };
+    if rc < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Opaque saved-termios image. 128 bytes over-allocates `struct termios` on
+/// both macOS aarch64 (≈72 bytes) and Linux aarch64 (≈60 bytes) — same trick
+/// as the raw-mode block in `UnixPtyMaster::open`.
+pub(crate) type SavedTermios = [u8; 128];
+
+/// Snapshot the fd's termios for a later [`fd_restore_termios`].
+pub(crate) fn fd_save_termios(fd: RawFd) -> io::Result<SavedTermios> {
+    let mut t: SavedTermios = [0u8; 128];
+    let rc = unsafe { tcgetattr(fd, t.as_mut_ptr() as *mut std::ffi::c_void) };
+    if rc != 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(t)
+    }
+}
+
+/// Put the fd into raw mode (`cfmakeraw`): transparent byte conduit — no
+/// echo, no ISIG, no CR/LF translation, byte-granular reads.
+pub(crate) fn fd_set_raw(fd: RawFd) -> io::Result<()> {
+    let mut t: SavedTermios = [0u8; 128];
+    let t_ptr = t.as_mut_ptr() as *mut std::ffi::c_void;
+    unsafe {
+        if tcgetattr(fd, t_ptr) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        cfmakeraw(t_ptr);
+        if tcsetattr(fd, TCSANOW, t_ptr) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
+/// Restore a termios image previously captured with [`fd_save_termios`].
+pub(crate) fn fd_restore_termios(fd: RawFd, saved: &SavedTermios) -> io::Result<()> {
+    let rc = unsafe { tcsetattr(fd, TCSANOW, saved.as_ptr() as *const std::ffi::c_void) };
+    if rc != 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
 

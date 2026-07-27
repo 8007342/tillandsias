@@ -75,12 +75,14 @@ impl BridgeJoin {
 /// the PTY layer. Returns the transport the caller plumbs into
 /// `PtySession::open` plus the task handles.
 ///
-/// `capacity` is the outbound mpsc bound — small enough that
-/// backpressure on a stuck VM surfaces as a clean `send` error
-/// (which `PtySession` then propagates) rather than unbounded host
-/// memory growth. The Linux shared `Client` uses an effectively
-/// unbounded write loop; we choose bounded here to keep host RSS
-/// predictable when the VM stalls.
+/// `capacity` is the outbound mpsc bound, keeping host RSS predictable
+/// when the VM stalls (the Linux shared `Client` uses an effectively
+/// unbounded write loop). Semantics per path: one-shot control ops use
+/// the fail-fast `send` (a full queue surfaces as an error); the byte
+/// pumps and the resize/close control path use `send_lossless`, which
+/// AWAITS queue space — a stall backpressures the local terminal instead
+/// of silently killing the input direction (audit D3, the host→guest
+/// twin of the ea2fbc8d guest→host fix).
 pub fn spawn_pty_bridge<S>(
     stream: S,
     router: Arc<PtyRouter>,

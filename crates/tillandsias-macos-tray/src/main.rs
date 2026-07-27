@@ -116,11 +116,38 @@ fn main() {
              to this terminal. With --prompt runs non-interactively (one shot).\n    \
              --diagnose    Print a static health report, then exit\n    \
              --json        With --diagnose, emit JSON instead of human text\n    \
+             --attach-pty <slave-tty> --session-sock <path>  (internal) in-terminal\n                  \
+             attach client the tray spawns inside Terminal.app for live PTY\n                  \
+             sessions; owns the window tty and forwards resize events\n    \
              -V, --version Print version and exit\n    \
              -h, --help    Print this help and exit",
             env!("CARGO_PKG_VERSION")
         );
         std::process::exit(0);
+    }
+    // In-terminal attach client (terminal-attach@v2): the process
+    // Terminal.app runs inside the window for a live PTY attach. Owns the
+    // window's tty (raw mode, SIGWINCH → event-driven resize on the
+    // per-session socket, boundary mode resets). Boots no VM and touches
+    // no AppKit — dispatch before the singleton guard, like --diagnose;
+    // the running tray is the one that spawned us.
+    // @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
+    if let Some(i) = args.iter().position(|a| a == "--attach-pty") {
+        let slave = args.get(i + 1).cloned();
+        let sock = args
+            .iter()
+            .position(|a| a == "--session-sock")
+            .and_then(|j| args.get(j + 1))
+            .cloned();
+        match (slave, sock) {
+            (Some(slave), Some(sock)) => std::process::exit(
+                tillandsias_host_shell::pty::attach_client::run(&slave, &sock),
+            ),
+            _ => {
+                eprintln!("usage: tillandsias-tray --attach-pty <slave-tty> --session-sock <path>");
+                std::process::exit(2);
+            }
+        }
     }
     if args.iter().any(|a| a == "--provision") {
         std::process::exit(diagnose::provision_main());

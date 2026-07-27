@@ -22356,3 +22356,58 @@ plan_index:
         gemini/opencode login lane; --diagnose names the missing seed before
         launch. Until fixed the Linux 455-family forge gate cannot pass
         unattended.
+
+    - packet_id: bigpickle-macos-terminal-cooperative-debug
+      order: 478
+      desired_release: v0.4
+      title: "P0: in-forge cooperative verification of terminal-attach@v2 (BigPickle inside the forge + outside builder loop via push/pull)"
+      status: ready
+      kind: verification
+      deliverable: plan/issues/bigpickle-macos-terminal-cooperative-debug-2026-07-27.md
+      depends_on: []
+      pickup_role: "in-forge agent on the macOS host's forge (BigPickle/OpenCode); outside half: macOS builder"
+      capability_tags: [macos, forge, opencode, pty, terminal, smoke-gate, p0, cooperative]
+      estimated_hours: 3
+      outcome: >
+        Nine in-forge probes (geometry, live SIGWINCH resize, echo bleed,
+        Ctrl+C, UTF-8 bursts, window-close reap, mode-reset hygiene, env,
+        termios) verify the 2026-07-27 terminal-attach@v2 rebuild end to end
+        from the harness's own terminal. Findings are appended to the packet
+        and pushed IMMEDIATELY (a prior forge died with unpushed root-cause
+        work); the outside builder pulls, fixes, rebuilds, relaunches.
+        Gate for v0.4 macOS terminal-UX stability.
+
+    - packet_id: host-pty-slave-retention-eof-teardown
+      order: 479
+      desired_release: v0.4
+      title: "Host PTY split() retains the slave fd — EOF/teardown defeated (audit D5 full fix; mitigated by attach-client detach)"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/host-pty-slave-retention-eof-teardown-2026-07-27.md
+      depends_on: []
+      pickup_role: "macOS host (needs live Darwin termios-persistence probe); code is shared cfg(unix)"
+      capability_tags: [macos, pty, host-shell, fd-lifecycle, p2]
+      estimated_hours: 3
+      outcome: >
+        Probe whether pty-pair raw termios survives a zero-slave window on
+        Darwin, then drop the retained slave in split() (or re-raw from the
+        attach client), wire input-task EOF to a transport-level PtyClose,
+        and keep the blank-terminal ATTACH_GRACE regression guard green.
+
+    - packet_id: guest-pty-write-wedge
+      order: 480
+      desired_release: v0.4
+      title: "Guest write_to_guest blocks unboundedly inline in the connection loop — wedge kills session/connection (audit D6)"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/guest-pty-write-wedge-2026-07-27.md
+      depends_on: []
+      pickup_role: "any host (guest-only cfg(unix) code); good in-forge candidate"
+      capability_tags: [guest, headless, pty, vsock, fairness, p2]
+      estimated_hours: 4
+      outcome: >
+        Per-session bounded write queue + writer task, full-for-deadline
+        wedge kill via the existing SIGTERM/SIGKILL path (kill-not-drop),
+        enqueue bounded to the 250ms control-plane fairness bound, resize
+        routed through the same queue to preserve arrival order. Restores
+        the vsock-transport fairness invariant under a wedged child.

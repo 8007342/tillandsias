@@ -39,8 +39,11 @@
 #      attach-no-ssh): the live PTY-attach codepath SHALL never invoke
 #      ssh on the host (all VM I/O routes through virtio-vsock; no
 #      sshd in the in-VM forge container). Pin test
-#      `screen_attach_never_invokes_ssh` in terminal_attach.rs asserts
-#      this; this litmus enforces the test continues to exist.
+#      `attach_client_never_invokes_ssh` in terminal_attach.rs asserts
+#      this (renamed from screen_attach_never_invokes_ssh when
+#      terminal-attach@v2 replaced `screen` with the tray's own attach
+#      client, 2026-07-27); this litmus enforces the test continues to
+#      exist.
 #
 # Pattern: each step's expected_behavior is a literal substring of the
 # step's stdout (per the matcher's substring rule documented at
@@ -91,9 +94,9 @@ critical_path:
     expected_behavior: "lsuielement-is-true"
     timeout_ms: 3000
 
-  - step: "terminal-attach-no-ssh: pin test screen_attach_never_invokes_ssh exists"
-    command: "grep -F 'fn screen_attach_never_invokes_ssh' crates/tillandsias-macos-tray/src/terminal_attach.rs"
-    expected_behavior: "screen_attach_never_invokes_ssh"
+  - step: "terminal-attach-no-ssh: pin test attach_client_never_invokes_ssh exists"
+    command: "grep -F 'fn attach_client_never_invokes_ssh' crates/tillandsias-macos-tray/src/terminal_attach.rs"
+    expected_behavior: "attach_client_never_invokes_ssh"
     timeout_ms: 3000
 
   # Slice 31 additions (4 more invariants, 5 grep patterns):
