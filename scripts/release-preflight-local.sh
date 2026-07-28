@@ -87,6 +87,17 @@ else
     step "Skip local CI gate"
 fi
 
+step "Refresh tracked release evidence (docs/convergence dashboards)"
+# Order 495 (preflight-evidence-dirties-forge-gate): the local CI gate above
+# routes its own dashboard regeneration under target/ so the post-build forge
+# gate always starts from a clean worktree. The TRACKED docs/convergence
+# projection — committed release evidence per docs/RELEASING.md step 4 — is
+# regenerated HERE, after the gate, so generated dirt never sits between
+# generation and the forge gate. As a bonus this render includes the
+# signature record the gate just appended (previously the committed
+# dashboards lagged one CI run).
+bash scripts/update-convergence-dashboard.sh
+
 if [[ "$run_nix_probe" == "1" ]]; then
     step "Probe Linux release Nix targets locally"
     if ! command -v nix >/dev/null 2>&1; then
@@ -99,6 +110,10 @@ if [[ "$run_nix_probe" == "1" ]]; then
 fi
 
 step "Release preflight complete"
+evidence_dirt="$(git status --porcelain -- TRACES.md 'openspec/specs/*/TRACES.md' docs/convergence || true)"
+if [[ -n "$evidence_dirt" ]]; then
+    printf 'Generated release evidence awaiting commit (docs/RELEASING.md step 4):\n%s\n\n' "$evidence_dirt"
+fi
 version="$(tr -d '[:space:]' < VERSION)"
 release_ref="$(git branch --show-current 2>/dev/null || true)"
 if [[ -z "$release_ref" ]]; then

@@ -9,6 +9,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-plan/Cargo.toml#L1](../../../crates/tillandsias-plan/Cargo.toml#L1)
 - [crates/tillandsias-plan/src/lib.rs#L18](../../../crates/tillandsias-plan/src/lib.rs#L18)
 - [crates/tillandsias-plan/src/main.rs#L6](../../../crates/tillandsias-plan/src/main.rs#L6)
+- [images/default/config-overlay/mcp/forge-plan.sh#L3](../../../images/default/config-overlay/mcp/forge-plan.sh#L3)
 - [scripts/check-cheatsheet-refs.sh#L23](../../../scripts/check-cheatsheet-refs.sh#L23)
 - [scripts/hooks/pre-commit-openspec.sh#L3](../../../scripts/hooks/pre-commit-openspec.sh#L3)
 - [scripts/install-hooks.sh#L3](../../../scripts/install-hooks.sh#L3)

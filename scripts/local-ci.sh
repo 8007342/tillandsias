@@ -1154,7 +1154,19 @@ fi
 
 log_section "CentiColon Dashboard Generation"
 if [[ -f "scripts/update-convergence-dashboard.sh" ]]; then
-    if bash scripts/update-convergence-dashboard.sh 2>&1 | tee /tmp/convergence-dashboard.log; then
+    # Order 495 (preflight-evidence-dirties-forge-gate): route the generated
+    # dashboards under target/ (gitignored) so this gate never dirties the
+    # tracked checkout that the post-build forge gate's dirty-start guard
+    # verifies. Same MD_OUT/JSON_OUT/SUMMARY_OUT redirect that build.sh's
+    # _run_local_ci_gate uses (order-489 prior art); explicit caller env
+    # still wins. The TRACKED docs/convergence projection is committed
+    # release evidence (docs/RELEASING.md step 4) and is refreshed by
+    # scripts/release-preflight-local.sh AFTER this gate completes — never
+    # between generation and the forge gate.
+    if MD_OUT="${MD_OUT:-$REPO_ROOT/target/convergence/centicolon-dashboard.md}" \
+        JSON_OUT="${JSON_OUT:-$REPO_ROOT/target/convergence/centicolon-dashboard.json}" \
+        SUMMARY_OUT="${SUMMARY_OUT:-$REPO_ROOT/target/convergence/summary.md}" \
+        bash scripts/update-convergence-dashboard.sh 2>&1 | tee /tmp/convergence-dashboard.log; then
         log_pass "CentiColon dashboard regenerated"
         archive_check_log "convergence-dashboard" "pass" /tmp/convergence-dashboard.log
     else

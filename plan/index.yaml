@@ -23408,7 +23408,7 @@ plan_index:
       order: 495
       desired_release: v0.5
       title: "release-preflight local-ci regenerates evidence into the shared checkout, then its own post-build forge gate refuses the dirty worktree"
-      status: ready
+      status: done
       kind: fix
       deliverable: plan/issues/preflight-evidence-dirties-forge-gate-2026-07-28.md
       depends_on: []
@@ -23428,17 +23428,47 @@ plan_index:
         deferred verdict on known-generated-only dirt. Pin with a litmus
         step asserting empty porcelain after local-ci's generate phases.
       events:
-        - type: filed
-          ts: "2026-07-28T01:05:00Z"
-          agent_id: "linux-mutable-metaorch-20260727"
+        - type: completed
+          ts: "2026-07-29T00:15:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
           host: linux_mutable
-          commits: ["b3677fb3"]
           summary: >
-            Filed from the live v0.4 release-preflight failure (STEP 4
-            HEAD-unchanged at 596b6bc8); resolved this cycle by committing
-            the generated evidence per RELEASING.md step 4 and re-running
-            the gate. The in-forge guard, boundary verify, and clean exit
-            all behaved exactly as specified — composition bug only.
+            Fixed per-artifact, reusing the order-489 mechanism rather than
+            inventing a parallel one. Centicolon dashboards: the CI gate now
+            renders ONLY the target/ copy (local-ci defaults MD_OUT/JSON_OUT/
+            SUMMARY_OUT under target/convergence, caller env still wins), and
+            release-preflight regenerates the tracked docs/convergence
+            projection AFTER the gate — so generated dirt can never sit
+            between generation and the forge gate. They cannot be no-op
+            regenerated (timestamps churn), so target-routing was the only
+            option inside the gate; they must stay tracked per RELEASING.md
+            step 4, hence the post-gate refresh. Side benefit: the committed
+            dashboard now carries the signature record the gate just
+            appended (previously it lagged one run). TRACES indexes: kept
+            tracked (spec:clickable-trace-index requires committed
+            GitHub-navigable indexes) and are timestamp-free/deterministic,
+            so the constraint is regenerate-and-commit BEFORE any post-build
+            phase. Verifiable closure: new litmus:local-ci-self-clean-evidence
+            (ci-release, pre-build, quick) renders exactly as the gate does
+            then asserts git porcelain names no generated-evidence path —
+            emitting ok:self-clean-evidence or fail:generated-evidence-dirt
+            with the remedy. Validated on BOTH paths: it failed live on the
+            stale committed indexes (proving it catches the real class) and
+            passes with them regenerated+committed in this same commit; 6/6
+            ci-release quick litmus green. Option 2 (deferred verdict in the
+            e2e launcher) deliberately NOT implemented — it would mask
+            staleness instead of surfacing it.
+                - type: filed
+                  ts: "2026-07-28T01:05:00Z"
+                  agent_id: "linux-mutable-metaorch-20260727"
+                  host: linux_mutable
+                  commits: ["b3677fb3"]
+                  summary: >
+                    Filed from the live v0.4 release-preflight failure (STEP 4
+                    HEAD-unchanged at 596b6bc8); resolved this cycle by committing
+                    the generated evidence per RELEASING.md step 4 and re-running
+                    the gate. The in-forge guard, boundary verify, and clean exit
+                    all behaved exactly as specified — composition bug only.
 
     - packet_id: macos-tray-icon-state-machine-parity
       order: 496
