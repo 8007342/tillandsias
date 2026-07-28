@@ -23217,3 +23217,39 @@ plan_index:
             misread (first post-release macOS multi-lane session),
             differently-named sibling coverage, and the documented
             same-name --replace self-relaunch semantics.
+
+    - packet_id: preflight-evidence-dirties-forge-gate
+      order: 495
+      desired_release: v0.5
+      title: "release-preflight local-ci regenerates evidence into the shared checkout, then its own post-build forge gate refuses the dirty worktree"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/preflight-evidence-dirties-forge-gate-2026-07-28.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, build, release-gate, litmus, meta-orchestration, self-clean]
+      estimated_hours: 2
+      outcome: >
+        Found live during the v0.4.260728.1 preflight: local-ci writes
+        centicolon dashboards + TRACES indexes, then
+        litmus:opencode-prompt-e2e-shape launches a full forge cycle whose
+        dirty-start guard correctly refuses the generated dirt — the
+        preflight fails itself. Preferred fix (order-489 prior art,
+        discard-over-repair): route these artifacts under target/ so the
+        preflight is self-clean by construction; alternatively commit
+        evidence before the post-build phase or teach the launch script a
+        deferred verdict on known-generated-only dirt. Pin with a litmus
+        step asserting empty porcelain after local-ci's generate phases.
+      events:
+        - type: filed
+          ts: "2026-07-28T01:05:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["b3677fb3"]
+          summary: >
+            Filed from the live v0.4 release-preflight failure (STEP 4
+            HEAD-unchanged at 596b6bc8); resolved this cycle by committing
+            the generated evidence per RELEASING.md step 4 and re-running
+            the gate. The in-forge guard, boundary verify, and clean exit
+            all behaved exactly as specified — composition bug only.
