@@ -95,6 +95,7 @@ mod tests {
                 ready: true,
             }],
             cloud_projects: Vec::new(),
+            cloud_projects_loaded: true,
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: true,
             podman_ready: true,

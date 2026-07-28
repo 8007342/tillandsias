@@ -1630,7 +1630,15 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
         // (rendering the project body), an invalid/missing token falls back
         // to LoggedOut's actionable "GitHub Login" leaf — never a stale
         // in-progress or logged-in rendering.
-        guard.get_or_insert_with(MenuState::initial).login = state;
+        let menu = guard.get_or_insert_with(MenuState::initial);
+        if menu.login != state && state == GithubLoginState::LoggedOut {
+            // Fresh logout: the next login must re-fetch cloud projects, so
+            // its submenu shows "(loading repos…)" rather than a stale
+            // "(no repos)" / repo list from the previous session.
+            menu.cloud_projects_loaded = false;
+            menu.cloud_projects = Vec::new();
+        }
+        menu.login = state;
     }
 }
 
@@ -1642,7 +1650,11 @@ fn apply_cloud_projects(projects: &[tillandsias_control_wire::CloudProjectEntry]
     let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
     let n = mapped.len();
     if let Ok(mut guard) = MENU_STATE.lock() {
-        guard.get_or_insert_with(MenuState::initial).cloud_projects = mapped;
+        let state = guard.get_or_insert_with(MenuState::initial);
+        state.cloud_projects = mapped;
+        // A confirmed answer (even an empty one) flips the cloud submenu
+        // from "(loading repos…)" to real entries / "(no repos)".
+        state.cloud_projects_loaded = true;
     }
     n
 }

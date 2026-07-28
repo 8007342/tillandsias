@@ -2701,14 +2701,45 @@ fn handover_pair_is_persistable(token: &str, share_b64: &str) -> bool {
 /// fabricated share into `generate-root`.
 #[cfg(feature = "vault")]
 fn read_shamir_share_b64(debug: bool) -> Result<String, String> {
+    let mut candidates = shamir_share_candidates();
+    if candidates.is_empty() {
+        return Err(
+            "no valid 32-byte base64 Shamir share in VM credentials, host keychain, or fallback file"
+                .to_string(),
+        );
+    }
+    let (source, share) = candidates.remove(0);
+    if debug {
+        eprintln!("[tillandsias-vault] heal: using Shamir share from {source}");
+    }
+    Ok(share)
+}
+
+/// Append `encoded` to `list` iff it is a valid 32-byte base64 share not
+/// already present under another source label.
+#[cfg(feature = "vault")]
+fn push_share_candidate(list: &mut Vec<(&'static str, String)>, label: &'static str, encoded: String) {
     use base64::Engine;
-    let valid = |encoded: &str| {
-        !encoded.is_empty()
-            && base64::engine::general_purpose::STANDARD
-                .decode(encoded)
-                .map(|v| v.len() == 32)
-                .unwrap_or(false)
-    };
+    let valid = !encoded.is_empty()
+        && base64::engine::general_purpose::STANDARD
+            .decode(&encoded)
+            .map(|v| v.len() == 32)
+            .unwrap_or(false);
+    if valid && !list.iter().any(|(_, existing)| *existing == encoded) {
+        list.push((label, encoded));
+    }
+}
+
+/// Ordered, validated, deduplicated Shamir-share candidates for the
+/// generate-root self-heal: host-delivered credentials, host keychain,
+/// then the guest-local fallback file. The sources can legitimately
+/// disagree after a storage re-init — e.g. the host keychain pinned to a
+/// previous vault-data epoch while the guest fallback file tracks the
+/// current one (the 2026-07-28 Windows login wedge) — so the heal must be
+/// able to fall through to the next source when generate-root rejects one.
+#[cfg(feature = "vault")]
+fn shamir_share_candidates() -> Vec<(&'static str, String)> {
+    let mut candidates: Vec<(&'static str, String)> = Vec::new();
 
     if is_running_in_vm()
         && let Some(cell) = IN_VM_CREDENTIALS.get()
@@ -2716,46 +2747,27 @@ fn read_shamir_share_b64(debug: bool) -> Result<String, String> {
         && let Some(creds) = &*guard
         && let Some(encoded) = &creds.unseal_share_b64
     {
-        let encoded = encoded.trim().to_string();
-        if valid(&encoded) {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] heal: using Shamir share from host-delivered credentials"
-                );
-            }
-            return Ok(encoded);
-        }
+        push_share_candidate(
+            &mut candidates,
+            "host-delivered credentials",
+            encoded.trim().to_string(),
+        );
     }
 
     if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
         && let Ok(encoded) = with_keyring_timeout(move || entry.get_password())
     {
-        let encoded = encoded.trim().to_string();
-        if valid(&encoded) {
-            if debug {
-                eprintln!("[tillandsias-vault] heal: using Shamir share from host keychain");
-            }
-            return Ok(encoded);
-        }
+        push_share_candidate(&mut candidates, "host keychain", encoded.trim().to_string());
     }
 
     if let Ok(cache_dir) = crate::init_cache_dir()
         && let Ok(encoded) =
             fs::read_to_string(cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")))
     {
-        let encoded = encoded.trim().to_string();
-        if valid(&encoded) {
-            if debug {
-                eprintln!("[tillandsias-vault] heal: using Shamir share from fallback file");
-            }
-            return Ok(encoded);
-        }
+        push_share_candidate(&mut candidates, "fallback file", encoded.trim().to_string());
     }
 
-    Err(
-        "no valid 32-byte base64 Shamir share in VM credentials, host keychain, or fallback file"
-            .to_string(),
-    )
+    candidates
 }
 
 /// Persist a freshly minted (healed) root token to the same stores the
@@ -2775,6 +2787,10 @@ fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Resul
         if let Ok(mut guard) = creds_cell.lock() {
             if let Some(creds) = guard.as_mut() {
                 creds.root_token = Some(token.to_string());
+                // The winning share just authenticated generate-root against
+                // the current storage epoch; replace any stale delivered
+                // share so later heals in this process start from it.
+                creds.unseal_share_b64 = Some(share_b64.to_string());
             } else {
                 *guard = Some(InVmCredentials {
                     unseal_share_b64: Some(share_b64.to_string()),
@@ -2790,6 +2806,17 @@ fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Resul
         {
             use std::os::unix::fs::PermissionsExt;
             let _ = fs::set_permissions(&fallback_file, fs::Permissions::from_mode(0o600));
+        }
+        // Persist the winning share alongside the token so the next boot's
+        // partial-init check and self-heal read the storage-matching share
+        // even if it originally came from a host-delivered source.
+        let share_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        fs::write(&share_file, share_b64)
+            .map_err(|err| format!("write share fallback file: {err}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&share_file, fs::Permissions::from_mode(0o600));
         }
         if debug {
             eprintln!("[tillandsias-vault] heal: persisted fresh root token to VM stores");
@@ -2819,79 +2846,97 @@ fn heal_stale_root_token(
     base_url: &str,
     debug: bool,
 ) -> Result<String, String> {
-    let share_b64 = read_shamir_share_b64(debug).map_err(|e| {
-        format!(
+    let candidates = shamir_share_candidates();
+    if candidates.is_empty() {
+        return Err(
             "OPERATOR ACTION REQUIRED: vault rejects the cached root token and no valid \
-             Shamir share is available to self-heal ({e}). Vault storage was left untouched — \
+             Shamir share is available to self-heal (no valid 32-byte base64 Shamir share in \
+             VM credentials, host keychain, or fallback file). Vault storage was left untouched — \
              it may hold real secrets. Recover the share, or perform an attended \
              storage-preserving re-init. Do NOT wipe the vault-data volume."
-        )
-    })?;
+                .to_string(),
+        );
+    }
 
     eprintln!(
         "[tillandsias-vault] running `generate-root` self-heal from the stored Shamir share (order 383)"
     );
     let anon = vault_client(base_url, "", debug)?;
-    // A stale half-finished attempt keeps its nonce but never re-reveals
-    // its OTP; cancel unconditionally so we always own a fresh attempt.
-    let _ = rt.block_on(anon.generate_root_cancel());
-    let attempt = rt
-        .block_on(anon.generate_root_start())
-        .map_err(|e| format!("generate-root start failed: {e}"))?;
-    if attempt.required > 1 {
-        return Err(format!(
-            "OPERATOR ACTION REQUIRED: this vault needs {} unseal key shares for generate-root \
-             but the host stores exactly one. Complete `vault operator generate-root` manually \
-             with the remaining shares. Storage untouched.",
-            attempt.required
-        ));
-    }
-    let progress = rt
-        .block_on(anon.generate_root_update(&share_b64, &attempt.nonce))
-        .map_err(|e| {
+    // The share sources can disagree after a storage re-init (stale host
+    // keychain vs current guest fallback file); try each candidate until
+    // one authenticates generate-root against the current storage epoch.
+    let mut rejections: Vec<String> = Vec::new();
+    for (source, share_b64) in &candidates {
+        // A stale half-finished attempt keeps its nonce but never re-reveals
+        // its OTP; cancel unconditionally so we always own a fresh attempt.
+        let _ = rt.block_on(anon.generate_root_cancel());
+        let attempt = rt
+            .block_on(anon.generate_root_start())
+            .map_err(|e| format!("generate-root start failed: {e}"))?;
+        if attempt.required > 1 {
+            return Err(format!(
+                "OPERATOR ACTION REQUIRED: this vault needs {} unseal key shares for generate-root \
+                 but the host stores exactly one. Complete `vault operator generate-root` manually \
+                 with the remaining shares. Storage untouched.",
+                attempt.required
+            ));
+        }
+        let progress = match rt.block_on(anon.generate_root_update(share_b64, &attempt.nonce)) {
+            Ok(progress) => progress,
+            Err(e) => {
+                eprintln!(
+                    "[tillandsias-vault] heal: {source} Shamir share rejected by generate-root \
+                     ({e}); trying next share source"
+                );
+                rejections.push(format!("{source}: {e}"));
+                continue;
+            }
+        };
+        if !progress.complete {
+            return Err(
+                "OPERATOR ACTION REQUIRED: generate-root accepted the share but did not complete \
+                 (more shares required than the host stores). Storage untouched."
+                    .to_string(),
+            );
+        }
+        let encoded = progress
+            .encoded_token
+            .ok_or("generate-root completed but returned no encoded token")?;
+        let token = tillandsias_vault_client::decode_generated_root_token(&encoded, &attempt.otp)
+            .map_err(|e| format!("generate-root token decode failed: {e}"))?;
+
+        // The 2026-07-17 Windows wrinkle: a fresh root token whose `policy
+        // list` works can still 403 on approle + KV. Verify actual
+        // reachability before reporting success.
+        let healed = vault_client(base_url, &token, debug)?;
+        let lookup = probe_outcome(rt.block_on(healed.token_lookup_self()));
+        let approle = probe_outcome(rt.block_on(healed.list_approle_roles()));
+        let kv = probe_outcome(rt.block_on(healed.read_secret("secret/github/token")));
+        classify_post_heal(&lookup, &approle, &kv).map_err(|reason| {
             format!(
-                "OPERATOR ACTION REQUIRED: generate-root rejected the stored Shamir share ({e}). \
-                 The share no longer matches vault storage. Storage was left untouched — recover \
-                 the correct share or perform an attended storage-preserving re-init. Do NOT wipe \
-                 the vault-data volume."
+                "OPERATOR ACTION REQUIRED: generate-root minted a fresh root token but the vault is \
+                 still not fully reachable ({reason}). The token/storage skew is deeper than the \
+                 root token. Storage was left untouched — KV data (including any operator github \
+                 token) is intact but unreadable until an attended storage-preserving re-init. \
+                 Do NOT wipe the vault-data volume."
             )
         })?;
-    if !progress.complete {
-        return Err(
-            "OPERATOR ACTION REQUIRED: generate-root accepted the share but did not complete \
-             (more shares required than the host stores). Storage untouched."
-                .to_string(),
+
+        persist_healed_root_token(&token, share_b64, debug)?;
+        eprintln!(
+            "[tillandsias-vault] generate-root self-heal succeeded: fresh root token minted, \
+             verified (lookup-self + approle + KV), and persisted (share source: {source})"
         );
+        return Ok(token);
     }
-    let encoded = progress
-        .encoded_token
-        .ok_or("generate-root completed but returned no encoded token")?;
-    let token = tillandsias_vault_client::decode_generated_root_token(&encoded, &attempt.otp)
-        .map_err(|e| format!("generate-root token decode failed: {e}"))?;
 
-    // The 2026-07-17 Windows wrinkle: a fresh root token whose `policy
-    // list` works can still 403 on approle + KV. Verify actual
-    // reachability before reporting success.
-    let healed = vault_client(base_url, &token, debug)?;
-    let lookup = probe_outcome(rt.block_on(healed.token_lookup_self()));
-    let approle = probe_outcome(rt.block_on(healed.list_approle_roles()));
-    let kv = probe_outcome(rt.block_on(healed.read_secret("secret/github/token")));
-    classify_post_heal(&lookup, &approle, &kv).map_err(|reason| {
-        format!(
-            "OPERATOR ACTION REQUIRED: generate-root minted a fresh root token but the vault is \
-             still not fully reachable ({reason}). The token/storage skew is deeper than the \
-             root token. Storage was left untouched — KV data (including any operator github \
-             token) is intact but unreadable until an attended storage-preserving re-init. \
-             Do NOT wipe the vault-data volume."
-        )
-    })?;
-
-    persist_healed_root_token(&token, &share_b64, debug)?;
-    eprintln!(
-        "[tillandsias-vault] generate-root self-heal succeeded: fresh root token minted, \
-         verified (lookup-self + approle + KV), and persisted"
-    );
-    Ok(token)
+    Err(format!(
+        "OPERATOR ACTION REQUIRED: generate-root rejected the stored Shamir share ({}). \
+         The share no longer matches vault storage. Storage was left untouched — recover \
+         the correct share or perform an attended storage-preserving re-init. Do NOT wipe \
+         the vault-data volume.",
+        rejections.join("; ")
+    ))
 }
 
 #[cfg(not(feature = "vault"))]
