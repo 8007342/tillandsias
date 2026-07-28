@@ -4922,6 +4922,23 @@ fn build_opencode_forge_args(
             "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
         ]);
     }
+    // Seed-branch pin (order 501, git-branching decision record §5.2, repair
+    // B6): the mirror's HEAD symref is global and STICKY — a persisted mirror
+    // volume can hand a fresh clone branch Y after this launch's gate passed
+    // on branch X. Pin the branch this launch was actually gated on so the
+    // guest's clone_project_from_mirror can check it out explicitly via a
+    // fallback chain (lib-common.sh checkout_forge_seed_branch; a hard
+    // `clone -b` is forbidden — a never-pushed branch or the mirror's 120s
+    // reconcile window would hard-fail the launch). Complements — never
+    // replaces — the mirror-side TILLANDSIAS_PROJECT_DEFAULT_BRANCH env
+    // (build_git_run_args), which only steers HEAD on a volume-fresh mirror.
+    // Detached HEAD / unreadable checkout → no env → guest behavior
+    // byte-identical to before. Caveat: a REUSED (not recreated) container
+    // carries creation-time env, so a stale seed is possible until recreate.
+    if let Some(seed) = read_host_project_current_branch(project_path) {
+        args.push("--env".into());
+        args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
+    }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
@@ -7563,6 +7580,15 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
     config.push('\n');
     config.push_str("[core]\n");
     config.push_str("\thooksPath = /home/forge/.cache/tillandsias/git-hooks\n");
+    config.push('\n');
+    // Order 501 (git-branching decision record §5.2): a bare `git push`
+    // pushes the CURRENT branch to the same-named remote ref. Safe today —
+    // after the seed-branch clone fix the current branch IS the launch-gated
+    // seed branch, exactly what agents are expected to push — and
+    // load-bearing for rung 3 (packet 502), where a bare push must target
+    // the auto-seeded lane branch with zero agent awareness.
+    config.push_str("[push]\n");
+    config.push_str("\tdefault = current\n");
 
     if let Some(ref origin) = origin_url {
         config.push('\n');
@@ -10896,6 +10922,14 @@ fn build_forge_agent_run_args_with_vault(
     } else {
         spec.env("TILLANDSIAS_GIT_SERVICE", "tillandsias-git")
     };
+    // Seed-branch pin (order 501, repair B6): same sticky-HEAD repair as
+    // build_opencode_forge_args — see the full rationale there. Injected on
+    // every agent lane so the guest's clone_project_from_mirror checks out
+    // the launch-gated branch on ALL clone transports. No branch readable →
+    // no env → guest behavior unchanged.
+    if let Some(seed) = read_host_project_current_branch(project_path) {
+        spec = spec.env("TILLANDSIAS_FORGE_SEED_BRANCH", seed);
+    }
     // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
     // entrypoint can restore the opaque provider document. OpenCode re-execs
     // through its existing CLI lane and uses the separate raw OpenCode/Web
@@ -15760,6 +15794,93 @@ mod tests {
         );
     }
 
+    /// Order 501 (git-branching decision record §5.2, repair B6): BOTH forge
+    /// arg builders must pin the host checkout's launch-gated branch into the
+    /// container env as TILLANDSIAS_FORGE_SEED_BRANCH so the guest's
+    /// clone_project_from_mirror can defeat the sticky-HEAD mirror hazard on
+    /// every clone transport. A project with no readable branch must inject
+    /// NO seed env — the guest fallback chain then sees exactly today's
+    /// environment (end-user transparency).
+    #[test]
+    fn forge_builders_inject_seed_branch_from_host_checkout() {
+        let _env = env_lock();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // A minimal-but-valid gitdir shape (HEAD symref + objects/ + refs/):
+        // a real git binary resolves the symref via `git symbolic-ref`, and
+        // git-less hosts hit read_host_project_current_branch's direct
+        // .git/HEAD parse — both yield the same branch.
+        let project = tmp.path().join("seeded");
+        std::fs::create_dir_all(project.join(".git").join("objects")).expect("mkdir objects");
+        std::fs::create_dir_all(project.join(".git").join("refs")).expect("mkdir refs");
+        std::fs::write(
+            project.join(".git").join("HEAD"),
+            "ref: refs/heads/feature/seed-check\n",
+        )
+        .expect("write HEAD");
+        let certs = tmp.path().join("ca");
+
+        let opencode = build_opencode_forge_args(
+            &project,
+            "alpha",
+            None,
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        let agent = build_forge_agent_run_args_with_vault(
+            &project,
+            "alpha",
+            &certs,
+            "1.2.3",
+            ForgeAgentMode::Maintenance,
+            false,
+            None,
+            None,
+        );
+        for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
+            assert!(
+                has_arg(args, "TILLANDSIAS_FORGE_SEED_BRANCH=feature/seed-check"),
+                "{lane} builder must pin the launch-gated seed branch: {args:?}"
+            );
+        }
+
+        // No readable branch → NO seed env on either builder.
+        let no_repo = tmp.path().join("no-repo");
+        std::fs::create_dir_all(&no_repo).expect("mkdir");
+        let opencode = build_opencode_forge_args(
+            &no_repo,
+            "alpha",
+            None,
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        let agent = build_forge_agent_run_args_with_vault(
+            &no_repo,
+            "alpha",
+            &certs,
+            "1.2.3",
+            ForgeAgentMode::Maintenance,
+            false,
+            None,
+            None,
+        );
+        for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
+            assert!(
+                !args
+                    .iter()
+                    .any(|a| a.contains("TILLANDSIAS_FORGE_SEED_BRANCH")),
+                "{lane} builder must not invent a seed branch for a non-repo project: {args:?}"
+            );
+        }
+    }
+
     #[test]
     fn delegated_result_codex_entrypoint_appends_json_to_the_exec_command() {
         let entrypoint = include_str!(concat!(
@@ -16717,6 +16838,11 @@ esac
             !text.contains("FAULT"),
             "a healthy local-only project must not be described as a fault; got:\n{text}"
         );
+        assert!(
+            text.contains("[push]\n\tdefault = current"),
+            "push.default=current is structural and must be present even with \
+             no redirect (order 501); got:\n{text}"
+        );
     }
 
     #[test]
@@ -16789,6 +16915,11 @@ esac
         assert!(
             contents.contains("helper ="),
             "config must disable credential helper"
+        );
+        assert!(
+            contents.contains("[push]\n\tdefault = current"),
+            "config must set push.default=current so a bare `git push` targets \
+             the current (seed, later lane) branch (order 501)"
         );
 
         // The config file should be at the expected path under HOME/.cache/...

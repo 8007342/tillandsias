@@ -23474,9 +23474,31 @@ plan_index:
       order: 501
       desired_release: v0.5
       title: "Fix sticky-HEAD: forge clone explicitly checks out the launch-gated seed branch on ALL transports (fallback chain, no hard -b failure)"
-      status: ready
+      status: done
       kind: fix
       depends_on: []
+      events:
+        - type: completed
+          ts: "2026-07-28T22:50:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Sticky-HEAD killed on all transports: both forge builders
+            inject TILLANDSIAS_FORGE_SEED_BRANCH from
+            read_host_project_current_branch (nothing injected for
+            detached-HEAD/non-git, unit-pinned both directions), and
+            clone_project_from_mirror's new common-tail
+            checkout_forge_seed_branch() runs on the network AND
+            filesystem transport success paths (host-mount excluded by
+            design — operator working tree): fetch-then-switch fallback
+            chain, loud warning + stay-on-HEAD for never-pushed seeds or
+            the 120s reconcile window, no path can hard-fail the clone.
+            push.default=current added to the injected forge gitconfig.
+            Empty-env behavior fixture-proven byte-identical (zero git
+            calls, zero output). cargo check clean; forge tests 40/40,
+            git tests 36/36; unborn-head-repair litmus 8/8;
+            git-mirror-service instant 14/14. Lane-branch creation
+            deliberately NOT included (packet 502).
       pickup_role: "linux (Rust launcher + lib-common.sh); Windows/macOS verify"
       capability_tags: [headless, forge, git-mirror, lib-common, cross-platform]
       estimated_hours: 3

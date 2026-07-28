@@ -16,6 +16,14 @@ description: >
   launcher-declared host branch via TILLANDSIAS_PROJECT_DEFAULT_BRANCH), and
   the launcher blocks on wait_for_git_mirror_ready before starting a forge.
   plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md
+  Order 501 extends this HEAD-steering pin to the STICKY-HEAD hazard: the
+  mirror's HEAD is set only volume-fresh, so a persisted volume can hand a
+  fresh clone branch Y after the launch gate passed on branch X. Both forge
+  arg builders now inject TILLANDSIAS_FORGE_SEED_BRANCH and lib-common.sh's
+  clone_project_from_mirror COMMON TAIL (checkout_forge_seed_branch, run on
+  every clone transport — repair B6) checks it out via a soft fallback chain
+  (fetch -> switch if present -> loud warn + stay on HEAD, never a hard
+  `clone -b`). plan/issues/git-branching-methodology-research-2026-07-28.md
 preconditions:
   - workspace contains images/git/ensure-mirror-head.sh
 
@@ -34,6 +42,31 @@ critical_path:
     command: "scripts/test-git-mirror-unborn-head.sh >/dev/null && echo 'ok: unborn-head-fixture-pass'"
     timeout_ms: 30000
     expected_behavior: "ok: unborn-head-fixture-pass"
+
+  - step: "both forge arg builders pin the launch-gated seed branch into the container env (order 501)"
+    command: "grep -qF 'TILLANDSIAS_FORGE_SEED_BRANCH={seed}' crates/tillandsias-headless/src/main.rs && grep -qF '\"TILLANDSIAS_FORGE_SEED_BRANCH\", seed' crates/tillandsias-headless/src/main.rs && echo 'ok: seed-env-both-builders'"
+    timeout_ms: 5000
+    expected_behavior: "ok: seed-env-both-builders"
+
+  - step: "lib-common.sh common tail carries the seed-branch fallback chain (fetch -> switch if present -> loud warn, never hard-fail)"
+    command: "grep -q 'checkout_forge_seed_branch()' images/default/lib-common.sh && grep -q 'git fetch origin \"\\$seed\"' images/default/lib-common.sh && grep -q 'git switch \"\\$seed\"' images/default/lib-common.sh && grep -q 'refs/remotes/origin/\\${seed}' images/default/lib-common.sh && grep -q 'WARNING: launch-gated seed branch' images/default/lib-common.sh && echo 'ok: seed-fallback-chain'"
+    timeout_ms: 5000
+    expected_behavior: "ok: seed-fallback-chain"
+
+  - step: "the common tail runs on BOTH clone transports (filesystem + network) so no transport keeps sticky-HEAD (repair B6)"
+    command: "test \"$(grep -cE '^[[:space:]]+checkout_forge_seed_branch$' images/default/lib-common.sh)\" -eq 2 && echo 'ok: seed-tail-both-transports'"
+    timeout_ms: 5000
+    expected_behavior: "ok: seed-tail-both-transports"
+
+  - step: "no clone uses a hard -b/--branch pin (a never-pushed seed or the 120s reconcile window would hard-fail the launch)"
+    command: "! grep -E '^[^#]*git clone[^|]*( -b | --branch )' images/default/lib-common.sh && echo 'ok: no-hard-branch-clone'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no-hard-branch-clone"
+
+  - step: "forge gitconfig sets push.default=current so a bare push targets the seed (later lane) branch (order 501)"
+    command: "grep -qF 'default = current' crates/tillandsias-headless/src/main.rs && echo 'ok: push-default-current'"
+    timeout_ms: 5000
+    expected_behavior: "ok: push-default-current"
 
 observability:
   traces:
