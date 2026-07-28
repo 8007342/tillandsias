@@ -1,0 +1,57 @@
+# @trace spec:ci-release
+# Order 495 (preflight-evidence-dirties-forge-gate): the local CI gate must be
+# self-clean by construction — after its evidence-generate phases run, `git
+# status --porcelain` must name no path the post-build forge gate's
+# dirty-start guard would refuse. Found live in the v0.4.260728.1 preflight:
+# local-ci regenerated dashboards + TRACES indexes into the tracked checkout,
+# then its own post-build litmus launched a real forge whose dirty-start
+# guard correctly refused the cycle. Evidence:
+# plan/issues/preflight-evidence-dirties-forge-gate-2026-07-28.md
+name: litmus:local-ci-self-clean-evidence
+spec: ci-release
+phase: pre-build
+description: Assert local-ci's evidence generators (trace indexes, centicolon dashboards) leave no tracked-tree dirt for the post-build forge gate's dirty-start guard to refuse
+severity: high
+size: quick
+
+preconditions:
+  - workspace is a git checkout with scripts/ and openspec/specs/
+  - bash, git, grep, and jq are available in PATH
+  - no real forge is launched (cheap, non-destructive assertion only)
+
+critical_path:
+  - step: "verify the CI gate routes dashboards under target/ and the preflight refreshes tracked evidence after the gate"
+    command: "grep -F 'target/convergence/centicolon-dashboard.md' scripts/local-ci.sh && grep -F 'target/convergence/centicolon-dashboard.json' scripts/local-ci.sh && grep -F 'update-convergence-dashboard.sh' scripts/release-preflight-local.sh"
+    timeout_ms: 3000
+
+  - step: "regenerate trace indexes from the current checkout (deterministic; no-op when committed indexes are current)"
+    command: "./scripts/generate-traces.sh >/dev/null && echo ok:traces-regenerated"
+    success_pattern: "^ok:traces-regenerated$"
+    timeout_ms: 120000
+
+  - step: "render centicolon dashboards exactly as the CI gate does (target/-routed, gitignored)"
+    command: "MD_OUT=target/convergence/centicolon-dashboard.md JSON_OUT=target/convergence/centicolon-dashboard.json SUMMARY_OUT=target/convergence/summary.md TERMINAL_PREVIEW=0 bash scripts/update-convergence-dashboard.sh >/dev/null && echo ok:dashboard-target-routed"
+    success_pattern: "^ok:dashboard-target-routed$"
+    timeout_ms: 30000
+
+  - step: "assert porcelain names no generated-evidence path the forge dirty-start guard would refuse"
+    command: "dirt=\"$(git status --porcelain -- TRACES.md 'openspec/specs/*/TRACES.md' docs/convergence)\"; if [ -n \"$dirt\" ]; then echo \"$dirt\"; echo 'remedy: commit (or discard) the regenerated evidence BEFORE any post-build forge gate (order 495)'; echo fail:generated-evidence-dirt; exit 1; fi; echo ok:self-clean-evidence"
+    success_pattern: "^ok:self-clean-evidence$"
+    failure_pattern: "^fail:generated-evidence-dirt$"
+    timeout_ms: 10000
+
+gating_points:
+  - success: "ok:self-clean-evidence"
+  - failure: "fail:generated-evidence-dirt"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "local-ci evidence generation is self-clean; the post-build forge dirty-start guard has nothing to refuse"
+  log_fields:
+    spec: "ci-release"
+    test: "local-ci-self-clean-evidence"
+
+rollback:
+  on_failure: "trace indexes or dashboards are stale relative to the checkout: run ./scripts/generate-traces.sh and commit the result (docs/RELEASING.md step 4) or discard local drift; never hand the dirt to the post-build forge gate"
+  command: "git status --porcelain -- TRACES.md 'openspec/specs/*/TRACES.md' docs/convergence"

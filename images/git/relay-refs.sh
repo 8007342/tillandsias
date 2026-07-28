@@ -174,6 +174,24 @@ fi
 OUTPUT_REDACTED="$(redact_output "$OUTPUT")"
 log_msg "Atomic push to $REMOTE_URL_REDACTED FAILED: $OUTPUT_REDACTED"
 
+# @trace spec:git-mirror-service
+# Rung 2 (order 500, repair B3): NEVER pre-reject a protected branch in the
+# pre-receive hook — these hooks ship to every end-user mirror, and an
+# unconditional guard would brick pushes to an ordinary UNPROTECTED main.
+# Instead, when the UPSTREAM itself refuses the push for branch protection
+# (GitHub prints "GH006" and/or "protected branch"), print actionable salvage
+# advice on this failure path only. Fully neutral: triggered by upstream
+# output, zero configuration required.
+case "$OUTPUT" in
+    *"protected branch"*|*GH006*)
+        SALVAGE_DATE="$(date -u '+%Y%m%d' 2>/dev/null || echo '<yyyymmdd>')"
+        log_msg "ADVICE: upstream refused this push because the target branch is protected (pull-request only)."
+        log_msg "ADVICE: land the same tree on a salvage branch for later triage instead:"
+        log_msg "ADVICE:   git push origin HEAD:refs/heads/salvage/<host>/${SALVAGE_DATE}-<slug>"
+        log_msg "ADVICE: replace <host> with your lowercase host name and <slug> with a short lowercase description of the work; the coordinator triages salvage/* branches and merges them properly later."
+        ;;
+esac
+
 if [ -n "$PUSH_URL" ]; then
     log_msg "Attempting non-forced reconcile fetch from upstream..."
     # Explicit non-forced refspecs are mandatory here for the same reason as the

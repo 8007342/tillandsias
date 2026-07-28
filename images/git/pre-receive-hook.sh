@@ -7,6 +7,11 @@
 # upstream before accepting it locally. A client success therefore means the
 # configured upstream has durably accepted the same atomic ref set.
 #
+# Branch policy (rung 2, order 500) is CONFIG-DRIVEN and convention-neutral:
+# see the "config-supplied branch policy" section below. When that config is
+# absent (e.g. a non-Tillandsias end-user mirror) this hook behaves exactly as
+# before: no grammar warnings, no gate exemptions.
+#
 # Validator fallback order:
 #   1. tillandsias-policy validate-yaml (if available)
 #   2. ruby -ryaml (Alpine package)
@@ -106,6 +111,64 @@ is_legacy_archive() {
     return 1
 }
 
+# --- Config-supplied branch policy (rung 2, order 500) ---
+# @trace spec:git-mirror-service
+# Branch-name grammar and YAML-gate ref exemptions reach this hook ONLY via
+# the environment, supplied by the service entrypoint (or a test fixture).
+# Hook CODE stays convention-neutral (the order-462 leak class): no project
+# branch names or namespace enums are hard-coded here. On a mirror where
+# these variables are absent or empty — e.g. a non-Tillandsias end-user
+# repo — the hook emits no grammar warnings and exempts no refs, which is
+# byte-identical to its pre-rung-2 behavior.
+#
+#   TILLANDSIAS_BRANCH_CREATION_REGEX  ERE matched against the full refname
+#                                      of NEW branch creations (zero oldsha,
+#                                      refs/heads/* only). A non-matching
+#                                      name WARNS and is ACCEPTED: rung 2 is
+#                                      warn-only; rejection is a later rung.
+#   TILLANDSIAS_BRANCH_GRAMMAR_HINT    Optional human-readable summary of the
+#                                      expected namespaces, used in the
+#                                      warning instead of the raw regex.
+#   TILLANDSIAS_YAML_GATE_EXEMPT_REFS  Space-separated shell glob(s); a full
+#                                      refname matching one skips the
+#                                      ledger-YAML gate for that ref so a
+#                                      blocked agent can land a half-edited
+#                                      tree for triage. Content is
+#                                      re-validated at graduation/merge.
+warn_if_outside_branch_grammar() {
+    local refname="$1"
+    [ -n "${TILLANDSIAS_BRANCH_CREATION_REGEX:-}" ] || return 0
+    case "$refname" in
+        refs/heads/*) ;;
+        *) return 0 ;;
+    esac
+    if printf '%s\n' "$refname" | grep -Eq -e "$TILLANDSIAS_BRANCH_CREATION_REGEX"; then
+        return 0
+    fi
+    log_msg "WARNING: new branch '$refname' does not match the configured branch-creation grammar"
+    if [ -n "${TILLANDSIAS_BRANCH_GRAMMAR_HINT:-}" ]; then
+        log_msg "WARNING: expected namespaces: $TILLANDSIAS_BRANCH_GRAMMAR_HINT"
+    else
+        log_msg "WARNING: expected pattern: $TILLANDSIAS_BRANCH_CREATION_REGEX"
+    fi
+    log_msg "WARNING: push accepted anyway — the branch-name grammar is warn-only at this rung"
+    return 0
+}
+
+ref_is_gate_exempt() {
+    local refname="$1"
+    local pattern
+    [ -n "${TILLANDSIAS_YAML_GATE_EXEMPT_REFS:-}" ] || return 1
+    for pattern in $TILLANDSIAS_YAML_GATE_EXEMPT_REFS; do
+        # shellcheck disable=SC2254
+        # Unquoted on purpose: the config supplies shell glob patterns.
+        case "$refname" in
+            $pattern) return 0 ;;
+        esac
+    done
+    return 1
+}
+
 # --- For a new branch, find the nearest existing ancestor ref to diff against ---
 # This avoids validating the entire inherited tree (which includes frozen legacy
 # archive files that intentionally have invalid YAML).
@@ -155,6 +218,24 @@ while read -r OLDSHA NEWSHA REFNAME; do
     case "$NEWSHA" in
         0000000000000000000000000000000000000000) continue ;;
     esac
+
+    # Rung 2 (order 500): warn-only name grammar applies to NEW branch
+    # creations only (zero oldsha). Never rejects; no-op without config.
+    case "$OLDSHA" in
+        0000000000000000000000000000000000000000)
+            warn_if_outside_branch_grammar "$REFNAME"
+            ;;
+    esac
+
+    # Rung 2 (order 500, repair B4): a ref matching a config-supplied exempt
+    # pattern skips the ledger-YAML gate entirely — a blocked agent must be
+    # able to land a half-edited tree for triage. The relay below still runs
+    # for the full transaction, and content is re-validated when the ref
+    # graduates via merge (rung-4 territory). Absent config = no exemptions.
+    if ref_is_gate_exempt "$REFNAME"; then
+        log_msg "NOTE: $REFNAME matches a configured YAML-gate exemption; ledger YAML validation skipped for this ref (re-validated at graduation)"
+        continue
+    fi
 
     # Determine the set of changed files to validate
     case "$OLDSHA" in

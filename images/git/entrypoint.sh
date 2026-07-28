@@ -84,6 +84,36 @@ if [ -f /run/secrets/tillandsias-ca-cert ]; then
 fi
 
 # @trace spec:git-mirror-service
+# Branch-namespace policy (rung 2, order 500): the DEFAULTS live HERE, in
+# Tillandsias-owned config — the pre-receive hook CODE stays convention-
+# neutral (the order-462 leak class) and reads these from its environment
+# (entrypoint -> git daemon -> receive-pack -> hook). The grammar is the
+# codified creation_regex from methodology/multi-host-development.yaml
+# branch_namespaces; enforcement is WARN-ONLY at this rung (reject is a
+# later rung). salvage/* skips the ledger-YAML gate (repair B4: a blocked
+# agent must be able to land a half-edited tree for triage; validation
+# re-runs at graduation/merge — rung-4 territory).
+# All three defaults are UNSET-ONLY: a launcher serving a non-Tillandsias
+# project may export them EMPTY to disable grammar warnings and gate
+# exemptions entirely — the hook is silent when they are empty or absent.
+TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX='^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47})$'
+if [ "${TILLANDSIAS_BRANCH_CREATION_REGEX+set}" != "set" ]; then
+    TILLANDSIAS_BRANCH_CREATION_REGEX="$TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX"
+fi
+if [ "${TILLANDSIAS_BRANCH_GRAMMAR_HINT+set}" != "set" ]; then
+    TILLANDSIAS_BRANCH_GRAMMAR_HINT='main | linux-next | windows-next | osx-next | gh-pages | release/* | claude/* | revert-* | agent/<host>/<base>/<yyyymmdd>-<slug> | salvage/<host>/<yyyymmdd>-<slug>'
+fi
+if [ "${TILLANDSIAS_YAML_GATE_EXEMPT_REFS+set}" != "set" ]; then
+    TILLANDSIAS_YAML_GATE_EXEMPT_REFS='refs/heads/salvage/*'
+fi
+export TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS
+if [ -n "$TILLANDSIAS_BRANCH_CREATION_REGEX" ]; then
+    echo "[git-service] branch-name grammar active (warn-only, rung 2); yaml-gate exempt refs: ${TILLANDSIAS_YAML_GATE_EXEMPT_REFS:-none}"
+else
+    echo "[git-service] branch-name grammar disabled (TILLANDSIAS_BRANCH_CREATION_REGEX is empty)"
+fi
+
+# @trace spec:git-mirror-service
 # Seed the project's bare repo + install the receive hooks.
 #
 # The forge pushes via `git://git-service/<project>` (see

@@ -55,6 +55,99 @@ multi_host_development:
       platform-agnostic crates. Keep thin tray wrappers and OS API calls on the
       owning platform branch unless the shared API contract changes.
 
+  branch_namespaces:
+    version: v0.1
+    provenance: >
+      operator-directed 2026-07-28 (The Tlatoani). Decision record:
+      plan/issues/git-branching-methodology-research-2026-07-28.md (adopted
+      with adversarial-review repairs). This section is rung 1 of a 4-rung
+      rollout: DOCUMENTATION ONLY. Enforcement (hook warnings/rejection, lane
+      auto-seeding, ledger path policy, coordinator sweep/GC, reconcile
+      prune) ships via packets, orders 500-504.
+    reserved:
+      integration: [main, linux-next, windows-next, osx-next]
+      infrastructure: [gh-pages, "release/*"]
+      external_tolerated: ["claude/*", "revert-*"]
+      note: >
+        main is PR-only (protected, enforce_admins, 2026-07-28, order 476).
+        linux-next/windows-next/osx-next carry deletion + force-push
+        protection (2026-07-28, operator-directed) while keeping direct
+        pushes open. The sweep operates ONLY on agent/* and salvage/*
+        refs — integration branches are structurally outside its
+        enumeration and additionally server-protected against deletion.
+    lane_grammar:
+      pattern: "agent/<host>/<base>/<yyyymmdd>-<slug>"
+      slug: >
+        <mode>-<instance>-<launch-epoch>; MANDATORY, launcher-synthesized,
+        never reused; all segments lowercase (launcher lowercases hostnames).
+      base_rule: >
+        <base> names the integration branch the lane was seeded from; the
+        merge target derives mechanically from the refname. Bases containing
+        '/' (release/*) substitute '-' and record the true base in the
+        ledger claim.
+      creation_regex: >
+        ^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47})$
+      scope: >
+        Tillandsias-repo convention only (platform_branches.scope applies).
+        Hook/launcher CODE stays convention-neutral: patterns and path lists
+        reach it via config or launcher env, never hard-coded (order-462
+        leak class), and policy is read from env or the base ref's committed
+        tree, never the pushed tip.
+      grandfathering: >
+        Grammar applies to NEW branch creations (zero-oldsha) only. The
+        rung-1 census COMPLETED 2026-07-28: all 11 legacy remote refs were
+        archive-tagged (archive/<branch>-<tipsha>) and pruned,
+        operator-approved. The remote now carries only main, gh-pages, and
+        the three integration branches; any future out-of-grammar creation
+        is a stray for the sweep to report.
+      lifecycle_intent: >
+        Lanes are merged into their named <base> by the owning agent at
+        green exit (merge-only, --no-ff); never rebased or force-pushed once
+        relayed. Cherry-pick allowed only with -x AND simultaneous lane
+        retirement. Enforcement and the coordinator sweep are packet-gated.
+    ledger_rule: >
+      Lane branches are code-only for shared ledger state: plan/index.yaml,
+      plan.yaml, plan/loop_status.md, and methodology/** ride integration
+      branches directly (claims land on the base ref mid-cycle, recording
+      lane name + tip SHA). Lanes MAY add new append-only files under
+      plan/issues/. Mechanical enforcement is rung 4; until then this is
+      binding convention. Rationale: every recorded order-number collision
+      came from delayed ledger landing (462/464, 477/479, 478-479/486-487).
+    pre_push_gate_amendment: >
+      pull_merge_cadence.pre_push_gate.applies_to EXCLUDES agent/* and
+      salvage/* refs (mid-cycle lane checkpoints need no trunk merge). The
+      lane green-exit procedure and ledger checkpoints MUST merge
+      origin/linux-next first when <base> != linux-next, preserving the
+      gate's intent for platform branches.
+    sweep_role: >
+      Lane/salvage backstop (enumerate, sweep-merge, packet, escalate,
+      archive+delete) binds to the coordinate-multihost-work ROLE — any host
+      running it, not a specific machine; merge-only landings are
+      idempotent, so concurrent landers converge. race_exception applies.
+      Deadlines: merged->delete; idle >24h -> salvage packet; >72h ->
+      operator; >14d -> archive tag then delete.
+    salvage_intake:
+      pattern: "salvage/<host>/<yyyymmdd>-<slug> — merge target is a triage decision, not encoded in the name"
+      who_names: "the pushing (blocked) agent; coordinator may rename on adoption"
+      main_guard_case: >
+        An agent whose push is rejected by main branch protection pushes the
+        SAME tree as salvage/<host>/<date>-<slug> through its normal push
+        channel (in-forge: the mirror) and records a blocker ledger entry
+        (branch name + tip SHA). The coordinator deals with the merge later:
+        selective, merge-only, via PR where main is the target. The hook
+        NEVER pre-rejects main; guidance is printed on the relay-failure
+        path (rung 2).
+      ownership: "coordinator triages; selective adoption per lifecycle_intent; archive-tag before any deletion"
+      pending_case: >
+        macOS v0.5-validation forge (2026-07-28): any temporary branch it
+        pushes when blocked by the main guard is intaken under this
+        procedure (adopt/rename to salvage/<host>/..., triage, selective
+        merge into osx-next or linux-next, archive+delete).
+    forge_branch_inheritance: >
+      A forge-hosted agent inherits the branch its lane's mirror was seeded
+      from — the host checkout's checked-out branch at launch; the container
+      OS never selects the branch. (Closes
+      plan/issues/forge-agent-branch-selection-clarification-2026-07-28.md.)
   host_identity:
     required_fields:
       - host_id
@@ -162,7 +255,15 @@ multi_host_development:
         least context. Operator directive 2026-07-02: this is the normal
         workflow — platform hosts absorb the merge cost so remote linux workers
         can merge platform branches back into linux-next cleanly.
-      applies_to: ["windows-next", "osx-next", "any non-linux-next shared branch"]
+      applies_to: ["windows-next", "osx-next", "any non-linux-next shared branch EXCEPT agent/* and salvage/* refs"]
+      lane_exclusion: >
+        agent/* and salvage/* refs are excluded (branch_namespaces
+        pre_push_gate_amendment, 2026-07-28): a mid-cycle lane checkpoint
+        must not require a trunk merge — durability beats integration
+        freshness for work-in-progress refs. The gate's INTENT is preserved
+        at the boundary instead: the lane green-exit procedure
+        (lane-exit.sh, order 502) and ledger checkpoints MUST merge
+        origin/linux-next first when the lane's <base> is not linux-next.
       race_exception: >
         If the coordinator is actively merging your already-pushed head (your
         commits are in flight toward linux-next), do NOT race them with a second

@@ -4922,6 +4922,23 @@ fn build_opencode_forge_args(
             "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
         ]);
     }
+    // Seed-branch pin (order 501, git-branching decision record §5.2, repair
+    // B6): the mirror's HEAD symref is global and STICKY — a persisted mirror
+    // volume can hand a fresh clone branch Y after this launch's gate passed
+    // on branch X. Pin the branch this launch was actually gated on so the
+    // guest's clone_project_from_mirror can check it out explicitly via a
+    // fallback chain (lib-common.sh checkout_forge_seed_branch; a hard
+    // `clone -b` is forbidden — a never-pushed branch or the mirror's 120s
+    // reconcile window would hard-fail the launch). Complements — never
+    // replaces — the mirror-side TILLANDSIAS_PROJECT_DEFAULT_BRANCH env
+    // (build_git_run_args), which only steers HEAD on a volume-fresh mirror.
+    // Detached HEAD / unreadable checkout → no env → guest behavior
+    // byte-identical to before. Caveat: a REUSED (not recreated) container
+    // carries creation-time env, so a stale seed is possible until recreate.
+    if let Some(seed) = read_host_project_current_branch(project_path) {
+        args.push("--env".into());
+        args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
+    }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
@@ -6784,12 +6801,13 @@ printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https 
 fn get_generic_login_token_script(provider: &ProviderId) -> String {
     let vault_path = provider.vault_path();
     let secret_field = provider.secret_field();
+    let guidance = provider.token_guidance();
     format!(
         r#"
 printf '\n\n' >&2
 printf 'Paste your {} Token and press Enter.\n' >&2
 printf '(The token will not echo to the screen)\n' >&2
-printf '\n' >&2
+{}printf '\n' >&2
 printf 'Token: ' >&2
 read -r -s TOKEN
 if [ -z "$TOKEN" ]; then
@@ -6801,6 +6819,7 @@ printf '\n\nSaving token to vault...\n' >&2
 printf '%s' "$TOKEN" | vault-cli.sh write-stdin {} {}
 "#,
         provider.name(),
+        guidance,
         vault_path,
         secret_field
     )
@@ -6838,6 +6857,29 @@ impl ProviderId {
             ProviderId::Claude => "claude",
             ProviderId::Codex => "codex",
             ProviderId::Antigravity => "antigravity",
+        }
+    }
+
+    /// Extra guidance printed above the token prompt, as `printf` lines the
+    /// containerized login script emits to stderr. GitHub gets the token
+    /// creation URL and the minimum permission set so an operator never has to
+    /// guess which scopes the mirror relay needs. The URL sits alone on its
+    /// line with no surrounding punctuation so terminal renderers linkify it.
+    pub fn token_guidance(&self) -> &'static str {
+        match self {
+            ProviderId::GitHub => concat!(
+                "printf '\\n' >&2\n",
+                "printf 'Create a fine-grained Personal Access Token here:\\n' >&2\n",
+                "printf '\\n' >&2\n",
+                "printf '  https://github.com/settings/personal-access-tokens\\n' >&2\n",
+                "printf '\\n' >&2\n",
+                "printf 'Minimum repository permissions:\\n' >&2\n",
+                "printf '  Contents  - Read and write  (clone, fetch, push)\\n' >&2\n",
+                "printf '  Metadata  - Read-only       (required by GitHub)\\n' >&2\n",
+                "printf '\\n' >&2\n",
+                "printf 'Add more permissions later if you need them.\\n' >&2\n",
+            ),
+            ProviderId::Claude | ProviderId::Codex | ProviderId::Antigravity => "",
         }
     }
 
@@ -7141,13 +7183,11 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     let required = ["tillandsias-vault", container.as_str()];
     check_auth_required_services(&required, debug)?;
 
-    if matches!(config.provider, ProviderId::GitHub) {
-        match config.input_mode {
-            LoginInputMode::Terminal => prompt_and_store_git_identity()?,
-            LoginInputMode::StdinToken => store_existing_git_identity()?,
-        }
-    }
-
+    // Order (operator directive 2026-07-29): CREDENTIAL FIRST, identity
+    // second. Prompting for name/email before the token led operators to
+    // believe those fields WERE their GitHub credentials. Taking the token
+    // first makes the credential step unambiguous, and the identity prompt
+    // then arrives already framed as commit metadata.
     let mut login = podman_command();
     login.args(provider_login_exec_args(
         &container,
@@ -7155,6 +7195,13 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         config.input_mode,
     ));
     run_command(login, debug)?;
+
+    if matches!(config.provider, ProviderId::GitHub) {
+        match config.input_mode {
+            LoginInputMode::Terminal => prompt_and_store_git_identity()?,
+            LoginInputMode::StdinToken => store_existing_git_identity()?,
+        }
+    }
 
     if matches!(config.provider, ProviderId::GitHub) {
         let mut auth_status = podman_command();
@@ -7352,6 +7399,16 @@ struct GitIdentity {
 }
 
 fn prompt_and_store_git_identity() -> Result<(), String> {
+    // Framed explicitly as NOT credentials: operators were mistaking these
+    // fields for their GitHub login (operator directive 2026-07-29). The
+    // token is already stored by the time this runs.
+    println!();
+    println!("GIT IDENTITY — this is not a credential.");
+    println!("These two values are stamped on the commits you author; they are");
+    println!("separate from the GitHub token you just provided and grant no");
+    println!("access to anything.");
+    println!();
+
     let current = read_git_identity_defaults();
     let name = prompt_with_default("Git author name", current.name.as_deref())?;
     let email = prompt_with_default("Git author email", current.email.as_deref())?;
@@ -7563,6 +7620,15 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
     config.push('\n');
     config.push_str("[core]\n");
     config.push_str("\thooksPath = /home/forge/.cache/tillandsias/git-hooks\n");
+    config.push('\n');
+    // Order 501 (git-branching decision record §5.2): a bare `git push`
+    // pushes the CURRENT branch to the same-named remote ref. Safe today —
+    // after the seed-branch clone fix the current branch IS the launch-gated
+    // seed branch, exactly what agents are expected to push — and
+    // load-bearing for rung 3 (packet 502), where a bare push must target
+    // the auto-seeded lane branch with zero agent awareness.
+    config.push_str("[push]\n");
+    config.push_str("\tdefault = current\n");
 
     if let Some(ref origin) = origin_url {
         config.push('\n');
@@ -10896,6 +10962,14 @@ fn build_forge_agent_run_args_with_vault(
     } else {
         spec.env("TILLANDSIAS_GIT_SERVICE", "tillandsias-git")
     };
+    // Seed-branch pin (order 501, repair B6): same sticky-HEAD repair as
+    // build_opencode_forge_args — see the full rationale there. Injected on
+    // every agent lane so the guest's clone_project_from_mirror checks out
+    // the launch-gated branch on ALL clone transports. No branch readable →
+    // no env → guest behavior unchanged.
+    if let Some(seed) = read_host_project_current_branch(project_path) {
+        spec = spec.env("TILLANDSIAS_FORGE_SEED_BRANCH", seed);
+    }
     // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
     // entrypoint can restore the opaque provider document. OpenCode re-execs
     // through its existing CLI lane and uses the separate raw OpenCode/Web
@@ -14857,7 +14931,7 @@ mod tests {
             ("helper health", helper_health_idx),
         ] {
             assert!(
-                idx < prompt_idx,
+                idx < token_idx,
                 "{label} preflight must happen before credential prompts: {login_window}"
             );
         }
@@ -14873,9 +14947,70 @@ mod tests {
             helper_idx < helper_preflight_idx && helper_preflight_idx < helper_health_idx,
             "the health preflight must target the helper container after it starts: {login_window}"
         );
+        // Operator directive 2026-07-29: CREDENTIAL FIRST, identity second.
+        // Prompting for name/email before the token made operators think
+        // those fields were their GitHub credentials.
         assert!(
-            prompt_idx < token_idx,
-            "git identity prompt should still precede token entry: {login_window}"
+            token_idx < prompt_idx,
+            "token entry must precede the git identity prompt: {login_window}"
+        );
+    }
+
+    /// The GitHub token prompt must carry the token-creation URL and the
+    /// minimum permission set, and the URL must sit alone on its line (no
+    /// wrapping punctuation) so terminal renderers linkify it.
+    /// @trace spec:gh-auth-script
+    #[test]
+    fn github_token_prompt_carries_clickable_url_and_minimum_scopes() {
+        let script = get_generic_login_token_script(&ProviderId::GitHub);
+        assert!(
+            script.contains("https://github.com/settings/personal-access-tokens"),
+            "GitHub token prompt must name the fine-grained PAT settings page: {script}"
+        );
+        let url_line = script
+            .lines()
+            .find(|l| l.contains("https://github.com/settings/personal-access-tokens"))
+            .expect("URL line present");
+        assert!(
+            url_line.contains("  https://github.com/settings/personal-access-tokens\\n"),
+            "URL must be alone on its line so terminals can linkify it: {url_line}"
+        );
+        assert!(
+            script.contains("Contents") && script.contains("Read and write"),
+            "GitHub token prompt must state the Contents read/write minimum: {script}"
+        );
+        assert!(
+            script.contains("Metadata"),
+            "GitHub token prompt must state the Metadata permission: {script}"
+        );
+        // Other providers keep the bare prompt — no GitHub guidance leaks.
+        for other in [
+            ProviderId::Claude,
+            ProviderId::Codex,
+            ProviderId::Antigravity,
+        ] {
+            let s = get_generic_login_token_script(&other);
+            assert!(
+                !s.contains("personal-access-tokens"),
+                "non-GitHub providers must not carry GitHub token guidance: {s}"
+            );
+        }
+    }
+
+    /// The git identity prompt must frame itself as commit metadata, NOT a
+    /// credential — the confusion this reorder exists to remove.
+    /// @trace spec:gh-auth-script
+    #[test]
+    fn git_identity_prompt_disclaims_being_a_credential() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn prompt_and_store_git_identity()");
+        assert!(
+            window.contains("GIT IDENTITY") && window.contains("not a credential"),
+            "identity prompt must say it is not a credential: {window}"
+        );
+        assert!(
+            window.contains("stamped on the commits"),
+            "identity prompt must explain these values are commit metadata: {window}"
         );
     }
 
@@ -15758,6 +15893,93 @@ mod tests {
             !has_arg(&unstructured, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
             "ordinary prompted runs must retain human-formatted output"
         );
+    }
+
+    /// Order 501 (git-branching decision record §5.2, repair B6): BOTH forge
+    /// arg builders must pin the host checkout's launch-gated branch into the
+    /// container env as TILLANDSIAS_FORGE_SEED_BRANCH so the guest's
+    /// clone_project_from_mirror can defeat the sticky-HEAD mirror hazard on
+    /// every clone transport. A project with no readable branch must inject
+    /// NO seed env — the guest fallback chain then sees exactly today's
+    /// environment (end-user transparency).
+    #[test]
+    fn forge_builders_inject_seed_branch_from_host_checkout() {
+        let _env = env_lock();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // A minimal-but-valid gitdir shape (HEAD symref + objects/ + refs/):
+        // a real git binary resolves the symref via `git symbolic-ref`, and
+        // git-less hosts hit read_host_project_current_branch's direct
+        // .git/HEAD parse — both yield the same branch.
+        let project = tmp.path().join("seeded");
+        std::fs::create_dir_all(project.join(".git").join("objects")).expect("mkdir objects");
+        std::fs::create_dir_all(project.join(".git").join("refs")).expect("mkdir refs");
+        std::fs::write(
+            project.join(".git").join("HEAD"),
+            "ref: refs/heads/feature/seed-check\n",
+        )
+        .expect("write HEAD");
+        let certs = tmp.path().join("ca");
+
+        let opencode = build_opencode_forge_args(
+            &project,
+            "alpha",
+            None,
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        let agent = build_forge_agent_run_args_with_vault(
+            &project,
+            "alpha",
+            &certs,
+            "1.2.3",
+            ForgeAgentMode::Maintenance,
+            false,
+            None,
+            None,
+        );
+        for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
+            assert!(
+                has_arg(args, "TILLANDSIAS_FORGE_SEED_BRANCH=feature/seed-check"),
+                "{lane} builder must pin the launch-gated seed branch: {args:?}"
+            );
+        }
+
+        // No readable branch → NO seed env on either builder.
+        let no_repo = tmp.path().join("no-repo");
+        std::fs::create_dir_all(&no_repo).expect("mkdir");
+        let opencode = build_opencode_forge_args(
+            &no_repo,
+            "alpha",
+            None,
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        let agent = build_forge_agent_run_args_with_vault(
+            &no_repo,
+            "alpha",
+            &certs,
+            "1.2.3",
+            ForgeAgentMode::Maintenance,
+            false,
+            None,
+            None,
+        );
+        for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
+            assert!(
+                !args
+                    .iter()
+                    .any(|a| a.contains("TILLANDSIAS_FORGE_SEED_BRANCH")),
+                "{lane} builder must not invent a seed branch for a non-repo project: {args:?}"
+            );
+        }
     }
 
     #[test]
@@ -16717,6 +16939,11 @@ esac
             !text.contains("FAULT"),
             "a healthy local-only project must not be described as a fault; got:\n{text}"
         );
+        assert!(
+            text.contains("[push]\n\tdefault = current"),
+            "push.default=current is structural and must be present even with \
+             no redirect (order 501); got:\n{text}"
+        );
     }
 
     #[test]
@@ -16789,6 +17016,11 @@ esac
         assert!(
             contents.contains("helper ="),
             "config must disable credential helper"
+        );
+        assert!(
+            contents.contains("[push]\n\tdefault = current"),
+            "config must set push.default=current so a bare `git push` targets \
+             the current (seed, later lane) branch (order 501)"
         );
 
         // The config file should be at the expected path under HOME/.cache/...

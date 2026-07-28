@@ -1,5 +1,85 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-28T22:50Z (forge — v0.5 inference startup cleanup split + freshness audit)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`.
+  Credential guard `ok:forge-git-mirror`, committable guard
+  `ok:branch-linux-next`. Startup boundary clean. Sibling heads:
+  main=ffe85a23, linux-next=b0c3c97c, windows-next=89059357, osx-next=89cade75.
+- **Claimed & split**: order 392 (`inference-startup-cleanup`) — 6h packet was
+  partially implemented (criteria a+b done per 2026-07-18 cycle), residual
+  (c)+(d) split into two child packets:
+  - **392a** (`inference-startup-cleanup/model-preload-policy`) — ~2h: default
+    model warm at READY, expert slots reserved, model inventory checkpoint
+  - **392b** (`inference-startup-cleanup/gpu-passthrough-tier-matrix`) — ~3h:
+    wire GPU device args (CDI nvidia.com/gpu, AMD /dev/kfd) through podman
+    launch based on effective_inference_tier()
+- **Dependency unblocked**: order 394 (`plan-methodology-experts-rung1`)
+  depended on `inference-startup-cleanup` — parent is now `done` with
+  deterministic readiness + tier detection achieved. Children (392a/392b) are
+  parallel scope, not blockers.
+- **Freshness audit (order 372 mandatory)**: refreshed
+  `scripts/freshness-inventory.sh` (auditor=forge-opencode-20260728,
+  verdict=refreshed). 945 components total, 8 stamped, 937 unstamped — same
+  0% coverage as prior audit; no new drift detected in the stamped set. The
+  broader 0% coverage is a known systemic gap (multi-cycle effort, not
+  one-cycle-fixable).
+- **Build verification**: `./build.sh --check` PASS (Rust + clippy). YAML
+  parse PASS on plan/index.yaml. No conflict markers in plan/.
+- **Next**: linux_mutable or Windows host claims 392a (model preload) or 392b
+  (GPU passthrough). Experts construction research (order 393) is decision-
+  signed; `plan-methodology-experts-rung1` (order 394, ~10h) is the next
+  implementation milestone for the expert system.
+
+## Cycle 2026-07-28T22:10Z (forge — new-container smoke test, overhead validation + v0.5 seed)
+
+- **Host**: forge container, `linux-next` (was `main` at startup — corrected per
+  branch discipline). Credential guard `ok:forge-git-mirror`, committable guard
+  `ok:branch-linux-next`; startup boundary clean.
+- **Git validation**: `git push --dry-run origin linux-next` OK (up-to-date);
+  fetch from `git://tillandsias-git/tillandsias` OK; full `./build.sh --check`
+  (Rust + clippy) PASS.
+- **v0.4 release validated**: VERSION = `0.4.260728.1`, build green, curl-install
+  e2e PASS already on record (`plan/issues/smoke-e2e-findings-v0.4.260728.1-2026-07-28.md`).
+  `./build.sh --ci` reports 4 pre-existing failures (tray-contract, cheatsheet-tiers,
+  no-python-scripts, podman-path-availability) — all expected in the forge.
+- **v0.5 work seeded**: packet `transport-negligible-overhead-audit` (order 147)
+  advanced with forge-container overhead evidence. Containerization stack confirmed
+  negligible: zero CFS throttling, 74% memory available, 2.1 GB/s tmpfs IO.
+- **Overhead validation**: Full resource census taken — CPU (16 cores, no throttle),
+  memory (7.3 GB/5.4 GB avail), disk (1007 GB/941 GB free), cgroup v2 stats, kernel
+  version, network topology, process tree. Findings file:
+  `plan/issues/forge-container-overhead-validation-2026-07-28.md`.
+- **Freshness audit**: skipped this cycle (forge smoke mode — no full cycle run).
+- **Next**: Rebuild image with current linux-next, verify mount fixes, then claim
+  a v0.5 implementation packet on the next forge cycle.
+
+## Cycle 2026-07-28T19:16Z (forge — config-overlay mount audit + Containerfile fix)
+
+- **Host**: forge container, `linux-next` (was `main` — corrected per branch discipline).
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Config-overlay mount gap discovered**: `MountSource::ConfigOverlay` is
+  declared in `container_profile.rs:84` but NEVER wired into any container
+  launch path. The entrypoint's `apply_opencode_config_overlay()` function
+  silently no-ops because no podman mount populates `.config-overlay/`.
+  Filed: `plan/issues/config-overlay-runtime-mount-gap-2026-07-28.md` (v0.5).
+- **Containerfile fixed**: replaced stub `opencode.json` with the rich
+  config-overlay version (MCP tools, local provider, agent instructions).
+  Added COPY for `config-overlay/mcp/` and `config-overlay/ollama/` so all
+  forge MCP tools are baked into the image even without the runtime mount.
+- **Forge-plan MCP server**: `images/default/config-overlay/mcp/forge-plan.sh`
+  wraps `tillandsias-plan` CLI (6 tools). Registered in config overlay.
+- **New packet**: order 496 `macos-tray-icon-state-machine-parity` (v0.5)
+  — ports Linux plant-lifecycle SVG engine to macOS.
+- **Verification**: `./build.sh --check` PASS, `tillandsias-plan check` clean
+  (398 packets, ids unique, references sound).
+- **Branch fix**: commits rebased from `main` to `linux-next` (correct branch).
+- **Live config note**: `/home/forge/.config/opencode/config.json` is ephemeral
+  — was updated for testing but will be replaced by the Containerfile COPY on
+  next image rebuild.
+- **Next**: wire `MountSource::ConfigOverlay` into container launch args;
+  sync live config to upstream sources (not ephemeral paths).
+
 ## Cycle 2026-07-27T23:38Z (linux_mutable — v0.4 RELEASE CYCLE: full integration + triage + drain)
 
 - **Host/branch**: mutable Linux (macuahuitl), `linux-next`; credential guard
@@ -33,9 +113,14 @@
   destructive local-build gate deliberately deferred: the destructive-reset
   budget goes to the post-release curl-install e2e of the PUBLISHED v0.4
   binary per the operator's smoke-the-released-artifact directive.
-- **Operator handoff (order 476 prong a)**: `main` has no branch protection
-  (404). The exact `gh api` call is in the packet deliverable; must
-  accommodate the release flow's direct VERSION-bump push (skill step 4).
+- **Operator handoff (order 476 prong a)**: ~~`main` has no branch
+  protection (404)~~ **CLOSED 2026-07-28T18:40Z** under explicit in-session
+  operator direction: protection applied (enforce_admins, required CI
+  checks, 0-approval PRs, no force-push/deletion), probe prints `true`,
+  packet 476 completed. merge-to-main-and-release step 4 rewritten to land
+  the VERSION bump via auto-merge PR. Same session: v0.4.260728.1 promoted
+  to STABLE (`promoted:v0.4.260728.1`; GitHub "latest" was 16 days stale at
+  v0.3.260712.1), README-path install verified serving v0.4.260728.1.
 
 ## Cycle 2026-07-25T04:18Z (linux_mutable - v0.4 agent drain + Windows integration)
 
@@ -726,22 +811,31 @@ plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
   413 (git-mirror-relay-fetch-before-push) that was dropping the b49b7776
   progress evidence via YAML last-wins; plan-orders gate green.
 
-## ACTIVE RELEASE: v0.4 (Linux stability bundle — EXPERTS re-scoped out by operator decision 2026-07-21)
+## ACTIVE RELEASE: v0.5 (v0.4 SHIPPED 2026-07-28 as v0.4.260728.1)
 
-> OPERATOR DECISION 2026-07-21: the EXPERTS family + the compiled plan/MCP
-> server (456-458) land TOGETHER as a coupled overhaul (ramdisk + experts
-> synergy, transparent to end users) — NOT in v0.4. v0.4 = the stability
-> bundle: forge checkout/mirror/push correctness, no crashloops, no work
-> loss, smoke-PASS evidence, then series bump 0.3 -> 0.4.
+> **v0.4 SHIPPED**: `v0.4.260728.1` published 2026-07-28T00:58Z (run
+> 30317466235, all three platform jobs green, full cosign asset set:
+> Linux musl host+headless, Windows x64 tray, macOS arm64 tray+DMG).
+> Series bump 0.3 → 0.4 executed on main per the operator directive (The
+> Tlatoani, 2026-07-27 "linux-next" session). Pre-merge evidence: 15-packet
+> adversarial triage with zero blockers
+> (`plan/issues/v04-release-triage-2026-07-27.md`), macOS destructive e2e
+> PASS (5a44fd69) + Windows smoke PASS (v0.3.260724.1).
+> **Latest published release for smoke targeting: v0.4.260728.1** — the
+> order-455 cross-platform smoke queue and curl-install e2e gates on ALL
+> hosts (immutable Linux included) should now run against this build.
+
+> OPERATOR DECISION 2026-07-21 (still governing v0.5 scope): the EXPERTS
+> family + the compiled plan/MCP server (456-458) land TOGETHER as a coupled
+> overhaul (ramdisk + experts synergy, transparent to end users) — in v0.5,
+> not v0.4.
 
 Releases are sequential, stability-gated bundles (versioning.yaml Minor;
-methodology `version_aware_release_planning`). The current published daily is
-**v0.3.260723.1**: workflow run 29977379850 completed successfully on
-2026-07-23 with the Linux, macOS, and Windows build/sign/publish jobs green.
-That is publication evidence only; a qualifying host smoke PASS is still
-required before v0.4 can close. The **active release-in-progress is v0.4**:
-finish the stability bundle — forge checkout/mirror/push correctness, no
-crashloops or work loss, and durable smoke-PASS evidence.
+methodology `version_aware_release_planning`). The **active
+release-in-progress is v0.5** (EXPERTS + cross-platform parity + streams/
+transport + security channel + audits). v0.4 residuals riding the
+post-release smoke campaign: 424, 455, 463, 466, 491, provisional trio,
+489/490 post-tag drains — each closes with evidence against v0.4.260728.1.
 
 ### Release roadmap (full backfill 2026-07-18; structural refresh 2026-07-24; order 407)
 

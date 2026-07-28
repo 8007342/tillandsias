@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# freshness: auditor=forge-forge-tillandsias-codex-20260723T0402Z date=2026-07-23 verdict=refreshed scope=revalidated inventory paths, first-record grammar, advisory output contract, local-ci consumer, and 931-component runtime
+# freshness: auditor=forge-opencode-20260728 date=2026-07-28 verdict=refreshed scope=revalidated inventory coverage (945 components, 8 stamped, 937 unstamped — 0% stamped), stale-report grammar, and advisory output contract; same findings as prior audit — no new drift detected in the stamped set
 # =============================================================================
 # freshness-inventory.sh — FRESHNESS rung 2: component inventory + coverage
 #

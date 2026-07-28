@@ -457,6 +457,67 @@ rewrite_origin_for_enclave_push() {
     echo "[forge] git push origin <branch> routes to the enclave mirror (${mirror_url}); upstream is ${original}."
 }
 
+# @trace spec:cross-platform, spec:git-mirror-service
+# COMMON TAIL of clone_project_from_mirror (order 501, repair B6 —
+# plan/issues/git-branching-methodology-research-2026-07-28.md §5.2): runs on
+# EVERY clone transport (Linux git-daemon network, Windows/WSL filesystem,
+# macOS staged filesystem) so no transport is left with the sticky-HEAD
+# hazard. Deliberately NOT run on the host-mount path — that is the
+# operator's own working tree, not a clone, and it is already on the
+# operator's branch.
+#
+# The mirror's HEAD symref is global and STICKY: a persisted mirror volume
+# can hand a fresh clone branch Y after this launch's gate passed on branch
+# X. The launcher pins the launch-gated branch in
+# TILLANDSIAS_FORGE_SEED_BRANCH; check it out here via a fallback chain:
+#   already on <seed>            -> no-op
+#   git fetch origin <seed>      -> tolerated failure (mirror mid-reconcile
+#                                   in its 120s window, or never-pushed seed)
+#   <seed> local or origin/<seed> -> git switch <seed>
+#   otherwise                    -> LOUD warning, stay on the clone's HEAD
+# A hard `git clone -b <seed>` is FORBIDDEN (B6): it hard-fails the whole
+# launch for a never-pushed branch and inside the reconcile window. This
+# tail NEVER hard-fails — worst case is the clone's HEAD, which is exactly
+# the pre-501 behavior. Unset/empty env -> no-op, byte-identical to today
+# (end-user transparency).
+#
+# Caveat: a REUSED (not recreated) container carries creation-time env, so a
+# stale seed is possible until the container is recreated.
+checkout_forge_seed_branch() {
+    local seed="${TILLANDSIAS_FORGE_SEED_BRANCH:-}"
+    [[ -n "$seed" ]] || return 0
+
+    local current
+    current="$(git symbolic-ref --short -q HEAD 2>/dev/null || true)"
+    if [[ "$current" == "$seed" ]]; then
+        trace_lifecycle "git-mirror" "clone already on seed branch ${seed}"
+        return 0
+    fi
+
+    # Refresh origin's view of the seed branch; tolerate failure (the mirror
+    # may still be inside its reconcile window, or the branch may never have
+    # been pushed). The clone itself already carries all mirror heads, so
+    # this only narrows the race, it is not load-bearing.
+    git fetch origin "$seed" >/dev/null 2>&1 || true
+
+    if git show-ref --verify --quiet "refs/heads/${seed}" || \
+       git show-ref --verify --quiet "refs/remotes/origin/${seed}"; then
+        # `git switch` DWIMs a local tracking branch from origin/<seed> when
+        # no local branch exists yet.
+        if git switch "$seed" >/dev/null 2>&1; then
+            trace_lifecycle "git-mirror" "checked out launch-gated seed branch ${seed} (clone HEAD was ${current:-detached})"
+            echo "[forge] Checked out '${seed}' — the branch this launch was gated on."
+        else
+            echo "[forge] WARNING: seed branch '${seed}' exists but 'git switch ${seed}' failed; staying on '${current:-HEAD}'." >&2
+            echo "[forge] Work will land on '${current:-HEAD}', which may NOT be the branch this launch was gated on." >&2
+        fi
+    else
+        echo "[forge] WARNING: launch-gated seed branch '${seed}' was not found in the mirror clone; staying on '${current:-HEAD}'." >&2
+        echo "[forge] The mirror may still be reconciling (120s window) or '${seed}' was never pushed. Work will land on '${current:-HEAD}'." >&2
+    fi
+    return 0
+}
+
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:forge-offline
 # Shared clone-from-mirror routine for ALL forge entrypoints (opencode,
 # claude, opencode-web, terminal). Two transports:
@@ -580,6 +641,9 @@ clone_project_from_mirror() {
                 git remote set-url --push origin "${src}" 2>/dev/null || true
             fi
             configure_git_identity
+            # COMMON TAIL (order 501, B6): every transport, incl. this
+            # Windows/WSL + macOS staged path, must defeat sticky-HEAD.
+            checkout_forge_seed_branch
             echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
             return 0
         else
@@ -649,6 +713,9 @@ clone_project_from_mirror() {
                     echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
                 configure_git_identity
                 rewrite_origin_for_enclave_push
+                # COMMON TAIL (order 501, B6): every transport, incl. this
+                # network path, must defeat sticky-HEAD.
+                checkout_forge_seed_branch
                 echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
                 return 0
             fi

@@ -434,6 +434,32 @@ bar_raise_governance:
     bar-raise is a deliberate scope decision the operator owns, keeping the
     convergence point clear instead of letting an ever-rising bar make "done"
     unreachable by construction.
+  release_boundary_bar_raise:
+    # Operator framing, The Tlatoani 2026-07-29. See philosophy.yaml
+    # multi_version_convergence for the mathematical statement.
+    rule: >
+      A RELEASE CUT IS ITSELF A BAR RAISE — the canonical one. At the release
+      boundary, fitness is re-evaluated against the then-current specs and the
+      bar advances (a Lamport-clock tick in logical version time). This does
+      NOT violate the no-self-escalation rule above: releases are cut by The
+      Tlatoani, so the approval gate is satisfied by the release decision
+      itself, and no separate per-signal approval is needed for the boundary
+      re-evaluation.
+    still_forbidden: >
+      Raising the bar MID-RELEASE — the loop deciding on its own to treat a
+      deeper signal class as findings while a release is in flight. That
+      remains a one-off Tlatoani approval recorded under approved_bar_raises.
+      Within a release the bar is fixed; that fixedness is what makes zero
+      residual a decidable convergence point.
+    why_this_is_not_a_moving_goalpost: >
+      Because the specs evolve, there is no final convergent state to reach —
+      only monotone approach. The per-release inequality (the technical-debt
+      ceiling: debt non-increasing, features non-decreasing, no regressions)
+      is the discrete, checkable precondition of the limit claim. An ever-
+      rising bar makes "done" unreachable only if it rises CONTINUOUSLY; a bar
+      that steps at discrete operator-gated release boundaries keeps every
+      intra-release convergence point well defined while still guaranteeing
+      the sequence improves.
 
 approved_bar_raises:
   - id: ci-full-all-features-clippy

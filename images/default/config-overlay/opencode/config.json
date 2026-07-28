@@ -51,6 +51,11 @@
       "type": "local",
       "command": ["/home/forge/.config-overlay/mcp/host-browser.sh"],
       "enabled": true
+    },
+    "forge-plan": {
+      "type": "local",
+      "command": ["/home/forge/.config-overlay/mcp/forge-plan.sh"],
+      "enabled": true
     }
   },
   "lsp": true

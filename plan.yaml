@@ -144,7 +144,6 @@ plan:
     - "The compiled Rust helper at `crates/tillandsias-repeat-graph` exists but is not wired into `./repeat`. ./repeat's per-cycle output capture is deleted after byte-counting, so stdout redirection is the only capture path for external consumers."
     - "The quiet repeat supervisor is tokio-driven and should wake on child stdout, note-file changes, and a low-frequency heartbeat instead of shell polling."
     - "Anonymous stream events may advance the current focus bar, but they must not create standalone tasks in the tree."
-    - "When a task uncovers ambiguity or a useful refinement, file an immediate bootstrap note in `./plan/issues/` or `./methodology/events/` before edits begin, then refresh it after each meaningful substep so future agents can pick up the thread without chat history."
     - "When a task uncovers ambiguity or a useful refinement, file an immediate bootstrap note in `./plan/issues/` or `./methodology/event/` before edits begin, then refresh it after each meaningful substep so future agents can pick up the thread without chat history."
     - "Before platform-branch work, fetch/pull the active branch, record sibling heads for main/linux-next/windows-next/osx-next, and merge shared changes before long verification or checkpoint pushes."
     - "Do not put durable architecture, process, or release claims in ad hoc top-level Markdown or CLAUDE files; distill them to OpenSpec, methodology, cheatsheets, or plan and leave only tombstone pointers."
