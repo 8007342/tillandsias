@@ -8,7 +8,12 @@
 //! outbound channel.
 //!
 //! Host → guest bytes (`PtyData{ToGuest}`) and resizes (`PtyResize`)
-//! look up the session by id and write to / ioctl the master fd. Host
+//! look up the session by id and ENQUEUE onto a bounded per-session
+//! write queue drained by a dedicated writer task (audit D6, order 493):
+//! the connection loop never awaits the master fd inline, so a wedged
+//! child cannot starve control-plane frames past the 250 ms fairness
+//! bound — a queue full past the deadline kills the session instead
+//! (kill-not-drop). Host
 //! `PtyClose` drives a SIGTERM with 2-second grace then SIGKILL. The
 //! pump task also reaps the child via `waitpid` and emits a final
 //! `PtyClose` carrying the exit code or signal before tearing the
@@ -51,6 +56,39 @@ use tracing::{debug, info, warn};
 
 const PTY_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 
+/// Depth of the per-session host→guest write queue drained by the writer
+/// task (audit D6, order 493). Sized so a burst of max-size `PtyData`
+/// frames (`MAX_PTY_FRAME_BYTES` = 64,000 bytes each) bounds per-session
+/// memory at ~1 MiB while still absorbing legitimate type-ahead during a
+/// busy cooked phase without tripping the wedge deadline below.
+const PTY_WRITE_QUEUE_CAPACITY: usize = 16;
+
+/// How long the connection loop may wait to ENQUEUE one host→guest
+/// command before declaring the session wedged. Equal to the ≤250 ms
+/// control-plane fairness bound ("PTY-traffic does not starve
+/// control-plane envelopes",
+/// openspec/changes/control-wire-pty-attach/specs/vsock-transport/spec.md):
+/// the bounded enqueue is the only PTY-write await the connection loop
+/// performs inline, so bounding it restores the fairness invariant even
+/// when the child wedges (stops reading its slave). A queue that stays
+/// FULL for this whole window — not merely non-empty; type-ahead drains
+/// within it — means the child is wedged, and the session is KILLED via
+/// the existing SIGTERM+2s+SIGKILL path rather than dropping bytes
+/// (kill-not-drop: silently dropped frames would recreate the UTF-8
+/// tearing fixed in ea2fbc8d).
+/// @trace plan/issues/guest-pty-write-wedge-2026-07-27.md (audit D6)
+const PTY_WRITE_ENQUEUE_DEADLINE: Duration = Duration::from_millis(250);
+
+/// One host→guest command routed through the per-session bounded write
+/// queue. `Resize` travels through the SAME queue as `Write` so
+/// `TIOCSWINSZ` can never apply ahead of input bytes that arrived before
+/// it (audit D6 ordering note: resize kept inline while data queued
+/// would reorder).
+enum PtyWriteCommand {
+    Write(Vec<u8>),
+    Resize { rows: u16, cols: u16 },
+}
+
 /// One active PTY session for a single connection.
 struct PtySession {
     session_id: u32,
@@ -71,6 +109,18 @@ struct PtySession {
     /// the task also exits voluntarily on EOF or `waitpid` reaping the
     /// child.
     _pump: tokio::task::JoinHandle<()>,
+    /// Bounded host→guest write queue (audit D6). The connection loop
+    /// only ENQUEUES here — deadline-bounded via
+    /// [`PTY_WRITE_ENQUEUE_DEADLINE`] — while the writer task owns the
+    /// potentially-unbounded master-fd writes.
+    writer_tx: mpsc::Sender<PtyWriteCommand>,
+    /// Explicit cancellation for the writer task, mirroring `cancel`:
+    /// firing (or dropping) it interrupts even a wedged mid-write await
+    /// so teardown never waits on a child that stopped reading.
+    writer_cancel: Option<tokio::sync::oneshot::Sender<()>>,
+    /// Writer-task handle. The task exits on cancel, on queue close
+    /// (session removed from the store), or on a failed master write.
+    _writer: tokio::task::JoinHandle<()>,
 }
 
 /// Per-connection PTY session table. Keyed by `session_id` chosen by the
@@ -278,6 +328,14 @@ impl PtySessionStore {
             self.heartbeat_interval,
         );
 
+        // 6) Spawn the writer task behind the bounded write queue (audit
+        //    D6): host→guest data and resizes are enqueued by the
+        //    connection loop and drained here, so a child that stops
+        //    reading its slave wedges only this task — never the loop.
+        let (writer_tx, writer_rx) = mpsc::channel::<PtyWriteCommand>(PTY_WRITE_QUEUE_CAPACITY);
+        let (writer_cancel_tx, writer_cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let writer = spawn_writer_task(session_id, master_arc.clone(), writer_rx, writer_cancel_rx);
+
         self.sessions.insert(
             session_id,
             PtySession {
@@ -286,6 +344,9 @@ impl PtySessionStore {
                 child_pid,
                 cancel: Some(cancel_tx),
                 _pump: pump,
+                writer_tx,
+                writer_cancel: Some(writer_cancel_tx),
+                _writer: writer,
             },
         );
 
@@ -298,77 +359,79 @@ impl PtySessionStore {
         Ok(())
     }
 
-    /// Handle a `PtyData{ToGuest}` envelope: write bytes to the master fd
-    /// of the matching session. Silently no-ops if the session id is
-    /// unknown (the host may race a write against a child-exit close).
-    pub async fn write_to_guest(&self, session_id: u32, bytes: &[u8]) {
+    /// Handle a `PtyData{ToGuest}` envelope: enqueue the bytes on the
+    /// session's bounded write queue (audit D6 — the actual master-fd
+    /// write happens on the writer task, never inline in the connection
+    /// loop). No-ops if the session id is unknown (the host may race a
+    /// write against a child-exit close). If the queue stays full past
+    /// [`PTY_WRITE_ENQUEUE_DEADLINE`], the session is killed
+    /// (kill-not-drop).
+    pub async fn write_to_guest(&mut self, session_id: u32, bytes: Vec<u8>) {
+        self.enqueue_write_command(session_id, PtyWriteCommand::Write(bytes))
+            .await;
+    }
+
+    /// Handle a `PtyResize`: routed through the SAME per-session queue as
+    /// `PtyData{ToGuest}` so `TIOCSWINSZ` is applied at its host-arrival
+    /// position relative to input bytes (audit D6 ordering note).
+    pub async fn resize(&mut self, session_id: u32, rows: u16, cols: u16) {
+        self.enqueue_write_command(session_id, PtyWriteCommand::Resize { rows, cols })
+            .await;
+    }
+
+    /// Deadline-bounded enqueue shared by [`write_to_guest`] and
+    /// [`resize`]. The timeout is event-driven on the awaited `send` (a
+    /// bounded `mpsc::Sender::send` resolves the moment a slot frees) —
+    /// never a periodic queue inspection. When the queue has been FULL
+    /// for the whole [`PTY_WRITE_ENQUEUE_DEADLINE`] the child has stopped
+    /// reading its slave: the session is killed loudly via the existing
+    /// SIGTERM+2s+SIGKILL path ([`Self::close_host_initiated`]) instead
+    /// of blocking the connection loop unboundedly or silently dropping
+    /// the command (kill-not-drop). The pump task still emits the
+    /// terminal `PtyClose` so the host observes the kill.
+    async fn enqueue_write_command(&mut self, session_id: u32, cmd: PtyWriteCommand) {
         let Some(session) = self.sessions.get(&session_id) else {
             debug!(
                 spec = "vsock-transport",
                 session_id,
-                "PtyData{{ToGuest}} for unknown session — dropping (likely raced child-exit)"
+                "host→guest PTY command for unknown session — dropping (likely raced child-exit)"
             );
             return;
         };
-        // Write the full buffer, looping on WouldBlock via AsyncFd's
-        // writable-readiness guard. Partial writes advance offset.
-        let mut written = 0usize;
-        while written < bytes.len() {
-            let mut guard = match session.master.writable().await {
-                Ok(g) => g,
-                Err(err) => {
-                    warn!(
-                        spec = "vsock-transport",
-                        session_id, error = %err,
-                        "PtyData{{ToGuest}}: writable() guard failed"
-                    );
-                    return;
-                }
-            };
-            let raw = session.master.get_ref().as_raw_fd();
-            let result = guard.try_io(|_| {
-                // SAFETY: raw is a valid PTY master fd owned by master_arc;
-                // libc::write returns ssize_t with errno on -1.
-                let n = unsafe {
-                    nix::libc::write(
-                        raw,
-                        bytes[written..].as_ptr() as *const _,
-                        bytes.len() - written,
-                    )
-                };
-                if n < 0 {
-                    Err(io::Error::last_os_error())
-                } else {
-                    Ok(n as usize)
-                }
-            });
-            match result {
-                Ok(Ok(n)) => written += n,
-                Ok(Err(err)) => {
-                    warn!(
-                        spec = "vsock-transport",
-                        session_id, error = %err,
-                        "PtyData{{ToGuest}}: write to master fd failed"
-                    );
-                    return;
-                }
-                Err(_would_block) => continue,
+        let kind = match &cmd {
+            PtyWriteCommand::Write(_) => "PtyData{ToGuest}",
+            PtyWriteCommand::Resize { .. } => "PtyResize",
+        };
+        let writer_tx = session.writer_tx.clone();
+        match tokio::time::timeout(PTY_WRITE_ENQUEUE_DEADLINE, writer_tx.send(cmd)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(_send_err)) => {
+                // Writer task exited (a master write failed — child side
+                // is gone or dying). The command cannot be delivered;
+                // close the session loudly rather than dropping it
+                // silently and letting the host keep writing into a void.
+                warn!(
+                    spec = "vsock-transport",
+                    session_id,
+                    command = kind,
+                    "PTY writer task is gone (master write previously failed); \
+                     killing session via SIGTERM/SIGKILL (kill-not-drop, audit D6)"
+                );
+                self.close_host_initiated(session_id).await;
             }
-        }
-    }
-
-    /// Handle a `PtyResize`: TIOCSWINSZ on the master fd.
-    pub fn resize(&self, session_id: u32, rows: u16, cols: u16) {
-        let Some(session) = self.sessions.get(&session_id) else {
-            return;
-        };
-        let fd = session.master.get_ref().as_raw_fd();
-        if let Err(err) = set_winsize(fd, rows, cols) {
-            warn!(
-                spec = "vsock-transport",
-                session_id, error = ?err,
-                "PtyResize: TIOCSWINSZ failed"
-            );
+            Err(_elapsed) => {
+                warn!(
+                    spec = "vsock-transport",
+                    session_id,
+                    command = kind,
+                    deadline_ms = PTY_WRITE_ENQUEUE_DEADLINE.as_millis() as u64,
+                    "PTY write queue FULL past the control-plane fairness deadline — \
+                     child is wedged (not reading its slave); killing session via \
+                     SIGTERM/SIGKILL instead of blocking the connection loop or \
+                     dropping bytes (kill-not-drop, audit D6)"
+                );
+                self.close_host_initiated(session_id).await;
+            }
         }
     }
 
@@ -386,6 +449,12 @@ impl PtySessionStore {
         if let Some(cancel) = session.cancel.take() {
             let _ = cancel.send(());
         }
+        // Fire the writer cancel too: a writer wedged mid-write on a
+        // child that stopped reading must not linger until the master
+        // fd errors (audit D6).
+        if let Some(cancel) = session.writer_cancel.take() {
+            let _ = cancel.send(());
+        }
         spawn_terminator(session.child_pid, Duration::from_secs(2));
     }
 
@@ -398,6 +467,9 @@ impl PtySessionStore {
         let drained: Vec<PtySession> = self.sessions.drain().map(|(_, s)| s).collect();
         for mut session in drained {
             if let Some(cancel) = session.cancel.take() {
+                let _ = cancel.send(());
+            }
+            if let Some(cancel) = session.writer_cancel.take() {
                 let _ = cancel.send(());
             }
             spawn_terminator(session.child_pid, Duration::from_secs(2));
@@ -575,6 +647,143 @@ fn pty_heartbeat_envelope(session_id: u32) -> ControlEnvelope {
     }
 }
 
+/// Per-session writer task (audit D6): the sole owner of master-fd
+/// writes and `TIOCSWINSZ`. Draining one FIFO queue with one task
+/// preserves the host arrival order between data and resize. Exits when
+/// the cancel fires (session teardown — interruptible even wedged
+/// mid-write), when the store drops the sender (session removed), or
+/// when a master write fails (child side gone; the pump emits the
+/// terminal `PtyClose` through its own path).
+fn spawn_writer_task(
+    session_id: u32,
+    master: Arc<AsyncFd<OwnedFd>>,
+    mut queue: mpsc::Receiver<PtyWriteCommand>,
+    mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            let cmd = tokio::select! {
+                _ = &mut cancel_rx => {
+                    debug!(
+                        spec = "vsock-transport",
+                        session_id,
+                        undelivered = queue.len(),
+                        "PTY writer: cancel signalled; exiting (session tearing down)"
+                    );
+                    return;
+                }
+                cmd = queue.recv() => match cmd {
+                    Some(cmd) => cmd,
+                    // Store dropped the sender: session removed.
+                    None => return,
+                },
+            };
+            match cmd {
+                PtyWriteCommand::Write(bytes) => {
+                    if !write_all_to_master(session_id, &master, &bytes, &mut cancel_rx).await {
+                        // Loud, never silent: any commands still queued die
+                        // with the session. Teardown (SIGTERM/SIGKILL +
+                        // terminal PtyClose) is driven by the store and the
+                        // pump — never from this task (it has no store
+                        // access; audit D6 fix-shape constraint 3).
+                        if !queue.is_empty() {
+                            warn!(
+                                spec = "vsock-transport",
+                                session_id,
+                                undelivered = queue.len(),
+                                "PTY writer: exiting with undelivered queued \
+                                 commands (session tearing down)"
+                            );
+                        }
+                        return;
+                    }
+                }
+                PtyWriteCommand::Resize { rows, cols } => {
+                    let fd = master.get_ref().as_raw_fd();
+                    if let Err(err) = set_winsize(fd, rows, cols) {
+                        warn!(
+                            spec = "vsock-transport",
+                            session_id, error = ?err,
+                            "PtyResize: TIOCSWINSZ failed"
+                        );
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// Write one command's bytes fully to the master fd, looping on
+/// writable-readiness with partial writes advancing the offset. This is
+/// the potentially-unbounded wait the connection loop must never perform
+/// inline (audit D6) — it lives on the writer task, where only this
+/// session's queue waits behind it. Returns `false` when the writer task
+/// should exit: the session cancel fired mid-write (teardown while
+/// wedged) or the write failed (slave side gone).
+async fn write_all_to_master(
+    session_id: u32,
+    master: &AsyncFd<OwnedFd>,
+    bytes: &[u8],
+    cancel_rx: &mut tokio::sync::oneshot::Receiver<()>,
+) -> bool {
+    let mut written = 0usize;
+    while written < bytes.len() {
+        let mut guard = tokio::select! {
+            _ = &mut *cancel_rx => {
+                debug!(
+                    spec = "vsock-transport",
+                    session_id,
+                    remaining = bytes.len() - written,
+                    "PTY writer: cancel signalled mid-write; abandoning \
+                     remaining bytes (session tearing down)"
+                );
+                return false;
+            }
+            writable = master.writable() => match writable {
+                Ok(g) => g,
+                Err(err) => {
+                    warn!(
+                        spec = "vsock-transport",
+                        session_id, error = %err,
+                        "PtyData{{ToGuest}}: writable() guard failed"
+                    );
+                    return false;
+                }
+            }
+        };
+        let raw = master.get_ref().as_raw_fd();
+        let result = guard.try_io(|_| {
+            // SAFETY: raw is a valid PTY master fd owned by master_arc;
+            // libc::write returns ssize_t with errno on -1.
+            let n = unsafe {
+                nix::libc::write(
+                    raw,
+                    bytes[written..].as_ptr() as *const _,
+                    bytes.len() - written,
+                )
+            };
+            if n < 0 {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(n as usize)
+            }
+        });
+        match result {
+            Ok(Ok(n)) => written += n,
+            Ok(Err(err)) => {
+                warn!(
+                    spec = "vsock-transport",
+                    session_id, error = %err,
+                    "PtyData{{ToGuest}}: write to master fd failed"
+                );
+                return false;
+            }
+            Err(_would_block) => continue,
+        }
+    }
+    true
+}
+
 fn spawn_pump_task(
     session_id: u32,
     child_pid: Pid,
@@ -718,6 +927,231 @@ mod tests {
     fn store() -> (PtySessionStore, mpsc::Receiver<ControlEnvelope>) {
         let (tx, rx) = mpsc::channel(64);
         (PtySessionStore::new(tx), rx)
+    }
+
+    /// PTY pair for writer-task tests: RAW slave (no echo, no canonical
+    /// buffering — master bytes pass to the slave verbatim), nonblocking
+    /// master wrapped in `AsyncFd` exactly as `open()` wires it.
+    fn raw_pty_pair() -> (Arc<AsyncFd<OwnedFd>>, OwnedFd) {
+        use nix::sys::termios::{SetArg, cfmakeraw, tcgetattr, tcsetattr};
+        let OpenptyOwned { master, slave } = openpty_owned(24, 80).expect("openpty");
+        let mut t = tcgetattr(&slave).expect("tcgetattr(slave)");
+        cfmakeraw(&mut t);
+        tcsetattr(&slave, SetArg::TCSANOW, &t).expect("tcsetattr raw");
+        let raw = master.as_raw_fd();
+        let flags = fcntl(raw, FcntlArg::F_GETFL).expect("F_GETFL");
+        let new_flags = OFlag::from_bits_truncate(flags) | OFlag::O_NONBLOCK;
+        fcntl(raw, FcntlArg::F_SETFL(new_flags)).expect("F_SETFL");
+        let master = AsyncFd::with_interest(master, Interest::READABLE | Interest::WRITABLE)
+            .expect("AsyncFd::with_interest");
+        (Arc::new(master), slave)
+    }
+
+    fn winsize_of(fd: std::os::fd::RawFd) -> (u16, u16) {
+        let mut ws = nix::libc::winsize {
+            ws_row: 0,
+            ws_col: 0,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        // SAFETY: TIOCGWINSZ fills a correctly-sized winsize; fd is a
+        // live PTY slave owned by the test.
+        let rc = unsafe { nix::libc::ioctl(fd, nix::libc::TIOCGWINSZ, &mut ws) };
+        assert_eq!(rc, 0, "TIOCGWINSZ failed");
+        (ws.ws_row, ws.ws_col)
+    }
+
+    /// Audit D6 (a): the per-session writer task drains queued
+    /// host→guest writes strictly FIFO — bytes reach the slave exactly in
+    /// enqueue order even when many frames queue up before the writer
+    /// catches up (odd-sized chunks exercise partial-write offsets).
+    #[tokio::test]
+    async fn writer_queue_drains_writes_in_order() {
+        let (master, slave) = raw_pty_pair();
+        let (tx, rx) = mpsc::channel(PTY_WRITE_QUEUE_CAPACITY);
+        let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        let _writer = spawn_writer_task(11, master, rx, cancel_rx);
+
+        let mut expected = Vec::new();
+        for i in 0..8u8 {
+            let chunk = vec![b'a' + i; 997];
+            expected.extend_from_slice(&chunk);
+            tx.send(PtyWriteCommand::Write(chunk))
+                .await
+                .expect("enqueue within capacity");
+        }
+        let total = expected.len();
+        let reader = tokio::task::spawn_blocking(move || {
+            use std::io::Read;
+            let mut f = std::fs::File::from(slave);
+            let mut buf = vec![0u8; total];
+            f.read_exact(&mut buf).expect("slave reads all bytes");
+            buf
+        });
+        let read_back = tokio::time::timeout(Duration::from_secs(5), reader)
+            .await
+            .expect("queue drains within budget")
+            .expect("reader task");
+        assert_eq!(read_back, expected, "bytes must arrive in enqueue order");
+    }
+
+    /// Audit D6 (b): `PtyResize` travels through the SAME per-session
+    /// queue as writes, so TIOCSWINSZ is applied at exactly its
+    /// host-arrival position — never ahead of input bytes that arrived
+    /// before it (asserted while the oversized first write is still
+    /// draining) and always by the time bytes enqueued after it become
+    /// visible at the slave.
+    #[tokio::test]
+    async fn resize_preserves_arrival_order_relative_to_writes() {
+        let (master, slave) = raw_pty_pair();
+        let (tx, rx) = mpsc::channel(PTY_WRITE_QUEUE_CAPACITY);
+        let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        let _writer = spawn_writer_task(12, master, rx, cancel_rx);
+
+        // First write far exceeds kernel PTY buffering (~64 KiB ceiling),
+        // so with nobody reading the slave the writer is still mid-write
+        // when the resize queued behind it could otherwise jump ahead.
+        let first = vec![b'x'; 192 * 1024];
+        let second = b"tail".to_vec();
+        tx.send(PtyWriteCommand::Write(first.clone()))
+            .await
+            .expect("enqueue first write");
+        tx.send(PtyWriteCommand::Resize {
+            rows: 50,
+            cols: 100,
+        })
+        .await
+        .expect("enqueue resize");
+        tx.send(PtyWriteCommand::Write(second.clone()))
+            .await
+            .expect("enqueue second write");
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            winsize_of(slave.as_raw_fd()),
+            (24, 80),
+            "resize must not apply ahead of an earlier-arrived write"
+        );
+
+        let total = first.len() + second.len();
+        let reader = tokio::task::spawn_blocking(move || {
+            use std::io::Read;
+            let mut f = std::fs::File::from(slave);
+            let mut buf = vec![0u8; total];
+            f.read_exact(&mut buf).expect("slave reads all bytes");
+            // The writer performed TIOCSWINSZ strictly before writing
+            // `second`, so once `second` is visible the resize is applied.
+            let after = winsize_of(f.as_raw_fd());
+            (buf, after)
+        });
+        let (bytes, after) = tokio::time::timeout(Duration::from_secs(10), reader)
+            .await
+            .expect("queue drains within budget")
+            .expect("reader task");
+        assert_eq!(&bytes[..first.len()], &first[..]);
+        assert_eq!(&bytes[first.len()..], &second[..]);
+        assert_eq!(
+            after,
+            (50, 100),
+            "resize must be applied before bytes enqueued after it are visible"
+        );
+    }
+
+    /// Audit D6 (c): a child that never reads its slave wedges the kernel
+    /// PTY buffer; once the bounded write queue has been FULL for the
+    /// 250ms fairness deadline, the store KILLS the session via the
+    /// existing SIGTERM/SIGKILL path instead of blocking the caller (the
+    /// connection loop) unboundedly or silently dropping bytes — and the
+    /// pump still emits the terminal PtyClose so the host observes the
+    /// kill (kill-not-drop).
+    /// @trace plan/issues/guest-pty-write-wedge-2026-07-27.md
+    #[tokio::test]
+    async fn full_write_queue_past_deadline_kills_wedged_session() {
+        let hermetic_home = std::env::temp_dir()
+            .join(format!("tillandsias-wedge-pty-{}", std::process::id()))
+            .to_string_lossy()
+            .into_owned();
+        std::fs::create_dir_all(&hermetic_home).expect("hermetic HOME creates");
+        let (mut store, mut rx) = store();
+        store
+            .open(
+                66,
+                24,
+                80,
+                vec![
+                    "/bin/bash".to_string(),
+                    "-lc".to_string(),
+                    "sleep 30".to_string(),
+                ],
+                vec![("HOME".to_string(), hermetic_home)],
+                None,
+            )
+            .await
+            .expect("wedge PTY opens");
+
+        // Cooked slave + a child that never reads: frames of COMPLETE
+        // LINES (a real paste), because n_tty only backpressures the
+        // master once the canonical buffer holds pending newlines —
+        // newline-free overflow is beeped away instead of blocking. The
+        // kernel absorbs at most ~68 KiB (64 KiB flip-buffer memory limit
+        // + 4 KiB canonical buffer) and can never drain. Kernel
+        // (~5 frames) + one in-flight write + the
+        // PTY_WRITE_QUEUE_CAPACITY queued slots absorb the first ~22
+        // frames; a later enqueue must trip the deadline and kill the
+        // session well within the iteration budget.
+        let frame: Vec<u8> = std::iter::repeat_with(|| {
+            let mut line = vec![b'z'; 63];
+            line.push(b'\n');
+            line
+        })
+        .take(256)
+        .flatten()
+        .collect(); // 256 × 64-byte lines = 16 KiB per frame
+        let mut killed = false;
+        for _ in 0..(PTY_WRITE_QUEUE_CAPACITY + 16) {
+            let call = tokio::time::timeout(
+                PTY_WRITE_ENQUEUE_DEADLINE + Duration::from_millis(750),
+                store.write_to_guest(66, frame.clone()),
+            )
+            .await;
+            assert!(
+                call.is_ok(),
+                "write_to_guest must never block the connection loop past \
+                 the enqueue deadline"
+            );
+            if !store.sessions.contains_key(&66) {
+                killed = true;
+                break;
+            }
+        }
+        assert!(
+            killed,
+            "wedged session must be killed once the queue stays full past \
+             the deadline"
+        );
+
+        // Kill-not-drop is loud end-to-end: the pump reaps the SIGTERM'd
+        // child and emits the terminal PtyClose to the host.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let mut close_exit: Option<PtyExit> = None;
+        while std::time::Instant::now() < deadline {
+            match tokio::time::timeout(Duration::from_secs(1), rx.recv()).await {
+                Ok(Some(env)) => {
+                    if let ControlMessage::PtyClose { session_id, exit } = env.body {
+                        assert_eq!(session_id, 66);
+                        close_exit = Some(exit);
+                        break;
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => continue,
+            }
+        }
+        let exit = close_exit.expect("PtyClose after wedge kill");
+        assert!(
+            exit.signal == Some(Signal::SIGTERM as i32) || exit.code != 0,
+            "child must have been terminated by the kill path: {exit:?}"
+        );
     }
 
     #[test]

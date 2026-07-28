@@ -1076,7 +1076,10 @@ async fn handle_connection(
                 direction: tillandsias_control_wire::PtyDirection::ToGuest,
                 bytes,
             } => {
-                pty_store.write_to_guest(session_id, &bytes).await;
+                // Bounded enqueue (audit D6): never blocks past the 250ms
+                // control-plane fairness deadline — a wedged session is
+                // killed by the store instead (kill-not-drop).
+                pty_store.write_to_guest(session_id, bytes).await;
             }
             #[cfg(unix)]
             ControlMessage::PtyData {
@@ -1097,7 +1100,11 @@ async fn handle_connection(
                 rows,
                 cols,
             } => {
-                pty_store.resize(session_id, rows, cols);
+                // Routed through the same per-session queue as PtyData so
+                // TIOCSWINSZ keeps its arrival order relative to input
+                // bytes (audit D6); enqueue is deadline-bounded like the
+                // data path.
+                pty_store.resize(session_id, rows, cols).await;
             }
             #[cfg(unix)]
             ControlMessage::PtyClose { session_id, .. } => {
@@ -1716,6 +1723,158 @@ mod tests {
 
         slow_server.abort();
         fast_server.abort();
+    }
+
+    /// Audit D6 (order 493) at the connection-handler boundary: a PTY
+    /// child that never reads its slave must not wedge the connection
+    /// loop. The write path only ENQUEUES, bounded by the 250ms
+    /// control-plane fairness deadline (spec "PTY-traffic does not starve
+    /// control-plane envelopes"); on trip the session is killed
+    /// (SIGTERM → pump → PtyClose on the wire, kill-not-drop) and a
+    /// VmStatusRequest sent behind the write storm is still answered
+    /// within the SC-09/SC-10 500ms bound. Pre-fix, `write_to_guest`
+    /// blocked inline forever and this test would time out.
+    /// @trace plan/issues/guest-pty-write-wedge-2026-07-27.md
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn pty_write_wedge_kills_session_and_keeps_control_plane_responsive() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(1 << 20);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let server_task = tokio::spawn(handle_connection(
+            Box::new(server),
+            state.clone(),
+            shutdown_rx,
+        ));
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::Hello {
+                    from: "wedge-client".to_string(),
+                    capabilities: vec![CAP_PTY_ATTACH_V1.into()],
+                    build_version: None,
+                },
+            },
+        )
+        .await
+        .expect("client writes Hello");
+        assert!(matches!(
+            read_envelope(&mut client).await.expect("HelloAck").body,
+            ControlMessage::HelloAck { .. }
+        ));
+
+        // A child that never reads its slave (hermetic HOME as in the
+        // pty_handler tests, so `-l` profile sourcing stays silent).
+        let hermetic_home = std::env::temp_dir()
+            .join(format!("tillandsias-wedge-vsock-{}", std::process::id()))
+            .to_string_lossy()
+            .into_owned();
+        std::fs::create_dir_all(&hermetic_home).expect("hermetic HOME creates");
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::PtyOpen {
+                    session_id: 9,
+                    rows: 24,
+                    cols: 80,
+                    argv: vec![
+                        "/bin/bash".to_string(),
+                        "-lc".to_string(),
+                        "sleep 30".to_string(),
+                    ],
+                    env: vec![("HOME".to_string(), hermetic_home)],
+                    cwd: None,
+                },
+            },
+        )
+        .await
+        .expect("client writes PtyOpen");
+
+        // Saturate with 16 KiB frames of COMPLETE LINES (a real paste):
+        // n_tty only backpressures the master once the canonical buffer
+        // holds pending newlines — newline-free overflow is beeped away
+        // instead of blocking. 32 frames (512 KiB) comfortably exceed the
+        // kernel's ~68 KiB PTY buffering plus the in-flight write plus
+        // the bounded queue, guaranteeing one enqueue trips the deadline.
+        let frame: Vec<u8> = std::iter::repeat_with(|| {
+            let mut line = vec![b'w'; 63];
+            line.push(b'\n');
+            line
+        })
+        .take(256)
+        .flatten()
+        .collect(); // 256 × 64-byte lines = 16 KiB per frame
+        for i in 0..32u64 {
+            write_envelope(
+                &mut client,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 100 + i,
+                    body: ControlMessage::PtyData {
+                        session_id: 9,
+                        direction: tillandsias_control_wire::PtyDirection::ToGuest,
+                        bytes: frame.clone(),
+                    },
+                },
+            )
+            .await
+            .expect("client writes PtyData storm");
+        }
+
+        // Control-plane frame queued behind the storm must still be
+        // answered within the fairness bound (one 250ms wedge trip max).
+        let started = std::time::Instant::now();
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 200,
+                body: ControlMessage::VmStatusRequest { seq: 200 },
+            },
+        )
+        .await
+        .expect("client writes VmStatusRequest");
+
+        let mut status_latency = None;
+        let mut pty_close_exit = None;
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while (status_latency.is_none() || pty_close_exit.is_none())
+            && std::time::Instant::now() < deadline
+        {
+            let env = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+                .await
+                .expect("frame within budget")
+                .expect("stream stays open");
+            match env.body {
+                ControlMessage::VmStatusReply { .. } => {
+                    status_latency = Some(started.elapsed());
+                }
+                ControlMessage::PtyClose { session_id, exit } => {
+                    assert_eq!(session_id, 9);
+                    pty_close_exit = Some(exit);
+                }
+                // Stray child output (e.g. profile noise) is fine.
+                ControlMessage::PtyData { .. } => {}
+                other => panic!("unexpected frame during wedge: {other:?}"),
+            }
+        }
+        let latency = status_latency.expect("VmStatusReply while a PTY write storm wedges");
+        assert!(
+            latency < Duration::from_millis(500),
+            "control plane exceeded the fairness bound: {latency:?}"
+        );
+        let exit = pty_close_exit.expect("wedged session must be killed and emit PtyClose");
+        assert!(
+            exit.signal.is_some() || exit.code != 0,
+            "child should have been terminated by the kill path: {exit:?}"
+        );
+
+        server_task.abort();
     }
 
     // ── LoginState / CloudProjects push sources (orders 230/231) ────────────

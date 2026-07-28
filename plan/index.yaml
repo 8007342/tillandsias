@@ -23335,7 +23335,7 @@ plan_index:
       order: 493
       desired_release: v0.5
       title: "Guest write_to_guest blocks unboundedly inline in the connection loop — wedge kills session/connection (audit D6)"
-      status: ready
+      status: done
       kind: fix
       deliverable: plan/issues/guest-pty-write-wedge-2026-07-27.md
       depends_on: []
@@ -23349,6 +23349,29 @@ plan_index:
         routed through the same queue to preserve arrival order. Restores
         the vsock-transport fairness invariant under a wedged child.
       events:
+        - type: completed
+          ts: "2026-07-29T00:40:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            D6 closed in v0.5 (slipped here from v0.4 with the trigger mitigated).
+            Each session now owns a bounded 16-slot mpsc queue drained by a dedicated
+            writer task that is the sole owner of master-fd writes and TIOCSWINSZ; the
+            connection loop only enqueues under timeout(250ms) — event-driven on the
+            awaited send, never a poll. Trip condition is queue-FULL for the whole
+            250ms window (type-ahead that drains within it never trips), and a trip
+            KILLS the session through the existing SIGTERM/SIGKILL path with a loud
+            warn! naming the cause — kill-not-drop, never silent data loss. Resize
+            rides the same FIFO queue so TIOCSWINSZ keeps arrival order relative to
+            input bytes. Order-492 teardown semantics preserved (single shutdown_all
+            funnel; source-scan test still green). Tests: 4 new incl. a wire-level
+            512 KiB paste storm asserting VmStatusReply within 500ms and PtyClose on
+            the wire — that test hangs forever pre-fix. Full pty/vsock set 49/49,
+            whole headless bin 331 passed, clippy strict + listen-vsock clean, 5x
+            repeat with zero flakes. Kernel finding recorded for the deliverable:
+            n_tty does NOT backpressure newline-free canonical overflow (it discards
+            and beeps), so the real production trigger is specifically a LINE-BEARING
+            paste — sharpens the deliverable narrative.
         - type: slipped
           ts: "2026-07-28T00:20:00Z"
           agent_id: "linux-mutable-metaorch-20260727"
