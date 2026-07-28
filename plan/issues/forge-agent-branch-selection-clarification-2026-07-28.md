@@ -36,3 +36,11 @@ forge-hosted agent inherits the branch its lane's mirror was seeded from —
 the host checkout's checked-out branch at launch; the container OS never
 selects the branch." Optionally pin with a litmus grep. Until then this file
 is the citable answer.
+
+## CLOSED 2026-07-28
+
+The rule is now codified in `methodology/multi-host-development.yaml` →
+`branch_namespaces.forge_branch_inheritance` (rung 1 of the branch scheme,
+operator-directed; decision record:
+`plan/issues/git-branching-methodology-research-2026-07-28.md`). This file
+remains as the discovery record; the methodology text is the citable answer.

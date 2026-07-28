@@ -23342,3 +23342,435 @@ plan_index:
         - "SVG assets from assets/icons/ are rendered to NSImage at build time via resvg"
         - "missing assets fall back to a text glyph (not a raw crash)"
         - "litmus pins the state-machine icon shape across all 6 states"
+
+    - packet_id: git-branching-methodology-research
+      order: 497
+      desired_release: v0.5
+      title: "Research record: git branching model for multi-agent integration branches — trunk spine + agent/salvage exception tier, adopted with red-team repairs"
+      status: done
+      kind: research
+      depends_on: []
+      pickup_role: "linux_mutable"
+      capability_tags: [methodology, git-mirror, coordination, research]
+      estimated_hours: 6
+      outcome: >
+        Deliverable
+        plan/issues/git-branching-methodology-research-2026-07-28.md: scored
+        7 branching models against agent-velocity/ledger/main-protection
+        constraints; adopted trunk-based checkpoints as the protected spine
+        plus agent/<host>/<base>/<date>-<slug> lane branches and
+        salvage/<host>/<date>-<slug> intake, self-merge-when-green atomic
+        dual-ref exit, role-bound coordinator sweep with 24h/72h/14d
+        deadlines, ledger-stays-on-integration-branches rule (4-way
+        collision evidence), and all 10 mandatory adversarial-review repairs
+        (B1-B7, W1/W4 + rung re-specifications). Rungs 2-4 spawned as orders
+        498-503.
+
+    - packet_id: forge-rebuild-mcp-design-research
+      order: 498
+      desired_release: v0.5
+      title: "Research record: dev-gated in-forge rebuild/restart MCP surface (dev-control) — adopted with security-spine rebuild after adversarial review"
+      status: done
+      kind: research
+      depends_on: []
+      pickup_role: "linux_mutable"
+      capability_tags: [mcp, tray, security, forge, research]
+      estimated_hours: 6
+      outcome: >
+        Deliverable
+        plan/issues/forge-rebuild-mcp-orchestration-research-2026-07-28.md:
+        two-verb surface (dev_rebuild + dev_rebuild_status), ticket+poll,
+        host-side tiering, tray-advisory-only, true hot-reload refused as
+        incoherent. Red team proved the single-socket /proc-environ
+        attribution forgeable (PoC) and 3 further critical breaks (instance
+        never injected; stop-then-rm defeats the order-494 guard;
+        dev-sessions mount persists credentials) — resolved via per-lane
+        sockets with listener-derived identity, ownership-proof before stop,
+        unpushed-work refusal, and dropping session-state persistence from
+        the first drain. Spawns orders 504-513.
+
+    - packet_id: branch-namespace-rung1-docs
+      order: 499
+      desired_release: v0.5
+      title: "Branch scheme rung 1: codify branch_namespaces in methodology (doc-only) + dead-ref census with operator-approved archive+prune"
+      status: ready
+      kind: docs
+      depends_on: [git-branching-methodology-research]
+      pickup_role: "linux_mutable"
+      capability_tags: [methodology, docs, git, coordination]
+      estimated_hours: 2
+      outcome: >
+        Land the branch_namespaces block (grammar, creation regex, ledger
+        rule, pre_push_gate applies_to amendment excluding
+        agent/*+salvage/*, sweep-role binding, salvage intake incl. the
+        main-guard and pending-macOS cases, forge-branch-inheritance
+        sentence) in methodology/multi-host-development.yaml; mirror the
+        inheritance sentence in the meta-orchestration skill Host
+        Classification section; census the ~11 legacy remote refs and
+        execute the archive-tag-then-prune ONLY after operator approval
+        (open question 1 of the research record). Zero behavior change.
+
+    - packet_id: mirror-namespace-hook-rung2
+      order: 500
+      desired_release: v0.5
+      title: "Branch scheme rung 2: warn-only name grammar, protected-branch salvage advice on the relay-failure path, salvage/* YAML-gate exemption"
+      status: ready
+      kind: feature
+      depends_on: [branch-namespace-rung1-docs]
+      pickup_role: "linux (images/git POSIX sh); litmus on any host"
+      capability_tags: [git-mirror, posix-sh, hooks, litmus]
+      estimated_hours: 3
+      outcome: >
+        pre-receive-hook.sh warns (never rejects) on out-of-grammar
+        zero-oldsha branch creations, patterns supplied via env/config,
+        never hard-coded (order-462 leak class). NEVER pre-reject
+        refs/heads/main (repair B3 — the hook ships to every end-user
+        mirror): detect GitHub's protection rejection in relay-refs.sh
+        captured stderr (:174-175) and print the exact salvage push command
+        on that path. salvage/* skips is_ledger_yaml via a config-supplied
+        exempt pattern (repair B4 — salvage must accept half-edited trees;
+        re-validated at graduation). Extend
+        litmus-git-mirror-yaml-gate-shape to pin the routing case so a
+        refactor cannot silently re-gate salvage.
+
+    - packet_id: forge-seed-branch-clone-fix
+      order: 501
+      desired_release: v0.5
+      title: "Fix sticky-HEAD: forge clone explicitly checks out the launch-gated seed branch on ALL transports (fallback chain, no hard -b failure)"
+      status: ready
+      kind: fix
+      depends_on: []
+      pickup_role: "linux (Rust launcher + lib-common.sh); Windows/macOS verify"
+      capability_tags: [headless, forge, git-mirror, lib-common, cross-platform]
+      estimated_hours: 3
+      outcome: >
+        Launcher injects TILLANDSIAS_FORGE_SEED_BRANCH (from
+        read_host_project_current_branch, main.rs:2695-2734) into the forge
+        env; clone_project_from_mirror checks it out via a fallback chain
+        (clone default -> fetch origin <seed> -> switch if present -> warn +
+        HEAD) in the COMMON tail so network (:606), Windows/WSL filesystem
+        (:522), and macOS staged transports all agree (repair B6 — a bare -b
+        hard-fails on never-pushed branches and inside the 120s reconcile
+        window). Kills the sticky-HEAD hazard (persisted mirror volume
+        checks out branch Y after the gate passed on X). Standalone: no lane
+        branches required. Document the reused-container stale-env caveat.
+
+    - packet_id: forge-lane-branch-seeding-optin
+      order: 502
+      desired_release: v0.5
+      title: "Branch scheme rung 3: opt-in per-lane branch auto-seeding + lane-exit.sh + ledger-checkpoint.sh + exit-contract amendment"
+      status: ready
+      kind: feature
+      depends_on: [branch-namespace-rung1-docs, mirror-namespace-hook-rung2, forge-seed-branch-clone-fix]
+      pickup_role: "linux (Rust launcher + POSIX sh guest scripts); forge cycle validates"
+      capability_tags: [headless, forge, git-mirror, posix-sh, exit-contract]
+      estimated_hours: 4
+      outcome: >
+        TILLANDSIAS_FORGE_LANE_BRANCH=auto seeds
+        agent/<host>/<base>/<yyyymmdd>-<mode>-<instance>-<launch-epoch>
+        (slug mandatory, launcher-synthesized, never reused — repair B1
+        kills the same-day-relaunch collision); write_forge_gitconfig gains
+        push.default=current; guest does git switch -c post-clone; lane
+        materializes remotely only at first checkpoint. scripts/lane-exit.sh
+        is the SOLE green-exit command (fetch/merge base into lane, --check
+        fast-tier verify per repair W6, --no-ff merge onto base, atomic
+        dual-ref push, delete lane; merges origin/linux-next first when base
+        != linux-next per repair B5). scripts/ledger-checkpoint.sh lands
+        mid-cycle ledger commits on the base ref via tmpfs worktree with
+        3-retry. SKILL.md exit contract amended (green = merged+pushed+lane
+        deleted; blocked = lane pushed + blocker ledger entry with lane
+        name+tip SHA). Minimal lane enumeration + loud unmerged-lane
+        loop_status line ships NOW, not rung 4 (repair W5). Agents still
+        make zero branch decisions.
+
+    - packet_id: mirror-lane-path-policy-rung4
+      order: 503
+      desired_release: v0.5
+      title: "Branch scheme rung 4a: enforce agent/* ledger path policy (merge-base diff) + reject-on-create grammar, policy sourced outside the pushed tip"
+      status: ready
+      kind: feature
+      depends_on: [forge-lane-branch-seeding-optin]
+      pickup_role: "linux (images/git POSIX sh + litmus)"
+      capability_tags: [git-mirror, posix-sh, hooks, ledger, litmus]
+      estimated_hours: 3
+      outcome: >
+        pre-receive rejects agent/* diffs touching the configured ledger
+        path list (plan/index.yaml, plan.yaml, plan/loop_status.md,
+        methodology/**; plan/issues/ additions allowed), computed against
+        merge-base(NEWSHA, refs/heads/<base-from-refname>) three-dot
+        semantics — NEVER OLDSHA..NEWSHA and never the default-branch
+        heuristic (repair B2: the naive diff rejects every cycle-end
+        self-merge push and lanes seeded from unmerged platform branches).
+        Policy patterns/paths read from launcher-injected env or the base
+        ref's committed tree, never the pushed tip (repair W4 self-bypass).
+        Out-of-grammar zero-oldsha creations upgrade from warn to reject.
+        Litmus: cycle-end self-merge push passes with trunk moved;
+        ledger-touching lane commit rejected; policy-file edit on the lane
+        does not lift the ban.
+
+    - packet_id: coordinator-lane-sweep-gc
+      order: 504
+      desired_release: v0.5
+      title: "Branch scheme rung 4b: coordinator lane/salvage sweep + GC (role-bound) + sibling-mirror namespace prune + project-opt-in default-on"
+      status: ready
+      kind: feature
+      depends_on: [forge-lane-branch-seeding-optin]
+      pickup_role: "linux_mutable (sweep logic, role-portable); images/git for reconcile prune"
+      capability_tags: [coordination, meta-orchestration, git-mirror, gc, posix-sh]
+      estimated_hours: 4
+      outcome: >
+        coordinate-multihost-work ROLE (any host — repair W2) enumerates
+        agent/*+salvage/*: merged->delete; idle >24h -> sweep-merge if
+        trivially green else salvage packet; >72h -> operator escalation;
+        >14d -> archive tag archive/<branch>-<tipsha> then delete;
+        out-of-grammar strays REPORTED, never deleted (repair W7).
+        reconcile-exported-heads.sh prunes ONLY the configured lane/salvage
+        namespaces (repair B7 — sibling mirrors otherwise accumulate dead
+        lanes forever; safe because relayed-only heads). Lane seeding
+        default-on is keyed to project opt-in (launcher flag / methodology
+        marker), never global (repair W3 — foreign repos must never
+        accumulate agent/* branches). Unmerged-lane count printed in
+        loop_status every run.
+
+    - packet_id: mcp-sock-perlane-attribution
+      order: 505
+      desired_release: v0.5
+      title: "SECURITY P0: replace forgeable /proc-environ peer attribution on mcp.sock with per-lane sockets + listener-derived identity (closes existing order-363 hole)"
+      status: ready
+      kind: fix
+      depends_on: []
+      pickup_role: "linux (tillandsias-headless tray + launch mounts)"
+      capability_tags: [security, mcp, tray, enclave-isolation, p1]
+      estimated_hours: 4
+      outcome: >
+        resolve_peer_project (tray/mod.rs:658-676) trusts
+        TILLANDSIAS_PROJECT from the peer's /proc/<pid>/environ —
+        self-asserted at execve (red-team PoC confirmed) — and the shared
+        mcp dir is mounted into every forge of every project, so ANY
+        in-forge agent can impersonate any project on publish_local today.
+        Repair: bind <mcp_dir>/<project>-<instance>/mcp.sock per lane, mount
+        only that lane's subdirectory; identity = which listener accepted
+        (kernel-enforced); attributed labels validated by EQUALITY against
+        enumerated local projects, never sanitized (blocks the
+        main.rs:12721-12722 join-traversal class); environ treated as
+        untrusted permanently. Also removes the pid-reuse TOCTOU. Standalone
+        value independent of dev-control; prerequisite for all mutating dev
+        verbs.
+
+    - packet_id: dev-control-mcp-spec
+      order: 506
+      desired_release: v0.5
+      title: "dev-control P1: OpenSpec change — retro-specify mcp.sock transport, two dev verbs, two-key gate, refusal statuses; correct false grounding claims"
+      status: ready
+      kind: spec
+      depends_on: [forge-rebuild-mcp-design-research]
+      pickup_role: "any (openspec workflow)"
+      capability_tags: [openspec, mcp, tray, spec]
+      estimated_hours: 2
+      outcome: >
+        OpenSpec change dev-control-mcp: retro-specify the order-363 NDJSON
+        mcp.sock transport (existing spec debt) with the per-lane socket
+        model from order 504; delta for dev_rebuild/dev_rebuild_status incl.
+        refused-unpushed-work, refused-sibling-live, busy, rate-limited,
+        rebuild-deferred, tray-advisory; two-key gate semantics with -32601
+        curated absence; reconcile the protocolVersion drift (mcp.sock
+        2024-11-05 vs host-browser-mcp spec 2025-06-18) explicitly;
+        kept-warm cache preconditions named (esp. order-459 harness artifact
+        cache host-side). MUST NOT carry forward the design's disproven
+        claims (TILLANDSIAS_FORGE_INSTANCE threading; dev-sessions carries
+        no credentials); re-verify all citations against current HEAD
+        (design was grounded at e57b6a3d).
+
+    - packet_id: dev-control-gate-and-registry
+      order: 507
+      desired_release: v0.5
+      title: "dev-control P2: two-key host gate, conditional tools/list, -32601 invisibility, ticket registry, scoped status, default-deny dispatch, rate limiting"
+      status: ready
+      kind: feature
+      depends_on: [mcp-sock-perlane-attribution, dev-control-mcp-spec]
+      pickup_role: "linux (tillandsias-headless)"
+      capability_tags: [mcp, tray, security, rust]
+      estimated_hours: 3
+      outcome: >
+        TILLANDSIAS_DEV_CONTROL read once from the tray's own env at server
+        start (key 1) AND per-project host-side opt-in allowlist (key 2,
+        repair B9 — a global gate lets one malicious repo's agent own the
+        dev host); off/non-opted => verbs absent from tools/list and -32601
+        on call, unit-tested indistinguishable from nonexistence. Ticket
+        registry with dedupe (sha8 of
+        project,instance,component,session_id); dev_rebuild_status scoped
+        strictly to the listener's lane, never echoing other lanes'
+        reason/prompt (repair B10); server-side match with default-deny arm
+        before any name/path construction (repair B12 — inputSchema is
+        advertisement, not enforcement); rate buckets keyed on unforgeable
+        lane identity + host-wide global bucket, image resource_lock
+        acquired with a short NON-blocking try returning busy — never queue
+        900s behind the tray's own launch path (repair B8).
+
+    - packet_id: dev-rebuild-shared-components
+      order: 508
+      desired_release: v0.5
+      title: "dev-control P3: dev_rebuild for proxy/inference/git — force rebuild path, order-494 recreate protocol, rebuild-deferred tier, telemetry initiator tagging"
+      status: ready
+      kind: feature
+      depends_on: [dev-control-gate-and-registry]
+      pickup_role: "linux (tillandsias-headless + tillandsias-logging); litmus instant"
+      capability_tags: [mcp, tray, podman, images, litmus, rust]
+      estimated_hours: 4
+      outcome: >
+        Force path into ensure_image_exists gated by
+        runtime_phase::container_mutations_allowed; recreate of shared
+        containers strictly via order-494 plain-rm (no -f, no pre-stop) —
+        sibling holds it => tier rebuild-deferred (content-addressed sha256-
+        tags mean running containers keep their image; recreate at next
+        zero-refcount teardown); component=git additionally refused while
+        any live lane of the project holds the mirror or has unpushed work
+        (mirror is the only push channel; mid-clone teardown was the
+        order-494 incident). Initiator {project,instance,reason} stamped
+        into image-build-events.jsonl; superseded agent-initiated leaf
+        digests pruned (repair B8, reconciles with the
+        no-podman-system-reset rule). Litmus instant: refused-sibling-live
+        shape.
+
+    - packet_id: resume-relaunch-plumbing
+      order: 509
+      desired_release: v0.5
+      title: "dev-control P4: resume token store/consume (TTL+nonce), session-id capture, injection-safe --resume threading — NO session-state persistence in this slice"
+      status: ready
+      kind: feature
+      depends_on: [dev-control-gate-and-registry]
+      pickup_role: "linux (Rust host + 3 sh entrypoints)"
+      capability_tags: [mcp, forge, entrypoints, posix-sh, security, rust]
+      estimated_hours: 4
+      outcome: >
+        Host-side state/resume/<project>/<instance>.json (0600, path
+        components equality-validated per order 504): {harness, session_id,
+        initial_prompt, ticket, nonce, created_ts}; consume = atomic rename
+        with TTL check (refuse-and-delete on expiry), nonce bound to ticket
+        registry, ticket must still be pending_teardown|recreating, loud
+        consume log (repair B11). session_id validated
+        ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ (dash-anchored, repair B6) and
+        ALL three entrypoints place a -- separator before injected
+        positionals; prompt travels env-only into already-quoted exec lines,
+        8KiB cap, telemetry-logged. Session-id capture: codex thread.started
+        JSONL host-side; claude/opencode write a .session sibling of the
+        result file. Explicitly NO harness-state-dir persistence (credential
+        quarantine, red-team B4): resume without order 510 = fresh session
+        seeded with initial_prompt, honestly documented.
+
+    - packet_id: forge-self-restart-lifecycle
+      order: 510
+      desired_release: v0.5
+      title: "dev-control P5: component=forge self-restart — unpushed-work refusal, ownership-proven teardown, deadline, relaunch-with-inject, e2e litmus"
+      status: ready
+      kind: feature
+      depends_on: [dev-rebuild-shared-components, resume-relaunch-plumbing]
+      pickup_role: "linux (tillandsias-headless); litmus instant pre-build"
+      capability_tags: [mcp, forge, podman, lifecycle, litmus, rust]
+      estimated_hours: 4
+      outcome: >
+        Build-before-destroy ordering kept verbatim (red-team-endorsed
+        failure-safe): reply first, rebuild while old forge runs, build
+        failure destroys nothing; green => token write => pending_teardown
+        with deadline (default 30s) => stop+rm ONLY of the container the
+        listener identity provably maps to (repair B3 — stop-then-rm is
+        otherwise the exact bypass of the order-494 running-sibling guard)
+        => relaunch via normal pipeline with TILLANDSIAS_RESUME_SESSION_ID
+        injection; post-destroy recreate failure retains the token and names
+        the exact recreate command (ephemerality error policy). REFUSES
+        unless worktree clean AND HEAD reachable from a lane mirror ref —
+        refused-unpushed-work with the exact git push command; optional
+        push_first performs the mirror push and refuses on failure (repair
+        B5 — /home/forge/src is tmpfs; restart must never silently discard
+        commits not yet on the mirror). e2e litmus --size instant --phase
+        pre-build.
+
+    - packet_id: dev-session-transcript-persistence
+      order: 511
+      desired_release: v0.5
+      title: "dev-control: transcripts-ONLY session persistence for real --resume continuity — OPERATOR-DECISION-GATED (ephemerality + credential-quarantine exception)"
+      status: pending
+      kind: feature
+      depends_on: [resume-relaunch-plumbing]
+      pickup_role: "linux (tillandsias-headless + entrypoints); spec delta first"
+      capability_tags: [mcp, forge, security, credential-quarantine, spec, litmus]
+      estimated_hours: 3
+      outcome: >
+        PENDING OPERATOR DECISION (The Tlatoani): accept a dev-gated,
+        per-lane, transcripts-ONLY host volume as an explicit spec
+        exception? The original design's harness-state-dir bind-mount is
+        REJECTED (red-team B4: CODEX_HOME/auth.json ARE the credential
+        locations — mounting them persists vault-delivered credentials past
+        the container). If approved: explicit allowlist of transcript paths
+        copied out at teardown (or a subdir mount provably excluding
+        credential roots), an OpenSpec delta naming it as the one hot/cold +
+        quarantine exception, and a litmus asserting no credential filename
+        ever appears under state/dev-sessions/. If declined: order 508's
+        fresh-session+initial_prompt behavior is the permanent contract and
+        --resume stays best-effort-cosmetic.
+
+    - packet_id: dev-control-advertisement-ux
+      order: 512
+      desired_release: v0.5
+      title: "dev-control P6: agent_init.sh advertisement, cheatsheet with provenance, tray-menu ticket visibility incl. tray-advisory queue"
+      status: ready
+      kind: docs
+      depends_on: [forge-self-restart-lifecycle]
+      pickup_role: "linux; forge cycle validates advertisement"
+      capability_tags: [forge, ux, cheatsheets, tray, docs]
+      estimated_hours: 2
+      outcome: >
+        When both gate keys are on, TILLANDSIAS_DEV_CONTROL=1 passes into
+        forge env as a read-only SIGNAL (grants nothing; authority stays
+        host-side) so order-458 agent_init.sh mentions the two verbs;
+        cheatsheet documents ticket lifecycle, refusal statuses and their
+        correct agent responses (rebuild-deferred/refused-sibling-live are
+        terminal for this cycle, never retry-hammer), and the unpushed-work
+        push-first flow. Tray menu surfaces open tickets, notably the
+        tray-advisory queue whose entries a human resolves with ./build.sh
+        --ci-full --install (tray rebuilds are advisory-only, forever — ACE
+        boundary).
+
+    - packet_id: dev-end-user-gating-litmus
+      order: 513
+      desired_release: v0.5
+      title: "End-user transparency litmus: foreign project sees NO lane branches, NO dev verbs, NO Tillandsias branch conventions"
+      status: ready
+      kind: test
+      depends_on: [forge-lane-branch-seeding-optin, dev-control-gate-and-registry]
+      pickup_role: "linux (litmus harness); Windows/macOS replicate later"
+      capability_tags: [litmus, transparency, git-mirror, mcp, end-user]
+      estimated_hours: 2
+      outcome: >
+        One litmus (instant/pre-build where possible) pinning the operator's
+        transparency requirement across BOTH workstreams: a forge launched
+        on a non-opted-in project (a) creates no agent/*/salvage/* refs and
+        imports no Tillandsias branch names
+        (multi-host-development.yaml:21-37 scope rule), (b) gets -32601 for
+        dev_rebuild/dev_rebuild_status with the verbs absent from tools/list
+        (curated absence, tray-ux spec.md:111), (c) can push to an
+        unprotected main normally — the rung-2 salvage advice appears ONLY
+        on a genuine GitHub protection rejection (repair B3 regression
+        guard). This is the falsifiable end-user-invisibility contract for
+        both features.
+
+    - packet_id: dev-control-vsock-crossplatform
+      order: 514
+      desired_release: v0.6
+      title: "dev-control P7: vsock (McpFrame) arm for Windows/macOS dev hosts behind the same two-key gate — DEFERRED, operator-priority-gated"
+      status: pending
+      kind: feature
+      depends_on: [forge-self-restart-lifecycle]
+      pickup_role: "windows/macos with linux control-wire support"
+      capability_tags: [mcp, vsock, control-wire, windows, macos, cross-platform]
+      estimated_hours: 4
+      outcome: >
+        PENDING OPERATOR PRIORITY CALL: (McpFrame, Vsock) => Unsupported
+        (control_dispatch.rs:127-131) keeps dev-control Linux-native-only;
+        flipping the arm behind the same two-key gate extends it to
+        Windows/WSL2 and macOS VM dev hosts. The per-lane-socket attribution
+        model (order 504) must be re-derived for vsock (no unix
+        listener-per-lane; needs port- or CID-scoped equivalent with the
+        same unforgeability property) — do not ship a weaker attribution on
+        vsock than on unix sockets. Deferred to v0.6 unless the operator
+        raises priority.
