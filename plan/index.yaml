@@ -21702,6 +21702,24 @@ plan_index:
             (must carry >= 58b58322); expected ~3 min e2e. The
             windows-260722-1 WSL-absent flow ships in that build too but
             needs a WSL-less host for live verification.
+        - type: progress
+          ts: "2026-07-28T01:25:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          summary: >
+            LINUX column PASS against the published v0.4 build: the v0.4
+            tag exists (v0.4.260728.1, run 30317466235, all three platform
+            jobs green) and the same-day clean-room curl-install smoke on
+            mutable Linux passed every gate — pinned-release install,
+            podman system reset to empty, cold init exit 0 with full image
+            rebuilds + Vault from nothing, and a forge lane whose in-forge
+            agent completed a full meta-orchestration cycle and durably
+            pushed 52347333 through the enclave mirror. Report:
+            plan/issues/smoke-e2e-findings-v0.4.260728.1-2026-07-28.md.
+            Remaining columns: macOS and Windows hosts re-run their
+            curl-install smokes naming this v0.4 build (Windows column was
+            complete against v0.3.260724.1; the v0.4-named record and the
+            TILLANDSIAS_GIT_MIRROR_PATH lane coverage remain).
 
     - packet_id: forge-plan-metadata-mcp-server
       order: 456
