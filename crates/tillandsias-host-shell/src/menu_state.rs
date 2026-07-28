@@ -41,6 +41,7 @@ pub mod ids {
     pub const LOCAL_PROJECTS_EMPTY: &str = "local-projects.empty";
     pub const CLOUD_PROJECTS: &str = "cloud-projects";
     pub const CLOUD_PROJECTS_EMPTY: &str = "cloud-projects.empty";
+    pub const CLOUD_PROJECTS_LOADING: &str = "cloud-projects.loading";
     pub const CLOUD_PROJECTS_OVERFLOW: &str = "cloud-projects.overflow";
     /// Separator rendered before the footer (version/quit).
     pub const SEPARATOR: &str = "---";
@@ -296,6 +297,11 @@ pub struct MenuState {
     pub login: GithubLoginState,
     pub local_projects: Vec<ProjectEntry>,
     pub cloud_projects: Vec<ProjectEntry>,
+    /// False until the first cloud-projects answer (push or refresh reply)
+    /// lands. Distinguishes "still fetching your GitHub repos" from a
+    /// confirmed empty answer so the menu never claims "(no repos)" while
+    /// the request is in flight (operator report 2026-07-28).
+    pub cloud_projects_loaded: bool,
     pub selected_agent: SelectedAgent,
     /// True on Win11+WSLg hosts; false otherwise. Gates Observatorium +
     /// OpenCode Web items. Combined with the target surface (macOS defers
@@ -326,6 +332,7 @@ impl MenuState {
             login: GithubLoginState::LoggedOut,
             local_projects: Vec::new(),
             cloud_projects: Vec::new(),
+            cloud_projects_loaded: false,
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: false,
             podman_ready: false,
@@ -528,11 +535,19 @@ fn build_cloud_projects(state: &MenuState) -> MenuItem {
         .collect();
 
     if children.is_empty() {
-        children.push(MenuItem::disabled(
-            ids::CLOUD_PROJECTS_EMPTY,
-            "(no repos)",
-            "no GitHub repos visible to the in-VM gh client",
-        ));
+        if state.cloud_projects_loaded {
+            children.push(MenuItem::disabled(
+                ids::CLOUD_PROJECTS_EMPTY,
+                "(no repos)",
+                "no GitHub repos visible to the in-VM gh client",
+            ));
+        } else {
+            children.push(MenuItem::disabled(
+                ids::CLOUD_PROJECTS_LOADING,
+                "(loading repos\u{2026})",
+                "fetching your GitHub repos from the in-VM gh client",
+            ));
+        }
     }
 
     if total > visible {
@@ -682,6 +697,7 @@ mod tests {
             },
             local_projects: local,
             cloud_projects: cloud,
+            cloud_projects_loaded: true,
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: true,
             podman_ready: true,
@@ -1070,6 +1086,41 @@ mod tests {
                 .iter()
                 .all(|c| c.id != ids::CLOUD_PROJECTS_OVERFLOW)
         );
+    }
+
+    /// Operator report 2026-07-28: an empty cloud submenu must say
+    /// "(loading repos…)" until the first confirmed answer lands, and
+    /// "(no repos)" only after — never claim emptiness mid-fetch.
+    #[test]
+    fn cloud_projects_empty_distinguishes_loading_from_confirmed_empty() {
+        let loading = MenuState {
+            login: GithubLoginState::LoggedIn { handle: "u".into() },
+            ..MenuState::initial()
+        };
+        let menu = build(&loading);
+        let items = match menu {
+            MenuStructure::Ready { items } => items,
+            _ => panic!("expected Ready"),
+        };
+        let cloud = &items[2];
+        assert_eq!(cloud.children.len(), 1);
+        assert_eq!(cloud.children[0].id, ids::CLOUD_PROJECTS_LOADING);
+        assert_eq!(cloud.children[0].label, "(loading repos\u{2026})");
+
+        let confirmed_empty = MenuState {
+            login: GithubLoginState::LoggedIn { handle: "u".into() },
+            cloud_projects_loaded: true,
+            ..MenuState::initial()
+        };
+        let menu = build(&confirmed_empty);
+        let items = match menu {
+            MenuStructure::Ready { items } => items,
+            _ => panic!("expected Ready"),
+        };
+        let cloud = &items[2];
+        assert_eq!(cloud.children.len(), 1);
+        assert_eq!(cloud.children[0].id, ids::CLOUD_PROJECTS_EMPTY);
+        assert_eq!(cloud.children[0].label, "(no repos)");
     }
 
     /// Recursively collect every id in a menu subtree.
