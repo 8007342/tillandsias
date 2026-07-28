@@ -23651,9 +23651,33 @@ plan_index:
     - packet_id: resume-relaunch-plumbing
       order: 509
       desired_release: v0.5
-      title: "dev-control P4: resume token store/consume (TTL+nonce), session-id capture, injection-safe --resume threading — NO session-state persistence in this slice"
+      title: "dev-control P4: relaunch-request integrity (TTL+nonce) + injection-safe SEED-PROMPT threading — session-id capture DROPPED (511 rejected)"
       status: ready
       kind: feature
+      events:
+        - type: rescoped
+          ts: "2026-07-28T21:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Operator ruling simplifies this slice: with order 511 rejected
+            (seed prompt IS the resume; every session cold-starts per the
+            ephemeral contract), drop session-id capture from the three
+            harness entrypoints and any --resume flag threading entirely.
+            What remains: the relaunch REQUEST token (TTL + nonce,
+            replay-safe — it authorizes the restart and deduplicates it,
+            nothing to do with session state) and injection-safe seed
+            prompt delivery to the relaunched harness (dash-anchored
+            validation, -- separators). Restart tiers per the 510 ruling:
+            tier 1 restart = new container from the same image
+            (near-equivalent to exiting the forge and relaunching from the
+            tray UX; shared stack untouched); tier 2 = wipe the
+            container's ephemeral cache then launch; tier 3 full
+            podman-create-force recreation through the idiomatic layer
+            (signature/certificate churn risk) = DEVELOPMENT TIME only.
+            DEVELOPMENT TIME is now precisely defined: built from a
+            source checkout; END USER RUNTIME = curl-installed artifact
+            with no Tillandsias checkout access, maximally restricted.
       depends_on: [dev-control-gate-and-registry]
       pickup_role: "linux (Rust host + 3 sh entrypoints)"
       capability_tags: [mcp, forge, entrypoints, posix-sh, security, rust]
@@ -23720,9 +23744,24 @@ plan_index:
     - packet_id: dev-session-transcript-persistence
       order: 511
       desired_release: v0.5
-      title: "dev-control: transcripts-ONLY session persistence for real --resume continuity — OPERATOR-DECISION-GATED (ephemerality + credential-quarantine exception)"
-      status: pending
+      title: "dev-control: transcripts-ONLY session persistence for real --resume continuity — REJECTED by operator (seed prompt is the resume)"
+      status: obsolete
       kind: feature
+      events:
+        - type: rejected
+          ts: "2026-07-28T21:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Operator ruling (The Tlatoani, 2026-07-28): rejected — session
+            continuity is what the SEED PROMPT is for. With ./plan and
+            ./methodology, a resume prompt is just a bootstrap ("continue
+            work #123"); each forge session starts new per the ephemeral
+            contract, and ALL work is eligible to start without context —
+            that is exactly what the forge bootstrap handles. No
+            transcript persistence, no credential-quarantine exception,
+            nothing to persist. Tombstoned; do not revive without a new
+            operator decision.
       depends_on: [resume-relaunch-plumbing]
       pickup_role: "linux (tillandsias-headless + entrypoints); spec delta first"
       capability_tags: [mcp, forge, security, credential-quarantine, spec, litmus]

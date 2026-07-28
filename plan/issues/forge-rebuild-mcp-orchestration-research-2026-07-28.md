@@ -153,3 +153,28 @@ Recorded same-day, superseding the corresponding open questions above:
 6. **Order 514 pulled to v0.5** (vsock arm for Windows/macOS dev hosts).
 7. **Resume continuity (order 511)**: pending — operator asked for a plain
    explanation before ruling; see the packet.
+
+## Operator rulings round 2 — 2026-07-28 (restart semantics + continuity closed)
+
+1. **Order 511 REJECTED.** Continuity is what the seed prompt is for: with
+   ./plan and ./methodology, a resume prompt is a bootstrap ("continue work
+   #123"). Every forge session starts new per the ephemeral contract; all
+   work is eligible to start without context — the forge bootstrap exists
+   to handle exactly that. No transcript persistence, no quarantine
+   exception. Order 509 rescoped accordingly (session-id capture dropped;
+   request-integrity token + seed-prompt injection remain).
+2. **Restart tiers.** "Restart me" means the FORGE, not the stack:
+   - **Tier 1 — restart**: new forge container from the same image; shared
+     stack (proxy/git/inference/vault) untouched. Near-equivalent to
+     exiting the forge and relaunching from the tray UX.
+   - **Tier 2 — fresh**: wipe that container's ephemeral cache, then
+     launch again.
+   - **Tier 3 — full recreation**: podman create force through the
+     idiomatic layer (known signature/certificate churn risk) —
+     DEVELOPMENT TIME only.
+3. **Runtime boundary, precise definition.** DEVELOPMENT TIME = built from
+   a source checkout. END USER RUNTIME = curl-installed artifact, no
+   Tillandsias checkout access — much more restricted; anything that
+   causes issues during end-user runtime gets restricted to development
+   time. (Sharpens rulings 2-3 of round 1; consistent with the
+   compile-time gating on orders 507/510.)
