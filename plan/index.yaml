@@ -15819,7 +15819,12 @@ plan_index:
       # origin/linux-next AND origin/main (shipped in v0.3.260719.1), and the
       # push path was restored by order 450. Remaining scope is the real
       # residual (preload policy, >=2-host tier matrix), not a credential.
-      status: ready
+      # SPLIT 2026-07-28: exit criteria (a)+(b) closed; (c) model preload
+      # and (d) GPU passthrough + multi-tier matrix spun out as children.
+      status: done
+      split_into:
+        - "392a — inference-startup-cleanup/model-preload-policy (slice c: default model warm at ready, expert slots reserved)"
+        - "392b — inference-startup-cleanup/gpu-passthrough-tier-matrix (slice d: GPU device passthrough args, >=2-host-class tier matrix)"
       kind: implementation
       deliverable: images/inference + container_deps ensure + readiness litmus
       depends_on: []
@@ -15890,6 +15895,85 @@ plan_index:
             Smallest next action: operator runs `tillandsias --github-login
             --with-token` (or sets GH_TOKEN), then `git push origin linux-next`.
             Work is finished; only the upstream transport credential is missing.
+        - type: split
+          ts: "2026-07-28T22:50:00Z"
+          agent_id: "forge-opencode-20260728"
+          host: forge
+          lease_id: "inference-startup-cleanup"
+          summary: >
+            Split order 392 into parent (criteria a+b done) + two children:
+            392a (model preload policy — default model warm at ready, expert
+            slots reserved) and 392b (GPU passthrough args + >=2-host-class
+            tier matrix). Criteria (a) deterministic readiness and (b)
+            hardware tier detection were already implemented per 2026-07-18
+            progress event (f7701ffd). The residual (c)+(d) were too large
+            for a single forge cycle. Children created below with shaped
+            exit criteria.
+          evidence:
+            - "plan/index.yaml:9380 — effective_inference_tier() and wait_for_inference_ready() implementations"
+            - "plan/index.yaml:15851 — (a)+(b) implementation evidence from 2026-07-18 cycle"
+            - "images/inference/entrypoint.sh — bounded proxy-egress gate (order 486) + CURL_CA_BUNDLE already landed"
+            - "images/inference/Containerfile — Fedora 44 Minimal base with pciutils, curl, zstd"
+
+    - packet_id: inference-startup-cleanup/model-preload-policy
+      order: 392a
+      parent: inference-startup-cleanup
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Model preload policy — default model warm at ready, expert slots reserved"
+      status: ready
+      kind: implementation
+      deliverable: images/inference/entrypoint.sh (model preload orchestration) + startup-context model-warm state + readiness litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, ollama, containers, experts]
+      estimated_hours: 2
+      outcome: >
+        Every forge launch gets a warm default model at READY, with slots
+        reserved for expert models. Builds on the existing entrypoint.sh
+        DEFAULT_MODELS loop: (1) guarantee the default model pull completes
+        BEFORE the startup context reports READY (today it's fire-and-forget);
+        (2) reserve a memory slot for expert models so they preload without
+        evicting the default; (3) expose warm-model state in the startup
+        context (e.g. models_warm: qwen2.5:0.5b). Must degrade gracefully
+        on constrained hosts (no eviction cascade). Checkpoint the model
+        inventory after preload so a fast restart skips re-pull.
+      exit_criteria:
+        - "default model (qwen2.5:0.5b) blocks READY — startup context reports inference: ready(models=1) only after ollama list confirms the model is cached"
+        - "expert memory slot reservation does not increase OOM risk on 4GB hosts (OLLAMA_MAX_LOADED_MODELS respected)"
+        - "model inventory checkpoint written to $OLLAMA_MODELS/.preloaded so cold volume → warm model on subsequent starts"
+        - "forge litmus reproduces a cold model cache and measures warm-model time <= 60s cumulative (download + ollama serve handshake)"
+
+    - packet_id: inference-startup-cleanup/gpu-passthrough-tier-matrix
+      order: 392b
+      parent: inference-startup-cleanup
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "GPU passthrough args and multi-host tier matrix — wire GPU device args through podman launch based on tier probe"
+      status: ready
+      kind: implementation
+      deliverable: crates/tillandsias-podman/src/client.rs (build_run_args GPU device injection) + tier-matrix config + GPU-e2e litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, rust, podman, linux, gpu, nvidia, amd]
+      estimated_hours: 3
+      outcome: >
+        The effective_inference_tier() function already detects gpu-cuda and
+        gpu-rocm, but the launch paths only pass `--group-add=keep-groups`
+        without actual `--device nvidia.com/gpu=all` (NVIDIA CDI) or
+        `--device /dev/dri --device /dev/kfd` (AMD ROCm). This packet wires
+        the tier probe result into podman run args so that a GPU-capable
+        host actually uses the GPU in the inference container. Also
+        reconciles the >=2-host-class tier matrix so that heterogeneous
+        hosts (e.g. NVIDIA laptop + AMD desktop sharing a project) each get
+        the correct device args. Litmus: `podman run` with the generated
+        args does not fail with "CDI device not found" on the target host.
+      exit_criteria:
+        - "gpu-cuda tier injects --device nvidia.com/gpu=all (NVIDIA CDI) into inference container podman run args"
+        - "gpu-rocm tier injects --device /dev/dri --device /dev/kfd"
+        - "cpu tier injects no GPU device args (unchanged behavior)"
+        - "tier matrix config is host-class keyed so different hosts in a shared project get correct args"
+        - "litmus:inference-gpu-device-args matches each tier's expected podman args (dry-run, no actual GPU required)"
 
     - packet_id: experts-construction-research
       order: 393

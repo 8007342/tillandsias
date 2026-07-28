@@ -1,5 +1,36 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-28T22:50Z (forge — v0.5 inference startup cleanup split + freshness audit)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`.
+  Credential guard `ok:forge-git-mirror`, committable guard
+  `ok:branch-linux-next`. Startup boundary clean. Sibling heads:
+  main=ffe85a23, linux-next=b0c3c97c, windows-next=89059357, osx-next=89cade75.
+- **Claimed & split**: order 392 (`inference-startup-cleanup`) — 6h packet was
+  partially implemented (criteria a+b done per 2026-07-18 cycle), residual
+  (c)+(d) split into two child packets:
+  - **392a** (`inference-startup-cleanup/model-preload-policy`) — ~2h: default
+    model warm at READY, expert slots reserved, model inventory checkpoint
+  - **392b** (`inference-startup-cleanup/gpu-passthrough-tier-matrix`) — ~3h:
+    wire GPU device args (CDI nvidia.com/gpu, AMD /dev/kfd) through podman
+    launch based on effective_inference_tier()
+- **Dependency unblocked**: order 394 (`plan-methodology-experts-rung1`)
+  depended on `inference-startup-cleanup` — parent is now `done` with
+  deterministic readiness + tier detection achieved. Children (392a/392b) are
+  parallel scope, not blockers.
+- **Freshness audit (order 372 mandatory)**: refreshed
+  `scripts/freshness-inventory.sh` (auditor=forge-opencode-20260728,
+  verdict=refreshed). 945 components total, 8 stamped, 937 unstamped — same
+  0% coverage as prior audit; no new drift detected in the stamped set. The
+  broader 0% coverage is a known systemic gap (multi-cycle effort, not
+  one-cycle-fixable).
+- **Build verification**: `./build.sh --check` PASS (Rust + clippy). YAML
+  parse PASS on plan/index.yaml. No conflict markers in plan/.
+- **Next**: linux_mutable or Windows host claims 392a (model preload) or 392b
+  (GPU passthrough). Experts construction research (order 393) is decision-
+  signed; `plan-methodology-experts-rung1` (order 394, ~10h) is the next
+  implementation milestone for the expert system.
+
 ## Cycle 2026-07-28T22:10Z (forge — new-container smoke test, overhead validation + v0.5 seed)
 
 - **Host**: forge container, `linux-next` (was `main` at startup — corrected per
