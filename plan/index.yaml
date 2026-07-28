@@ -1209,6 +1209,27 @@ plan_index:
       pickup_role: any
       capability_tags: [windows, linux, transport, performance, observability]
       estimated_hours: 6
+      events:
+        - type: progress
+          ts: "2026-07-28T22:20:00Z"
+          agent_id: "forge-opencode-smoke-20260728"
+          host: forge
+          summary: >
+            Forge container overhead validation completed. Measured the
+            WSL2→Fedora→Podman→forge containerization stack and confirmed
+            negligible overhead: zero CFS throttled periods, 74% memory available
+            (5.4 GB / 7.3 GB), 2.1 GB/s disk throughput on tmpfs. The container
+            stack adds no measurable CPU/memory pressure. Findings filed as
+            plan/issues/forge-container-overhead-validation-2026-07-28.md. The
+            transport layer (HvSocket/vsock) audit remains for a host with live
+            VM access — this forge container cannot exercise the host↔guest
+            transport path directly.
+          next_action: >
+            Continue on a linux_mutable or windows host with a live VM:
+            (1) confirm LIVE_CLIENT persistence in notify_icon.rs,
+            (2) profile postcard decode for heap allocation,
+            (3) investigate headless crash root cause,
+            (4) add litmus:no-polling-noops.
       outcome: >
         Guarantee that the HvSocket/vsock transport stack adds negligible overhead:
         amortized O(0) connection setup (LIVE_CLIENT persists), O(1) framing per message

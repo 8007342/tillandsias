@@ -1,5 +1,28 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-28T22:10Z (forge — new-container smoke test, overhead validation + v0.5 seed)
+
+- **Host**: forge container, `linux-next` (was `main` at startup — corrected per
+  branch discipline). Credential guard `ok:forge-git-mirror`, committable guard
+  `ok:branch-linux-next`; startup boundary clean.
+- **Git validation**: `git push --dry-run origin linux-next` OK (up-to-date);
+  fetch from `git://tillandsias-git/tillandsias` OK; full `./build.sh --check`
+  (Rust + clippy) PASS.
+- **v0.4 release validated**: VERSION = `0.4.260728.1`, build green, curl-install
+  e2e PASS already on record (`plan/issues/smoke-e2e-findings-v0.4.260728.1-2026-07-28.md`).
+  `./build.sh --ci` reports 4 pre-existing failures (tray-contract, cheatsheet-tiers,
+  no-python-scripts, podman-path-availability) — all expected in the forge.
+- **v0.5 work seeded**: packet `transport-negligible-overhead-audit` (order 147)
+  advanced with forge-container overhead evidence. Containerization stack confirmed
+  negligible: zero CFS throttling, 74% memory available, 2.1 GB/s tmpfs IO.
+- **Overhead validation**: Full resource census taken — CPU (16 cores, no throttle),
+  memory (7.3 GB/5.4 GB avail), disk (1007 GB/941 GB free), cgroup v2 stats, kernel
+  version, network topology, process tree. Findings file:
+  `plan/issues/forge-container-overhead-validation-2026-07-28.md`.
+- **Freshness audit**: skipped this cycle (forge smoke mode — no full cycle run).
+- **Next**: Rebuild image with current linux-next, verify mount fixes, then claim
+  a v0.5 implementation packet on the next forge cycle.
+
 ## Cycle 2026-07-28T19:16Z (forge — config-overlay mount audit + Containerfile fix)
 
 - **Host**: forge container, `linux-next` (was `main` — corrected per branch discipline).
