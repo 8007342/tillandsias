@@ -68,6 +68,76 @@ philosophy:
     - fixed_points: "A fully closed spec is a fixed point of the local refinement operator."
     - unknown_events: "Unknown-event intake is the escape hatch that prevents the model from confusing current completeness with absolute truth."
 
+  multi_version_convergence:
+    # Operator framing, The Tlatoani 2026-07-29. Resolves the apparent conflict
+    # between per-release bar raising and bar_raise_governance's rule that the
+    # loop must not self-escalate: a bar raise IS a release event, and releases
+    # are operator-cut, so the governance gate is satisfied by construction.
+    statement: >
+      Convergence is asymptotic across versions, not terminal within one.
+      Write T_v for the target (the specs at version v), I_v for the
+      implementation, and d(I_v, T_v) for residual distance. Because the specs
+      themselves evolve, T is a MOVING target and no final convergent state
+      exists. The guarantee is therefore not "d reaches 0 at some version" but
+      lim(v -> infinity) d(I_v, T_v) -> 0: every release gets closer, so the
+      sequence converges even though the target keeps moving.
+    within_a_release: >
+      Inside release v the bar B_v is FIXED. The reduction engine converges to
+      a fixed point of the refinement operator at B_v; zero residual at B_v is
+      a complete, well-defined "done" (convergence.yaml bar_raise_governance).
+      This is what makes "done" decidable at all.
+    at_a_release_boundary: >
+      Cutting release v+1 IS the bar raise: a Lamport-clock tick in logical
+      version time at which fitness is re-evaluated against the then-current
+      specs and B_{v+1} advances. Bar raises are therefore not continuous
+      self-escalation by the loop (forbidden) but discrete, operator-gated
+      events (a release is cut by The Tlatoani).
+    enforceable_guarantee: >
+      lim() is not mechanically checkable, but its per-step precondition is:
+      d must be NON-INCREASING from release to release. That is what the
+      technical-debt ceiling measures and enforces — a countable proxy vector
+      for d, compared release-over-release. Monotone non-increase at every
+      Lamport tick is exactly the discrete condition that makes the limit
+      claim honest rather than aspirational.
+    corollary_no_debt_accretion: >
+      "More feature rich with no regressions, and less debt than the previous
+      release" is the operational reading of the same inequality: the feature
+      set may only grow, the debt vector may only shrink or hold, and any
+      component that would increase requires explicit operator sign-off
+      recorded at the release boundary.
+
+  obsolete_mechanism_live_intent:
+    # Operator-ratified sweep discipline, The Tlatoani 2026-07-29, after an
+    # adversarial pass refuted 9 of 10 "already satisfied"/"obsolete" claims.
+    principle: >
+      A packet, spec, guard, or component names both a MECHANISM (how) and an
+      INTENT (why). These decay independently. The sweep question is never
+      "is this still accurate?" but two questions: is the mechanism still
+      real, and is the intent still live?
+    dispositions:
+      mechanism_dead_intent_dead: "obsolete — close/tombstone with evidence for both halves."
+      mechanism_dead_intent_live: >
+        REWRITE, never close. The work is real; only its stated implementation
+        died. Closing here silently drops the obligation — the precise failure
+        this discipline exists to prevent. Record the replacement premise in
+        the same edit.
+      mechanism_live_intent_dead: >
+        Retire deliberately, but check for dependents first: shipping code
+        whose purpose lapsed is removal work, not a no-op.
+      mechanism_live_intent_live: "still valid — drain, split, or downgrade on effort/priority alone."
+    closure_preconditions: >
+      An obsolete-close requires BOTH (a) the mechanism is verifiably absent at
+      HEAD, cited in code or spec — a packet's own optimistic events are NOT
+      evidence — and (b) the intent is served elsewhere with that replacement
+      named and checked against every exit criterion, or is explicitly moot.
+      Additionally, no other packet may list it in depends_on: closing a
+      depended-on packet dangles the dependent.
+    verification_rule: >
+      Obsolescence and satisfaction claims are ADVERSARIALLY verified before
+      any ledger closure — an independent pass that tries to refute the claim
+      and defaults to refuted under uncertainty. Wrongly-closed work is
+      invisible forever; a wrongly-open packet costs one re-read.
+
 layers:
   - name: spec
     description: >
