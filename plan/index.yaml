@@ -6433,6 +6433,9 @@ plan_index:
       title: "Credential & Secrets Architecture Audit"
       status: ready
       kind: audit+security+design
+      split_into:
+        - "246a — credential-inventory-audit (inventory all credential flows: vault, github, podman secrets, agent tokens)"
+        - "246b — token-lifecycle-policy (token TTLs, rotation, revocation, quarantine litmus)"
       deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
       depends_on: [network-architecture-audit]
       pickup_role: any
@@ -6471,6 +6474,9 @@ plan_index:
       title: "Proxy & Git Mirror Configuration Audit"
       status: ready
       kind: audit+bug-fix
+      split_into:
+        - "247a — tls-certificate-chain-audit (CA generation -> podman secrets -> container trust stores)"
+        - "247b — git-mirror-forwarding-e2e (forge -> mirror -> GitHub, ref consistency litmus)"
       deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
       depends_on: [network-architecture-audit]
       pickup_role: any
@@ -6535,6 +6541,317 @@ plan_index:
         - "Reconciliation Plan for each contradiction (which spec supersedes or new unified spec)"
         - "Cheatsheet cross-reference against spec matrix"
         - "Minimum litmus set to prevent spec drift (litmus:spec-*)"
+
+    # --- Split children: order 427 (forge-delegation-instance-names) ---
+    - packet_id: delegation-instance-names-code
+      order: 427a
+      desired_release: v0.4
+      title: "Instance-scoped container naming: add worker/instance component to forge container names"
+      status: completed
+      kind: fix
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, podman, delegation, naming]
+      estimated_hours: 2
+      parent_order: 427
+      outcome: >
+        Container names change from tillandsias-{project}-forge-{mode} to
+        tillandsias-{project}-forge-{mode}-{instance_id} where instance_id
+        is a stable digest of the worker identity. The launcher no longer
+        passes --replace; each worker targets its own container name.
+      exit_criteria:
+        - "container name format includes instance component"
+        - "launcher uses instance-scoped name, no --replace flag"
+        - "unit test proves name uniqueness for distinct instance IDs"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 427 for forge cycle budget compliance."
+
+    - packet_id: delegation-coexistence-litmus
+      order: 427b
+      desired_release: v0.4
+      title: "Coexistence litmus: prove two workers on one project run simultaneously without replacing each other"
+      status: completed
+      kind: litmus
+      deliverable: openspec/litmus-tests/litmus-delegation-coexistence.yaml
+      depends_on: [427a]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, podman, delegation, litmus]
+      estimated_hours: 1
+      parent_order: 427
+      outcome: >
+        A litmus test that starts two forge containers on the same project
+        with different instance IDs, verifies both are running, and confirms
+        neither replaced the other.
+      exit_criteria:
+        - "litmus starts two named containers on the same project"
+        - "both containers are running after start"
+        - "neither container was replaced (original PID still alive)"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 427 for forge cycle budget compliance."
+
+    - packet_id: delegation-teardown-target
+      order: 427c
+      desired_release: v0.4
+      title: "Targeted teardown: stop/remove only the intended worker container, leave others intact"
+      status: completed
+      kind: fix+litmus
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: [427a]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, podman, delegation, teardown]
+      estimated_hours: 1
+      parent_order: 427
+      outcome: >
+        Teardown (stop + rm) targets only the container matching the specific
+        instance ID. A litmus proves that stopping worker A leaves worker B
+        untouched.
+      exit_criteria:
+        - "teardown accepts an instance ID and targets only that container"
+        - "litmus: stop worker A, verify worker B still running"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 427 for forge cycle budget compliance."
+
+    # --- Split children: order 429 (forge-delegation-result-retrieval) ---
+    - packet_id: delegation-jsonl-parser
+      order: 429a
+      desired_release: v0.4
+      title: "JSONL parser: consume opencode --format json and codex exec --json structured output"
+      status: completed
+      kind: implementation
+      deliverable: crates/tillandsias-headless/src/delegation/
+      depends_on: [427a]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, delegation, jsonl, parsing]
+      estimated_hours: 2
+      parent_order: 429
+      outcome: >
+        A Rust module that reads JSONL from child process stdout, parses
+        opencode step_start/text/step_finish and codex
+        thread.started/turn.*/item.*/error events, and emits a unified
+        WorkerEvent enum.
+      exit_criteria:
+        - "parses opencode JSONL into WorkerEvent variants"
+        - "parses codex JSONL into WorkerEvent variants"
+        - "unit tests for both parsers with fixture data"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 429 for forge cycle budget compliance."
+
+    - packet_id: delegation-outcome-surface
+      order: 429b
+      desired_release: v0.4
+      title: "Outcome surfacing: delegator reports per-worker success/failure/timeout to the calling agent"
+      status: completed
+      kind: feature
+      deliverable: crates/tillandsias-headless/src/delegation/
+      depends_on: [429a]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, delegation, observability]
+      estimated_hours: 2
+      parent_order: 429
+      outcome: >
+        After a delegated worker completes (or times out), the dispatcher
+        surfaces a structured WorkerOutcome { id, status, summary, duration }
+        to the delegating agent's context.
+      exit_criteria:
+        - "WorkerOutcome struct with success/failure/timeout variants"
+        - "timeout detection (configurable per-worker deadline)"
+        - "outcome logged to plan event and visible to delegating agent"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 429 for forge cycle budget compliance."
+
+    - packet_id: delegation-failed-task-litmus
+      order: 429c
+      desired_release: v0.4
+      title: "Failed-task litmus: a delegated task that fails is reported as failed, not silently dropped"
+      status: completed
+      kind: litmus
+      deliverable: openspec/litmus-tests/litmus-delegation-result-retrieval.yaml
+      depends_on: [429a, 429b]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, forge, delegation, litmus, testing]
+      estimated_hours: 1
+      parent_order: 429
+      outcome: >
+        A litmus that delegates a deliberately-failing task (exit 1 or invalid
+        prompt), verifies the dispatcher surfaces a failure outcome, and
+        proves no silent drop occurred.
+      exit_criteria:
+        - "litmus delegates a failing task"
+        - "dispatcher surfaces failure outcome with non-zero exit code"
+        - "no silent drop: outcome is explicitly recorded in plan event"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 429 for forge cycle budget compliance."
+
+    # --- Split children: order 246 (credential-secrets-architecture-audit) ---
+    - packet_id: credential-inventory-audit
+      order: 246a
+      desired_release: v0.5
+      title: "Credential inventory: map every credential flow (vault, github, podman secrets, agent tokens)"
+      status: pending
+      kind: audit
+      deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
+      depends_on: [network-architecture-audit]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [security, vault, credentials, audit]
+      estimated_hours: 6
+      parent_order: 246
+      outcome: >
+        Complete inventory of all credential flows: creation, storage,
+        rotation, expiry, and revocation paths. Per-project credential scope
+        design ratified.
+      exit_criteria:
+        - "credential inventory table (source, storage, TTL, rotation, revocation)"
+        - "per-project credential scope design ratified"
+        - "spec/cheatsheet patch list published"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 246 for cycle budget compliance."
+
+    - packet_id: token-lifecycle-policy
+      order: 246b
+      desired_release: v0.5
+      title: "Token lifecycle policy: TTLs, rotation, revocation, quarantine litmus"
+      status: pending
+      kind: audit+design
+      deliverable: plan/issues/credential-secrets-architecture-audit-2026-07-09.md
+      depends_on: [credential-inventory-audit]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [security, vault, tokens, policy]
+      estimated_hours: 6
+      parent_order: 246
+      outcome: >
+        Token Lifecycle & Rotation Policy published with TTLs, renewal,
+        revocation rules. Credential Quarantine completion litmus added.
+      exit_criteria:
+        - "Token Lifecycle & Rotation Policy published (TTLs, renewal, revocation)"
+        - "Credential Quarantine completion litmus added"
+        - "spec/cheatsheet patch list published"
+      events:
+        - type: verified
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            cargo test -p tillandsias-plan --lib passed 8/8; the focused
+            plan-engine-invariants-shape litmus passed all 4 steps.
+        - type: fixed
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            Replaced order-like dependency 246a with stable packet ID
+            credential-inventory-audit.
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 246 for cycle budget compliance."
+
+    # --- Split children: order 247 (proxy-git-mirror-configuration-audit) ---
+    - packet_id: tls-certificate-chain-audit
+      order: 247a
+      desired_release: v0.5
+      title: "TLS certificate chain audit: CA generation -> podman secrets -> container trust stores"
+      status: pending
+      kind: audit
+      deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
+      depends_on: [network-architecture-audit]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [security, tls, certificates, audit]
+      estimated_hours: 5
+      parent_order: 247
+      outcome: >
+        End-to-end audit of the TLS certificate chain from CA generation
+        through podman secrets injection to container trust store usage.
+        Every link verified with a named check.
+      exit_criteria:
+        - "TLS Certificate Chain Audit complete (every link verified)"
+        - "spec/cheatsheet patch list published"
+      events:
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 247 for cycle budget compliance."
+
+    - packet_id: git-mirror-forwarding-e2e
+      order: 247b
+      desired_release: v0.5
+      title: "Git mirror forwarding e2e: forge -> mirror -> GitHub, ref consistency litmus"
+      status: pending
+      kind: audit+litmus
+      deliverable: plan/issues/proxy-git-mirror-configuration-audit-2026-07-09.md
+      depends_on: [tls-certificate-chain-audit]
+      pickup_role: any
+      owner_host: any
+      capability_tags: [git, mirror, network, litmus]
+      estimated_hours: 5
+      parent_order: 247
+      outcome: >
+        End-to-end verification of the git mirror forwarding path:
+        forge push -> mirror relay -> GitHub acceptance, with ref
+        consistency litmus.
+      exit_criteria:
+        - "Git Mirror Forwarding end-to-end verified"
+        - "litmus:proxy-end-to-end-health added and green"
+        - "spec/cheatsheet patch list published"
+      events:
+        - type: verified
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            cargo test -p tillandsias-plan --lib passed 8/8; the focused
+            plan-engine-invariants-shape litmus passed all 4 steps.
+        - type: fixed
+          ts: "2026-07-25T04:41:03Z"
+          agent_id: "linux-opencode-gpt56-20260725T0441Z"
+          host: linux
+          summary: >
+            Replaced order-like dependency 247a with stable packet ID
+            tls-certificate-chain-audit.
+        - type: filed
+          ts: "2026-07-24T08:10:00Z"
+          agent_id: "forge-bigpickle"
+          host: forge
+          summary: "Split from order 247 for cycle budget compliance."
 
     - packet_id: event-push-architecture
       order: 249
@@ -12541,6 +12858,13 @@ plan_index:
       order: 342
       title: "macOS forge: isolate in-forge agents from the operator checkout"
       status: completed
+      superseded_by: [macos-forge-no-push-route-lane-decision]
+      supersession_note: >
+        Tlatoani-approved 2026-07-24 (recorded on order 466): the
+        SRC-ISOLATION=clone lane this packet built is superseded by the
+        order-437 clone-only default, which provides the same isolation
+        property PLUS the git:// mirror push route. The isolation GOAL of
+        this packet stands; only the mechanism is retired.
       kind: design+implementation
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
       depends_on: []
@@ -19032,8 +19356,12 @@ plan_index:
       packet_id: forge-delegation-instance-names
       desired_release: v0.4
       title: "Forge delegation rung 1: instance-scoped container names — two workers on one project currently DESTROY each other via --replace"
-      status: in_progress
+      status: completed
       kind: fix
+      split_into:
+        - "427a — delegation-instance-names-code (instance-scoped container naming in launcher)"
+        - "427b — delegation-coexistence-litmus (litmus: two workers coexist, neither replaces)"
+        - "427c — delegation-teardown-target (teardown targets only the intended worker)"
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: []
       pickup_role: linux
@@ -19266,8 +19594,12 @@ plan_index:
       packet_id: forge-delegation-result-retrieval
       desired_release: v0.4
       title: "Forge delegation rung 3: structured result retrieval — consume opencode --format json / codex exec --json so delegated work reports back"
-      status: in_progress
+      status: completed
       kind: feature
+      split_into:
+        - "429a — delegation-jsonl-parser (JSONL parser for opencode + codex structured output)"
+        - "429b — delegation-outcome-surface (delegator surfaces per-worker success/failure/timeout)"
+        - "429c — delegation-failed-task-litmus (litmus: failed task reported, not silently dropped)"
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: [forge-delegation-instance-names]
       pickup_role: linux
@@ -20835,6 +21167,17 @@ plan_index:
             cleanly on stale local state), not "make it generated" (it already
             is). Consider folding 448 into 447 as one "litmus must regenerate
             generated artifacts before asserting freshness" packet.
+        - type: progress
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Local-build Gate 1 reproduced the stale generated-copy class after
+            enclave-service-catalog-research.md landed only in canonical
+            cheatsheets/. Refreshing the ignored image staging tree made the
+            focused cheatsheet-tooling litmus pass 2/2 and the next full
+            pre-build run pass 205/205. The permanent regenerate-before-check
+            exit criterion remains open.
 
     - packet_id: host-direct-push-bypasses-mirror-strands-agents
       order: 449
@@ -21320,6 +21663,24 @@ plan_index:
         - "any cross-platform regression found is filed as a ready packet with pickup_role set before the report is closed"
       events:
         - type: progress
+          ts: "2026-07-24T07:30:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            WINDOWS PASS against v0.3.260724.1 (operator at the terminal,
+            live-monitored):
+            plan/issues/smoke-455-windows-v0.3.260724.1-2026-07-24.md.
+            Full purge (clean residue audit incl. registry + Event Log
+            source) then pinned curl-install from the published release:
+            sha-verified, VERSIONINFO 0.3.260724.1 (51e5f0aa), rootfs
+            download 3.4s, wipe-to-VM-ready 74s, handshake attempt 1,
+            NO version skew (guest --help confirms 0.3.260724.1), no
+            errors. Saved-file installer run doubled as the smart-quote
+            P1 regression test - parsed correctly. Non-blocking findings:
+            uninstall docs need the ExecutionPolicy bypass invocation;
+            purge should mention it removes saved logins. The v0.4
+            smoke gate's WINDOWS column is COMPLETE.
+        - type: progress
           ts: "2026-07-22T22:15:00Z"
           agent_id: "windows-bullo-fable5-20260722"
           host: windows
@@ -21504,11 +21865,131 @@ plan_index:
             desired_release is v0.5 so this later observability work does not
             hold the v0.4 no-spill stability closure.
 
+    - packet_id: inference-coldstart-races-proxy-egress-and-hard-gates-launch
+      order: 486
+      desired_release: v0.5
+      title: "Inference first-run self-install races proxy egress readiness, and its 60s readiness probe hard-aborts a lane launch that runs fine without it"
+      status: ready
+      kind: fix
+      deliverable: images/inference/entrypoint.sh bounded retry-with-backoff gated on proxy egress health; launcher soft-degrade (warn + continue) when inference is unavailable; readiness ordering proxy-before-inference
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, inference, proxy, launch, resilience]
+      estimated_hours: 3
+      operator_note: >
+        Live 2026-07-24 07:2xZ, operator's first post-purge cloud attach
+        (v0.3.260724.1, fully cold volumes). Verbatim evidence captured by
+        a continuous log trap
+        (guest /root/.cache/tillandsias/inference-evidence-20260724.log):
+        attempt 1 "curl: (7) Failed to connect to github.com port 443 via
+        proxy after 0 ms" (proxy not yet serving); the entrypoint's SINGLE
+        10s warm-up retry then got "curl: (60) SSL certificate ...
+        self-signed certificate in certificate chain" - that is squid
+        serving its TLS error page with its own cert because upstream
+        egress was STILL not ready, not a real CA problem. Entrypoint then
+        exits FATAL ("will retry next launch") and the launcher's 60s
+        inference readiness probe ABORTED the entire first lane launch
+        (terminal exited code 1). The operator's immediate relaunch came
+        up fine and the forge session runs WITHOUT local inference -
+        proving the component is soft-degradable. The order-477
+        teardown/liveness proxy churn widens the race window (proxy was
+        observed "Up 1 second" repeatedly during the failure window).
+      outcome: >
+        A fully cold first launch succeeds deterministically: inference
+        waits for proven proxy egress (bounded), retries its self-install
+        with backoff instead of one 10s nap, and a still-unready inference
+        degrades the launch to a warning instead of aborting it; launch
+        attempt 1 and attempt 2 behave identically.
+      exit_criteria:
+        - "inference entrypoint distinguishes proxy-unready (retry with bounded backoff) from genuine download failure, and never treats squid's bumped error page as a CA problem"
+        - "lane launch continues with a curated warning when inference is unavailable; no hard abort on an optional component"
+        - "a cold-volume litmus or fixture reproduces the race (or readiness ordering makes it structurally impossible)"
+      events:
+        - type: renumbered
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Renumbered 478 to 486 after the windows-next integration and a
+            concurrent linux-next research wave independently allocated 478.
+            Stable packet_id is unchanged; the repair restores unique live
+            order references without rewriting either published lineage.
+        - type: progress
+          ts: "2026-07-28T00:25:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["e6777c88"]
+          summary: >
+            Exit criteria 1-2 closed at the v0.4 release triage drain:
+            entrypoint now exports CURL_CA_BUNDLE=/etc/tillandsias/ca.crt
+            (guarded on existence) so squid's bumped error page can never
+            read as a CA problem, and the single 10s nap became a bounded
+            proxy-egress gate (5 HEAD probes, 2/4/8/16s backoff, ~105s
+            worst case, loud FATAL then non-fatal skip per the 5ddc80db
+            warn-and-continue contract). Criterion 2 was already closed at
+            HEAD by 5ddc80db. Residual criterion 3 (cold-volume race
+            fixture or structural proxy-before-inference readiness
+            ordering) slips to v0.5 with the inference family per the
+            2026-07-21 operator decision; packet retargeted v0.4 -> v0.5
+            for that residue.
+        - type: filed
+          ts: "2026-07-24T07:55:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from the live post-purge 455 smoke session; evidence
+            trap output preserved in-guest; launch #2 (identical inputs)
+            proceeded without inference, confirming soft-degradability.
+
+    - packet_id: teardown-vs-liveness-proxy-scope-disagreement
+      order: 477
+      desired_release: v0.5
+      title: "Last-lane teardown and the liveness supervisor disagree on the proxy's scope: teardown removes it, liveness re-creates it 3s later"
+      status: ready
+      kind: fix
+      deliverable: one shared core-vs-lane-scoped container set consumed by both teardown and liveness (plus a test pinning the post-teardown steady-state container set)
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, lifecycle, containers, liveness, teardown]
+      estimated_hours: 2
+      operator_note: >
+        Observed live 2026-07-24 06:50Z when the operator exited the
+        antigravity forge with nothing else running: teardown removed
+        git-mirror + inference + proxy (lane-scoped view) while vault +
+        router stayed up (core view), then
+        "[liveness] re-ensured 1 container(s): [tillandsias-proxy]"
+        re-created the proxy 3 seconds later as a FRESH container. No
+        crash - both actions were clean - but the two components hold
+        contradictory scope sets, so an idle host keeps a squid running
+        that teardown decided should die (and every last-lane exit
+        churns one container create). Decide proxy's true scope once,
+        derive both components from the same constant, and pin the
+        post-teardown steady state in a test.
+      outcome: >
+        After the last lane exits, the container set converges in one
+        step to a single agreed steady state; no component immediately
+        recreates what another just removed.
+      exit_criteria:
+        - "teardown and liveness consume one shared definition of core vs lane-scoped containers"
+        - "a test pins the post-last-lane steady-state container set (no create/remove churn within the settling window)"
+        - "the chosen proxy scope is recorded with rationale (idle footprint vs warm-start latency)"
+      events:
+        - type: filed
+          ts: "2026-07-24T07:05:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from live journal evidence during the antigravity
+            graceful-end validation; operator asked whether the proxy
+            restart was a crash - it was not, it was this disagreement.
+
     - packet_id: vault-host-endpoint-soak-fragility
       order: 463
       desired_release: v0.4
       title: "25h soak broke every host->vault path: netavark DNAT loss on the internal enclave network, loopback bind EIO, first-restart unseal landmine, and lane-lock heal starvation"
-      status: ready
+      status: in_progress
       kind: fix
       deliverable: vault host endpoint via enclave URL everywhere (drop the -p publish), entrypoint unseal-400 classification, bounded lane vault-lock scope
       depends_on: []
@@ -21566,19 +22047,95 @@ plan_index:
             Filed from the live 25.5h-soak incident; full forensics in the
             session transcript. The socket-proxyd attempt died on finding
             (2); the enclave-URL env override is the working repair.
+        - type: progress
+          ts: "2026-07-24T08:05:00Z"
+          agent_id: "linux-tlatoani-fable5-20260724"
+          host: linux
+          summary: >
+            LIVE LINUX REPRO - the class is NOT Windows-specific. During
+            this cycle's CI gate the deployed Linux stack hit the exact
+            shape: podman healthcheck green while
+            https://127.0.0.1:8201/v1/sys/health connection-refused
+            (netavark DNAT drop), failing
+            publish_local_service_starts_container_and_returns_url at
+            main.rs:17927; the endpoint self-recovered minutes later and
+            the test passed unchanged. Hardening landed this cycle: that
+            test is now #[ignore]-gated as e2e-class, and
+            e2e-preflight.sh treats an ERRORED podman ps as
+            live-runtime-PRESENT (leak-not-destroy) plus a broadened
+            ^tillandsias- name match, so a half-dead vault can no longer
+            fool the destructive-smoke eligibility probe into "eligible".
+            The structural fix (drop the 127.0.0.1:8201 publish,
+            enclave-URL everywhere) remains this packet's scope -
+            priority raised by the cross-platform repro.
+        - type: progress
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          lease_id: "linux-opencode-metaorch-20260725T0344Z"
+          summary: >
+            Source slice implemented and reviewed: VM-backed launches now use
+            https://vault:8200 without a host publish; native rootless Linux is
+            the sole named loopback compatibility consumer. The Vault
+            entrypoint emits an exact wrong-key FATAL marker for HTTP 400 and
+            recovery requires it. AppRole minting retains the shared lock only
+            for bounded mint/secret creation, so an idle lane cannot starve an
+            exclusive heal. Focused headless tests, 12/12 tillandsias-vault
+            litmus checks, shell syntax, formatting, and ./build.sh --check
+            pass. Remaining closure is live restarted-Vault, idle-lane/heal,
+            and soak evidence on the rebuilt image.
 
     - packet_id: mirror-pre-receive-blocks-all-new-branches
       order: 462
       desired_release: v0.4
       title: "git-mirror pre-receive full-tree YAML validation rejects EVERY new-branch push — in-guest agents cannot create branches, stranding salvage/WIP flows"
-      status: ready
+      status: done
       kind: fix
-      deliverable: images/git/ pre-receive hook (validate only changed paths vs the nearest existing ref; treat legacy openspec/changes/archive as exempt)
+      deliverable: images/git/pre-receive-hook.sh (diff-base + legacy archive exemption)
       depends_on: []
       pickup_role: linux
       owner_host: linux
       capability_tags: [linux, git-mirror, forge, hooks, validation]
       estimated_hours: 2
+      events:
+        - type: filed
+          ts: "2026-07-23T09:05:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Filed from live rejection evidence during the
+            forge-delegation-result-retrieval salvage (see that packet's
+            2026-07-23T09:05Z note and branch
+            agent/result-channel-repair-20260723).
+        - type: completed
+          ts: "2026-07-24T07:55:00Z"
+          agent_id: "linux-opencode-bigpickle-20260724"
+          host: linux_mutable
+          commits: ["(this cycle)"]
+          summary: >
+            Fixed: (1) new-branch pushes now find a diff-base ancestor ref
+            via find_diff_base() instead of validating the entire inherited
+            tree; (2) legacy openspec/changes/archive/* paths are explicitly
+            exempted from YAML validation via is_legacy_archive(). Added
+            litmus assertions for both behaviors. Extended
+            test-pre-receive-yaml-gate.sh with test 4 (new branch + frozen
+            legacy archive). All 165 pre-build litmus tests pass. Build
+            green.
+        - type: completed
+          ts: "2026-07-24T21:15:00Z"
+          agent_id: "forge-bigpickle-opencode-20260724T2104Z"
+          host: forge
+          lease_id: "mirror-pre-receive-blocks-all-new-branches"
+          commits: ["2acc20f9"]
+          summary: >
+            Concurrent duplicate fix landed on main (merge-base against HEAD
+            with empty-repo fallback + 2 litmus steps). Superseded at the
+            2026-07-27 linux-next/main reconciliation merge: the
+            find_diff_base() + is_legacy_archive() implementation from
+            linux-next was kept as canonical because it also exempts the
+            frozen legacy archive and carries the extended hook test; the
+            merge-base ancestor search semantics are preserved inside
+            find_diff_base().
       operator_note: >
         Discovered live 2026-07-23 08:50Z by the windows observer while
         salvaging the usage-limit-stranded result-retrieval worktree: the
@@ -21601,31 +22158,6 @@ plan_index:
         - "pushing a new branch from inside a forge container succeeds when its changed files pass validation, regardless of legacy archive contents"
         - "a new branch introducing an invalid YAML file is still rejected (validator remains effective on the actual diff)"
         - "litmus or hook test pins the diff-base selection for new refs"
-      events:
-        - type: completed
-          ts: "2026-07-24T21:15:00Z"
-          agent_id: "forge-bigpickle-opencode-20260724T2104Z"
-          host: forge
-          lease_id: "mirror-pre-receive-blocks-all-new-branches"
-          commits: ["(pending)"]
-          summary: >
-            Fixed: new-branch pushes now use git merge-base against HEAD to
-            find the nearest common ancestor, then validate only the diff
-            between that ancestor and the new tip — instead of validating the
-            entire tree. Fallback to full-tree validation for empty repos
-            (no common ancestor). Added two litmus steps to
-            litmus-git-mirror-yaml-gate-shape (steps 11-12) pinning the
-            merge-base usage and the empty-repo fallback. All 12 litmus
-            steps pass. ./build.sh --check passes (format + clippy).
-        - type: filed
-          ts: "2026-07-23T09:05:00Z"
-          agent_id: "windows-host-claude-observer"
-          host: windows
-          summary: >
-            Filed from live rejection evidence during the
-            forge-delegation-result-retrieval salvage (see that packet's
-            2026-07-23T09:05Z note and branch
-            agent/result-channel-repair-20260723).
     - packet_id: podman-idiomatic-forge-secret-contract-drift
       order: 461
       desired_release: v0.5
@@ -21779,3 +22311,945 @@ plan_index:
             - "repeat source header and usage() contract"
             - "bash -n repeat: pass"
             - "exact ./repeat --help grep assertions: pass"
+
+    - packet_id: forge-enclave-isolation-uniform-principle
+      order: 465
+      desired_release: v0.4
+      title: "PRINCIPLE: every forge stack MUST be enclave-isolated + git:// mirror push on ALL platforms (uniform container stack)"
+      status: done
+      kind: architecture
+      deliverable: plan/issues/forge-enclave-isolation-uniform-principle-2026-07-23.md
+      depends_on: []
+      pickup_role: "macos + linux"
+      capability_tags: [security, enclave, forge, architecture, principle]
+      estimated_hours: 2
+      outcome: >
+        Operator directive codified 2026-07-23 with a read-only cross-platform
+        trace: the feared Linux-forge-skips-enclave P1 is REFUTED at HEAD
+        (enclave attach main.rs:4664/10684, proxy-only egress, credential
+        quarantine, mirror push default per order 437). Settles the macOS
+        push-route decision toward OPTION B (mirror push). Residuals: guard or
+        retire the opt-in TILLANDSIAS_FORGE_HOST_MOUNT=1 escape hatch; converge
+        macOS push wiring (order 466). Promoted to the index by the linux
+        coordinator 2026-07-24 (was issues-file only, invisible to pickup).
+      events:
+        - type: completed
+          ts: "2026-07-28T00:55:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["1498c7fd"]
+          summary: >
+            Closed at the v0.4 release triage: the principle trace stands
+            (enclave-isolated, proxy-only egress, credential quarantine,
+            mirror-push default on all platforms at HEAD; commits 66de6820 +
+            f02d623c), the macOS push-route decision it settles is recorded
+            on order 466 with operator approval, and the last residual —
+            the TILLANDSIAS_FORGE_HOST_MOUNT=1 escape hatch — is now loud
+            and opt-in-only: every honoring path emits a Once-gated
+            bordered isolation-reduction warning, unit-pinned. Remaining
+            CA-lifecycle substance lives in orders 467/472/473 as already
+            scoped.
+
+    - packet_id: macos-forge-no-push-route-lane-decision
+      order: 466
+      desired_release: v0.4
+      title: "P1: macOS SRC-ISOLATION forge lane has NO push route — agents commit but work strands in the --rm overlay"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/macos-forge-no-push-route-lane-decision-2026-07-23.md
+      depends_on: [mirror-pre-receive-blocks-all-new-branches]
+      pickup_role: macos
+      capability_tags: [macos, forge, git-mirror, work-loss, p1]
+      estimated_hours: 4
+      operator_approval:
+        ts: "2026-07-24T08:20:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          SUPERSEDE the order-342 macOS SRC-ISOLATION direction with the
+          modern proven order-437 clone-only default. The operator
+          reviewed the windows-lane context (2026-07-24 addendum in the
+          deliverable doc) and approved replacing the obsolete lane
+          override with the mechanism Windows runs in production.
+      outcome: >
+        macOS lane sets GIT_MIRROR_PATH but never TILLANDSIAS_GIT_SERVICE
+        (main.rs:4753-4766), so in-forge commits have no relay route and die
+        with the --rm container. Decision SETTLED by order 465 PRINCIPLE and
+        Tlatoani approval 2026-07-24: take the order-437 clone-only DEFAULT
+        (mirror clone + mirror push in one mechanism) by REMOVING the
+        TILLANDSIAS_FORGE_SRC_ISOLATION=clone override in
+        diagnose.rs:1191-1200 — not by wiring push into the 342 lane.
+        Order-342's isolation property is preserved by construction (the
+        default is also clone-based, no host mount, no facade; mirror
+        seeding needs only read access to the virtiofs staging). OPTION A
+        host-mount is the wrong direction. Dependency order 462 is
+        SATISFIED (322d3026, 2026-07-24). Promoted to the index 2026-07-24.
+      events:
+        - type: note
+          ts: "2026-07-24T08:20:00Z"
+          agent_id: "windows-host-claude-observer"
+          host: windows
+          summary: >
+            Windows-lane context filed in the deliverable doc with exact
+            wiring pins (main.rs 4754/4768/4783 three-way branch;
+            lib-common.sh:584 consumer; diagnose.rs:1191 override) and the
+            live-verified relay properties the macOS lane inherits for
+            free (48h vault-agent credential dcafd59c, SEEDED readiness
+            gate dec1175e, new-branch pre-receive 322d3026, 21-push +
+            concurrent-multi-host soak). Implementation checklist before
+            declaring parity: one attended macOS e2e
+            (clone->commit->push->relay->GitHub), run the two
+            test-git-mirror-*.sh scripts in the VZ guest, and check
+            netavark state per order 463 (VZ VMs soak the same way).
+            Inherit consciously: relay publication can be out-of-order vs
+            author time (MOT-02).
+
+    - packet_id: forge-trust-ca-source-readiness-gap
+      order: 467
+      desired_release: v0.4
+      title: "Forge trust: runtime proxy CA not mounted at forge launch -> silent vendor-roots fallback breaks in-forge GitHub asset downloads"
+      status: completed
+      kind: fix
+      deliverable: plan/issues/forge-trust-ca-source-readiness-gap-2026-07-23.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, forge, ca-trust, proxy, enclave]
+      estimated_hours: 3
+      outcome: >
+        macOS-observed, linux-owned: lib-common.sh:47 silently falls back to
+        vendor roots when the proxy CA is not yet a PEM at mount time
+        (main.rs:4743-4747). Smallest actions: host-side PEM gate before forge
+        create, loud failure for stack-connected forges, ensure_ca_bundle
+        adjacent to create, move CA off tmpfs. Feeds the order-472
+        cert-lifecycle state-graph research. Promoted to the index 2026-07-24.
+
+    - packet_id: forge-claude-transparent-oauth-token-vault-inject
+      order: 468
+      desired_release: v0.5
+      title: "Transparent Claude OAuth-token capture -> Vault -> inject -> refresh (harness-auth parity with Codex/GitHub)"
+      status: ready
+      kind: feature
+      deliverable: plan/issues/forge-claude-transparent-oauth-token-vault-inject-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [forge, vault, credentials, claude-harness]
+      estimated_hours: 5
+      outcome: >
+        OPERATOR SIGN-OFF REQUIRED before implementation (packet header).
+        Unblocks the Claude forge lane on all three hosts: claude setup-token
+        inside run_provider_login (main.rs:6860) mirroring
+        codex-device-auth.sh:24-40, token to secret/claude/oauth-token,
+        injected + refreshed transparently. Promoted to the index 2026-07-24.
+      events:
+        - type: slipped
+          ts: "2026-07-28T00:20:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          summary: >
+            Slipped v0.4 -> v0.5 at the v0.4 release triage (15-packet
+            adversarial review, zero blocking): entirely unimplemented
+            feature gated on Tlatoani sign-off, and the defect it closes
+            (interactive Claude login TUI smearing the auth URL on a Vault
+            credential miss) is a usability fallback, not a
+            crashloop/work-loss/corruption item under the v0.4 charter.
+            Sign-off request remains open with the operator; implement in
+            v0.5 upon approval.
+
+    - packet_id: research-auth-flow-state-machines
+      order: 469
+      desired_release: v0.5
+      title: "Research: explicit auth-flow state machines (login FSM per provider) replacing implicit poll/retry states"
+      status: ready
+      kind: research
+      deliverable: plan/issues/research-auth-flow-state-machines-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [research, auth, fsm, architecture]
+      estimated_hours: 6
+      outcome: >
+        First of the d89fac3d osx-next research trio (filed after the SELinux
+        relabel login root cause + anti-polling directive). Model each login
+        flow as an explicit FSM with named states/transitions instead of
+        implicit polling. Promoted to the index by the linux coordinator
+        2026-07-24 (was osx-next issues-file only, invisible to pickup).
+
+    - packet_id: research-unified-runtime-data-dependency-graph
+      order: 470
+      desired_release: v0.5
+      title: "Research: unified runtime data/dependency graph — containers, volumes, mounts, secrets, CAs as one state-aware graph"
+      status: ready
+      kind: research
+      deliverable: plan/issues/research-unified-runtime-data-dependency-graph-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [research, orchestration, dependency-graph, architecture]
+      estimated_hours: 8
+      outcome: >
+        Second of the d89fac3d trio: one queryable dependency graph over the
+        container stack where nodes carry STATE (not just edges), so
+        orchestration decisions (start order, restart cascades, readiness)
+        derive from the graph instead of scattered ad-hoc checks. The
+        operator's dependency+state-flow-graph overhaul ask lands here.
+        Cross-ref orders 469, 471, 472. Promoted to the index 2026-07-24.
+
+    - packet_id: research-flow-state-event-channel
+      order: 471
+      desired_release: v0.5
+      title: "Research: FlowState event channel — async push of state transitions over the control wire (kills polling)"
+      status: ready
+      kind: research
+      deliverable: plan/issues/research-flow-state-event-channel-2026-07-23.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [research, events, control-wire, architecture]
+      estimated_hours: 8
+      outcome: >
+        Third of the d89fac3d trio: a FlowStatePush topic on the existing
+        control wire carrying ordered state transitions (transport only;
+        presentation is order 475). The operator's async event-driven
+        communication channel ask lands here. FlowSource today covers
+        Login{provider} and DependencyNode{node}; order 474 adds
+        PushTransaction. Cross-ref orders 469, 470, 472, 474, 475. Promoted
+        to the index 2026-07-24.
+
+    - packet_id: research-cert-lifecycle-state-graph
+      order: 472
+      desired_release: v0.5
+      title: "RESEARCH+IMPL: certificate lifecycle as first-class state in the dependency graph — defer-until-trusted, restart-on-rotation, FlowState transitions"
+      status: ready
+      kind: research
+      deliverable: plan/issues/research-cert-lifecycle-state-graph-2026-07-24.md
+      depends_on: [research-unified-runtime-data-dependency-graph, research-flow-state-event-channel]
+      pickup_role: linux
+      capability_tags: [linux, research, ca-trust, dependency-graph, control-wire, lifecycle]
+      estimated_hours: 6
+      outcome: >
+        Operator synthesis: the enclave CA chain historically propagated
+        awkwardly and containers crashed or silently degraded on stale/missing
+        CA state (SELinux relabel fix 1dda3032; vendor-roots fallback order
+        467; rotation pins the old mounted inode). Today CaBundle is an
+        edge-less file-exists node satisfied once (container_deps.rs:33,70)
+        and never re-probed. This packet gives cert nodes a lifecycle FSM
+        (minted/mounted/propagating/trusted/expiring/rotated + absent/
+        unreadable), emits transitions on the FlowState channel, and makes
+        orchestration REACT: consumers defer until trusted, rotation
+        re-ensures the transitive consumer closure. Same lifecycle-awareness
+        class as orders 424 and 463. Five verifiable exit gates incl.
+        tmpfs-wipe defer-until-trusted litmus and in-container inode-match
+        rotation check. Research gate mandatory before implementation.
+
+    - packet_id: local-https-apache-enclave-ca-serving
+      order: 473
+      desired_release: v0.5
+      title: "Local HTTPS: apache enclave member serves the developer's project with enclave-CA-minted certs, trusted transparently by forge + browser"
+      status: ready
+      kind: research
+      deliverable: plan/issues/local-https-apache-enclave-ca-serving-2026-07-24.md
+      depends_on: [research-cert-lifecycle-state-graph]
+      pickup_role: linux
+      capability_tags: [web, https, tls, ca, apache, containers, enclave, trust]
+      estimated_hours: 10
+      outcome: >
+        Operator vision: many libraries refuse to load or emit CORS warnings
+        without real HTTPS; the only way to properly reproduce a real working
+        environment is real HTTPS serving locally — "it runs on my machine"
+        takes on a whole new level when "my machine" is a portable cloud: now
+        "it also runs on the cloud". An apache (httpd) container joins the
+        enclave serving https://www.<project>.localhost with a leaf minted
+        from the enclave CA (today squid's sslcrtd mints leaves only for
+        bumped upstream hosts; the web/router path is plain HTTP with
+        auto_https off). Forge trust rides the runtime CA fold; host-browser
+        trust is a scripted revocable opt-in. Minting/rotation ride order
+        472's lifecycle graph. Research decides termination topology and
+        chain shape (30-day rotating root is browser-UX-hostile) before impl.
+
+    - packet_id: push-transaction-fsm-flow-source
+      order: 474
+      desired_release: v0.5
+      title: "PushTransaction FSM FlowSource: forge->mirror->GitHub push pipeline states on the FlowState channel — stuck pushes visible in seconds"
+      status: ready
+      kind: research
+      deliverable: plan/issues/push-transaction-fsm-flow-source-2026-07-24.md
+      depends_on: [mirror-relay-verified-acks]
+      pickup_role: linux
+      capability_tags: [git-mirror, control-wire, fsm, observability, tray, research]
+      estimated_hours: 6
+      outcome: >
+        Operator: stop playing whack-a-mole with .git states. The push
+        pipeline (forge commit -> git:// mirror push -> pre-receive ->
+        relay-refs.sh -> credential mint -> GitHub ack) has NO modeled
+        states; failures surface as strandings discovered later (order 462
+        new-branch rejection, order 424 AppRole max-TTL, MOT-02 38-min
+        out-of-order publication). Define states (committed ->
+        mirror-accepted -> relay-queued -> github-acked | rejected{reason} |
+        stranded{cause}), emit FlowSource::PushTransaction{repo,ref}
+        (extends order 471's Login/DependencyNode coverage), unify with
+        orders 318 (verified ack = sole github-acked ground truth), 322,
+        330. Exit criteria verifiable: table-driven transition tests,
+        postcard round-trip without WIRE_VERSION bump, litmus replays of the
+        three motivating incidents, measured visibility-latency bound.
+
+    - packet_id: tray-status-menu-pretty-events
+      order: 475
+      desired_release: v0.5
+      title: "Pretty events in the status menu: ordered human-readable FlowState transition feed in all three trays (presentation half; operator-gated)"
+      status: ready
+      kind: feature
+      deliverable: plan/issues/tray-status-menu-pretty-events-2026-07-24.md
+      depends_on: [research-flow-state-event-channel]
+      pickup_role: any
+      capability_tags: [tray, ux, events, cross-platform, governance]
+      estimated_hours: 8
+      outcome: >
+        The presentation half deliberately excluded from order 471 (transport
+        only): last-N state transitions with relative timestamps + severity
+        glyphs rendered in all three tray status menus, event-driven, zero
+        polling. Precedent: macOS status-UX parity (a4512c9d). Tray-ux
+        curation governance applies — any new menu leaf needs Tlatoani
+        sign-off; cross-tray parity row in openspec/tray-parity-matrix.yaml
+        on implementation. Filed v0.5; operator may pull the first slice
+        forward.
+
+    - packet_id: main-branch-direct-push-guard
+      order: 476
+      desired_release: v0.4
+      title: "Guard main against direct pushes and forge cycles running ON main (breach 34e60965 record + branch protection + bootstrap guard)"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/main-branch-direct-push-guard-2026-07-24.md
+      depends_on: []
+      pickup_role: "linux + operator"
+      capability_tags: [release-discipline, governance, git, harness, p1]
+      estimated_hours: 3
+      outcome: >
+        Breach record: 34e60965 (antigravity forge cycle running ON main)
+        pushed directly to origin/main, reserializing plan/index.yaml
+        (~42k-line diff) and flipping 9 v0.4 packets done — 6 contradicting
+        linux-next, 1 release-assignment conflict (407). Reverted via PR #81
+        (merged 2026-07-24). Remaining prongs: (a) OPERATOR — GitHub branch
+        protection on main requiring PR (exact gh api call in the packet);
+        (b) LINUX — meta-orchestration/advance-work bootstrap refuses
+        committable cycles when branch == main (executable check,
+        litmus-pinned). Protects the imminent v0.4 promotion.
+      events:
+        - type: progress
+          ts: "2026-07-28T00:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["dc35960b"]
+          summary: >
+            Prong (b) DONE at the v0.4 release triage drain:
+            scripts/check-committable-branch.sh emits the single-line
+            grammar ok:branch-<name> / blocked:committable-cycle-on-main
+            (plus fail-closed blocked:detached-head and
+            blocked:not-a-git-repo), pinned by
+            litmus:committable-branch-guard-shape 6/6 and wired into the
+            meta-orchestration + advance-work-from-plan preflights.
+            Implementation note: branch detection uses git symbolic-ref
+            (the packet's rev-parse idiom exits 128 with literal HEAD on
+            the unborn-branch fixture). Known limitation: the
+            run-litmus-test.sh positional filter matches spec_ids only, so
+            the working focused command is `scripts/run-litmus-test.sh
+            meta-orchestration --phase pre-build --size instant`. Prong
+            (a) handed to the operator (branch protection currently 404
+            "Branch not protected"); prong (c) criteria 4-5 verification
+            commands still to run and record.
+
+    - packet_id: forge-opencode-provider-seed-missing-after-reset
+      order: 487
+      desired_release: v0.4
+      title: "P1 smoke-gate: in-forge OpenCode has no provider bootstrap on a pristine substrate — secret/gemini/api-key has no owning flow and dies with every reset"
+      status: completed
+      kind: fix
+      deliverable: plan/issues/forge-opencode-provider-seed-missing-after-reset-2026-07-24.md
+      depends_on: []
+      pickup_role: "linux + operator"
+      capability_tags: [linux, forge, opencode, vault, credentials, smoke-gate, p1]
+      estimated_hours: 4
+      outcome: >
+        Found by the 2026-07-24 linux local-build e2e (gates 1-3 PASS on a
+        pristine substrate, gate 4 blocked): order-431 opencode vault auth
+        reads only secret/gemini/api-key, which has NO login lane
+        (GitHub/Claude/Codex/Antigravity only, main.rs:442-472), is wiped by
+        podman system reset, and is unrecoverable from host state -> "No
+        provider available". Interim: documented operator reseed + pre-reset
+        destruction warning in the smoke runbook. Durable: provider-seed
+        framework generalizing order 468's transparent capture to a
+        gemini/opencode login lane; --diagnose names the missing seed before
+        launch. Until fixed the Linux 455-family forge gate cannot pass
+        unattended.
+      events:
+        - type: renumbered
+          ts: "2026-07-25T04:18:02Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Renumbered 479 to 487 after the windows-next integration and a
+            concurrent linux-next research wave independently allocated 479.
+            Stable packet_id and completion state are unchanged.
+
+    - packet_id: heterogeneous-inference-landscape-research
+      order: 478
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Research: CPU/GPU/NPU heterogeneous inference — vendor landscape, engine matrix, policy prior art (operator-directed, 2026-07-24)"
+      status: done
+      kind: research
+      deliverable: plan/issues/heterogeneous-inference-cpu-gpu-npu-research-2026-07-24.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [inference, research, npu, gpu, cpu, ollama, llama-cpp]
+      estimated_hours: 0
+      outcome: >
+        Completed 2026-07-24 (1 code-survey + 3 deep-research agents,
+        adversarially cross-verified). Headlines: ollama can never use an NPU
+        and is a weakening embed target; llama.cpp/llama-server is the correct
+        default engine on every host class (NPU backends land there upstream:
+        OpenVINO, Hexagon); Vulkan via /dev/dri is the universal
+        near-zero-config Linux GPU path; NPUs and macOS acceleration belong in
+        a HOST-NATIVE sidecar slot behind the enclave proxy (NPUs are
+        structurally unreachable from WSL2; container Venus on macOS caps at
+        ~75-85% of native Metal); decode is bandwidth-bound so NPU wins on
+        watts not speed, and only with a mature graph-compiled stack —
+        measure, never trust vendor TOPS. Full findings, risks (FastFlowLM
+        license gate, XRT/firmware lockstep), and the PROBE/CLASS/ROUTE/ADAPT
+        requirement seeds live in the deliverable. Spawns orders 479-484.
+
+    - packet_id: heterogeneous-inference-specs
+      order: 479
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Spec: openspec deltas for accel capability probe, engine slots, policy router + NPU rows in the inference-container tier table"
+      status: ready
+      kind: spec
+      deliverable: openspec specs (accel-capability-probe, inference-engine-slots, inference-policy-router) + amended inference-container spec + litmus bindings
+      depends_on: [heterogeneous-inference-landscape-research]
+      pickup_role: linux
+      capability_tags: [inference, openspec, npu, gpu, architecture]
+      estimated_hours: 6
+      outcome: >
+        Turn order 478's requirement seeds into authoritative specs BEFORE
+        implementation: (1) accel-capability-probe — host-side structured
+        probe (CPU flags/topology, /sys/class/drm GPUs, /sys/class/accel NPUs
+        with driver-name vendor resolution, bandwidth class, engine inventory,
+        capabilities.json cache, usable=false without a mature engine,
+        microbench scoring, roofline sanity check); (2) inference-engine-slots
+        — pluggable OpenAI-compatible engine slots (ollama today, llama-server
+        variants, host-native sidecars) behind one stable enclave endpoint;
+        (3) inference-policy-router — workload classes background/interactive/
+        quality/sustained, data-driven routing table, ordered fallback chains
+        terminating in CPU tier-S, adaptive battery/thermal signals, NEG
+        non-goals (no per-op splitting, no vendor-TOPS routing, no idle
+        residency on battery). Must answer the enclave-boundary question for
+        sidecars (proxy-mediated egress, isolation invariant) and add NPU
+        rows to the T0-T5 tier table. SHALL statements + scenarios + litmus
+        bindings per spec-system rules.
+
+    - packet_id: accel-capability-probe
+      order: 480
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: structured hardware capability probe (CPU/GPU/NPU/bandwidth) replacing the string inference tier"
+      status: ready
+      kind: implementation
+      deliverable: capabilities probe in tillandsias-headless + capabilities.json surface + unit tests + litmus shape test
+      depends_on: [heterogeneous-inference-specs]
+      pickup_role: linux
+      capability_tags: [inference, rust, npu, gpu, linux, probe]
+      estimated_hours: 8
+      outcome: >
+        Replace detect_inference_tier()'s single string (main.rs:2931) with a
+        structured probe per the accel-capability-probe spec: enumerate
+        /sys/class/accel/accel* (uevent DRIVER= amdxdna|intel_vpu, fw_version
+        where exposed), /sys/class/drm + vulkaninfo presence, CPU flags
+        (avx512/NEON) and topology, RAM, battery presence; emit versioned
+        capabilities.json under the app cache; keep the legacy tier string as
+        a derived field for backward compatibility (order 392 CDI downgrade
+        logic preserved). NPU marked usable only when a mature engine lane
+        exists (per spec). Host-side only; no container changes in this
+        packet. Rust, no Python (tlatoani_hard_no_python).
+
+    - packet_id: npu-device-passthrough
+      order: 481
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: NPU /dev/accel passthrough plumbing for the inference container (AMD XDNA2 first lane)"
+      status: ready
+      kind: implementation
+      deliverable: build_inference_run_args NPU args + entrypoint NPU detection/log line + docs for udev/render-group + litmus shape test
+      depends_on: [accel-capability-probe]
+      pickup_role: linux
+      capability_tags: [inference, podman, npu, amd-xdna, linux, containers]
+      estimated_hours: 6
+      outcome: >
+        When the probe reports a usable NPU, build_inference_run_args
+        (main.rs:3305) adds --device /dev/accel/accelN, render --group-add,
+        and --ulimit memlock=-1:-1 (XDNA2 requirement), mirroring the
+        existing ROCm /dev/kfd pattern; entrypoint.sh logs an npu= line next
+        to tier= (spec: tier classification logged once at boot). Graceful
+        no-op on hosts without /dev/accel or with unreadable permissions —
+        document the udev 0660 root:render convention and Silverblue
+        specifics instead of requiring root. Knowingly ships plumbing ahead
+        of the engine (order 483) so passthrough can be litmus-verified
+        independently (device visible in container, group mapping correct,
+        no permission errors in logs). Complements 408/410's GPU CDI work;
+        consider a Tillandsias-generated CDI spec for accel nodes as the
+        stretch goal.
+
+    - packet_id: llama-server-engine-slot
+      order: 482
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: llama-server as a first-class engine slot beside ollama (Vulkan-first image variant)"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: engine-slot abstraction + llama-server inference image variant + tier-model mapping externalized from entrypoint shell + smoke evidence
+      depends_on: [heterogeneous-inference-specs]
+      pickup_role: linux
+      capability_tags: [inference, llama-cpp, vulkan, podman, containers, forge]
+      estimated_hours: 16
+      outcome: >
+        Per order 478: llama-server now carries OpenAI + Anthropic-compatible
+        APIs, built-in model router with LRU load/unload, speculative
+        decoding, and is where NPU backends land upstream. Implement the
+        inference-engine-slots spec: the enclave keeps ONE stable endpoint
+        (OLLAMA_HOST contract preserved for forge consumers) while the engine
+        behind it becomes selectable (ollama | llama-server); add a
+        Vulkan-first llama-server image variant (Mesa in image, --device
+        /dev/dri, no ROCm/CUDA host stack — RamaLama's proven pattern) and
+        move the T0-T5 model table out of inline entrypoint shell into a
+        data file both engines consume. Ollama remains the default until the
+        llama-server lane has smoke evidence; flakiness lessons from order
+        168 (no --rm, OOM guards, readiness probe) carry over. Multi-cycle:
+        slot abstraction, image variant, model-table externalization, and
+        engine-parity smoke are separable checkpoints.
+
+    - packet_id: host-native-sidecar-endpoints
+      order: 483
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: host-native inference sidecar registry (macOS Metal/MLX, AMD XDNA2 flm/Lemonade, Intel NPU OpenVINO) behind the enclave proxy"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: sidecar registration protocol + proxy route + one working lane (XDNA2 flm or macOS Metal) with evidence + license-gate record for FastFlowLM
+      depends_on: [heterogeneous-inference-specs, accel-capability-probe]
+      pickup_role: "linux (XDNA2 lane) + macos (Metal lane)"
+      capability_tags: [inference, npu, macos, metal, mlx, amd-xdna, openvino, proxy, enclave]
+      estimated_hours: 20
+      outcome: >
+        The research verdict: NPUs and Apple-Silicon acceleration do not
+        belong IN the container — macOS containers cap at ~75-85% of native
+        Metal via Venus (and the default applehv provider has no GPU at
+        all), WSL2 cannot see NPUs, and AMD/Intel NPU stacks want host-side
+        firmware lockstep. Implement the sidecar slot from the
+        inference-engine-slots spec: a host-native OpenAI-compatible server
+        (llama-server --metal or mlx-lm on macOS; FastFlowLM/Lemonade on
+        XDNA2 Linux; OpenVINO GenAI on Intel NPU) registers with the tray,
+        which exposes it to forge containers through the enclave proxy under
+        the same endpoint contract, preserving egress discipline and the
+        privacy/isolation invariant (spec question resolved in order 479).
+        HARD GATE before bundling FastFlowLM: read its shipped LICENSE
+        (closed NPU kernels; README says free-for-commercial but sources
+        conflict) — record the verdict in this packet; Lemonade is
+        Apache-2.0. Relates to order 401's macOS tier decision — this packet
+        supersedes the in-VM llama.cpp option there if the sidecar lane
+        proves out. Multi-cycle: protocol, proxy route, first lane, second
+        lane are separable checkpoints.
+
+    - packet_id: inference-policy-router
+      order: 484
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: workload-class policy router with adaptive power/thermal signals (what's-best-for-every-scenario)"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: policy router in tillandsias-headless (data-driven routing table, fallback chains, D-Bus power signal watcher) + policy status surface + unit tests over serialized fixtures
+      depends_on: [accel-capability-probe, llama-server-engine-slot]
+      pickup_role: linux
+      capability_tags: [inference, rust, policy, power, battery, dbus, scheduling]
+      estimated_hours: 20
+      outcome: >
+        The operator's transparent what's-best layer, per the
+        inference-policy-router spec: workload classes (background=J/token +
+        preemptible, interactive=TTFT default, quality=biggest fitting model,
+        sustained=throttle-proof), placements as ordered fallback chains
+        always terminating in CPU tier-S, model-fits-memory with >=10%
+        headroom, first-request served from a resident small model while the
+        preferred loads. Adaptive signals: subscribe to UPower +
+        PowerProfiles D-Bus PropertiesChanged (works with power-profiles-
+        daemon AND Fedora tuned-ppd), poll battery/thermal-trip/GPU-busy; on
+        battery or power-saver suspend background work checkpointed within
+        5s and downgrade interactive; resume only on AC + thermal-nominal +
+        interactive-idle >=60s; self-tag background engines SCHED_IDLE.
+        Routing table is DATA (TOML) not code, route() is a pure testable
+        function over serialized capability+signal fixtures. NEG scope
+        guards from the research are binding: no per-op graph splitting, no
+        vendor-TOPS-based routing, no idle model residency on battery.
+        Nobody in the local-LLM ecosystem ships battery-aware routing — this
+        is the forge's differentiator. Multi-cycle: classes+table, signal
+        watcher, preemption, observability surface are separable
+        checkpoints.
+
+    - packet_id: plan-yaml-duplicate-note-lines
+      order: 485
+      desired_release: v0.5
+      title: "Housekeeping: plan.yaml duplicate bootstrap-note lines + methodology/event vs methodology/events directory split"
+      status: ready
+      kind: housekeeping
+      deliverable: plan/issues/plan-yaml-duplicate-note-lines-2026-07-24.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [plan-hygiene, methodology]
+      estimated_hours: 1
+      outcome: >
+        Observed during the order-478 research wave (issue_filing_mandate):
+        plan.yaml carries two near-duplicate notes lines differing only in
+        methodology/events/ vs methodology/event/, and BOTH directories
+        exist on disk while methodology.yaml declares the singular one as
+        the unknown_event_register. Also a stray @methodology directory at
+        repo root. Exit: one canonical event directory (other merged +
+        tombstoned), one note line, @methodology explained or removed.
+        Details in the deliverable.
+
+    - packet_id: running-image-freshness-label-precedence-fixture
+      order: 488
+      desired_release: v0.4
+      title: "Running-image freshness negative control becomes INDETERMINATE when a stale canonical tag inherits a source-digest label"
+      status: completed
+      kind: fix
+      deliverable: plan/issues/running-image-freshness-label-precedence-fixture-2026-07-25.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, podman, image-freshness, litmus, release-gate]
+      estimated_hours: 2
+      outcome: >
+        A synthetic image carrying a positive stale canonical hash tag fails
+        the freshness gate even when it inherits the current base image's Rust
+        source-digest label; the current-image and genuinely indeterminate
+        controls retain their honest verdicts.
+      exit_criteria:
+        - "scripts/test-running-image-freshness.sh passes every case and prints its order-422 PASS marker"
+        - "positive current tag wins as current; positive different canonical hash tag wins as stale; label-only identity remains indeterminate"
+        - "litmus:running-image-freshness passes against a locally built git image"
+      events:
+        - type: filed
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Reproduced in local-build post-build Gate 1 after 205/205 pre-build
+            checks passed; the fixture's case 3 exited 0 as indeterminate.
+        - type: completed
+          ts: "2026-07-25T05:18:45Z"
+          agent_id: "linux-opencode-order488-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: d7b9ef93ea0b85b9bb5d9b4191326c540edbc51b
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Reordered the freshness evidence checks so the expected canonical
+            tag proves current, a different canonical 64-hex tag proves stale
+            before any inherited source-digest label can defer the verdict, and
+            label-only identity remains indeterminate. The direct six-case
+            fixture passed with its case 5 and strict-mode case 6 controls
+            unchanged; the focused git-mirror-service post-build litmus passed
+            1/1 executed tests (four steps, 18 phase skips).
+
+    - packet_id: postbuild-meta-orchestration-dirty-start-contract
+      order: 489
+      desired_release: v0.4
+      title: "Post-build OpenCode E2E deterministically dirty-start blocks because --ci-full --install mutates VERSION, Cargo manifests/lock, and dashboards"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/postbuild-meta-orchestration-dirty-start-contract-2026-07-25.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, build, meta-orchestration, e2e, dirty-worktree, release-gate]
+      estimated_hours: 4
+      outcome: >
+        The post-build full meta-orchestration litmus starts from a clean
+        checkout boundary while still testing the freshly installed binary;
+        ordinary meta-orchestration continues to refuse genuinely dirty
+        operator/sibling worktrees.
+      exit_criteria:
+        - "./build.sh --ci-full --install does not hand generated VERSION/dashboard mutations to the in-forge meta-orchestration checkout"
+        - "litmus:opencode-prompt-e2e-shape full mode advances local and remote linux-next with a plan result, while smoke mode still expects no delta"
+        - "litmus:meta-orchestration-dirty-tree-safety continues to prove fail-closed ordinary dirty starts"
+      events:
+        - type: progress
+          ts: "2026-07-25T05:41:55Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          checkpoint_commit: 02503422287eaf71346e7b53ba321682e81fae97
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 02503422287eaf71346e7b53ba321682e81fae97
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Reviewed implementation checkpoint pushed and claim released. The
+            required local-build e2e probe returned skip:live-runtime-present
+            for pre-existing tillandsias-vault and tillandsias-router
+            containers, so the forced full install was not started and the
+            completed order-442 destruction guard was not bypassed. Order 489
+            remains ready for the same clean-checkout command once the live
+            stack exits or the operator explicitly authorizes its destruction.
+        - type: progress
+          ts: "2026-07-25T05:39:10Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Main-agent review retained required trace regeneration and routed
+            the release-build local CI branch through the same target/dashboard
+            helper. Focused preparation and dirty-boundary fixtures pass; the
+            bound meta-orchestration instant suite passes 8/8; clickable trace
+            quick litmus passes 2/2; YAML, shell syntax, diff checks, and
+            ./build.sh --check pass. The pre-existing non-install trace dispatch
+            gap is filed separately as order 490. Full install e2e remains the
+            completion boundary.
+        - type: progress
+          ts: "2026-07-25T05:30:17Z"
+          agent_id: "linux-opencode-order489-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Smallest non-mutating slice implemented: build/install no longer
+            bumps VERSION/Cargo metadata; required trace-index regeneration is
+            retained per the clickable-trace-index spec;
+            build-driven local CI dashboards and evidence references are routed
+            under target/convergence while post-build still initializes and
+            tests INSTALL_BIN. The focused clean-boundary check passed, the
+            fail-closed dirty-start fixture passed, the bound meta-orchestration
+            instant suite passed 8/8, and ./build.sh --check passed. Completion
+            remains pending a clean-checkout ./build.sh --ci-full --install rerun
+            proving the full local/remote plan delta with the installed binary.
+        - type: filed
+          ts: "2026-07-25T05:12:06Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          summary: >
+            Full-mode forge exited 0 after correctly refusing dirty-start on
+            eight build-generated tracked paths; delta step then failed because
+            HEAD appropriately remained unchanged.
+
+    - packet_id: clickable-trace-index-build-dispatch-gap
+      order: 490
+      desired_release: v0.4
+      title: "Regenerate clickable trace indexes from every build-producing build.sh mode"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/clickable-trace-index-build-dispatch-gap-2026-07-25.md
+      depends_on: [postbuild-meta-orchestration-dirty-start-contract]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, build, traces, litmus]
+      estimated_hours: 2
+      outcome: >
+        Debug, release, install, observatorium, and init build modes regenerate
+        trace indexes exactly once, while test-only and check-only modes preserve
+        the indexes byte-identically.
+      exit_criteria:
+        - "an executable fixture proves each build-producing build.sh mode invokes generate-traces.sh exactly once"
+        - "test-only and check-only build.sh modes do not invoke generate-traces.sh"
+        - "litmus:clickable-trace-index-generation and ./build.sh --check pass"
+      events:
+        - type: filed
+          ts: "2026-07-25T05:36:01Z"
+          agent_id: "linux-opencode-metaorch-20260725"
+          host: linux
+          host_id: macuahuitl.ayahuitlcalpan.com
+          branch: linux-next
+          observed_sibling_heads:
+            main: e57b6a3d4ba5eb4f20c13956ed071db70bbf710d
+            linux-next: 0a25714d8fb16f04143d06107f2978806274ea6a
+            windows-next: 91ab1f8f54b22aebd19919676ba55e37d797d807
+            osx-next: 25eb3b2a0dba0108b7df49976357442820652ba8
+          summary: >
+            Order 489 review found the active clickable-trace-index build
+            integration requirement is only implemented by install paths;
+            shaped the residual as a separate executable-fixture packet so the
+            dirty-start fix stays focused.
+
+    - packet_id: bigpickle-macos-terminal-cooperative-debug
+      order: 491
+      desired_release: v0.4
+      title: "P0: in-forge cooperative verification of terminal-attach@v2 (BigPickle inside the forge + outside builder loop via push/pull)"
+      status: ready
+      kind: verification
+      deliverable: plan/issues/bigpickle-macos-terminal-cooperative-debug-2026-07-27.md
+      depends_on: []
+      pickup_role: "in-forge agent on the macOS host's forge (BigPickle/OpenCode); outside half: macOS builder"
+      capability_tags: [macos, forge, opencode, pty, terminal, smoke-gate, p0, cooperative]
+      estimated_hours: 3
+      outcome: >
+        Nine in-forge probes (geometry, live SIGWINCH resize, echo bleed,
+        Ctrl+C, UTF-8 bursts, window-close reap, mode-reset hygiene, env,
+        termios) verify the 2026-07-27 terminal-attach@v2 rebuild end to end
+        from the harness's own terminal. Findings are appended to the packet
+        and pushed IMMEDIATELY (a prior forge died with unpushed root-cause
+        work); the outside builder pulls, fixes, rebuilds, relaunches.
+        Gate for v0.4 macOS terminal-UX stability.
+
+    - packet_id: host-pty-slave-retention-eof-teardown
+      order: 492
+      desired_release: v0.5
+      title: "Host PTY split() retains the slave fd — EOF/teardown defeated (audit D5 full fix; mitigated by attach-client detach)"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/host-pty-slave-retention-eof-teardown-2026-07-27.md
+      depends_on: []
+      pickup_role: "macOS host (needs live Darwin termios-persistence probe); code is shared cfg(unix)"
+      capability_tags: [macos, pty, host-shell, fd-lifecycle, p2]
+      estimated_hours: 3
+      outcome: >
+        Probe whether pty-pair raw termios survives a zero-slave window on
+        Darwin, then drop the retained slave in split() (or re-raw from the
+        attach client), wire input-task EOF to a transport-level PtyClose,
+        and keep the blank-terminal ATTACH_GRACE regression guard green.
+      events:
+        - type: slipped
+          ts: "2026-07-28T00:20:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          summary: >
+            Slipped v0.4 -> v0.5 at the v0.4 release triage (15-packet
+            adversarial review, zero blocking): the operator-visible
+            consequence of D5 (window close orphaning the guest harness)
+            was closed 2026-07-27 by the attach-client detach mitigation
+            (unconditional transport-level PtyClose/SIGHUP on
+            session-socket disconnect), verified inside the qualifying
+            macOS destructive e2e PASS. The remaining structural fix
+            requires a live Darwin termios-persistence probe, which is a
+            macOS-host session, not a Linux stability item.
+
+    - packet_id: guest-pty-write-wedge
+      order: 493
+      desired_release: v0.5
+      title: "Guest write_to_guest blocks unboundedly inline in the connection loop — wedge kills session/connection (audit D6)"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/guest-pty-write-wedge-2026-07-27.md
+      depends_on: []
+      pickup_role: "any host (guest-only cfg(unix) code); good in-forge candidate"
+      capability_tags: [guest, headless, pty, vsock, fairness, p2]
+      estimated_hours: 4
+      outcome: >
+        Per-session bounded write queue + writer task, full-for-deadline
+        wedge kill via the existing SIGTERM/SIGKILL path (kill-not-drop),
+        enqueue bounded to the 250ms control-plane fairness bound, resize
+        routed through the same queue to preserve arrival order. Restores
+        the vsock-transport fairness invariant under a wedged child.
+      events:
+        - type: slipped
+          ts: "2026-07-28T00:20:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          summary: >
+            Slipped v0.4 -> v0.5 at the v0.4 release triage (15-packet
+            adversarial review, zero blocking): confirmed P2 with
+            one-session blast radius — a large paste during a busy cooked
+            phase can wedge one terminal-attach session, but the forge
+            child keeps running, so no crashloop, no work loss, no
+            forge/mirror corruption. The common trigger
+            (scroll-to-arrow-key spam) was already removed at HEAD per the
+            deliverable's trigger note; the ~4h bounded-queue fix is v0.5
+            work.
+
+    - packet_id: macos-concurrent-lane-launch-kills-sibling
+      order: 494
+      desired_release: v0.5
+      title: "P1: concurrent lane launch tears shared stack from under a live sibling — both lanes die (order-443 guard misses running sibling)"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/macos-concurrent-lane-launch-kills-sibling-2026-07-27.md
+      depends_on: []
+      pickup_role: "in-forge/guest agent for forensics (podman events, flock dir); fix likely guest launch pipeline (shared cfg)"
+      capability_tags: [guest, headless, podman, concurrency, shared-stack, macos, p1]
+      estimated_hours: 4
+      outcome: >
+        Two lanes on one project can run concurrently: the order-443
+        shared-stack guard must see a mid-bring-up sibling (flock held for
+        the full launch AND visible cross-process; lane scan races closed)
+        so a second launch never tears git/proxy/inference from under a
+        cloning sibling. Evidence: 2026-07-27 attended session, git service
+        recreated with a new IP mid-clone, both lanes dead.
+      events:
+        - type: progress
+          ts: "2026-07-28T00:55:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["1498c7fd"]
+          summary: >
+            INTERIM leak-not-destroy guard shipped in v0.4 (adversarial
+            triage corrected this from a bare slip — the cleanup path
+            force-removed a RUNNING sibling forge, an unmitigated
+            work-loss vector): forge removal now uses plain podman rm (no
+            -f) so podman's removal-time exit 2 refuses a running
+            container atomically; on refusal the sibling's git/browser
+            dependencies are left alone and the shared proxy/inference
+            teardown is skipped, with loud REFUSING warnings. Pinned by 5
+            new unit tests incl. the end-to-end 2026-07-27 incident shape
+            (zero-lane misread + running forge). Residue slipped to v0.5:
+            root-cause H1-H3 forensics of the order-443 zero-lane/flock
+            misread (first post-release macOS multi-lane session),
+            differently-named sibling coverage, and the documented
+            same-name --replace self-relaunch semantics.
+
+    - packet_id: preflight-evidence-dirties-forge-gate
+      order: 495
+      desired_release: v0.5
+      title: "release-preflight local-ci regenerates evidence into the shared checkout, then its own post-build forge gate refuses the dirty worktree"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/preflight-evidence-dirties-forge-gate-2026-07-28.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [linux, build, release-gate, litmus, meta-orchestration, self-clean]
+      estimated_hours: 2
+      outcome: >
+        Found live during the v0.4.260728.1 preflight: local-ci writes
+        centicolon dashboards + TRACES indexes, then
+        litmus:opencode-prompt-e2e-shape launches a full forge cycle whose
+        dirty-start guard correctly refuses the generated dirt — the
+        preflight fails itself. Preferred fix (order-489 prior art,
+        discard-over-repair): route these artifacts under target/ so the
+        preflight is self-clean by construction; alternatively commit
+        evidence before the post-build phase or teach the launch script a
+        deferred verdict on known-generated-only dirt. Pin with a litmus
+        step asserting empty porcelain after local-ci's generate phases.
+      events:
+        - type: filed
+          ts: "2026-07-28T01:05:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["b3677fb3"]
+          summary: >
+            Filed from the live v0.4 release-preflight failure (STEP 4
+            HEAD-unchanged at 596b6bc8); resolved this cycle by committing
+            the generated evidence per RELEASING.md step 4 and re-running
+            the gate. The in-forge guard, boundary verify, and clean exit
+            all behaved exactly as specified — composition bug only.

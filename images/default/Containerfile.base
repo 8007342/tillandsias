@@ -5,7 +5,14 @@
 FROM registry.fedoraproject.org/fedora-minimal:44
 
 # ── System packages ────────────────────────────────────────────
+# glibc-langpack-en: the image declares `ENV LANG=en_US.UTF-8` (Containerfile) but
+# Fedora-minimal ships only C/C.utf8/POSIX. Without this langpack the locale
+# silently degrades to ASCII — `locale` errors "Cannot set LC_CTYPE" — garbling
+# UTF-8 in the terminal AND in file I/O, and making tool output non-deterministic
+# (the encoding "flip-flop"). Root-caused by Big Pickle in-forge:
+# plan/issues/optimization/forge-locale-missing-glibc-langpack-2026-07-24.md.
 RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
+        glibc-langpack-en \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates ncurses ncurses-term \
         fish zsh \

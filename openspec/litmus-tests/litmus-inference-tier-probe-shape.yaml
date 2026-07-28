@@ -16,7 +16,7 @@ critical_path:
     timeout_ms: 3000
 
   - step: "probe emits exactly one line in the pinned grammar"
-    command: "out=$(scripts/inference-tier-probe.sh); echo \"$out\"; [ \"$(printf '%s' \"$out\" | wc -l)\" -le 1 ] && printf '%s' \"$out\" | grep -qE '^tier:(gpu-cuda|gpu-rocm|metal|cpu)$'"
+    command: "d=$(mktemp -d); printf '#!/bin/sh\\nexit 1\\n' > \"$d/tillandsias\"; chmod +x \"$d/tillandsias\"; out=$(PATH=\"$d:$PATH\" scripts/inference-tier-probe.sh); rm -rf \"$d\"; echo \"$out\"; [ \"$(printf '%s' \"$out\" | wc -l)\" -le 1 ] && printf '%s' \"$out\" | grep -qE '^tier:(gpu-cuda|gpu-rocm|metal|cpu)$'"
     timeout_ms: 10000
 
   - step: "falsifiability: with GPU tools shadowed by failing stubs, a linux host degrades to tier:cpu (darwin stays tier:metal)"

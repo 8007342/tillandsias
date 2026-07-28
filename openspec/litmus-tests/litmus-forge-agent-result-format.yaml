@@ -66,14 +66,14 @@ critical_path:
     expected_behavior: "ok: result path remains host-only"
 
   - step: "both CLI builders, Web omission, both real JSON schemas, fresh capture, nonzero status, and exact timeout cleanup pass without Podman"
-    command: "cargo test -q -p tillandsias-headless delegated_result_"
+    command: "cargo test -q -p tillandsias-headless delegated_result_ && echo 'ok: delegated result fixtures'"
     timeout_ms: 120000
-    expected_behavior: "all delegated_result_ fixtures pass"
+    expected_behavior: "ok: delegated result fixtures"
 
   - step: "captured stdout retains a fixed bound while the source continues draining"
-    command: "cargo test -q -p tillandsias-podman bounded_attached_capture_drains_but_never_retains_over_limit"
+    command: "cargo test -q -p tillandsias-podman bounded_attached_capture_drains_but_never_retains_over_limit && echo 'ok: bounded capture fixture'"
     timeout_ms: 120000
-    expected_behavior: "bounded capture overflow fixture passes"
+    expected_behavior: "ok: bounded capture fixture"
 
 observability:
   traces:

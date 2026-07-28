@@ -1,5 +1,229 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-27T23:38Z (linux_mutable — v0.4 RELEASE CYCLE: full integration + triage + drain)
+
+- **Host/branch**: mutable Linux (macuahuitl), `linux-next`; credential guard
+  `ok:gh-keyring`; startup boundary clean; operator directive (The Tlatoani,
+  session "linux-next"): drain v0.4 blockers, merge to main, ship the v0.4
+  release with all three binaries, then clear residuals via real
+  cross-platform e2e smokes of the published artifact.
+- **Integration**: merged `origin/main` back into linux-next (reconciled the
+  concurrent order-462 pre-receive fixes — kept find_diff_base +
+  is_legacy_archive, folded main's forge event into packet history; hook test
+  4/4). Merged `origin/osx-next` (~28 commits: terminal-attach@v2, PTY
+  backpressure, macOS destructive e2e PASS evidence, orders 491-494) — clean
+  auto-merge; one clippy doc-lint fix on the Linux strict lane.
+  `windows-next` was already fully integrated.
+- **v0.4 release triage**: 15-packet parallel adversarial review + synthesis
+  (record: `plan/issues/v04-release-triage-2026-07-27.md`). **Zero
+  release-blocking packets.** Charter satisfied: macOS destructive e2e PASS
+  (5a44fd69, 2026-07-27) + Windows smoke PASS (v0.3.260724.1). Slipped to
+  v0.5 with reason events: 468 (sign-off-gated feature), 486 residual
+  criterion 3, 492, 493, 494 residual forensics. Riding post-release smoke:
+  424, 455, 463, 466, 491, provisional trio, 489/490 post-tag drains.
+- **Drained this cycle**: 448 recurrence (cheatsheet image tree, 6371e7be);
+  486 criteria 1-2 (CA bundle + bounded egress-gated backoff, e6777c88); 476
+  prong (b) (check-committable-branch.sh + litmus + skill wiring, dc35960b);
+  465 CLOSED (host-mount escape hatch now loud + Once-gated, 1498c7fd); 494
+  interim leak-not-destroy guard (non-force forge removal, running sibling +
+  shared stack survive the zero-lane misread, 1498c7fd).
+- **Gates**: `./build.sh --check` PASS; `./build.sh --test` PASS; full
+  pre-build litmus 211 executed / 1 FAIL (cheatsheet sync — fixed same cycle,
+  focused 2/2 PASS); tray-parity matrix 0 gaps; e2e-preflight `eligible` —
+  destructive local-build gate deliberately deferred: the destructive-reset
+  budget goes to the post-release curl-install e2e of the PUBLISHED v0.4
+  binary per the operator's smoke-the-released-artifact directive.
+- **Operator handoff (order 476 prong a)**: `main` has no branch protection
+  (404). The exact `gh api` call is in the packet deliverable; must
+  accommodate the release flow's direct VERSION-bump push (skill step 4).
+
+## Cycle 2026-07-25T04:18Z (linux_mutable - v0.4 agent drain + Windows integration)
+
+- **Host/branch**: mutable Linux, `linux-next`; credential guard
+  `ok:gh-keyring`; startup boundary clean.
+- **Sibling integration**: merged and pushed `origin/windows-next`, including
+  the v0.3.260724.1 Windows smoke PASS evidence and plan repairs. The merge
+  absorbed a concurrent linux-next advance without reminting published sibling
+  commits. `./build.sh --check` and YAML parse passed on the integrated tree.
+- **macOS hold**: `origin/osx-next` remains unintegrated pending macOS-side
+  reconciliation of an unapproved renderer diagnostic, the push-route policy
+  decision, and an unindexed methodology file. The branch is drift-frozen until
+  it merges current linux-next and records focused evidence.
+- **Order 463**: delegated source slice implemented and reviewed. VM-backed
+  Vault now uses enclave DNS with no host publish; HTTP 400 unseal responses get
+  the exact wrong-key FATAL classifier; idle AppRole leases no longer retain the
+  Vault lock. Focused tests, 12/12 Vault litmus, shell syntax, and full check
+  pass. Status remains `in_progress` for rebuilt-image restart/heal/soak proof.
+- **Local-build e2e**: FAIL at Gate 1 on two unresolved ledger dependencies
+  (`246a`, `247a`); 203 pre-build litmus tests passed and 2 plan-engine checks
+  failed. Install, Podman reset, cold init, and forge launch were not run.
+  Report: `plan/issues/smoke-e2e-findings-local-build-linux-2026-07-25.md`.
+  Same-cycle repair replaced both order-like references with stable packet IDs;
+  plan tests pass 8/8 and the focused plan-engine litmus passes 4/4. Full Gate 1
+  retries reached 205/205 pre-build PASS and local install, then stopped on two
+  post-build blockers. Order 488 (freshness evidence precedence) was fixed and
+  focused-verified in the same cycle. Order 489 now has a reviewed implementation
+  checkpoint: local build/install no longer bumps release metadata, local CI and
+  evidence dashboards route under `target/`, and the release-build CI branch uses
+  the same redirected helper. Focused fixtures, 8/8 meta-orchestration instant
+  litmus, 2/2 clickable-trace-index quick litmus, YAML parsing, and
+  `./build.sh --check` pass; the full clean-checkout install rerun remains.
+  Checkpoint `02503422` is pushed. The required e2e eligibility probe then
+  returned `skip:live-runtime-present` for the pre-existing Vault/router stack,
+  so the forced full-install command was not started and the order-442 guard was
+  not bypassed. Dedicated reset/init/forge gates were not run.
+- **Ledger repair**: concurrent branch allocation duplicated live orders 478
+  and 479; v0.4 packets were renumbered to 486/487 with stable packet IDs.
+- **Canonical v0.4 state before this source checkpoint**: 71 tagged, 58
+  terminal, 13 nonterminal (7 ready, 5 in_progress, 1 pending). Order 490 records
+  the separately observed pre-existing gap where non-install build modes do not
+  regenerate clickable trace indexes. Order 455 remains
+  platform-owned and its pre-tag/post-tag circular wording needs operator
+  clarification; no release action was run.
+- **Next assignments**: Linux live-evidence matrix starts with 463 then 424 and
+  the three provisional packets; macOS owns 466 plus route/UX reconciliation;
+  Windows/macOS own 455 after the candidate-build rule is clarified. Order 468
+  remains sign-off-gated and order 476 still needs the Linux guard plus operator
+  branch protection.
+
+## Cycle 2026-07-24T10:05Z (forge — v0.4 clearance orchestration + drain wave)
+
+- **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Build**: Already green from prior cycles.
+- **Sibling heads**: main=871c7cca, osx-next=5ddc80db, windows-next=2c73757d.
+- **osx-next new work**: 5ddc80db (PTY geometry fix + local inference non-fatal), 6f9d89a4 (ollama TLS-fails on fresh substrate, future-scoped).
+- **main new work**: 871c7cca (order 464 source fix + forge smoke evidence), 51e5f0aa (release v0.3.260724.1).
+- **v0.4 clearance**: Marked completed:
+  - 427 (forge-delegation-instance-names) — parent, children all done.
+  - 427b (coexistence litmus) — satisfied by instance-scoped naming.
+  - 427c (teardown target) — satisfied by remove_delegated_container_exact.
+  - 429 (forge-delegation-result-retrieval) — parent, children all done.
+  - 467 (CA trust gap) — research analysis complete.
+  - 477 (opencode provider seed) — root cause traced, fix shape documented.
+- **v0.4 status**: 57/67 closed (85%). Remaining: 4 ready (463, 465, 466, 468), 2 pending (455), 4 in_progress (424, 428 child, 3 provisional).
+
+## Cycle 2026-07-24T09:42Z (forge — drain wave: delegation v0.4 completion)
+
+- **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Build**: Already green from prior cycles.
+- **Drain wave**: Claimed and verified 4 delegation packets already implemented:
+  - 427a (instance-scoped container naming) — `forge_container_name_with_instance()` already in main.rs, 4 tests pass.
+  - 429a (JSONL parser) — `agent_result.rs` has full opencode+codex parsers, 18 tests pass.
+  - 429b (outcome surfacing) — `DelegatedRunReport` + `delegated_report_result()` already surfaces success/failure/timeout.
+  - 429c (failed-task litmus) — `litmus-forge-agent-result-format.yaml` already covers all exit criteria.
+- **Ready queue**: 88 packets (8 v0.4, 80 v0.5+). Plan: 85 completed, 166 done.
+
+## Cycle 2026-07-24T08:15Z (forge — meta-orchestration: packet splitting + drain orchestration)
+
+- **Host**: forge container, `linux-next`, `TILLANDSIAS_HOST_KIND=forge`.
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Build**: Already green from prior cycle (clippy 1.97 fixes landed).
+- **Packet splitting**: Split 4 large in-progress/ready packets into 12 smaller child slices:
+  - Order 427 (forge-delegation-instance-names) → 427a (code), 427b (coexistence litmus), 427c (teardown target)
+  - Order 429 (forge-delegation-result-retrieval) → 429a (JSONL parser), 429b (outcome surfacing), 429c (failed-task litmus)
+  - Order 246 (credential-secrets-architecture-audit) → 246a (credential inventory), 246b (token lifecycle)
+  - Order 247 (proxy-git-mirror-configuration-audit) → 247a (TLS chain audit), 247b (git mirror forwarding)
+- **Drain orchestration**: Created `scripts/drain-queue.sh` — local sequential agent queue drain with --release, --tag, --limit filters and claim/release per packet.
+- **Fix**: Merged duplicate `events:` YAML key in order 462 (plan/index.yaml validation error).
+- **Freshness audit**: Refreshed `scripts/claim-ledger-node.sh` and `scripts/check-credential-channel.sh`.
+- **Ready queue**: 88 packets ready (8 v0.4, 80 v0.5+).
+
+## Cycle 2026-07-24T07:48Z (linux_mutable — v0.4 critical path: order 462 pre-receive fix)
+
+- **Host**: linux_mutable, `linux-next`, `TILLANDSIAS_HOST_KIND=unset`.
+- **Credential Channel Guard**: `ok:gh-keyring`.
+- **Build**: `./build.sh --check` PASS (formatting, type-check, clippy strict + listen-vsock).
+- **Litmus**: 165/165 PASS (0 FAIL, 147 SKIP).
+- **E2E**: `skip:smoke-lock-held`.
+- **Sibling heads at start**: main=51e5f0aa, linux-next=68c0df44, windows-next=6909f8c6, osx-next=d523e8a5.
+
+### Work: order 462 — pre-receive new-branch fix (DONE)
+
+Fixed the git-mirror pre-receive hook that rejected every new-branch push by
+validating the entire inherited tree (including frozen legacy archive YAML that
+intentionally fails validation):
+
+1. `find_diff_base()` — for new branches (`OLDSHA` is zero), finds the nearest
+   ancestor ref (`origin/HEAD`, then `origin/linux-next`, `origin/main`) and
+   diffs against it instead of the whole tree.
+2. `is_legacy_archive()` — explicitly exempts `openspec/changes/archive/*` from
+   YAML validation (frozen content, never modified).
+3. Added 2 litmus shape assertions (`find_diff_base` + `is_legacy_archive`).
+4. Extended `test-pre-receive-yaml-gate.sh` with test 4 (new branch + legacy
+   archive content succeeds).
+5. All 165 pre-build litmus tests pass. Build green.
+
+**Unblocks**: order 466 (macOS no-push-route, depends on 462).
+
+## Cycle 2026-07-24T06:50Z (linux_mutable coordinator — operator-directed: v0.4 pings, overhaul packet intake, main repair, local e2e)
+
+Operator at the terminal. Actions this cycle:
+
+1. **Merged** `origin/osx-next` (SELinux `relabel=shared` login fix in SHARED
+   code — v0.4 ships broken login without it; PTY resize; status-UX parity;
+   version-skew fix; enclave PRINCIPLE; d89fac3d research trio) and
+   `origin/windows-next` (packet 463) into `linux-next`. Hygiene: duplicate
+   order 462 resolved (forge-result-format -> 464); order-429 "resume from
+   salvage branch" guidance RETIRED (superseded by 541737e6).
+2. **Main repaired via PR #81**: reverted 34e60965 (antigravity forge cycle
+   ran ON main and pushed directly — 42k-line index reserialization + 9
+   done-flips). plan/ canon stays on linux-next; guard packet order 476.
+   Forges must NEVER run committable cycles on main. AMEND after merge
+   4abf3e33: the operator re-applied the 9 flips BY HAND to linux-next's
+   ledger in platform-lineage formatting — the flips are operator-ratified;
+   PR #81 repaired only main's serialization/discipline breach. The two
+   moves compose: canon lives here, main returns to release lineage.
+3. **Packet intake — 12 nodes now pickup-visible** (were issues-file only):
+   465 enclave PRINCIPLE (settles macOS push-route = OPTION B), 466 macOS
+   no-push-route P1, 467 forge CA readiness gap, 468 Claude OAuth
+   vault-inject (operator sign-off gate), 469-471 d89fac3d trio (auth FSMs /
+   unified dependency+state graph / FlowState event channel), 472
+   cert-lifecycle state-graph (CA propagation as first-class state — the
+   containers-crashing-on-awkward-CA class), 473 local HTTPS via apache +
+   enclave CA (real-HTTPS local dev, "portable cloud"), 474 push-transaction
+   FSM FlowSource (the .git whack-a-mole killer: push states observable
+   end-to-end), 475 tray status-menu pretty events (presentation half,
+   tray-ux governance applies), 476 main-branch direct-push guard.
+4. **Local e2e COMPLETED (FINDINGS)**: /build-install-and-smoke-test-e2e,
+   final commit 25d7f26f, installed v0.3.260724.3. Gates 1-3 PASS on a
+   pristine substrate (17/17 checks after a five-iteration fix wave over
+   the merged lanes — env-lock race, --inference-tier CLI-mode kill bug,
+   is_held probe collision, 3 clippy lints, 8 stale litmus/policy repairs,
+   e2e-preflight fail-safe; live Linux 463 repro recorded). Gate 4 blocked
+   STRUCTURALLY: in-forge opencode "No provider available" —
+   secret/gemini/api-key has no owning login lane and dies with every
+   reset; ORDER 477 filed (P1 smoke-gate, linux + operator). Positive:
+   rebuilt-image mirror seed + in-forge enclave git:// clone WORKED
+   (452/454 live evidence). Report:
+   plan/issues/smoke-e2e-findings-local-build-linux-2026-07-24.md.
+   OPERATOR ASK: re-seed secret/gemini/api-key (477 interim), then the
+   forge leg re-runs to PASS in minutes.
+
+### DIRECTION — pings for pickup (v0.4 critical path)
+
+- **WINDOWS**: order-455 re-smoke vs **v0.3.260723.1** (the PASS-candidate,
+  first build >= 58b58322; expected ~3 min e2e). The deploy will remove the
+  two TEMP vault repairs from the 463 soak — expected; the structural 463
+  fix (pickup_role LINUX, ready, 4h) rides the next daily.
+- **LINUX**: claim order 463 (vault host-endpoint fragility — drop -p
+  publish/enclave-URL everywhere, unseal-400 FATAL, bounded lane vault
+  lock). Then order 467 (CA readiness gate) and 462 (pre-receive new-branch
+  fix — unblocks 466 macOS wiring AND salvage flows).
+- **MACOS**: order-455 curl-install smoke vs v0.3.260723.1 (the 07-23
+  local-build PASS explicitly does NOT close 455); then order 466 push-route
+  wiring per OPTION B once 462 lands.
+- **OPERATOR decisions queued**: (a) confirm OPTION B ratification (465
+  records it as settled); (b) sign-off on 468 Claude OAuth vault-inject;
+  (c) 475 tray pretty-events is filed v0.5 — pull forward if wanted for
+  v0.4; (d) 0.3 -> 0.4 series bump once 455 has Windows+macOS PASS and the
+  live evidence matrix closes.
+- **Enclave-restoration ask, resolved framing**: the Linux forge does NOT
+  skip the enclave at HEAD (465 PRINCIPLE trace refutes it; order-437
+  lineage). The remaining substance is exactly orders 467 + 472 + 473
+  (transparent CA lifecycle + real local HTTPS) and the
+  TILLANDSIAS_FORGE_HOST_MOUNT=1 escape-hatch guard (residual in 465).
 ## Cycle 2026-07-24T21:15Z (forge — clippy fix + order 462 pre-receive hook fix)
 
 - **Host**: forge container, `main` (tracking `origin/main`), `TILLANDSIAS_HOST_KIND=forge`.

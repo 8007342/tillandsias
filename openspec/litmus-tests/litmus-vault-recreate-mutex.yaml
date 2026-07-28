@@ -1,4 +1,5 @@
 # @trace spec:tillandsias-vault
+# freshness: auditor=linux-opencode-metaorch-20260725 date=2026-07-25 verdict=updated scope=order-463-bounded-vault-lock
 name: litmus:vault-recreate-mutex
 spec: tillandsias-vault
 phase: pre-build
@@ -6,9 +7,9 @@ description: >-
   Order 235 (R7): vault recreate (ensure_vault_running, exclusive flock on
   the vault resource) is mutually exclusive with lease holders — every
   exec-based Vault accessor (kv get, token/key writes, approle lease mint)
-  holds the same resource SHARED, and the minted AppRoleSecretLease carries
-  the shared guard for its whole lifetime so a recreate waits for in-flight
-  login flows. The health wait retries transient "container is stopped" /
+  holds the same resource SHARED only for its bounded operation. A minted
+  AppRoleSecretLease retains the Podman secret but not the shared guard, so an
+  idle lane cannot starve exclusive ensure/heal. The health wait retries transient "container is stopped" /
   "no such container" with a bounded attempt cap. STEP 1 proves the
   shared/exclusive flock semantics in-process; STEP 2 source-audits the
   wiring. Single-line commands + explicit patterns per the order-256 runner
@@ -25,9 +26,9 @@ critical_path:
     timeout_ms: 120000
     success_pattern: "RW-LOCK-SEMANTICS-OK"
     failure_pattern: "FAILED|panicked"
-  - step: "source audit: 5 shared-holder sites + lease-held guard + exclusive recreate + bounded transient retry"
-    command: "test $(grep -c vault_stability_lease crates/tillandsias-headless/src/vault_bootstrap.rs) -ge 6 && grep -q _stability crates/tillandsias-headless/src/vault_bootstrap.rs && grep -q 'attempt == 3' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -q resource_lock::acquire crates/tillandsias-headless/src/vault_bootstrap.rs && echo VAULT-RECREATE-MUTEX-WIRED"
-    timeout_ms: 5000
+  - step: "bounded lease proof: token mint is shared-locked but idle lease retains no guard"
+    command: "cargo test -p tillandsias-headless vault_bootstrap::tests::approle_secret_lease_does_not_hold_vault_lock_while_lane_is_idle -- --exact 2>&1 | grep 'approle_secret_lease_does_not_hold_vault_lock_while_lane_is_idle ... ok' && grep -q 'attempt == 3' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -q 'resource_lock::acquire(\"vault\"' crates/tillandsias-headless/src/vault_bootstrap.rs && echo VAULT-RECREATE-MUTEX-WIRED"
+    timeout_ms: 120000
     success_pattern: "VAULT-RECREATE-MUTEX-WIRED"
     failure_pattern: "No such file"
 
@@ -40,5 +41,5 @@ observability:
     test: "vault-recreate-mutex"
 
 rollback:
-  on_failure: "a vault accessor dropped its vault_stability_lease, the lease no longer carries the guard, or the bounded retry cap was removed"
+  on_failure: "a Vault accessor lost bounded stability protection, an idle lease retained the guard, or the bounded retry cap was removed"
   command: "grep -n 'vault_stability_lease\\|attempt == 3' crates/tillandsias-headless/src/vault_bootstrap.rs"

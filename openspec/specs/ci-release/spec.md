@@ -34,7 +34,7 @@ to the local release gate.
 - **THEN** they run `scripts/release-preflight-local.sh`
 - **AND** the local preflight runs `scripts/local-ci.sh`
 - **AND** hosted workflows do not run litmus, convergence dashboard, cache warm,
-  or general CI jobs
+  or test execution (a lean fmt+check push/PR gate, ci.yml, is permitted)
 
 #### Scenario: Manual hosted release
 - **WHEN** `.github/workflows/release.yml` is dispatched manually
@@ -48,6 +48,7 @@ Smallest actionable boundary:
 - `grep -F 'nix build -L .#tillandsias-x86_64-musl' .github/workflows/release.yml`
 - `test -x scripts/release-preflight-local.sh`
 - `! test -e .github/workflows/litmus-tests.yml`
+- `! grep -F 'cargo test' .github/workflows/ci.yml`
 
 Sibling tests:
 - `./scripts/release-preflight-local.sh --fast`

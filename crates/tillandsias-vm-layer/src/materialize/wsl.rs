@@ -76,9 +76,7 @@ pub async fn tar_to_wsl_import(
     // and actionable up-front instead.
     let tar_len = std::fs::metadata(tar).map(|m| m.len()).unwrap_or(0);
     let avail = fs2::available_space(install_dir).unwrap_or(u64::MAX);
-    if let Err(msg) = evaluate_host_import_headroom(avail, tar_len) {
-        return Err(msg);
-    }
+    evaluate_host_import_headroom(avail, tar_len)?;
     let args = wsl_import_args(distro, install_dir, rootfs);
     let mut cmd = tokio::process::Command::new("wsl");
     cmd.args(&args).env("WSL_UTF8", "1");

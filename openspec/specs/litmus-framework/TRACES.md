@@ -13,6 +13,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [build-web.sh#L2](../../../build-web.sh#L2)
 - [crates/tillandsias-core/src/bin/build-image.rs#L7](../../../crates/tillandsias-core/src/bin/build-image.rs#L7)
 - [scripts/check-running-image-freshness.sh#L2](../../../scripts/check-running-image-freshness.sh#L2)
+- [scripts/test-concurrent-forge-shared-stack.sh#L2](../../../scripts/test-concurrent-forge-shared-stack.sh#L2)
 - [scripts/test-forge-git-index-materialization.sh#L2](../../../scripts/test-forge-git-index-materialization.sh#L2)
 - [scripts/test-forge-packed-refs-split-brain.sh#L2](../../../scripts/test-forge-packed-refs-split-brain.sh#L2)
 - [scripts/test-harness-contract-probe.sh#L2](../../../scripts/test-harness-contract-probe.sh#L2)

@@ -28,6 +28,12 @@ pub mod windows;
 #[cfg(unix)]
 pub mod unix;
 
+/// In-terminal attach client + its session-socket protocol. The protocol
+/// half compiles on every target (Linux dev box / Windows probe run its
+/// unit tests); the engine is unix-only.
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
+pub mod attach_client;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -166,9 +172,10 @@ pub fn intent_for_action(
 /// VM: for [`PtyIntent::Shell`] that's the deliberate VM-debug escape hatch,
 /// and `gh auth login` is user-level so it works pre-attach.
 ///
-/// `env` carries only `TERM` (the in-VM handler `env_clear`s before applying it,
-/// so no host env leaks); the login shell + forge set `PATH` etc. `cwd` is left
-/// to the in-VM default (the forge's working tree).
+/// `env` carries the pinned terminal-identity triple `TERM`/`COLORTERM`/`LANG`
+/// (the in-VM handler `env_clear`s before applying it, so no host env leaks);
+/// the login shell + forge set `PATH` etc. `cwd` is left to the in-VM default
+/// (the forge's working tree).
 ///
 /// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping),
 /// plan/issues/tray-convergence-coordination.md (Open Shell / agent target)
@@ -182,7 +189,8 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             //   1. `gh` is absent from the bare VM rootfs (it ships in the
             //      container images), and
             //   2. the in-VM PTY handler (`tillandsias-headless::pty_handler`)
-            //      `env_clear()`s the child and only re-adds `TERM`, so there
+            //      `env_clear()`s the child and re-adds only the launch env
+            //      (TERM/COLORTERM/LANG + a default PATH), so there
             //      is no `PATH` — any bare-name argv[0] fails to spawn, and the
             //      spawn error is not surfaced to the host PTY (silent blank).
             // `/bin/bash -lc` mirrors the working `Shell` intent: `/bin/bash`
@@ -246,7 +254,30 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
         rows,
         cols,
         argv,
-        env: vec![("TERM".to_string(), "xterm-256color".to_string())],
+        // Terminal-identity env (audit D7; hardened per review 2026-07-27):
+        // PINNED constants, deliberately NOT forwarded from the tray
+        // process env — the tray's inherited TERM/LANG describe whatever
+        // launched the tray (a dev's tmux/kitty shell, Finder), never the
+        // window the session renders in (the tray-spawned Terminal.app /
+        // wt.exe, both xterm-256color-compatible):
+        //   TERM=xterm-256color — always resolvable in the guest terminfo
+        //     (a forwarded xterm-kitty/tmux-256color is NOT, and aborts
+        //     ncurses TUIs);
+        //   COLORTERM=truecolor — harness TUIs keep 24-bit color;
+        //   LANG=C.UTF-8 — ships in Fedora glibc itself; a forwarded
+        //     en_US.UTF-8 silently falls back to the C locale in the VM
+        //     rootfs (no glibc-langpack-en) and loses IUTF8 (erase splits
+        //     multibyte) — the exact D7 defect.
+        // LC_ALL is deliberately NOT set (it overrides every LC_* category
+        // downstream). This is a recorded deviation from the
+        // control-wire-pty-attach delta forward-list, whose forward-from-
+        // host premise is wrong for GUI trays — see
+        // plan/issues/macos-terminal-management-audit-2026-07-27.md (D7).
+        env: vec![
+            ("TERM".to_string(), "xterm-256color".to_string()),
+            ("COLORTERM".to_string(), "truecolor".to_string()),
+            ("LANG".to_string(), "C.UTF-8".to_string()),
+        ],
         cwd: None,
     }
 }
@@ -256,16 +287,37 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
 /// headless. Abstracted so the session logic is testable without a real
 /// vsock connection.
 pub trait PtyTransport: Send + Sync {
+    /// Fail-fast enqueue: a full queue surfaces as an error. Correct for
+    /// one-shot control ops (`PtyOpen`) where the caller handles failure.
     fn send(&self, body: ControlMessage) -> Result<(), PtyError>;
+
+    /// Lossless enqueue: awaits queue space instead of failing on Full, so
+    /// a transient writer stall backpressures the producer instead of
+    /// silently dropping (or, worse, killing) the stream. Errors only when
+    /// the connection is gone. This is the host→guest mirror of the
+    /// guest→host awaited-send fix (audit defect D3; the input-direction
+    /// twin of ea2fbc8d) — the byte pumps and the resize/close control
+    /// path MUST use this, never the fail-fast variant.
+    /// @trace plan/issues/macos-terminal-management-audit-2026-07-27.md (D3)
+    fn send_lossless<'a>(
+        &'a self,
+        body: ControlMessage,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), PtyError>> + Send + 'a>>
+    {
+        Box::pin(std::future::ready(self.send(body)))
+    }
 }
 
 /// A [`PtyTransport`] that enqueues outbound control messages onto a bounded
 /// channel — the per-connection writer queue from §D3. The connection's writer
 /// task drains the paired receiver and sends each via the vsock `Client`,
-/// interleaving with control traffic. A full queue surfaces as a backpressure
-/// error so the host PTY reader slows (rather than blocking the connection).
+/// interleaving with control traffic. `send` (fail-fast) surfaces a full
+/// queue as a backpressure error for one-shot control ops; `send_lossless`
+/// awaits queue space so the byte/resize path never drops or dies on a
+/// transient stall (audit D3 — Full and Closed are NOT the same condition).
 ///
-/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§D3)
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§D3),
+///        plan/issues/macos-terminal-management-audit-2026-07-27.md (D3)
 pub struct ChannelPtyTransport {
     tx: mpsc::Sender<ControlMessage>,
 }
@@ -285,6 +337,19 @@ impl PtyTransport for ChannelPtyTransport {
                 "pty outbound queue full (backpressure)".to_string()
             }
             mpsc::error::TrySendError::Closed(_) => "pty connection closed".to_string(),
+        })
+    }
+
+    fn send_lossless<'a>(
+        &'a self,
+        body: ControlMessage,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), PtyError>> + Send + 'a>>
+    {
+        let tx = self.tx.clone();
+        Box::pin(async move {
+            tx.send(body)
+                .await
+                .map_err(|_| "pty connection closed".to_string())
         })
     }
 }
@@ -354,7 +419,7 @@ impl PtyRouter {
     /// `PtyClose` → a terminal `Closed` event (and the route is removed).
     /// Returns `Err` on an oversized `PtyData` frame (protocol violation);
     /// non-PTY messages and unknown session ids are ignored.
-    pub fn route(&self, msg: &ControlMessage) -> Result<(), PtyError> {
+    pub async fn route(&self, msg: &ControlMessage) -> Result<(), PtyError> {
         match msg {
             ControlMessage::PtyData {
                 session_id,
@@ -373,17 +438,30 @@ impl PtyRouter {
                         MAX_PTY_FRAME_BYTES
                     ));
                 }
-                if let Some(tx) = self.sessions.lock().unwrap().get(session_id) {
-                    // try_send: a full session channel applies backpressure to
-                    // the guest via the connection reader (§D3); we never block
-                    // the router on one slow session.
-                    let _ = tx.try_send(SessionEvent::Data(bytes.clone()));
+                // Terminal output MUST NOT be dropped. The former `try_send`
+                // silently discarded frames when the 256-deep channel filled —
+                // exactly what happens during a full-screen TUI redraw burst when
+                // the consumer (screen → Terminal.app) drains slower than the
+                // guest produces. A dropped frame both scrambles the render AND
+                // splits a multi-byte UTF-8 sequence (the "encoding" corruption).
+                // Instead, clone the Sender, RELEASE the lock (never held across
+                // the await), and `send().await`: a full channel now blocks the
+                // vsock reader, applying real backpressure through the guest PTY
+                // to the writing process — proper terminal flow control, lossless,
+                // and bounded host memory (unlike an unbounded channel, which a
+                // runaway forge process could OOM).
+                // @trace macos-forge-opencode-events-lost (reconstructed from
+                //        BigPickle in-forge research; forge died before push)
+                let tx = self.sessions.lock().unwrap().get(session_id).cloned();
+                if let Some(tx) = tx {
+                    let _ = tx.send(SessionEvent::Data(bytes.clone())).await;
                 }
                 Ok(())
             }
             ControlMessage::PtyClose { session_id, exit } => {
-                if let Some(tx) = self.sessions.lock().unwrap().remove(session_id) {
-                    let _ = tx.try_send(SessionEvent::Closed(*exit));
+                let tx = self.sessions.lock().unwrap().remove(session_id);
+                if let Some(tx) = tx {
+                    let _ = tx.send(SessionEvent::Closed(*exit)).await;
                 }
                 Ok(())
             }
@@ -472,9 +550,11 @@ impl PtySession {
     }
 }
 
-/// Detachable `PtyResize` sender — see [`PtySession::resize_sender`]. Sends a
-/// resize on a discrete change (never polled on the wire); the host winsize
-/// watcher owns the change detection locally.
+/// Detachable session-control sender — see [`PtySession::resize_sender`].
+/// Sends a resize on a discrete change (the attach-client's SIGWINCH event;
+/// never polled on the wire OR on the host) and a close on detach. Both go
+/// through the lossless path: a resize/close must survive a momentarily
+/// full writer queue, not die on it (audit D3).
 pub struct PtyResizeSender {
     transport: Arc<dyn PtyTransport>,
     session_id: u32,
@@ -482,14 +562,30 @@ pub struct PtyResizeSender {
 
 impl PtyResizeSender {
     /// Relay a terminal resize to the guest child (it applies `TIOCSWINSZ`
-    /// and raises SIGWINCH so the TUI repaints). Errors once the transport
-    /// is gone (session ended).
-    pub fn resize(&self, rows: u16, cols: u16) -> Result<(), PtyError> {
-        self.transport.send(ControlMessage::PtyResize {
-            session_id: self.session_id,
-            rows,
-            cols,
-        })
+    /// and raises SIGWINCH so the TUI repaints). Awaits queue space on a
+    /// full writer queue; errors only once the transport is gone (session
+    /// ended).
+    pub async fn resize(&self, rows: u16, cols: u16) -> Result<(), PtyError> {
+        self.transport
+            .send_lossless(ControlMessage::PtyResize {
+                session_id: self.session_id,
+                rows,
+                cols,
+            })
+            .await
+    }
+
+    /// Host-initiated close (§3.6) from a detached watcher — the attach
+    /// client disconnected (window closed / client exited), so tell the
+    /// guest to reap the child instead of leaking the harness
+    /// (plan/issues/host-pty-slave-retention-eof-teardown-2026-07-27.md).
+    pub async fn close(&self, exit: PtyExit) -> Result<(), PtyError> {
+        self.transport
+            .send_lossless(ControlMessage::PtyClose {
+                session_id: self.session_id,
+                exit,
+            })
+            .await
     }
 }
 
@@ -505,13 +601,15 @@ pub trait PtyMaster: Send + 'static {
 }
 
 /// Pre-attach EIO tolerance window. On macOS a PTY master read/write returns
-/// `EIO` while no slave is open; `master.split()` closes the retained slave and
-/// the terminal (`screen`) re-opens it only after the attach handoff, so the
-/// host briefly sees `EIO` with zero slaves. `pump_io` treats such errors as
-/// transient until the first successful read/write, bounded by this window,
-/// rather than tearing the session down (which SIGHUP'd the guest child and
-/// made every macOS tray PTY attach flash-and-die). Linux blocks pre-attach and
-/// never hits this path, so behavior there is unchanged.
+/// `EIO` while no slave is open; the in-window attach client opens the slave
+/// only after Terminal.app launches it, so the host can briefly see `EIO`
+/// with zero slaves. `pump_io` treats such errors as transient until the
+/// first successful read/write, bounded by this window, rather than tearing
+/// the session down (which SIGHUP'd the guest child and made every macOS
+/// tray PTY attach flash-and-die). Linux blocks pre-attach and never hits
+/// this path, so behavior there is unchanged. (Note: today `split()` also
+/// retains a slave fd, which masks this path entirely — see
+/// plan/issues/host-pty-slave-retention-eof-teardown-2026-07-27.md.)
 /// @trace plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md
 const ATTACH_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
 /// Backoff between pre-attach EIO retries inside [`ATTACH_GRACE`].
@@ -552,16 +650,21 @@ pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::Joi
                 Ok(n) => {
                     in_attached.store(true, Ordering::Relaxed);
                     for body in chunk_to_guest(session_id, &buf[..n]) {
-                        if transport.send(body).is_err() {
+                        // Lossless: a full writer queue backpressures this
+                        // reader (blocking the local terminal's input — real
+                        // flow control) instead of silently killing the
+                        // input direction forever (audit D3, the twin of the
+                        // ea2fbc8d guest→host fix). Err = connection gone.
+                        if transport.send_lossless(body).await.is_err() {
                             return;
                         }
                     }
                 }
                 Err(_) => {
                     // macOS: a PTY master read returns EIO while no slave is
-                    // open. `master.split()` closed the retained slave, and the
-                    // terminal (`screen`) re-opens it only after the attach
-                    // handoff completes — so we briefly see EIO with no slave.
+                    // open — the in-window attach client opens the slave only
+                    // after Terminal.app launches it, so we can briefly see
+                    // EIO with no slave.
                     // Tolerate it until the first attach, bounded by the grace
                     // window; afterwards (or once attached) it is a real close.
                     if !in_attached.load(Ordering::Relaxed) && start.elapsed() < ATTACH_GRACE {
@@ -695,6 +798,7 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: vec![],
         })
+        .await
         .unwrap();
         assert!(s.inbound.try_recv().is_err());
 
@@ -704,6 +808,7 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: b"hi\n".to_vec(),
         })
+        .await
         .unwrap();
         assert_eq!(s.recv().await, Some(SessionEvent::Data(b"hi\n".to_vec())));
 
@@ -716,6 +821,7 @@ mod tests {
             session_id: 1,
             exit,
         })
+        .await
         .unwrap();
         assert_eq!(s.recv().await, Some(SessionEvent::Closed(exit)));
 
@@ -758,20 +864,22 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: b"two".to_vec(),
         })
+        .await
         .unwrap();
         r.route(&ControlMessage::PtyData {
             session_id: 1,
             direction: PtyDirection::ToHost,
             bytes: b"one".to_vec(),
         })
+        .await
         .unwrap();
         assert_eq!(s1.recv().await, Some(SessionEvent::Data(b"one".to_vec())));
         assert_eq!(s2.recv().await, Some(SessionEvent::Data(b"two".to_vec())));
     }
 
     /// §3.8: an inbound frame larger than the cap is a protocol violation.
-    #[test]
-    fn oversized_inbound_frame_rejected() {
+    #[tokio::test]
+    async fn oversized_inbound_frame_rejected() {
         let r = PtyRouter::new();
         let _rx = r.register(1);
         let oversized = ControlMessage::PtyData {
@@ -779,7 +887,7 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: vec![0u8; MAX_PTY_FRAME_BYTES + 1],
         };
-        assert!(r.route(&oversized).is_err());
+        assert!(r.route(&oversized).await.is_err());
     }
 
     #[test]
@@ -1024,16 +1132,61 @@ mod tests {
         );
     }
 
+    /// Audit D3 pin: `send_lossless` on a FULL queue waits for space and
+    /// then delivers — it neither drops the frame nor reports the fatal
+    /// "connection closed" error that would kill the input pump. Only a
+    /// dropped receiver (connection gone) errors.
+    /// @trace plan/issues/macos-terminal-management-audit-2026-07-27.md (D3)
+    #[tokio::test]
+    async fn channel_transport_lossless_send_waits_out_a_full_queue() {
+        let (t, mut rx) = ChannelPtyTransport::new(1);
+        t.send(ControlMessage::PtyData {
+            session_id: 1,
+            direction: PtyDirection::ToGuest,
+            bytes: b"a".to_vec(),
+        })
+        .unwrap(); // fills the single slot
+        // Drain one message shortly after — the awaited send must unblock.
+        let drain = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let first = rx.recv().await;
+            let second = rx.recv().await;
+            (first, second)
+        });
+        t.send_lossless(ControlMessage::PtyData {
+            session_id: 1,
+            direction: PtyDirection::ToGuest,
+            bytes: b"b".to_vec(),
+        })
+        .await
+        .expect("lossless send completes once the queue drains");
+        let (first, second) = drain.await.unwrap();
+        assert!(first.is_some() && second.is_some(), "both frames delivered");
+
+        // Receiver gone → the connection is over: only THEN does it error.
+        let (t2, rx2) = ChannelPtyTransport::new(1);
+        drop(rx2);
+        let err = t2
+            .send_lossless(ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToGuest,
+                bytes: b"c".to_vec(),
+            })
+            .await
+            .unwrap_err();
+        assert!(err.contains("closed"), "expected closed error, got: {err}");
+    }
+
     /// An unknown session id is ignored, not an error.
-    #[test]
-    fn unknown_session_is_ignored() {
+    #[tokio::test]
+    async fn unknown_session_is_ignored() {
         let r = PtyRouter::new();
         let ok = ControlMessage::PtyData {
             session_id: 999,
             direction: PtyDirection::ToHost,
             bytes: b"x".to_vec(),
         };
-        assert!(r.route(&ok).is_ok());
+        assert!(r.route(&ok).await.is_ok());
     }
 
     /// Fake PTY master backed by two in-memory duplex pipes — no real terminal.
@@ -1088,6 +1241,7 @@ mod tests {
             direction: PtyDirection::ToHost,
             bytes: b"file1\n".to_vec(),
         })
+        .await
         .unwrap();
         let mut buf = [0u8; 6];
         out_reader.read_exact(&mut buf).await.unwrap();
@@ -1101,6 +1255,7 @@ mod tests {
                 signal: None,
             },
         })
+        .await
         .unwrap();
         let joined = tokio::time::timeout(Duration::from_secs(2), handle).await;
         assert!(joined.is_ok(), "pump output task should finish after close");

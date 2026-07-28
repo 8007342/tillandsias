@@ -4106,17 +4106,17 @@ mod tests {
                 }
                 let stat = std::fs::read_to_string(entry.path().join("stat")).unwrap_or_default();
                 // /proc/<pid>/stat: "pid (comm) state ..." — state is char 3.
-                if let Some(state) = stat.split_whitespace().nth(2) {
-                    if state.starts_with('Z') {
-                        // Confirm it is actually our child via /proc/<pid>/status PPid.
-                        let status = std::fs::read_to_string(entry.path().join("status"))
-                            .unwrap_or_default();
-                        for line in status.lines() {
-                            if line.starts_with("PPid:") {
-                                if line.split_whitespace().nth(1) == Some(&me.to_string()) {
-                                    return true;
-                                }
-                            }
+                if let Some(state) = stat.split_whitespace().nth(2)
+                    && state.starts_with('Z')
+                {
+                    // Confirm it is actually our child via /proc/<pid>/status PPid.
+                    let status =
+                        std::fs::read_to_string(entry.path().join("status")).unwrap_or_default();
+                    for line in status.lines() {
+                        if line.starts_with("PPid:")
+                            && line.split_whitespace().nth(1) == Some(&me.to_string())
+                        {
+                            return true;
                         }
                     }
                 }

@@ -146,7 +146,13 @@ pub fn is_held(resource: &str) -> bool {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return false,
         Err(_) => return true,
     };
-    match try_lock(&file, LockMode::Exclusive) {
+    // Probe with a SHARED lock: two concurrent probes coexist instead of
+    // colliding (an exclusive probe momentarily holds the flock, so a
+    // concurrent scan of the same file reads it as "held" — a live flake
+    // under parallel launch-path scans), while a real holder still blocks
+    // the shared probe because every holder acquires EXCLUSIVE. Contract:
+    // this probe cannot see `acquire_shared` holders; nothing scans those.
+    match try_lock(&file, LockMode::Shared) {
         // Acquired instantly → nobody held it. The probe lock releases when
         // `file` drops at the end of this function.
         Ok(acquired) => !acquired,

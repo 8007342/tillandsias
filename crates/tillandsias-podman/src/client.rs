@@ -648,6 +648,47 @@ impl PodmanClient {
         Ok(())
     }
 
+    /// Remove a container WITHOUT `-f`, so podman REFUSES (instead of
+    /// SIGKILLing) when the container is running or paused.
+    ///
+    /// Order 494 interim guard (leak-not-destroy): the per-project cleanup
+    /// path removes FORGE containers through this variant because a forge's
+    /// clone-only workspace holds uncommitted in-forge work — a cleanup that
+    /// misreads the active-lane refcount must fail loudly rather than destroy
+    /// a running sibling's work. The probe is atomic: podman itself checks
+    /// container state at removal time, so there is no check-then-remove race.
+    ///
+    /// `podman rm` exit codes are the contract: 0 = removed; 1 = no such
+    /// container (tolerated, same as [`Self::remove_container`]'s absent-name
+    /// path); 2 = running/paused (refused, container untouched); anything
+    /// else = failed (container untouched). [`Self::remove_container`]
+    /// (force) keeps its semantics for every other caller — only opt-in call
+    /// sites get this guard.
+    ///
+    /// @trace plan/issues/macos-concurrent-lane-launch-kills-sibling-2026-07-27.md
+    pub async fn remove_container_unless_running(&self, name: &str) -> NonForceRemoval {
+        debug!(
+            name,
+            "Removing container (non-force; a running container is refused, not killed)"
+        );
+        let args = vec!["rm".into(), name.to_string()];
+        match self.execute(OperationKind::Container, &args).await {
+            Ok(_) => NonForceRemoval::Removed,
+            Err(failure) if failure.output.status == Some(1) => {
+                warn!(name, error = %failure, "Container removal skipped — may not exist");
+                NonForceRemoval::Removed
+            }
+            Err(failure) if failure.output.status == Some(2) => {
+                warn!(name, error = %failure, "Container is running/paused — non-force removal refused");
+                NonForceRemoval::RefusedRunning(failure)
+            }
+            Err(failure) => {
+                warn!(name, error = %failure, "Non-force container removal failed");
+                NonForceRemoval::Failed(failure)
+            }
+        }
+    }
+
     /// Build a container image from a Containerfile.
     #[instrument(skip(self), fields(image.tag = %tag))]
     pub async fn build_image(
@@ -1732,6 +1773,23 @@ pub struct ContainerListEntry {
     pub state: String,
 }
 
+/// Outcome of [`PodmanClient::remove_container_unless_running`] (order 494
+/// interim guard). Failure variants carry the raw command facts so callers
+/// can report WHY a container was left in place (leak-not-destroy).
+#[derive(Debug)]
+pub enum NonForceRemoval {
+    /// The container was removed (it existed and was not running), or it did
+    /// not exist at all (`podman rm` exit 1 — tolerated, matching
+    /// [`PodmanClient::remove_container`]'s absent-name behavior).
+    Removed,
+    /// podman refused the removal because the container is RUNNING or paused
+    /// (`podman rm` exit 2). The container was left untouched.
+    RefusedRunning(CommandFailure),
+    /// The removal failed for any other reason (exit 125, transport error…).
+    /// Nothing was destroyed; the container's state is unknown.
+    Failed(CommandFailure),
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct PodmanPsEntry {
     #[serde(rename = "Names")]
@@ -2291,6 +2349,59 @@ mod tests {
                 duration: Duration::ZERO,
             }),
             retry: RetryClass::Unknown,
+        }
+    }
+
+    /// Order 494 interim guard: the non-force removal variant maps
+    /// `podman rm` exit codes onto leak-not-destroy outcomes — a RUNNING
+    /// container is refused (exit 2), never SIGKILLed, and the argv must
+    /// carry no force flag at all.
+    /// @trace plan/issues/macos-concurrent-lane-launch-kills-sibling-2026-07-27.md
+    #[tokio::test]
+    async fn non_force_removal_maps_rm_exit_codes_to_leak_not_destroy_outcomes() {
+        let backend = std::sync::Arc::new(crate::backend::FakeBackend::default());
+        // exit 0: removed. FakeBackend's default response is status 0.
+        backend.push(Err(fake_failure(Some(1), "no such container"))); // absent
+        backend.push(Err(fake_failure(Some(2), "container state improper"))); // running
+        backend.push(Err(fake_failure(Some(125), "cannot connect"))); // other
+        let client = PodmanClient::with_backend(backend.clone());
+
+        // Queue order: 1 (absent), 2 (running), 125 (other), then default 0.
+        assert!(
+            matches!(
+                client.remove_container_unless_running("c").await,
+                NonForceRemoval::Removed
+            ),
+            "exit 1 (no such container) must stay the tolerated absent path"
+        );
+        assert!(
+            matches!(
+                client.remove_container_unless_running("c").await,
+                NonForceRemoval::RefusedRunning(_)
+            ),
+            "exit 2 (running/paused) must be a refusal, not a kill"
+        );
+        assert!(
+            matches!(
+                client.remove_container_unless_running("c").await,
+                NonForceRemoval::Failed(_)
+            ),
+            "any other failure must report Failed, leaving the container alone"
+        );
+        assert!(
+            matches!(
+                client.remove_container_unless_running("c").await,
+                NonForceRemoval::Removed
+            ),
+            "exit 0 removes a stopped container as before"
+        );
+
+        for (_, argv) in backend.seen() {
+            assert_eq!(
+                argv,
+                vec!["rm".to_string(), "c".to_string()],
+                "non-force removal must be plain `rm <name>` — no -f/--force"
+            );
         }
     }
 

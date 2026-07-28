@@ -52,7 +52,7 @@ suitable for scripting.
 | `--status-once`            | Connect to the live control wire, request `VmStatus`, print phase / `podman_ready` / `last_event` + a `Status: READY/REACHABLE-NOT-READY/UNREACHABLE (exit N)` self-summarizing footer. | `0` Ready / `2` reachable-not-Ready / `1` unreachable |
 | `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
 | `--diagnose`               | Bundled human-readable health report (~13 rows in 5 grouped sections: binary identity, logs, host software, WSL distro + rootfs, control wire — followed by recent log tail and a `Status: HEALTHY/DEGRADED (exit N)` self-summarizing footer). | `0` healthy / `2` degraded / `1` hard fail |
-| `--diagnose --json`        | Same report as a structured JSON object on stdout (19 top-level keys, see schema below).    | (same as `--diagnose`)  |
+| `--diagnose --json`        | Same report as a structured JSON object on stdout (20 top-level keys, see schema below).    | (same as `--diagnose`)  |
 | `--logs [--tail N] [--bak]` | Dump the tray log to stdout; `--tail N` for last N lines, `--bak` for the rotation backup `tray.log.bak`. | `0` readable / `1` missing |
 | `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note + ENVIRONMENT vars.  | `0`                     |
 | `--version` / `-V`         | Print `tillandsias-tray <workspace VERSION> (<build_commit>)` on one line.                  | `0`                     |
@@ -163,7 +163,8 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
   },
   "recent_log_tail": [                     // array of string — last 20 lines of tray.log
     "2026-05-28T... INFO ..."
-  ]
+  ],
+  "guest_version": "0.3.260721.1"          // string | null — in-VM headless build version from the wire handshake (windows-260719-4 skew guard); null when the wire is down
 }
 ```
 

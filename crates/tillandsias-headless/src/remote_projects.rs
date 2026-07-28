@@ -761,10 +761,7 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
-    use std::sync::Mutex;
     use tempfile::tempdir;
-
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn install_podman_mock() -> tempfile::TempDir {
         let dir = tempdir().expect("tempdir");
@@ -783,7 +780,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::runtime_assets::env_lock();
         // Ensure no override is leaking from a previous test.
         unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
         let tag = git_image_tag();
@@ -840,7 +837,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::runtime_assets::env_lock();
         invalidate_github_projects_cache();
         let mut guard = cache().lock().expect("cache lock");
         *guard = Some(CacheEntry {
@@ -865,7 +862,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::runtime_assets::env_lock();
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
         let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
@@ -906,7 +903,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::runtime_assets::env_lock();
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
         let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
@@ -996,7 +993,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::runtime_assets::env_lock();
         let podman_dir = install_podman_mock();
         let state_dir = tempdir().expect("state tempdir");
         let original_path = std::env::var_os("PATH");
@@ -1059,7 +1056,7 @@ mod tests {
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
         // acquires the lock afterward.
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = crate::runtime_assets::env_lock();
         let podman_dir = install_podman_mock();
         let state_dir = tempdir().expect("state tempdir");
         let original_path = std::env::var_os("PATH");

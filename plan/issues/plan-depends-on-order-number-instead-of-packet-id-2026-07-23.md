@@ -3,7 +3,7 @@
 **Filed**: 2026-07-23T02:10Z
 **Host**: forge (TILLANDSIAS_HOST_KIND=forge)
 **Classification**: enhancement
-**Status**: fixed (same commit)
+**Status**: resolved 2026-07-25
 **Order**: n/a (routine finding)
 
 ## Symptom
@@ -39,3 +39,25 @@ in `plan/index.yaml` line 20061.
 - `cargo test -p tillandsias-plan --lib` → 8/8 pass
 - `cargo test --workspace` → all pass
 - `./build.sh --check` → clean
+
+## Recurrence: 2026-07-25 local-build smoke
+
+The order 246/247 split introduced two more bare child-order references:
+
+- `token-lifecycle-policy: depends_on -> unresolved reference '246a'`
+- `git-mirror-forwarding-e2e: depends_on -> unresolved reference '247a'`
+
+The child packets exist as `credential-inventory-audit` and
+`tls-certificate-chain-audit`; only their alphanumeric `order` fields were used
+as dependencies. This failed both `tillandsias-plan` integrity tests and
+`litmus:plan-engine-invariants-shape`, stopping the 2026-07-25 local-build e2e
+at Gate 1 before install/reset. The smallest repair is the same as the original:
+depend on stable packet IDs and rerun the two exact gates.
+
+## Recurrence resolution
+
+Replaced `246a` with `credential-inventory-audit` and `247a` with
+`tls-certificate-chain-audit`. Verification on the repaired live ledger:
+
+- `cargo test -p tillandsias-plan --lib` -> 8 passed, 0 failed
+- `./scripts/run-litmus-test.sh spec-traceability --phase pre-build --size quick --compact` -> `litmus:plan-engine-invariants-shape` passed 4/4 steps; runner summary 7 passed, 0 failed

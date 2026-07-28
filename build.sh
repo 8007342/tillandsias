@@ -523,9 +523,15 @@ _run_litmus_phase() {
 _run_local_ci_gate() {
     local -a command=(bash "$SCRIPT_DIR/scripts/local-ci.sh" "$@")
     if [[ "$FLAG_GRAPHS" == true ]]; then
-        "${command[@]}" >/tmp/tillandsias-ci-graphs.log 2>&1
+        MD_OUT="$SCRIPT_DIR/target/convergence/centicolon-dashboard.md" \
+            JSON_OUT="$SCRIPT_DIR/target/convergence/centicolon-dashboard.json" \
+            SUMMARY_OUT="$SCRIPT_DIR/target/convergence/summary.md" \
+            "${command[@]}" >/tmp/tillandsias-ci-graphs.log 2>&1
     else
-        "${command[@]}"
+        MD_OUT="$SCRIPT_DIR/target/convergence/centicolon-dashboard.md" \
+            JSON_OUT="$SCRIPT_DIR/target/convergence/centicolon-dashboard.json" \
+            SUMMARY_OUT="$SCRIPT_DIR/target/convergence/summary.md" \
+            "${command[@]}"
     fi
 }
 
@@ -533,8 +539,7 @@ _prepare_ci_full_install_inputs() {
     [[ "$FLAG_CI_FULL" == true ]] || return 0
     [[ "$FLAG_INSTALL" == true ]] || return 0
 
-    _step "Preparing version and staged guest binaries for full install CI..."
-    "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
+    _step "Preparing trace indexes and staged guest binaries for full install CI..."
     "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
 
     if [[ ! -x "$SCRIPT_DIR/scripts/build-guest-binaries.sh" ]]; then
@@ -586,9 +591,8 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
     # If --ci is the only flag, exit with success
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
         if [[ "$FLAG_GRAPHS" == true ]]; then
-            "$SCRIPT_DIR/scripts/update-convergence-dashboard.sh" >/dev/null 2>&1 || true
-            if [[ -f "$SCRIPT_DIR/docs/convergence/centicolon-dashboard.md" ]]; then
-                cat "$SCRIPT_DIR/docs/convergence/centicolon-dashboard.md"
+            if [[ -f "$SCRIPT_DIR/target/convergence/centicolon-dashboard.md" ]]; then
+                cat "$SCRIPT_DIR/target/convergence/centicolon-dashboard.md"
             fi
         fi
         exit 0
@@ -602,7 +606,6 @@ fi
 if [[ "$FLAG_INSTALL" == true ]]; then
     _step "Building portable launcher (musl-static) with tray support for install..."
     if [[ "$FLAG_CI_FULL" == false ]]; then
-        "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
         "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
     fi
 
@@ -681,7 +684,8 @@ if [[ "$FLAG_INSTALL" == true ]]; then
         fi
 
         _step "Generating evidence bundle..."
-        if bash "$SCRIPT_DIR/scripts/generate-evidence-bundle.sh" --reuse-ci-results; then
+        if DASHBOARD_FILE="$SCRIPT_DIR/target/convergence/centicolon-dashboard.json" \
+            bash "$SCRIPT_DIR/scripts/generate-evidence-bundle.sh" --reuse-ci-results; then
             _info "Evidence bundle generated for convergence validation"
         else
             _warn "Evidence bundle generation failed (non-fatal)"
@@ -739,7 +743,7 @@ fi
 
 # Release build
 if [[ "$FLAG_RELEASE" == true ]]; then
-    if ! bash "$SCRIPT_DIR/scripts/local-ci.sh" --fast "${CI_ARG_LIST[@]}"; then
+    if ! _run_local_ci_gate --fast "${CI_ARG_LIST[@]}"; then
         _error "CI/CD validation failed — fix issues before releasing"
         exit 1
     fi

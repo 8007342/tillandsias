@@ -162,22 +162,23 @@ for IMAGE in "${IMAGES[@]}"; do
             # Positive evidence of currency: the canonical source-hash tag is
             # present on the exact image this container runs.
             echo "ok: $C runs current tillandsias-$IMAGE (${EXPECTED:0:12})"
-        elif [ -n "$SOURCE_DIGEST" ] && [ "$SOURCE_DIGEST" != "<no value>" ]; then
-            # Built by the Rust image_builder, whose source-digest is computed
-            # over the context tree plus non-filesystem build inputs. Shell
-            # cannot recompute it, so this gate must NOT guess. Defer.
-            echo "indeterminate: $C carries a source-digest label (${SOURCE_DIGEST:0:19}…);"
-            echo "               freshness for this image is owned by tillandsias-core::image_builder."
-            INDETERMINATE=$((INDETERMINATE + 1))
         elif printf '%s' "$TAGS" | tr ' ' '\n' | grep -q "tillandsias-$IMAGE:[0-9a-f]\{64\}$"; then
             # It carries SOME canonical source-hash tag, just not the expected
-            # one. That is positive evidence of drift.
+            # one. That positive evidence of drift takes precedence over an
+            # inherited source-digest label.
             RUNNING_TAG="$(printf '%s' "$TAGS" | tr ' ' '\n' | grep "tillandsias-$IMAGE:[0-9a-f]\{64\}$" | head -1)"
             echo "FAIL: $C runs a STALE tillandsias-$IMAGE image" >&2
             echo "      running:  $RUNNING_TAG" >&2
             echo "      expected: localhost/tillandsias-$IMAGE:${EXPECTED}" >&2
             echo "      fix:      ./build-$IMAGE.sh && relaunch the container" >&2
             DRIFTED=1
+        elif [ -n "$SOURCE_DIGEST" ] && [ "$SOURCE_DIGEST" != "<no value>" ]; then
+            # Built by the Rust image_builder, whose source-digest is computed
+            # over the context tree plus non-filesystem build inputs. Shell
+            # cannot recompute it, so label-only identity must defer.
+            echo "indeterminate: $C carries a source-digest label (${SOURCE_DIGEST:0:19}…);"
+            echo "               freshness for this image is owned by tillandsias-core::image_builder."
+            INDETERMINATE=$((INDETERMINATE + 1))
         else
             # No canonical tag and no label — tags may simply have been pruned
             # by a later build. Absence of evidence is not evidence of drift.

@@ -2,7 +2,7 @@
 name: litmus:provider-device-auth-shape
 spec: tillandsias-vault
 phase: pre-build
-description: Pin the Claude/Antigravity device login commands, opaque stdin-to-Vault schema, restore/rotation wiring, and the tray no-TTY CLI-lane delegation
+description: Pin the Claude/Antigravity device login commands, opaque stdin-to-Vault schema, restore/rotation wiring, and the tray no-TTY CLI-lane delegation (OpenCode joined the credentialed set in 3df90b4d)
 severity: high
 size: quick
 
@@ -23,8 +23,8 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: provider device schemas + alias"
 
-  - step: "tray credentialed-agent clicks delegate to the TTY-capable CLI lane"
-    command: "grep -Fq 'ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::Antigravity' crates/tillandsias-headless/src/main.rs && echo 'ok: tray cli-lane delegation'"
+  - step: "tray credentialed-agent clicks (codex/claude/opencode/antigravity) delegate to the TTY-capable CLI lane"
+    command: "tr -d ' \\n' < crates/tillandsias-headless/src/main.rs | grep -Fq 'ForgeAgentMode::Codex|ForgeAgentMode::Claude|ForgeAgentMode::OpenCode|ForgeAgentMode::Antigravity' && echo 'ok: tray cli-lane delegation'"
     timeout_ms: 3000
     expected_behavior: "ok: tray cli-lane delegation"
 

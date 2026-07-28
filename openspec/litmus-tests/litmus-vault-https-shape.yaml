@@ -2,7 +2,7 @@
 name: litmus:vault-https-shape
 spec: tillandsias-vault
 phase: pre-build
-description: Pin Vault HTTPS, CA trust, server identity, and secret-mounted TLS material
+description: Pin Vault HTTPS, in-VM no-publish routing, CA trust, server identity, and secret-mounted TLS material
 severity: critical
 size: instant
 
@@ -21,6 +21,11 @@ critical_path:
     command: "grep -F 'api_addr     = \"https://vault:8200\"' images/vault/vault.hcl && grep -F 'VAULT_ADDR=\"https://127.0.0.1:8200\"' images/vault/entrypoint.sh"
     timeout_ms: 3000
     expected_behavior: "https://vault:8200"
+
+  - step: "In-VM headless selects enclave DNS without a host publish"
+    command: "grep -F 'linux_vault_api_base_url(is_running_in_vm())' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'let host_publish_arg = vault_host_publish_arg(is_running_in_vm());' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'if let Some(publish) = host_publish_arg' crates/tillandsias-headless/src/vault_bootstrap.rs"
+    timeout_ms: 3000
+    expected_behavior: "host_publish_arg"
 
   - step: "Vault leaf certificate covers network and loopback identities"
     command: "grep -F 'subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1' crates/tillandsias-headless/src/vault_bootstrap.rs"

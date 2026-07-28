@@ -27,7 +27,10 @@ critical_path:
     command: "LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --init --status-check /tmp/litmus-e2e-project 2>&1"
     timeout_ms: 120000
     success_pattern: "app.stopped|shutdown|completed"
-    failure_pattern: "error|panic|failed"
+    # Pattern narrowed 2026-07-24: WARNING lines legitimately contain the word
+    # "failed" since dcafd59c (mirror AppRole mint warns when vault is absent
+    # under fake podman); only a panic or an ERROR-level line fails this step.
+    failure_pattern: "panic|ERROR"
 
   - step: "verify no stale sockets after status-check"
     command: "SOCKET_COUNT=$(find /tmp -maxdepth 2 -name 'tillandsias*.sock' 2>/dev/null | wc -l); [[ $SOCKET_COUNT -eq 0 ]] && echo 'CLEAN: 0 sockets' || (echo \"LEAK: $SOCKET_COUNT sockets found\"; exit 1)"

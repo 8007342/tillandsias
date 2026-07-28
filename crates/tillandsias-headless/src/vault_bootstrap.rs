@@ -35,9 +35,9 @@ const VAULT_TLS_KEY_SECRET: &str = "tillandsias-vault-tls-key";
 const VAULT_TLS_CA_SECRET: &str = "tillandsias-vault-tls-ca";
 const VAULT_NETWORK_ALIAS: &str = "vault";
 const VAULT_API_BASE_URL_ENV: &str = "TILLANDSIAS_VAULT_API_BASE_URL";
-// Loopback port we publish for the host-process to reach vault during the
-// POC (Linux host == VM). In Phase 4/5 the host shell will use vsock
-// instead of publishing a port.
+// Native rootless Linux cannot resolve the enclave network alias or directly
+// route to the bridge. It remains the one named consumer of this compatibility
+// publish; in-VM headless launches never publish Vault to the host namespace.
 pub const VAULT_HOST_PORT: u16 = 8201;
 
 /// Keychain service name for Tillandsias.
@@ -277,6 +277,19 @@ fn vault_service_base_url() -> String {
     format!("https://{VAULT_NETWORK_ALIAS}:8200")
 }
 
+#[cfg(target_os = "linux")]
+fn linux_vault_api_base_url(running_in_vm: bool) -> String {
+    if running_in_vm {
+        vault_service_base_url()
+    } else {
+        format!("https://127.0.0.1:{VAULT_HOST_PORT}")
+    }
+}
+
+fn vault_host_publish_arg(running_in_vm: bool) -> Option<String> {
+    (!running_in_vm).then(|| format!("127.0.0.1:{VAULT_HOST_PORT}:8200"))
+}
+
 fn vault_api_base_url() -> String {
     std::env::var(VAULT_API_BASE_URL_ENV)
         .ok()
@@ -298,11 +311,7 @@ fn vault_api_base_url() -> String {
             // @trace plan/issues/vault-host-dns-vault-name-unresolvable-2026-07-03.md
             #[cfg(target_os = "linux")]
             {
-                if is_running_in_vm() {
-                    vault_service_base_url()
-                } else {
-                    format!("https://127.0.0.1:{VAULT_HOST_PORT}")
-                }
+                linux_vault_api_base_url(is_running_in_vm())
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -1255,11 +1264,6 @@ pub async fn mint_approle_auto_auth_for_container(
 #[allow(dead_code)]
 pub struct AppRoleSecretLease {
     secret_name: String,
-    /// Order 235 (R7): shared vault-stability lock held for the lease's whole
-    /// lifetime — a vault recreate (exclusive holder) waits for this lease to
-    /// drop, so the container consuming the minted secret never observes the
-    /// vault container being replaced mid-flow.
-    _stability: crate::resource_lock::ResourceLockGuard,
 }
 
 impl AppRoleSecretLease {
@@ -1287,18 +1291,17 @@ pub fn mint_approle_secret_lease(
     container_instance: &str,
     debug: bool,
 ) -> Result<AppRoleSecretLease, String> {
-    // Order 235 (R7): acquired BEFORE minting and held by the returned lease.
-    let stability = vault_stability_lease(debug)?;
+    // Hold Vault stable only across token mint + Podman-secret creation. The
+    // returned secret can outlive this bounded operation, but its idle lane
+    // must not starve an exclusive ensure/heal for the lane's whole lifetime.
+    let _stability = vault_stability_lease(debug)?;
     let runtime = tokio_runtime()?;
     let (_token, secret_name) = runtime.block_on(mint_approle_token_for_container(
         role,
         container_instance,
         debug,
     ))?;
-    Ok(AppRoleSecretLease {
-        secret_name,
-        _stability: stability,
-    })
+    Ok(AppRoleSecretLease { secret_name })
 }
 
 /// Drain and revoke every per-container token recorded in the in-process
@@ -1978,6 +1981,7 @@ fn vault_selinux_label_opt(_debug: bool) -> Option<String> {
 
 fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let image_tag = canonical_vault_launch_tag(image_tag)?;
+    let host_publish_arg = vault_host_publish_arg(is_running_in_vm());
 
     // Tear down any previous container with the same name (idempotent).
     let _ = podman_cmd_sync()
@@ -2034,9 +2038,14 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let selinux_label = vault_selinux_label_opt(debug);
 
     if debug {
-        eprintln!(
-            "[tillandsias-vault] launching container {VAULT_CONTAINER_NAME} (alias {VAULT_NETWORK_ALIAS}:8200, publish 127.0.0.1:{VAULT_HOST_PORT}:8200)"
-        );
+        match &host_publish_arg {
+            Some(publish) => eprintln!(
+                "[tillandsias-vault] launching container {VAULT_CONTAINER_NAME} (alias {VAULT_NETWORK_ALIAS}:8200, native compatibility publish {publish})"
+            ),
+            None => eprintln!(
+                "[tillandsias-vault] launching container {VAULT_CONTAINER_NAME} (alias {VAULT_NETWORK_ALIAS}:8200, no host publish)"
+            ),
+        }
     }
 
     let secret_arg = VAULT_UNSEAL_SECRET.to_string();
@@ -2058,7 +2067,6 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     std::fs::create_dir_all(&vault_dir)
         .map_err(|e| format!("failed to create vault data dir: {}", e))?;
     let volume_arg = format!("{}:/vault/data:U", vault_dir.display());
-    let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
     let mut run_args: Vec<String> = vec![
         "run".into(),
         "-d".into(),
@@ -2107,13 +2115,11 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         run_args.push("--security-opt".into());
         run_args.push(label.clone());
     }
-    run_args.extend([
-        "--userns".into(),
-        "keep-id".into(),
-        "-p".into(),
-        port_arg,
-        image_tag.to_string(),
-    ]);
+    run_args.extend(["--userns".into(), "keep-id".into()]);
+    if let Some(publish) = host_publish_arg {
+        run_args.extend(["-p".into(), publish]);
+    }
+    run_args.push(image_tag.to_string());
     let status = podman_cmd_sync()
         .args(&run_args)
         .stdout(Stdio::null())
@@ -2252,6 +2258,7 @@ fn wait_for_vault_ready(
 /// against `images/vault/entrypoint.sh` by a test — update both together.
 const UNSEAL_LOG_SUBSEQUENT_BOOT: &str = "subsequent boot: using unseal key from secret";
 const UNSEAL_LOG_ATTEMPT: &str = "unsealing vault";
+const UNSEAL_LOG_WRONG_KEY: &str = "FATAL: unseal request returned HTTP 400: wrong key";
 const UNSEAL_LOG_SUCCESS: &str = "vault unsealed (sealed=false)";
 const UNSEAL_LOG_ALREADY: &str = "vault already unsealed";
 
@@ -2287,6 +2294,7 @@ fn unseal_failure_is_key_rejection(entrypoint_logs: &str, container_still_runnin
     }
     entrypoint_logs.contains(UNSEAL_LOG_SUBSEQUENT_BOOT)
         && entrypoint_logs.contains(UNSEAL_LOG_ATTEMPT)
+        && entrypoint_logs.contains(UNSEAL_LOG_WRONG_KEY)
         && !entrypoint_logs.contains(UNSEAL_LOG_SUCCESS)
         && !entrypoint_logs.contains(UNSEAL_LOG_ALREADY)
 }
@@ -3435,6 +3443,22 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
+    fn in_vm_vault_endpoint_has_no_loopback_publish_dependency() {
+        assert_eq!(linux_vault_api_base_url(true), "https://vault:8200");
+        assert_eq!(vault_host_publish_arg(true), None);
+
+        assert_eq!(
+            linux_vault_api_base_url(false),
+            format!("https://127.0.0.1:{VAULT_HOST_PORT}")
+        );
+        assert_eq!(
+            vault_host_publish_arg(false),
+            Some(format!("127.0.0.1:{VAULT_HOST_PORT}:8200"))
+        );
+    }
+
+    #[test]
     fn vault_tls_leaf_san_includes_service_dns() {
         let source = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -3792,6 +3816,7 @@ mod tests {
         for marker in [
             UNSEAL_LOG_SUBSEQUENT_BOOT,
             UNSEAL_LOG_ATTEMPT,
+            UNSEAL_LOG_WRONG_KEY,
             UNSEAL_LOG_SUCCESS,
             UNSEAL_LOG_ALREADY,
         ] {
@@ -3806,11 +3831,10 @@ mod tests {
         // attempted, HTTP 400 (curl 22), container dead — a key rejection.
         let base = "2026-07-17T12:00:00Z [vault-entrypoint] subsequent boot: using unseal key from secret\n\
                     2026-07-17T12:00:01Z [vault-entrypoint] unsealing vault\n";
-        let rejected = format!("{base}curl: (22) The requested URL returned error: 400\n");
+        let rejected = format!("{base}{UNSEAL_LOG_WRONG_KEY}\n");
         assert!(unseal_failure_is_key_rejection(&rejected, false));
-        let rejected_explicit =
-            format!("{base}FATAL: unseal call returned sealed=true — wrong key\n");
-        assert!(unseal_failure_is_key_rejection(&rejected_explicit, false));
+        let unclassified_400 = format!("{base}curl: (22) The requested URL returned error: 400\n");
+        assert!(!unseal_failure_is_key_rejection(&unclassified_400, false));
 
         // Container still running → possibly mid-unseal; not a rejection.
         assert!(!unseal_failure_is_key_rejection(&rejected, true));
@@ -3831,6 +3855,37 @@ mod tests {
             "[vault-entrypoint] FATAL: vault API never came up\n",
             false
         ));
+    }
+
+    #[test]
+    fn approle_secret_lease_does_not_hold_vault_lock_while_lane_is_idle() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let lease = source
+            .split("pub struct AppRoleSecretLease {")
+            .nth(1)
+            .expect("AppRoleSecretLease source")
+            .split('}')
+            .next()
+            .expect("AppRoleSecretLease body");
+        assert!(
+            !lease.contains("ResourceLockGuard"),
+            "an idle lane's secret lease must not retain the shared Vault lock"
+        );
+
+        let mint = source
+            .split("pub fn mint_approle_secret_lease(")
+            .nth(1)
+            .expect("mint_approle_secret_lease source")
+            .split("\n}")
+            .next()
+            .expect("mint_approle_secret_lease body");
+        assert!(
+            mint.contains("let _stability = vault_stability_lease(debug)?;"),
+            "token minting must remain protected by the shared Vault lock"
+        );
     }
 
     /// Exit-criterion litmus: a unseal secret that fails to unseal existing

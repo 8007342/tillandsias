@@ -1120,12 +1120,10 @@ impl TrayActionHost {
                 let _project_launch_lease = project_launch_lease;
                 match result {
                     Ok(slave_path) => {
+                        // Terminal.app + `screen` are now spawned inside
+                        // run_pty_attach (before the guest launch) so the forge
+                        // is seeded at the operator's real terminal geometry.
                         eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
-                        if let Err(e) =
-                            crate::terminal_attach::spawn_terminal_pty_attach(&slave_path)
-                        {
-                            eprintln!("[tillandsias-tray] {label}: terminal spawn failed: {e}");
-                        }
                     }
                     Err(e) => {
                         eprintln!("[tillandsias-tray] {label} failed: {e}");
@@ -1178,7 +1176,7 @@ async fn run_pty_attach(
 
     let router = Arc::new(PtyRouter::new());
     let alloc = SessionIdAllocator::default();
-    let (transport, _bridge_join, _wire_version) = crate::pty_vsock_bridge::connect_pty_bridge(
+    let (transport, bridge_join, _wire_version) = crate::pty_vsock_bridge::connect_pty_bridge(
         stream,
         router.clone(),
         32,
@@ -1191,38 +1189,162 @@ async fn run_pty_attach(
     let master = UnixPtyMaster::open(24, 80).map_err(|e| format!("openpty: {e}"))?;
     let slave_path = master.slave_path().to_string();
 
-    let opts = launch_spec(&intent, project.as_deref(), 24, 80);
-    let session = PtySession::open(Arc::new(transport), &alloc, &router, &opts)
-        .map_err(|e| format!("PtyOpen: {e}"))?;
+    // Per-session control socket: the in-window attach client reports its
+    // Hello/Resize geometry events here (event subscription — the tray is a
+    // GUI process with no controlling tty, so SIGWINCH can only be observed
+    // by the client that owns the window's tty). Bind BEFORE spawning
+    // Terminal.app so the client never races the listener.
+    // @trace spec:macos-native-tray.lifecycle.terminal-attach@v2,
+    //        plan/issues/macos-terminal-management-audit-2026-07-27.md (D1)
+    let sock_path = {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static ATTACH_SOCK_SEQ: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "tillandsias-pty-{}-{}.sock",
+            std::process::id(),
+            ATTACH_SOCK_SEQ.fetch_add(1, Ordering::Relaxed)
+        ))
+    };
+    let _ = std::fs::remove_file(&sock_path);
+    let listener = tokio::net::UnixListener::bind(&sock_path)
+        .map_err(|e| format!("session socket bind {}: {e}", sock_path.display()))?;
+    let sock_path_str = sock_path.to_string_lossy().into_owned();
 
-    // Window-resize forwarding. The guest child starts at the 24x80 default
-    // above; once Terminal.app + `screen` attach to the slave, the operator's
-    // REAL terminal size (and every later resize) lands on the shared PTY
-    // winsize. The tray is a GUI process with no controlling tty, so it never
-    // receives SIGWINCH — read the master winsize locally and relay changes to
-    // the guest so the child TUI repaints at the true size instead of clipping
-    // at 24x80. This is a cheap LOCAL ioctl, not a guest round-trip: it only
-    // touches the wire (one `PtyResize`) on an actual change. The detached
-    // handles outlive the `pump_io` move below; the loop ends when the master
-    // fd closes or the transport drops (session over).
-    {
-        let winsize_reader = master.winsize_reader();
-        let resize_sender = session.resize_sender();
-        tokio::spawn(async move {
-            let mut last: (u16, u16) = (24, 80);
-            loop {
-                tokio::time::sleep(Duration::from_millis(400)).await;
-                match winsize_reader.get() {
-                    Ok(size) if size != last && size.0 > 0 && size.1 > 0 => {
-                        last = size;
-                        if resize_sender.resize(size.0, size.1).is_err() {
-                            break; // transport gone → session ended
-                        }
+    if let Err(e) = crate::terminal_attach::spawn_terminal_pty_attach(&slave_path, &sock_path_str) {
+        eprintln!("[tillandsias-tray] terminal spawn failed: {e}");
+    }
+
+    // Event-driven geometry gate (replaces the former 100ms seed poll): the
+    // attach client's Hello carries the window's true size the instant the
+    // client owns the tty, so the guest forge PTY is BORN at the real
+    // geometry — first frame correct, no grow. Bounded: a never-attached
+    // path (Terminal.app failed, operator closed the window early) falls
+    // back to 24x80 after the timeout and a late client reconciles below.
+    use tillandsias_host_shell::pty::attach_client::{
+        SESSION_MSG_LEN, SessionMsg, decode_session_msg,
+    };
+    let mut seed: (u16, u16) = (24, 80);
+    let mut early_client: Option<tokio::net::UnixStream> = None;
+    match tokio::time::timeout(Duration::from_secs(10), listener.accept()).await {
+        Ok(Ok((mut stream, _))) => {
+            use tokio::io::AsyncReadExt;
+            let mut buf = [0u8; SESSION_MSG_LEN];
+            match tokio::time::timeout(Duration::from_secs(5), stream.read_exact(&mut buf)).await {
+                Ok(Ok(_)) => match decode_session_msg(&buf) {
+                    Some(SessionMsg::Hello { rows, cols })
+                    | Some(SessionMsg::Resize { rows, cols })
+                        if rows > 0 && cols > 0 =>
+                    {
+                        seed = (rows, cols);
                     }
-                    Ok(_) => {}
-                    Err(_) => break, // master fd closed → session ended
+                    _ => eprintln!("[tillandsias-tray] pty-attach: malformed Hello; 24x80 seed"),
+                },
+                _ => eprintln!("[tillandsias-tray] pty-attach: no Hello from client; 24x80 seed"),
+            }
+            early_client = Some(stream);
+        }
+        _ => eprintln!(
+            "[tillandsias-tray] pty-attach: no attach client within 10s; \
+             launching at 24x80 (a late client will reconcile via resize)"
+        ),
+    }
+    eprintln!(
+        "[tillandsias-tray] pty-attach: seeding forge at {}x{} (attach-client geometry)",
+        seed.0, seed.1
+    );
+
+    let opts = launch_spec(&intent, project.as_deref(), seed.0, seed.1);
+    let session = match PtySession::open(Arc::new(transport), &alloc, &router, &opts) {
+        Ok(s) => s,
+        Err(e) => {
+            // The session-control task (sole owner of the socket-file
+            // cleanup) is never spawned on this path — unlink here or the
+            // bound socket file leaks per failed attach (review F5). The
+            // per-attach connection is useless without a session: drop it.
+            let _ = std::fs::remove_file(&sock_path);
+            bridge_join.abort();
+            return Err(format!("PtyOpen: {e}"));
+        }
+    };
+
+    // Session-control task (replaces the former 400ms winsize poll —
+    // event-driven, per the no-polling policy). Each socket message is a
+    // discrete client event: Resize (and a late Hello) → wire `PtyResize`
+    // (guest applies TIOCSWINSZ; kernel raises SIGWINCH; podman forwards
+    // into the container; TUI reflows). Socket EOF is the detach signal:
+    // the window closed or the client died. All sends ride the lossless
+    // transport path (audit D3), but bounded — a send parked past its
+    // timeout means the writer queue is wedged (deferred D6), and the
+    // teardown below still must run.
+    {
+        let control = session.resize_sender();
+        let sock_cleanup = sock_path.clone();
+        tokio::spawn(async move {
+            use tillandsias_control_wire::PtyExit;
+            use tokio::io::AsyncReadExt;
+            let stream = match early_client {
+                Some(s) => Some(s),
+                // Late-attach lane (cold Terminal.app slower than the seed
+                // gate): one bounded wait, not a loop. The client's Hello
+                // arrives in the message loop below and reconciles size.
+                None => {
+                    match tokio::time::timeout(Duration::from_secs(120), listener.accept()).await {
+                        Ok(Ok((s, _))) => Some(s),
+                        _ => None,
+                    }
+                }
+            };
+            drop(listener); // one client per session
+            if let Some(mut stream) = stream {
+                let mut buf = [0u8; SESSION_MSG_LEN];
+                // A failed read = client gone (window closed / session over).
+                'msgs: while stream.read_exact(&mut buf).await.is_ok() {
+                    match decode_session_msg(&buf) {
+                        Some(SessionMsg::Hello { rows, cols })
+                        | Some(SessionMsg::Resize { rows, cols }) => {
+                            if rows == 0 || cols == 0 {
+                                continue;
+                            }
+                            // Bounded: a resize parked >5s = wedged writer
+                            // queue → stop consuming, fall to teardown.
+                            match tokio::time::timeout(
+                                Duration::from_secs(5),
+                                control.resize(rows, cols),
+                            )
+                            .await
+                            {
+                                Ok(Ok(())) => {}
+                                _ => break 'msgs,
+                            }
+                        }
+                        None => break, // protocol violation → detach
+                    }
                 }
             }
+            // Detach teardown — UNCONDITIONAL (review F1/F2): the guest
+            // child was launched by PtyOpen even if no client ever attached
+            // (TCC-denied osascript, window closed pre-connect), and this
+            // is the only reaper. In-band close first (graceful SIGTERM
+            // path; idempotent if the session already ended)…
+            let closed = tokio::time::timeout(
+                Duration::from_secs(5),
+                control.close(PtyExit {
+                    code: 0,
+                    signal: Some(1), // SIGHUP: the terminal went away
+                }),
+            )
+            .await;
+            if matches!(closed, Ok(Ok(()))) {
+                // One bounded grace so the bridge writer can flush the
+                // enqueued close frame before the abort below.
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+            // …then drop the per-attach vsock connection: it has no purpose
+            // beyond this session, and the guest's connection-scoped
+            // shutdown_all is the out-of-band reaper whenever the in-band
+            // close could not be delivered (wedged queue, D6).
+            bridge_join.abort();
+            let _ = std::fs::remove_file(&sock_cleanup);
         });
     }
 

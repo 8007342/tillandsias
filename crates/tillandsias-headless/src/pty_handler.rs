@@ -167,6 +167,38 @@ impl PtySessionStore {
         let OpenptyOwned { master, slave } =
             openpty_owned(rows, cols).map_err(PtyOpenError::Openpty)?;
 
+        // 1b) Line-discipline hygiene (audit D2 — the character-bleeding
+        // source): the kernel-default slave termios is cooked with the echo
+        // family ON, so during any phase where the child is not itself raw
+        // (the whole `bash -lc` provisioning window before podman attaches)
+        // unconsumed host input — e.g. Terminal.app scroll synthesized into
+        // arrow keys — echoes straight back as literal `^[[A`/`^[[B` over an
+        // output-only stream. Clear ONLY the echo family; ISIG (Ctrl+C
+        // ownership) and everything else stay untouched. TUIs and `podman
+        // exec -it` set their own termios/echo; the lanes that DO rely on
+        // kernel echo for typed input (github-login's cooked prompts, the
+        // bare-VM `/bin/bash -l` debug shell whose non-readline children
+        // would type blind) keep it — see `argv_wants_kernel_echo`.
+        // @trace plan/issues/macos-terminal-management-audit-2026-07-27.md (D2),
+        //        plan/issues/macos-tray-scroll-arrowkey-spill-during-build-2026-07-23.md
+        if !argv_wants_kernel_echo(&argv)
+            && let Err(err) = clear_slave_echo_family(&slave)
+        {
+            // Best-effort: a cooked-echo PTY is degraded UX, not a
+            // launch blocker.
+            warn!(session_id, %err, "guest PTY echo-family clear failed");
+        }
+        // 1c) UTF-8-aware cooked-mode editing (order-491 in-forge probe 1):
+        // the kernel default leaves IUTF8 off, so a canonical-mode erase
+        // (backspace in github-login prompts, `read` lines) can split a
+        // multibyte sequence even though the session env is UTF-8
+        // (LANG=C.UTF-8 / en_US.UTF-8). Linux-only flag; the guest is
+        // always Linux — the cfg keeps macOS dev-host unit builds green.
+        #[cfg(target_os = "linux")]
+        if let Err(err) = set_slave_iutf8(&slave) {
+            warn!(session_id, %err, "guest PTY IUTF8 set failed");
+        }
+
         // 2) Build the child Command. Slave fd becomes child stdin/out/err
         //    and its controlling tty (via setsid + TIOCSCTTY in pre_exec).
         let slave_raw = slave.as_raw_fd();
@@ -452,6 +484,54 @@ fn openpty_owned(rows: u16, cols: u16) -> nix::Result<OpenptyOwned> {
     })
 }
 
+/// Does this argv rely on KERNEL echo for operator-typed input?
+/// - github-login: prompts for name/email/PAT via plain cooked reads (no
+///   readline, no TUI).
+/// - the bare-VM debug shell (`/bin/bash -l`, PtyIntent::Shell with no
+///   project): readline restores the shell's STARTUP termios before each
+///   foreground command, so cooked non-readline children (`read`, `cat`)
+///   would type blind with the family cleared (review F5) — and the bleed
+///   this clear targets lives in the orchestrated `-lc`/agent lanes, not
+///   in a human-driven debug shell.
+///
+/// Everything else (agent TUIs, `-lc` provisioning streams, `podman exec
+/// -it` shells whose echo comes from the container PTY) gets the family
+/// cleared (audit D2). Accepted residue: a cooked `read` prompt inside a
+/// `-lc` provisioning stream types blind — that lane is output-only by
+/// design.
+fn argv_wants_kernel_echo(argv: &[String]) -> bool {
+    argv.iter().any(|a| a.contains("--github-login"))
+        || matches!(argv, [bash, flag] if bash == "/bin/bash" && flag == "-l")
+}
+
+/// Clear the echo family (`ECHO|ECHOE|ECHOK|ECHONL|ECHOCTL`) on the guest
+/// PTY slave, leaving every other flag — crucially `ISIG`: this endpoint
+/// OWNS Ctrl+C→SIGINT for the child's foreground process group — exactly as
+/// the kernel set it. `cfmakeraw` here is explicitly rejected prior art: it
+/// clears `ISIG` and would break Ctrl+C on the signal-owning endpoint
+/// (that lever is correct only for the transparent host conduit).
+fn clear_slave_echo_family(slave: &OwnedFd) -> nix::Result<()> {
+    use nix::sys::termios::{LocalFlags, SetArg, tcgetattr, tcsetattr};
+    let mut t = tcgetattr(slave)?;
+    t.local_flags &= !(LocalFlags::ECHO
+        | LocalFlags::ECHOE
+        | LocalFlags::ECHOK
+        | LocalFlags::ECHONL
+        | LocalFlags::ECHOCTL);
+    tcsetattr(slave, SetArg::TCSANOW, &t)
+}
+
+/// Mark the guest PTY line discipline UTF-8-aware (`IUTF8`) so canonical-
+/// mode erase treats multibyte sequences as one character instead of
+/// splitting them byte-wise. Linux-only flag (absent on Darwin).
+#[cfg(target_os = "linux")]
+fn set_slave_iutf8(slave: &OwnedFd) -> nix::Result<()> {
+    use nix::sys::termios::{InputFlags, SetArg, tcgetattr, tcsetattr};
+    let mut t = tcgetattr(slave)?;
+    t.input_flags |= InputFlags::IUTF8;
+    tcsetattr(slave, SetArg::TCSANOW, &t)
+}
+
 fn set_winsize(fd: std::os::fd::RawFd, rows: u16, cols: u16) -> nix::Result<()> {
     use nix::libc;
     let winsize = libc::winsize {
@@ -698,6 +778,81 @@ mod tests {
             .expect("heartbeat arrives before deadline")
             .expect("outbound channel remains open");
         assert_eq!(heartbeat, pty_heartbeat_envelope(77));
+        store.shutdown_all().await;
+    }
+
+    /// Audit D2 scoping (amended per review F5): kernel echo stays for the
+    /// typed-input lanes — github-login's cooked prompts AND the bare-VM
+    /// `/bin/bash -l` debug shell (its non-readline children would type
+    /// blind). Orchestrated `-lc`/agent lanes clear the family.
+    #[test]
+    fn kernel_echo_scope_is_typed_input_lanes_only() {
+        let login = vec![
+            "/bin/bash".to_string(),
+            "-lc".to_string(),
+            "exec tillandsias-headless --github-login || false".to_string(),
+        ];
+        assert!(argv_wants_kernel_echo(&login));
+        let direct = vec![
+            "tillandsias-headless".to_string(),
+            "--github-login".to_string(),
+        ];
+        assert!(argv_wants_kernel_echo(&direct));
+        let debug_shell = vec!["/bin/bash".to_string(), "-l".to_string()];
+        assert!(argv_wants_kernel_echo(&debug_shell));
+        let provisioning = vec![
+            "/bin/bash".to_string(),
+            "-lc".to_string(),
+            "exec tillandsias-headless --cloud 'o/r' --opencode".to_string(),
+        ];
+        assert!(!argv_wants_kernel_echo(&provisioning));
+        let agent = vec!["tillandsias".to_string(), "--agent".to_string()];
+        assert!(!argv_wants_kernel_echo(&agent));
+    }
+
+    /// Audit D2 pin: a non-login guest PTY is born with the echo family OFF
+    /// (no `^[[A` bleed on output-only streams) while `ISIG` stays ON
+    /// (Ctrl+C still reaches the child's foreground pgrp through the line
+    /// discipline). Asserted on the master fd — termios is per-pair.
+    /// @trace plan/issues/macos-terminal-management-audit-2026-07-27.md (D2)
+    #[tokio::test]
+    async fn guest_pty_clears_echo_family_but_keeps_isig() {
+        use nix::sys::termios::{LocalFlags, tcgetattr};
+        let hermetic_home = std::env::temp_dir()
+            .join(format!("tillandsias-echo-pty-{}", std::process::id()))
+            .to_string_lossy()
+            .into_owned();
+        std::fs::create_dir_all(&hermetic_home).expect("hermetic HOME creates");
+        let (mut store, _rx) = store();
+        store
+            .open(
+                91,
+                24,
+                80,
+                vec![
+                    "/bin/bash".to_string(),
+                    "-lc".to_string(),
+                    "sleep 1".to_string(),
+                ],
+                vec![("HOME".to_string(), hermetic_home)],
+                None,
+            )
+            .await
+            .expect("echo-test PTY opens");
+        let t = {
+            let session = store.sessions.get(&91).expect("session stored");
+            tcgetattr(session.master.get_ref()).expect("tcgetattr on master")
+        };
+        assert!(
+            !t.local_flags.contains(LocalFlags::ECHO)
+                && !t.local_flags.contains(LocalFlags::ECHOCTL),
+            "echo family must be OFF on a non-login guest PTY: {:?}",
+            t.local_flags
+        );
+        assert!(
+            t.local_flags.contains(LocalFlags::ISIG),
+            "ISIG must stay ON — the guest line discipline owns Ctrl+C"
+        );
         store.shutdown_all().await;
     }
 

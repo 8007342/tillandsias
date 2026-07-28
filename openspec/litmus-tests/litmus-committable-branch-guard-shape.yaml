@@ -1,0 +1,83 @@
+# @trace spec:meta-orchestration
+#
+# Pins the executable Committable Branch Guard (plan order 476). Committable
+# cycles must consult a structured verdict (`ok:branch-<name>` |
+# `blocked:committable-cycle-on-main` | `blocked:detached-head` |
+# `blocked:not-a-git-repo`) emitted by an executable that returns a pass/fail
+# exit code, instead of the advisory prose ("Release: `main` through PR only")
+# that breach 34e60965 bypassed — an antigravity forge cycle running ON `main`
+# pushed a ~42k-line plan/index.yaml reserialization directly to origin/main
+# (reverted via PR #81; see
+# plan/issues/main-branch-direct-push-guard-2026-07-24.md). This test
+# falsifies drift in the guard's grammar, its refuse-main branch, its
+# fail-closed detached-HEAD branch, and the skills' wiring to it.
+name: litmus:committable-branch-guard-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/check-committable-branch.sh's committable_branch_verdict probe:
+  the standalone verdict mode, the falsifiable verdict grammar
+  ^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo))$,
+  the refuse-main and fail-closed detached-HEAD branches, and the
+  meta-orchestration + advance-work-from-plan skills' consultation of the
+  probe before committable work.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-committable-branch.sh
+  - workspace contains skills/meta-orchestration/SKILL.md
+  - workspace contains skills/advance-work-from-plan/SKILL.md
+  - shell utilities (grep, bash, git, mktemp) are available in PATH
+
+critical_path:
+  - step: "probe defines committable_branch_verdict, parses, and is executable"
+    command: "bash -n scripts/check-committable-branch.sh && grep -q 'committable_branch_verdict()' scripts/check-committable-branch.sh && test -x scripts/check-committable-branch.sh && echo 'ok: probe-defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe-defined"
+
+  - step: "a scratch `git init -b main` checkout is refused with the deterministic on-main verdict and a non-zero exit"
+    command: "d=$(mktemp -d); git init -q -b main \"$d/repo\"; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && bash check-committable-branch.sh ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:committable-cycle-on-main' ] && echo 'ok: main-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: main-fails-closed"
+
+  - step: "a scratch linux-next checkout passes with ok:branch-linux-next and a zero exit"
+    command: "d=$(mktemp -d); git init -q -b linux-next \"$d/repo\"; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && bash check-committable-branch.sh ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:branch-linux-next' ] && echo 'ok: branch-passes-open' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: branch-passes-open"
+
+  - step: "detached HEAD fails closed with its own grammar token (a committable cycle needs a branch to push)"
+    command: "d=$(mktemp -d); git init -q -b scratch \"$d/repo\"; git -C \"$d/repo\" -c user.email=litmus@tillandsias -c user.name=litmus commit -q --allow-empty -m fixture; git -C \"$d/repo\" checkout -q --detach; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && bash check-committable-branch.sh ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:detached-head' ] && echo 'ok: detached-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: detached-fails-closed"
+
+  - step: "the probe emits exactly one well-formed verdict line"
+    command: "d=$(mktemp -d); git init -q -b main \"$d/repo\"; cp scripts/check-committable-branch.sh \"$d/repo/\"; n=$( cd \"$d/repo\" && bash check-committable-branch.sh | grep -cE '^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo))$' ); rm -rf \"$d\"; [ \"$n\" = \"1\" ] && echo \"ok: well-formed verdict ($n line)\" || { echo \"FAIL: $n lines\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: well-formed verdict"
+
+  - step: "the meta-orchestration and advance-work-from-plan bootstraps consult the probe (wiring is real, not prose)"
+    command: "[ \"$(grep -c 'check-committable-branch.sh' skills/meta-orchestration/SKILL.md)\" -ge 1 ] && [ \"$(grep -c 'check-committable-branch.sh' skills/advance-work-from-plan/SKILL.md)\" -ge 1 ] && echo 'ok: skills-consult-probe'"
+    timeout_ms: 3000
+    expected_behavior: "ok: skills-consult-probe"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "committable-branch verdict probe pinned (grammar + refuse-main branch + fail-closed detached + skill wiring)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "committable-branch-guard-shape"
+    artifact: "scripts/check-committable-branch.sh + skills/meta-orchestration/SKILL.md + skills/advance-work-from-plan/SKILL.md"
+
+rollback:
+  on_failure: >
+    The committable-branch probe drifted. Restore committable_branch_verdict()
+    in scripts/check-committable-branch.sh emitting exactly one line matching
+    ^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo))$
+    with a pass/fail exit code (0 on a non-main branch, 1 on main, detached
+    HEAD, or a non-repo — fail closed), keep the file executable, and restore
+    the Committable Branch Guard consultation of
+    `scripts/check-committable-branch.sh` in skills/meta-orchestration/SKILL.md
+    and skills/advance-work-from-plan/SKILL.md.
+  command: "grep -nE 'committable_branch_verdict|ok:branch-|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo)' scripts/check-committable-branch.sh | head -20"

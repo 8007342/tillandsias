@@ -563,6 +563,15 @@ clone_project_from_mirror() {
                 if [[ "$(git -C "${src}" rev-parse --is-bare-repository 2>/dev/null)" == "true" ]]; then
                     git config --local "url.${src}.insteadOf" "$github_url" 2>/dev/null || true
                     trace_lifecycle "git-mirror" "origin presented as ${github_url}; routes to ${src}"
+                elif [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]]; then
+                    # macOS clone lane (order 342): the staged source is non-bare
+                    # + read-only and cannot accept a push, but the enclave git
+                    # mirror IS running and relays to GitHub via the Vault token.
+                    # Route pushes there — the same transport the network lane
+                    # (git daemon, below) already uses — keeping the fast local
+                    # clone while giving the forge a real push route.
+                    git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null || true
+                    trace_lifecycle "git-mirror" "origin presented as ${github_url}; pushes route to git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}"
                 else
                     trace_lifecycle "git-mirror" "origin presented as ${github_url}; no push route (non-bare staged source)"
                 fi

@@ -55,14 +55,18 @@ critical_path:
     # path observed). Pin name=tillandsias-inference, hostname=
     # inference, network-alias=inference so a refactor breaking
     # enclave discovery surfaces.
-    command: "grep -A 30 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F 'tillandsias-inference' && grep -A 30 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '\"inference\".into()' | head -1"
+    # Window widened 30 -> 60 (order 313): the uid-1000 chown_tree ownership
+    # block (5a5b9a37) now precedes the base args.
+    command: "grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F 'tillandsias-inference' && grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '\"inference\".into()' | head -1"
     timeout_ms: 3000
     expected_behavior: "inference"
 
   - step: "Req inference security: --cap-drop=ALL + --security-opt=no-new-privileges + --userns=keep-id + --pids-limit=128"
     # Container security flags are non-negotiable per the work-loop
     # guardrails. Pin all 4 on the inference launch path.
-    command: "B=$(grep -A 30 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs); for p in 'cap-drop=ALL' 'security-opt=no-new-privileges' 'userns=keep-id' 'pids-limit=128'; do echo \"$B\" | grep -Fq \"$p\" || { echo \"FAIL: $p missing\"; exit 1; }; done && echo \"ok: 4 security flags pinned\""
+    # Window widened 30 -> 60 (order 313): the uid-1000 chown_tree ownership
+    # block (5a5b9a37) now precedes the base args.
+    command: "B=$(grep -A 60 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs); for p in 'cap-drop=ALL' 'security-opt=no-new-privileges' 'userns=keep-id' 'pids-limit=128'; do echo \"$B\" | grep -Fq \"$p\" || { echo \"FAIL: $p missing\"; exit 1; }; done && echo \"ok: 4 security flags pinned\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 

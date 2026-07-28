@@ -59,7 +59,7 @@ use tillandsias_core::image_builder::{
 };
 use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_podman::{
-    ContainerSpec, MountMode, OperationKind, PodmanClient, current_runtime_lane,
+    ContainerSpec, MountMode, NonForceRemoval, OperationKind, PodmanClient, current_runtime_lane,
     detect_gpu_devices, podman_cmd_sync, require_desktop_user_session,
     require_headless_service_account,
 };
@@ -386,6 +386,7 @@ fn main() {
         || observatorium
         || init
         || status_check
+        || inference_tier
         || github_login
         || claude_login
         || codex_login
@@ -520,6 +521,16 @@ fn main() {
         return;
     }
 
+    if inference_tier {
+        // Order 392: the launch-authoritative tier verdict, in the
+        // pinned falsifiable grammar. scripts/inference-tier-probe.sh
+        // defers to this when the binary is installed so the two
+        // detection surfaces can never drift; the sibling lanes
+        // (orders 401/402) grade their guests against it.
+        println!("tier:{}", detect_inference_tier());
+        std::process::exit(0);
+    }
+
     // Intentional EPHEMERAL RESET (windows-260717-4): the Linux `podman
     // equivalent` of the Windows `wsl --unregister` + reprovision. Wipes the
     // guest substrate (vault + enclave), then re-runs the same init + vault
@@ -553,16 +564,6 @@ fn main() {
             if debug {
                 eprintln!("[tillandsias] vault feature not compiled; continuing without Vault");
             }
-        }
-
-        if inference_tier {
-            // Order 392: the launch-authoritative tier verdict, in the
-            // pinned falsifiable grammar. scripts/inference-tier-probe.sh
-            // defers to this when the binary is installed so the two
-            // detection surfaces can never drift; the sibling lanes
-            // (orders 401/402) grade their guests against it.
-            println!("tier:{}", detect_inference_tier());
-            std::process::exit(0);
         }
 
         if status_check {
@@ -4200,6 +4201,36 @@ fn forge_uses_host_mount() -> bool {
     )
 }
 
+/// Order 465 residual: the opt-in host-mount escape hatch must be LOUD so it
+/// "cannot silently run a less-isolated forge". Pure so the wording is
+/// unit-testable without capturing stderr.
+/// @trace plan/issues/forge-enclave-isolation-uniform-principle-2026-07-23.md
+fn forge_host_mount_isolation_warning() -> &'static str {
+    "[tillandsias] ==============================================================\n\
+     [tillandsias] WARNING: WORKSPACE ENCLAVE ISOLATION IS REDUCED\n\
+     [tillandsias]   TILLANDSIAS_FORGE_HOST_MOUNT=1 is set: the project directory\n\
+     [tillandsias]   is bind-mounted READ-WRITE from the host into the forge,\n\
+     [tillandsias]   bypassing the isolated clone + mirror-push lane (order 437\n\
+     [tillandsias]   default). In-forge edits land directly in the host checkout.\n\
+     [tillandsias]   Credentials remain quarantined: SSH/gh surfaces stay\n\
+     [tillandsias]   tmpfs-masked and git egress still routes through the enclave\n\
+     [tillandsias]   mirror. This escape hatch is for DEBUGGING / solo live-edit\n\
+     [tillandsias]   only. Unset TILLANDSIAS_FORGE_HOST_MOUNT to restore full\n\
+     [tillandsias]   enclave isolation.\n\
+     [tillandsias] =============================================================="
+}
+
+/// Emit the order-465 reduced-isolation warning exactly once per launch.
+/// `Once`-gated at the process level: both launch-arg builders honor the env
+/// var, and either (or repeated helper calls within one launch) must produce a
+/// single unmissable block, not a warning per call.
+fn warn_forge_host_mount_isolation_reduced() {
+    static WARNED: std::sync::Once = std::sync::Once::new();
+    WARNED.call_once(|| {
+        eprintln!("{}", forge_host_mount_isolation_warning());
+    });
+}
+
 /// Turn a raw instance identifier into the name suffix. Pure so the naming
 /// rules are unit-testable without mutating process environment, which is
 /// racy under the parallel test runner.
@@ -4328,6 +4359,20 @@ fn build_forge_common_args(
     )
 }
 
+/// Result of [`cleanup_stack_containers`] (order 494 interim guard).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ForgeCleanupOutcome {
+    /// Per-project teardown completed: the forge was absent or removed while
+    /// not running, and git/browser were removed as before.
+    Removed,
+    /// The forge container was left in place — it is RUNNING (a concurrent
+    /// sibling lane likely owns it), its removal failed, or the order-234
+    /// phase gate refused — and git/browser were left with it. Callers must
+    /// NOT proceed to shared-stack teardown on this outcome
+    /// (leak-not-destroy).
+    LeftInPlace,
+}
+
 /// Remove the PER-PROJECT containers for `project_name` only.
 ///
 /// Order 233 (R5, order-160 ratification): SHARED containers (proxy,
@@ -4336,7 +4381,10 @@ fn build_forge_common_args(
 /// This function used to remove tillandsias-proxy and tillandsias-inference
 /// too, which tore the shared stack out from under any OTHER project's live
 /// forge on every per-project cleanup.
-async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
+async fn cleanup_stack_containers(
+    client: &PodmanClient,
+    project_name: &str,
+) -> ForgeCleanupOutcome {
     // Order 234 (R6): removals also race shutdown's own teardown — skip
     // during drain/stop (the shutdown path owns teardown then).
     if !runtime_phase::container_mutations_allowed() {
@@ -4344,17 +4392,50 @@ async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str) {
             "[tillandsias] {}",
             runtime_phase::refusal("project cleanup")
         );
-        return;
+        return ForgeCleanupOutcome::LeftInPlace;
+    }
+    // Order 494 interim guard (leak-not-destroy): remove the forge FIRST and
+    // WITHOUT force. `podman rm` (no -f) is atomic against container state —
+    // it refuses (exit 2) when the container is RUNNING instead of SIGKILLing
+    // it. A running forge here means a concurrent sibling lane owns it (macOS
+    // attended repro 2026-07-27: a Maintenance launch's cleanup force-removed
+    // the OpenCode lane's live forge after the order-443 active-lane guard
+    // misread zero lanes), and its clone-only workspace holds uncommitted
+    // in-forge work — destroying it is work-loss. On refusal, git and browser
+    // are left too: they are the running sibling's live dependencies (the
+    // same incident killed the sibling's clone by yanking tillandsias-git
+    // mid-fetch). Root-cause forensics for the guard misread stay open
+    // (v0.5); this guard only pins the failure direction to leak-not-destroy.
+    // @trace plan/issues/macos-concurrent-lane-launch-kills-sibling-2026-07-27.md
+    let forge_name = forge_container_name(project_name);
+    match client.remove_container_unless_running(&forge_name).await {
+        NonForceRemoval::Removed => {}
+        NonForceRemoval::RefusedRunning(failure) => {
+            eprintln!(
+                "[tillandsias] REFUSING to remove forge container {forge_name}: it is \
+                 RUNNING — a concurrent sibling lane likely owns it, and its clone-only \
+                 workspace holds unpushed in-forge work. Leaving it and its per-project \
+                 dependencies (git, browser) alone (leak-not-destroy, order 494). \
+                 Detail: {failure}"
+            );
+            return ForgeCleanupOutcome::LeftInPlace;
+        }
+        NonForceRemoval::Failed(failure) => {
+            eprintln!(
+                "[tillandsias] forge container {forge_name}: non-force removal failed \
+                 ({failure}); cannot prove it is not a running sibling's — leaving \
+                 per-project containers in place (leak-not-destroy, order 494)"
+            );
+            return ForgeCleanupOutcome::LeftInPlace;
+        }
     }
     let _ = client
         .remove_container(&format!("tillandsias-git-{project_name}"))
         .await;
     let _ = client
-        .remove_container(&forge_container_name(project_name))
-        .await;
-    let _ = client
         .remove_container(&format!("tillandsias-browser-{project_name}"))
         .await;
+    ForgeCleanupOutcome::Removed
 }
 
 /// Remove the SHARED stack containers. Callers MUST have verified no forge
@@ -4535,7 +4616,19 @@ async fn cleanup_shared_stack_if_no_running_forge(
     eprintln!(
         "[tillandsias] no active lane containers; cleaning project + shared stack for {project_name}"
     );
-    cleanup_stack_containers(client, project_name).await;
+    if cleanup_stack_containers(client, project_name).await == ForgeCleanupOutcome::LeftInPlace {
+        // Order 494 interim guard: podman just refused (or failed) a
+        // NON-FORCE forge removal — authoritative, removal-time evidence that
+        // a lane may be live even though the zero-lane read above said
+        // otherwise (the 2026-07-27 incident's exact shape). Keep the shared
+        // stack up too; a later launch's cleanup retries (leak-not-destroy).
+        // @trace plan/issues/macos-concurrent-lane-launch-kills-sibling-2026-07-27.md
+        eprintln!(
+            "[tillandsias] keeping shared stack alive; per-project cleanup left the \
+             forge container in place (order 494 leak-not-destroy)"
+        );
+        return;
+    }
     remove_shared_stack_containers(client).await;
 }
 
@@ -4637,6 +4730,15 @@ fn forge_src_isolation_requested() -> bool {
     std::env::var("TILLANDSIAS_FORGE_SRC_ISOLATION").is_ok_and(|v| v == "clone")
 }
 
+/// This process's `name` env var when set and non-empty, else `fallback`.
+/// Used to forward the session's terminal identity into the forge container.
+fn env_or(name: &str, fallback: &str) -> String {
+    std::env::var(name)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| fallback.to_string())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
@@ -4681,6 +4783,20 @@ fn build_opencode_forge_args(
             if !diagnostics && prompt.is_none() {
                 args.push("--interactive".into());
                 args.push("--tty".into());
+                // Terminal identity for the interactive TUI: with --tty,
+                // podman injects its default TERM=xterm unless one is set
+                // explicitly, downgrading the in-forge palette (order-491
+                // in-forge probe 4 caught exactly this). Forward the
+                // SESSION's real terminal identity — this process runs on
+                // the terminal the container renders into: Linux native
+                // inherits the operator's emulator env; the macOS/Windows
+                // wire lane carries the pinned xterm-256color/truecolor via
+                // the PtyOpen env. Fallbacks keep a bare env sane.
+                // @trace plan/issues/bigpickle-macos-terminal-cooperative-debug-2026-07-27.md
+                args.push("--env".into());
+                args.push(format!("TERM={}", env_or("TERM", "xterm-256color")));
+                args.push("--env".into());
+                args.push(format!("COLORTERM={}", env_or("COLORTERM", "truecolor")));
             }
         }
         ForgeMode::Web => {
@@ -4763,12 +4879,24 @@ fn build_opencode_forge_args(
             ),
             "--env".into(),
             format!("TILLANDSIAS_GIT_MIRROR_PATH=/home/forge/src-host/{project_name}"),
+            // macOS push route (2026-07-23): the staged source is read-only +
+            // non-bare and cannot accept a push, but the enclave `tillandsias-git`
+            // mirror IS started + seeded on this launch path (run_opencode_mode)
+            // and relays to GitHub via the Vault token. Declaring the service
+            // lets clone_project_from_mirror route pushes there while keeping the
+            // fast local filesystem clone. The filesystem branch returns before
+            // the network-clone branch, so this env only feeds the push-URL
+            // redirect, never a re-clone.
+            "--env".into(),
+            "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
         ]);
     } else if forge_uses_host_mount() {
         // Opt-in legacy shared host-mount (TILLANDSIAS_FORGE_HOST_MOUNT=1):
         // bind-mounts the operator's real checkout rw and installs the gitdir
         // facade. Retained for the solo live-edit workflow where a single user
         // wants their edits visible on the host without a commit+relay.
+        // Order 465 residual: never silent — announce the reduced isolation.
+        warn_forge_host_mount_isolation_reduced();
         args.extend([
             "--env".into(),
             "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
@@ -10432,15 +10560,20 @@ pub(crate) fn ensure_enclave_for_project(
         .await?;
         let git_container_name = format!("tillandsias-git-{project_name}");
 
-        // Order 392: deterministic inference readiness. The forge agent must
-        // not boot into an indeterminate "inference may still be starting"
-        // state. Block until the ollama API answers inside the enclave (the
-        // probe runs from the container's own network namespace where
-        // 127.0.0.1:11434 is reachable), with a truthful bounded wait and a
-        // loud reason on timeout. Models may still be pulling in the
-        // background — the API is up the moment ollama `serve` is listening,
-        // which is all the agent needs to query it.
-        wait_for_inference_ready(&client, debug).await?;
+        // Local inference readiness (order 392) is BEST-EFFORT, not a launch
+        // gate. The harnesses use cloud models (operator, 2026-07-24: OpenCode
+        // = BigPickle/Hy3/free cloud); local ollama is a FUTURE expert-system
+        // feature nothing consumes yet. A missing/failed inference (e.g. the
+        // uid-1000 ollama self-install TLS failure on a fresh substrate,
+        // inference-ollama-selfinstall-tls-uid1000-2026-07-24) must NOT abort
+        // the forge — warn and continue so cloud-model harnesses launch
+        // regardless. When local models land, re-gate behind an opt-in.
+        if let Err(e) = wait_for_inference_ready(&client, debug).await {
+            eprintln!(
+                "[tillandsias] [forge-launch] WARNING: local inference not ready ({e}); \
+                 continuing — local models are optional (harnesses use cloud models)."
+            );
+        }
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -10704,6 +10837,8 @@ fn build_forge_agent_run_args_with_vault(
     // it the entrypoint's clone_project_from_mirror clones a fresh tree there.
     let host_mount = forge_uses_host_mount();
     let spec = if host_mount {
+        // Order 465 residual: never silent — announce the reduced isolation.
+        warn_forge_host_mount_isolation_reduced();
         spec.volume(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),
@@ -12984,6 +13119,157 @@ mod tests {
         );
     }
 
+    /// Order 494 interim guard (leak-not-destroy): a RUNNING forge must never
+    /// be force-removed by per-project cleanup — the non-force `podman rm`
+    /// refuses (exit 2), and the sibling's live dependencies (git, browser)
+    /// must be left standing with it.
+    /// @trace plan/issues/macos-concurrent-lane-launch-kills-sibling-2026-07-27.md
+    #[tokio::test]
+    async fn cleanup_leaves_running_sibling_forge_and_its_dependencies_alone() {
+        let backend = Arc::new(FakeBackend::default());
+        // First command is the NON-FORCE forge removal; podman answers
+        // exit 2 (running/paused refusal).
+        backend.push(Err(fake_podman_failure(2)));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        let outcome = cleanup_stack_containers(&client, "fixture").await;
+
+        assert_eq!(
+            outcome,
+            ForgeCleanupOutcome::LeftInPlace,
+            "a running forge must leave the whole per-project stack in place"
+        );
+        let seen = backend.seen();
+        assert_eq!(
+            seen.len(),
+            1,
+            "after the forge refusal no further removal may run — git/browser \
+             are the running sibling's live dependencies: {seen:?}"
+        );
+        let argv = &seen[0].1;
+        assert_eq!(argv.first().map(String::as_str), Some("rm"));
+        assert!(
+            !argv.iter().any(|arg| arg == "-f" || arg == "--force"),
+            "forge removal must never carry a force flag: {argv:?}"
+        );
+        assert!(
+            argv.last()
+                .is_some_and(|name| name.starts_with("tillandsias-fixture-forge")),
+            "the guard must target the instance-scoped forge name: {argv:?}"
+        );
+    }
+
+    /// Order 494: legitimate teardown is unchanged — an exited forge is
+    /// removed (non-force `rm` succeeds on stopped containers), then git and
+    /// browser keep today's forced removal.
+    #[tokio::test]
+    async fn cleanup_removes_exited_forge_then_git_and_browser() {
+        let backend = Arc::new(FakeBackend::default());
+        // FakeBackend defaults every response to exit 0.
+        let client = PodmanClient::with_backend(backend.clone());
+
+        let outcome = cleanup_stack_containers(&client, "fixture").await;
+
+        assert_eq!(outcome, ForgeCleanupOutcome::Removed);
+        let seen = backend.seen();
+        assert_eq!(seen.len(), 3, "forge, then git, then browser: {seen:?}");
+        assert!(
+            seen[0]
+                .1
+                .last()
+                .is_some_and(|name| name.starts_with("tillandsias-fixture-forge"))
+                && !seen[0].1.iter().any(|arg| arg == "-f"),
+            "the forge removal goes first and stays non-force: {:?}",
+            seen[0].1
+        );
+        assert_eq!(
+            seen[1].1,
+            vec![
+                "rm".to_string(),
+                "-f".into(),
+                "tillandsias-git-fixture".into()
+            ],
+        );
+        assert_eq!(
+            seen[2].1,
+            vec![
+                "rm".to_string(),
+                "-f".into(),
+                "tillandsias-browser-fixture".into()
+            ],
+        );
+    }
+
+    /// Order 494: an ABSENT forge (`podman rm` exit 1) keeps the order-298
+    /// first-launch wipe intact — cleanup proceeds to git/browser as before.
+    #[tokio::test]
+    async fn cleanup_tolerates_absent_forge_and_still_wipes_project_dependencies() {
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Err(fake_podman_failure(1))); // no such container
+        let client = PodmanClient::with_backend(backend.clone());
+
+        let outcome = cleanup_stack_containers(&client, "fixture").await;
+
+        assert_eq!(outcome, ForgeCleanupOutcome::Removed);
+        assert_eq!(
+            backend.seen().len(),
+            3,
+            "an absent forge must not block the git/browser wipe"
+        );
+    }
+
+    /// The 2026-07-27 incident shape, end to end: `podman ps` reads ZERO
+    /// active lanes (the order-443 guard misread) while a sibling's forge is
+    /// actually RUNNING. The non-force forge removal is the second,
+    /// removal-time authoritative probe — its exit-2 refusal must stop the
+    /// teardown before git/browser AND before the shared proxy/inference.
+    /// @trace plan/issues/macos-concurrent-lane-launch-kills-sibling-2026-07-27.md
+    #[test]
+    fn shared_stack_survives_zero_lane_misread_when_forge_refuses_removal() {
+        // Sync test + block_on (not #[tokio::test]): env_lock must protect
+        // XDG_RUNTIME_DIR for the whole call, and holding a std MutexGuard
+        // across a syntactic await trips clippy::await_holding_lock. A
+        // current-thread block_on has no executor interleaving while the
+        // guard is held, which is exactly the safe shape the lint wants.
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&["XDG_RUNTIME_DIR"]);
+        // Point the launch-in-flight flock probe at a fresh dir so a real
+        // lane running on the dev host cannot short-circuit this test.
+        let scratch =
+            std::env::temp_dir().join(format!("tilland-order494-locks-{}", std::process::id()));
+        std::fs::create_dir_all(&scratch).expect("mk scratch lock dir");
+        restore.set("XDG_RUNTIME_DIR", &scratch);
+
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Ok(fake_podman_output(0, ""))); // ps: zero lanes (the misread)
+        backend.push(Err(fake_podman_failure(2))); // rm forge: actually RUNNING
+        let client = PodmanClient::with_backend(backend.clone());
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build current-thread runtime")
+            .block_on(cleanup_shared_stack_if_no_running_forge(
+                &client, "fixture", None, false,
+            ));
+
+        drop(restore);
+        let _ = std::fs::remove_dir_all(&scratch);
+
+        let seen = backend.seen();
+        assert_eq!(
+            seen.len(),
+            2,
+            "teardown must stop at the forge refusal (ps + non-force rm only): {seen:?}"
+        );
+        assert!(
+            !seen.iter().any(|(_, argv)| argv.iter().any(|arg| {
+                arg.contains("tillandsias-proxy") || arg.contains("tillandsias-inference")
+            })),
+            "the shared stack must survive the zero-lane misread: {seen:?}"
+        );
+    }
+
     #[test]
     fn forge_gitdir_staging_hands_root_staged_trees_to_forge_uid() {
         // Order 382: the guest headless (WSL2/VZ) runs as root, so staged
@@ -13160,6 +13446,7 @@ mod tests {
             "antigravity",
             "opencode_web",
             "observatorium",
+            "inference_tier",
             "github_login",
             "claude_login",
             "codex_login",
@@ -13700,6 +13987,69 @@ mod tests {
         );
     }
 
+    /// Order 465 residual: the escape hatch must be LOUD. The warning text is
+    /// pure, so pin the load-bearing claims: what is reduced, why (rw
+    /// host-mount bypassing the isolated clone + mirror-push lane), what still
+    /// holds (credential quarantine), and the intended scope (debugging only).
+    #[test]
+    fn host_mount_isolation_warning_names_reduction_quarantine_and_scope() {
+        let warning = forge_host_mount_isolation_warning();
+        for needle in [
+            "WARNING: WORKSPACE ENCLAVE ISOLATION IS REDUCED",
+            "TILLANDSIAS_FORGE_HOST_MOUNT=1",
+            "READ-WRITE",
+            "bypassing the isolated clone + mirror-push lane",
+            "Credentials remain quarantined",
+            "DEBUGGING",
+        ] {
+            assert!(
+                warning.contains(needle),
+                "escape-hatch warning must state {needle:?}; got:\n{warning}"
+            );
+        }
+        let bordered = warning
+            .lines()
+            .filter(|line| line.contains("=========="))
+            .count();
+        assert!(
+            bordered >= 2 && warning.lines().count() >= bordered + 3,
+            "warning must be an unmissable multi-line bordered block, got:\n{warning}"
+        );
+        assert!(
+            warning
+                .lines()
+                .all(|line| line.starts_with("[tillandsias]")),
+            "every warning line must carry the [tillandsias] stderr prefix"
+        );
+    }
+
+    /// Order 465 residual pin: BOTH launch-arg builders that honor
+    /// TILLANDSIAS_FORGE_HOST_MOUNT=1 must announce the reduced isolation on
+    /// the honored branch (Once-gated, so a launch warns exactly once).
+    #[test]
+    fn host_mount_escape_hatch_branches_emit_the_isolation_guard() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+
+        let opencode = source_window(source, "fn build_opencode_forge_args(");
+        let optin_idx = opencode
+            .find("else if forge_uses_host_mount()")
+            .expect("opencode builder keeps the opt-in host-mount branch");
+        let warn_idx = opencode
+            .find("warn_forge_host_mount_isolation_reduced();")
+            .expect("opencode host-mount branch must emit the order-465 guard");
+        assert!(
+            warn_idx > optin_idx,
+            "the guard must fire inside the opt-in branch, not unconditionally"
+        );
+
+        let agent = source_window(source, "fn build_forge_agent_run_args_with_vault(");
+        assert!(
+            agent.contains("warn_forge_host_mount_isolation_reduced();"),
+            "agent run-args builder must emit the order-465 guard on its \
+             host_mount branch"
+        );
+    }
+
     /// Order 427: two workers on one project must not collide. Before the
     /// instance component existed, both got `tillandsias-<project>-forge-<mode>`
     /// and `--replace` made worker 2 destroy worker 1.
@@ -13804,13 +14154,22 @@ mod tests {
     #[test]
     fn scoped_cleanup_uses_the_same_stable_forge_name_constructor() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let cleanup_window = source_window(
-            source,
-            "async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str)",
+        let cleanup_window = source_window(source, "async fn cleanup_stack_containers(");
+        assert!(
+            cleanup_window.contains("let forge_name = forge_container_name(project_name);"),
+            "teardown must derive the same instance-scoped name as launch: {cleanup_window}"
+        );
+        // Order 494 interim guard: the forge is removed through the NON-FORCE
+        // variant only — `rm -f` on the forge name is the work-loss vector
+        // (it SIGKILLs a running sibling's clone-only workspace).
+        // @trace plan/issues/macos-concurrent-lane-launch-kills-sibling-2026-07-27.md
+        assert!(
+            cleanup_window.contains("remove_container_unless_running(&forge_name)"),
+            "forge teardown must go through the order-494 non-force guard: {cleanup_window}"
         );
         assert!(
-            cleanup_window.contains("remove_container(&forge_container_name(project_name))"),
-            "teardown must derive the same instance-scoped name as launch: {cleanup_window}"
+            !cleanup_window.contains("remove_container(&forge"),
+            "the force removal of the forge container must stay dead (order 494): {cleanup_window}"
         );
         assert!(
             !cleanup_window.contains("format!(\"tillandsias-{project_name}-forge\")"),
@@ -14582,7 +14941,7 @@ mod tests {
         // legitimately names the shared containers); cut the window at that
         // signature explicitly.
         let cleanup_start = source
-            .find("async fn cleanup_stack_containers(client: &PodmanClient, project_name: &str)")
+            .find("async fn cleanup_stack_containers(")
             .expect("cleanup_stack_containers signature present");
         let cleanup_end = source
             .find("async fn remove_shared_stack_containers")
@@ -15261,6 +15620,55 @@ mod tests {
             "Error: cannot set up namespace: newuidmap returned exit status 1"
         ));
         assert!(!podman_runtime_blocker("podman run exited with status 125"));
+    }
+
+    /// Order-491 probe-4 pin: the interactive forge run must carry an
+    /// explicit terminal-identity env — with `--tty` and no `--env TERM`,
+    /// podman injects its default `TERM=xterm`, downgrading the in-forge
+    /// palette. The value is FORWARDED from this process (the session's
+    /// real terminal: operator emulator on Linux native, pinned
+    /// xterm-256color via PtyOpen env on the wire lanes), with fallbacks.
+    #[test]
+    fn interactive_forge_run_forwards_terminal_identity_env() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TERM", "COLORTERM"]);
+        restore.set("TERM", "tmux-256color");
+        restore.remove("COLORTERM");
+
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None, // no prompt → interactive lane
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        assert!(has_arg(&args, "--tty"));
+        assert!(
+            has_arg(&args, "TERM=tmux-256color"),
+            "interactive run must FORWARD the session TERM: {args:?}"
+        );
+        assert!(
+            has_arg(&args, "COLORTERM=truecolor"),
+            "unset COLORTERM must fall back to truecolor: {args:?}"
+        );
+
+        // Prompted (non-interactive) lane allocates no tty and needs none.
+        let prompted = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            Some("one shot"),
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        assert!(!prompted.iter().any(|a| a.starts_with("TERM=")));
     }
 
     #[test]
@@ -17979,7 +18387,9 @@ esac
 
     #[cfg(feature = "tray")]
     #[test]
+    #[ignore = "e2e: drives the live host podman/vault stack; run with --ignored on a healthy stack (order-463 host-endpoint class)"]
     fn publish_local_service_starts_container_and_returns_url() {
+        let _env = env_lock();
         use std::sync::Once;
         static INIT: Once = Once::new();
         INIT.call_once(|| {

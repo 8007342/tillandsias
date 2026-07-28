@@ -7,7 +7,10 @@
 # statically-linked validation, cosign sign-blob). This companion pins
 # the cloud-minute policy: hosted release is manual, release.yml owns
 # only build/sign/publish work, and local scripts own verification and
-# dashboard generation before dispatch.
+# dashboard generation before dispatch. Since 2026-07-21 a lean fmt+check
+# push/PR gate (ci.yml, check-only — born 0f54dc0d, ratified
+# plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md) is
+# permitted; hosted TEST execution remains banned.
 #
 # Plus: release.yml is
 # workflow_dispatch-only by design — a regression flipping it
@@ -49,15 +52,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "workflow_dispatch:"
 
-  - step: "hosted verification (test/convergence) workflows are absent; only release + cache-warm remain"
+  - step: "hosted verification stays lean: no litmus/convergence workflows; ci.yml is check-only (no hosted test execution; born 0f54dc0d, ratified plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md)"
     # nix-cache-warm.yml legitimately exists (commit 769b4a32, reverting
     # FlakeHub caching back to nix-community/cache-nix-action) — it warms
     # the Nix build cache on a schedule/push, it does not run tests or
     # verification, so it does not violate the local-only-verification
     # contract this step protects.
-    command: "test ! -e .github/workflows/ci.yml && test ! -e .github/workflows/litmus-tests.yml && test ! -e .github/workflows/github-actions-convergence.yml && echo 'ok: hosted verification retired'"
+    command: "test ! -e .github/workflows/litmus-tests.yml && test ! -e .github/workflows/github-actions-convergence.yml && grep -Fq 'cargo check' .github/workflows/ci.yml && ! grep -Fq 'cargo test' .github/workflows/ci.yml && echo 'ok: hosted verification lean (check-only ci.yml permitted)'"
     timeout_ms: 3000
-    expected_behavior: "ok: hosted verification retired"
+    expected_behavior: "ok: hosted verification lean"
 
   - step: "sibling local-ci.sh script exists and is executable"
     # The spec's "Litmus Chain" section names `scripts/local-ci.sh

@@ -61,10 +61,11 @@ live_runtime_is_present() {
   if ! command -v podman >/dev/null 2>&1; then
     return 1
   fi
-  ps_out="$(podman ps --format '{{.Names}}' 2>/dev/null)" || return 1
+  # an errored listing counts as PRESENT (leak-not-destroy, 443-review convention)
+  ps_out="$(podman ps --format '{{.Names}}' 2>/dev/null)" || return 0
   [ -z "$ps_out" ] && return 1
   # A forge itself, or any of the shared-stack services the forge brings up.
-  printf '%s\n' "$ps_out" | grep -qiE 'tillandsias-.*forge|tillandsias-git|tillandsias-vault|tillandsias-proxy|tillandsias-router|tillandsias-inference|git-service|tillandsias-git-mirror' && return 0
+  printf '%s\n' "$ps_out" | grep -qiE '^tillandsias-|git-service' && return 0
   return 1
 }
 
