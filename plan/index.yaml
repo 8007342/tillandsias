@@ -755,6 +755,17 @@ plan_index:
         - "antigravity launchable as a forge agent (entrypoint present)"
         - "zero TCP_DENIED for claude/codex/antigravity required endpoints"
         - "litmus:agent-egress-allowlist-shape pinned + green; --check passes"
+      events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification: PARTIAL (plan/issues/v05-already-satisfied-refutation-2026-07-28.md). allowlist.txt:87-98 carries
+            all required provider hosts, the antigravity entrypoint exists, and both
+            litmus grep steps were executed green this pass. Remaining: one recorded
+            proxy-log audit (podman logs tillandsias-proxy | grep TCP_DENIED) proving
+            zero denials for the three providers — indirect evidence is not the criterion.
 
     - packet_id: agent-login-flows-impl
       order: 132
@@ -786,6 +797,19 @@ plan_index:
         - "refresh_provider_oauth re-mints access tokens before a forge session near expiry"
         - "Each provider's forge session authenticates through the proxy (zero TCP_DENIED)"
         - "./build.sh --check and --test pass"
+      events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification REFUTED closure (plan/issues/v05-already-satisfied-refutation-2026-07-28.md). Shared
+            run_provider_login (main.rs:7005) and the secret/<provider>/oauth paths are
+            verified, but refresh_provider_oauth DOES NOT EXIST anywhere in the repo —
+            what shipped instead is in-forge rotation harvest (order-340 pattern,
+            extended to Claude at entrypoint-forge-claude.sh:123-127), a design
+            equivalent that was never recorded as a re-scope. Remaining: EC3 disposition
+            note (harvest supersedes host-side refresh) + the TCP_DENIED audit.
 
     - packet_id: agent-api-key-login-flows
       order: 143
@@ -970,6 +994,20 @@ plan_index:
         - "litmus:vsock-unauthenticated-peer-rejected pinned + green (asserts rejection, failure-closed)"
         - "openspec/specs vsock-transport no longer sanctions unauthenticated 'accept from any CID' without an authz gate"
         - "./build.sh --check and --test pass"
+      events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification REFUTED the already-satisfied claim (report:
+            plan/issues/v05-already-satisfied-refutation-2026-07-28.md). The secure control wire is DEFAULT OFF (vsock_server.rs:77-82
+            NotPresent => Off; vz.rs:484-487 provisions "off"), so the default listener
+            HelloAcks any plaintext peer and never emits Unauthorized; the named
+            litmus:vsock-unauthenticated-peer-rejected does not exist; the spec still
+            sanctions bare CID_ANY. Remaining: default-on flip (or ratified opt-in
+            re-scope, which order 145 owns) + the litmus pin + the spec paragraph.
+            An authn packet whose protection is default-off is NOT satisfied.
 
     - packet_id: github-login-e2e-gate
       order: 144
@@ -1270,6 +1308,16 @@ plan_index:
       title: "Investigate: token storage + cloud refresh not triggering after GitHub Login"
       status: ready
       events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification REFUTED closure (plan/issues/v05-already-satisfied-refutation-2026-07-28.md). The code claim is
+            TRUE — the order-276 sentinel funnel at main.rs:11618-11675 drives
+            apply_login_transition within ~2s — but all four exit criteria ARE live
+            observations and none was ever recorded (deliverable checkboxes unchecked).
+            Remaining: exactly one attended live pass recording the four observations.
         - type: slipped
           ts: "2026-07-21T03:45:00Z"
           agent_id: "linux-claude-fable-coordinator-20260720"
@@ -2163,6 +2211,22 @@ plan_index:
         - "LoginStatePush emitted within 1s of vault kv put secret/github/token"
         - "Vault watch task reconnects on Vault restart (not a panic path)"
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+      events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification (plan/issues/v05-already-satisfied-refutation-2026-07-28.md): the OBSOLETE-mechanism claim is
+            CONFIRMED — our Vault is community 1.18 (images/vault/Containerfile:16) and
+            KV v2 has no blocking GET ?wait= long-poll (that is Consul; Vault event
+            subscribe is Enterprise), so this packet as written is unimplementable. But
+            DELETION IS REFUSED: the intent is unserved (a 2s tick plus a 60s heavy
+            Vault presence poll remain at main.rs:11629-11637, violating this packet's
+            own SC-01/SC-14) and order 151 lists this packet in depends_on, so deleting
+            it would dangle the master socket audit. Disposition: REWRITE around a
+            feasible mechanism (ratify sentinel + bounded residual poll, or an
+            audit-device/event alternative) and keep 151's dependency pointed at it.
 
     - packet_id: wire-tray-cloud-attach
       order: 159
@@ -2323,6 +2387,16 @@ plan_index:
         concurrent Windows PTY launch clicks. (R9) Windows embedded fetch script
         atomicity. macOS R2/R3/R9 analog slices are complete on osx-next.
       events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification REFUTED closure (plan/issues/v05-already-satisfied-refutation-2026-07-28.md). All six named commits
+            (c3089123, 244a6797, 4e432e54, 64676548, bb72efc2, 3e1637ad) confirmed
+            ancestors of HEAD and matching their slices, but the N=10 provoked
+            quit/relaunch litmus NEVER EXISTED — no litmus file, no script, only the
+            packet's own prose. Remaining: author that litmus + record live convergence.
         - type: renumber
           ts: "2026-07-10T04:35:00Z"
           agent_id: "linux-macuahuitl-fable5-20260710T0410Z"
@@ -11435,6 +11509,16 @@ plan_index:
         - "credential rotation: swapping the vault secret takes effect without container rebuild"
         - "decision record: GitHub App tokens adopted or rejected with reasons"
       events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification REFUTED closure (plan/issues/v05-already-satisfied-refutation-2026-07-28.md). EC1 (clean URL/argv/env
+            credential helper) and EC2 (per-invocation Vault read, rotation without
+            rebuild) verified in code and live-proven by order 424. EC3 is missing: the
+            GitHub App adopt/reject DECISION RECORD was only recommended by research,
+            and order 390 remains ready. Remaining: EC3 operator-facing decision record.
         - type: filed
           ts: "2026-07-13T04:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
@@ -12745,8 +12829,31 @@ plan_index:
       order: 328
       desired_release: v0.5
       title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
-      status: pending
+      status: done
       kind: bugfix
+      events:
+        - type: completed
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            CLOSED after adversarial verification — the only one of ten
+            already-satisfied claims that survived refutation
+            (plan/issues/v05-already-satisfied-refutation-2026-07-28.md).
+            Every parent exit criterion personally re-derived: the skill
+            text scopes cleanliness to cycle-created artifacts with a
+            byte-identical startup boundary and blocked exits that never
+            checkout/restore/reset/clean startup dirt (SKILL.md:68-74,
+            123-134, 440-446); the checksummed blocked-cycle fixture
+            scripts/test-meta-orchestration-dirty-tree-safety.sh was RE-RUN
+            this pass and PASSED ("blocked cycle preserved startup tracked
+            and untracked bytes"), litmus-bound at
+            meta-orchestration-dirty-tree-safety (425e5db7 ancestor); the
+            macOS isolation decision is recorded in code
+            (main.rs:4718-4731, materialize-by-clone, linked worktree
+            REJECTED) with child 342 completed (adc488d8) and the
+            supersession by the order-437 clone-only default
+            operator-approved under order 466.
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
       depends_on:
         - forge-dirty-tree-exit-contract
@@ -14989,6 +15096,20 @@ plan_index:
         - "guest-lane litmus pins staged-gitdir readability for the forge uid"
         - "macOS VZ lane spot-checked for the same class (same shared guest binary)"
       events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification REFUTED the obsolete claim (plan/issues/v05-already-satisfied-refutation-2026-07-28.md). The gating
+            is real but the claim named the WRONG switch: the gitdir facade is gated
+            behind opt-in TILLANDSIAS_FORGE_HOST_MOUNT=1 (main.rs:4188-4202, both call
+            sites), NOT TILLANDSIAS_FORGE_SRC_ISOLATION (the retired order-342 macOS
+            lane). The opt-in path still ships and is reachable on a root-running guest,
+            and the bug already has an in-tree fix plus pin (chown_tree_to_forge_uid
+            main.rs:7760/7840-7845; litmus:forge-gitdir-staging-chown). Disposition:
+            DOWNGRADE to low-priority, re-scoped to the opt-in host-mount lane — not
+            obsolete-delete. ECs 1 (Windows curl-install live) and 3 (macOS VZ) remain.
         - type: progress
           ts: "2026-07-16T08:25:00Z"
           agent_id: "windows-bullo-fable5-20260716T0731Z"
@@ -15969,6 +16090,16 @@ plan_index:
       capability_tags: [lsp, forge, opencode, images, dx]
       estimated_hours: 5
       events:
+        - type: verified
+          ts: "2026-07-28T23:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Adversarial verification: PARTIAL (plan/issues/v05-already-satisfied-refutation-2026-07-28.md). Config and image sides are
+            done and litmus-pinned (config-overlay/opencode/config.json:61 lsp:true;
+            rust-analyzer in Containerfile.base:23; forge-lsp-availability-shape bound),
+            so the size/cold-start criterion is satisfied by construction. Remaining:
+            one live go-to-definition/references check in a fresh forge session.
         - type: progress
           ts: "2026-07-18T05:20:00Z"
           agent_id: "linux-forge-opencode-20260718T0509Z"
