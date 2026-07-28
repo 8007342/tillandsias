@@ -7,7 +7,11 @@ size: instant
 description: >
   Pins the pre-receive YAML validation gate for git-mirror-service.
   Verifies the hook script exists, is executable, validates plan/openspec YAML,
-  and rejects pushes with broken YAML.
+  and rejects pushes with broken YAML. Also pins the rung-2 branch policy
+  (order 500): the warn-only creation grammar and the salvage YAML-gate
+  exemption are CONFIG-DRIVEN (env from the entrypoint, never hard-coded in
+  hook code — the order-462 leak class), and the relay failure path prints
+  protected-branch salvage advice (repair B3: never pre-reject main).
 
 severity: high
 
@@ -74,6 +78,31 @@ critical_path:
 
   - step: "pre-receive hook exempts legacy archive from validation"
     command: "grep -q 'is_legacy_archive' images/git/pre-receive-hook.sh && grep -qF 'openspec/changes/archive' images/git/pre-receive-hook.sh && echo 'OK: hook exempts legacy archive' || { echo 'FAIL: hook missing legacy archive exemption'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "rung-2 grammar warning is config-driven and warn-only"
+    command: "grep -q 'warn_if_outside_branch_grammar' images/git/pre-receive-hook.sh && grep -q 'TILLANDSIAS_BRANCH_CREATION_REGEX' images/git/pre-receive-hook.sh && grep -q 'TILLANDSIAS_BRANCH_CREATION_REGEX' images/git/entrypoint.sh && grep -q 'warn-only' images/git/pre-receive-hook.sh && echo 'OK: warn-only grammar path present; regex reaches the pre-receive script via env with the default in the entrypoint' || { echo 'FAIL: warn-only grammar env wiring missing'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "hook code stays convention-neutral (order-462 leak class)"
+    command: "if grep -qF 'refs/heads/(main' images/git/pre-receive-hook.sh; then echo 'FAIL: creation-policy regex inlined in the pre-receive script'; exit 1; elif sed 's/#.*//' images/git/pre-receive-hook.sh | grep -q 'salvage'; then echo 'FAIL: salvage namespace hard-coded in pre-receive logic'; exit 1; else echo 'OK: pre-receive code embeds no branch-name conventions; patterns arrive via config'; fi"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "salvage YAML-gate exemption routes via a config-supplied exempt pattern"
+    command: "grep -q 'ref_is_gate_exempt' images/git/pre-receive-hook.sh && grep -q 'TILLANDSIAS_YAML_GATE_EXEMPT_REFS' images/git/pre-receive-hook.sh && grep -qF 'refs/heads/salvage/*' images/git/entrypoint.sh && echo 'OK: gate exemption is config-routed with the salvage default in the entrypoint' || { echo 'FAIL: config-supplied salvage gate exemption missing'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "relay failure path prints protected-branch salvage advice (B3: never pre-reject main)"
+    command: "grep -q 'GH006' images/git/relay-refs.sh && grep -q 'protected branch' images/git/relay-refs.sh && grep -qF 'salvage/<host>/' images/git/relay-refs.sh && grep -q 'git push origin HEAD:refs/heads/salvage' images/git/relay-refs.sh && echo 'OK: relay prints the literal salvage push command on the protection-rejection path' || { echo 'FAIL: protected-branch salvage advice missing from relay failure path'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "OK"
+
+  - step: "functional gate tests pin warn-only grammar and salvage routing (tests 5-6)"
+    command: "grep -q 'Test 5' scripts/test-pre-receive-yaml-gate.sh && grep -q 'Test 6' scripts/test-pre-receive-yaml-gate.sh && grep -q 'refs/heads/salvage/' scripts/test-pre-receive-yaml-gate.sh && echo 'OK: functional suite covers rung-2 warn and salvage exemption routing' || { echo 'FAIL: functional rung-2 coverage missing'; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "OK"
 

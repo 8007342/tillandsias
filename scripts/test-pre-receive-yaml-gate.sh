@@ -5,6 +5,11 @@
 # and asserts non-zero receive. Then pushes valid YAML and asserts success.
 set -euo pipefail
 
+# Rung-2 branch-policy env must not leak in from the caller: tests 1-4 pin
+# the NO-CONFIG (convention-neutral) hook behavior; tests 5-6 opt in
+# per-command. In production these are supplied by images/git/entrypoint.sh.
+unset TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 HOOK_SRC="$PROJECT_ROOT/images/git/pre-receive-hook.sh"
@@ -151,5 +156,99 @@ if ! git -C "$WORK3" push origin feature/new-branch 2>/dev/null; then
     exit 1
 fi
 echo "PASS: new branch push with valid changes succeeded (legacy archive excluded via diff-base)"
+
+# --- Test 5: out-of-grammar NEW branch WARNS but SUCCEEDS (rung 2 warn-only) ---
+# The creation-policy regex reaches the hook via env ONLY (order-462 leak
+# class: hook code is convention-neutral). Sub-assertions:
+#   5a. env ABSENT (non-Tillandsias end-user repo): no warning at all
+#   5b. env SET + out-of-grammar name: WARNING printed, push still accepted
+#   5c. env SET + in-grammar name: no warning
+CREATION_REGEX='^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47})$'
+GRAMMAR_HINT='main | linux-next | windows-next | osx-next | gh-pages | release/* | claude/* | revert-* | agent/<host>/<base>/<yyyymmdd>-<slug> | salvage/<host>/<yyyymmdd>-<slug>'
+
+# 5a: no env -> no warning (convention-neutral for end-user mirrors)
+if ! OUT5A="$(git -C "$WORK" push origin HEAD:refs/heads/wip-freeform-noenv 2>&1)"; then
+    echo "FAIL: new branch push without grammar env was rejected"
+    printf '%s\n' "$OUT5A"
+    exit 1
+fi
+if printf '%s\n' "$OUT5A" | grep -q 'WARNING: new branch'; then
+    echo "FAIL: grammar warning printed although no grammar env was configured (neutrality broken)"
+    printf '%s\n' "$OUT5A"
+    exit 1
+fi
+echo "PASS: new branch with no grammar config pushed silently (convention-neutral)"
+
+# 5b: env set + out-of-grammar name -> warn, but the push MUST succeed
+if ! OUT5B="$(TILLANDSIAS_BRANCH_CREATION_REGEX="$CREATION_REGEX" \
+        TILLANDSIAS_BRANCH_GRAMMAR_HINT="$GRAMMAR_HINT" \
+        git -C "$WORK" push origin HEAD:refs/heads/wip-out-of-grammar 2>&1)"; then
+    echo "FAIL: out-of-grammar new branch was rejected (rung 2 must be warn-only)"
+    printf '%s\n' "$OUT5B"
+    exit 1
+fi
+if ! printf '%s\n' "$OUT5B" | grep -q 'WARNING: new branch'; then
+    echo "FAIL: out-of-grammar new branch pushed without the expected WARNING"
+    printf '%s\n' "$OUT5B"
+    exit 1
+fi
+if ! printf '%s\n' "$OUT5B" | grep -q 'warn-only'; then
+    echo "FAIL: grammar warning does not state it is warn-only"
+    printf '%s\n' "$OUT5B"
+    exit 1
+fi
+echo "PASS: out-of-grammar new branch WARNED but was accepted (warn-only)"
+
+# 5c: env set + in-grammar name -> silent
+if ! OUT5C="$(TILLANDSIAS_BRANCH_CREATION_REGEX="$CREATION_REGEX" \
+        git -C "$WORK" push origin HEAD:refs/heads/agent/testhost/linux-next/20260728-mode-a-1 2>&1)"; then
+    echo "FAIL: in-grammar new branch was rejected"
+    printf '%s\n' "$OUT5C"
+    exit 1
+fi
+if printf '%s\n' "$OUT5C" | grep -q 'WARNING: new branch'; then
+    echo "FAIL: in-grammar new branch triggered a grammar warning"
+    printf '%s\n' "$OUT5C"
+    exit 1
+fi
+echo "PASS: in-grammar new branch pushed silently"
+
+# --- Test 6: salvage/* push with INVALID ledger YAML SUCCEEDS via the ---
+# --- config-supplied YAML-gate exemption (repair B4)                  ---
+# A blocked agent must be able to land a half-edited tree for triage;
+# validation re-runs at graduation/merge (rung-4 territory).
+git -C "$WORK" checkout -b salvage-src 2>/dev/null
+cat > "$WORK/plan/index.yaml" <<'BROKEN'
+plan:
+  version: v1
+  broken yaml: [[[
+BROKEN
+git -C "$WORK" add -A
+git -C "$WORK" commit -m "salvage: half-edited tree" --quiet 2>/dev/null
+
+# 6a: no exemption configured -> salvage is still gated (neutral default)
+if git -C "$WORK" push origin HEAD:refs/heads/salvage/testhost/20260728-triage-a 2>/dev/null; then
+    echo "FAIL: salvage push with broken YAML accepted although no exemption was configured"
+    exit 1
+fi
+echo "PASS: salvage push rejected when no exemption is configured (neutral default)"
+
+# 6b: config-supplied exemption -> the half-edited tree lands for triage
+if ! OUT6B="$(TILLANDSIAS_YAML_GATE_EXEMPT_REFS='refs/heads/salvage/*' \
+        git -C "$WORK" push origin HEAD:refs/heads/salvage/testhost/20260728-triage-a 2>&1)"; then
+    echo "FAIL: salvage push with broken YAML rejected despite configured exemption"
+    printf '%s\n' "$OUT6B"
+    exit 1
+fi
+echo "PASS: salvage push with broken YAML accepted under configured exemption"
+
+# 6c: the exemption is SCOPED — the same broken tree to a non-salvage ref
+# must still be rejected while the exemption is configured
+if TILLANDSIAS_YAML_GATE_EXEMPT_REFS='refs/heads/salvage/*' \
+        git -C "$WORK" push origin HEAD:refs/heads/not-salvage 2>/dev/null; then
+    echo "FAIL: non-salvage push with broken YAML accepted while the exemption was configured"
+    exit 1
+fi
+echo "PASS: exemption is scoped to configured patterns only"
 
 echo "ALL TESTS PASSED"

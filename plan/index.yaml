@@ -23431,9 +23431,29 @@ plan_index:
       order: 500
       desired_release: v0.5
       title: "Branch scheme rung 2: warn-only name grammar, protected-branch salvage advice on the relay-failure path, salvage/* YAML-gate exemption"
-      status: ready
+      status: done
       kind: feature
       depends_on: [branch-namespace-rung1-docs]
+      events:
+        - type: completed
+          ts: "2026-07-28T22:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Rung 2 shipped, fully config-driven: policy reaches the
+            pre-receive hook ONLY via env (TILLANDSIAS_BRANCH_CREATION_REGEX
+            / _GRAMMAR_HINT / _YAML_GATE_EXEMPT_REFS) with Tillandsias
+            defaults embedded in the git entrypoint — absent config is
+            byte-identical pre-rung-2 behavior, litmus-pinned neutrality
+            (step 14 rejects inlined branch names in non-comment hook
+            lines). Zero-oldsha creations outside the grammar WARN and
+            succeed; salvage/* skips the ledger-YAML gate (loud NOTE,
+            re-validated at graduation); GH006/protected-branch relay
+            failures print the literal salvage push command. Hook tests
+            5a-c + 6a-c added (ALL PASS incl. legacy 1-4);
+            git-mirror-service litmus 14/14 with yaml-gate-shape 17/17.
+            Left for rung 4 as designed: reject-on-create, graduation
+            re-validation, sweep/GC/prune, ledger path policy.
       pickup_role: "linux (images/git POSIX sh); litmus on any host"
       capability_tags: [git-mirror, posix-sh, hooks, litmus]
       estimated_hours: 3
