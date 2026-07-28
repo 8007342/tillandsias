@@ -6801,12 +6801,13 @@ printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https 
 fn get_generic_login_token_script(provider: &ProviderId) -> String {
     let vault_path = provider.vault_path();
     let secret_field = provider.secret_field();
+    let guidance = provider.token_guidance();
     format!(
         r#"
 printf '\n\n' >&2
 printf 'Paste your {} Token and press Enter.\n' >&2
 printf '(The token will not echo to the screen)\n' >&2
-printf '\n' >&2
+{}printf '\n' >&2
 printf 'Token: ' >&2
 read -r -s TOKEN
 if [ -z "$TOKEN" ]; then
@@ -6818,6 +6819,7 @@ printf '\n\nSaving token to vault...\n' >&2
 printf '%s' "$TOKEN" | vault-cli.sh write-stdin {} {}
 "#,
         provider.name(),
+        guidance,
         vault_path,
         secret_field
     )
@@ -6855,6 +6857,29 @@ impl ProviderId {
             ProviderId::Claude => "claude",
             ProviderId::Codex => "codex",
             ProviderId::Antigravity => "antigravity",
+        }
+    }
+
+    /// Extra guidance printed above the token prompt, as `printf` lines the
+    /// containerized login script emits to stderr. GitHub gets the token
+    /// creation URL and the minimum permission set so an operator never has to
+    /// guess which scopes the mirror relay needs. The URL sits alone on its
+    /// line with no surrounding punctuation so terminal renderers linkify it.
+    pub fn token_guidance(&self) -> &'static str {
+        match self {
+            ProviderId::GitHub => concat!(
+                "printf '\\n' >&2\n",
+                "printf 'Create a fine-grained Personal Access Token here:\\n' >&2\n",
+                "printf '\\n' >&2\n",
+                "printf '  https://github.com/settings/personal-access-tokens\\n' >&2\n",
+                "printf '\\n' >&2\n",
+                "printf 'Minimum repository permissions:\\n' >&2\n",
+                "printf '  Contents  - Read and write  (clone, fetch, push)\\n' >&2\n",
+                "printf '  Metadata  - Read-only       (required by GitHub)\\n' >&2\n",
+                "printf '\\n' >&2\n",
+                "printf 'Add more permissions later if you need them.\\n' >&2\n",
+            ),
+            ProviderId::Claude | ProviderId::Codex | ProviderId::Antigravity => "",
         }
     }
 
@@ -7158,13 +7183,11 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     let required = ["tillandsias-vault", container.as_str()];
     check_auth_required_services(&required, debug)?;
 
-    if matches!(config.provider, ProviderId::GitHub) {
-        match config.input_mode {
-            LoginInputMode::Terminal => prompt_and_store_git_identity()?,
-            LoginInputMode::StdinToken => store_existing_git_identity()?,
-        }
-    }
-
+    // Order (operator directive 2026-07-29): CREDENTIAL FIRST, identity
+    // second. Prompting for name/email before the token led operators to
+    // believe those fields WERE their GitHub credentials. Taking the token
+    // first makes the credential step unambiguous, and the identity prompt
+    // then arrives already framed as commit metadata.
     let mut login = podman_command();
     login.args(provider_login_exec_args(
         &container,
@@ -7172,6 +7195,13 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         config.input_mode,
     ));
     run_command(login, debug)?;
+
+    if matches!(config.provider, ProviderId::GitHub) {
+        match config.input_mode {
+            LoginInputMode::Terminal => prompt_and_store_git_identity()?,
+            LoginInputMode::StdinToken => store_existing_git_identity()?,
+        }
+    }
 
     if matches!(config.provider, ProviderId::GitHub) {
         let mut auth_status = podman_command();
@@ -7369,6 +7399,16 @@ struct GitIdentity {
 }
 
 fn prompt_and_store_git_identity() -> Result<(), String> {
+    // Framed explicitly as NOT credentials: operators were mistaking these
+    // fields for their GitHub login (operator directive 2026-07-29). The
+    // token is already stored by the time this runs.
+    println!();
+    println!("GIT IDENTITY — this is not a credential.");
+    println!("These two values are stamped on the commits you author; they are");
+    println!("separate from the GitHub token you just provided and grant no");
+    println!("access to anything.");
+    println!();
+
     let current = read_git_identity_defaults();
     let name = prompt_with_default("Git author name", current.name.as_deref())?;
     let email = prompt_with_default("Git author email", current.email.as_deref())?;
@@ -14891,7 +14931,7 @@ mod tests {
             ("helper health", helper_health_idx),
         ] {
             assert!(
-                idx < prompt_idx,
+                idx < token_idx,
                 "{label} preflight must happen before credential prompts: {login_window}"
             );
         }
@@ -14907,9 +14947,70 @@ mod tests {
             helper_idx < helper_preflight_idx && helper_preflight_idx < helper_health_idx,
             "the health preflight must target the helper container after it starts: {login_window}"
         );
+        // Operator directive 2026-07-29: CREDENTIAL FIRST, identity second.
+        // Prompting for name/email before the token made operators think
+        // those fields were their GitHub credentials.
         assert!(
-            prompt_idx < token_idx,
-            "git identity prompt should still precede token entry: {login_window}"
+            token_idx < prompt_idx,
+            "token entry must precede the git identity prompt: {login_window}"
+        );
+    }
+
+    /// The GitHub token prompt must carry the token-creation URL and the
+    /// minimum permission set, and the URL must sit alone on its line (no
+    /// wrapping punctuation) so terminal renderers linkify it.
+    /// @trace spec:gh-auth-script
+    #[test]
+    fn github_token_prompt_carries_clickable_url_and_minimum_scopes() {
+        let script = get_generic_login_token_script(&ProviderId::GitHub);
+        assert!(
+            script.contains("https://github.com/settings/personal-access-tokens"),
+            "GitHub token prompt must name the fine-grained PAT settings page: {script}"
+        );
+        let url_line = script
+            .lines()
+            .find(|l| l.contains("https://github.com/settings/personal-access-tokens"))
+            .expect("URL line present");
+        assert!(
+            url_line.contains("  https://github.com/settings/personal-access-tokens\\n"),
+            "URL must be alone on its line so terminals can linkify it: {url_line}"
+        );
+        assert!(
+            script.contains("Contents") && script.contains("Read and write"),
+            "GitHub token prompt must state the Contents read/write minimum: {script}"
+        );
+        assert!(
+            script.contains("Metadata"),
+            "GitHub token prompt must state the Metadata permission: {script}"
+        );
+        // Other providers keep the bare prompt — no GitHub guidance leaks.
+        for other in [
+            ProviderId::Claude,
+            ProviderId::Codex,
+            ProviderId::Antigravity,
+        ] {
+            let s = get_generic_login_token_script(&other);
+            assert!(
+                !s.contains("personal-access-tokens"),
+                "non-GitHub providers must not carry GitHub token guidance: {s}"
+            );
+        }
+    }
+
+    /// The git identity prompt must frame itself as commit metadata, NOT a
+    /// credential — the confusion this reorder exists to remove.
+    /// @trace spec:gh-auth-script
+    #[test]
+    fn git_identity_prompt_disclaims_being_a_credential() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn prompt_and_store_git_identity()");
+        assert!(
+            window.contains("GIT IDENTITY") && window.contains("not a credential"),
+            "identity prompt must say it is not a credential: {window}"
+        );
+        assert!(
+            window.contains("stamped on the commits"),
+            "identity prompt must explain these values are commit metadata: {window}"
         );
     }
 
