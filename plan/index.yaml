@@ -23309,3 +23309,36 @@ plan_index:
             the generated evidence per RELEASING.md step 4 and re-running
             the gate. The in-forge guard, boundary verify, and clean exit
             all behaved exactly as specified — composition bug only.
+
+    - packet_id: macos-tray-icon-state-machine-parity
+      order: 496
+      desired_release: v0.5
+      title: "macOS tray icon: plant-lifecycle state machine with dynamic SVG rendering (Linux parity)"
+      status: pending
+      kind: enhancement
+      deliverable: >
+        crates/tillandsias-macos-tray gains a state-driven icon engine:
+        build-time SVG-to-NSImage rendering (via resvg, matching Linux),
+        lifecycle-aware state transitions (Pup/Mature/Building/Blooming/Dried/Stopping),
+        and a dynamic toolbar icon that updates on every state change.
+      depends_on: []
+      pickup_role: macos
+      estimated_hours: 12
+      outcome: >
+        The macOS tray icon currently shows a static "T" fallback letter
+        because tray-icon.png is absent from the installed bundle. Even
+        when present, the icon is a single static PNG — entirely unaware
+        of forge lifecycle state (building containers, healthy, stalled).
+        Linux has a full plant-lifecycle engine: 72 SVGs across 24 plant
+        genera, 6 lifecycle states, build-time rendering via resvg, D-Bus
+        new-icon signals on state transitions, and user click-to-acknowledge.
+        This packet ports that engine to macOS: render the same SVGs to
+        NSImage at build time, wire state transitions from the control wire,
+        and update the NSStatusItem icon dynamically.
+      exit_criteria:
+        - "macOS tray shows a dynamic plant-lifecycle icon (not a static 'T')"
+        - "state transitions (Pup → Building → Blooming → Mature → Dried → Stopping) update the icon live"
+        - "clicking the icon acknowledges Blooming state (transition to Mature)"
+        - "SVG assets from assets/icons/ are rendered to NSImage at build time via resvg"
+        - "missing assets fall back to a text glyph (not a raw crash)"
+        - "litmus pins the state-machine icon shape across all 6 states"

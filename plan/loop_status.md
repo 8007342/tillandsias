@@ -1,5 +1,31 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-28T19:16Z (forge — config-overlay mount audit + Containerfile fix)
+
+- **Host**: forge container, `linux-next` (was `main` — corrected per branch discipline).
+- **Credential Channel Guard**: `ok:forge-git-mirror`.
+- **Config-overlay mount gap discovered**: `MountSource::ConfigOverlay` is
+  declared in `container_profile.rs:84` but NEVER wired into any container
+  launch path. The entrypoint's `apply_opencode_config_overlay()` function
+  silently no-ops because no podman mount populates `.config-overlay/`.
+  Filed: `plan/issues/config-overlay-runtime-mount-gap-2026-07-28.md` (v0.5).
+- **Containerfile fixed**: replaced stub `opencode.json` with the rich
+  config-overlay version (MCP tools, local provider, agent instructions).
+  Added COPY for `config-overlay/mcp/` and `config-overlay/ollama/` so all
+  forge MCP tools are baked into the image even without the runtime mount.
+- **Forge-plan MCP server**: `images/default/config-overlay/mcp/forge-plan.sh`
+  wraps `tillandsias-plan` CLI (6 tools). Registered in config overlay.
+- **New packet**: order 496 `macos-tray-icon-state-machine-parity` (v0.5)
+  — ports Linux plant-lifecycle SVG engine to macOS.
+- **Verification**: `./build.sh --check` PASS, `tillandsias-plan check` clean
+  (398 packets, ids unique, references sound).
+- **Branch fix**: commits rebased from `main` to `linux-next` (correct branch).
+- **Live config note**: `/home/forge/.config/opencode/config.json` is ephemeral
+  — was updated for testing but will be replaced by the Containerfile COPY on
+  next image rebuild.
+- **Next**: wire `MountSource::ConfigOverlay` into container launch args;
+  sync live config to upstream sources (not ephemeral paths).
+
 ## Cycle 2026-07-27T23:38Z (linux_mutable — v0.4 RELEASE CYCLE: full integration + triage + drain)
 
 - **Host/branch**: mutable Linux (macuahuitl), `linux-next`; credential guard

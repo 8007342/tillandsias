@@ -96,7 +96,9 @@ ENV LANG=en_US.UTF-8
 # @trace spec:secrets-management, spec:forge-offline, spec:native-secrets-store
 
 # ── OpenCode config ────────────────────────────────────────────
-COPY opencode.json /home/forge/.config/opencode/config.json
+# The full rich config (MCP tools, local provider, agent instructions)
+# replaces the schema-only stub so all forge tools are available by default.
+COPY config-overlay/opencode/config.json /home/forge/.config/opencode/config.json
 # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp, spec:default-image
 # Default UI theme (tokyonight) — applies to both `opencode` TUI and
 # `opencode serve` web UI. Overrideable per-project by mounting a different
@@ -104,6 +106,14 @@ COPY opencode.json /home/forge/.config/opencode/config.json
 # at the user-config layer when applications resolve XDG paths).
 COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
 COPY config-overlay/opencode/instructions/ /home/forge/.config/opencode/instructions/
+# @trace order:456
+# Rich config and MCP scripts (git-tools, project-info, host-browser, forge-plan)
+# are copied to .config-overlay where the config.json expects them.
+# The .config-overlay path matches the MountSource::ConfigOverlay mount point
+# so a runtime host overlay (once wired) can override these defaults.
+COPY config-overlay/opencode/config.json /home/forge/.config-overlay/opencode/config.json
+COPY config-overlay/opencode/tui.json /home/forge/.config-overlay/opencode/tui.json
+COPY config-overlay/mcp/ /home/forge/.config-overlay/mcp/
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish
@@ -130,6 +140,9 @@ RUN mkdir -p /etc/tillandsias
 COPY config-overlay/shell-helpers.sh /etc/tillandsias/shell-helpers.sh
 COPY config-overlay/shell-helpers.fish /etc/tillandsias/shell-helpers.fish
 RUN chmod +x /etc/tillandsias/shell-helpers.sh || true
+
+# ── MCP scripts must be executable for OpenCode to launch them
+RUN chmod +x /home/forge/.config-overlay/mcp/*.sh || true
 
 # ── Discovery CLIs ─────────────────────────────────────────────
 # @trace spec:forge-environment-discoverability
