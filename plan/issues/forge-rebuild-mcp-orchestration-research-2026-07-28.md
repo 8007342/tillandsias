@@ -119,3 +119,37 @@ First drain ~23h. Gate off ⇒ surface absent ⇒ "transparent to end users" hol
 2. Two-key gate: auto-opt-in the Tillandsias repo itself as the second key's first entry?
 3. P7 vsock arm priority for Windows/macOS dev hosts — deferred to v0.6 acceptable?
 4. Tray-advisory UX: acceptable that tray rebuilds ALWAYS require a human `./build.sh --ci-full --install`?
+## Operator rulings — 2026-07-28 (The Tlatoani)
+
+Recorded same-day, superseding the corresponding open questions above:
+
+1. **Scope: forge containers ONLY.** No agent-triggered tray recompilation,
+   ever — not even as a "build" tier. The deterministic compiled tray is the
+   idiomatic layer that protects the host from rogue forge creations and
+   keeps agents in-forge running "unrestricted" safely; rebuilding it from
+   agent-editable sources would dissolve the boundary. The tray-advisory
+   tier is informational tickets only; a human acts on them.
+2. **Runtime doctrine.** DEVELOPMENT RUNTIME → supports container
+   hot-recreation (this whole surface exists for development velocity).
+   USER RUNTIME → containers are SEALED; no dev-control surface; freshness
+   comes from the normal ephemeral/idempotent relaunch/recreate path — the
+   Containerfiles are declarative "use latest" formulae, and a borked forge
+   is fixed by recreate, not by any dev capability. Forge recreation in
+   user runtime is for major updates (e.g. a Fedora revision), not routine.
+3. **Gate is compile-time, not just env.** The capability is a security
+   hole in USER RUNTIME and therefore must not exist in release artifacts
+   at all: dev-control compiles only into local dev builds (cfg feature),
+   plus the explicit host-side operator env opt-in at runtime. A litmus
+   asserts released binaries contain no dev-control verb names (folded into
+   orders 507/513).
+4. **No repo-identity key.** The Tillandsias repo gets no auto-opt-in;
+   END USERS never receive development privileges regardless of what
+   project they run ("DEVELOPMENT TIME only, just me"). Agents working our
+   tasks get self-improvement capabilities on the operator's dev hosts;
+   agents on unknown tasks get nothing.
+5. **Forge rootfs immutability** (adjacent directive): sealed running
+   containers — order 515 filed; sidecars already --read-only, the forge
+   container is the verified gap.
+6. **Order 514 pulled to v0.5** (vsock arm for Windows/macOS dev hosts).
+7. **Resume continuity (order 511)**: pending — operator asked for a plain
+   explanation before ruling; see the packet.

@@ -23587,6 +23587,22 @@ plan_index:
       title: "dev-control P2: two-key host gate, conditional tools/list, -32601 invisibility, ticket registry, scoped status, default-deny dispatch, rate limiting"
       status: ready
       kind: feature
+      operator_ruling:
+        ts: "2026-07-28T21:10:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          The second gate key is NOT repo identity — the Tillandsias repo
+          gets no auto-opt-in; a clone/fork on any other machine must not
+          enable dev-control (repo identity is spoofable and END USERS
+          never receive development privileges: "DEVELOPMENT TIME only,
+          just me"). Required key shape instead: a LOCAL DEV BUILD
+          (compile-time cfg — release binaries do not contain the verbs;
+          add a litmus asserting the release artifact lacks the
+          dev-control tool names) plus the explicit host-side operator
+          opt-in env var on the tray process. This strengthens the
+          research design: env-gating alone is insufficient because the
+          capability is a security hole in USER RUNTIME and must not ship
+          in the artifact at all.
       depends_on: [mcp-sock-perlane-attribution, dev-control-mcp-spec]
       pickup_role: "linux (tillandsias-headless)"
       capability_tags: [mcp, tray, security, rust]
@@ -23664,6 +23680,22 @@ plan_index:
       title: "dev-control P5: component=forge self-restart — unpushed-work refusal, ownership-proven teardown, deadline, relaunch-with-inject, e2e litmus"
       status: ready
       kind: feature
+      operator_ruling:
+        ts: "2026-07-28T21:10:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          restart/rebuild capability is FORGE CONTAINERS ONLY, and only in
+          DEVELOPMENT RUNTIME. Agents may NEVER trigger a tray recompile —
+          the deterministic compiled tray is the idiomatic layer that
+          protects the host from rogue forge creations and keeps agents
+          in-forge; recompiling it from agent-editable sources would
+          dissolve that boundary. Runtime doctrine: DEVELOPMENT RUNTIME
+          supports container hot-recreation for velocity; USER RUNTIME
+          ships containers SEALED — freshness comes only from the normal
+          ephemeral/idempotent relaunch-recreate path (Containerfiles are
+          declarative "use latest" formulae), no dev-control surface
+          present. Gate is compile-time for local dev builds: release
+          artifacts must not contain the dev-control verbs at all.
       depends_on: [dev-rebuild-shared-components, resume-relaunch-plumbing]
       pickup_role: "linux (tillandsias-headless); litmus instant pre-build"
       capability_tags: [mcp, forge, podman, lifecycle, litmus, rust]
@@ -23756,9 +23788,21 @@ plan_index:
 
     - packet_id: dev-control-vsock-crossplatform
       order: 514
-      desired_release: v0.6
-      title: "dev-control P7: vsock (McpFrame) arm for Windows/macOS dev hosts behind the same two-key gate — DEFERRED, operator-priority-gated"
-      status: pending
+      desired_release: v0.5
+      title: "dev-control P7: vsock (McpFrame) arm for Windows/macOS dev hosts behind the same two-key gate"
+      status: ready
+      events:
+        - type: retargeted
+          ts: "2026-07-28T21:10:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Operator call (The Tlatoani, 2026-07-28): pulled forward
+            v0.6 -> v0.5 ("looks like it will help") — Windows/macOS dev
+            hosts are actively used for v0.5 validation, so the vsock arm
+            rides the same release as the rest of dev-control. Status
+            pending -> ready; the attribution re-derivation requirement in
+            the outcome stands unchanged.
       kind: feature
       depends_on: [forge-self-restart-lifecycle]
       pickup_role: "windows/macos with linux control-wire support"
@@ -23774,3 +23818,42 @@ plan_index:
         same unforgeability property) — do not ship a weaker attribution on
         vsock than on unix sockets. Deferred to v0.6 unless the operator
         raises priority.
+
+    - packet_id: forge-rootfs-immutability
+      order: 515
+      desired_release: v0.5
+      title: "Make the forge container rootfs read-only — sidecars already are; the agent workspace container is the gap (operator-directed 2026-07-28)"
+      status: ready
+      kind: fix
+      depends_on: []
+      pickup_role: "linux (tillandsias-headless + images/default)"
+      capability_tags: [linux, forge, podman, security, immutability, enclave]
+      estimated_hours: 4
+      operator_ruling:
+        ts: "2026-07-28T21:10:00Z"
+        authority: "The Tlatoani"
+        scope: >
+          "we should likely make our forge filesystem immutable, I think it
+          was part of the original spec, let's make sure we do so." Agents
+          must not be able to modify the forge's own substrate (incl. the
+          source CONTAINERFILE the image is built from — that lives in the
+          project tree and is governed by the branch/ledger flow, but the
+          RUNNING container's rootfs must be sealed).
+      outcome: >
+        Verified gap at HEAD: vault-agent (main.rs:2849) and router
+        (main.rs:3470) run --read-only with explicit tmpfs, but the forge
+        container run paths (build_opencode_forge_args ~main.rs:4810 and
+        build_forge_agent_run_args) do NOT pass --read-only — the forge
+        rootfs is writable; protection today is tmpfs quarantines plus
+        no-new-privileges. podman-idiomatic-patterns spec:54 treats
+        --read-only as per-project opt-in only. Close it: enumerate every
+        legitimately writable path in the forge (hot/cold volumes: cargo +
+        harness caches; tmpfs: /tmp, /run/user/1000, /opt/cheatsheets,
+        quarantine mounts; the project clone working tree), then flip
+        --read-only on both forge run paths with explicit mounts covering
+        the enumeration; extend the architectural-invariants litmus to pin
+        --read-only on every enclave container class; document in
+        podman-idiomatic-patterns that forge rootfs immutability is the
+        DEFAULT, not opt-in. Watch item: harness self-installs
+        (order-486-class flows) write under /home/forge — decide
+        volume-vs-tmpfs per path, never rootfs.

@@ -68,7 +68,13 @@ multi_host_development:
       integration: [main, linux-next, windows-next, osx-next]
       infrastructure: [gh-pages, "release/*"]
       external_tolerated: ["claude/*", "revert-*"]
-      note: "main is PR-only (protected, enforce_admins, 2026-07-28, order 476)."
+      note: >
+        main is PR-only (protected, enforce_admins, 2026-07-28, order 476).
+        linux-next/windows-next/osx-next carry deletion + force-push
+        protection (2026-07-28, operator-directed) while keeping direct
+        pushes open. The sweep operates ONLY on agent/* and salvage/*
+        refs — integration branches are structurally outside its
+        enumeration and additionally server-protected against deletion.
     lane_grammar:
       pattern: "agent/<host>/<base>/<yyyymmdd>-<slug>"
       slug: >
@@ -89,9 +95,11 @@ multi_host_development:
         tree, never the pushed tip.
       grandfathering: >
         Grammar applies to NEW branch creations (zero-oldsha) only. The
-        pre-existing legacy remote refs are exempt pending the rung-1
-        census; pruning them is operator-approved, archive-tag first
-        (archive/<branch>-<tipsha>).
+        rung-1 census COMPLETED 2026-07-28: all 11 legacy remote refs were
+        archive-tagged (archive/<branch>-<tipsha>) and pruned,
+        operator-approved. The remote now carries only main, gh-pages, and
+        the three integration branches; any future out-of-grammar creation
+        is a stray for the sweep to report.
       lifecycle_intent: >
         Lanes are merged into their named <base> by the owning agent at
         green exit (merge-only, --no-ff); never rebased or force-pushed once
