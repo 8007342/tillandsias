@@ -726,22 +726,31 @@ plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
   413 (git-mirror-relay-fetch-before-push) that was dropping the b49b7776
   progress evidence via YAML last-wins; plan-orders gate green.
 
-## ACTIVE RELEASE: v0.4 (Linux stability bundle — EXPERTS re-scoped out by operator decision 2026-07-21)
+## ACTIVE RELEASE: v0.5 (v0.4 SHIPPED 2026-07-28 as v0.4.260728.1)
 
-> OPERATOR DECISION 2026-07-21: the EXPERTS family + the compiled plan/MCP
-> server (456-458) land TOGETHER as a coupled overhaul (ramdisk + experts
-> synergy, transparent to end users) — NOT in v0.4. v0.4 = the stability
-> bundle: forge checkout/mirror/push correctness, no crashloops, no work
-> loss, smoke-PASS evidence, then series bump 0.3 -> 0.4.
+> **v0.4 SHIPPED**: `v0.4.260728.1` published 2026-07-28T00:58Z (run
+> 30317466235, all three platform jobs green, full cosign asset set:
+> Linux musl host+headless, Windows x64 tray, macOS arm64 tray+DMG).
+> Series bump 0.3 → 0.4 executed on main per the operator directive (The
+> Tlatoani, 2026-07-27 "linux-next" session). Pre-merge evidence: 15-packet
+> adversarial triage with zero blockers
+> (`plan/issues/v04-release-triage-2026-07-27.md`), macOS destructive e2e
+> PASS (5a44fd69) + Windows smoke PASS (v0.3.260724.1).
+> **Latest published release for smoke targeting: v0.4.260728.1** — the
+> order-455 cross-platform smoke queue and curl-install e2e gates on ALL
+> hosts (immutable Linux included) should now run against this build.
+
+> OPERATOR DECISION 2026-07-21 (still governing v0.5 scope): the EXPERTS
+> family + the compiled plan/MCP server (456-458) land TOGETHER as a coupled
+> overhaul (ramdisk + experts synergy, transparent to end users) — in v0.5,
+> not v0.4.
 
 Releases are sequential, stability-gated bundles (versioning.yaml Minor;
-methodology `version_aware_release_planning`). The current published daily is
-**v0.3.260723.1**: workflow run 29977379850 completed successfully on
-2026-07-23 with the Linux, macOS, and Windows build/sign/publish jobs green.
-That is publication evidence only; a qualifying host smoke PASS is still
-required before v0.4 can close. The **active release-in-progress is v0.4**:
-finish the stability bundle — forge checkout/mirror/push correctness, no
-crashloops or work loss, and durable smoke-PASS evidence.
+methodology `version_aware_release_planning`). The **active
+release-in-progress is v0.5** (EXPERTS + cross-platform parity + streams/
+transport + security channel + audits). v0.4 residuals riding the
+post-release smoke campaign: 424, 455, 463, 466, 491, provisional trio,
+489/490 post-tag drains — each closes with evidence against v0.4.260728.1.
 
 ### Release roadmap (full backfill 2026-07-18; structural refresh 2026-07-24; order 407)
 
