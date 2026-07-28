@@ -48,7 +48,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-host-shell/src/provisioning.rs#L13](../../../crates/tillandsias-host-shell/src/provisioning.rs#L13)
 - [crates/tillandsias-host-shell/src/provisioning.rs#L126](../../../crates/tillandsias-host-shell/src/provisioning.rs#L126)
 - [crates/tillandsias-host-shell/src/provisioning.rs#L191](../../../crates/tillandsias-host-shell/src/provisioning.rs#L191)
-- [crates/tillandsias-host-shell/src/pty/mod.rs#L232](../../../crates/tillandsias-host-shell/src/pty/mod.rs#L232)
+- [crates/tillandsias-host-shell/src/pty/mod.rs#L240](../../../crates/tillandsias-host-shell/src/pty/mod.rs#L240)
 - [crates/tillandsias-host-shell/src/scanner.rs#L12](../../../crates/tillandsias-host-shell/src/scanner.rs#L12)
 - [crates/tillandsias-host-shell/src/scanner.rs#L45](../../../crates/tillandsias-host-shell/src/scanner.rs#L45)
 - [crates/tillandsias-host-shell/src/scanner.rs#L110](../../../crates/tillandsias-host-shell/src/scanner.rs#L110)

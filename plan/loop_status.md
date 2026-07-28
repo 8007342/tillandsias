@@ -1,5 +1,42 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-27T23:38Z (linux_mutable — v0.4 RELEASE CYCLE: full integration + triage + drain)
+
+- **Host/branch**: mutable Linux (macuahuitl), `linux-next`; credential guard
+  `ok:gh-keyring`; startup boundary clean; operator directive (The Tlatoani,
+  session "linux-next"): drain v0.4 blockers, merge to main, ship the v0.4
+  release with all three binaries, then clear residuals via real
+  cross-platform e2e smokes of the published artifact.
+- **Integration**: merged `origin/main` back into linux-next (reconciled the
+  concurrent order-462 pre-receive fixes — kept find_diff_base +
+  is_legacy_archive, folded main's forge event into packet history; hook test
+  4/4). Merged `origin/osx-next` (~28 commits: terminal-attach@v2, PTY
+  backpressure, macOS destructive e2e PASS evidence, orders 491-494) — clean
+  auto-merge; one clippy doc-lint fix on the Linux strict lane.
+  `windows-next` was already fully integrated.
+- **v0.4 release triage**: 15-packet parallel adversarial review + synthesis
+  (record: `plan/issues/v04-release-triage-2026-07-27.md`). **Zero
+  release-blocking packets.** Charter satisfied: macOS destructive e2e PASS
+  (5a44fd69, 2026-07-27) + Windows smoke PASS (v0.3.260724.1). Slipped to
+  v0.5 with reason events: 468 (sign-off-gated feature), 486 residual
+  criterion 3, 492, 493, 494 residual forensics. Riding post-release smoke:
+  424, 455, 463, 466, 491, provisional trio, 489/490 post-tag drains.
+- **Drained this cycle**: 448 recurrence (cheatsheet image tree, 6371e7be);
+  486 criteria 1-2 (CA bundle + bounded egress-gated backoff, e6777c88); 476
+  prong (b) (check-committable-branch.sh + litmus + skill wiring, dc35960b);
+  465 CLOSED (host-mount escape hatch now loud + Once-gated, 1498c7fd); 494
+  interim leak-not-destroy guard (non-force forge removal, running sibling +
+  shared stack survive the zero-lane misread, 1498c7fd).
+- **Gates**: `./build.sh --check` PASS; `./build.sh --test` PASS; full
+  pre-build litmus 211 executed / 1 FAIL (cheatsheet sync — fixed same cycle,
+  focused 2/2 PASS); tray-parity matrix 0 gaps; e2e-preflight `eligible` —
+  destructive local-build gate deliberately deferred: the destructive-reset
+  budget goes to the post-release curl-install e2e of the PUBLISHED v0.4
+  binary per the operator's smoke-the-released-artifact directive.
+- **Operator handoff (order 476 prong a)**: `main` has no branch protection
+  (404). The exact `gh api` call is in the packet deliverable; must
+  accommodate the release flow's direct VERSION-bump push (skill step 4).
+
 ## Cycle 2026-07-25T04:18Z (linux_mutable - v0.4 agent drain + Windows integration)
 
 - **Host/branch**: mutable Linux, `linux-next`; credential guard

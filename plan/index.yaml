@@ -21867,7 +21867,7 @@ plan_index:
 
     - packet_id: inference-coldstart-races-proxy-egress-and-hard-gates-launch
       order: 486
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Inference first-run self-install races proxy egress readiness, and its 60s readiness probe hard-aborts a lane launch that runs fine without it"
       status: ready
       kind: fix
@@ -21915,6 +21915,24 @@ plan_index:
             concurrent linux-next research wave independently allocated 478.
             Stable packet_id is unchanged; the repair restores unique live
             order references without rewriting either published lineage.
+        - type: progress
+          ts: "2026-07-28T00:25:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["e6777c88"]
+          summary: >
+            Exit criteria 1-2 closed at the v0.4 release triage drain:
+            entrypoint now exports CURL_CA_BUNDLE=/etc/tillandsias/ca.crt
+            (guarded on existence) so squid's bumped error page can never
+            read as a CA problem, and the single 10s nap became a bounded
+            proxy-egress gate (5 HEAD probes, 2/4/8/16s backoff, ~105s
+            worst case, loud FATAL then non-fatal skip per the 5ddc80db
+            warn-and-continue contract). Criterion 2 was already closed at
+            HEAD by 5ddc80db. Residual criterion 3 (cold-volume race
+            fixture or structural proxy-before-inference readiness
+            ordering) slips to v0.5 with the inference family per the
+            2026-07-21 operator decision; packet retargeted v0.4 -> v0.5
+            for that residue.
         - type: filed
           ts: "2026-07-24T07:55:00Z"
           agent_id: "windows-host-claude-observer"
@@ -22298,7 +22316,7 @@ plan_index:
       order: 465
       desired_release: v0.4
       title: "PRINCIPLE: every forge stack MUST be enclave-isolated + git:// mirror push on ALL platforms (uniform container stack)"
-      status: ready
+      status: done
       kind: architecture
       deliverable: plan/issues/forge-enclave-isolation-uniform-principle-2026-07-23.md
       depends_on: []
@@ -22314,6 +22332,23 @@ plan_index:
         retire the opt-in TILLANDSIAS_FORGE_HOST_MOUNT=1 escape hatch; converge
         macOS push wiring (order 466). Promoted to the index by the linux
         coordinator 2026-07-24 (was issues-file only, invisible to pickup).
+      events:
+        - type: completed
+          ts: "2026-07-28T00:55:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["1498c7fd"]
+          summary: >
+            Closed at the v0.4 release triage: the principle trace stands
+            (enclave-isolated, proxy-only egress, credential quarantine,
+            mirror-push default on all platforms at HEAD; commits 66de6820 +
+            f02d623c), the macOS push-route decision it settles is recorded
+            on order 466 with operator approval, and the last residual —
+            the TILLANDSIAS_FORGE_HOST_MOUNT=1 escape hatch — is now loud
+            and opt-in-only: every honoring path emits a Once-gated
+            bordered isolation-reduction warning, unit-pinned. Remaining
+            CA-lifecycle substance lives in orders 467/472/473 as already
+            scoped.
 
     - packet_id: macos-forge-no-push-route-lane-decision
       order: 466
@@ -22389,7 +22424,7 @@ plan_index:
 
     - packet_id: forge-claude-transparent-oauth-token-vault-inject
       order: 468
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Transparent Claude OAuth-token capture -> Vault -> inject -> refresh (harness-auth parity with Codex/GitHub)"
       status: ready
       kind: feature
@@ -22404,6 +22439,20 @@ plan_index:
         inside run_provider_login (main.rs:6860) mirroring
         codex-device-auth.sh:24-40, token to secret/claude/oauth-token,
         injected + refreshed transparently. Promoted to the index 2026-07-24.
+      events:
+        - type: slipped
+          ts: "2026-07-28T00:20:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          summary: >
+            Slipped v0.4 -> v0.5 at the v0.4 release triage (15-packet
+            adversarial review, zero blocking): entirely unimplemented
+            feature gated on Tlatoani sign-off, and the defect it closes
+            (interactive Claude login TUI smearing the auth URL on a Vault
+            credential miss) is a usability fallback, not a
+            crashloop/work-loss/corruption item under the v0.4 charter.
+            Sign-off request remains open with the operator; implement in
+            v0.5 upon approval.
 
     - packet_id: research-auth-flow-state-machines
       order: 469
@@ -22581,6 +22630,29 @@ plan_index:
         (b) LINUX — meta-orchestration/advance-work bootstrap refuses
         committable cycles when branch == main (executable check,
         litmus-pinned). Protects the imminent v0.4 promotion.
+      events:
+        - type: progress
+          ts: "2026-07-28T00:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["dc35960b"]
+          summary: >
+            Prong (b) DONE at the v0.4 release triage drain:
+            scripts/check-committable-branch.sh emits the single-line
+            grammar ok:branch-<name> / blocked:committable-cycle-on-main
+            (plus fail-closed blocked:detached-head and
+            blocked:not-a-git-repo), pinned by
+            litmus:committable-branch-guard-shape 6/6 and wired into the
+            meta-orchestration + advance-work-from-plan preflights.
+            Implementation note: branch detection uses git symbolic-ref
+            (the packet's rev-parse idiom exits 128 with literal HEAD on
+            the unborn-branch fixture). Known limitation: the
+            run-litmus-test.sh positional filter matches spec_ids only, so
+            the working focused command is `scripts/run-litmus-test.sh
+            meta-orchestration --phase pre-build --size instant`. Prong
+            (a) handed to the operator (branch protection currently 404
+            "Branch not protected"); prong (c) criteria 4-5 verification
+            commands still to run and record.
 
     - packet_id: forge-opencode-provider-seed-missing-after-reset
       order: 487
@@ -23043,7 +23115,7 @@ plan_index:
 
     - packet_id: host-pty-slave-retention-eof-teardown
       order: 492
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Host PTY split() retains the slave fd — EOF/teardown defeated (audit D5 full fix; mitigated by attach-client detach)"
       status: ready
       kind: fix
@@ -23057,10 +23129,25 @@ plan_index:
         Darwin, then drop the retained slave in split() (or re-raw from the
         attach client), wire input-task EOF to a transport-level PtyClose,
         and keep the blank-terminal ATTACH_GRACE regression guard green.
+      events:
+        - type: slipped
+          ts: "2026-07-28T00:20:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          summary: >
+            Slipped v0.4 -> v0.5 at the v0.4 release triage (15-packet
+            adversarial review, zero blocking): the operator-visible
+            consequence of D5 (window close orphaning the guest harness)
+            was closed 2026-07-27 by the attach-client detach mitigation
+            (unconditional transport-level PtyClose/SIGHUP on
+            session-socket disconnect), verified inside the qualifying
+            macOS destructive e2e PASS. The remaining structural fix
+            requires a live Darwin termios-persistence probe, which is a
+            macOS-host session, not a Linux stability item.
 
     - packet_id: guest-pty-write-wedge
       order: 493
-      desired_release: v0.4
+      desired_release: v0.5
       title: "Guest write_to_guest blocks unboundedly inline in the connection loop — wedge kills session/connection (audit D6)"
       status: ready
       kind: fix
@@ -23075,10 +23162,25 @@ plan_index:
         enqueue bounded to the 250ms control-plane fairness bound, resize
         routed through the same queue to preserve arrival order. Restores
         the vsock-transport fairness invariant under a wedged child.
+      events:
+        - type: slipped
+          ts: "2026-07-28T00:20:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          summary: >
+            Slipped v0.4 -> v0.5 at the v0.4 release triage (15-packet
+            adversarial review, zero blocking): confirmed P2 with
+            one-session blast radius — a large paste during a busy cooked
+            phase can wedge one terminal-attach session, but the forge
+            child keeps running, so no crashloop, no work loss, no
+            forge/mirror corruption. The common trigger
+            (scroll-to-arrow-key spam) was already removed at HEAD per the
+            deliverable's trigger note; the ~4h bounded-queue fix is v0.5
+            work.
 
     - packet_id: macos-concurrent-lane-launch-kills-sibling
       order: 494
-      desired_release: v0.4
+      desired_release: v0.5
       title: "P1: concurrent lane launch tears shared stack from under a live sibling — both lanes die (order-443 guard misses running sibling)"
       status: ready
       kind: fix
@@ -23094,3 +23196,24 @@ plan_index:
         so a second launch never tears git/proxy/inference from under a
         cloning sibling. Evidence: 2026-07-27 attended session, git service
         recreated with a new IP mid-clone, both lanes dead.
+      events:
+        - type: progress
+          ts: "2026-07-28T00:55:00Z"
+          agent_id: "linux-mutable-metaorch-20260727"
+          host: linux_mutable
+          commits: ["1498c7fd"]
+          summary: >
+            INTERIM leak-not-destroy guard shipped in v0.4 (adversarial
+            triage corrected this from a bare slip — the cleanup path
+            force-removed a RUNNING sibling forge, an unmitigated
+            work-loss vector): forge removal now uses plain podman rm (no
+            -f) so podman's removal-time exit 2 refuses a running
+            container atomically; on refusal the sibling's git/browser
+            dependencies are left alone and the shared proxy/inference
+            teardown is skipped, with loud REFUSING warnings. Pinned by 5
+            new unit tests incl. the end-to-end 2026-07-27 incident shape
+            (zero-lane misread + running forge). Residue slipped to v0.5:
+            root-cause H1-H3 forensics of the order-443 zero-lane/flock
+            misread (first post-release macOS multi-lane session),
+            differently-named sibling coverage, and the documented
+            same-name --replace self-relaunch semantics.

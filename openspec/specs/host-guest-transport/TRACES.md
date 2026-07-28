@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-control-wire/src/guest_transport.rs#L1](../../../crates/tillandsias-control-wire/src/guest_transport.rs#L1)
-- [crates/tillandsias-macos-tray/src/action_host.rs#L3164](../../../crates/tillandsias-macos-tray/src/action_host.rs#L3164)
+- [crates/tillandsias-macos-tray/src/action_host.rs#L3286](../../../crates/tillandsias-macos-tray/src/action_host.rs#L3286)
 - [crates/tillandsias-macos-tray/src/diagnose.rs#L1403](../../../crates/tillandsias-macos-tray/src/diagnose.rs#L1403)
 - [crates/tillandsias-vm-layer/src/lib.rs#L82](../../../crates/tillandsias-vm-layer/src/lib.rs#L82)
 - [crates/tillandsias-vm-layer/src/transport_conformance.rs#L31](../../../crates/tillandsias-vm-layer/src/transport_conformance.rs#L31)
