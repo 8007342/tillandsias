@@ -821,9 +821,19 @@ plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
 > adversarial triage with zero blockers
 > (`plan/issues/v04-release-triage-2026-07-27.md`), macOS destructive e2e
 > PASS (5a44fd69) + Windows smoke PASS (v0.3.260724.1).
-> **Latest published release for smoke targeting: v0.4.260728.1** — the
+> **Latest published release for smoke targeting: v0.4.260728.2** (published
+> 2026-07-28, run 30406924690, all platform jobs green, full cosign asset
+> set; merged PR #84 = Windows login-gate/vault epoch-skew fixes + same-day
+> linux-next work). Promoted STABLE/latest same day via
+> `promote-stable.sh v0.4.260728.2 --force` — OPERATOR OVERRIDE RECORD
+> (who/when/why): The Tlatoāni, 2026-07-28 live Windows session, directed
+> "release to main and trigger a new release to latest under v0.4";
+> evidence at promotion time was the attended Windows local-build
+> validation of the identical source 89059357 (fresh WSL provision →
+> GitHub login flow PASS → OpenCode forge launch + in-forge agent
+> test/push PASS), NOT a published-artifact curl-install e2e — the
 > order-455 cross-platform smoke queue and curl-install e2e gates on ALL
-> hosts (immutable Linux included) should now run against this build.
+> hosts (immutable Linux included) should now run against v0.4.260728.2.
 
 > OPERATOR DECISION 2026-07-21 (still governing v0.5 scope): the EXPERTS
 > family + the compiled plan/MCP server (456-458) land TOGETHER as a coupled
