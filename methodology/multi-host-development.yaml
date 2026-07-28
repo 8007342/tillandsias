@@ -255,7 +255,15 @@ multi_host_development:
         least context. Operator directive 2026-07-02: this is the normal
         workflow — platform hosts absorb the merge cost so remote linux workers
         can merge platform branches back into linux-next cleanly.
-      applies_to: ["windows-next", "osx-next", "any non-linux-next shared branch"]
+      applies_to: ["windows-next", "osx-next", "any non-linux-next shared branch EXCEPT agent/* and salvage/* refs"]
+      lane_exclusion: >
+        agent/* and salvage/* refs are excluded (branch_namespaces
+        pre_push_gate_amendment, 2026-07-28): a mid-cycle lane checkpoint
+        must not require a trunk merge — durability beats integration
+        freshness for work-in-progress refs. The gate's INTENT is preserved
+        at the boundary instead: the lane green-exit procedure
+        (lane-exit.sh, order 502) and ledger checkpoints MUST merge
+        origin/linux-next first when the lane's <base> is not linux-next.
       race_exception: >
         If the coordinator is actively merging your already-pushed head (your
         commits are in flight toward linux-next), do NOT race them with a second

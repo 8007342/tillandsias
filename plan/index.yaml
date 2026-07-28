@@ -23393,8 +23393,25 @@ plan_index:
       order: 499
       desired_release: v0.5
       title: "Branch scheme rung 1: codify branch_namespaces in methodology (doc-only) + dead-ref census with operator-approved archive+prune"
-      status: ready
+      status: done
       kind: docs
+      events:
+        - type: completed
+          ts: "2026-07-28T22:05:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            All rung-1 elements verified landed: branch_namespaces block in
+            methodology/multi-host-development.yaml (af2533ec — grammar,
+            creation regex, ledger rule, sweep_role, salvage intake incl.
+            the macOS case, forge_branch_inheritance); census COMPLETED
+            with operator approval — 11 legacy refs archive-tagged +
+            pruned, *-next deletion/force-push protection applied
+            (30a47c1b); and this cycle the pre_push_gate applies_to
+            amendment was applied at the SOURCE (pull_merge_cadence:
+            agent/* + salvage/* excluded with lane_exclusion rationale),
+            not just documented in the namespaces block. Rung 2 is order
+            500 (in drain).
       depends_on: [git-branching-methodology-research]
       pickup_role: "linux_mutable"
       capability_tags: [methodology, docs, git, coordination]
