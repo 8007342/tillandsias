@@ -10,7 +10,7 @@ allowed_path() {
   case "$1" in
     README.md|TRACES.md|CLAUDE.md) return 0 ;;
     docs/*|cheatsheets/*|openspec/*|plan/*|skills/*|crates/*) return 0 ;;
-    methodology/events/README.md|methodology/specs/*) return 0 ;;
+    methodology/specs/*) return 0 ;;
     .claude/commands/*|.opencode/commands/*|.opencode/command/*|.github/prompts/*) return 0 ;;
     .claude/skills/*/SKILL.md|.opencode/skills/*/SKILL.md|.codex/skills/*/SKILL.md|.gemini/skills/*/SKILL.md|.github/skills/*/SKILL.md) return 0 ;;
     images/default/cheatsheets/*|images/default/config-overlay/opencode/*) return 0 ;;

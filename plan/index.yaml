@@ -22896,13 +22896,25 @@ plan_index:
       order: 485
       desired_release: v0.5
       title: "Housekeeping: plan.yaml duplicate bootstrap-note lines + methodology/event vs methodology/events directory split"
-      status: ready
+      status: completed
       kind: housekeeping
       deliverable: plan/issues/plan-yaml-duplicate-note-lines-2026-07-24.md
       depends_on: []
       pickup_role: any
       capability_tags: [plan-hygiene, methodology]
       estimated_hours: 1
+      events:
+        - type: completed
+          ts: "2026-07-28T01:20:00Z"
+          agent_id: "linux-bigpickle-forge-20260728T0112Z"
+          host: forge
+          summary: >
+            Removed duplicate plan.yaml note line (events/ plural), deleted
+            methodology/events/ directory (contained only README.md; canonical
+            is methodology/event/), cleaned whitelist entries from
+            methodology/markdown-distillation.yaml and
+            scripts/check-markdown-distillation.sh. @methodology/ explained
+            as intentional stale OpenCode overlay (separate cleanup).
       outcome: >
         Observed during the order-478 research wave (issue_filing_mandate):
         plan.yaml carries two near-duplicate notes lines differing only in
