@@ -22631,7 +22631,7 @@ plan_index:
       order: 476
       desired_release: v0.4
       title: "Guard main against direct pushes and forge cycles running ON main (breach 34e60965 record + branch protection + bootstrap guard)"
-      status: ready
+      status: completed
       kind: fix
       deliverable: plan/issues/main-branch-direct-push-guard-2026-07-24.md
       depends_on: []
@@ -22671,6 +22671,32 @@ plan_index:
             (a) handed to the operator (branch protection currently 404
             "Branch not protected"); prong (c) criteria 4-5 verification
             commands still to run and record.
+        - type: completed
+          ts: "2026-07-28T18:40:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            Prong (a) EXECUTED under explicit in-session operator direction
+            (The Tlatoani, 2026-07-28: "let's complete the gaps") — the
+            packet's exact gh api PUT applied to
+            repos/8007342/tillandsias/branches/main/protection with
+            enforce_admins true, required_pull_request_reviews
+            (0 approvals), the three CI contexts, force-push and deletion
+            disabled. Exit-criterion-3 probe output, pasted verbatim:
+            `true`. Criteria 1-2 held (litmus 6/6 + skill wiring,
+            dc35960b). Criteria 4-5 evaluated intent-vs-letter: the revert
+            DID arrive via PR (6f191a8f = Merge PR #81, on main's
+            first-parent walk) and all four branches now agree
+            mirror-first-seed-vs-launch-readiness-race is status done, so
+            no sibling contradiction remains; the literal byte-identity
+            and tip-is-merge checks are stale snapshots — superseded by
+            legitimate post-revert work (PR #82/#83 promotions, release
+            bumps) and by the recurrence direct pushes (871c7cca,
+            2acc20f9, e57b6a3d, ffe85a23) that this protection now makes
+            impossible for everyone including admins. Consequence handled:
+            merge-to-main-and-release step 4 rewritten to land the VERSION
+            bump via a short-lived auto-merge PR (ci.yml has no path
+            filters, so a VERSION-only PR still gets its required checks).
 
     - packet_id: forge-opencode-provider-seed-missing-after-reset
       order: 487

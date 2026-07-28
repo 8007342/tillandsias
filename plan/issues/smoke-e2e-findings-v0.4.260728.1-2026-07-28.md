@@ -28,6 +28,22 @@ enclave bring-up → in-forge agent work → durable mirror push, with no
 crashloop, no work loss, and no forge/mirror corruption. Order-455's Linux
 column now has its dated PASS naming the v0.4 build.
 
+## Stable-channel promotion one-shot (2026-07-28T18:22Z)
+
+Operator-directed promotion executed the same day:
+`scripts/promote-stable.sh v0.4.260728.1` → `promoted:v0.4.260728.1`
+(evidence gate satisfied by this report; prerelease flag cleared, GitHub
+"latest" flipped from the 16-day-old v0.3.260712.1, annotated `stable` tag
+force-moved and pushed). One-shot stable-channel verification: the README's
+exact unpinned command (`curl -fsSL .../releases/latest/download/install.sh
+| bash`) installed and `tillandsias --version` reports `v0.4.260728.1`
+(`target/smoke-e2e/05-stable-install.log`, `05-stable-version.txt`);
+`scripts/resolve-smoke-release.sh stable` resolves to the same tag.
+Scope note: the destructive reset/init/forge chain was NOT repeated for the
+stable channel — the artifact is byte-identical to the daily-channel build
+that passed the full destructive chain earlier this same day (gates 1-4
+above); the one-shot proves the stable RESOLUTION path the README serves.
+
 ## Observations (process, not product)
 
 - **4b egress snapshot missed**: the host-side proxy-alive-alongside-lane

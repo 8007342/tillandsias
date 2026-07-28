@@ -33,9 +33,14 @@
   destructive local-build gate deliberately deferred: the destructive-reset
   budget goes to the post-release curl-install e2e of the PUBLISHED v0.4
   binary per the operator's smoke-the-released-artifact directive.
-- **Operator handoff (order 476 prong a)**: `main` has no branch protection
-  (404). The exact `gh api` call is in the packet deliverable; must
-  accommodate the release flow's direct VERSION-bump push (skill step 4).
+- **Operator handoff (order 476 prong a)**: ~~`main` has no branch
+  protection (404)~~ **CLOSED 2026-07-28T18:40Z** under explicit in-session
+  operator direction: protection applied (enforce_admins, required CI
+  checks, 0-approval PRs, no force-push/deletion), probe prints `true`,
+  packet 476 completed. merge-to-main-and-release step 4 rewritten to land
+  the VERSION bump via auto-merge PR. Same session: v0.4.260728.1 promoted
+  to STABLE (`promoted:v0.4.260728.1`; GitHub "latest" was 16 days stale at
+  v0.3.260712.1), README-path install verified serving v0.4.260728.1.
 
 ## Cycle 2026-07-25T04:18Z (linux_mutable - v0.4 agent drain + Windows integration)
 

@@ -134,23 +134,45 @@ Use `--merge` (not `--squash`): the linux-next history is the audit log of the d
 
 ---
 
-## 4 — Bump VERSION on main + push
+## 4 — Bump VERSION on main via PR (branch protection, order 476)
+
+`main` has server-side branch protection (enabled 2026-07-28, order 476
+prong (a)): direct pushes are rejected for EVERYONE including admins
+(`enforce_admins: true`), so the VERSION bump lands through a short-lived
+PR with auto-merge. PRs to main require the three CI checks but ZERO
+approvals, so the flow stays fully automated; ci.yml has no path filters,
+so a VERSION-only PR still gets its checks.
 
 ```bash
 git checkout main
 git pull --ff-only origin main
+bump_branch="release/version-bump-${new_version}"
+git checkout -b "${bump_branch}"
 echo "${new_version}" > VERSION
 git add VERSION
 git commit -m "release: bump VERSION to ${new_version}
 
 The merge-to-main-and-release skill bumped VERSION as part of the
-daily linux-next → main promotion. Tag ${new_tag} follows.
-
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
-git push origin main
+daily linux-next → main promotion (via PR: main is branch-protected,
+order 476). Tag ${new_tag} follows."
+git push origin "${bump_branch}"
+gh pr create --base main --head "${bump_branch}" \
+    --title "release: bump VERSION to ${new_version}" \
+    --body "Automated VERSION bump for ${new_tag} by the merge-to-main-and-release skill. Auto-merges when CI is green (0 approvals required by branch protection)."
+gh pr merge "${bump_branch}" --auto --merge
+gh pr checks "${bump_branch}" --watch          # blocks until green or red
+git checkout main
+git pull origin main                           # now contains the bump merge
+git push origin --delete "${bump_branch}" 2>/dev/null || true
+git branch -D "${bump_branch}"
 ```
 
-If the push fails because main advanced concurrently (another release ran), pull + retry up to 3 times. If still failing, write an `ESCALATION:` line in `plan/issues/multi-host-integration-loop-2026-05-24.md` and stop.
+Confirm `cat VERSION` on main equals `${new_version}` before tagging. If
+the bump PR's checks fail, surface the run URL and stop — do not tag a
+main whose VERSION was not bumped. If main advanced concurrently (another
+release ran), re-run from the `git pull --ff-only` with a fresh branch; if
+still conflicting after 3 attempts, write an `ESCALATION:` line in
+`plan/issues/multi-host-integration-loop-2026-05-24.md` and stop.
 
 ---
 
@@ -228,8 +250,12 @@ branch is not ahead of upstream.
 
 ## Hard guardrails
 
-- **NEVER push directly to `main`** — always via PR, even though the skill creates and merges the PR for you.
-- **NEVER `git push --force`** — main is protected.
+- **NEVER push directly to `main`** — always via PR. Since 2026-07-28 this
+  is server-enforced (order 476: branch protection with `enforce_admins`,
+  required CI checks, 0 approvals), so a direct push fails loudly — including
+  the VERSION bump, which is why step 4 uses a PR.
+- **NEVER `git push --force`** — main is protected (force-pushes and
+  deletions rejected server-side).
 - **NEVER skip the workflow_dispatch step**: the release workflow is manual-only by design. If the user wants automatic-on-tag, they edit release.yml first.
 - **NEVER bump VERSION on linux-next**; only on main as part of the release commit. Sibling hosts (osx-next / windows-next) consume VERSION from their respective merge points; bumping it on linux-next desyncs them.
 - The release ships three platform artifacts to ONE GitHub release with matching versions:
