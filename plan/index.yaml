@@ -1398,7 +1398,7 @@ plan_index:
       order: 153
       desired_release: v0.5
       title: "VM Headless: persistent vsock listener + server-push event stream"
-      status: ready
+      status: in_progress
       multi_cycle: true
       phase: verification
       progress_summary: >
@@ -23620,8 +23620,37 @@ plan_index:
       order: 506
       desired_release: v0.5
       title: "dev-control P1: OpenSpec change — retro-specify mcp.sock transport, two dev verbs, two-key gate, refusal statuses; correct false grounding claims"
-      status: ready
+      status: done
       kind: spec
+      events:
+        - type: completed
+          ts: "2026-07-28T23:20:00Z"
+          agent_id: "linux-mutable-metaorch-20260728"
+          host: linux_mutable
+          summary: >
+            OpenSpec change openspec/changes/dev-control-mcp authored (1081
+            lines: proposal, design, tasks, mcp-tool-socket transport
+            retro-spec, dev-control-mcp verb surface). Operator rulings are
+            normative in the spec text: NO tray component ever
+            (tray-advisory survives only as an informational result tier),
+            restart tiers restart|fresh|full with full gated to dev time,
+            seed-prompt-only resume (the design's resume{session_id}
+            object removed per the 511 rejection / 509 rescope), two-key
+            gate = compile-time `dev-control` cargo feature present only
+            in source-checkout builds PLUS TILLANDSIAS_DEV_CONTROL=1 on
+            the tray process, no repo-identity key, -32601
+            indistinguishability, release-artifact litmus asserting no
+            verb-name strings. Per-lane listener identity (order 505) is a
+            hard dependency with fail-closed legacy-socket behavior;
+            protocolVersion drift reconciled by negotiation over
+            {2024-11-05, 2025-06-18} from one shared constant. Adversarial
+            grounding pass DISPROVED two design claims before they could
+            enter the spec: TILLANDSIAS_FORGE_INSTANCE is never injected
+            into container env (all reads host-side), and harness state
+            dirs DO carry credentials — plus six line-drift corrections,
+            all recorded in design.md. Validators: .openspec.yaml parses,
+            both JSON schemas parse, validate-traces errors are
+            pre-existing and unrelated.
       depends_on: [forge-rebuild-mcp-design-research]
       pickup_role: "any (openspec workflow)"
       capability_tags: [openspec, mcp, tray, spec]
