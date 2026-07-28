@@ -2718,7 +2718,11 @@ fn read_shamir_share_b64(debug: bool) -> Result<String, String> {
 /// Append `encoded` to `list` iff it is a valid 32-byte base64 share not
 /// already present under another source label.
 #[cfg(feature = "vault")]
-fn push_share_candidate(list: &mut Vec<(&'static str, String)>, label: &'static str, encoded: String) {
+fn push_share_candidate(
+    list: &mut Vec<(&'static str, String)>,
+    label: &'static str,
+    encoded: String,
+) {
     use base64::Engine;
     let valid = !encoded.is_empty()
         && base64::engine::general_purpose::STANDARD
