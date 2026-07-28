@@ -72,6 +72,7 @@ pub use client::CapturedAttachedRun;
 pub use client::ContainerHealthFacade;
 pub use client::EnclaveContainerInfo;
 pub use client::HealthStatus;
+pub use client::NonForceRemoval;
 pub use client::PodmanClient;
 pub use client::RunOutput;
 pub use client::ServiceHealth;
