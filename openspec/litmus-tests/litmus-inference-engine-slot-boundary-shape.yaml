@@ -1,0 +1,160 @@
+# @trace spec:inference-engine-slots
+# @trace spec:inference-container
+#
+# The security-critical half of order 479. The host-native sidecar slot
+# is the ONLY construct in the runtime that places an inference server
+# outside the container enclave, so the boundary clauses of SLOT-6 are
+# the highest-value thing in the whole heterogeneous-inference spec
+# surface to protect from quiet erosion. Every one of them is a clause
+# whose removal would turn a correct design into a hole in
+# spec:enclave-network and spec:security-privacy-isolation:
+#
+#   * loopback-only bind — a sidecar on 0.0.0.0 is reachable from the
+#     LAN, not just from the enclave terminus;
+#   * enclave stays --internal, no published port, no --network=host —
+#     any of these three would give forge containers a direct route off
+#     the enclave;
+#   * route terminates at the proxy terminus — the "proxy-only egress"
+#     invariant;
+#   * single explicitly named upstream, allowlist not widened — a
+#     wildcard upstream is an egress hole wearing a sidecar costume;
+#   * ephemeral per-run credential, never in a forge-readable file, argv
+#     or logs;
+#   * no host credentials or project secrets cross;
+#   * sidecar is a terminus, never a relay;
+#   * leased registration removed on exit (ephemerality).
+#
+# It also pins the engine-selection facts the order-478 research settled
+# and the NPU tier rows added to spec:inference-container, because the
+# two move together: ollama can never use an NPU, so an NPU lane on the
+# ollama engine kind would be a placement that can never execute.
+#
+# Pattern: spec prose wraps, so each step squeezes whitespace with
+# `tr -s` before a fixed-string grep; success emits a token the matcher
+# looks for as a substring of stdout.
+name: litmus:inference-engine-slot-boundary-shape
+spec: inference-engine-slots
+phase: pre-build
+description: >
+  Pin the inference-engine-slots enclave boundary: loopback-only sidecar
+  bind, enclave stays internal with no published port and no
+  --network=host, proxy-terminated route with a single named upstream and
+  an unwidened allowlist, ephemeral credential, no secrets crossing, no
+  relay, leased registration removed on exit. Also pins the frozen
+  OLLAMA_HOST endpoint, the Vulkan-first Linux GPU lane, the
+  no-NPU-on-ollama rule, and the additive probe-gated NPU tier rows plus
+  the CPU tier-S terminal in spec:inference-container.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains openspec/specs/inference-engine-slots/spec.md
+  - workspace contains openspec/specs/inference-container/spec.md
+  - shell utilities (grep, tr) are available in PATH
+
+critical_path:
+  - step: "Spec exists and carries its trace header"
+    command: "grep -Fq '<!-- @trace spec:inference-engine-slots -->' openspec/specs/inference-engine-slots/spec.md && echo 'ok: trace header present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: trace header present"
+
+  - step: "Enclave endpoint contract is frozen (SLOT-1)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'OLLAMA_HOST=http://inference:11434' && echo 'ok: endpoint frozen'"
+    timeout_ms: 3000
+    expected_behavior: "ok: endpoint frozen"
+
+  - step: "Sidecar binds loopback only (SLOT-6.1)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST bind a loopback-only host address' && echo 'ok: loopback-only bind'"
+    timeout_ms: 3000
+    expected_behavior: "ok: loopback-only bind"
+
+  - step: "Enclave stays internal; no published port; no host network (SLOT-6.2)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'network MUST remain `--internal`' && tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST NOT publish a host port into the enclave, and MUST NOT add `--network=host` to any container' && echo 'ok: isolation invariant intact'"
+    timeout_ms: 3000
+    expected_behavior: "ok: isolation invariant intact"
+
+  - step: "Route terminates at the enclave proxy terminus (SLOT-6.3)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST reach the sidecar only through the enclave' && tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'never at a new hole in the enclave' && echo 'ok: proxy-mediated only'"
+    timeout_ms: 3000
+    expected_behavior: "ok: proxy-mediated only"
+
+  - step: "Route is a single named upstream and widens no allowlist (SLOT-6.4)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'single explicitly named upstream' && tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST NOT widen the proxy' && echo 'ok: no egress widening'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no egress widening"
+
+  - step: "Sidecar credential is ephemeral and off observable surfaces (SLOT-6.5)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'ephemeral, per-run credential' && echo 'ok: ephemeral credential'"
+    timeout_ms: 3000
+    expected_behavior: "ok: ephemeral credential"
+
+  - step: "No host credentials or project secrets cross the boundary (SLOT-6.6)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST NOT receive host credentials, native keyring handles, or project secrets' && echo 'ok: no secrets cross'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no secrets cross"
+
+  - step: "Sidecar is an inference terminus, never a relay (SLOT-6.7)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST NOT forward, proxy, or relay any request off-host' && echo 'ok: not an egress path'"
+    timeout_ms: 3000
+    expected_behavior: "ok: not an egress path"
+
+  - step: "Registration is leased and removed on exit (SLOT-6.8, ephemerality)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'Registration MUST be leased' && tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST be removed on application exit' && echo 'ok: leased and ephemeral'"
+    timeout_ms: 3000
+    expected_behavior: "ok: leased and ephemeral"
+
+  - step: "Vulkan via /dev/dri is the default Linux GPU lane (SLOT-4)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'default GPU lane MUST be Vulkan through `--device /dev/dri`' && echo 'ok: vulkan-first'"
+    timeout_ms: 3000
+    expected_behavior: "ok: vulkan-first"
+
+  - step: "No NPU lane may be added to the ollama engine kind (SLOT-3)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'An NPU lane MUST NOT be added to the `ollama`' && echo 'ok: ollama cannot claim an NPU'"
+    timeout_ms: 3000
+    expected_behavior: "ok: ollama cannot claim an NPU"
+
+  - step: "Device passthrough is graceful and unprivileged (SLOT-5)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST be a logged no-op' && tr -s '[:space:]' ' ' < openspec/specs/inference-engine-slots/spec.md | grep -Fq 'MUST NOT require running as root' && echo 'ok: graceful passthrough'"
+    timeout_ms: 3000
+    expected_behavior: "ok: graceful passthrough"
+
+  - step: "All eight SLOT requirements are present"
+    command: "for n in 1 2 3 4 5 6 7 8; do grep -Fq \"### Requirement: SLOT-$n\" openspec/specs/inference-engine-slots/spec.md || exit 1; done; echo 'ok: SLOT-1..SLOT-8 present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: SLOT-1..SLOT-8 present"
+
+  - step: "CPU tier-S terminal is unconditional in the tier table"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-container/spec.md | grep -Fq 'CPU tier-S is the always-available terminal' && tr -s '[:space:]' ' ' < openspec/specs/inference-container/spec.md | grep -Fq 'SHALL NOT be gated on any device probe' && echo 'ok: tier-S unconditional'"
+    timeout_ms: 3000
+    expected_behavior: "ok: tier-S unconditional"
+
+  - step: "NPU tier rows are additive, probe-gated, and never on ollama"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-container/spec.md | grep -Fq 'NPU tier rows are additive and engine-gated' && tr -s '[:space:]' ' ' < openspec/specs/inference-container/spec.md | grep -Fq 'N rows SHALL NOT be attempted on the `ollama` engine kind' && echo 'ok: NPU rows additive'"
+    timeout_ms: 3000
+    expected_behavior: "ok: NPU rows additive"
+
+  - step: "Boot log carries exactly one npu= line beside tier="
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-container/spec.md | grep -Fq 'exactly one `npu=` line next to the `tier=` line' && echo 'ok: npu boot line specified'"
+    timeout_ms: 3000
+    expected_behavior: "ok: npu boot line specified"
+
+observability:
+  traces:
+    - "@trace spec:inference-engine-slots"
+    - "@trace spec:inference-container"
+    - "@trace spec:enclave-network"
+  expected_log: "inference engine slot enclave boundary pinned"
+  log_fields:
+    spec: "inference-engine-slots"
+    test: "inference-engine-slot-boundary-shape"
+    artifact: "openspec/specs/{inference-engine-slots,inference-container}/spec.md"
+
+rollback:
+  on_failure: >
+    An enclave-boundary clause for the host-native inference sidecar, or
+    an NPU tier-row rule, was weakened. Restore it before any work on
+    order 483 proceeds — SLOT-6 is what keeps the sidecar from becoming a
+    hole in enclave isolation and proxy-only egress. Intentional changes
+    must go through the bounded-uncertainty exception in
+    methodology/spec-system.yaml.
+  command: "sed -n '165,215p' openspec/specs/inference-engine-slots/spec.md"

@@ -1,0 +1,140 @@
+# @trace spec:accel-capability-probe
+#
+# Drift protection for the accel-capability-probe contract authored by
+# order 479 (heterogeneous-inference-specs) ahead of its implementation
+# in order 480. The spec is the gate; until the probe exists there is no
+# code to pin, so what this test protects is the SPEC's load-bearing
+# invariants against silent weakening.
+#
+# Every pinned clause is one that, if quietly relaxed, would let order
+# 480 ship something the order-478 research explicitly ruled out:
+#
+#   1. `usable: false` unless a mature engine lane is NAMED (PROBE-3).
+#      Without this the router would place work on an NPU that has no
+#      backend and burn 16x the energy per token for 1/10th the speed
+#      (measured: hobbyist XDNA2 4.1 t/s @ 16.2 J/tok vs the same host's
+#      Vulkan lane at 43.8 t/s @ 0.95 J/tok).
+#   2. Vendor TOPS cannot promote a device (PROBE-3). Vendor 10x/67x
+#      claims are not independently reproduced.
+#   3. NPU vendor comes from the uevent DRIVER= field (PROBE-2), never a
+#      product/marketing string — the only cross-vendor enumeration
+#      surface Linux actually offers.
+#   4. The roofline degradation threshold stays at 30% (PROBE-6).
+#   5. Microbenchmarks stay bounded at 60 s (PROBE-5).
+#   6. RAPL energy unavailability degrades to null, never a privilege
+#      escalation or a failed probe (PROBE-5; root-only since
+#      CVE-2020-8694).
+#   7. The probe runs on the HOST and does not assume host visibility
+#      implies container visibility (PROBE-7).
+#   8. `legacy_tier` survives as a derived field (PROBE-1) so the order
+#      392 CDI-absence downgrade keeps working.
+#   9. No Python (tlatoani_hard_no_python).
+#
+# Pattern: spec prose wraps across lines, so each step squeezes
+# whitespace with `tr -s` before a fixed-string grep. Success emits a
+# token; the matcher checks that token is a substring of stdout.
+name: litmus:accel-capability-probe-contract-shape
+spec: accel-capability-probe
+phase: pre-build
+description: >
+  Pin the accel-capability-probe spec invariants that gate order 480:
+  usability requires a named mature engine, vendor TOPS cannot promote a
+  device, NPU vendor resolves from the uevent DRIVER= field, the 30%
+  roofline degradation threshold, the 60 s microbenchmark bound, graceful
+  RAPL degradation, host-side execution with explicit per-lane
+  reachability, the derived legacy_tier field, and the no-Python
+  constraint.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains openspec/specs/accel-capability-probe/spec.md
+  - shell utilities (grep, tr) are available in PATH
+
+critical_path:
+  - step: "Spec exists and carries its trace header"
+    command: "grep -Fq '<!-- @trace spec:accel-capability-probe -->' openspec/specs/accel-capability-probe/spec.md && echo 'ok: trace header present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: trace header present"
+
+  - step: "Usability requires a NAMED mature engine lane (PROBE-3)"
+    # Relaxing this to "device present => usable" is the single change
+    # that would most damage routing quality on NPU hosts.
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'MUST be `false` unless the probe can name at least one engine lane' && echo 'ok: usability gate intact'"
+    timeout_ms: 3000
+    expected_behavior: "ok: usability gate intact"
+
+  - step: "Unusable devices carry a machine-readable reason (PROBE-3)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'unusable_reason' && echo 'ok: unusable_reason retained'"
+    timeout_ms: 3000
+    expected_behavior: "ok: unusable_reason retained"
+
+  - step: "Vendor TOPS cannot promote a device (PROBE-3, NEG-2 of the research)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'MUST NOT contribute to `usable`' && echo 'ok: TOPS excluded'"
+    timeout_ms: 3000
+    expected_behavior: "ok: TOPS excluded"
+
+  - step: "NPU vendor resolves from the uevent DRIVER= field (PROBE-2)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'resolved from the `DRIVER=` field of the device `uevent`' && echo 'ok: driver-name vendor resolution'"
+    timeout_ms: 3000
+    expected_behavior: "ok: driver-name vendor resolution"
+
+  - step: "Roofline degradation threshold stays at 30% (PROBE-6)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'below 30% of the roofline' && echo 'ok: roofline threshold 30%'"
+    timeout_ms: 3000
+    expected_behavior: "ok: roofline threshold 30%"
+
+  - step: "Microbenchmarks stay bounded at 60 seconds (PROBE-5)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'MUST be bounded to 60 seconds' && echo 'ok: microbench bounded'"
+    timeout_ms: 3000
+    expected_behavior: "ok: microbench bounded"
+
+  - step: "Unreadable RAPL counters degrade to null, never escalate (PROBE-5)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'joules_per_token: null' && tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'MUST NOT escalate privilege per sample' && echo 'ok: energy degrades gracefully'"
+    timeout_ms: 3000
+    expected_behavior: "ok: energy degrades gracefully"
+
+  - step: "Probe runs host-side and does not conflate host with container visibility (PROBE-7)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'MUST execute on the HOST, not inside a forge or inference container' && tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'MUST NOT assume host visibility implies container visibility' && echo 'ok: host-side probe with explicit lanes'"
+    timeout_ms: 3000
+    expected_behavior: "ok: host-side probe with explicit lanes"
+
+  - step: "Legacy tier string survives as a derived field (PROBE-1)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'legacy_tier' && echo 'ok: legacy_tier retained'"
+    timeout_ms: 3000
+    expected_behavior: "ok: legacy_tier retained"
+
+  - step: "Missing accel class is a normal outcome, not an error (PROBE-2)"
+    # WSL2 kernels lack CONFIG_DRM_ACCEL entirely; a probe that errors
+    # there would break every Windows host.
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'MUST be a normal, non-error outcome' && echo 'ok: absent accel class tolerated'"
+    timeout_ms: 3000
+    expected_behavior: "ok: absent accel class tolerated"
+
+  - step: "No-Python constraint is stated in the spec"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/accel-capability-probe/spec.md | grep -Fq 'MUST NOT be produced by, or require, a Python interpreter' && echo 'ok: no python'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no python"
+
+  - step: "All eight PROBE requirements are present"
+    command: "for n in 1 2 3 4 5 6 7 8; do grep -Fq \"### Requirement: PROBE-$n\" openspec/specs/accel-capability-probe/spec.md || exit 1; done; echo 'ok: PROBE-1..PROBE-8 present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: PROBE-1..PROBE-8 present"
+
+observability:
+  traces:
+    - "@trace spec:accel-capability-probe"
+  expected_log: "accel-capability-probe spec invariants pinned"
+  log_fields:
+    spec: "accel-capability-probe"
+    test: "accel-capability-probe-contract-shape"
+    artifact: "openspec/specs/accel-capability-probe/spec.md"
+
+rollback:
+  on_failure: >
+    An accel-capability-probe spec invariant was weakened or removed.
+    Restore it, or, if the change is intentional, route it through the
+    bounded-uncertainty exception in methodology/spec-system.yaml with an
+    evidence bundle — these clauses are the gate that order 480 (probe),
+    481 (passthrough), 483 (sidecars), and 484 (router) build against.
+  command: "sed -n '1,60p' openspec/specs/accel-capability-probe/spec.md"

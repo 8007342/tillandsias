@@ -2,6 +2,12 @@ version: '1.0'
 description: Tillandsias Spec-to-Litmus Test Bindings Registry
 generated: '2026-05-03T12:36:39.186138'
 specs:
+- spec_id: accel-capability-probe
+  status: active
+  litmus_tests:
+  - litmus:accel-capability-probe-contract-shape
+  coverage_ratio: 100
+  last_verified: '2026-07-28'
 - spec_id: agent-cheatsheets
   status: obsolete
   litmus_tests: []
@@ -450,13 +456,27 @@ specs:
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
   - litmus:inference-tier-probe-shape
+  - litmus:inference-engine-slot-boundary-shape
   coverage_ratio: 80
-  last_verified: '2026-07-04'
+  last_verified: '2026-07-28'
+- spec_id: inference-engine-slots
+  status: active
+  litmus_tests:
+  - litmus:inference-engine-slot-boundary-shape
+  - litmus:enclave-isolation
+  coverage_ratio: 100
+  last_verified: '2026-07-28'
 - spec_id: inference-host-side-pull
   status: obsolete
   litmus_tests: null
   coverage_ratio: 0
   last_verified: '2026-05-12'
+- spec_id: inference-policy-router
+  status: active
+  litmus_tests:
+  - litmus:inference-policy-router-invariants-shape
+  coverage_ratio: 100
+  last_verified: '2026-07-28'
 - spec_id: init-command
   status: active
   litmus_tests:

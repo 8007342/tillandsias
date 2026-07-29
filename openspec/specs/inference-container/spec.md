@@ -136,13 +136,89 @@ sidesteps Squid SSL-bump EOF issues (see: project_squid_ollama_eof.md).
 - **AND** the inference container SHALL stay up serving whatever models
   ARE present (T0 + T1 minimum)
 
+### Requirement: CPU tier-S is the always-available terminal
+
+The CPU lane running the T0 model (`qwen2.5:0.5b`) is designated **tier-S**,
+the safety terminal. Tier-S SHALL be available on every host regardless of
+GPU, NPU, driver, or engine availability, and SHALL NOT be gated on any
+device probe.
+
+`spec:inference-policy-router` terminates every fallback chain here. No
+change to this spec may remove tier-S or make it conditional.
+
+@trace spec:inference-container
+
+#### Scenario: Tier-S serves when every accelerator is unavailable
+- **WHEN** the host has no usable GPU and no usable NPU
+- **THEN** the inference container SHALL still serve the T0 model on the CPU
+  lane
+- **AND** the tier line SHALL still be logged
+
+### Requirement: NPU tier rows are additive and engine-gated
+
+NPU execution SHALL be described by additional rows that supplement, and never
+replace, the T0–T5 rows above. A host with a usable NPU still resolves a
+T-row for its container-resident CPU/GPU lane.
+
+| Row | Trigger | Model class | Ceiling |
+|-----|---------|-------------|---------|
+| N1  | `spec:accel-capability-probe` reports an NPU with `usable: true` AND device-visible memory ≥8GB | ≤4B-parameter instruct model, graph-compiled, INT4/INT8 | engine-declared context ceiling |
+| N2  | `usable: true` NPU AND device-visible memory ≥16GB | ≤8B-parameter instruct model, graph-compiled, INT4 | engine-declared context ceiling |
+
+Binding rules for the N rows:
+
+1. An N row SHALL only be selected when the capability probe reports that NPU
+   `usable: true`. A present-but-unusable NPU SHALL select no N row.
+2. N rows name a **model class** (parameter ceiling plus quantization), not an
+   ollama tag, because NPU engines consume graph-compiled artifacts rather
+   than ollama manifests.
+3. N rows SHALL NOT be attempted on the `ollama` engine kind. Ollama cannot
+   use any NPU; the N rows belong to the `llama-server` or
+   `host-native-sidecar` kinds of `spec:inference-engine-slots`.
+4. No row above 8B parameters SHALL be added until an engine lane demonstrates
+   it. The 8B parameter and 8K context ceilings reflect what the Intel NPU
+   OpenVINO GenAI lane supports today; an engine that declares a larger
+   context (for example the XDNA2 FastFlowLM lane) may exceed the context
+   ceiling but not the parameter ceiling.
+5. N-row selection SHALL be a no-op that logs and continues when no NPU is
+   present, exactly as the T-row logic degrades.
+
+@trace spec:inference-container
+
+#### Scenario: Usable NPU with 16GB unified memory selects N2
+- **WHEN** the capability probe reports an NPU with `usable: true` and a
+  device-visible pool of 16GB
+- **AND** the active slot is a `llama-server` or host-native sidecar kind
+- **THEN** the N2 row SHALL be eligible
+- **AND** the T-row for the CPU/GPU lane SHALL remain resolved unchanged
+
+#### Scenario: Present-but-unusable NPU selects no N row
+- **WHEN** an accel device is enumerated but reported `usable: false`
+- **THEN** no N row SHALL be selected
+- **AND** the container SHALL start normally on its T row
+
+#### Scenario: N rows are never attempted on ollama
+- **WHEN** the active engine kind is `ollama`
+- **THEN** no N row SHALL be attempted
+
 ### Requirement: Tier classification logged once at boot
 
 On startup the inference entrypoint SHALL log a single line summarizing
 which tier was selected for runtime pulls based on detected CPU/GPU/RAM,
 e.g. `[inference] tier=T1 (CPU only, 16GB RAM)` or
-`[inference] tier=T3 (GPU 8GB)`. The tier label SHALL match the table
-above.
+`[inference] tier=T3 (GPU 8GB)`. The tier label SHALL match the T0–T5
+table above.
+
+The entrypoint SHALL additionally log exactly one `npu=` line next to the
+`tier=` line on every boot, whether or not an NPU is present, so an operator
+reading `podman logs` can tell the difference between "no NPU", "NPU present
+but not passed through", and "NPU present and usable". The line SHALL name
+the resolved driver and device node when one is visible, and the
+`unusable_reason` when the device is present but unusable, e.g.
+`[inference] npu=none`, `[inference] npu=amdxdna:/dev/accel/accel0 usable=false reason=engine-missing`,
+or `[inference] npu=intel_vpu:/dev/accel/accel0 usable=true`.
+
+@trace spec:inference-container
 
 #### Scenario: User reading the log knows what got pulled
 - **WHEN** an operator runs `podman logs tillandsias-inference | head`
@@ -150,14 +226,45 @@ above.
 - **AND** subsequent `[inference] T<N> ...` lines correspond to that
   tier or below
 
+#### Scenario: NPU state is legible on every boot
+- **WHEN** an operator runs `podman logs tillandsias-inference | head`
+- **THEN** they SHALL see exactly one `npu=` line
+- **AND** on a host with no accel device that line SHALL read
+  `[inference] npu=none`
+- **AND** on a host with a device passed through it SHALL name the driver and
+  device node
+
+### Requirement: The engine behind the endpoint is a slot
+
+The inference container is one engine slot behind the enclave inference
+endpoint, not the endpoint itself. `spec:inference-engine-slots` governs which
+engine is bound, the descriptor a slot declares, and the host-native sidecar
+lane. `spec:accel-capability-probe` governs what devices exist and whether
+they are usable. `spec:inference-policy-router` governs which slot and tier
+serve a given request.
+
+The `OLLAMA_HOST=http://inference:11434` consumer contract stated above
+SHALL remain valid regardless of which slot is bound.
+
+@trace spec:inference-container
+
+#### Scenario: Consumer contract survives an engine change
+- **WHEN** the active engine slot changes
+- **THEN** `OLLAMA_HOST=http://inference:11434` SHALL still resolve for forge
+  containers
+
 
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation` — Verify inference container is enclave-only with no external network access
 - `litmus:inference-readiness-probe-shape` — Verify the stack uses container health plus a forge-side `/api/version` probe
+- `litmus:inference-engine-slot-boundary-shape` — Verify the NPU tier rows, the tier-S terminal, and the host-native sidecar isolation clauses have not been weakened
 
 Gating points:
+- CPU tier-S (T0 on CPU) is unconditional and present in the spec
+- NPU rows N1/N2 are additive, probe-gated, and never attempted on the ollama engine kind
+- Exactly one `npu=` line is logged at boot alongside `tier=`
 - Container named `tillandsias-inference` starts from `tillandsias-inference` image
 - Container attaches to `tillandsias-enclave` network only; no default bridge access
 - Container exposes the friendly alias `inference` on the enclave network

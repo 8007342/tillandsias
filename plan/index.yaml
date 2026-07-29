@@ -23031,7 +23031,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Spec: openspec deltas for accel capability probe, engine slots, policy router + NPU rows in the inference-container tier table"
-      status: ready
+      status: done
       kind: spec
       deliverable: openspec specs (accel-capability-probe, inference-engine-slots, inference-policy-router) + amended inference-container spec + litmus bindings
       depends_on: [heterogeneous-inference-landscape-research]
@@ -23056,6 +23056,13 @@ plan_index:
         rows to the T0-T5 tier table. SHALL statements + scenarios + litmus
         bindings per spec-system rules.
 
+      events:
+        - type: completed
+          ts: "2026-07-29T02:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            Spec gate DELIVERED, unblocking orders 480-484. Three new specs: accel-capability-probe (PROBE-1..8: structured capability document replacing the string tier, vendor-resolved enumeration, engine inventory gating 'usable', bandwidth first-class, TOPS explicitly excluded, roofline degradation flag, ephemeral self-invalidating cache), inference-engine-slots (SLOT-1..8: frozen endpoint with selectable engine, ollama default until evidence, no NPU lane on ollama per order 478, Vulkan /dev/dri as the default Linux GPU lane, and SLOT-6's eight absolute clauses specifying the host-native sidecar as reachable ONLY behind the enclave proxy - never a hole in isolation), and inference-policy-router (CLASS-1, ROUTE-1..5, ADAPT-1..4, NEG-1/2, all chains terminating in the always-available CPU tier-S). inference-container amended with additive probe-gated NPU rows N1/N2 and the npu= boot line. Three shape litmus bound; instant pre-build suite 169 PASS / 0 FAIL at 96/96 spec coverage; falsifiability spot-checked by weakening SLOT-6.2 and confirming the litmus turned red. validate-traces errors byte-identical before/after (7, all pre-existing ghosts); the 3 new orphaned-spec warnings are the correct spec-before-implementation state and clear when 480/482/484 annotate code.
     - packet_id: accel-capability-probe
       order: 480
       desired_release: v0.5
