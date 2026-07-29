@@ -15980,7 +15980,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Research: expert-construction technique — fine-tune vs LoRA vs RAG-index vs Modelfile context, per tier, under a launch-time budget"
-      status: ready
+      status: done
       kind: research
       multi_cycle: true
       deliverable: plan/issues/experts-construction-decision-2026-07-17.md
@@ -16007,6 +16007,12 @@ plan_index:
         - "per-tier technique recommendation with measured build-time/quality/footprint"
         - "Tlatoani sign-off recorded on the decision"
       events:
+        - type: completed
+          ts: "2026-07-29T03:40:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            Research delivered (plan/issues/experts-construction-research-2026-07-29.md) and its three amendments to the SIGNED 2026-07-17 decision record are OPERATOR-APPROVED (The Tlatoani, 2026-07-29, verbatim: 'approved, all three amendments, file the 394 slices'). Amendments now binding: (1) Modelfile stuffing SUPERSEDED — it is an ollama-only API and order 478 already chose llama-server as the default engine; methodology/ does not fit any tiny-model context anyway. (2) The transparent model-name proxy is DEFERRED — MCP is the affordance now (order 456's server, live since 52ef1de7). (3) Fine-tune/LoRA rejection HARDENED from costly to policy-illegal: every training toolchain is Python, so tlatoani_hard_no_python settles it as policy, not economics. Embeddings remain DEFERRED, not rejected — buy them only when a graded query set (394d) shows the deterministic layer missing answers. Core finding: an expert is a cited retrieval surface, not a model — L0 compiled query over machine-readable corpora, L1 deterministic lexical retrieval returning file:line, L2 an optional model that only renders L0/L1 spans and is discarded if it cites nothing. For the plan ledger specifically a model is STRICTLY WORSE than the compiled engine we already have (measured on this host: 0.02s/query, 12.5MB RSS, 585KB binary over 419 packets / 24k lines, 5.33s cold build), so rung 1 ships ZERO inference. Slices 394a-394e filed; 394's depends_on inference-startup-cleanup DROPPED because rung 1 needs no inference container, which also makes the milestone's tier-matrix criterion trivially satisfiable for rung 1 and de-risks 397/401/402.
         - type: decision
           ts: "2026-07-17T04:30:00Z"
           agent_id: "linux-tlatoani-claude-20260717T0355Z"
@@ -16043,7 +16049,13 @@ plan_index:
       deliverable: inference expert-build pipeline + named expert endpoints
       # 393's technique decision is SIGNED (2026-07-17); only its harness
       # residual co-develops here, so the research packet no longer gates.
-      depends_on: [inference-startup-cleanup]
+      depends_on: []
+      split_into:
+      - plan-methodology-experts-rung1/plan-expert-binary-shipping
+      - plan-methodology-experts-rung1/expert-answer-envelope
+      - plan-methodology-experts-rung1/methodology-expert-layer0
+      - plan-methodology-experts-rung1/expert-groundtruth-harness
+      - plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
       pickup_role: linux
       capability_tags: [inference, ollama, experts, rust, forge]
       estimated_hours: 10
@@ -16061,6 +16073,131 @@ plan_index:
         - "'what packets are blocked by <order>' answered correctly against the live plan/index.yaml state"
         - "stack shutdown leaves no expert artifacts (ephemerality litmus)"
 
+
+    - packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
+      order: 394a
+      parent: plan-methodology-experts-rung1
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Plan expert rung 1 slice 1 — build and install the tillandsias-plan binary at forge launch"
+      status: done
+      kind: implementation
+      deliverable: images/default/lib-common.sh ensure_forge_experts + config-overlay/mcp/forge-plan.sh + litmus-forge-plan-expert-build-shape
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, experts, mcp, rust, posix-sh]
+      estimated_hours: 2
+      outcome: >
+        Closes the blocking gap order 393 found: the forge-plan MCP server
+        wrapped a compiled binary that nothing built into the image, so every
+        call returned "binary not found". ensure_forge_experts builds and
+        installs tillandsias-plan to $HOME/.local/bin, backgrounded after the
+        clone, cache-keyed on crate source hash, never gating a launch.
+      exit_criteria:
+        - "in a fresh forge, `tillandsias-plan check` on PATH prints ok: <n> packets"
+        - "an MCP tools/call plan_blocked_by returns packet rows, not ERROR: binary not found"
+        - "a litmus asserts both and asserts the launch reaches the agent prompt with the build still running (non-blocking)"
+
+    - packet_id: plan-methodology-experts-rung1/expert-answer-envelope
+      order: 394b
+      parent: plan-methodology-experts-rung1
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Plan expert rung 1 slice 2 — the cited answer envelope + plan_answer MCP tool"
+      status: ready
+      kind: implementation
+      deliverable: answer envelope schema + plan_answer tool + envelope litmus
+      depends_on: [plan-methodology-experts-rung1/plan-expert-binary-shipping]
+      pickup_role: linux
+      capability_tags: [forge, experts, mcp, rust, citations]
+      estimated_hours: 3
+      outcome: >
+        Pin the mandatory {answer, citations[], freshness, confidence} envelope
+        from the 393 decision record and expose a plan_answer MCP tool that
+        returns it. Zero citations MUST render as "unsupported", never a guess
+        — the evidence-is-not-proof invariant applied to experts. Also upgrade
+        forge-plan.sh's not-found text to the truthful building state.
+      exit_criteria:
+        - "envelope schema pinned by litmus"
+        - "a fixture query returns >=1 citation whose path+line-range resolves and whose span contains the claimed packet_id"
+        - "a seeded FABRICATED citation turns the litmus RED (the check can fail)"
+
+    - packet_id: plan-methodology-experts-rung1/methodology-expert-layer0
+      order: 394c
+      parent: plan-methodology-experts-rung1
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Plan expert rung 1 slice 3 — methodology L0 YAML path query as an MCP tool"
+      status: ready
+      kind: implementation
+      deliverable: new subcommand on the existing tillandsias-plan crate + MCP tool beside forge-plan
+      depends_on: [plan-methodology-experts-rung1/expert-answer-envelope]
+      pickup_role: linux
+      capability_tags: [forge, experts, mcp, rust, methodology]
+      estimated_hours: 3
+      outcome: >
+        A YAML path-query subcommand (NO new crate, NO new dependency)
+        returning the matched block plus file:line over methodology.yaml and
+        methodology/*.yaml, exposed as an MCP tool. This is what lets an agent
+        ask "may a forge cycle drain two packets?" instead of reading the
+        whole methodology tree.
+      exit_criteria:
+        - "10 canonical discipline questions answer with the exact YAML path and a resolvable file:line"
+        - "each answer's cited span contains the governing rule text"
+        - "an unknown path returns unsupported, never a guess"
+
+    - packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
+      order: 394d
+      parent: plan-methodology-experts-rung1
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Plan expert rung 1 slice 4 — committed ground-truth query set graded against the L0 engine"
+      status: ready
+      kind: test
+      deliverable: committed query set (plan + methodology) + grading harness runnable in-forge
+      depends_on: [plan-methodology-experts-rung1/methodology-expert-layer0]
+      pickup_role: linux
+      capability_tags: [forge, experts, testing, litmus, grading]
+      estimated_hours: 3
+      outcome: >
+        Order 393's residual and the milestone's grading gate: a committed
+        query set with expected exact answers, graded by comparison against the
+        L0 engine. This is also the harness that closes order 456's remaining
+        exit criterion (litmus proves correct packets for the active release),
+        and it is reusable verbatim by 457 and 400 — so the cheatsheet and code
+        experts inherit a falsifiable accuracy bar instead of inventing one.
+      exit_criteria:
+        - "harness runs inside the forge in under 60s"
+        - "it is GREEN at HEAD"
+        - "injecting a WRONG expected answer turns it RED (the harness can fail)"
+        - "reusable verbatim by 457 and 400"
+
+    - packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
+      order: 394e
+      parent: plan-methodology-experts-rung1
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Plan expert rung 1 slice 5 — launch state line, tmpfs placement, teardown proof"
+      status: in_progress
+      kind: implementation
+      deliverable: inject_startup_context experts state + /dev/shm placement + ephemerality litmus
+      depends_on: [plan-methodology-experts-rung1/plan-expert-binary-shipping]
+      pickup_role: linux
+      capability_tags: [forge, experts, ephemerality, litmus]
+      estimated_hours: 2
+      outcome: >
+        The startup-context state line and tmpfs placement landed with slice 1
+        (52ef1de7): inject_startup_context prints
+        experts: ready|building(<n>s)|degraded(<reason>) beside the untouched
+        inference line, state lives in /dev/shm, and the building state is
+        published synchronously before forking. REMAINING: the teardown proof —
+        an ephemerality litmus asserting no expert index survives stack
+        shutdown. The built binary in the cache volume is explicitly OUT of
+        scope: it is a build artifact, not knowledge.
+      exit_criteria:
+        - "inject_startup_context prints experts: ready|building(<n>s)|degraded(<reason>) — never an ambiguous 'may still be building'"
+        - "a cold launch with inference DOWN still reaches the agent prompt (order 486 soft-degrade preserved)"
+        - "after stack shutdown, no expert index remains anywhere (ephemerality litmus)"
     - packet_id: experts-opencode-affordance
       order: 395
       desired_release: v0.5
@@ -24319,3 +24456,29 @@ plan_index:
         DEFAULT, not opt-in. Watch item: harness self-installs
         (order-486-class flows) write under /home/forge — decide
         volume-vs-tmpfs per path, never rootfs.
+
+    - packet_id: plan-engine-alphanumeric-order-lookup
+      order: 516
+      desired_release: v0.5
+      title: "tillandsias-plan cannot resolve alphanumeric child orders (394a, 392a) by order — only by packet_id"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-plan reference resolver + unit test over a child-order fixture
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, plan-engine, ergonomics, experts]
+      estimated_hours: 1
+      outcome: >
+        Found 2026-07-29 while filing the 394 slices: `tillandsias-plan status
+        394a` and `blocked-by 392a` both return "no packet matches" although
+        the packets exist and resolve by packet_id. Alphanumeric child orders
+        are now the common shape (427a-c, 429a-c, 246a/b, 247a/b, 392a/b,
+        394a-e), and burndown output prints exactly those tokens — so an agent
+        that copies an order from a burndown into a query gets a false
+        negative, which is worse than an error because it reads as "no such
+        work". Fix the resolver to match order values as strings (not only
+        integers) and pin it with a fixture carrying a child order.
+      exit_criteria:
+        - "status/blocked-by/blocked-closure resolve 394a and 392a to their packets"
+        - "integer order lookup keeps working unchanged"
+        - "a unit test over a child-order fixture fails before the fix and passes after"

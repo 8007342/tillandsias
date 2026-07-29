@@ -466,3 +466,24 @@ Unchanged and reaffirmed: fine-tune/LoRA rejected (now on policy-hard grounds,
   drop 394's `depends_on: inference-startup-cleanup`; file 394.1-394.5 as
   children with the exit criteria above; re-scope 456 per risk 2; note in 457
   that it replaces `tellme howto`'s internals.
+
+---
+
+## Operator ratification — 2026-07-29
+
+The Tlatoāni approved all three amendments to the signed 2026-07-17 record
+("approved, all three amendments, file the 394 slices"). Modelfile stuffing is
+superseded, the model-name proxy is deferred, and fine-tune/LoRA is hardened
+from costly to policy-illegal under `tlatoani_hard_no_python`. Embeddings stay
+deferred pending 394d's graded query set. Slices 394a–394e are filed and 394's
+inference dependency is dropped — rung 1 ships zero inference.
+
+## Coordinator finding filed while applying this (capture discipline)
+
+`tillandsias-plan status|blocked-by <order>` cannot resolve ALPHANUMERIC child
+orders: `394a` and the pre-existing `392a` both return `no packet matches`,
+while the packet_id resolves fine. Child orders of this shape are now the
+common case (427a–c, 429a–c, 246a/b, 247a/b, 392a/b, 394a–e), so the ergonomic
+gap will keep biting agents that quote an order number from a burndown. Filed
+as order 516 rather than fixed inline — it is a one-cycle fix in the engine's
+reference resolver, not part of this packet.
