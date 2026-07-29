@@ -29,18 +29,46 @@ fi
 # Create config directory if needed
 mkdir -p "$CONFIG_DIR"
 
-# Backup existing registries.conf if present
-if [[ -f "$TARGET_FILE" ]]; then
-    BACKUP="$TARGET_FILE.backup.$(date +%s)"
-    echo "[podman-registries] Backing up existing registries.conf to $BACKUP"
-    cp "$TARGET_FILE" "$BACKUP"
+# Deploy registries.conf — but only when it would actually CHANGE something.
+#
+# This script runs on every ./build.sh, and it used to back up the target
+# unconditionally before an unconditional copy. With the deployed file already
+# byte-identical to the source, that produced one 1397-byte backup per build
+# forever: macuahuitl had accumulated 989 identical
+# registries.conf.backup.<epoch> files (3.9 MB) in ~/.config/containers by
+# 2026-07-29. A backup that is identical to both the source and the target
+# records nothing, and an unbounded retention policy is not a policy.
+#
+# So: no-op when already current, and keep exactly ONE rollback copy (.prev)
+# when a real change is being made.
+if [[ -f "$TARGET_FILE" ]] && cmp -s "$SOURCE_FILE" "$TARGET_FILE"; then
+    echo "[podman-registries] already current — no change (no backup written)"
+else
+    if [[ -f "$TARGET_FILE" ]]; then
+        echo "[podman-registries] content differs — saving one rollback copy to $TARGET_FILE.prev"
+        cp "$TARGET_FILE" "$TARGET_FILE.prev"
+    fi
+    cp "$SOURCE_FILE" "$TARGET_FILE"
+    chmod 644 "$TARGET_FILE"
+    echo "[podman-registries] ✓ Deployed registries.conf to $TARGET_FILE"
 fi
 
-# Deploy registries.conf
-cp "$SOURCE_FILE" "$TARGET_FILE"
-chmod 644 "$TARGET_FILE"
-
-echo "[podman-registries] ✓ Deployed registries.conf to $TARGET_FILE"
+# Retire the unbounded backup set left by the pre-2026-07-29 behaviour. Only
+# copies that are byte-identical to what is now deployed are removed, so a
+# genuinely divergent old backup is never destroyed — it is reported instead.
+_pruned=0
+_kept=0
+for _old in "$TARGET_FILE".backup.*; do
+    [[ -e "$_old" ]] || continue
+    if cmp -s "$_old" "$TARGET_FILE"; then
+        rm -f "$_old" && _pruned=$((_pruned + 1))
+    else
+        _kept=$((_kept + 1))
+    fi
+done
+if (( _pruned > 0 || _kept > 0 )); then
+    echo "[podman-registries] legacy backups: pruned $_pruned identical, kept $_kept divergent"
+fi
 
 # Verify podman recognizes it
 echo "[podman-registries] Verifying podman configuration..."

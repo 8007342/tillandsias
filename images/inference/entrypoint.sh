@@ -35,7 +35,11 @@ export OLLAMA_HOST=0.0.0.0:11434
 # from the preload policy below (1 default-model slot + RAM-derived expert
 # slots), and an operator-supplied value is respected verbatim. On a <8GB host
 # the policy still yields exactly 1, i.e. the pre-392a behaviour.
-export OLLAMA_NUM_PARALLEL=1
+#
+# OLLAMA_NUM_PARALLEL is likewise NOT pinned here any more: order 406 derives it
+# (with flash attention and the KV cache type) from the accelerator tier in
+# engine-tuning.sh, sourced below. Hardcoding 1 here would have looked like an
+# operator override and suppressed the tier policy.
 
 # Shared model cache — persisted via volume mount.
 export OLLAMA_MODELS=/home/ollama/.ollama/models/
@@ -82,6 +86,28 @@ else
 fi
 echo "[inference] $PRELOAD_LINE"
 
+# ── Accelerator engine tuning (order 406) ─────────────────────────
+# @trace spec:inference-container
+# Sourced BEFORE `ollama serve` because it exports OLLAMA_FLASH_ATTENTION,
+# OLLAMA_KV_CACHE_TYPE and OLLAMA_NUM_PARALLEL, all of which ollama reads once
+# at process start. Prints the pinned
+# `tuning: tier=... flash_attn=... kv_cache=... num_parallel=... vram_mb=...`
+# line. See images/inference/engine-tuning.sh for the measured A/B that chose
+# these values (30% VRAM saved at equal throughput on the CUDA lane) and why the
+# vulkan/rocm lanes deliberately stay conservative.
+ENGINE_TUNING_SH=/usr/local/bin/tillandsias-engine-tuning.sh
+if [ -r "$ENGINE_TUNING_SH" ]; then
+    # shellcheck source=engine-tuning.sh
+    . "$ENGINE_TUNING_SH"
+else
+    # Older image without the tuning file: fall back to the pre-406 shape so the
+    # container still starts (never fail-closed on a policy helper).
+    echo "[inference] WARN: $ENGINE_TUNING_SH missing — falling back to untuned defaults" >&2
+    export OLLAMA_NUM_PARALLEL=1
+    TUNING_LINE="tuning: tier=${TILLANDSIAS_INFERENCE_TIER:-cpu} flash_attn=0 kv_cache=f16 num_parallel=1 vram_mb=0"
+fi
+echo "[inference] $TUNING_LINE"
+
 # Persistent inventory of what preload actually warmed, written on the mounted
 # model volume so a cold volume becomes a warm one for every later start.
 PRELOAD_CHECKPOINT="${OLLAMA_MODELS}.preloaded"
@@ -101,14 +127,88 @@ if [ -n "$_proxy_host" ] && ! getent hosts "$_proxy_host" >/dev/null 2>&1; then
     unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
 fi
 
-# ── Self-install ollama binary (FIRST_RUN into persistent model cache) ──
+# ── Self-install ollama ENGINE (FIRST_RUN into persistent model cache) ──
 # @trace plan/issues/forge-firstrun-tool-migration-2026-07-04.md (order 180 ollama sub-slice)
-# Download the latest ollama release, extracting only bin/ollama (skipping
-# ~1.8GB GPU runner libs). Installs into the persistent model cache volume so
-# it survives container restarts. Arch-aware (x86_64|aarch64). Fail-soft.
+# @trace spec:inference-container — order 406 engine payload
+#
+# ORDER 406 ROOT CAUSE (macuahuitl, live repro 2026-07-29). The release tarball is
+# `bin/ollama` (37 MB) plus `lib/ollama/` (2101 MB). `lib/ollama/` is NOT optional
+# "GPU runner libs": it holds **llama-server**, the binary ollama EXECS for every
+# single model load, plus libggml/libllama and the CPU backends. Extracting only
+# `bin/ollama` — the pre-406 behaviour, whose comment called the remainder skippable
+# — left llama-server absent, so `ollama serve` bound :11434 and answered
+# /api/version (healthcheck GREEN) while EVERY /api/generate returned HTTP 500
+# "llama-server binary not found". That held on every host and every tier: the
+# inference substrate could not serve one token, GPU or CPU.
+#
+# Only the per-accelerator BACKEND dirs are genuinely large, and exactly one of them
+# is usable on any given host, so select instead of dropping the lot:
+#
+#   core (root of lib/ollama, ~30 MB)  llama-server + libggml/libllama + CPU backends
+#   cuda_v13 (~844 MB)                 CUDA UMD >= 13
+#   cuda_v12 (~1277 MB)                CUDA UMD 12
+#   vulkan   (~51 MB)                  mobile/integrated GPUs and the AMD lane
+#
+# On this host that is 871 MB installed instead of 2138 MB, and the excluded
+# backends could never have loaded anyway. Arch-aware (x86_64|aarch64). Fail-soft
+# on download, FAIL-LOUD on a payload that cannot serve (guard below).
 OLLAMA_BINDIR="${OLLAMA_MODELS}.tools/ollama"
 OLLAMA_BIN="$OLLAMA_BINDIR/ollama"
-if [ ! -x "$OLLAMA_BIN" ]; then
+# ollama resolves llama-server relative to the dir holding the ollama binary; the
+# probe list includes `<bindir>/../lib/ollama/llama-server`, which is this path.
+# Verified live: libdirs=ollama,cuda_v13 with the model fully resident in VRAM.
+OLLAMA_TOOLSROOT="${OLLAMA_MODELS}.tools"
+OLLAMA_LIBDIR="$OLLAMA_TOOLSROOT/lib/ollama"
+OLLAMA_ENGINE_MANIFEST="$OLLAMA_TOOLSROOT/.engine-set"
+
+# Which backend dirs does THIS host need? Derived from the effective tier the
+# launcher passed (TILLANDSIAS_INFERENCE_TIER, already downgraded when podman
+# cannot deliver the GPU — order 392) corroborated by the device nodes actually
+# visible in the container. Echoes a space-separated set; empty means core-only.
+_engine_wanted_backends() {
+    _tier="${TILLANDSIAS_INFERENCE_TIER:-}"
+    # Corroborate: a tier claiming cuda with no /dev/nvidia0 in the container gets
+    # core-only rather than an 844 MB backend that can never load.
+    case "$_tier" in
+        gpu-cuda)
+            [ -e /dev/nvidia0 ] || { echo ""; return 0; }
+            _cuda_mm=""
+            if command -v nvidia-smi >/dev/null 2>&1; then
+                # "CUDA UMD Version : 13.3"; the older "CUDA Version" line carries a
+                # deprecation suffix, so match a bare major.minor either way.
+                _cuda_mm="$(nvidia-smi -q 2>/dev/null \
+                    | grep -m1 -E 'CUDA (UMD )?Version' \
+                    | grep -oE '[0-9]+\.[0-9]+' | head -n1)"
+            fi
+            _cuda_major="${_cuda_mm%%.*}"
+            case "$_cuda_major" in
+                ''|*[!0-9]*)
+                    # Undetectable CUDA version: correctness over size — ship both
+                    # majors and let ollama pick, rather than guess wrong and fall
+                    # back to CPU on a GPU host.
+                    echo "cuda_v13 cuda_v12" ;;
+                *) if [ "$_cuda_major" -ge 13 ]; then echo "cuda_v13"; else echo "cuda_v12"; fi ;;
+            esac
+            ;;
+        gpu-rocm)
+            # This ollama release ships no rocm backend dir; Vulkan is the working
+            # AMD lane (RamaLama's proven pattern, order 482).
+            echo "vulkan" ;;
+        gpu-vulkan) echo "vulkan" ;;
+        *) echo "" ;;
+    esac
+}
+OLLAMA_WANTED_BACKENDS="$(_engine_wanted_backends)"
+# Stable set id for the manifest: core plus the sorted wanted backends.
+OLLAMA_ENGINE_SET="core$(printf '%s' "$OLLAMA_WANTED_BACKENDS" | tr ' ' '\n' | sed '/^$/d' | sort | sed 's/^/+/' | tr -d '\n')"
+_engine_installed_set=""
+[ -f "$OLLAMA_ENGINE_MANIFEST" ] && _engine_installed_set="$(cat "$OLLAMA_ENGINE_MANIFEST" 2>/dev/null)"
+# Reinstall when the binary is missing, when llama-server is missing (the pre-406
+# payload), or when the host's required backend set changed (e.g. a CPU-only host
+# that gained a GPU, or a driver major bump).
+if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
+    || [ "$_engine_installed_set" != "$OLLAMA_ENGINE_SET" ]; then
+    echo "[inference] engine payload: need '$OLLAMA_ENGINE_SET' (have '${_engine_installed_set:-none}')"
     echo "[inference] Installing ollama binary (first run)..."
     # Order 313: NO error swallowing in this chain — the volume-ownership
     # EACCES (root-owned models bind-mount vs uid-1000 container) hid for
@@ -156,10 +256,41 @@ if [ ! -x "$OLLAMA_BIN" ]; then
                 echo "[inference] FATAL: proxy egress never became ready within bounded backoff (5 probes) — skipping self-install this launch" >&2
             fi
             if [ "$_ollama_dl" -eq 0 ]; then
-                if zstd -d "$TMP_O/ollama.tar.zst" -o "$TMP_O/ollama.tar" \
-                    && tar -xf "$TMP_O/ollama.tar" -C "$TMP_O" bin/ollama \
-                    && install -m 0755 "$TMP_O/bin/ollama" "$OLLAMA_BIN"; then
-                    echo "[inference] ollama $OLLAMA_ARCH installed into model cache"
+                # Two STREAMING passes over the .zst (list, then extract) instead of
+                # materialising the 2.1 GB intermediate .tar: peak extra disk is the
+                # installed payload, not payload + 2.1 GB. Costs one extra decompress
+                # (a few seconds) and buys ~2 GB of headroom on a constrained host.
+                #
+                # Pass 1: discover which backend dirs THIS release actually ships, so
+                # a newly-added backend is neither silently installed nor able to
+                # break the exclude list.
+                _have_backends="$(zstd -dc "$TMP_O/ollama.tar.zst" 2>/dev/null \
+                    | tar -tf - 2>/dev/null \
+                    | sed -n 's|^lib/ollama/\([^/][^/]*\)/.*|\1|p' | sort -u)"
+                echo "[inference] engine backends available: $(echo "$_have_backends" | tr '\n' ' ')"
+                # Exclude every shipped backend dir that this host cannot use.
+                set --
+                for _b in $_have_backends; do
+                    _keep=0
+                    for _w in $OLLAMA_WANTED_BACKENDS; do
+                        [ "$_b" = "$_w" ] && _keep=1
+                    done
+                    [ "$_keep" -eq 0 ] && set -- "$@" --exclude="lib/ollama/$_b"
+                done
+                # A wanted backend the release does not ship is a REAL mismatch: say
+                # so rather than silently installing a CPU-only payload on a GPU host.
+                for _w in $OLLAMA_WANTED_BACKENDS; do
+                    echo "$_have_backends" | grep -qx "$_w" \
+                        || echo "[inference] WARN: tier wants backend '$_w' but this ollama release does not ship it — inference will fall back to CPU" >&2
+                done
+                mkdir -p "$OLLAMA_LIBDIR" 2>/dev/null || true
+                # Pass 2: extract bin/ollama + the selected slice of lib/ollama.
+                if zstd -dc "$TMP_O/ollama.tar.zst" 2>/dev/null \
+                    | tar -xf - -C "$OLLAMA_TOOLSROOT" "$@" bin/ollama lib/ollama \
+                    && install -m 0755 "$OLLAMA_TOOLSROOT/bin/ollama" "$OLLAMA_BIN"; then
+                    rm -rf "$OLLAMA_TOOLSROOT/bin"
+                    printf '%s\n' "$OLLAMA_ENGINE_SET" > "$OLLAMA_ENGINE_MANIFEST"
+                    echo "[inference] ollama $OLLAMA_ARCH engine '$OLLAMA_ENGINE_SET' installed ($(du -sh "$OLLAMA_LIBDIR" 2>/dev/null | cut -f1) libs) into model cache"
                 else
                     echo "[inference] ollama install FAILED (see errors above) — will retry next launch (non-fatal)" >&2
                 fi
@@ -228,6 +359,25 @@ if ! command -v ollama >/dev/null 2>&1; then
     echo "[inference] FATAL: no ollama binary available (self-install failed above) — exiting so the next launch retries" >&2
     exit 1
 fi
+
+# @trace spec:inference-container — order 406 fail-loud guard
+# `command -v ollama` was the WRONG thing to assert. ollama execs a separate
+# llama-server binary for every model load, so a payload with `ollama` but no
+# llama-server serves /api/version happily (healthcheck GREEN, launcher READY)
+# and 500s on every single /api/generate. That is a silent, total inference
+# outage wearing a healthy badge — precisely the "no ambiguous state" boundary
+# this project forbids. Assert the binary that actually serves tokens.
+if [ ! -x "$OLLAMA_LIBDIR/llama-server" ]; then
+    echo "[inference] FATAL: engine payload incomplete — no executable llama-server at $OLLAMA_LIBDIR/llama-server." >&2
+    echo "[inference]   ollama would bind :11434 and answer /api/version while EVERY model load returns HTTP 500." >&2
+    echo "[inference]   Exiting so the next launch re-installs the engine (see order 406)." >&2
+    exit 1
+fi
+# Tier truth: report the backend set that is actually installed, so an agent is
+# never promised a GPU the engine cannot use. Corroborated against the dirs on
+# disk, not against the tier string alone.
+_installed_backends="$(find "$OLLAMA_LIBDIR" -maxdepth 1 -mindepth 1 -type d -printf '%f ' 2>/dev/null)"
+echo "[inference] engine: set=$OLLAMA_ENGINE_SET backends=[${_installed_backends:-core-only}] llama-server=ok"
 
 # @trace spec:inference-container
 # Start ollama in background so we can pre-pull models before going live.

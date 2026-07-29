@@ -317,11 +317,11 @@ while IFS= read -r line; do
         "tools/list")
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[
                 {"name":"plan_check","description":"Run integrity + schema validation on the plan ledger (shell: tillandsias-plan check)","inputSchema":{"type":"object","properties":{}}},
-                {"name":"plan_status","description":"Get the status line of a packet by id or order number","inputSchema":{"type":"object","properties":{"reference":{"type":"string"},"required":["reference"]}}},
+                {"name":"plan_status","description":"Get the status line of a packet by id or order number","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_ready","description":"List ready packets, optionally filtered by pickup role","inputSchema":{"type":"object","properties":{"role":{"type":"string"}}}},
-                {"name":"plan_blocked_by","description":"List packets directly blocked by a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"},"required":["reference"]}}},
-                {"name":"plan_closure","description":"List everything transitively downstream of a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"},"required":["reference"]}}},
-                {"name":"plan_burndown","description":"List all children of a milestone/release-target with their statuses","inputSchema":{"type":"object","properties":{"reference":{"type":"string"},"required":["reference"]}}},
+                {"name":"plan_blocked_by","description":"List packets directly blocked by a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
+                {"name":"plan_closure","description":"List everything transitively downstream of a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
+                {"name":"plan_burndown","description":"List all children of a milestone/release-target with their statuses","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_answer","description":"Answer a plan question as the CITED envelope {answer, citations[], freshness, confidence}. Every citation carries a repo-relative path and a line range whose span contains the packet it is offered as evidence for; verify with `tillandsias-plan verify-answer`. An answer with zero citations is returned as confidence=unsupported — the expert refuses rather than guesses.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"what is blocked by 394b\", \"everything downstream of 394\", \"what is ready for linux\", \"status of 394a\""}},"required":["question"]}},
                 {"name":"methodology_path","description":"METHODOLOGY EXPERT (L0). Look up a YAML path in methodology.yaml and methodology/**/*.yaml and return the matched block plus a resolvable file:line, in the same CITED envelope as plan_answer. Query by full dotted path (methodology.runtime_language_policy.tlatoani_hard_no_python.rule), by path suffix (forge_cycle_budget.rule), or with * wildcards. An unknown path returns confidence=unsupported with zero citations — never the nearest key, never a guess.","inputSchema":{"type":"object","properties":{"path":{"type":"string","description":"e.g. \"forge_cycle_budget.rule\", \"bar_raise_governance.authority\", \"multi_host_development.pull_merge_cadence.pre_push_gate.rule\""}},"required":["path"]}},
                 {"name":"methodology_ask","description":"METHODOLOGY EXPERT (L0). Route a canonical discipline question to its YAML path and answer it in the CITED envelope. Deterministic routing only: a question matching no route, or two routes, is refused as confidence=unsupported and the refusal lists the routed forms so you can re-ask methodology_path directly.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"may a forge cycle drain two packets?\", \"may I embed a script in base64?\", \"who may raise the scan bar?\", \"what happens to a dead mechanism with a live intent?\", \"which branch does macOS checkpoint to?\""}},"required":["question"]}}
@@ -375,11 +375,32 @@ while IFS= read -r line; do
                     result=$(methodology_envelope "methodology-ask" "$question")
                     ;;
                 *)
-                    result="Unknown tool: $tool"
+                    # An unhandled tool name is a PROTOCOL error, not a successful
+                    # answer whose text happens to say "Unknown tool". Returning it
+                    # as a result made this server the textbook instance of the
+                    # project's own ratified anti-pattern
+                    # `silent-drop-on-unhandled-control-variant`
+                    # (methodology/multi-host-development.yaml:435-447): a caller
+                    # sees success, the model reads the sentence as an ANSWER, and a
+                    # typo'd or renamed tool degrades into a plausible reply instead
+                    # of a loud failure. The tray's MCP socket already answers
+                    # -32601 here (crates/tillandsias-headless/src/tray/mod.rs:798),
+                    # so the two host MCP surfaces disagreed on the same contract.
+                    # Flag and branch AFTER the case: an early `return`/`exit` inside
+                    # this command-substitution context is what previously killed the
+                    # server mid-session rather than reporting (order 456 event,
+                    # 2026-07-29T03:10Z).
+                    unknown_tool=1
                     ;;
             esac
-            escaped=$(echo "$result" | jq -Rs .)
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
+            if [ "${unknown_tool:-0}" = "1" ]; then
+                unknown_tool=0
+                escaped=$(echo "Unknown tool: $tool" | jq -Rs .)
+                echo '{"jsonrpc":"2.0","id":"'"$id"'","error":{"code":-32601,"message":'"$escaped"'}}'
+            else
+                escaped=$(echo "$result" | jq -Rs .)
+                echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
+            fi
             ;;
         "prompts/list")
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"prompts":[]}}'

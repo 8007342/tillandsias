@@ -15982,6 +15982,13 @@ plan_index:
         - "tier matrix config is host-class keyed so different hosts in a shared project get correct args"
         - "litmus:inference-gpu-device-args matches each tier's expected podman args (dry-run, no actual GPU required)"
 
+      events:
+        - type: progress
+          ts: "2026-07-29T21:45:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            Re-derived the five exit criteria against shipped code. THREE ALREADY MET by order 392 (main.rs:3306-3345): gpu-cuda injects --device nvidia.com/gpu=all gated on nvidia_cdi_available(); gpu-rocm injects /dev/kfd + /dev/dri; cpu injects nothing; unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi covers the gate. TWO REMAIN: (a) the host-class-keyed tier matrix config, (b) the named closure litmus:inference-gpu-device-args, which does NOT exist in openspec/litmus-tests/. A designed tier-matrix artifact (crates/tillandsias-core/data/inference-tier-matrix.toml + a pure resolver shared by the launch path and a dry-run flag) was produced this cycle but FAILED adversarial review and is NOT being implemented as-is: the reviewer showed (i) moving the CDI remedy text into TOML would turn the source-window assertion at main.rs:13143-13146 RED because that test greps the literal out of build_inference_run_args's source text, and (ii) the design instructs removing a /dev/kfd grep that does not exist. Also learned: gpu-vulkan is ALREADY a live handled tier value container-side (entrypoint.sh _engine_wanted_backends, engine-tuning.sh), so the matrix must treat it as a real verdict, not a matrix-only tier. Packet stays ready with the residual sharpened.
     - packet_id: experts-construction-research
       order: 393
       desired_release: v0.5
@@ -16235,15 +16242,28 @@ plan_index:
         (52ef1de7): inject_startup_context prints
         experts: ready|building(<n>s)|degraded(<reason>) beside the untouched
         inference line, state lives in /dev/shm, and the building state is
-        published synchronously before forking. REMAINING: the teardown proof —
-        an ephemerality litmus asserting no expert index survives stack
-        shutdown. The built binary in the cache volume is explicitly OUT of
-        scope: it is a build artifact, not knowledge.
+        published synchronously before forking. The built binary in the cache
+        volume is explicitly OUT of scope: it is a build artifact, not
+        knowledge. CORRECTED 2026-07-29 (this prose contradicted the packet's
+        own 05:30Z event and would have made a reader rebuild shipped work):
+        the teardown proof is CLOSED too — it ships as two registered litmus
+        files, litmus:forge-experts-ephemerality-shape (pre-build, 8/8) and
+        litmus:forge-experts-teardown-ephemeral (runtime e2e, 9/9, seed ->
+        witness -> teardown -> verdict with a negative control), both re-run
+        green on 2026-07-29. REMAINING is criterion (ii) ONLY: prove a cold
+        launch with inference DOWN still reaches the agent prompt (order 486
+        soft-degrade preserved).
       exit_criteria:
         - "inject_startup_context prints experts: ready|building(<n>s)|degraded(<reason>) — never an ambiguous 'may still be building'"
         - "a cold launch with inference DOWN still reaches the agent prompt (order 486 soft-degrade preserved)"
         - "after stack shutdown, no expert index remains anywhere (ephemerality litmus)"
       events:
+        - type: progress
+          ts: "2026-07-29T21:45:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            LEDGER CORRECTION + residual sharpened. This packet's outcome prose contradicted its own 05:30Z event: the prose said the teardown proof REMAINED, the event said it was closed. An agent reading only the outcome would have rebuilt shipped work. Verified by re-running both committed litmus files: litmus:forge-experts-ephemerality-shape (pre-build, 8/8 OK) and litmus:forge-experts-teardown-ephemeral (runtime e2e, 9/9 OK, seed -> witness -> teardown -> verdict with a negative control proving the check can fail), leaving zero containers or volumes behind. Prose corrected in place. REMAINING is criterion (ii) ONLY: a cold launch with inference DOWN still reaches the agent prompt (order 486 soft-degrade preserved). That criterion is now MORE testable than before, because this cycle established that an inference container CAN report healthy while unable to serve — so the soft-degrade proof must exercise a genuinely non-serving endpoint, not merely a stopped container.
         - type: progress
           ts: "2026-07-29T05:30:00Z"
           agent_id: "linux-mutable-metaorch-20260729"
@@ -18184,6 +18204,12 @@ plan_index:
         - "`ollama list` inside the container works and at least one default model is warm/pullable via the proxy"
         - "the launch path already gates GPU passthrough on the tier probe (tier:gpu-cuda) + CDI presence (order 392 code, present); confirm cpu host is unaffected"
       events:
+        - type: progress
+          ts: "2026-07-29T21:45:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            GPU BRINGUP ACHIEVED end-to-end on this host, and it took clearing TWO independent blockers, not one. (1) No CDI spec: cleared with NO host sudo at all — nvidia-ctk + nvidia-cdi-hook 1.19.1 extracted from a rootless container into ~/.local/bin, then 'nvidia-ctk cdi generate --nvidia-cdi-hook-path=$HOME/.local/bin/nvidia-cdi-hook --output=$HOME/.config/cdi/nvidia.yaml' (the hook-path flag is REQUIRED: the spec embeds a host hook path and the default /usr/bin/nvidia-cdi-hook does not exist here), plus cdi_spec_dirs widened to include the absolute ~/.config/cdi in containers.conf. NOTE cdi_spec_dirs does NOT expand $HOME, so order 408 automation must write the resolved path. SELinux is Enforcing with container_use_devices off, so --security-opt label=disable is required; the inference container already passes it (main.rs:3298). (2) THE REAL BLOCKER, independently reproduced by a second agent: entrypoint.sh:160 extracted only bin/ollama and discarded lib/ollama, which holds llama-server — the binary ollama execs for EVERY model load. So the container reported Up (healthy), answered /api/version, satisfied wait_for_inference_ready(), and returned HTTP 500 'llama-server binary not found' on every single /api/generate, on every host and every tier. EVIDENCE AFTER FIX: 'inference compute id=0 library=CUDA compute=8.6 name=CUDA0 description=NVIDIA RTX A5000 libdirs=ollama,cuda_v13 driver=13.3 total=23.5 GiB'; default_num_ctx=32768; /api/generate HTTP 200; nvidia-smi shows llama-server holding 1126 MiB; /api/ps size_vram=932446207 (fully resident). Warm qwen2.5:0.5b: 425 tok/s generate, 6600 tok/s prompt eval, vs a 13.6s prompt eval CPU-only before. Exit criteria 2, 3 and 4 CLOSED with live evidence; criterion 1 satisfied by a user-level spec with zero sudo rather than the root path it names. Full record: plan/issues/inference-engine-payload-gpu-bringup-2026-07-29.md
         - type: progress
           ts: "2026-07-17T19:45:00Z"
           agent_id: "linux-macuahuitl-opus48-20260717T1747Z"
@@ -22193,6 +22219,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-07-29T21:45:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            TWO live MCP boundary defects found by driving the real forge-plan server over JSON-RPC (not by reading it), and FIXED + re-verified against the running process. (1) Four tools advertised a malformed inputSchema with 'required' nested INSIDE 'properties' (plan_status, plan_blocked_by, plan_closure, plan_burndown), so each declared a property literally named 'required' and enforced nothing. Now hoisted to a sibling array; tools/list re-driven confirms 9 tools, zero schemas with properties.required, and every required is an array. (2) An unknown tool name returned a SUCCESS result whose text read 'Unknown tool: <name>' — a model reads that sentence as an ANSWER, so a typo'd or renamed tool degraded into a plausible reply instead of a loud failure. That is the textbook instance of this project's own ratified anti-pattern silent-drop-on-unhandled-control-variant (methodology/multi-host-development.yaml:435-447), and it disagreed with the tray's own MCP socket, which already answers -32601 (tray/mod.rs:798). Now returns {error:{code:-32601}} with no result field; verified live. The flag-then-branch shape is deliberate: an early return/exit inside that command-substitution context is what killed the server mid-session per this packet's 03:10Z event. NOTE for consumers: tools/list emits its reply across multiple lines, so a strict one-object-per-line NDJSON client would mis-frame it; existing clients use a streaming parser. Not changed here (framing change is riskier than the defects fixed).
+        - type: progress
           ts: "2026-07-29T05:30:00Z"
           agent_id: "linux-mutable-metaorch-20260729"
           host: linux_mutable
@@ -24605,6 +24637,13 @@ plan_index:
         - "or: the requirement is documented AND emitted as a named error when the injected proxy is unreachable"
         - "a litmus pins whichever contract is chosen"
 
+      events:
+        - type: progress
+          ts: "2026-07-29T21:45:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            SCOPE WIDENED with root cause. This is not limited to `podman build`: it breaks `podman pull` and therefore `toolbox create` too. Repro 2026-07-29 with the enclave down: `podman pull registry.fedoraproject.org/fedora-toolbox:44` -> 'proxyconnect tcp: dial tcp: lookup proxy: no such host'. ROOT CAUSE located: `tillandsias --init` idempotently writes the enclave proxy into the user's GLOBAL ~/.config/containers/containers.conf [engine] env (crates/tillandsias-headless/src/main.rs:5495-5528), and podman applies [engine] env to its OWN host-side registry client, not only to launched containers. The no_proxy in that same block lists enclave aliases (vault, inference, proxy, git-service) but no external registry, so every registry operation on a host that has EVER been --init'ed requires the enclave proxy to be running. Verified the fix direction works: the identical pull succeeds immediately with a CONTAINERS_CONF that omits the [engine] env block. So the contract decision this packet already asks for should cover all three surfaces (build, pull, toolbox) with one fix — most likely scoping the proxy to container launches rather than the global engine config, or extending no_proxy to the registries the product itself pulls from. Note this is a first-run/bootstrap hazard: an operator whose enclave is stopped cannot pull ANY image.
     - packet_id: inference-deferred-model-pulls-litmus-destructive-and-red
       order: 518
       desired_release: v0.5
@@ -24632,3 +24671,148 @@ plan_index:
         - "the litmus no longer wipes a shared host cache (throwaway store or explicit opt-in gate)"
         - "the cold-run timeout is root-caused: either fixed, or recorded as a known-slow path with a justified budget"
         - "a green run is demonstrated on an unmodified image"
+
+    - packet_id: model-lifecycle-mcp-surface
+      order: 519
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "MCP model lifecycle: agent-triggered model load/unload and expert RAG refresh behind a VRAM-budgeted, zero-tolerance boundary"
+      status: ready
+      kind: implementation
+      deliverable: model-lifecycle MCP server (compiled-layer wrapper, forge-plan.sh shape) + VRAM budget enforcement + shared idempotent refresh implementation + litmus
+      depends_on: [inference-cuda-bringup-fat-host]
+      pickup_role: linux
+      capability_tags: [mcp, inference, experts, rag, rust, forge, ollama]
+      estimated_hours: 8
+      outcome: >
+        Operator directive verbatim (The Tlatoani, 2026-07-29): "To be able to
+        load and unload models and refresh our experts RAG dynamically we'll
+        need to make a thorough platform of MCP Servers and make sure our
+        compiled idiomatic layers enforce zero tolerance at every boundary
+        while allowing transparent refreshes triggered by models directly or
+        through their work." Two trigger paths are required and they SHARE one
+        idempotent refresh implementation: model-triggered (an agent calls the
+        tool) and work-triggered (a commit/push hook, order 396). Ledger audit
+        2026-07-29 found NO packet covering model load/unload MCP tools; the
+        only load/unload reference in the tree is llama-server's internal LRU
+        (order 482). This packet owns that gap.
+        SCOPE ANCHORS established this cycle, all of which a naive design gets
+        wrong: (a) the forge MCP surface runs under opencode
+        `"permission": "allow"` (config-overlay/opencode/config.json:5), so
+        every tool here is exercised UNATTENDED — authority granted is authority
+        used without a prompt, which is exactly why a VRAM budget must be
+        enforced server-side rather than trusted to the caller; (b) ENCLAVE_NET
+        is one flat internal bridge with no east-west ACL, so a "private alias
+        reachable only by the broker" is NOT an access control — a DNS name is
+        not a boundary, and any closure asserting a gated door must prove the
+        bypass door is closed too; (c) expert slots reserved by order 392a's
+        preload policy are RAM-derived and must not be silently consumed by an
+        agent-requested load; (d) forge-plan.sh is the reference compiled-layer
+        shape — a thin wrapper execing a compiled binary, with ONE degraded
+        envelope constructor so confidence and citations cannot drift.
+        An unload maps to the ollama API as keep_alive 0, a pin as keep_alive
+        -1, and residency is read from /api/ps (verified live this cycle).
+      exit_criteria:
+        - "an agent can list, load, pin, and unload models through MCP tools and observe the resulting residency via /api/ps"
+        - "a load that would exceed the host VRAM budget is REFUSED with a named machine-readable reason, never partially applied and never OOM"
+        - "an agent-requested load cannot evict an expert slot reserved by the preload policy"
+        - "an expert RAG refresh is triggerable BOTH by an MCP tool call and by a commit hook, through one shared idempotent implementation, and never blocks the commit"
+        - "every boundary is zero-tolerance: unknown tool -> JSON-RPC -32601, malformed args -> validation error naming the field, unparseable engine reply -> named failure, NEVER a success-shaped answer"
+        - "litmus drives the REAL server over JSON-RPC and asserts parsed replies, including the refusal paths (the pattern that caught the order-456 defects)"
+
+    - packet_id: ollama-rocm-asset-never-fetched
+      order: 520
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "gpu-rocm tier is CPU-only BY CONSTRUCTION — the ollama ROCm asset is never downloaded"
+      status: ready
+      kind: bug
+      deliverable: rocm engine payload lane (or an explicit, truthful tier downgrade) + evidence on AMD hardware
+      depends_on: [inference-cuda-bringup-fat-host]
+      pickup_role: any
+      capability_tags: [inference, ollama, rocm, amd, gpu, containers]
+      estimated_hours: 4
+      outcome: >
+        Found 2026-07-29 while fixing the order-406 engine payload. The
+        entrypoint fetches only `ollama-linux-${ARCH}.tar.zst`, whose
+        `lib/ollama/` ships exactly three backend dirs — cuda_v12, cuda_v13,
+        vulkan. There is NO rocm backend in that asset; ROCm is a SEPARATE
+        1,047,683,394-byte release asset (`ollama-linux-amd64-rocm.tar.zst`)
+        that nothing in the tree ever fetches. So a `gpu-rocm` host runs
+        CPU-only no matter what the tier probe says, and
+        `build_inference_run_args` dutifully passes `--device /dev/kfd
+        --device /dev/dri` to an engine that has no ROCm backend to use them
+        with. Order 406 mapped the gpu-rocm tier onto the `vulkan` backend as a
+        deliberate interim (Vulkan is the working AMD lane in this release, and
+        SLOT-4 already makes Vulkan the default Linux GPU lane), but that
+        mapping is REASONED, NOT MEASURED — no AMD host has exercised it.
+        Decide and prove one of: fetch the rocm asset on the rocm tier, or
+        commit to the vulkan lane for AMD with evidence, or downgrade the
+        gpu-rocm tier truthfully. What is NOT acceptable is the pre-406 status
+        quo where the tier name promised acceleration nothing could deliver.
+      exit_criteria:
+        - "on real AMD hardware, either the ROCm backend loads a model or the Vulkan lane does, with nvidia-smi-equivalent evidence of device residency"
+        - "the tier reported to agents matches what the engine can actually use (no gpu-rocm claim on a CPU-only payload)"
+        - "litmus:inference-engine-payload-and-tuning gains the rocm branch assertion once the lane is chosen"
+
+    - packet_id: engine-payload-download-integrity
+      order: 521
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "The inference engine payload is downloaded and executed with NO integrity verification"
+      status: ready
+      kind: bug
+      deliverable: checksum/signature verification on the engine payload before install + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, security, supply-chain, ollama, containers]
+      estimated_hours: 3
+      outcome: >
+        Found 2026-07-29 during the order-406 payload audit.
+        images/inference/entrypoint.sh downloads a ~1.4 GB tarball from
+        `github.com/ollama/ollama/releases/latest/download/...` and installs
+        executables from it with no checksum, no signature, and no pinned
+        version — through the enclave Squid proxy that TLS-bumps with the
+        enclave CA, so the transport trust anchor is the enclave's own CA
+        rather than GitHub's. The installed binaries then execute inside the
+        enclave. `latest` also means the engine version can change under a host
+        between launches with nothing recording which version is installed
+        (order 406 added an `.engine-set` manifest recording the BACKEND SET,
+        which is the right place to also record the version + digest).
+        This is a supply-chain boundary with zero tolerance applied to it today.
+      exit_criteria:
+        - "the engine payload is verified against a recorded digest before any file is installed, and a mismatch refuses the install with a named reason"
+        - "the installed engine version is recorded alongside the backend set so a silent upstream change is detectable"
+        - "verification failure is loud and non-fatal in the order-486 sense: the launch still reaches the agent prompt, degraded and truthfully reported"
+
+    - packet_id: expert-slots-vram-aware
+      order: 522
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Expert slot reservation is RAM-derived but the binding constraint on a GPU host is VRAM"
+      status: ready
+      kind: implementation
+      deliverable: VRAM-aware expert slot rung in the preload policy + litmus branch
+      depends_on: [inference-cuda-bringup-fat-host, accel-capability-probe]
+      pickup_role: any
+      capability_tags: [inference, experts, gpu, npu, policy, mobile]
+      estimated_hours: 4
+      outcome: >
+        Found 2026-07-29. images/inference/preload-policy.sh:83-89 derives
+        expert slots from host RAM alone (<8GB -> 0, <16GB -> 1, >=16GB -> 2).
+        On a GPU host the models are resident in VRAM, not RAM, so the ladder
+        measures the wrong resource: a 64 GB host with a 4 GB mobile GPU is
+        granted 2 expert slots that cannot both be resident, and the models
+        spill to host RAM or thrash — the exact "GPU tier slower than the CPU
+        lane it replaced" outcome. This matters most for precisely the
+        mobile-GPU/NPU host class a sibling host is bringing up, where RAM is
+        plentiful and VRAM is scarce. Order 406 already established the VRAM
+        reading (engine-tuning.sh reads nvidia-smi memory.total, stubbable via
+        TILLANDSIAS_TUNING_VRAM_MB) and the measured per-model cost (a 7B
+        Q4_K_M at 32768 ctx with flash attention + q8_0 KV = 5690 MiB), so the
+        rung can be derived from real numbers rather than guessed. Keep the
+        4 GB-RAM floor behaviour unchanged (order 168 / 392a no-regression).
+      exit_criteria:
+        - "on a GPU tier the expert-slot rung is derived from VRAM (with RAM still governing the CPU tier), stubbable so every rung is litmus-testable without matching hardware"
+        - "a high-RAM/low-VRAM host is granted no more resident expert slots than fit in VRAM"
+        - "the <8GB RAM host still gets expert_slots=0 max_loaded=1 (order 392a no-regression floor holds)"

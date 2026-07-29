@@ -53,21 +53,48 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # separate file so litmus can exercise every policy branch with stubbed inputs
 # without booting a container.
 COPY preload-policy.sh /usr/local/bin/tillandsias-preload-policy.sh
+# @trace spec:inference-container — order 406 accelerator engine tuning
+# Same contract as preload-policy.sh: POSIX sh, sourced by the entrypoint BEFORE
+# `ollama serve` (it exports OLLAMA_FLASH_ATTENTION / OLLAMA_KV_CACHE_TYPE /
+# OLLAMA_NUM_PARALLEL, which ollama reads once at process start), and runnable
+# standalone so litmus can exercise every tier branch with stubbed inputs.
+COPY engine-tuning.sh /usr/local/bin/tillandsias-engine-tuning.sh
 # @trace spec:external-logs-layer
 # Manifest of curated external log files published by this image.
 # The tray-side auditor reads this at /etc/tillandsias/external-logs.yaml
 # every 60 s and flags unlisted files in the role dir as LEAK events.
 RUN mkdir -p /etc/tillandsias
 COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/tillandsias-preload-policy.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    /usr/local/bin/tillandsias-preload-policy.sh \
+    /usr/local/bin/tillandsias-engine-tuning.sh
 
 USER 1000:1000
 
 EXPOSE 11434
 
 # @trace spec:inference-container, spec:socket-container-orchestration
+# @trace spec:inference-container — order 406 truthful readiness
+#
+# ORDER 406: `/api/version` alone is NOT a health signal for this container. It
+# answers the moment `ollama serve` binds the port, which happens even when the
+# engine payload is missing llama-server — the binary ollama execs for every
+# model load. The live repro on macuahuitl 2026-07-29 had this container sitting
+# at `Up (healthy)` while EVERY /api/generate returned HTTP 500
+# "llama-server binary not found". A health badge on a server that cannot serve
+# is worse than no badge: the launcher's readiness gate believed it.
+#
+# So the probe asserts BOTH: the API is up AND the engine can actually load a
+# model. llama-server lives in the host-mounted, forge-SHARED model cache, so
+# this cannot be a start-time-only check — a concurrent prune of that volume
+# must turn this container unhealthy rather than leave it serving 500s.
+# A real generate would be the strongest assertion but is far too expensive at a
+# 5s interval; the entrypoint does that capability check once at startup and
+# refuses to come up without it.
 HEALTHCHECK --interval=5s --timeout=10s --start-period=30s --retries=12 \
-    CMD curl -sf http://127.0.0.1:11434/api/version || exit 1
+    CMD curl -sf http://127.0.0.1:11434/api/version >/dev/null \
+        && test -x /home/ollama/.ollama/models/.tools/lib/ollama/llama-server \
+        || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ENV HOME=/home/ollama USER=ollama

@@ -1,5 +1,81 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-29T21:10Z (linux_mutable macuahuitl — GPU bringup + THE inference substrate was dead)
+
+- **Host**: `linux_mutable` (macuahuitl), `linux-next`. Credential guard
+  `ok:gh-keyring`, committable guard `ok:branch-linux-next`, e2e eligibility
+  `skip:live-runtime-present`. Startup boundary clean and verified on exit.
+  Sibling heads at start: main=ffe85a23/7a593409, linux-next=11fd37f2,
+  windows-next=e4102a80, osx-next=89cade75.
+- **HEADLINE (P0, order 406)**: the inference container **could not serve a
+  single token on any host or tier**, and reported `Up (healthy)` while doing
+  it. `entrypoint.sh:160` extracted only `bin/ollama`, discarding `lib/ollama/`
+  — which holds **`llama-server`**, the binary ollama execs for *every* model
+  load. Every `/api/generate` returned HTTP 500; the healthcheck probed
+  `/api/version` only, so the launcher's readiness gate believed it. Implication
+  for milestone 391: the expert slices already graded PASS (394b/c/d) pass
+  through the **deterministic compiled Rust path** (Layer 0) — no model-backed
+  expert has ever served a token here.
+- **GPU bringup ACHIEVED, no host sudo**: a second, independent blocker was the
+  absent CDI spec. Cleared by extracting `nvidia-ctk`/`nvidia-cdi-hook` 1.19.1
+  from a rootless container into `~/.local/bin`, generating a **user-level**
+  `~/.config/cdi/nvidia.yaml`, and widening `cdi_spec_dirs`. Live evidence:
+  `library=CUDA compute=8.6 NVIDIA RTX A5000 libdirs=ollama,cuda_v13
+  driver=13.3 total=23.5 GiB`, `default_num_ctx=32768`, `/api/generate` HTTP
+  200, `nvidia-smi` shows `llama-server` holding 1126 MiB, `/api/ps`
+  `size_vram=932446207`. Warm qwen2.5:0.5b **425 tok/s** generate / **6600
+  tok/s** prompt eval (was a 13.6 s CPU-only prompt eval).
+- **Tier-aware payload**: only one accelerator backend is ever usable per host,
+  so select instead of dropping all of them — 871 MB installed here instead of
+  2139 MB, and the CPU tier gets a *working* engine for the first time (67 MB).
+  Two streaming passes so the 2.1 GB intermediate tar is never materialised;
+  `.engine-set` manifest forces reinstall when the required set changes.
+- **Measured tuning (not assumed)**: flash attention + `q8_0` KV cache on the
+  CUDA lane = **8098 -> 5690 MiB VRAM at identical throughput** (105.9 vs
+  106.8-107.7 tok/s, qwen2.5:7b Q4_K_M @ 32768 ctx). That 2.4 GB is most of
+  another resident 7B expert slot. Deliberately NOT enabled on vulkan/rocm —
+  unmeasured there, and shipping an unmeasured claim is the same class of error
+  as reporting an undeliverable GPU tier.
+- **New closure**: `litmus:inference-engine-payload-and-tuning` (21 steps, all
+  green), registered under `inference-container`. **Falsifiability proven** by
+  seeding three regressions (bin-only extraction, version-only healthcheck,
+  unmeasured vulkan claim) and confirming each turned its step red; seed damage
+  verified byte-reverted.
+- **Two live MCP boundary defects fixed** (order 456), found and re-verified by
+  driving the real forge-plan server over JSON-RPC: four tools had `required`
+  nested *inside* `properties` (enforcing nothing), and an unknown tool returned
+  a **success** result reading "Unknown tool: X" — the project's own ratified
+  `silent-drop-on-unhandled-control-variant` anti-pattern, and a disagreement
+  with the tray socket which already answers `-32601`. Both fixed.
+- **Ledger correction (394e)**: its `outcome:` prose contradicted its own event
+  — claiming the teardown proof remained when two registered litmus files
+  already ship it (re-run green 8/8 and 9/9). Corrected; the real residual is
+  criterion (ii) only, the cold-launch-with-inference-DOWN soft-degrade proof.
+- **Housekeeping**: `scripts/setup-podman-registries.sh` backed up
+  `registries.conf` on every `build.sh` with no content check and no retention
+  bound — **989 identical copies** (3.9 MB) had accumulated. Now a no-op when
+  current, one `.prev` on real change, and it prunes identical legacy copies
+  (989 pruned, 0 divergent; 3.9 MB -> 16 KB).
+- **Filed**: orders 519 (model-lifecycle MCP surface — the operator's explicit
+  load/unload + RAG-refresh ask, no packet existed), 520 (`gpu-rocm` is CPU-only
+  by construction: ROCm is a separate asset nothing fetches), 521 (engine payload
+  has no checksum/signature/version pin), 522 (expert slots are RAM-derived but
+  VRAM is the binding constraint on GPU hosts). Order 517 widened with root
+  cause: `--init` writes the enclave proxy into the **global** containers.conf
+  `[engine] env`, so `podman pull` and `toolbox create` also fail whenever the
+  enclave is down.
+- **Research orchestrated** (5 parallel analyses + adversarial critique): the
+  tier-matrix and MCP-broker designs both came back **NOT SOUND** with specific
+  refutations, so neither was implemented — recorded instead so the next
+  implementer does not inherit a flawed design. Notably: a "private network
+  alias" is not an access control on the flat enclave bridge, and moving the CDI
+  remedy text into TOML would turn a source-window assertion red.
+- **Next**: order 519 (model-lifecycle MCP) is the operator's headline ask and is
+  now unblocked by 406. Order 392b needs only the host-class matrix +
+  `litmus:inference-gpu-device-args`. Order 394e needs only the soft-degrade
+  proof. Orders 401/402 (macOS/Windows tier verification) are now worth
+  dispatching — the payload fix changes what those hosts will observe.
+
 ## Cycle 2026-07-28T22:50Z (forge — v0.5 inference startup cleanup split + freshness audit)
 
 - **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`.

@@ -465,8 +465,9 @@ specs:
   - litmus:inference-engine-slot-boundary-shape
   - litmus:inference-model-preload-policy
   - litmus:inference-model-warm-timing
+  - litmus:inference-engine-payload-and-tuning
   coverage_ratio: 85
-  last_verified: '2026-07-28'
+  last_verified: '2026-07-29'
 - spec_id: inference-engine-slots
   status: active
   litmus_tests:
