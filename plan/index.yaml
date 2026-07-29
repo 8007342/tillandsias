@@ -21980,7 +21980,7 @@ plan_index:
       order: 456
       desired_release: v0.5
       title: "Idiomatic compiled Rust layer MCP server in Ramdisk for deterministic plan/metadata queries"
-      status: pending
+      status: in_progress
       kind: implementation
       deliverable: crates/tillandsias-forge-mcp (or similar) built and running in ramdisk at startup
       depends_on: []
@@ -21996,6 +21996,13 @@ plan_index:
         - "Agents can invoke `query_plan` tool to get active packets without using grep or python"
         - "Litmus test proves the MCP server returns the correct packets for the current active release"
 
+      events:
+        - type: progress
+          ts: "2026-07-29T03:10:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            DOA FIXED and verified by real execution in the forge image, not inspection. Root cause: the forge-plan MCP wrapper (a61aade2) probed three paths for the compiled tillandsias-plan binary that NOTHING produced, so every call returned 'binary not found'. Two further latent DOAs were found and fixed in the same pass: (1) the wrapper cached an empty binary path at startup, so any client connecting during the backgrounded build stayed broken for the whole session - it now re-resolves lazily while unresolved; (2) the not-found paths used 'return 1' under set -e at a command-substitution call site, which KILLED the server and dropped the connection instead of reporting - now return 0 with the diagnostic as the tool result. Build hooks on the CALLEE side: clone_project_from_mirror is now a wrapper delegating to _clone_project_from_mirror_impl (which has FOUR success returns - a tail hook would have silently skipped three, the same drift class as the original bug), then firing start_forge_experts_async, then returning the clone's rc verbatim. That covers all six forge lanes from one site, so a new lane cannot ship without its expert. cargo build --release -p tillandsias-plan runs backgrounded and timeout-bounded, installs to the probed path, and every failure returns 0 with a named reason - never gating a launch (order 486 contract). State lives in /dev/shm (tmpfs, ephemeral by construction) and the building state is published SYNCHRONOUSLY before forking so the startup context can never observe a missing file. inject_startup_context gains a peer 'experts:' line (ready|building(Ns)|degraded(reason)) alongside the untouched inference READY/NOT-READY line. Live evidence: same server pid served a during-build request (TRANSIENT diagnostic) then plan_check/plan_blocked_by/plan_ready/plan_status correctly after convergence, exiting cleanly on stdin close; full launch path reproduced the DOA pre-fix, then clone returned in 0s with experts converging ready in 8s, cached on re-run; degraded paths real (non-tillandsias project, poisoned crate - clone still rc=0 in 0s, self-heals when restored). New litmus forge-plan-expert-build-shape 15/15, falsifiability proven by seeding three regressions (moved probe path, deleted build step, dropped the background & so the expert gates launch) and confirming each turned a step red. Instant pre-build sweep 171 PASS / 0 FAIL at 96/96 coverage. EXIT CRITERIA: #2 (agents invoke a tool instead of grep/python) CLOSED; #1 (ephemeral from ramdisk) PARTIAL - binary and all state are container-ephemeral with state on tmpfs, but the wrapper script itself is image-baked, not ramdisk; #3 (litmus proves correct packets for the active release) REMAINS - needs a runtime-phase ground-truth harness, which is 394.4. Residual: a genuinely cold crates.io fetch through squid is unmeasured (ran warm, --network none); full opencode launch not exercised offline (vault/auth unavailable).
     - packet_id: cheatsheet-expert-model-rung1
       order: 457
       desired_release: v0.5

@@ -323,8 +323,9 @@ specs:
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
   - litmus:forge-lsp-availability-shape
+  - litmus:forge-plan-expert-build-shape
   coverage_ratio: 80
-  last_verified: '2026-07-16'
+  last_verified: '2026-07-29'
 - spec_id: forge-forward-compat
   status: deprecated
   litmus_tests: []
@@ -457,7 +458,9 @@ specs:
   - litmus:inference-firstrun-default-models-shape
   - litmus:inference-tier-probe-shape
   - litmus:inference-engine-slot-boundary-shape
-  coverage_ratio: 80
+  - litmus:inference-model-preload-policy
+  - litmus:inference-model-warm-timing
+  coverage_ratio: 85
   last_verified: '2026-07-28'
 - spec_id: inference-engine-slots
   status: active

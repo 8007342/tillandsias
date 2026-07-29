@@ -1,0 +1,183 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:456, order:394 (rung 1, slice 1)
+# @trace plan/issues/experts-construction-research-2026-07-29.md §3
+#
+# THE REGRESSION THIS EXISTS TO PREVENT
+#
+# Order 456 landed the `forge-plan` MCP server (a61aade2) as a wrapper around
+# the compiled `tillandsias-plan` CLI. The wrapper probed three paths for that
+# binary. NOTHING in the image ever built or installed it. The server was DEAD
+# ON ARRIVAL: every `tools/call` answered "ERROR: tillandsias-plan binary not
+# found", and nothing in the tree could tell you that, because the wrapper and
+# the (absent) build step were never checked against each other.
+#
+# That is a DRIFT bug between two files, so it is pinned STRUCTURALLY here:
+# the install destination is EXTRACTED from lib-common.sh, the probe path is
+# EXTRACTED from forge-plan.sh, and the two are compared. Deleting the build
+# step, moving the install target, or editing the probe list on one side only
+# turns this test RED.
+#
+# Three things are pinned:
+#   (a) the build+install step exists AND is reached from the launch path,
+#       backgrounded and fail-soft so it can never gate a forge launch;
+#   (b) the wrapper's probe path and the install location agree — the exact
+#       drift that caused the DOA;
+#   (c) the experts startup-context grammar
+#       (`experts: ready|building(<n>s)|degraded(<reason>)` plus the
+#       machine-readable token line) and its CLOSED reason vocabulary.
+#
+# Instant + grep-only, except one cheap behavioural step that runs the real MCP
+# wrapper with no binary present and asserts the error names the build step.
+name: litmus:forge-plan-expert-build-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin the forge plan-expert launch build: ensure_forge_experts builds and
+  installs tillandsias-plan, is invoked backgrounded + fail-soft from the shared
+  clone entry point so every agent lane is covered, its install destination
+  agrees with the forge-plan MCP wrapper's probe path (the order-456 DOA drift),
+  and inject_startup_context reports the pinned experts state grammar over a
+  closed reason vocabulary.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - shell utilities (grep, sed) are available in PATH
+
+critical_path:
+  # ── (a) the build + install step exists in the launch path ───────────────
+  - step: "ensure_forge_experts exists and actually builds + installs the binary"
+    # The whole point of the packet: order 456 shipped a wrapper with no
+    # payload. If the cargo build or the install disappears, the MCP server is
+    # dead on arrival again.
+    command: "grep -q 'ensure_forge_experts() {' images/default/lib-common.sh && grep -q 'cargo build --release -p tillandsias-plan' images/default/lib-common.sh && grep -q 'install -m 0755' images/default/lib-common.sh && echo 'ok: build-and-install-step-present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: build-and-install-step-present"
+
+  - step: "the launch path invokes it, BACKGROUNDED and fail-soft"
+    # `&` keeps it off the critical path; `|| true` keeps a failure in the
+    # starter from propagating into the clone's exit status. Losing either
+    # turns an optional expert into a launch gate.
+    command: "grep -q 'start_forge_experts_async || true' images/default/lib-common.sh && grep -q 'ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 &' images/default/lib-common.sh && echo 'ok: hook-backgrounded-failsoft'"
+    timeout_ms: 5000
+    expected_behavior: "ok: hook-backgrounded-failsoft"
+
+  - step: "the clone's exit status is preserved — the expert never changes whether a launch proceeds"
+    command: "grep -q '_clone_project_from_mirror_impl \"$@\" || _clone_rc=$?' images/default/lib-common.sh && grep -q 'return \"$_clone_rc\"' images/default/lib-common.sh && echo 'ok: clone-rc-preserved'"
+    timeout_ms: 5000
+    expected_behavior: "ok: clone-rc-preserved"
+
+  - step: "EVERY forge agent lane that gets a checkout is covered by the hook"
+    # The hook lives on the callee side of clone_project_from_mirror precisely
+    # so a new lane cannot ship without its plan expert. This fires if any lane
+    # bypasses the public wrapper by calling the implementation directly.
+    command: "for f in opencode opencode-web claude codex antigravity; do grep -q '^clone_project_from_mirror$' \"images/default/entrypoint-forge-$f.sh\" || exit 1; done; grep -q '^clone_project_from_mirror$' images/default/entrypoint-terminal.sh && ! grep -q '_clone_project_from_mirror_impl' images/default/entrypoint-forge-*.sh images/default/entrypoint-terminal.sh && echo 'ok: all-lanes-via-wrapper'"
+    timeout_ms: 5000
+    expected_behavior: "ok: all-lanes-via-wrapper"
+
+  - step: "every failure mode is fail-soft — the builder returns 0 and never exits"
+    # lib-common.sh is SOURCED; an `exit` in this block would kill the whole
+    # entrypoint. Assert the builder's tail is `return 0` and no `exit` was
+    # introduced into the experts block.
+    command: "sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -qE '^[[:space:]]*exit[[:space:]]' && exit 1; sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -c 'return 0' | grep -qE '^[5-9]|^[0-9]{2}' && echo 'ok: builder-fail-soft'"
+    timeout_ms: 5000
+    expected_behavior: "ok: builder-fail-soft"
+
+  # ── (b) probe path and install location agree (the DOA drift) ────────────
+  - step: "DRIFT PIN: the install destination and the wrapper's probe path are the SAME directory"
+    # Extracted from both files and compared. This is the check that would have
+    # caught order 456's dead-on-arrival server on the day it landed.
+    command: "lib=$(sed -n 's#^FORGE_EXPERTS_BIN_DIR=.*:-\\(.*\\)}.*#\\1#p' images/default/lib-common.sh); mcp=$(sed -n 's#^PLAN_BIN_CANONICAL=.\\(.*\\)/tillandsias-plan.$#\\1#p' images/default/config-overlay/mcp/forge-plan.sh); test -n \"$lib\" && test \"$lib\" = \"$mcp\" && echo \"ok: install-probe-agree=$lib\""
+    timeout_ms: 5000
+    expected_behavior: "ok: install-probe-agree="
+
+  - step: "the wrapper's probe LOOP actually uses the canonical path"
+    # Agreement on a constant is worthless if the loop stops consulting it.
+    command: "grep -A3 'for candidate in' images/default/config-overlay/mcp/forge-plan.sh | grep -q 'PLAN_BIN_CANONICAL' && echo 'ok: canonical-probed'"
+    timeout_ms: 5000
+    expected_behavior: "ok: canonical-probed"
+
+  - step: "the wrapper re-resolves the binary lazily so a build finishing later is picked up"
+    # The build is backgrounded. An MCP client that connects mid-build must not
+    # cache an empty path and stay broken for the whole session.
+    command: "grep -q 'PLAN_BIN=\"$(resolve_plan_bin)\"' images/default/config-overlay/mcp/forge-plan.sh && sed -n '/^plan_query() {/,/^}/p' images/default/config-overlay/mcp/forge-plan.sh | grep -q 'resolve_plan_bin' && echo 'ok: lazy-rebind'"
+    timeout_ms: 5000
+    expected_behavior: "ok: lazy-rebind"
+
+  - step: "the experts STATE directory agrees between builder and wrapper, and is tmpfs"
+    # Ephemerality by construction: /dev/shm dies with the container, so there
+    # is no reaper and no state can outlive a forge.
+    command: "a=$(sed -n 's#^FORGE_EXPERTS_STATE_DIR=.*:-\\(.*\\)}.*#\\1#p' images/default/lib-common.sh); b=$(sed -n 's#^FORGE_EXPERTS_STATE_DIR=.*:-\\(.*\\)}.*#\\1#p' images/default/config-overlay/mcp/forge-plan.sh); test -n \"$a\" && test \"$a\" = \"$b\" && case \"$a\" in /dev/shm/*) echo \"ok: state-tmpfs-agree=$a\" ;; esac"
+    timeout_ms: 5000
+    expected_behavior: "ok: state-tmpfs-agree=/dev/shm/"
+
+  - step: "BEHAVIOURAL: with no binary present the MCP wrapper names the build step, not a bare not-found"
+    # Runs the real wrapper against an empty HOME. A bare "binary not found"
+    # told an agent nothing about which step was supposed to produce it or
+    # whether the condition was transient.
+    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_check\",\"arguments\":{}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh); rm -rf \"$d\"; printf '%s' \"$out\" | grep -q 'ensure_forge_experts' && printf '%s' \"$out\" | grep -q 'TRANSIENT' && echo 'ok: wrapper-names-build-step'"
+    timeout_ms: 15000
+    expected_behavior: "ok: wrapper-names-build-step"
+
+  # ── (c) the experts startup-context grammar ──────────────────────────────
+  - step: "inject_startup_context emits the pinned experts state line + machine-readable tokens"
+    # Extends the existing inference READY/NOT-READY grammar rather than
+    # replacing it: the inference line must survive alongside the experts line.
+    command: "grep -q 'experts: ${_experts_status}' images/default/lib-common.sh && grep -q 'experts_state=${_experts_state} experts_reason=${_experts_reason} experts_elapsed=${_experts_elapsed}' images/default/lib-common.sh && grep -q 'inference_state=${_inference_state}' images/default/lib-common.sh && echo 'ok: experts-line-extends-inference-grammar'"
+    timeout_ms: 5000
+    expected_behavior: "ok: experts-line-extends-inference-grammar"
+
+  - step: "the state renderer emits exactly the three pinned forms"
+    # ready | building(<n>s) | degraded(<reason>) — and NOTHING else. The
+    # printf count is asserted exactly so a fourth, ambiguous state (the
+    # "may still be building" that 394.5 explicitly forbids) cannot be added
+    # to the renderer without turning this RED.
+    command: "sed -n '/^forge_experts_state_line() {/,/^}/p' images/default/lib-common.sh > /tmp/.litmus-experts-render && grep -q \"printf 'ready\" /tmp/.litmus-experts-render && grep -q \"printf 'building(%ss)\" /tmp/.litmus-experts-render && grep -q \"printf 'degraded(%s)\" /tmp/.litmus-experts-render && grep -q \"printf 'degraded(not-built)\" /tmp/.litmus-experts-render && test \"$(grep -c \"printf '\" /tmp/.litmus-experts-render)\" = 4 && rm -f /tmp/.litmus-experts-render && echo 'ok: three-state-grammar'"
+    timeout_ms: 5000
+    expected_behavior: "ok: three-state-grammar"
+
+  - step: "the degraded reason vocabulary is CLOSED and every token is actually emitted"
+    # An open-ended reason string is an unfalsifiable state. Each documented
+    # reason must correspond to a real code path that sets it.
+    command: "for r in no-checkout no-plan-crate no-cargo build-failed build-timeout binary-missing install-failed; do grep -q \"_forge_experts_set_state degraded $r\" images/default/lib-common.sh || exit 1; done; grep -q \"printf 'degraded(not-built)\" images/default/lib-common.sh && echo 'ok: closed-reason-vocabulary'"
+    timeout_ms: 5000
+    expected_behavior: "ok: closed-reason-vocabulary"
+
+  - step: "the build is keyed on a source hash so a relaunched forge converges idempotently"
+    command: "grep -q '_forge_experts_source_hash' images/default/lib-common.sh && grep -q 'plan-source-hash' images/default/lib-common.sh && grep -q 'ready (cached)' images/default/lib-common.sh && echo 'ok: idempotent-source-keyed'"
+    timeout_ms: 5000
+    expected_behavior: "ok: idempotent-source-keyed"
+
+  - step: "NO-PYTHON: the expert build path is cargo + POSIX shell only"
+    command: "sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -qiE '(^|[^a-z])python' && exit 1; sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -q 'cargo build' && echo 'ok: no-python-cargo-only'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no-python-cargo-only"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:456"
+    - "@trace order:394"
+  expected_log: "Forge plan-expert launch build wired, probe/install agreement pinned, experts startup grammar closed"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-plan-expert-build-shape"
+    builder_artifact: "images/default/lib-common.sh"
+    mcp_artifact: "images/default/config-overlay/mcp/forge-plan.sh"
+    research: "plan/issues/experts-construction-research-2026-07-29.md"
+
+rollback:
+  on_failure: >
+    The forge plan expert drifted. If the DRIFT PIN step failed, the install
+    destination in lib-common.sh (FORGE_EXPERTS_BIN_DIR) and the probe path in
+    forge-plan.sh (PLAN_BIN_CANONICAL) no longer name the same directory — that
+    is the exact condition that made order 456's MCP server dead on arrival, and
+    every plan_* tool call is now answering an error. If a build/install step
+    assertion failed, ensure_forge_experts no longer produces the binary. If a
+    fail-soft assertion failed, expert construction may now GATE a forge launch,
+    which violates order 486's warn-and-continue contract. If a grammar
+    assertion failed, agents can no longer branch on experts_state and the
+    startup context has become ambiguous.
+  command: "sed -n '/Forge EXPERTS: launch-time build/,/^ensure_forge_experts/p' images/default/lib-common.sh | head -60 && sed -n '1,60p' images/default/config-overlay/mcp/forge-plan.sh"
