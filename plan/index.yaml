@@ -23401,6 +23401,13 @@ plan_index:
         slot abstraction, image variant, model-table externalization, and
         engine-parity smoke are separable checkpoints.
 
+      events:
+        - type: progress
+          ts: "2026-07-29T22:05:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            DETERMINISM CONSTRAINT for the engine-slot lane: OLLAMA_VULKAN defaults to TRUE (measured on ollama v0.32.5), so whenever both lib/ollama/vulkan/ and a cuda_v* backend are present, backend selection on a CUDA host is nondeterministic unless explicitly pinned. Order 406's tier-keyed payload INCIDENTALLY mitigates this by installing exactly one accelerator backend per tier (measured live: libdirs=ollama,cuda_v13), but two multi-backend paths remain and belong to this packet: (a) the undetectable-CUDA-major fallback deliberately ships cuda_v12+cuda_v13, (b) any engine-slot lane that makes Vulkan selectable alongside a vendor lane per SLOT-4. Pin the backend explicitly rather than relying on payload contents to constrain it. Also relevant here: ROCm is a SEPARATE release asset nothing fetches (order 520), so the AMD story on the ollama kind is Vulkan-or-nothing today.
     - packet_id: host-native-sidecar-endpoints
       order: 483
       desired_release: v0.5
@@ -24785,6 +24792,13 @@ plan_index:
         - "the installed engine version is recorded alongside the backend set so a silent upstream change is detectable"
         - "verification failure is loud and non-fatal in the order-486 sense: the launch still reaches the agent prompt, degraded and truthfully reported"
 
+      events:
+        - type: progress
+          ts: "2026-07-29T22:05:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            CONCRETE PATH FOUND: upstream already publishes a sha256sum.txt asset (1,472 B) on the ollama release, and nothing in the tree uses it. So this packet does not need a digest-recording scheme of our own — verify the downloaded tarball against the published checksum before installing any file. Two further facts from the same measurement: the release is currently v0.32.5 (54 tar members, 2,242,628,920 B uncompressed), and bin/ollama plus lib/ollama MUST come from the SAME build — so against the unpinned releases/latest/ URL any split baked-floor/later-fetch scheme would silently mix versions. Order 406's new .engine-set manifest is the right place to also record version + digest.
     - packet_id: expert-slots-vram-aware
       order: 522
       desired_release: v0.5
@@ -24816,3 +24830,185 @@ plan_index:
         - "on a GPU tier the expert-slot rung is derived from VRAM (with RAM still governing the CPU tier), stubbable so every rung is litmus-testable without matching hardware"
         - "a high-RAM/low-VRAM host is granted no more resident expert slots than fit in VRAM"
         - "the <8GB RAM host still gets expert_slots=0 max_loaded=1 (order 392a no-regression floor holds)"
+
+    - packet_id: expert-envelope-self-verification
+      order: 523
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "WRONG ANSWER path: experts cite unparseable corpora and citations the engine's own verifier refuses"
+      status: ready
+      kind: bug
+      deliverable: self-verifying envelope exit points + untrusted-corpus refusal + reproduction litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [experts, rust, correctness, mcp, security, inference]
+      estimated_hours: 5
+      outcome: >
+        Found 2026-07-29 by the zero-tolerance boundary audit; both halves
+        reproduced through the SHIPPED surface, not hypothesised. Full record:
+        plan/issues/expert-inference-boundary-audit-2026-07-29.md (R1, R2).
+        R1: Corpus::load computes parse_error and then pushes
+        `entries: index_text(&text)` UNCONDITIONALLY
+        (crates/tillandsias-plan/src/methodology.rs:160-172, verified by hand),
+        so entries from an invalid-YAML file are indexed and citable. The only
+        signal is a stderr warning (main.rs:409-411) that forge-plan.sh:297
+        discards with 2>/dev/null. Observed: confidence=exact, verify-answer
+        says "ok: envelope verified", and the rendered span glues one claim's
+        limits/falsification_signal/review_cadence onto a DIFFERENT claim, so an
+        agent attributes the wrong caveats to the wrong claim.
+        R2: an envelope escapes with a citation the engine's own verifier
+        REFUSES, because nothing on the runtime path calls verify() and the
+        envelope carries no field naming the root its paths are relative to
+        (citation_path/root_for, main.rs:55-77). Observed: an index under
+        /opt/cheatsheets/plan-index.yaml yields confidence=exact citing
+        cheatsheets/plan-index.yaml:16084-16106, which verify-answer against the
+        real checkout refuses. That path is a LIVE probe candidate
+        (forge-plan.sh:52) and PLAN_INDEX is cached for the session once
+        non-empty (:145,:152), so it is reachable.
+        This is exactly the failure the cited-envelope architecture (394b)
+        exists to prevent. One fix covers both: self-verify at the exit point —
+        after building the envelope in answer/methodology/methodology-ask, run
+        answer::verify(&env, &root) and on any violation emit
+        Envelope::unsupported naming them. That makes the verifier unavoidable
+        instead of ceremonial and retires R1's escape as well.
+      exit_criteria:
+        - "every envelope-emitting exit point verifies its OWN output and downgrades to confidence=unsupported naming the violations, rather than trusting construction"
+        - "a citation into a corpus file with parse_error is refused with a named reason (spans in a file that does not parse cannot be trusted)"
+        - "the envelope carries (or the verifier derives) the root its citation paths are relative to, so verify-answer cannot disagree with the emitter about the same envelope"
+        - "litmus reproduces BOTH escapes and turns red if either returns anything other than unsupported"
+
+    - packet_id: inference-run-args-flag-after-image
+      order: 524
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "skip_runtime_pulls inserts --env AFTER the image name, so the flag becomes container argv and is silently dropped"
+      status: ready
+      kind: bug
+      deliverable: arg-vector fix + flag-before-image unit assertion + removal of the dead trailing command
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, podman, inference, correctness, testing]
+      estimated_hours: 2
+      outcome: >
+        Found 2026-07-29, verified by reading the vec construction.
+        build_inference_run_args ends its args vec with
+        [..., image, "/usr/bin/ollama", "serve"], then the skip_runtime_pulls
+        block inserts TWICE at args.len()-2 (main.rs:3373-3379) — which is the
+        index of "/usr/bin/ollama", i.e. BEHIND the image name. So
+        `--env TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1` is container argv,
+        not a podman flag, and the env var is NEVER SET. The image is
+        ENTRYPOINT-only (Containerfile:72) and entrypoint.sh never reads "$@",
+        so the strays are silently discarded, the
+        "[inference] status-check mode — skipping runtime pulls" line can never
+        print, and the caller's explicit intent evaporates.
+        Second defect in the same block: the appended `/usr/bin/ollama serve`
+        command DOES NOT EXIST in the image (ollama self-installs under
+        ${OLLAMA_MODELS}.tools/), so it would exec-fail the container the day the
+        image switches ENTRYPOINT to CMD.
+        No existing litmus can catch either, because every SKIP_RUNTIME_PULLS
+        litmus bypasses this function and passes -e straight to podman. The
+        general lesson (audit corollary b): the arg vector is the only observable
+        form of that boundary, so it must be asserted flag-before-image in a
+        unit test.
+      exit_criteria:
+        - "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS is actually set in the container (env pair built BEFORE the mount/image tail)"
+        - "the dead /usr/bin/ollama serve trailing command is removed (or made real and asserted to exist in the image)"
+        - "a unit test asserts EVERY flag precedes the image name in the generated vector, so a future insert cannot regress past it"
+        - "the status-check mode log line is demonstrated to print"
+
+    - packet_id: inference-enclave-ca-not-trusted-by-engine
+      order: 525
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "ollama's Go TLS never trusts the enclave CA; the failure is swallowed and reported as 'no models cached'"
+      status: ready
+      kind: bug
+      deliverable: SSL_CERT_FILE export + guarded trust-store block with a named warning + distinguishable startup reason
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, tls, ca, containers, observability, ollama]
+      estimated_hours: 3
+      outcome: >
+        Found 2026-07-29 by the zero-tolerance boundary audit (R4).
+        entrypoint.sh:20-22 runs mkdir/cp/update-ca-trust each with `|| true`,
+        but update-ca-trust CANNOT succeed as uid 1000: the Containerfile chowns
+        only source/anchors (Containerfile:35-36), leaving
+        /etc/pki/ca-trust/extracted root-owned under USER 1000:1000 (:64). Order
+        486's mitigation exports CURL_CA_BUNDLE (entrypoint.sh:27) which fixes
+        CURL ONLY — SSL_CERT_FILE appears nowhere under images/inference, and
+        ollama is a Go binary whose crypto/x509 reads SSL_CERT_FILE, not
+        CURL_CA_BUNDLE. So every `ollama pull` through squid's TLS bump fails
+        x509, non-fatally, and the startup context reports
+        inference_reason=no-models — collapsing "TLS trust is broken" into
+        "nothing is cached". Two very different faults, one indistinguishable
+        message, which is an ambiguous-state violation independent of the TLS bug
+        itself.
+      exit_criteria:
+        - "the engine trusts the enclave CA (SSL_CERT_FILE exported beside CURL_CA_BUNDLE) and a pull through the enclave proxy succeeds"
+        - "a trust-store update failure emits ONE named warning with its rc instead of three silent `|| true`s"
+        - "a TLS-trust failure is distinguishable from an empty cache in the startup reason vocabulary"
+
+    - packet_id: experts-building-state-unbounded
+      order: 526
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "The 'building' experts state is advertised as transient but has no upper bound — a killed builder pins it forever"
+      status: ready
+      kind: bug
+      deliverable: read-side bound on the building state + degraded(build-abandoned-after-Ns) rendering + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, experts, observability, mcp, correctness]
+      estimated_hours: 3
+      outcome: >
+        Found 2026-07-29 by the zero-tolerance boundary audit (R5).
+        ensure_forge_experts is forked with NO supervisor
+        (images/default/lib-common.sh:914), every state write is `|| true`
+        (:836-849), and both renderers emit building(<n>s) for ANY elapsed value
+        (:855-882 and forge-plan.sh:88-97) while the MCP wrapper tells the agent
+        "TRANSIENT: the build is still running. Retry this tool in a few
+        seconds" (forge-plan.sh:118-120, :211-213). If the forked shell is
+        OOM-killed or dies, the state file pins `building` indefinitely and every
+        agent is told to retry a build that no longer exists — an unbounded wait
+        dressed as a transient one. Order 394e's grammar promises
+        ready|building(<n>s)|degraded(<reason>) with "never an ambiguous 'may
+        still be building'"; an unbounded building IS that ambiguity.
+        Fix on the READ side (audit corollary c) so no producer cooperation is
+        required: past a declared budget, render
+        degraded(build-abandoned-after-<n>s).
+      exit_criteria:
+        - "a building state older than a declared budget renders as degraded(build-abandoned-after-<n>s) on BOTH the startup-context and MCP surfaces"
+        - "the bound is enforced by the READER, so a killed or OOM'd builder cannot pin the state"
+        - "litmus seeds a stale building state with no live builder and asserts the degraded rendering"
+
+    - packet_id: expert-keepalive-contradicts-ephemerality
+      order: 527
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "OLLAMA_KEEP_ALIVE=24h pins ephemeral expert models in VRAM for a day after the stack is gone"
+      status: ready
+      kind: bug
+      deliverable: tier/ephemerality-aware keep-alive policy + VRAM-residency assertion in the teardown litmus
+      depends_on: [inference-cuda-bringup-fat-host]
+      pickup_role: linux
+      capability_tags: [inference, experts, ephemerality, gpu, policy]
+      estimated_hours: 3
+      outcome: >
+        Found 2026-07-29 by the zero-tolerance boundary audit (R6).
+        crates/tillandsias-headless/src/main.rs:3302 injects
+        OLLAMA_KEEP_ALIVE=24h as a bare literal with no rationale comment and no
+        litmus pinning it. Milestone 391 states "EVERYTHING EPHEMERAL: experts
+        are built on launch … and die on shutdown", and 394e requires that no
+        expert artifact survives teardown — but the existing ephemerality litmus
+        asserts no expert INDEX survives and says nothing about resident VRAM.
+        With max_loaded=3 an ephemeral expert holds VRAM for 24 hours after its
+        forge is gone. Order 406 sharpened the cost: a 7B expert at 32768 ctx
+        with flash attention + q8_0 KV holds 5690 MiB measured, so three
+        keep-alive-pinned experts is ~17 GB of a 24 GB card held against a stack
+        that has already shut down — and on a mobile-GPU host it is the whole
+        card. Decide the keep-alive policy deliberately (short for experts,
+        longer for the default model, or explicit unload on teardown) and pin it.
+      exit_criteria:
+        - "expert model residency does not outlive the stack: after teardown no expert model holds VRAM (asserted, not assumed)"
+        - "the keep-alive value is derived from a documented policy with a rationale comment, not a bare literal"
+        - "the teardown/ephemerality litmus gains a VRAM-residency assertion on a GPU tier (skipped with a named reason on CPU hosts)"

@@ -70,6 +70,38 @@
   implementer does not inherit a flawed design. Notably: a "private network
   alias" is not an access control on the flat enclave bridge, and moving the CDI
   remedy text into TOML would turn a source-window assertion red.
+- **ADDENDUM (research fan-out completed after the first commit; 10/10 agents,
+  0 errors, ~1.5M subagent tokens)**: the zero-tolerance boundary audit found
+  **two WRONG-ANSWER paths in the ExpertSystem itself**, both reproduced through
+  the shipped surface and both re-verified by hand here. (R1) `Corpus::load`
+  pushes `entries: index_text(&text)` unconditionally alongside `parse_error`
+  (`methodology.rs:160-172`), so an invalid-YAML corpus file is indexed and
+  citable — and the only signal is a stderr line `forge-plan.sh:297` discards
+  with `2>/dev/null`; the observed answer carried `confidence=exact` and glued
+  one claim's caveats onto another. (R2) an envelope escapes with a citation the
+  engine's own verifier REFUSES, because nothing on the runtime path calls
+  `verify()` and the envelope names no root for its paths; reachable via a live
+  probe candidate (`forge-plan.sh:52`). One fix covers both — self-verify at the
+  exit point — filed as order **523**. Also filed: **524** (`skip_runtime_pulls`
+  inserts `--env` AFTER the image name, verified by reading the vec — the flag
+  becomes container argv and is never set, plus a dead `/usr/bin/ollama serve`
+  that does not exist in the image), **525** (ollama's Go TLS never trusts the
+  enclave CA: `SSL_CERT_FILE` is absent, `update-ca-trust` cannot succeed as uid
+  1000 and fails behind three `|| true`, and the result is reported as
+  `no-models` — TLS-broken and empty-cache are indistinguishable), **526** (the
+  `building` experts state is advertised transient but unbounded; a killed
+  builder pins it forever, which is exactly the ambiguity 394e's grammar
+  forbids), **527** (`OLLAMA_KEEP_ALIVE=24h` pins *ephemeral* expert models in
+  VRAM for a day after the stack is gone — ~17 GB of a 24 GB card at the 5690 MiB
+  per-expert cost order 406 measured; the teardown litmus asserts no expert
+  *index* survives and says nothing about VRAM). Evidence added to 521 (upstream
+  publishes an unused `sha256sum.txt`, so integrity verification is
+  straightforward) and 482 (`OLLAMA_VULKAN` defaults TRUE, so multi-backend
+  payloads need an explicit pin). Full record:
+  `plan/issues/expert-inference-boundary-audit-2026-07-29.md`, which also states
+  the one mechanical rule worth adopting: *a value may not cross a boundary
+  unless the receiving side re-derives its trustworthiness with code a litmus can
+  make fail.*
 - **Next**: order 519 (model-lifecycle MCP) is the operator's headline ask and is
   now unblocked by 406. Order 392b needs only the host-class matrix +
   `litmus:inference-gpu-device-args`. Order 394e needs only the soft-degrade
