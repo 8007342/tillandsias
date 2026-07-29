@@ -24154,7 +24154,7 @@ plan_index:
       order: 511
       desired_release: v0.5
       title: "dev-control: transcripts-ONLY session persistence for real --resume continuity — REJECTED by operator (seed prompt is the resume)"
-      status: obsolete
+      status: obsoleted
       kind: feature
       events:
         - type: rejected

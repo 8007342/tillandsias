@@ -37,6 +37,14 @@ statuses:
   - active
   - implemented
   - needs_clarification
+  # Recorded 2026-07-29: `obsoleted` is the terminal status for a packet whose
+  # MECHANISM and INTENT are both dead (philosophy.yaml
+  # obsolete_mechanism_live_intent — a dead mechanism with a live intent is
+  # REWRITTEN, never obsoleted). It was already sanctioned by plan.yaml
+  # status_values and plan/index.yaml default_status_values but missing here,
+  # so the engine flagged legitimate usage as drift. Same order-440 caveat:
+  # recording usage is not endorsing the vocabulary's size.
+  - obsoleted
 
 # Fields whose values must resolve to existing packet_ids (checked by the
 # invariant core; listing them here tells the engine WHERE references live
