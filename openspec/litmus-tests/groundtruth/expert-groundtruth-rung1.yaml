@@ -92,10 +92,13 @@ cases:
           packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
           order: 394a
           status: done
+        # NOTE: deliberately does NOT assert this packet's status. A query set
+        # that pins the MUTABLE status of an in-flight packet goes red on every
+        # legitimate ledger update — this case did exactly that the first time
+        # 394d was closed. Identity + deliverable text are stable; status is not.
         - path: plan/index.yaml
           packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
           order: 394d
-          status: ready
           span_contains:
             - "committed query set (plan + methodology) + grading harness runnable in-forge"
         - path: plan/index.yaml
@@ -183,19 +186,18 @@ cases:
     why: >
       The pickup query, and the one where a broken filter is invisible: a
       `ready` list that quietly includes DONE packets sends agents to redo
-      finished work. 394d must be in it (ready, pickup_role linux) and 394a
-      must NOT (done).
+      finished work. Asserted STRUCTURALLY — no row may carry status done,
+      and the list must be non-trivial — rather than by naming a packet whose
+      status changes as work drains. Naming one is what turned this case red
+      the first time 394d closed; the invariant never moves, the packet does.
     expect:
       confidence: exact
       citation_kind: plan
       min_citations: 20
-      citations_include:
-        - packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
-          order: 394d
-          status: ready
       citations_exclude:
-        - packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
         - status: done
+        - status: completed
+        - status: obsoleted
 
   - id: plan-refuses-an-unknown-packet
     engine: plan.answer

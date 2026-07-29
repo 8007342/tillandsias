@@ -16111,7 +16111,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Plan expert rung 1 slice 2 — the cited answer envelope + plan_answer MCP tool"
-      status: ready
+      status: done
       kind: implementation
       deliverable: answer envelope schema + plan_answer tool + envelope litmus
       depends_on: [plan-methodology-experts-rung1/plan-expert-binary-shipping]
@@ -16129,13 +16129,20 @@ plan_index:
         - "a fixture query returns >=1 citation whose path+line-range resolves and whose span contains the claimed packet_id"
         - "a seeded FABRICATED citation turns the litmus RED (the check can fail)"
 
+      events:
+        - type: completed
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            All 3 exit criteria CLOSED (23a263dc). The envelope is exactly {answer, citations, confidence, freshness} with citation keys exactly {authority, kind, line_end, line_start, path}, pinned by litmus. A fixture query returns citations whose path+line-range resolves and whose span contains the claimed packet_id — re-derived in the litmus with sed+grep INDEPENDENTLY of the crate's own verifier, so the check cannot pass by trusting the code it tests. Fabricated citations turn the litmus RED, demonstrated twice at the runner level with four distinct fabrication shapes retained as permanent negative cases. Attribution note recorded by the agent: the not-found prose half (binary_missing_error + experts_state_line) was already at HEAD from order 456.
     - packet_id: plan-methodology-experts-rung1/methodology-expert-layer0
       order: 394c
       parent: plan-methodology-experts-rung1
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Plan expert rung 1 slice 3 — methodology L0 YAML path query as an MCP tool"
-      status: ready
+      status: done
       kind: implementation
       deliverable: new subcommand on the existing tillandsias-plan crate + MCP tool beside forge-plan
       depends_on: [plan-methodology-experts-rung1/expert-answer-envelope]
@@ -16153,13 +16160,20 @@ plan_index:
         - "each answer's cited span contains the governing rule text"
         - "an unknown path returns unsupported, never a guess"
 
+      events:
+        - type: completed
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            All 3 exit criteria CLOSED (23a263dc). A methodology-ask subcommand on the EXISTING crate — no new crate, no new dependency, as the ratified 393 record requires — answers YAML path queries over methodology.yaml and methodology/*.yaml in the 394b envelope. Ten canonical discipline questions ('may a forge cycle drain two packets?', 'is Python allowed in a committed script?', 'who may raise the scan bar?', 'what happens to a dead mechanism with a live intent?') all return confidence=exact with an exact YAML path and resolvable file:line; each cited span was verified by cutting the range with sed and grepping for a VERBATIM quote of the governing rule, not a paraphrase. An unknown path — even one token short of a real key — returns unsupported rather than the nearest guess.
     - packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
       order: 394d
       parent: plan-methodology-experts-rung1
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Plan expert rung 1 slice 4 — committed ground-truth query set graded against the L0 engine"
-      status: ready
+      status: done
       kind: test
       deliverable: committed query set (plan + methodology) + grading harness runnable in-forge
       depends_on: [plan-methodology-experts-rung1/methodology-expert-layer0]
@@ -16179,6 +16193,30 @@ plan_index:
         - "injecting a WRONG expected answer turns it RED (the harness can fail)"
         - "reusable verbatim by 457 and 400"
 
+      events:
+        - type: progress
+          ts: "2026-07-29T05:45:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            FIXTURE-DESIGN FIX, found by the harness catching ITSELF. Flipping 394d to
+            done immediately turned two of its own committed cases red: both pinned the
+            MUTABLE status of an in-flight packet (394d as status ready), so the very act
+            of closing the packet falsified its own query set. That is a fixture bug, not
+            an engine bug - a ground truth that goes red on every legitimate ledger update
+            trains people to ignore it. Repaired by asserting the INVARIANT instead of the
+            instance: plan-ready-for-linux-excludes-done now requires a non-trivial list
+            with min_citations 20 in which NO row carries done, completed or obsoleted,
+            naming no packet at all; the milestone case keeps 394d identity and deliverable
+            text, both stable, and drops its status. Regraded 17/17 in 100ms. Standing rule
+            for every future query set including those of 457 and 400: cite identity and
+            corpus text, never a packet current status.
+        - type: completed
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            All 4 exit criteria CLOSED (23a263dc) — the grading gate for the whole experts family. 17 committed cases (6 plan + 11 methodology), each carrying prose naming the regression it catches, expected answers quoted from the corpus rather than paraphrased, spans re-read from disk at grading time. (i) Runs in 110ms wall INSIDE tillandsias-forge:latest with the checkout bind-mounted READ-ONLY and --network none — 0.18% of the 60s budget, enforced two independent ways in litmus. (ii) 17/17 green at HEAD. (iii) Proven able to FAIL in both directions: 5 seeded wrong expected answers AND 4 seeded ENGINE regressions (ready() including done, route() picking the first ambiguous match, milestone_children losing its release_target filter, the span check made a no-op — the last of which turned the LITMUS itself red), each restored and diffed byte-identical. (iv) Corpus-agnostic BY SIGNATURE: grade_envelope takes no corpus, ledger, or engine parameter, so grading cannot special-case an expert; 457 and 400 plug in with one ENGINES row and one match arm each. Anti-vacuum enforced in code: deny_unknown_fields, empty case list is an error, duplicate case ids across sets are an error, and every case additionally runs the 394b verifier. Found and fixed a real CLI defect by RUNNING it: --index after a subcommand was silently swallowed as a query-set filename, so a typo'd flag would have graded the wrong ledger and reported it as an ordinary miss; unrecognised -* is now exit 2, and exit codes are deliberately distinct (0 green / 1 graded RED / 2 harness could not run).
     - packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
       order: 394e
       parent: plan-methodology-experts-rung1
@@ -16205,6 +16243,13 @@ plan_index:
         - "inject_startup_context prints experts: ready|building(<n>s)|degraded(<reason>) — never an ambiguous 'may still be building'"
         - "a cold launch with inference DOWN still reaches the agent prompt (order 486 soft-degrade preserved)"
         - "after stack shutdown, no expert index remains anywhere (ephemerality litmus)"
+      events:
+        - type: progress
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            Two of three criteria CLOSED (23a263dc), zero edits to lib-common.sh — the state line and tmpfs placement were already correct from 52ef1de7 and were VERIFIED by real execution rather than grep: the HEAD lib-common.sh was run inside tillandsias-forge:latest and inject_startup_context called for real, exercising all four states. Criterion (iii) teardown proof CLOSED with a real container, a real teardown, and a negative control proving the check can fail. REMAINS: criterion (ii), a cold launch with inference DOWN reaching the agent prompt — structurally pinned at two sites and the guest-side context proven non-aborting, but 'reaches the agent prompt' was not exercised end to end (vault/auth unavailable offline). That is the honest gap; it wants a live forge session.
     - packet_id: experts-opencode-affordance
       order: 395
       desired_release: v0.5
@@ -21522,7 +21567,7 @@ plan_index:
       order: 448
       desired_release: v0.5
       title: "Forge-image cheatsheet copy re-drifts from host whenever cheatsheets are edited — the committed copy is build-generated"
-      status: ready
+      status: in_progress
       capability_tags: [linux, cheatsheets, drift, generated-artifact]
       kind: enhancement
       deliverable: images/default/cheatsheets sync mechanism
@@ -21544,6 +21589,12 @@ plan_index:
         - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
         - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
       events:
+        - type: progress
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            ADVANCED, not closed (23a263dc). New scripts/stage-image-cheatsheets.sh is the single source of truth for materialising the derived image cheatsheet tree, and the sync litmus now regenerates before checking — so it is green from a fresh-clone state both when the derived tree is stale AND when it is entirely absent, which is the structural bug: the tree is gitignored, so the old check could never pass on a clean clone. That recurring false-red burned three preflights (twice since the 2026-07-20 correction, again at the v0.4 cut). REMAINS: the second criterion is only partially closed — editing host cheatsheets can still leave a committed image copy stale without a loud failure at commit/CI time; the durable fix is to stop committing the derived tree at all, which needs its own decision.
         - type: filed
           ts: "2026-07-20T06:20:00Z"
           agent_id: "linux-tillandsias-opus48-20260719T0000Z"
@@ -22142,6 +22193,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            Exit criterion 3 (litmus proves the server returns correct packets for the active release) CLOSED by order 394d's ground-truth harness (23a263dc): litmus step 17 drives the REAL forge-plan MCP server over JSON-RPC, takes the envelope that actually crossed the wire, and grades it against the committed query set. Criterion 2 was already closed. Criterion 1 remains PARTIAL on the literal reading — the binary and all expert state are container-ephemeral with state on tmpfs, but the wrapper script itself is image-baked rather than served from ramdisk. Coordinator note: that residue is cosmetic against the packet's intent (ephemerality) and a candidate for operator ratification rather than further work.
+        - type: progress
           ts: "2026-07-29T03:10:00Z"
           agent_id: "linux-mutable-metaorch-20260729"
           host: linux_mutable
@@ -22383,7 +22440,7 @@ plan_index:
       order: 477
       desired_release: v0.5
       title: "Last-lane teardown and the liveness supervisor disagree on the proxy's scope: teardown removes it, liveness re-creates it 3s later"
-      status: ready
+      status: in_progress
       kind: fix
       deliverable: one shared core-vs-lane-scoped container set consumed by both teardown and liveness (plus a test pinning the post-teardown steady-state container set)
       depends_on: []
@@ -22413,6 +22470,12 @@ plan_index:
         - "a test pins the post-last-lane steady-state container set (no create/remove churn within the settling window)"
         - "the chosen proxy scope is recorded with rationale (idle footprint vs warm-start latency)"
       events:
+        - type: progress
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            ADVANCED, not closed (23a263dc). Root cause addressed structurally: teardown AND the order-443 refcount predicate now derive from ONE shared SHARED_STACK_SCOPES definition (main.rs:4392-4425) rather than two independently-drifting notions of core-vs-lane-scoped, and the chosen proxy scope is recorded there with its rationale (idle footprint vs warm-start latency, plus correctness axes). A test pins the post-last-lane steady state — no create/remove churn within the settling window. REMAINS: one litmus the agent authored is blocked on a file outside its assigned scope, so the shared-definition criterion is PARTIAL until that lands; the order-494 leak-not-destroy doctrine was preserved throughout.
         - type: filed
           ts: "2026-07-24T07:05:00Z"
           agent_id: "windows-host-claude-observer"
@@ -22599,7 +22662,7 @@ plan_index:
       order: 461
       desired_release: v0.5
       title: "Reconcile generic Podman forge-secret prohibition with scoped Vault capability mounts"
-      status: ready
+      status: done
       kind: methodology
       deliverable: plan/issues/podman-idiomatic-forge-secret-contract-drift-2026-07-23.md
       depends_on: []
@@ -22621,6 +22684,12 @@ plan_index:
         - "a litmus distinguishes forbidden raw provider credentials from allowed short-lived Vault capability mounts"
         - "existing OpenCode/OAuth forge mounts either satisfy the reconciled wording or fail a named falsifiable check"
       events:
+        - type: completed
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            EC1-EC3 CLOSED (23a263dc). The generic podman-idiomatic-patterns spec no longer contradicts podman-secrets-integration: it now permits exactly the short-lived, per-container Vault AppRole capability mount the narrower contract intentionally allows, while still forbidding raw provider credentials in forge containers. A new litmus distinguishes the two shapes structurally — the allowed gated scoped vault-token mount versus forbidden raw credential material — so the next refactor cannot silently re-diverge. EC3 closed partly by the second branch (a named falsifiable check) rather than by wording alone, which is recorded in the packet's deliverable.
         - type: filed
           ts: "2026-07-24T02:28:49Z"
           agent_id: "forge-tillandsias-codex-result-repair-20260724T0228Z"
@@ -22635,7 +22704,7 @@ plan_index:
       order: 464
       desired_release: v0.5
       title: "Reject unknown delegated-result format values instead of silently disabling capture"
-      status: in_progress
+      status: done
       kind: fix
       deliverable: plan/issues/forge-result-format-unknown-value-fail-closed-2026-07-24.md
       depends_on: []
@@ -22656,6 +22725,12 @@ plan_index:
         - "tests cover both CLI lanes and prove OpenCode Web omits the internal result-mode variable"
         - "active specs state the fail-closed value grammar without adding an end-user UX surface"
       events:
+        - type: completed
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            All four exit criteria CLOSED (23a263dc). Criteria 1-2 were verified already satisfied at HEAD (delegated_run_config rejects unknown values with 'unsupported value' and non-UTF8 with 'Unicode'; unset preserves the ordinary path; exact json preserves delegated capture). Criterion 3 was INVESTIGATED rather than assumed and found TRUE: the OpenCode Web launch path genuinely omits TILLANDSIAS_AGENT_RESULT_FORMAT, so no production code change was needed — the finding is the evidence. Criterion 4 (spec wording) closed with new litmus steps proven falsifiable: weakening the spec phrase 'has a CLOSED value grammar' turns the step red, and seeding the Web-leak regression fails the litmus.
         - type: filed
           ts: "2026-07-24T02:39:00Z"
           agent_id: "forge-tillandsias-codex-root-resume-20260724T0219Z"
@@ -23541,7 +23616,7 @@ plan_index:
       order: 490
       desired_release: v0.4
       title: "Regenerate clickable trace indexes from every build-producing build.sh mode"
-      status: ready
+      status: done
       kind: fix
       deliverable: plan/issues/clickable-trace-index-build-dispatch-gap-2026-07-25.md
       depends_on: [postbuild-meta-orchestration-dirty-start-contract]
@@ -23558,6 +23633,12 @@ plan_index:
         - "test-only and check-only build.sh modes do not invoke generate-traces.sh"
         - "litmus:clickable-trace-index-generation and ./build.sh --check pass"
       events:
+        - type: completed
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            All exit criteria CLOSED (23a263dc). A single regeneration helper is now invoked by every build-producing dispatch — debug, release, install, observatorium, init — deduped when flags combine, with an executable fixture counting exactly one invocation per mode (1-1-1-1-1). Critically it does NOT fire on --check: md5sum of TRACES.md is byte-identical across a real ./build.sh --check run and the tracked-TRACES dirt count stays 70 to 70, so order 495's self-clean invariant is preserved rather than traded away. litmus:clickable-trace-index-generation 5/5 on the real runner; new dispatch-coverage litmus pins that a NEW dispatch cannot ship without regeneration.
         - type: filed
           ts: "2026-07-25T05:36:01Z"
           agent_id: "linux-opencode-metaorch-20260725"
@@ -24468,7 +24549,7 @@ plan_index:
       order: 516
       desired_release: v0.5
       title: "tillandsias-plan cannot resolve alphanumeric child orders (394a, 392a) by order — only by packet_id"
-      status: ready
+      status: done
       kind: fix
       deliverable: crates/tillandsias-plan reference resolver + unit test over a child-order fixture
       depends_on: []
@@ -24490,6 +24571,13 @@ plan_index:
         - "integer order lookup keeps working unchanged"
         - "a unit test over a child-order fixture fails before the fix and passes after"
 
+      events:
+        - type: completed
+          ts: "2026-07-29T05:30:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            All 3 exit criteria CLOSED (23a263dc). The reference resolver now matches order values as strings as well as integers, so 394a/392a resolve through status, blocked-by and blocked-closure — exercised on the real binary against the live ledger. Additive by proof: all 358 integer order tokens resolve byte-identically pre vs post, pinned by integer_order_lookup_is_unchanged. New unit test resolution_works_by_alphanumeric_child_order over a 903a/903b fixture, confirmed failing before the fix.
     - packet_id: podman-build-proxy-injection-blocks-local-image-builds
       order: 517
       desired_release: v0.5
