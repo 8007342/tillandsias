@@ -31,11 +31,60 @@ fi
 export OLLAMA_HOST=0.0.0.0:11434
 
 # Resource limits — prevent OOM on constrained hosts.
+# OLLAMA_MAX_LOADED_MODELS is NOT pinned here any more: order 392a derives it
+# from the preload policy below (1 default-model slot + RAM-derived expert
+# slots), and an operator-supplied value is respected verbatim. On a <8GB host
+# the policy still yields exactly 1, i.e. the pre-392a behaviour.
 export OLLAMA_NUM_PARALLEL=1
-export OLLAMA_MAX_LOADED_MODELS=1
 
 # Shared model cache — persisted via volume mount.
 export OLLAMA_MODELS=/home/ollama/.ollama/models/
+
+# ── Default small models (0.3-1.5B) ───────────────────────────────
+# @trace spec:inference-container
+# @trace plan/issues/inference-firstrun-small-models-impl-2026-07-04.md (order 183)
+# Operator directive: a fresh forge should have a few general-purpose 0.3-1.5B
+# models available on first run (foundation for fine-tuning + forge build-test
+# diagnostics). Pulled at container startup — NOT baked at build (keeps the image
+# small) — into the host-mounted models cache (~/.cache/tillandsias/models), so
+# only the first run downloads; subsequent starts load from the cached volume.
+#
+# All in the 0.3-1.5B envelope (the operator's "tiny-model-first" spec — llama3.2:3b
+# was 3B and is replaced by llama3.2:1b). qwen2.5-coder:1.5b serves the "diagnose
+# local build tests" use case. Idempotent (skip if cached), non-fatal (a failed
+# pull degrades gracefully + retries next launch; Squid SSL-bump can EOF big
+# manifests — see project memory project_squid_ollama_eof.md), and overridable via
+# TILLANDSIAS_DEFAULT_MODELS (space-separated ollama tags).
+DEFAULT_MODELS="${TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b}"
+
+# ── Preload policy (order 392a) ───────────────────────────────────
+# @trace spec:inference-container
+# Sourced BEFORE `ollama serve` because it exports OLLAMA_MAX_LOADED_MODELS,
+# which ollama reads once at process start. Sets PRELOAD_POLICY,
+# PRELOAD_MODELS, PRELOAD_EXPERT_SLOTS, PRELOAD_RAM_GB and prints the pinned
+# `preload: policy=... models=... expert_slots=... max_loaded=... ram_gb=...`
+# line. See images/inference/preload-policy.sh for the full rationale
+# (eager/lazy/off, and why a 4GB host gets zero expert slots).
+PRELOAD_POLICY_SH=/usr/local/bin/tillandsias-preload-policy.sh
+if [ -r "$PRELOAD_POLICY_SH" ]; then
+    # shellcheck source=preload-policy.sh
+    . "$PRELOAD_POLICY_SH"
+else
+    # Older image without the policy file: fall back to the pre-392a shape so
+    # the container still starts (never fail-closed on a policy helper).
+    echo "[inference] WARN: $PRELOAD_POLICY_SH missing — falling back to eager preload, max_loaded=1" >&2
+    PRELOAD_POLICY="eager"
+    PRELOAD_MODELS="$DEFAULT_MODELS"
+    PRELOAD_EXPERT_SLOTS=0
+    PRELOAD_RAM_GB=0
+    export OLLAMA_MAX_LOADED_MODELS=1
+    PRELOAD_LINE="preload: policy=eager models=${DEFAULT_MODELS} expert_slots=0 max_loaded=1 ram_gb=0"
+fi
+echo "[inference] $PRELOAD_LINE"
+
+# Persistent inventory of what preload actually warmed, written on the mounted
+# model volume so a cold volume becomes a warm one for every later start.
+PRELOAD_CHECKPOINT="${OLLAMA_MODELS}.preloaded"
 
 # ── Proxy reachability guard (order 268) ────────────────────────────────
 # The image bakes HTTP(S)_PROXY=http://proxy:3128 for enclave operation.
@@ -195,14 +244,17 @@ done
 
 # ── Tier-tagged tool-capable model pre-pulls ────────────────────
 # @trace spec:inference-container, spec:zen-default-with-ollama-analysis-pool
-# The DEFAULT small set (0.3-1.5B) is always pulled first-run (see the block
-# below). LARGER tier models (T2+: qwen2.5:7b … 32b) pull at runtime only if the
-# host has the headroom; pull failures stay non-fatal — Squid SSL bump tends to
+# The DEFAULT small set (0.3-1.5B) is pulled first-run under the eager preload
+# policy (see the block below). LARGER tier models (T2+: qwen2.5:7b … 32b) are
+# sized by this ladder; pull failures stay non-fatal — Squid SSL bump tends to
 # EOF on big ollama manifest pulls (see project memory project_squid_ollama_eof.md).
-# All ship tool-capable models. NOTE: on a 16GB laptop RAM_GB>=16 selects T2 and
-# background-pulls qwen2.5:7b — this conflicts with the "tiny-model-first" reference
-# envelope and should be reconciled (follow-up: gate T2+ behind an opt-in, keep the
-# small default set as the laptop baseline).
+# All ship tool-capable models. RECONCILED (order 392a): the old NOTE — "on a
+# 16GB laptop RAM_GB>=16 selects T2 and background-pulls qwen2.5:7b, which
+# conflicts with the tiny-model-first envelope" — is now fixed. The ladder still
+# CLASSIFIES the host (the tier= line below is the report), but the pulls
+# themselves are OPT-IN via TILLANDSIAS_INFERENCE_TIER_PULLS=1, so the small
+# default set is the baseline on every host and multi-GB models never evict the
+# expert slots reserved by the preload policy.
 
 # Detect runtime tier from RAM (CPU) and GPU VRAM, pick the highest.
 RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)
@@ -218,23 +270,35 @@ fi
 
 echo "[inference] tier=$TIER (RAM ${RAM_GB}GB, VRAM ${VRAM_GB}GB)"
 
-# ── Default small models (0.3-1.5B) — pulled on FIRST_RUN ─────────
+# ── Model preload (order 392a) ────────────────────────────────────
 # @trace spec:inference-container
 # @trace plan/issues/inference-firstrun-small-models-impl-2026-07-04.md (order 183)
-# Operator directive: a fresh forge should have a few general-purpose 0.3-1.5B
-# models available on first run (foundation for fine-tuning + forge build-test
-# diagnostics). Pulled at container startup — NOT baked at build (keeps the image
-# small) — into the host-mounted models cache (~/.cache/tillandsias/models), so
-# only the first run downloads; subsequent starts load from the cached volume.
 #
-# All in the 0.3-1.5B envelope (the operator's "tiny-model-first" spec — llama3.2:3b
-# was 3B and is replaced by llama3.2:1b). qwen2.5-coder:1.5b serves the "diagnose
-# local build tests" use case. Idempotent (skip if cached), non-fatal (a failed
-# pull degrades gracefully + retries next launch; Squid SSL-bump can EOF big
-# manifests — see project memory project_squid_ollama_eof.md), and overridable via
-# TILLANDSIAS_DEFAULT_MODELS (space-separated ollama tags).
-DEFAULT_MODELS="${TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b}"
-for _model in $DEFAULT_MODELS; do
+# Runs AFTER `ollama serve` is already answering /api/version, so it NEVER
+# gates a lane launch: the launcher's readiness gate waits only for the API and
+# is warn-and-continue (order 486). What preload DOES gate is the WARM state
+# the forge startup context reports — `READY (models=N, warm=<csv>)` is
+# asserted only once a model is genuinely cached, and an endpoint answering
+# with zero models reports `NOT-READY (no-models: …)` instead, which agents
+# can branch on.
+#
+# The set and the policy come from preload-policy.sh (sourced above):
+# eager pulls PRELOAD_MODELS now; lazy/off pull nothing here.
+_prev_inventory=""
+if [ -r "$PRELOAD_CHECKPOINT" ]; then
+    _prev_inventory="$(tr '\n' ' ' < "$PRELOAD_CHECKPOINT" 2>/dev/null | sed 's/  */ /g; s/^ //; s/ *$//')"
+fi
+if [ -n "$_prev_inventory" ]; then
+    echo "[inference] preload checkpoint: warm volume ($_prev_inventory)"
+else
+    echo "[inference] preload checkpoint: none (cold volume)"
+fi
+
+if [ "$PRELOAD_POLICY" != "eager" ]; then
+    echo "[inference] preload policy=$PRELOAD_POLICY — no startup pulls (models are served from the mounted cache only)"
+fi
+
+for _model in $PRELOAD_MODELS; do
     if ollama list 2>/dev/null | grep -q "$_model"; then
         echo "[inference] default model $_model ready (cached)"
     else
@@ -247,8 +311,50 @@ for _model in $DEFAULT_MODELS; do
     fi
 done
 
+# ── Warm-model inventory + checkpoint (order 392a) ────────────────
+# The authoritative warm set is what `ollama list` reports, not what preload
+# intended — a failed pull must never be recorded as warm. The inventory is
+# checkpointed onto the MOUNTED model volume so a cold volume becomes a warm
+# one for every subsequent start (and so a restart can see, before any network
+# call, what the last successful preload achieved).
+_inventory="$(ollama list 2>/dev/null | awk 'NR > 1 && $1 != "" { print $1 }' | sort -u)"
+_warm_count=0
+_warm_csv=""
+for _m in $_inventory; do
+    _warm_count=$((_warm_count + 1))
+    _warm_csv="${_warm_csv},${_m}"
+done
+_warm_csv="$(printf '%s' "$_warm_csv" | sed 's/^,//')"
+[ -n "$_warm_csv" ] || _warm_csv="-"
+
+_checkpoint_state="skipped"
+if [ "$_warm_count" -gt 0 ]; then
+    if printf '%s\n' "$_inventory" > "$PRELOAD_CHECKPOINT" 2>/dev/null; then
+        _checkpoint_state="written"
+    else
+        _checkpoint_state="unwritable"
+    fi
+fi
+
+# PINNED GRAMMAR (litmus:inference-model-preload-policy) — one line:
+#   [inference] preload-state: warm=<N> models=<csv|-> policy=<eager|lazy|off>
+#               expert_slots=<N> max_loaded=<N> checkpoint=<written|skipped|unwritable>
+echo "[inference] preload-state: warm=$_warm_count models=$_warm_csv policy=$PRELOAD_POLICY expert_slots=$PRELOAD_EXPERT_SLOTS max_loaded=$OLLAMA_MAX_LOADED_MODELS checkpoint=$_checkpoint_state"
+
+# ── Larger tier pulls — OPT-IN (order 392a) ───────────────────────
+# Reconciles the long-standing NOTE above: on a 16GB laptop the tier ladder
+# selected T2 and background-pulled qwen2.5:7b, which contradicts the
+# tiny-model-first envelope AND fills the loaded-model slots the EXPERTS family
+# (milestone 391) needs. Tier pulls are now opt-in via
+# TILLANDSIAS_INFERENCE_TIER_PULLS=1; the small default set stays the baseline
+# on every host. TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS (status-check mode)
+# and a non-eager preload policy both keep them off regardless.
 if [ -n "${TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS:-}" ]; then
     echo "[inference] status-check mode — skipping runtime pulls"
+elif [ "$PRELOAD_POLICY" != "eager" ]; then
+    echo "[inference] preload policy=$PRELOAD_POLICY — skipping runtime tier pulls"
+elif [ "${TILLANDSIAS_INFERENCE_TIER_PULLS:-0}" != "1" ]; then
+    echo "[inference] tier pulls opt-in (set TILLANDSIAS_INFERENCE_TIER_PULLS=1) — skipping runtime tier pulls"
 else
     # T2+ pull in background if tier permits.
     case "$TIER" in

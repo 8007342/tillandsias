@@ -58,6 +58,10 @@ COPY provider-device-auth.sh /usr/local/bin/provider-device-auth
 COPY provider-oauth-vault.sh /usr/local/bin/provider-oauth-vault
 # @trace spec:error-message-localization
 COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
+# @trace spec:inference-container — order 392a inference model-warm state.
+# Sourced by lib-common.sh from its own directory; kept separate so litmus can
+# exercise the state grammar with a stubbed curl outside the image.
+COPY lib-inference-state.sh /usr/local/lib/tillandsias/lib-inference-state.sh
 
 # ── Entrypoints ────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh

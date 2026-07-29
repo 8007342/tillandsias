@@ -1,0 +1,215 @@
+# @trace spec:inference-container
+# @trace spec:async-inference-launch
+#
+# Order 392a — inference-startup-cleanup/model-preload-policy.
+#
+# Order 392 made the endpoint's readiness deterministic (READY / NOT-READY,
+# never "may still be starting"). What stayed indeterminate for agents is the
+# MODEL-WARM state: an endpoint that answers /api/tags with an EMPTY model list
+# reported READY, which is useless — the agent then discovers there is nothing
+# to run only when it issues a request.
+#
+# 392a pins three things:
+#   1. an EXPLICIT, configurable preload policy (eager | lazy | off) that never
+#      gates a lane launch;
+#   2. EXPERT SLOT reservation — the EXPERTS family (milestone 391) builds
+#      ephemeral per-launch models on this same endpoint, and with
+#      OLLAMA_MAX_LOADED_MODELS=1 every expert load EVICTS the warm default.
+#      The reservation is RAM-derived and a 4GB host gets ZERO extra slots, so
+#      OOM risk on constrained hosts is unchanged;
+#   3. the EXTENDED startup-context grammar — READY additionally requires >=1
+#      cached model and carries the warm inventory, and every not-ready state
+#      carries a NAMED reason from a closed vocabulary.
+#
+# Falsifiability: both helpers (images/inference/preload-policy.sh and
+# images/default/lib-inference-state.sh) are side-effect-free when sourced and
+# runnable standalone, so every branch below is exercised with stubbed inputs —
+# no container, no network, no python. Grep-only steps are used exclusively for
+# call-site wiring and for the never-block regression guards.
+name: litmus:inference-model-preload-policy
+spec: inference-container
+phase: pre-build
+description: >
+  Pin the order-392a model preload policy (eager/lazy/off, expert-slot
+  reservation with a 4GB no-regression floor, model inventory checkpoint on the
+  mounted volume) and the extended forge startup-context model-warm grammar
+  (READY (models=N, warm=csv) / NOT-READY (<named-reason>: detail) plus the
+  inference_state= machine line), exercising every branch with stubbed inputs.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/inference/preload-policy.sh
+  - workspace contains images/inference/entrypoint.sh
+  - workspace contains images/default/lib-inference-state.sh
+  - workspace contains images/default/lib-common.sh
+  - POSIX sh, grep, sed and mktemp are available in PATH
+
+critical_path:
+  # ── Preload policy: grammar + every branch ─────────────────────────────
+  - step: "policy helper exists and documents the pinned one-line grammar"
+    command: "test -f images/inference/preload-policy.sh && grep -Fq 'preload: policy=<eager|lazy|off> models=<csv|-> expert_slots=<N> max_loaded=<N> ram_gb=<N>' images/inference/preload-policy.sh && echo 'ok: policy grammar documented'"
+    timeout_ms: 3000
+    expected_behavior: "ok: policy grammar documented"
+
+  - step: "default policy on a 32GB host emits the exact pinned line"
+    # The whole line is asserted verbatim once, so a field rename or reorder
+    # fails here rather than silently breaking downstream parsers.
+    command: "out=$(TILLANDSIAS_PRELOAD_RAM_GB=32 sh images/inference/preload-policy.sh); echo \"$out\"; [ \"$out\" = 'preload: policy=eager models=qwen2.5:0.5b expert_slots=2 max_loaded=3 ram_gb=32' ] && echo 'ok: pinned line'"
+    timeout_ms: 5000
+    expected_behavior: "ok: pinned line"
+
+  - step: "4GB host gets ZERO expert slots — OLLAMA_MAX_LOADED_MODELS stays 1 (no new OOM risk)"
+    # 392a exit criterion: "expert memory slot reservation does not increase OOM
+    # risk on 4GB hosts". Order 168 narrowed the default model set precisely
+    # because constrained hosts died ~32s in; the reservation must not undo it.
+    command: "out=$(TILLANDSIAS_PRELOAD_RAM_GB=4 sh images/inference/preload-policy.sh); echo \"$out\"; printf '%s' \"$out\" | grep -q 'expert_slots=0 max_loaded=1 ram_gb=4' && echo 'ok: 4GB host unchanged'"
+    timeout_ms: 5000
+    expected_behavior: "ok: 4GB host unchanged"
+
+  - step: "expert slot ladder: 8GB reserves 1 slot, 16GB reserves 2 (max_loaded = 1 default + slots)"
+    command: "a=$(TILLANDSIAS_PRELOAD_RAM_GB=8 sh images/inference/preload-policy.sh); b=$(TILLANDSIAS_PRELOAD_RAM_GB=16 sh images/inference/preload-policy.sh); echo \"$a\"; echo \"$b\"; printf '%s' \"$a\" | grep -q 'expert_slots=1 max_loaded=2' && printf '%s' \"$b\" | grep -q 'expert_slots=2 max_loaded=3' && echo 'ok: ladder'"
+    timeout_ms: 5000
+    expected_behavior: "ok: ladder"
+
+  - step: "lazy and off preload NOTHING at startup (models=-)"
+    command: "for p in lazy off; do out=$(TILLANDSIAS_PRELOAD_RAM_GB=32 TILLANDSIAS_INFERENCE_PRELOAD=$p sh images/inference/preload-policy.sh); echo \"$out\"; printf '%s' \"$out\" | grep -q \"policy=$p models=-\" || { echo \"FAIL: $p preloaded something\"; exit 1; }; done; echo 'ok: lazy/off preload nothing'"
+    timeout_ms: 5000
+    expected_behavior: "ok: lazy/off preload nothing"
+
+  - step: "an unrecognized policy degrades to eager (fail-soft, never fail-closed)"
+    command: "out=$(TILLANDSIAS_PRELOAD_RAM_GB=32 TILLANDSIAS_INFERENCE_PRELOAD=bogus sh images/inference/preload-policy.sh); echo \"$out\"; printf '%s' \"$out\" | grep -q 'policy=eager models=qwen2.5:0.5b' && echo 'ok: fail-soft'"
+    timeout_ms: 5000
+    expected_behavior: "ok: fail-soft"
+
+  - step: "TILLANDSIAS_DEFAULT_MODELS still drives the set, and entrypoint.sh keeps the canonical default assignment"
+    # The canonical `DEFAULT_MODELS=...` line stays in entrypoint.sh (order 168 /
+    # litmus:zen-default-with-ollama-shape pin it there); the policy helper only
+    # mirrors the same fallback chain so the two cannot disagree.
+    command: "out=$(TILLANDSIAS_PRELOAD_RAM_GB=32 TILLANDSIAS_DEFAULT_MODELS='qwen2.5:0.5b llama3.2:1b' sh images/inference/preload-policy.sh); echo \"$out\"; printf '%s' \"$out\" | grep -q 'models=qwen2.5:0.5b,llama3.2:1b' && grep -Fq 'DEFAULT_MODELS=\"${TILLANDSIAS_DEFAULT_MODELS:-qwen2.5:0.5b}\"' images/inference/entrypoint.sh && echo 'ok: override + canonical default'"
+    timeout_ms: 5000
+    expected_behavior: "ok: override + canonical default"
+
+  - step: "an operator-pinned OLLAMA_MAX_LOADED_MODELS wins and the reported reservation follows it"
+    command: "out=$(TILLANDSIAS_PRELOAD_RAM_GB=64 OLLAMA_MAX_LOADED_MODELS=1 sh images/inference/preload-policy.sh); echo \"$out\"; printf '%s' \"$out\" | grep -q 'expert_slots=0 max_loaded=1' && echo 'ok: operator pin respected'"
+    timeout_ms: 5000
+    expected_behavior: "ok: operator pin respected"
+
+  - step: "sourced mode is SILENT and exports the derived limit (entrypoint owns the single log line)"
+    command: "out=$(sh -c 'TILLANDSIAS_PRELOAD_RAM_GB=32; . ./images/inference/preload-policy.sh; printf \"%s|%s\" \"$PRELOAD_MODELS\" \"$OLLAMA_MAX_LOADED_MODELS\"'); echo \"$out\"; [ \"$out\" = 'qwen2.5:0.5b|3' ] && echo 'ok: sourced silent + exports'"
+    timeout_ms: 5000
+    expected_behavior: "ok: sourced silent + exports"
+
+  # ── Entrypoint orchestration ───────────────────────────────────────────
+  - step: "entrypoint sources the policy BEFORE `ollama serve` and emits the pinned preload-state line"
+    # ollama reads OLLAMA_MAX_LOADED_MODELS once at process start, so a policy
+    # sourced after `ollama serve` would be inert. Assert the source line
+    # precedes the serve line by byte offset, not just by presence.
+    command: "src=$(grep -n 'tillandsias-preload-policy.sh' images/inference/entrypoint.sh | head -1 | cut -d: -f1); srv=$(grep -n '^ollama serve &' images/inference/entrypoint.sh | head -1 | cut -d: -f1); echo \"policy@$src serve@$srv\"; [ -n \"$src\" ] && [ -n \"$srv\" ] && [ \"$src\" -lt \"$srv\" ] && grep -Fq '[inference] preload-state: warm=' images/inference/entrypoint.sh && echo 'ok: policy precedes serve + state line present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: policy precedes serve + state line present"
+
+  - step: "model inventory is checkpointed onto the MOUNTED volume (cold volume -> warm on later starts)"
+    # 392a exit criterion: checkpoint at $OLLAMA_MODELS/.preloaded. OLLAMA_MODELS
+    # carries a trailing slash, so ${OLLAMA_MODELS}.preloaded resolves inside the
+    # bind-mounted models dir (same nesting rule as OLLAMA_BINDIR).
+    command: "grep -Fq 'PRELOAD_CHECKPOINT=\"${OLLAMA_MODELS}.preloaded\"' images/inference/entrypoint.sh && grep -Fq 'checkpoint=$_checkpoint_state' images/inference/entrypoint.sh && grep -Fq 'preload checkpoint: warm volume' images/inference/entrypoint.sh && grep -Fq 'preload checkpoint: none (cold volume)' images/inference/entrypoint.sh && echo 'ok: inventory checkpoint on the mounted volume'"
+    timeout_ms: 3000
+    expected_behavior: "ok: inventory checkpoint on the mounted volume"
+
+  - step: "warm inventory is derived from `ollama list`, never from preload intent"
+    # A failed pull must never be recorded as warm — the checkpoint and the
+    # reported model count both come from what ollama actually serves.
+    command: "grep -Fq '_inventory=\"$(ollama list' images/inference/entrypoint.sh && grep -Fq 'default model $_model ready (cached)' images/inference/entrypoint.sh && grep -Fq 'pull FAILED' images/inference/entrypoint.sh && echo 'ok: inventory is observed, not assumed'"
+    timeout_ms: 3000
+    expected_behavior: "ok: inventory is observed, not assumed"
+
+  - step: "multi-GB tier pulls are OPT-IN so they never consume the reserved expert slots"
+    # Reconciles the long-standing entrypoint NOTE: a 16GB laptop used to select
+    # T2 and background-pull qwen2.5:7b, contradicting the tiny-model-first
+    # envelope and filling the loaded-model slots the EXPERTS family needs.
+    command: "grep -Fq 'TILLANDSIAS_INFERENCE_TIER_PULLS:-0' images/inference/entrypoint.sh && grep -Fq 'tier pulls opt-in' images/inference/entrypoint.sh && grep -Fq '[inference] tier=' images/inference/entrypoint.sh && echo 'ok: tier pulls opt-in, tier report retained'"
+    timeout_ms: 3000
+    expected_behavior: "ok: tier pulls opt-in, tier report retained"
+
+  # ── Forge startup-context model-warm grammar ───────────────────────────
+  - step: "READY requires a cached model and carries the warm inventory"
+    command: "d=$(mktemp -d); mkdir -p \"$d/bin\"; printf '{\"models\":[{\"name\":\"qwen2.5:0.5b\",\"model\":\"q\"}]}' > \"$d/tags.json\"; printf '#!/bin/sh\\ncat %s/tags.json\\n' \"$d\" > \"$d/bin/curl\"; chmod +x \"$d/bin/curl\"; out=$(PATH=\"$d/bin:$PATH\" sh images/default/lib-inference-state.sh); rm -rf \"$d\"; echo \"$out\"; printf '%s' \"$out\" | grep -q '^READY (models=1, warm=qwen2.5:0.5b)$' && printf '%s' \"$out\" | grep -q '^inference_state=ready inference_models=1 inference_warm=qwen2.5:0.5b inference_reason=-$' && echo 'ok: ready grammar'"
+    timeout_ms: 10000
+    expected_behavior: "ok: ready grammar"
+
+  - step: "an endpoint that answers with ZERO models is NOT-READY (no-models), not READY"
+    # This is the exact indeterminacy 392a removes: pre-392a this reported READY
+    # and the agent only discovered the emptiness at request time.
+    command: "d=$(mktemp -d); mkdir -p \"$d/bin\"; printf '{\"models\":[]}' > \"$d/tags.json\"; printf '#!/bin/sh\\ncat %s/tags.json\\n' \"$d\" > \"$d/bin/curl\"; chmod +x \"$d/bin/curl\"; out=$(PATH=\"$d/bin:$PATH\" sh images/default/lib-inference-state.sh); rm -rf \"$d\"; echo \"$out\" | head -1; printf '%s' \"$out\" | grep -q '^NOT-READY (no-models: ' && printf '%s' \"$out\" | grep -q 'inference_state=not-ready inference_models=0 inference_warm=- inference_reason=no-models' && echo 'ok: no-models grammar'"
+    timeout_ms: 10000
+    expected_behavior: "ok: no-models grammar"
+
+  - step: "every transport failure maps to a NAMED reason from the closed vocabulary"
+    command: "d=$(mktemp -d); mkdir -p \"$d/bin\"; for pair in 7:endpoint-unreachable 6:endpoint-unreachable 28:endpoint-timeout 22:endpoint-http-error 35:probe-error-35; do n=${pair%%:*}; want=${pair##*:}; printf '#!/bin/sh\\nexit %s\\n' \"$n\" > \"$d/bin/curl\"; chmod +x \"$d/bin/curl\"; out=$(PATH=\"$d/bin:$PATH\" sh images/default/lib-inference-state.sh); printf '%s' \"$out\" | grep -q \"inference_reason=$want\" || { rm -rf \"$d\"; echo \"FAIL: curl $n did not map to $want\"; exit 1; }; done; rm -rf \"$d\"; echo 'ok: named reason vocabulary'"
+    timeout_ms: 15000
+    expected_behavior: "ok: named reason vocabulary"
+
+  - step: "a missing curl is a NAMED reason too, and the probe always exits 0 (never fails a launch)"
+    command: "d=$(mktemp -d); mkdir -p \"$d/empty\"; out=$(PATH=\"$d/empty\" /bin/sh images/default/lib-inference-state.sh); rc=$?; rm -rf \"$d\"; echo \"$out\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q 'inference_reason=probe-tool-missing' && echo 'ok: probe-tool-missing + exit 0'"
+    timeout_ms: 10000
+    expected_behavior: "ok: probe-tool-missing + exit 0"
+
+  - step: "the startup context wires the helper and emits the machine-readable branch key"
+    # Agents MUST be able to branch without parsing prose. The token line and the
+    # closed reason vocabulary both have to reach .forge-startup-context.md.
+    command: "grep -Fq 'lib-inference-state.sh' images/default/lib-common.sh && grep -Fq 'tillandsias_inference_state \"http://inference:11434\"' images/default/lib-common.sh && grep -Fq 'inference_state=${_inference_state} inference_models=${_inference_count} inference_warm=${_inference_warm} inference_reason=${_inference_reason}' images/default/lib-common.sh && grep -Fq 'COPY lib-inference-state.sh' images/default/Containerfile && echo 'ok: startup-context wiring'"
+    timeout_ms: 3000
+    expected_behavior: "ok: startup-context wiring"
+
+  - step: "no indeterminate state survives: the context documents the closed vocabulary and disclaims a 'starting up' state"
+    command: "grep -Fq 'There is no indeterminate' images/default/lib-common.sh && for r in no-models endpoint-unreachable endpoint-timeout endpoint-http-error probe-tool-missing; do grep -Fq \"$r\" images/default/lib-common.sh || { echo \"FAIL: $r missing from the context vocabulary\"; exit 1; }; done; echo 'ok: closed vocabulary documented'"
+    timeout_ms: 3000
+    expected_behavior: "ok: closed vocabulary documented"
+
+  # ── Never-block regression guards ──────────────────────────────────────
+  - step: "preload never gates a launch: order 486's non-fatal contract and egress gate are intact"
+    # Order 486 (commit e6777c88) exported CURL_CA_BUNDLE and replaced a fixed
+    # nap with a bounded, proxy-egress-gated backoff; the launcher's readiness
+    # wait is warn-and-continue. 392a must not have turned any of that into a gate.
+    command: "grep -Fq 'export CURL_CA_BUNDLE=/etc/tillandsias/ca.crt' images/inference/entrypoint.sh && grep -Fq 'proxy egress not ready (attempt' images/inference/entrypoint.sh && grep -Fq 'continuing — local models are optional' crates/tillandsias-headless/src/main.rs && echo 'ok: non-fatal contract preserved'"
+    timeout_ms: 3000
+    expected_behavior: "ok: non-fatal contract preserved"
+
+  - step: "preload runs AFTER `ollama serve` is already answering, so the API is live before the first pull"
+    command: "srv=$(grep -n '^ollama serve &' images/inference/entrypoint.sh | head -1 | cut -d: -f1); pull=$(grep -n 'for _model in $PRELOAD_MODELS' images/inference/entrypoint.sh | head -1 | cut -d: -f1); echo \"serve@$srv preload@$pull\"; [ -n \"$srv\" ] && [ -n \"$pull\" ] && [ \"$srv\" -lt \"$pull\" ] && echo 'ok: serve precedes preload'"
+    timeout_ms: 5000
+    expected_behavior: "ok: serve precedes preload"
+
+  - step: "policy helpers are POSIX sh and free of banned interpreters"
+    # Comment lines are stripped first: both helpers legitimately name python in
+    # prose ("no python, no eval of untrusted text"), so the pin has to check
+    # ACTIVE code — the same technique litmus:inference-container-implementation
+    # -shape uses for the Fedora-vs-Debian CA paths.
+    command: "for f in images/inference/preload-policy.sh images/default/lib-inference-state.sh; do sh -n \"$f\" || { echo \"FAIL: $f is not valid POSIX sh\"; exit 1; }; if grep -vE '^[[:space:]]*#' \"$f\" | grep -qE '(^|[^a-zA-Z])python[0-9]?([^a-zA-Z]|$)'; then echo \"FAIL: $f invokes python\"; exit 1; fi; done; echo 'ok: POSIX sh, no python'"
+    timeout_ms: 8000
+    expected_behavior: "ok: POSIX sh, no python"
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+    - "@trace spec:async-inference-launch"
+  expected_log: "preload policy (eager/lazy/off) + expert-slot reservation + inventory checkpoint pinned; startup-context model-warm grammar exercised on every branch with stubbed inputs"
+  log_fields:
+    spec: "inference-container"
+    test: "inference-model-preload-policy"
+    artifact: "images/inference/preload-policy.sh + images/inference/entrypoint.sh + images/default/lib-inference-state.sh + images/default/lib-common.sh"
+
+rollback:
+  on_failure: >
+    An order-392a surface drifted. Restore: images/inference/preload-policy.sh
+    (the pinned `preload:` line, the eager/lazy/off vocabulary, and the RAM
+    ladder whose <8GB rung MUST stay expert_slots=0/max_loaded=1);
+    images/inference/entrypoint.sh (source the policy BEFORE `ollama serve`, the
+    `[inference] preload-state:` line, the ${OLLAMA_MODELS}.preloaded inventory
+    checkpoint, and opt-in tier pulls); images/default/lib-inference-state.sh
+    (READY only with >=1 cached model, the closed reason vocabulary, always
+    exit 0); and images/default/lib-common.sh + Containerfile (source the helper,
+    emit the inference_state= machine line). NEVER convert preload into a launch
+    gate — order 486's warn-and-continue contract is load-bearing for cold boots.
+  command: "sh images/inference/preload-policy.sh; sh images/default/lib-inference-state.sh; grep -n 'preload' images/inference/entrypoint.sh | head -30"

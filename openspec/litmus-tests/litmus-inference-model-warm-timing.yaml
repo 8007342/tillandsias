@@ -1,0 +1,77 @@
+# @trace spec:inference-container
+# @trace spec:async-inference-launch
+#
+# Order 392a — the LIVE half of the model preload policy.
+#
+# litmus:inference-model-preload-policy proves the policy's decision logic on
+# every branch with stubs (instant, pre-build). This one proves the two claims
+# that only a real container can settle:
+#
+#   1. COLD VOLUME -> WARM MODEL: a pristine model volume ends the launch with
+#      the default model cached AND an inventory checkpoint written to
+#      $OLLAMA_MODELS/.preloaded (392a exit criterion 3).
+#   2. WARM RESTART <= 60s: restarting on that now-warm volume reaches
+#      `preload-state: warm=N` within 60s cumulative, including the ollama serve
+#      handshake, with no re-download (392a exit criterion 4).
+#
+# NON-DESTRUCTIVE BY CONSTRUCTION: it uses a throwaway cache directory, never
+# the host's ~/.cache/tillandsias/models. The cold leg is therefore download
+# bound (the ollama release tarball plus a ~400MB model) and is budgeted
+# generously; only the WARM leg carries the 60s bound, because only the warm
+# leg is what a forge launch actually experiences on a host that has run before.
+#
+# The cold leg deliberately does NOT assert a 60s bound: doing so would make the
+# litmus a network speedometer, and a red result would say nothing about the
+# product. What it asserts is the invariant — cold ends warm, and the checkpoint
+# persists.
+name: litmus:inference-model-warm-timing
+spec: inference-container
+description: >
+  Real-podman proof that a cold model volume ends a launch warm with an
+  inventory checkpoint, and that a restart on the warm volume reaches
+  preload-state within 60s without re-downloading anything.
+severity: medium
+size: long
+phase: post-build
+backend: real
+
+preconditions:
+  - tillandsias-inference image built and available in podman
+  - podman runtime available with networking support
+  - "network: the cold leg downloads the ollama release (~1.3 GiB) + the default model (~400MB)"
+
+caveats:
+  - time_intensive: "cold leg is download-bound (minutes on slow links); warm leg is bounded at 60s"
+  - non_destructive: "uses a throwaway cache dir; the host's ~/.cache/tillandsias/models is untouched"
+
+critical_path:
+  - step: "cold volume: a pristine cache ends the launch with the default model warm and a checkpoint written"
+    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; IMG=\"${TILLANDSIAS_INFERENCE_IMAGE:-tillandsias-inference:latest}\"; CACHE=$(mktemp -d); chmod 0777 \"$CACHE\"; echo \"$CACHE\" > /tmp/litmus-392a-cache; \"$RP\" rm -f litmus-392a-cold >/dev/null 2>&1; \"$RP\" run -d --name litmus-392a-cold --userns=keep-id --security-opt=label=disable --security-opt=no-new-privileges -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v \"$CACHE:/home/ollama/.ollama/models:rw\" \"$IMG\" >/dev/null || { echo 'FAIL: cold launch did not start'; exit 1; }; ok=''; for i in $(seq 1 180); do log=$(\"$RP\" logs litmus-392a-cold 2>&1); printf '%s' \"$log\" | grep -qE 'preload-state: warm=[1-9]' && { ok=1; break; }; printf '%s' \"$log\" | grep -q 'FATAL: no ollama binary' && break; sleep 5; done; log=$(\"$RP\" logs litmus-392a-cold 2>&1); \"$RP\" rm -f litmus-392a-cold >/dev/null 2>&1; printf '%s' \"$log\" | grep -E 'preload|checkpoint' | tail -5; [ -n \"$ok\" ] || { echo 'FAIL: cold volume never reached a warm model'; exit 1; }; printf '%s' \"$log\" | grep -q 'preload checkpoint: none (cold volume)' || { echo 'FAIL: cold volume was not reported cold'; exit 1; }; test -s \"$CACHE/.preloaded\" || { echo 'FAIL: no inventory checkpoint at $OLLAMA_MODELS/.preloaded'; exit 1; }; echo \"ok: cold volume ended warm; checkpoint=$(tr '\\n' ' ' < \"$CACHE/.preloaded\")\""
+    timeout_ms: 960000
+    expected_behavior: "ok: cold volume ended warm"
+
+  - step: "warm restart reaches preload-state within 60s with no re-download and no re-install"
+    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; IMG=\"${TILLANDSIAS_INFERENCE_IMAGE:-tillandsias-inference:latest}\"; CACHE=$(cat /tmp/litmus-392a-cache 2>/dev/null); [ -n \"$CACHE\" ] && [ -d \"$CACHE\" ] || { echo 'SKIP-FAIL: cold leg did not leave a cache dir'; exit 1; }; \"$RP\" rm -f litmus-392a-warm >/dev/null 2>&1; start=$(date +%s); \"$RP\" run -d --name litmus-392a-warm --userns=keep-id --security-opt=label=disable --security-opt=no-new-privileges -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v \"$CACHE:/home/ollama/.ollama/models:rw\" \"$IMG\" >/dev/null || { echo 'FAIL: warm launch did not start'; exit 1; }; ok=''; for i in $(seq 1 60); do log=$(\"$RP\" logs litmus-392a-warm 2>&1); printf '%s' \"$log\" | grep -qE 'preload-state: warm=[1-9]' && { ok=1; break; }; sleep 1; done; elapsed=$(( $(date +%s) - start )); log=$(\"$RP\" logs litmus-392a-warm 2>&1); \"$RP\" rm -f litmus-392a-warm >/dev/null 2>&1; rm -rf \"$CACHE\" /tmp/litmus-392a-cache; printf '%s' \"$log\" | grep -E 'preload' | tail -4; echo \"warm-model time: ${elapsed}s\"; [ -n \"$ok\" ] || { echo 'FAIL: warm restart never reported preload-state'; exit 1; }; [ \"$elapsed\" -le 60 ] || { echo \"FAIL: warm-model time ${elapsed}s exceeds the 60s budget\"; exit 1; }; printf '%s' \"$log\" | grep -q 'preload checkpoint: warm volume' || { echo 'FAIL: checkpoint did not survive onto the warm volume'; exit 1; }; printf '%s' \"$log\" | grep -q 'ready (cached)' || { echo 'FAIL: warm restart did not serve from cache'; exit 1; }; printf '%s' \"$log\" | grep -q 'Installing ollama binary (first run)' && { echo 'FAIL: warm restart re-installed the binary'; exit 1; }; echo \"ok: warm restart ${elapsed}s <= 60s, cache-served, checkpoint persisted\""
+    timeout_ms: 180000
+    expected_behavior: "ok: warm restart"
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+    - "@trace spec:async-inference-launch"
+  expected_log: "cold model volume ends warm with a persisted inventory checkpoint; warm restart reaches preload-state within 60s from cache"
+  log_fields:
+    spec: "inference-container"
+    test: "inference-model-warm-timing"
+    backend: "real"
+
+rollback:
+  on_failure: >
+    Either the preload orchestration stopped warming the default model, or the
+    inventory checkpoint stopped persisting onto the mounted volume. Inspect
+    `podman logs` for the `[inference] preload:`, `preload checkpoint:` and
+    `preload-state:` lines, then images/inference/entrypoint.sh and
+    images/inference/preload-policy.sh. A warm leg over 60s usually means the
+    checkpoint/cache volume is not actually being reused (ownership: the models
+    dir must be uid 1000 under --userns=keep-id, order 313).
+  command: "sh images/inference/preload-policy.sh; grep -n 'preload' images/inference/entrypoint.sh | head -30"
