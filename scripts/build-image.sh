@@ -431,7 +431,10 @@ if [[ "$IMAGE_NAME" == "forge" || "$IMAGE_NAME" == "nanoclawv2" ]]; then
     _step "Refreshing cheatsheets and/or skills in build context..."
     rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources" "$IMAGE_DIR/skills"
     if [[ "$IMAGE_NAME" == "forge" ]]; then
-        cp -rp "$ROOT/cheatsheets" "$IMAGE_DIR/cheatsheets"
+        # Cheatsheet staging lives in ONE place so the tree litmus:
+        # cheatsheet-host-image-sync verifies is the tree the image receives
+        # (order 448). Do not inline the copy here again.
+        "$SCRIPT_DIR/stage-image-cheatsheets.sh" --stage >/dev/null
         cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
     fi
     cp -rp "$ROOT/skills" "$IMAGE_DIR/skills"

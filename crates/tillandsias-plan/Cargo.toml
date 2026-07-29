@@ -20,3 +20,9 @@ path = "src/main.rs"
 [dependencies]
 serde = { workspace = true }
 serde_yaml = { workspace = true }
+# Order 394b: the answer envelope IS a JSON contract (the ratified §4 schema),
+# and `verify-answer` must PARSE an envelope that crossed a tool boundary.
+# Hand-rolling either direction would put string escaping and JSON parsing on
+# the critical path of an evidence check. Already a workspace dependency used
+# by 15 sibling crates — no new third-party code enters the tree.
+serde_json = { workspace = true }

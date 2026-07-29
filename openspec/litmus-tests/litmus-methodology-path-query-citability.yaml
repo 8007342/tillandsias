@@ -1,0 +1,245 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:394, order:394c (rung 1, slice 3)
+# @trace plan/issues/experts-construction-research-2026-07-29.md §5, §7.1
+#
+# THE REGRESSION THIS EXISTS TO PREVENT
+#
+# The wave-1 design served methodology by stuffing methodology.yaml into an
+# Ollama Modelfile. §7.1 superseded it on two grounds — the engine decision
+# (order 478 moves off ollama-only APIs) and FIT: methodology/ is 560 KB and
+# does not go into any tiny-model context at any setting. What replaced it is
+# an L0 YAML PATH QUERY: the answer to "may a forge cycle drain two packets?"
+# is the governing block itself plus a `file:line` a reader can open — not a
+# paraphrase, and never a nearby key offered because it was the closest thing
+# found.
+#
+# The failure mode that would make this worthless is the one that looks fine:
+# a well-formed citation — real file, in-bounds range — pointing at lines that
+# do not contain the rule. So the load-bearing steps here are BEHAVIOURAL. They
+# run the engine over the ten canonical discipline questions, cut the cited
+# range out of the file with sed, and require the GOVERNING RULE TEXT to be in
+# it; then they FABRICATE citations in a real envelope — shifting the range,
+# swapping the path, emptying the citation list, renaming the key — and require
+# each one to be REFUSED. A check that cannot be made to fail is decoration.
+#
+# Five things are pinned:
+#   (a) the 394b envelope shape on the methodology corpus, `kind: methodology`;
+#   (b) EXIT (i) — ten canonical questions, each answering with the exact YAML
+#       path and a file:line that resolves, the anchor rendered in the answer;
+#   (c) EXIT (ii) — each cited span CONTAINS the governing rule text, cut from
+#       the file here rather than trusted from the envelope;
+#   (d) EXIT (iii) — an unknown path, a PREFIX of a real key, an unrouted
+#       question and an AMBIGUOUS one are all `unsupported` with zero
+#       citations, and the refusal never leaks the neighbouring block;
+#   (e) the MCP surface: methodology_path and methodology_ask beside
+#       plan_answer, envelope on every path including the degraded one.
+name: litmus:methodology-path-query-citability
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin the order-394c methodology L0 path query: the YAML path -> block +
+  file:line contract over methodology.yaml and methodology/**/*.yaml, answered
+  in the 394b cited envelope; ten canonical discipline questions whose cited
+  spans contain the governing rule text; an unknown path refused rather than
+  guessed; and — the falsifiability half — four seeded fabrications that must
+  each turn the check red.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-plan/src/methodology.rs (the L0 engine)
+  - workspace contains methodology.yaml and methodology/
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - cargo, jq and sed are available in PATH
+
+critical_path:
+  # ── (a) the envelope shape on the methodology corpus ─────────────────────
+  - step: "the methodology query emits EXACTLY the four ratified envelope keys"
+    # The `rm -f` is load-bearing, not tidiness: every later step reads these
+    # files, so a stale copy from a previous run would let them all pass while
+    # the engine emitted nothing at all.
+    command: "rm -f /tmp/.litmus-394c-env.json /tmp/.litmus-394c-q /tmp/.litmus-394c-f1 /tmp/.litmus-394c-f2 /tmp/.litmus-394c-f3 /tmp/.litmus-394c-f4 /tmp/.litmus-394c-mcp.json /tmp/.litmus-394c-uns.json; cargo build -q --release -p tillandsias-plan && ./target/release/tillandsias-plan methodology --root . forge_cycle_budget.rule > /tmp/.litmus-394c-env.json 2>/dev/null && test \"$(jq -r 'keys | join(\",\")' /tmp/.litmus-394c-env.json)\" = 'answer,citations,confidence,freshness' && echo 'ok: methodology-envelope-keys-exact'"
+    timeout_ms: 300000
+    expected_behavior: "ok: methodology-envelope-keys-exact"
+
+  - step: "the citation is kind=methodology and carries a resolvable line range"
+    # A citation without a LINE RANGE is unverifiable — file-level citations
+    # are the classic way a citation system becomes unfalsifiable.
+    command: "test \"$(jq -r '.citations[0] | keys | join(\",\")' /tmp/.litmus-394c-env.json)\" = 'authority,kind,line_end,line_start,path' && test \"$(jq -r '.citations[0].kind' /tmp/.litmus-394c-env.json)\" = 'methodology' && jq -e '.citations[0].line_start >= 1 and .citations[0].line_end >= .citations[0].line_start' /tmp/.litmus-394c-env.json >/dev/null && test \"$(jq -r '.confidence' /tmp/.litmus-394c-env.json)\" = 'exact' && echo 'ok: methodology-citation-shape'"
+    timeout_ms: 15000
+    expected_behavior: "ok: methodology-citation-shape"
+
+  - step: "freshness carries the REAL HEAD sha, not a synthesized one"
+    command: "test \"$(jq -r '.freshness.source_commit' /tmp/.litmus-394c-env.json)\" = \"$(git rev-parse HEAD)\" && test \"$(jq -r '.freshness.indexed_at' /tmp/.litmus-394c-env.json)\" != 'unknown' && echo 'ok: methodology-freshness-real'"
+    timeout_ms: 15000
+    expected_behavior: "ok: methodology-freshness-real"
+
+  - step: "the answer is the VERBATIM block, not a paraphrase of it"
+    # L0 means the corpus text IS the answer. If the first and last line of the
+    # cited range stopped appearing in the answer, something started rewriting
+    # methodology on the way out.
+    command: "f=$(jq -r '.citations[0].path' /tmp/.litmus-394c-env.json); s=$(jq -r '.citations[0].line_start' /tmp/.litmus-394c-env.json); e=$(jq -r '.citations[0].line_end' /tmp/.litmus-394c-env.json); sed -n \"${s},${e}p\" \"$f\" > /tmp/.litmus-394c-block && jq -r '.answer' /tmp/.litmus-394c-env.json | grep -qF \"$(head -1 /tmp/.litmus-394c-block)\" && jq -r '.answer' /tmp/.litmus-394c-env.json | grep -qF \"$(tail -1 /tmp/.litmus-394c-block)\" && rm -f /tmp/.litmus-394c-block && echo 'ok: answer-is-the-verbatim-block'"
+    timeout_ms: 20000
+    expected_behavior: "ok: answer-is-the-verbatim-block"
+
+  # ── (b)+(c) EXIT (i) and (ii): the ten canonical discipline questions ────
+  - step: "EXIT (i)+(ii): ten canonical questions, exact YAML path, resolvable file:line, span holds the governing rule"
+    # The whole packet in one step. For each question: it must route, answer
+    # `exact`, name the expected YAML path, cite a file that exists, RENDER the
+    # anchor in the prose an agent reads, and — the load-bearing half — the
+    # cited range cut out of the file with sed must contain the governing rule
+    # text verbatim. The expected texts are quotes, not paraphrases: if a rule
+    # is rewritten this goes red and a human re-reads it.
+    command: "printf '%s\\n' 'may a forge cycle drain two packets?|distributed_work.worker_agent_protocol.forge_cycle_budget.rule|drain AT MOST ONE plan packet per cycle' 'is Python allowed in a committed script?|methodology.runtime_language_policy.tlatoani_hard_no_python.rule|Python is not allowed for Tillandsias runtime' 'may I embed a script in base64?|methodology.runtime_language_policy.base64_script_injection_ban.rule|base64-encoded string literals' 'who may raise the scan bar?|bar_raise_governance.authority|MUST approve every time' 'what happens to a dead mechanism with a live intent?|philosophy.obsolete_mechanism_live_intent.dispositions|mechanism_dead_intent_live' 'must I file an issue I observed outside my scope?|methodology.cooperative_work_discipline.issue_filing_mandate.rule|MUST be filed as a' 'which branch does macOS checkpoint to?|multi_host_development.platform_branches|macos: osx-next' 'must I merge origin/linux-next before pushing windows-next?|multi_host_development.pull_merge_cadence.pre_push_gate.rule|resolve all conflicts LOCALLY before' 'may I close a packet as obsolete?|philosophy.obsolete_mechanism_live_intent.closure_preconditions|the mechanism is verifiably absent at' 'may I start work in a dirty workspace without cleaning it?|methodology.clean_workspace_discipline.rule|MUST start and end with a completely clean work state' > /tmp/.litmus-394c-q; n=0; while IFS='|' read -r q p t; do out=$(./target/release/tillandsias-plan methodology-ask --root . \"$q\" 2>/dev/null); test \"$(printf '%s' \"$out\" | jq -r '.confidence')\" = 'exact' || { echo \"FAIL: not exact: $q\"; exit 1; }; test \"$(printf '%s' \"$out\" | jq -r '.citations[0].authority.yaml_path')\" = \"$p\" || { echo \"FAIL: wrong yaml_path for: $q\"; exit 1; }; cf=$(printf '%s' \"$out\" | jq -r '.citations[0].path'); cs=$(printf '%s' \"$out\" | jq -r '.citations[0].line_start'); ce=$(printf '%s' \"$out\" | jq -r '.citations[0].line_end'); test -f \"$cf\" || { echo \"FAIL: unresolvable citation file $cf for: $q\"; exit 1; }; printf '%s' \"$out\" | jq -r '.answer' | grep -qF \"$cf:$cs-$ce\" || { echo \"FAIL: anchor not rendered for: $q\"; exit 1; }; sed -n \"${cs},${ce}p\" \"$cf\" | grep -qF -- \"$t\" || { echo \"FAIL: cited span lacks the governing rule text for: $q\"; exit 1; }; n=$((n+1)); done < /tmp/.litmus-394c-q; test \"$n\" = '10' || { echo \"FAIL: only $n questions checked\"; exit 1; }; echo \"ok: ten-canonical-questions-cited n=$n\""
+    timeout_ms: 180000
+    expected_behavior: "ok: ten-canonical-questions-cited"
+
+  - step: "every canonical answer PASSES the 394b verifier end to end"
+    command: "n=0; while IFS='|' read -r q p t; do ./target/release/tillandsias-plan methodology-ask --root . \"$q\" 2>/dev/null | ./target/release/tillandsias-plan verify-answer --root . | grep -q '^ok: envelope verified' || { echo \"FAIL: verifier rejected: $q\"; exit 1; }; n=$((n+1)); done < /tmp/.litmus-394c-q; test \"$n\" = '10' && echo \"ok: ten-answers-verified n=$n\""
+    timeout_ms: 180000
+    expected_behavior: "ok: ten-answers-verified"
+
+  # ── (d) EXIT (iii): refusal, never a guess ───────────────────────────────
+  - step: "EXIT (iii): an unknown YAML path is unsupported with zero citations"
+    command: "./target/release/tillandsias-plan methodology --root . 'no_such_methodology_key_at_all' > /tmp/.litmus-394c-uns.json 2>/dev/null; test \"$(jq -r '.confidence' /tmp/.litmus-394c-uns.json)\" = 'unsupported' && test \"$(jq -r '.citations | length' /tmp/.litmus-394c-uns.json)\" = '0' && jq -r '.answer' /tmp/.litmus-394c-uns.json | grep -q '^unsupported:' && ./target/release/tillandsias-plan verify-answer --root . < /tmp/.litmus-394c-uns.json | grep -q 'confidence=Unsupported' && echo 'ok: unknown-path-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: unknown-path-refused"
+
+  - step: "a PREFIX of a real key does NOT silently resolve to that key"
+    # The tempting miss: `forge_cycle` is one token short of `forge_cycle_budget`.
+    # A ranked engine would answer it. This one refuses and offers the near key
+    # as NAVIGATION, with no citation attached — the refusal must not carry the
+    # neighbouring rule's prose.
+    command: "out=$(./target/release/tillandsias-plan methodology --root . 'forge_cycle' 2>/dev/null); test \"$(printf '%s' \"$out\" | jq -r '.confidence')\" = 'unsupported' || { echo 'FAIL: a prefix resolved'; exit 1; }; test \"$(printf '%s' \"$out\" | jq -r '.citations | length')\" = '0' || { echo 'FAIL: a refusal carried citations'; exit 1; }; printf '%s' \"$out\" | jq -r '.answer' | grep -q 'drain AT MOST ONE' && { echo 'FAIL: the refusal leaked the neighbouring block as if it were an answer'; exit 1; }; printf '%s' \"$out\" | jq -r '.answer' | grep -q 'navigation only' && echo 'ok: near-miss-is-not-an-answer'"
+    timeout_ms: 60000
+    expected_behavior: "ok: near-miss-is-not-an-answer"
+
+  - step: "an unrouted question AND an ambiguous one are both refused"
+    # Ambiguity is a refusal, not a coin flip: 'is python allowed in base64'
+    # matches two canonical routes, so it gets neither.
+    command: "a=$(./target/release/tillandsias-plan methodology-ask --root . 'what is the airspeed velocity of an unladen swallow' 2>/dev/null | jq -r '.confidence'); b=$(./target/release/tillandsias-plan methodology-ask --root . 'is python allowed in base64' 2>/dev/null | jq -r '.confidence'); test \"$a\" = 'unsupported' && test \"$b\" = 'unsupported' && echo 'ok: unrouted-and-ambiguous-both-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: unrouted-and-ambiguous-both-refused"
+
+  # ── FALSIFIABILITY: each seeded fabrication must be REFUSED ──────────────
+  - step: "SEEDED FABRICATION 1: a line range shifted off the key is REFUSED"
+    # The dangerous case. Real file, in-bounds range, nothing malformed — and
+    # the span does not declare the key it is offered as evidence for.
+    command: "jq '.citations[0].line_start = 1 | .citations[0].line_end = 3' /tmp/.litmus-394c-env.json | ./target/release/tillandsias-plan verify-answer --root . > /tmp/.litmus-394c-f1 2>&1 && { echo 'FAIL: a fabricated line range was ACCEPTED'; exit 1; }; grep -q 'FABRICATED citation' /tmp/.litmus-394c-f1 && echo 'ok: fabricated-range-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: fabricated-range-refused"
+
+  - step: "SEEDED FABRICATION 2: a citation path that does not exist is REFUSED"
+    command: "jq '.citations[0].path = \"methodology/fabricated-by-the-litmus.yaml\"' /tmp/.litmus-394c-env.json | ./target/release/tillandsias-plan verify-answer --root . > /tmp/.litmus-394c-f2 2>&1 && { echo 'FAIL: a nonexistent citation path was ACCEPTED'; exit 1; }; grep -q 'does not resolve' /tmp/.litmus-394c-f2 && echo 'ok: fabricated-path-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: fabricated-path-refused"
+
+  - step: "SEEDED FABRICATION 3: a confident methodology answer with ZERO citations is REFUSED"
+    command: "jq '.citations = []' /tmp/.litmus-394c-env.json | ./target/release/tillandsias-plan verify-answer --root . > /tmp/.litmus-394c-f3 2>&1 && { echo 'FAIL: an uncited confident answer was ACCEPTED'; exit 1; }; grep -q 'MUST render as unsupported' /tmp/.litmus-394c-f3 && echo 'ok: uncited-guess-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: uncited-guess-refused"
+
+  - step: "SEEDED FABRICATION 4: citing one rule under another rule's key is REFUSED"
+    command: "jq '.citations[0].authority.key = \"tlatoani_hard_no_python:\"' /tmp/.litmus-394c-env.json | ./target/release/tillandsias-plan verify-answer --root . > /tmp/.litmus-394c-f4 2>&1 && { echo 'FAIL: a mislabelled citation was ACCEPTED'; exit 1; }; grep -qE 'FABRICATED citation|decorative citation' /tmp/.litmus-394c-f4 && echo 'ok: mislabelled-citation-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: mislabelled-citation-refused"
+
+  - step: "the span check demands the DECLARATION token, not the bare word"
+    # `rule` occurs in methodology prose constantly, so `span contains rule`
+    # would be satisfied by almost any ten lines of the corpus and the check
+    # would be decoration. The citation carries `rule:` — the YAML declaration
+    # — which only appears where the key is actually declared. Pinned at the
+    # source so it cannot be softened back to the bare key.
+    command: "grep -q 'authority.insert(\"key\".to_string(), hit.decl.clone());' crates/tillandsias-plan/src/methodology.rs && test \"$(jq -r '.citations[0].authority.key' /tmp/.litmus-394c-env.json)\" = 'rule:' && echo 'ok: declaration-token-is-the-hook'"
+    timeout_ms: 15000
+    expected_behavior: "ok: declaration-token-is-the-hook"
+
+  # ── the ratified constraints of the slice ────────────────────────────────
+  - step: "NO NEW CRATE, NO NEW DEPENDENCY, and no interpreter can be reached from this path"
+    # Both constraints are explicit in the ratified §5 slice text. The
+    # dependency count is asserted, not inspected: three workspace deps, the
+    # same three 394b left behind.
+    #
+    # The no-python half is asserted STRUCTURALLY rather than by grepping for
+    # the word: this module's own canonical question is literally "is Python
+    # allowed in a committed script?", so a word-grep here is guaranteed to
+    # fire on the honest text. The load-bearing claim is stronger anyway — the
+    # engine spawns NO subprocess at all, so no interpreter of any language is
+    # reachable from it, and the MCP wrapper's methodology path executes only
+    # the compiled binary.
+    command: "test ! -d crates/tillandsias-methodology || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -c 'workspace = true' crates/tillandsias-plan/Cargo.toml)\" = '3' || { echo 'FAIL: the dependency set changed'; exit 1; }; test \"$(grep -cE 'std::process::Command|std::process::' crates/tillandsias-plan/src/methodology.rs)\" = '0' || { echo 'FAIL: the L0 engine spawns a subprocess'; exit 1; }; sed -n '/^methodology_envelope() {/,/^}/p' images/default/config-overlay/mcp/forge-plan.sh | grep -q 'out=\"$(\"$PLAN_BIN\"' || { echo 'FAIL: the wrapper does not execute the compiled binary'; exit 1; }; echo 'ok: no-new-crate-no-new-dependency'"
+    timeout_ms: 15000
+    expected_behavior: "ok: no-new-crate-no-new-dependency"
+
+  - step: "the corpus really is methodology.yaml PLUS the whole methodology tree"
+    # A regression that silently dropped methodology/** would leave every
+    # discipline question answerable only from the 290-line root file, and
+    # nothing else in this litmus would notice.
+    command: "idx=$(./target/release/tillandsias-plan methodology-index --root . 2>/dev/null); printf '%s' \"$idx\" | grep -q '^methodology.yaml:' || { echo 'FAIL: root file missing from the index'; exit 1; }; printf '%s' \"$idx\" | grep -q '^methodology/distributed-work.yaml:' || { echo 'FAIL: methodology/ missing from the index'; exit 1; }; printf '%s' \"$idx\" | grep -q '^methodology/bootstrap/router.yaml:' || { echo 'FAIL: the walk is not recursive'; exit 1; }; n=$(printf '%s' \"$idx\" | wc -l); test \"$n\" -gt 3000 && echo \"ok: corpus-is-whole n=$n\""
+    timeout_ms: 60000
+    expected_behavior: "ok: corpus-is-whole"
+
+  # ── (e) the MCP surface ──────────────────────────────────────────────────
+  - step: "forge-plan offers methodology_path and methodology_ask beside plan_answer"
+    command: "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' | bash images/default/config-overlay/mcp/forge-plan.sh | jq -e '.result.tools | map(.name) | index(\"methodology_path\") != null and (index(\"methodology_ask\") != null) and (index(\"plan_answer\") != null)' >/dev/null && echo 'ok: methodology-tools-exposed'"
+    timeout_ms: 30000
+    expected_behavior: "ok: methodology-tools-exposed"
+
+  - step: "BEHAVIOURAL: methodology_ask over MCP returns a VERIFIED envelope end to end"
+    # The whole path an agent actually takes: JSON-RPC in, envelope out, and
+    # the envelope re-verified against the checkout.
+    command: "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"methodology_ask\",\"arguments\":{\"question\":\"may a forge cycle drain two packets?\"}}}' | TILLANDSIAS_PLAN_BIN=\"$PWD/target/release/tillandsias-plan\" TILLANDSIAS_METHODOLOGY_ROOT=\"$PWD\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > /tmp/.litmus-394c-mcp.json && test \"$(jq -r '.confidence' /tmp/.litmus-394c-mcp.json)\" = 'exact' && test \"$(jq -r '.citations[0].authority.yaml_path' /tmp/.litmus-394c-mcp.json)\" = 'distributed_work.worker_agent_protocol.forge_cycle_budget.rule' && ./target/release/tillandsias-plan verify-answer --root . < /tmp/.litmus-394c-mcp.json | grep -q '^ok: envelope verified' && echo 'ok: mcp-methodology-envelope-verified'"
+    timeout_ms: 120000
+    expected_behavior: "ok: mcp-methodology-envelope-verified"
+
+  - step: "BEHAVIOURAL: methodology_path over MCP refuses an unknown path with an ENVELOPE"
+    command: "out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"methodology_path\",\"arguments\":{\"path\":\"no_such_methodology_key_at_all\"}}}' | TILLANDSIAS_PLAN_BIN=\"$PWD/target/release/tillandsias-plan\" TILLANDSIAS_METHODOLOGY_ROOT=\"$PWD\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); printf '%s' \"$out\" | jq -e '.confidence == \"unsupported\" and (.citations | length) == 0' >/dev/null && echo 'ok: mcp-unknown-path-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: mcp-unknown-path-refused"
+
+  - step: "BEHAVIOURAL: with the binary absent, the methodology tools STILL answer with an envelope"
+    # The order-456 dead-on-arrival lesson applied to a JSON tool: the degraded
+    # path must stay parseable and must carry the truthful experts state, so an
+    # agent can tell 'retry shortly' from 'never, this session'.
+    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"methodology_ask\",\"arguments\":{\"question\":\"is Python allowed in a committed script?\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -e '.confidence == \"unsupported\" and (.citations | length) == 0' >/dev/null && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'building(' && echo 'ok: degraded-methodology-path-is-an-envelope'"
+    timeout_ms: 60000
+    expected_behavior: "ok: degraded-methodology-path-is-an-envelope"
+
+  - step: "the crate's own methodology unit pins are GREEN"
+    # Named, not counted: a bare 'N passed' assertion breaks the day someone
+    # adds test N+1, and a bare '0 failed' passes on an empty run. The named
+    # pin is the corpus-wide index self-check — the substrate every methodology
+    # citation's resolvability rests on.
+    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && exit 1; n=$(printf '%s' \"$out\" | grep -c '^test methodology::tests::.* ok$'); test \"$n\" -ge 10 || exit 1; printf '%s' \"$out\" | grep -q 'every_indexed_entry_starts_at_its_own_key_line_and_ends_in_bounds ... ok' && printf '%s' \"$out\" | grep -q 'all_ten_canonical_questions_answer_with_an_exact_path_and_a_resolvable_file_line ... ok' && echo \"ok: methodology-unit-pins-green n=$n\""
+    timeout_ms: 300000
+    expected_behavior: "ok: methodology-unit-pins-green"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:394"
+    - "@trace order:394c"
+  expected_log: "Methodology L0 path query pinned: ten canonical questions cited with resolvable file:line, governing rule text present in every span, unknown path refused, fabrication refused, MCP tools exposed"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "methodology-path-query-citability"
+    engine_artifact: "crates/tillandsias-plan/src/methodology.rs"
+    mcp_artifact: "images/default/config-overlay/mcp/forge-plan.sh"
+    corpus: "methodology.yaml + methodology/**/*.yaml"
+    research: "plan/issues/experts-construction-research-2026-07-29.md"
+
+rollback:
+  on_failure: >
+    The methodology L0 path query drifted. If the TEN CANONICAL QUESTIONS step
+    failed, either a governing rule moved (re-read it and update the expected
+    quote in the same commit) or the span scanner mis-attributed a range — in
+    which case every methodology citation is pointing at text that does not
+    support it, which is worse than having no methodology expert at all. If a
+    SEEDED FABRICATION step failed, the verifier ACCEPTED a fabricated
+    citation and the falsifiability of the whole citation contract is gone. If
+    the UNKNOWN PATH or PREFIX step failed, the engine has started guessing:
+    an agent asking about a rule that does not exist is now being answered
+    about a rule that does, which is the exact failure the ratified §4 envelope
+    exists to make impossible. If an MCP step failed, the tools are dead on
+    arrival in the forge the way order 456 was.
+  command: "./target/release/tillandsias-plan methodology --root . forge_cycle_budget.rule | tee /tmp/.litmus-394c-debug.json | jq . && ./target/release/tillandsias-plan verify-answer --root . < /tmp/.litmus-394c-debug.json && ./target/release/tillandsias-plan methodology-index --root . | head -40"

@@ -179,6 +179,7 @@ specs:
 - spec_id: clickable-trace-index
   status: active
   litmus_tests:
+  - litmus:build-trace-index-dispatch-coverage
   - litmus:clickable-trace-index-generation
   - litmus:clickable-trace-index-observatorium-skeleton
   coverage_ratio: 67
@@ -324,6 +325,10 @@ specs:
   - litmus:mcp-discoverability-shape
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
+  - litmus:forge-experts-ephemerality-shape
+  - litmus:plan-answer-envelope-citability
+  - litmus:methodology-path-query-citability
+  - litmus:expert-groundtruth-harness
   coverage_ratio: 80
   last_verified: '2026-07-29'
 - spec_id: forge-forward-compat
@@ -672,8 +677,9 @@ specs:
   - litmus:podman-idiomatic-launch-routing
   - litmus:headless-init-status-check-source-built
   - litmus:container-start-health
+  - litmus:forge-secret-capability-contract
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-07-28'
 - spec_id: project-bootstrap-readme
   status: active
   litmus_tests:
@@ -963,8 +969,9 @@ specs:
   - litmus:podman-secrets-integration-shape
   - litmus:opencode-vault-auth-content
   - litmus:git-mirror-vault-agent-auto-auth
+  - litmus:forge-secret-capability-contract
   coverage_ratio: 75
-  last_verified: '2026-07-23'
+  last_verified: '2026-07-28'
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
@@ -1000,8 +1007,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
+  - litmus:forge-experts-ephemerality-shape
+  - litmus:forge-experts-teardown-ephemeral
   coverage_ratio: 100
-  last_verified: '2026-05-15'
+  last_verified: '2026-07-28'
 - spec_id: reverse-proxy-internal
   status: active
   litmus_tests:

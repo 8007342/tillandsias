@@ -397,6 +397,74 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Shared build helpers
+# ---------------------------------------------------------------------------
+# These live ABOVE the standalone dispatches below on purpose: a function
+# definition only takes effect once the interpreter reaches it, so a helper
+# defined after a dispatch that calls it is plain "command not found" at run
+# time. That is exactly how `./build.sh --observatorium` used to die
+# (_require_host_build_tools was defined ~45 lines below its only caller).
+
+_require_host_build_tools() {
+    local missing=()
+    local tool
+    for tool in cargo rustc rustfmt clippy-driver gcc pkg-config; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            missing+=("$tool")
+        fi
+    done
+    if [[ "$FLAG_INSTALL" == true ]] && ! command -v file >/dev/null 2>&1; then
+        missing+=(file)
+    fi
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+        _error "Missing host build tools: ${missing[*]}"
+        _error "Install the Fedora build dependencies, then rerun this command."
+        exit 1
+    fi
+
+    if [[ "$FLAG_INSTALL" == true ]]; then
+        if ! command -v rustup >/dev/null 2>&1; then
+            _error "Portable installs require a rustup-managed toolchain with the musl target."
+            _error "Install rustup, initialize it, then add x86_64-unknown-linux-musl."
+            exit 1
+        fi
+        if ! rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl'; then
+            _error "Missing Rust target: x86_64-unknown-linux-musl"
+            _error "Run: rustup target add x86_64-unknown-linux-musl"
+            exit 1
+        fi
+    fi
+}
+
+# Clickable trace index regeneration. openspec/specs/clickable-trace-index/
+# spec.md ("Build integration") requires build.sh to invoke generate-traces.sh
+# on every build that is not a test-only or check-only invocation. Every
+# build-producing dispatch below calls this helper; the latch makes combined
+# flags (e.g. --clean --release --install) regenerate exactly once, and the
+# test/check dispatches never call it at all.
+#
+# Ordering rule (order 495, litmus:local-ci-self-clean-evidence): the tracked
+# trace indexes are deterministic, so regeneration is a no-op whenever the
+# committed indexes are current. It must therefore run BEFORE any CI gate or
+# post-build forge phase — never between a gate that passed clean and the
+# forge's dirty-start guard, which would refuse the cycle.
+#
+# TILLANDSIAS_SKIP_TRACE_INDEX=1 suppresses regeneration for callers that must
+# not mutate the tracked checkout; build.sh sets it for the post-build and
+# runtime litmus phases, which can launch a real forge.
+_TRACE_INDEXES_REGENERATED=false
+_regenerate_trace_indexes() {
+    [[ "$_TRACE_INDEXES_REGENERATED" == false ]] || return 0
+    _TRACE_INDEXES_REGENERATED=true
+    if [[ "${TILLANDSIAS_SKIP_TRACE_INDEX:-0}" == "1" ]]; then
+        _info "Skipping trace index regeneration (TILLANDSIAS_SKIP_TRACE_INDEX=1)"
+        return 0
+    fi
+    _step "Regenerating clickable trace indexes..."
+    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
 # Standalone operations
 # ---------------------------------------------------------------------------
 
@@ -405,6 +473,7 @@ if [[ "$FLAG_INIT" == true ]]; then
     # (it builds every container image). Fail fast with a clear message
     # here rather than a possibly-confusing downstream Rust error.
     require_podman || exit 1
+    _regenerate_trace_indexes
     _step "Running tillandsias --init (builds all images with versioned tags)..."
     # Runs on the host where podman works.
     "$SCRIPT_DIR/target/debug/tillandsias" --init 2>&1
@@ -415,6 +484,7 @@ if [[ "$FLAG_INIT" == true ]]; then
 fi
 
 if [[ "${FLAG_OBSERVATORIUM:-false}" == true ]]; then
+    _regenerate_trace_indexes
     _step "Building workspace (debug)..."
     _require_host_build_tools
     (cd "$SCRIPT_DIR" && cargo build --workspace)
@@ -463,37 +533,6 @@ fi
 # Host build execution
 # ---------------------------------------------------------------------------
 
-_require_host_build_tools() {
-    local missing=()
-    local tool
-    for tool in cargo rustc rustfmt clippy-driver gcc pkg-config; do
-        if ! command -v "$tool" >/dev/null 2>&1; then
-            missing+=("$tool")
-        fi
-    done
-    if [[ "$FLAG_INSTALL" == true ]] && ! command -v file >/dev/null 2>&1; then
-        missing+=(file)
-    fi
-    if [[ "${#missing[@]}" -gt 0 ]]; then
-        _error "Missing host build tools: ${missing[*]}"
-        _error "Install the Fedora build dependencies, then rerun this command."
-        exit 1
-    fi
-
-    if [[ "$FLAG_INSTALL" == true ]]; then
-        if ! command -v rustup >/dev/null 2>&1; then
-            _error "Portable installs require a rustup-managed toolchain with the musl target."
-            _error "Install rustup, initialize it, then add x86_64-unknown-linux-musl."
-            exit 1
-        fi
-        if ! rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl'; then
-            _error "Missing Rust target: x86_64-unknown-linux-musl"
-            _error "Run: rustup target add x86_64-unknown-linux-musl"
-            exit 1
-        fi
-    fi
-}
-
 _run() {
     _require_host_build_tools
     (cd "$SCRIPT_DIR" && "$@")
@@ -512,7 +551,12 @@ _run_litmus_phase() {
         [[ "$arg" == "--strict-all" ]] || phase_args+=("$arg")
     done
 
-    bash "$SCRIPT_DIR/scripts/run-litmus-test.sh" \
+    # Order 495 (litmus:local-ci-self-clean-evidence): these phases run after
+    # the pre-build gate and can launch a real forge whose dirty-start guard
+    # inspects the tracked checkout. A nested build.sh must not regenerate the
+    # tracked trace indexes inside that window, so suppress it for the phase.
+    TILLANDSIAS_SKIP_TRACE_INDEX=1 \
+        bash "$SCRIPT_DIR/scripts/run-litmus-test.sh" \
         --phase "$phase" \
         --size "$size" \
         --compact \
@@ -540,7 +584,7 @@ _prepare_ci_full_install_inputs() {
     [[ "$FLAG_INSTALL" == true ]] || return 0
 
     _step "Preparing trace indexes and staged guest binaries for full install CI..."
-    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    _regenerate_trace_indexes
 
     if [[ ! -x "$SCRIPT_DIR/scripts/build-guest-binaries.sh" ]]; then
         _error "Missing executable guest binary builder: scripts/build-guest-binaries.sh"
@@ -549,6 +593,17 @@ _prepare_ci_full_install_inputs() {
 
     "$SCRIPT_DIR/scripts/build-guest-binaries.sh"
 }
+
+# The install dispatch owns the only path with a post-build forge phase, and its
+# CI gate runs below — ahead of the install block itself. Regenerate here so the
+# order 495 rule holds for every install variant (--install, --ci --install,
+# --ci-full --install): trace indexes are refreshed BEFORE the gate, never
+# between the gate and the forge dirty-start guard. The call inside the install
+# block is latched to a no-op by this one. The release dispatch owns its own
+# gate and regenerates at the top of its own block.
+if [[ "$FLAG_INSTALL" == true ]]; then
+    _regenerate_trace_indexes
+fi
 
 # CI validation
 if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
@@ -605,9 +660,7 @@ fi
 
 if [[ "$FLAG_INSTALL" == true ]]; then
     _step "Building portable launcher (musl-static) with tray support for install..."
-    if [[ "$FLAG_CI_FULL" == false ]]; then
-        "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
-    fi
+    _regenerate_trace_indexes
 
     # Build only the Linux launcher here. macOS and Windows tray binaries share
     # the `tillandsias-tray` bin name and have platform-specific release paths.
@@ -743,6 +796,7 @@ fi
 
 # Release build
 if [[ "$FLAG_RELEASE" == true ]]; then
+    _regenerate_trace_indexes
     if ! _run_local_ci_gate --fast "${CI_ARG_LIST[@]}"; then
         _error "CI/CD validation failed — fix issues before releasing"
         exit 1
@@ -770,6 +824,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 
 # Default: debug build (only if no other build or CI action was requested)
 elif [[ "$FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalse" ]]; then
+    _regenerate_trace_indexes
     _step "Building workspace (debug)..."
     _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Debug build complete"

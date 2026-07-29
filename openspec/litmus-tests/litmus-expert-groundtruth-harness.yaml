@@ -1,0 +1,285 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:394, order:394d (rung 1, slice 4)
+# @trace order:456 (exit criterion 3 — correct packets for the active release)
+# @trace plan/issues/experts-construction-decision-2026-07-17.md (the residual:
+#        "per-tier measurements + ground-truth harness")
+#
+# THE REGRESSION THIS EXISTS TO PREVENT
+#
+# 394b and 394c each proved their own SHAPE: the envelope has the right keys,
+# the citations resolve, a fabricated citation is refused. None of that proves
+# the experts are RIGHT. An engine can emit a perfectly-shaped, perfectly
+# verifiable envelope that answers the wrong question — and the shape litmuses
+# would stay green while agents acted on wrong plan state and wrong methodology.
+#
+# So this test grades the experts against a COMMITTED GROUND TRUTH:
+# openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml, a query set
+# of real questions with the exact answers they must produce. `span_contains`
+# cuts the cited line range out of the corpus AT GRADING TIME and requires the
+# governing text to be inside it, so the failure mode that looks fine — real
+# file, in-bounds range, wrong lines — is what goes red.
+#
+# A grading gate that cannot fail is worse than none: it converts "unmeasured"
+# into "measured and fine". So half of the steps below EXIST TO MAKE IT FAIL —
+# five seeded wrong expected answers, an empty query set, a misspelled
+# expectation key, a duplicated case id, and the order-456 dead-on-arrival
+# server — and each one must turn a step red.
+#
+# The four exit criteria of order 394d map to steps as:
+#   (i)   under 60s in the forge      -> HARNESS BUDGET
+#   (ii)  GREEN at HEAD               -> GREEN AT HEAD
+#   (iii) a wrong expected answer     -> the five SEEDED WRONG ANSWER steps
+#         turns it RED                   plus the three ANTI-VACUUM steps
+#   (iv)  reusable verbatim by 457/400 -> REUSE steps (registry, plug-in point,
+#                                        corpus-free grader, multi-set run)
+# and order 456's remaining criterion is the MCP steps: the SERVER's envelope,
+# not the library's, graded against the same committed ground truth.
+name: litmus:expert-groundtruth-harness
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Grade the rung-1 experts (plan ledger + methodology L0) against the committed
+  ground-truth query set, prove the grading gate runs inside the 60s in-forge
+  budget, prove it goes RED on a wrong expected answer and on a wrong engine,
+  prove it cannot be vacuously green, prove the query-set format is corpus-
+  agnostic so orders 457 and 400 reuse it verbatim, and prove the forge-plan
+  MCP SERVER returns the correct packets for the active release (order 456).
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-plan/src/groundtruth.rs (the grader)
+  - workspace contains openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml (the ground truth)
+  - workspace contains plan/index.yaml, methodology.yaml and methodology/
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - cargo (or an installed tillandsias-plan), jq and sed are available in PATH
+
+critical_path:
+  # ── the binary under grade ───────────────────────────────────────────────
+  - step: "resolve the harness binary — the CHECKOUT wins over any installed copy"
+    # Deliberate precedence. In a forge, $HOME/.local/bin/tillandsias-plan is
+    # installed at launch by lib-common.sh::ensure_forge_experts (order 394a)
+    # and can be OLDER than the mounted checkout. A grading gate that graded a
+    # stale binary would certify code that is not the code under review, so the
+    # checkout build is tried first and the installed copy is only the fallback
+    # for a container with no cargo.
+    #
+    # The `rm -f` is load-bearing, not tidiness: every later step reads these
+    # files, so a stale copy from a previous run would let them all pass while
+    # nothing at all executed.
+    command: "rm -f /tmp/.litmus-394d-bin /tmp/.litmus-394d-*.yaml /tmp/.litmus-394d-*.json /tmp/.litmus-394d-*.txt; b=''; if cargo build -q --release -p tillandsias-plan 2>/dev/null; then b=\"$PWD/target/release/tillandsias-plan\"; else for c in \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do if [ -x \"$c\" ]; then b=\"$c\"; break; fi; done; fi; test -n \"$b\" && test -x \"$b\" || { echo 'FAIL: no tillandsias-plan binary, and no cargo to build one from the checkout'; exit 1; }; printf '%s' \"$b\" > /tmp/.litmus-394d-bin; echo 'ok: harness-binary-resolved'"
+    timeout_ms: 300000
+    expected_behavior: "ok: harness-binary-resolved"
+
+  - step: "the ground truth is COMMITTED DATA in the repo, not generated at run time"
+    # A ground truth the harness writes for itself grades nothing. It must be a
+    # file a human reviews in a diff — and it must not be sitting somewhere
+    # .gitignore swallows, which is the quiet way a fixture stops being
+    # committed while every step still passes locally.
+    command: "Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; test -f \"$Q\" || { echo 'FAIL: the committed ground truth is missing'; exit 1; }; git check-ignore -q \"$Q\" && { echo 'FAIL: the ground truth is gitignored — it is not committed data'; exit 1; }; grep -q '^version: 1$' \"$Q\" || { echo 'FAIL: the query set does not declare the pinned schema version'; exit 1; }; n=$(grep -c '^  - id: ' \"$Q\"); test \"$n\" -ge 17 || { echo \"FAIL: only $n cases committed\"; exit 1; }; echo \"ok: ground-truth-is-committed-data n=$n\""
+    timeout_ms: 15000
+    expected_behavior: "ok: ground-truth-is-committed-data"
+
+  # ── EXIT (ii): GREEN AT HEAD ─────────────────────────────────────────────
+  - step: "EXIT (ii): the committed ground truth is GREEN at HEAD"
+    # The whole packet in one line. `fail=0` alone is not enough — a query set
+    # that lost its cases would also report fail=0 — so the case count is
+    # asserted with it. A shrinking bar is a lowered bar.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); \"$PB\" grade --root . > /tmp/.litmus-394d-green.txt 2>&1 || { echo 'FAIL: the ground truth is RED at HEAD'; cat /tmp/.litmus-394d-green.txt; exit 1; }; r=$(grep '^groundtruth-result:' /tmp/.litmus-394d-green.txt); printf '%s' \"$r\" | grep -q 'fail=0' || { echo \"FAIL: $r\"; exit 1; }; n=$(printf '%s' \"$r\" | sed -n 's/.*total=\\([0-9]*\\).*/\\1/p'); test \"$n\" -ge 17 || { echo \"FAIL: the query set shrank to $n cases — a shrinking bar is a lowered bar\"; exit 1; }; grep -q '^PASS  plan-active-release-experts-milestone' /tmp/.litmus-394d-green.txt || { echo 'FAIL: the active-release case did not run'; exit 1; }; grep -q '^PASS  methodology-forge-cycle-budget' /tmp/.litmus-394d-green.txt || { echo 'FAIL: the methodology corpus was not graded'; exit 1; }; echo \"ok: groundtruth-green-at-head n=$n\""
+    timeout_ms: 120000
+    expected_behavior: "ok: groundtruth-green-at-head"
+
+  # ── EXIT (i): THE 60s IN-FORGE BUDGET ────────────────────────────────────
+  - step: "EXIT (i): the harness runs inside the forge budget — under 60s, measured twice"
+    # Measured two independent ways on purpose: the WALL CLOCK around the
+    # invocation (which no code inside the harness can lie about) and the
+    # harness's own elapsed_ms (which is what an operator will read in a log).
+    # If the harness ever stopped reporting its own time, this goes red rather
+    # than silently losing the measurement.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); s=$(date +%s); \"$PB\" grade --root . > /tmp/.litmus-394d-timed.txt 2>&1; rc=$?; e=$(date +%s); w=$((e-s)); test \"$rc\" = '0' || { echo 'FAIL: the timed run was RED'; exit 1; }; ms=$(sed -n 's/.*elapsed_ms=\\([0-9]*\\).*/\\1/p' /tmp/.litmus-394d-timed.txt); test -n \"$ms\" || { echo 'FAIL: the harness does not report its own elapsed time'; exit 1; }; test \"$w\" -lt 60 || { echo \"FAIL: wall clock ${w}s exceeds the 60s in-forge budget\"; exit 1; }; test \"$ms\" -lt 60000 || { echo \"FAIL: harness self-reported ${ms}ms, budget is 60000ms\"; exit 1; }; echo \"ok: harness-under-60s wall=${w}s self=${ms}ms\""
+    timeout_ms: 120000
+    expected_behavior: "ok: harness-under-60s"
+
+  # ── EXIT (iii): SEEDED WRONG EXPECTED ANSWERS MUST TURN IT RED ───────────
+  # Every seed is applied to a COPY under /tmp. The committed ground truth is
+  # never mutated by its own test.
+  - step: "SEEDED WRONG ANSWER 1: a methodology rule quoted wrongly is RED"
+    # The load-bearing one. The citation still resolves and the range is still
+    # in bounds — only the expected TEXT is wrong, so this can only be caught
+    # by re-reading the span from the corpus.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/drain AT MOST ONE plan packet per cycle/drain AS MANY plan packets as you like/' \"$Q\" > /tmp/.litmus-394d-w1.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w1.yaml > /tmp/.litmus-394d-w1.txt 2>&1 && { echo 'FAIL: a WRONG expected methodology answer was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-forge-cycle-budget' /tmp/.litmus-394d-w1.txt && grep -q 'cited span does not contain' /tmp/.litmus-394d-w1.txt && echo 'ok: wrong-methodology-quote-is-red'"
+    timeout_ms: 120000
+    expected_behavior: "ok: wrong-methodology-quote-is-red"
+
+  - step: "SEEDED WRONG ANSWER 2: a wrong PACKET STATUS is RED"
+    # The plan half. 394a is `done`; claiming it is `ready` must not grade
+    # green, or the expert could report finished work as available and agents
+    # would redo it.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/^          status: done$/          status: ready/' \"$Q\" > /tmp/.litmus-394d-w2.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w2.yaml > /tmp/.litmus-394d-w2.txt 2>&1 && { echo 'FAIL: a WRONG expected packet status was graded GREEN'; exit 1; }; grep -q '^FAIL  plan-status-of-394a' /tmp/.litmus-394d-w2.txt && grep -q 'authority.status' /tmp/.litmus-394d-w2.txt && echo 'ok: wrong-packet-status-is-red'"
+    timeout_ms: 120000
+    expected_behavior: "ok: wrong-packet-status-is-red"
+
+  - step: "SEEDED WRONG ANSWER 3: a wrong PACKET IDENTITY in the active-release set is RED"
+    # Order 456's own case. If a packet that is not in the milestone can be
+    # asserted into the expected set and still grade green, "the server returns
+    # the correct packets" means nothing.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's|packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness|packet_id: plan-methodology-experts-rung1/NOT-A-REAL-CHILD|' \"$Q\" > /tmp/.litmus-394d-w3.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w3.yaml > /tmp/.litmus-394d-w3.txt 2>&1 && { echo 'FAIL: a FABRICATED packet id was graded GREEN'; exit 1; }; grep -q '^FAIL  plan-active-release-experts-milestone' /tmp/.litmus-394d-w3.txt && echo 'ok: wrong-packet-identity-is-red'"
+    timeout_ms: 120000
+    expected_behavior: "ok: wrong-packet-identity-is-red"
+
+  - step: "SEEDED WRONG ANSWER 4: expecting a REFUSAL to become an answer is RED"
+    # Refusals are graded, not tolerated. `forge_cycle` is one token short of
+    # `forge_cycle_budget`; the expert must refuse it. Flipping that case's
+    # expected confidence to `exact` — i.e. asserting the engine SHOULD guess —
+    # must go red, which is what proves the refusal is really being checked and
+    # not merely unasserted.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed '/^  - id: methodology-near-miss-does-not-leak-the-answer$/,/^  - id: /{s/^      confidence: unsupported$/      confidence: exact/}' \"$Q\" > /tmp/.litmus-394d-w4.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w4.yaml > /tmp/.litmus-394d-w4.txt 2>&1 && { echo 'FAIL: expecting a guess where the engine refuses was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-near-miss-does-not-leak-the-answer' /tmp/.litmus-394d-w4.txt && grep -q 'confidence: expected Exact, got Unsupported' /tmp/.litmus-394d-w4.txt && echo 'ok: wrong-refusal-expectation-is-red'"
+    timeout_ms: 120000
+    expected_behavior: "ok: wrong-refusal-expectation-is-red"
+
+  - step: "SEEDED WRONG ANSWER 5: a rule attributed to the WRONG FILE is RED"
+    # Provenance, not just content: the no-python rule lives in methodology.yaml.
+    # Attributing it to methodology/distributed-work.yaml must not grade green,
+    # or a citation could name any file in the corpus.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; awk 'BEGIN{n=0} /^  - id: methodology-no-python$/{n=1} { if (n==1 && $0==\"        - path: methodology.yaml\") { print \"        - path: methodology/distributed-work.yaml\"; n=2; next } print }' \"$Q\" > /tmp/.litmus-394d-w5.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w5.yaml > /tmp/.litmus-394d-w5.txt 2>&1 && { echo 'FAIL: a rule attributed to the WRONG FILE was graded GREEN'; exit 1; }; grep -q '^FAIL  methodology-no-python' /tmp/.litmus-394d-w5.txt && grep -q 'path methodology.yaml != methodology/distributed-work.yaml' /tmp/.litmus-394d-w5.txt && echo 'ok: wrong-source-file-is-red'"
+    timeout_ms: 120000
+    expected_behavior: "ok: wrong-source-file-is-red"
+
+  # ── ANTI-VACUUM: the ways a grading gate normally rots into a no-op ──────
+  - step: "ANTI-VACUUM: an EMPTY query set is a harness ERROR (exit 2), never 'fail=0'"
+    # `0 cases, 0 failures` is the classic green-by-vacuum. The exit code is
+    # asserted specifically: 1 means graded red, 2 means the harness could not
+    # run, and collapsing the two is how "the query set moved" starts reading
+    # exactly like "the experts are correct".
+    command: "PB=$(cat /tmp/.litmus-394d-bin); printf 'version: 1\\nname: empty\\ncases: []\\n' > /tmp/.litmus-394d-empty.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-empty.yaml > /tmp/.litmus-394d-empty.txt 2>&1; rc=$?; test \"$rc\" = '2' || { echo \"FAIL: an EMPTY ground truth exited $rc, expected 2\"; exit 1; }; grep -q 'ZERO cases' /tmp/.litmus-394d-empty.txt && echo 'ok: empty-ground-truth-is-an-error'"
+    timeout_ms: 60000
+    expected_behavior: "ok: empty-ground-truth-is-an-error"
+
+  - step: "ANTI-VACUUM: a MISSPELLED expectation key is refused, not silently ignored"
+    # The single most common way an assertion becomes decoration: `answer_contain`
+    # instead of `answer_contains` would, under a permissive parser, leave the
+    # case green while checking nothing at all.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/^      answer_contains:$/      answer_contain:/' \"$Q\" > /tmp/.litmus-394d-typo.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-typo.yaml > /tmp/.litmus-394d-typo.txt 2>&1; rc=$?; test \"$rc\" = '2' || { echo \"FAIL: a misspelled expectation key exited $rc, expected 2\"; exit 1; }; grep -q 'answer_contain' /tmp/.litmus-394d-typo.txt && echo 'ok: misspelled-expectation-is-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: misspelled-expectation-is-refused"
+
+  - step: "ANTI-VACUUM: a DUPLICATE case id is refused (a shadowed case stops being graded)"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; cp \"$Q\" /tmp/.litmus-394d-dup.yaml; \"$PB\" grade --root . \"$Q\" /tmp/.litmus-394d-dup.yaml > /tmp/.litmus-394d-dup.txt 2>&1; rc=$?; test \"$rc\" = '2' || { echo \"FAIL: duplicate case ids exited $rc, expected 2\"; exit 1; }; grep -q 'duplicate case id' /tmp/.litmus-394d-dup.txt && echo 'ok: duplicate-case-id-is-refused'"
+    timeout_ms: 60000
+    expected_behavior: "ok: duplicate-case-id-is-refused"
+
+  # ── EXIT (iv): REUSABLE VERBATIM BY ORDERS 457 AND 400 ───────────────────
+  - step: "EXIT (iv): the engine registry is enumerable and both rung-1 corpora are in it"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); \"$PB\" grade --list-engines > /tmp/.litmus-394d-eng.txt 2>&1 || { echo 'FAIL: the registry is not enumerable'; exit 1; }; for e in plan.answer methodology.ask methodology.path; do grep -q \"^$e\" /tmp/.litmus-394d-eng.txt || { echo \"FAIL: engine $e is not registered\"; exit 1; }; done; echo 'ok: engine-registry-enumerable'"
+    timeout_ms: 30000
+    expected_behavior: "ok: engine-registry-enumerable"
+
+  - step: "EXIT (iv): an UNREGISTERED corpus fails loudly and names the plug-in site"
+    # This is the step orders 457 and 400 read. A query set naming
+    # `cheatsheet.ask` must not be silently skipped (which would let a new
+    # expert ship ungraded); it must stop the harness and say exactly where to
+    # register the corpus.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); printf 'version: 1\\nname: future\\ncases:\\n- id: future-corpus-probe\\n  engine: cheatsheet.ask\\n  query: how do I run podman rootless\\n  expect:\\n    confidence: exact\\n' > /tmp/.litmus-394d-future.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-future.yaml > /tmp/.litmus-394d-future.txt 2>&1; rc=$?; test \"$rc\" = '2' || { echo \"FAIL: an unregistered corpus exited $rc, expected 2 — a skipped case is an ungraded expert\"; exit 1; }; grep -q 'crates/tillandsias-plan/src/groundtruth.rs' /tmp/.litmus-394d-future.txt || { echo 'FAIL: the error does not name the registration site'; exit 1; }; grep -q 'ENGINES + Harness::run' /tmp/.litmus-394d-future.txt && echo 'ok: unregistered-corpus-names-the-plug-in-site'"
+    timeout_ms: 60000
+    expected_behavior: "ok: unregistered-corpus-names-the-plug-in-site"
+
+  - step: "EXIT (iv): the GRADER is structurally corpus-free"
+    # The reuse claim, pinned where it can rot. `grade_envelope` takes an
+    # envelope, an expectation and a checkout root — no corpus, no ledger, no
+    # engine — so it CANNOT grade a future expert more leniently than a current
+    # one. And no field of `Expect` names a corpus, so 457/400 do not have to
+    # extend the schema to express their expectations.
+    command: "G=crates/tillandsias-plan/src/groundtruth.rs; grep -q 'pub fn grade_envelope(envelope: &Envelope, expect: &Expect, root: &Path) -> Vec<String>' \"$G\" || { echo 'FAIL: grade_envelope grew a corpus-shaped parameter'; exit 1; }; sed -n '/^pub struct Expect {/,/^}/p' \"$G\" | grep -vE '^\\s*(///|//)' | grep -qiE 'methodology|packet|ledger|cheatsheet|yaml_path' && { echo 'FAIL: the expectation schema names a corpus — it is no longer reusable verbatim'; exit 1; }; sed -n '/^pub struct CitationMatch {/,/^}/p' \"$G\" | grep -q 'serde(flatten)' || { echo 'FAIL: citation matching stopped being an open authority map'; exit 1; }; echo 'ok: grader-is-corpus-free'"
+    timeout_ms: 15000
+    expected_behavior: "ok: grader-is-corpus-free"
+
+  - step: "EXIT (iv) BEHAVIOURAL: a SECOND query set is graded by the same binary, same run"
+    # How 457 and 400 will actually invoke it: drop a file next to the rung-1
+    # one and grade the glob. Proven by grading a second set alongside the
+    # committed one and requiring BOTH to be counted.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; printf 'version: 1\\nname: second-corpus-probe\\ncases:\\n- id: second-set-probe-case\\n  engine: methodology.path\\n  query: clean_workspace_discipline.rule\\n  expect:\\n    confidence: exact\\n    citation_kind: methodology\\n    citations_include:\\n    - path: methodology.yaml\\n      span_contains:\\n      - \"completely clean work state\"\\n' > /tmp/.litmus-394d-second.yaml; \"$PB\" grade --root . \"$Q\" /tmp/.litmus-394d-second.yaml > /tmp/.litmus-394d-second.txt 2>&1 || { echo 'FAIL: grading two query sets went red'; cat /tmp/.litmus-394d-second.txt; exit 1; }; r=$(grep '^groundtruth-result:' /tmp/.litmus-394d-second.txt); printf '%s' \"$r\" | grep -q 'sets=2' || { echo \"FAIL: the second set was not loaded: $r\"; exit 1; }; printf '%s' \"$r\" | grep -q 'fail=0' || { echo \"FAIL: $r\"; exit 1; }; grep -q '^PASS  second-set-probe-case' /tmp/.litmus-394d-second.txt && echo 'ok: second-query-set-graded-by-the-same-harness'"
+    timeout_ms: 120000
+    expected_behavior: "ok: second-query-set-graded-by-the-same-harness"
+
+  # ── ORDER 456 exit criterion 3: THE SERVER, not the library ─────────────
+  - step: "ORDER 456: the forge-plan MCP SERVER returns the CORRECT packets for the active release"
+    # Order 456's remaining criterion. The envelope graded here is the one that
+    # crossed the JSON-RPC boundary — the bytes an agent actually receives —
+    # graded against the SAME committed expectation the in-process run uses, so
+    # the transport cannot be right in the library and wrong at the tool.
+    # forge-local-experts-milestone (order 391) is the active release's (v0.5)
+    # experts milestone; the expected set pins the whole 394 family with its
+    # real statuses AND a negative set, so answering with the entire ledger
+    # fails too.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"burndown of forge-local-experts-milestone\"}}}' | TILLANDSIAS_PLAN_BIN=\"$PB\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" TILLANDSIAS_METHODOLOGY_ROOT=\"$PWD\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > /tmp/.litmus-394d-mcp.json; \"$PB\" grade --root . --case plan-active-release-experts-milestone --envelope /tmp/.litmus-394d-mcp.json > /tmp/.litmus-394d-mcp.txt 2>&1 || { echo 'FAIL: the MCP server did NOT return the correct packets for the active release'; cat /tmp/.litmus-394d-mcp.txt; exit 1; }; grep -q '^PASS  plan-active-release-experts-milestone' /tmp/.litmus-394d-mcp.txt && grep -q 'fail=0' /tmp/.litmus-394d-mcp.txt && echo 'ok: mcp-server-returns-correct-active-release-packets'"
+    timeout_ms: 180000
+    expected_behavior: "ok: mcp-server-returns-correct-active-release-packets"
+
+  - step: "ORDER 456 FALSIFIABILITY: a dead-on-arrival server is graded RED, not skipped"
+    # The exact regression order 456 shipped with: the wrapper probed for a
+    # binary nothing produced and every call came back with a diagnostic. That
+    # path now answers with a well-formed `unsupported` envelope — which is
+    # correct behaviour and MUST STILL FAIL THE GRADE, because a server that
+    # refuses every question is not a server that returns the correct packets.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'degraded\\n' > \"$d/state/state\"; printf 'not-built\\n' > \"$d/state/reason\"; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"burndown of forge-local-experts-milestone\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > /tmp/.litmus-394d-doa.json; rm -rf \"$d\"; \"$PB\" grade --root . --case plan-active-release-experts-milestone --envelope /tmp/.litmus-394d-doa.json > /tmp/.litmus-394d-doa.txt 2>&1 && { echo 'FAIL: a dead-on-arrival MCP server was graded GREEN'; exit 1; }; grep -q '^FAIL  plan-active-release-experts-milestone' /tmp/.litmus-394d-doa.txt && grep -q 'confidence: expected Exact, got Unsupported' /tmp/.litmus-394d-doa.txt && echo 'ok: dead-on-arrival-server-is-red'"
+    timeout_ms: 180000
+    expected_behavior: "ok: dead-on-arrival-server-is-red"
+
+  # ── the crate's own pins ─────────────────────────────────────────────────
+  - step: "the harness's own unit pins are GREEN — named, not counted"
+    # Named rather than counted: a bare 'N passed' breaks the day someone adds
+    # test N+1, and a bare '0 failed' passes on an empty run. Each named test
+    # here is one of the four exit criteria expressed inside the crate.
+    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && { echo 'FAIL: the crate test suite is red'; exit 1; }; for t in the_committed_query_set_is_green_at_head both_corpora_are_represented_in_the_committed_set a_wrong_expected_span_turns_a_passing_case_red a_misspelled_expectation_key_is_refused_not_ignored an_empty_query_set_is_an_error_not_a_pass an_unknown_engine_names_the_registration_site grading_works_on_a_corpus_this_crate_does_not_own; do printf '%s' \"$out\" | grep -q \"groundtruth::tests::$t ... ok\" || { echo \"FAIL: missing unit pin $t\"; exit 1; }; done; echo 'ok: groundtruth-unit-pins-green'"
+    timeout_ms: 300000
+    expected_behavior: "ok: groundtruth-unit-pins-green"
+
+  - step: "NO NEW DEPENDENCY, no interpreter, and the query set is DATA not code"
+    # The ratified §5 constraints of the 394 family, carried into slice 4. The
+    # dependency count is asserted, not inspected: three workspace deps, the
+    # same three 394b left behind. The no-interpreter half is asserted
+    # STRUCTURALLY — the grader spawns no process at all — because a word-grep
+    # would fire on the query set's own honest text (one of its cases is
+    # literally "is Python allowed in a committed script?").
+    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -c 'workspace = true' crates/tillandsias-plan/Cargo.toml)\" = '3' || { echo 'FAIL: the dependency set changed'; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
+    timeout_ms: 15000
+    expected_behavior: "ok: no-new-dependency-data-only-query-set"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:394"
+    - "@trace order:394d"
+    - "@trace order:456"
+  expected_log: "Expert ground truth graded: committed query set GREEN at HEAD inside the 60s in-forge budget, five seeded wrong expected answers RED, empty/misspelled/duplicated query sets refused, format proven corpus-agnostic for orders 457 and 400, and the forge-plan MCP server proven to return the correct packets for the active release"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "expert-groundtruth-harness"
+    harness: "crates/tillandsias-plan/src/groundtruth.rs"
+    ground_truth: "openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml"
+    mcp_artifact: "images/default/config-overlay/mcp/forge-plan.sh"
+    corpora: "plan/index.yaml + methodology.yaml + methodology/**/*.yaml"
+    decision_record: "plan/issues/experts-construction-decision-2026-07-17.md"
+
+rollback:
+  on_failure: >
+    If GREEN AT HEAD failed, read the FAIL lines: each names the case, the
+    expectation and the closest miss. Two causes are possible and they need
+    opposite responses. (a) The CORPUS changed — a rule was rewritten, a packet
+    changed status. Then the expected answer is stale: re-read the rule or the
+    packet and update the quote IN THE SAME COMMIT as the change. Deleting the
+    case to get green is a bar-lowering. (b) The ENGINE changed — then the
+    engine is wrong until proven otherwise, and the experts are currently
+    citing text that does not support their answers, which is worse than having
+    no expert at all.
+    If a SEEDED WRONG ANSWER step failed, the grader accepted a wrong expected
+    answer and every green above it is meaningless — fix that before trusting
+    any other result in this file.
+    If an ANTI-VACUUM step failed, the harness can be made to pass while
+    grading nothing.
+    If the ORDER 456 MCP step failed, the compiled plan layer is right in the
+    library and wrong at the tool boundary — which is exactly the shape of the
+    dead-on-arrival regression order 456 shipped with.
+    If the HARNESS BUDGET step failed, the grading gate no longer fits a forge
+    cycle and will be skipped by the people it exists to protect.
+  command: "PB=$(cat /tmp/.litmus-394d-bin 2>/dev/null || echo ./target/release/tillandsias-plan); \"$PB\" grade --root . ; \"$PB\" grade --list-engines"

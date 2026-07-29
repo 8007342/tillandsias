@@ -6,8 +6,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/src/container_profile.rs#L12](../../../crates/tillandsias-core/src/container_profile.rs#L12)
-- [images/default/Containerfile#L96](../../../images/default/Containerfile#L96)
-- [images/default/Containerfile#L185](../../../images/default/Containerfile#L185)
+- [images/default/Containerfile#L100](../../../images/default/Containerfile#L100)
+- [images/default/Containerfile#L189](../../../images/default/Containerfile#L189)
 - [images/default/entrypoint-forge-antigravity.sh#L60](../../../images/default/entrypoint-forge-antigravity.sh#L60)
 - [images/default/entrypoint-forge-claude.sh#L63](../../../images/default/entrypoint-forge-claude.sh#L63)
 - [images/default/entrypoint-forge-claude.sh#L74](../../../images/default/entrypoint-forge-claude.sh#L74)
@@ -18,4 +18,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
 - [images/default/lib-common.sh#L369](../../../images/default/lib-common.sh#L369)
 - [images/default/lib-common.sh#L521](../../../images/default/lib-common.sh#L521)
-- [images/default/lib-common.sh#L548](../../../images/default/lib-common.sh#L548)
+- [images/default/lib-common.sh#L557](../../../images/default/lib-common.sh#L557)

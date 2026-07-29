@@ -175,6 +175,26 @@ path, while JSON without a nonblank prompt MUST NOT fall through to an
 interactive session. Detached OpenCode Web mode runs `opencode serve`, has no
 attached current-run capture, and MUST NOT receive the result-format request.
 
+`TILLANDSIAS_AGENT_RESULT_FORMAT` has a CLOSED value grammar: it is either
+absent, or exactly the UTF-8 token `json`. Absence is the only way to request
+the ordinary human-formatted path. Every other present value — unrecognized
+text, a case or whitespace variant of `json`, the empty string, and byte
+sequences that are not valid UTF-8 — MUST be refused by the CLI launcher before
+any container is created, with a deterministic configuration diagnostic that
+names the offending class (unsupported value, or invalid UTF-8). Rejected
+non-UTF-8 input MUST NOT be echoed back as raw bytes. A present-but-unrecognized
+value MUST NOT be treated as absent: silently degrading to the ordinary path
+converts a launcher typo or a corrupt value into missing result evidence at the
+END of a long delegated run, instead of a configuration error at its start.
+This grammar is a launcher-internal automation boundary and MUST NOT introduce
+an end-user UX surface — no new CLI flag, no prompt, no interactive recovery.
+
+Detached OpenCode Web is outside this contract in BOTH directions. Its lane
+MUST NOT propagate the variable at any value, and MUST NOT consult the
+fail-closed grammar: an `opencode serve` session has no current-run capture to
+protect, so an inherited unsupported value MUST leave the Web launch unchanged
+rather than refuse it.
+
 Both the raw OpenCode CLI builder and the generic Codex builder MUST propagate
 only `TILLANDSIAS_AGENT_RESULT_FORMAT=json` into a delegated container. The
 OpenCode Web builder MUST omit it. Host timeout and result-file paths MUST NOT
@@ -218,6 +238,20 @@ host MUST never read that path as outcome evidence.
 - **THEN** the delegating process MUST surface `[forge-result] ... FAILED`
 - **AND** it MUST return failure rather than treating the work as done
 - **AND** any caller result file MUST contain only bytes from the current run
+
+#### Scenario: An unrecognized result-format value refuses the delegated launch
+
+- **WHEN** a CLI-lane launch carries `TILLANDSIAS_AGENT_RESULT_FORMAT` set to
+  anything other than exactly `json` — including `JSON`, `json ` with trailing
+  whitespace, the empty string, or non-UTF-8 bytes
+- **THEN** the launcher MUST fail before it creates any container
+- **AND** the diagnostic MUST classify the value as an unsupported value or as
+  invalid UTF-8
+- **AND** it MUST NOT fall back to the ordinary human-formatted path
+- **AND** removing the variable entirely MUST restore that ordinary path
+  unchanged
+- **AND** a detached OpenCode Web launch carrying the same value MUST be
+  unaffected and MUST still omit the variable from its container
 
 #### Scenario: A delegated worker exceeds its deadline
 

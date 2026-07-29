@@ -28,6 +28,16 @@ description: >
   cleanup without touching a sibling. Detached OpenCode Web serve has no such
   capture path and must not inherit the result-format request.
 
+  4. (order 464) The result-format variable has a CLOSED grammar: absent, or
+  exactly the UTF-8 token `json`. Anything else — unknown text, a case or
+  whitespace variant, the empty string, non-UTF-8 bytes — must fail the CLI
+  launch BEFORE any container is created. Treating an unrecognized value as
+  "absent" is the failure this guards: it silently removes current-run capture,
+  so the operator learns about a launcher typo as missing result evidence at
+  the end of a 15-minute delegated run instead of as a config error at second
+  zero. Detached OpenCode Web stays outside the contract in both directions —
+  it never carries the variable and is never refused by the grammar.
+
 preconditions:
   - workspace contains images/default/entrypoint-forge-opencode.sh
   - workspace contains images/default/entrypoint-forge-codex.sh
@@ -69,6 +79,16 @@ critical_path:
     command: "cargo test -q -p tillandsias-headless delegated_result_ && echo 'ok: delegated result fixtures'"
     timeout_ms: 120000
     expected_behavior: "ok: delegated result fixtures"
+
+  - step: "an unrecognized or non-UTF8 result-format value fails the CLI launch before any container, while the Web lane stays outside the grammar"
+    command: "cargo test -q -p tillandsias-headless delegated_result_format_ && echo 'ok: closed result-format grammar'"
+    timeout_ms: 120000
+    expected_behavior: "ok: closed result-format grammar"
+
+  - step: "the active spec states the closed fail-closed grammar and keeps Web outside it"
+    command: "S=openspec/specs/forge-as-only-runtime/spec.md; grep -Fq 'has a CLOSED value grammar' \"$S\" && grep -Fq 'MUST NOT be treated as absent' \"$S\" && grep -Fq 'MUST NOT consult the' \"$S\" && grep -Fq 'MUST NOT introduce' \"$S\" && echo 'ok: spec states the grammar'"
+    timeout_ms: 5000
+    expected_behavior: "ok: spec states the grammar"
 
   - step: "captured stdout retains a fixed bound while the source continues draining"
     command: "cargo test -q -p tillandsias-podman bounded_attached_capture_drains_but_never_retains_over_limit && echo 'ok: bounded capture fixture'"

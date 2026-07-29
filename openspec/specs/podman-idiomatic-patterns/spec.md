@@ -81,9 +81,19 @@ Each Tillandsias-managed project SHALL operate with its own isolated Podman grap
 - **ID**: podman-idiomatic-patterns.secrets.ephemeral-mount@v1
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [podman-idiomatic-patterns.invariant.secrets-not-in-env, podman-idiomatic-patterns.invariant.secrets-cleaned-on-exit]
+- **Invariants**: [podman-idiomatic-patterns.invariant.secrets-not-in-env, podman-idiomatic-patterns.invariant.secrets-cleaned-on-exit, podman-idiomatic-patterns.invariant.forge-capability-only]
 
 Credentials passed to containers SHALL use `podman secret create` at startup and `--secret <name>` at launch time. Embedding credentials in image layers (`ENV`, `RUN echo`) or passing them as `-e` environment variables is PROHIBITED.
+
+This spec distinguishes a **credential** (a value that authenticates to a
+third party — a provider API key, an OAuth document, a GitHub token) from a
+**capability** (a short-lived, least-privilege Vault AppRole client token that
+only entitles its holder to read one named Vault path). A credential's BYTES
+are what must never reach a container launch; a capability MAY be mounted,
+because it carries no third-party authority of its own and expires. The
+`--secret` transport is the only permitted channel for a capability, and
+`podman-secrets-integration` plus `tillandsias-vault` remain authoritative for
+which roles, policies, paths, TTLs, and mount options are allowed.
 
 #### Scenario: Ephemeral podman secrets created at startup
 - **WHEN** Tillandsias starts
@@ -108,10 +118,39 @@ Credentials passed to containers SHALL use `podman secret create` at startup and
   `revoke_pending_container_tokens()`
 - **AND** no credential remains in podman's secret store after shutdown
 
-#### Scenario: Forge containers receive no secrets
-- **WHEN** a forge container is launched
-- **THEN** it MUST NOT receive any `--secret` flags
-- **AND** forge containers MUST remain fully credential-free
+#### Scenario: Forge containers carry no raw provider credential
+- **WHEN** any forge container is launched — OpenCode CLI, OpenCode Web, Codex,
+  Claude, Antigravity, or maintenance
+- **THEN** the `podman run` argv MUST NOT carry a provider API key, an OAuth
+  document, a GitHub token, or any other third-party credential VALUE — not
+  positionally, not via `-e`/`--env`, and not as a podman secret
+- **AND** no long-lived credential MUST be registered as a podman secret for a
+  forge container
+- **AND** the forge image MUST NOT bake any credential into an image layer
+
+#### Scenario: A credentialed forge lane mounts one short-lived Vault capability
+- **WHEN** a forge lane is launched whose provider material is present in Vault
+- **THEN** the ONLY `--secret` that forge container MAY receive is a
+  per-launch, per-container Vault AppRole CLIENT TOKEN registered as
+  `tillandsias-vault-token-<role>-<container>` and mounted read-only at
+  `/run/secrets/vault-token` with `target=vault-token,uid=1000,gid=1000,mode=0400`
+- **AND** that AppRole MUST be bound to a policy that names the exact Vault path
+  the lane reads (`opencode-forge-policy`, `claude-forge-policy`,
+  `codex-forge-policy`, `antigravity-forge-policy`) — never a broad token
+- **AND** the token MUST expire (`APPROLE_TOKEN_TTL_SECS`) and MUST be revoked
+  with its podman secret removed when the session ends
+- **AND** the credential itself MUST be read from Vault INSIDE the container;
+  the launcher MUST NOT read it and hand it to Podman
+- **NOTE**: this scenario states only that such a mount is PERMITTED and
+  bounded. `podman-secrets-integration` (mount shape, secret-name registry) and
+  `tillandsias-vault` (`tillandsias-vault.security.forge-offline@v2` — allowed
+  roles, policies, paths, TTL) stay authoritative for the details.
+
+#### Scenario: Credential-free forge lanes receive no `--secret` at all
+- **WHEN** a maintenance forge is launched, or a lane whose provider material is
+  absent from Vault
+- **THEN** the `podman run` argv MUST contain zero `--secret` flags
+- **AND** that lane MUST remain fully credential-free
 
 ### Requirement: Categorized error handling with retry discrimination
 - **ID**: podman-idiomatic-patterns.errors.retry-discrimination@v1
@@ -242,6 +281,11 @@ short next-step hint before redacted argv details.
 - **Expression**: `container_launch_argv DOES_NOT_CONTAIN -e.*TOKEN AND secrets_passed_via --secret_only`
 - **Measurable**: true
 
+### Invariant: Forge containers receive capabilities, never credentials
+- **ID**: podman-idiomatic-patterns.invariant.forge-capability-only
+- **Expression**: `forge_container.secrets SUBSET_OF {tillandsias-vault-token-<role>-<container>} AND forge_container_launch_argv DOES_NOT_CONTAIN provider_credential_value`
+- **Measurable**: true
+
 ### Invariant: Secrets cleaned up on process exit
 - **ID**: podman-idiomatic-patterns.invariant.secrets-cleaned-on-exit
 - **Expression**: `on SIGTERM|SIGINT: cleanup_secrets() REMOVES all tillandsias-* secrets BEFORE process_exit`
@@ -268,12 +312,59 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation` — validates enclave network isolation
 - `litmus:security-privacy-isolation` — validates mandatory security flags
 - `litmus:podman-orchestration` — validates container launch argv
+- `litmus:forge-secret-capability-contract` — validates that this spec and
+  `podman-secrets-integration` make the SAME claim about forge `--secret`
+  flags, that both forge run-arg builders gate their single scoped
+  `vault-token` mount, and that the raw-provider-key env deviation below does
+  not spread
 
 Gating points:
 - Every `podman run` invocation in the codebase carries the four mandatory security flags
 - No `podman ps` polling loop exists (only `podman events` subscriptions)
 - Secrets are never passed as `-e` environment variables
 - All operations succeed without root
+- A forge container's `--secret` set is either empty or exactly one scoped
+  `tillandsias-vault-token-<role>-<container>` mount
+
+## Open Deviations
+
+Deviations are recorded here — not silently absorbed into the requirement
+wording — so the spec keeps stating the intended invariant while remaining
+falsifiable against HEAD.
+
+### Deviation: raw provider API keys reach agent-forge argv as `--env`
+- **ID**: podman-idiomatic-patterns.deviation.agent-forge-api-key-in-env
+- **Violates**: `podman-idiomatic-patterns.secrets.ephemeral-mount@v1`
+  (Scenario "Forge containers carry no raw provider credential"),
+  `podman-idiomatic-patterns.invariant.secrets-not-in-env`
+- **Observed**: 2026-07-28, order 461
+- **Site**: `crates/tillandsias-headless/src/main.rs`, inside
+  `build_forge_agent_run_args_with_vault()` — the `provider_api` block reads
+  the provider API key out of Vault ON THE HOST via
+  `vault_bootstrap::read_provider_api_key()` and injects it as
+  `spec.env(p.env_var(), &key)` (plus `GOOGLE_GENERATIVE_AI_API_KEY` for
+  Gemini). `ContainerSpec::to_run_args()` renders that as
+  `--env <PROVIDER>_API_KEY=<raw value>`, so the key is visible to
+  `podman inspect` and in `/proc/<pid>/cmdline`.
+- **Scope**: Claude, Codex, and Antigravity agent lanes only, and only when
+  Vault holds an API key for that provider. The OpenCode CLI/Web lane does NOT
+  deviate — order 431 already moved it to the scoped-capability shape
+  (`build_opencode_forge_args()`), which is the target shape for the rest.
+- **Not covered by**: the log-redaction path. `format_podman_invocation_line()`
+  scrubs the LOG line heuristically; it does not remove the value from the
+  container environment or from `podman inspect`.
+- **Falsification**:
+  `cargo test -p tillandsias-headless tests::forge_agent_lanes_carry_no_raw_provider_key -- --exact`
+  does not exist yet; until the fix lands, the falsifiable check is
+  `litmus:forge-secret-capability-contract` step "raw provider-key env
+  injection does not spread", which budgets the deviation at its 2 known lines
+  and turns red if another lane or another key is added, if the OpenCode
+  builder regains one, or if the credential-free lanes stop opting out.
+- **Exit**: convert these lanes to the order-431 shape (mount the scoped
+  `<provider>-forge` AppRole token, read the key from Vault inside the
+  entrypoint), then delete this deviation and tighten the litmus step to a
+  zero-site assertion. Requires a code-scope packet — not closed by order 461,
+  whose scope is spec + litmus only.
 
 ## Observability
 

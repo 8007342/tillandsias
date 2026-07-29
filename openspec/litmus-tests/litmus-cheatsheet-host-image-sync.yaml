@@ -2,22 +2,36 @@
 name: litmus:cheatsheet-host-image-sync
 spec: cheatsheet-tooling
 phase: pre-build
-description: Keep host-readable and forge-image cheatsheet trees byte-identical
+description: Keep the forge-image cheatsheet staging mechanism faithful to the canonical host tree
 severity: high
 size: instant
 
+# ORDER 448 — why this no longer diffs two trees directly.
+# images/default/cheatsheets/ is a DERIVED, .gitignore'd build-context copy that
+# scripts/build-image.sh regenerates from the canonical cheatsheets/ before every
+# forge build. The old step 1 ran `diff -qr cheatsheets images/default/cheatsheets`,
+# which asserts "a forge build ran on this host after the last cheatsheet edit" —
+# structurally RED on a fresh clone, in CI, and on any host that edited a
+# cheatsheet since its last build. It burned three preflights that way.
+# The step now regenerates the derived tree first (cheap, purely derived, exactly
+# what the build does) and then asserts the staging MECHANISM: the fresh stage
+# must reproduce canonical byte-for-byte, build-image.sh must stage through that
+# same code path, and the Containerfile must still bake it. Genuine drift between
+# canonical cheatsheets and what the image would receive still fails loud.
+
 preconditions:
   - workspace contains cheatsheets/
-  - workspace contains images/default/cheatsheets/
+  - workspace contains scripts/stage-image-cheatsheets.sh
   - diff is available in PATH
 
 critical_path:
-  - step: "host and forge-image cheatsheet trees are synchronized"
-    command: "diff -qr --exclude=.gitkeep cheatsheets images/default/cheatsheets && echo 'ok: cheatsheet trees synchronized'"
-    timeout_ms: 10000
-    expected_behavior: "ok: cheatsheet trees synchronized"
+  - step: "staging mechanism reproduces the canonical cheatsheet tree (absent/stale derived tree regenerates — order 448; a stage that no longer reproduces canonical, a build that bypasses it, or a Containerfile that stops baking it still exits non-zero)"
+    command: "bash scripts/stage-image-cheatsheets.sh --verify"
+    success_pattern: "cheatsheet-image-sync:(ok|regenerated)"
+    failure_pattern: "cheatsheet-image-sync:drift"
+    timeout_ms: 20000
 
-  - step: "forge image bakes the synchronized cheatsheet tree"
+  - step: "forge image bakes the staged cheatsheet tree"
     command: "grep -F 'COPY cheatsheets/ /opt/cheatsheets-image/' images/default/Containerfile"
     timeout_ms: 3000
     expected_behavior: "COPY cheatsheets/ /opt/cheatsheets-image/"
@@ -31,11 +45,11 @@ observability:
   traces:
     - "@trace spec:cheatsheet-tooling"
     - "@trace spec:default-image"
-  expected_log: "Host and forge-image cheatsheet trees remain synchronized and discoverable"
+  expected_log: "Forge-image cheatsheet staging reproduces the canonical host tree and remains discoverable"
   log_fields:
     spec: "cheatsheet-tooling"
     test: "cheatsheet-host-image-sync"
 
 rollback:
-  on_failure: "copy the canonical host cheatsheet tree into images/default/cheatsheets and regenerate indexes"
-  command: "diff -qr --exclude=.gitkeep cheatsheets images/default/cheatsheets"
+  on_failure: "read the drift reason on the cheatsheet-image-sync:drift line and repair the staging path it names"
+  command: "bash scripts/stage-image-cheatsheets.sh --verify"
