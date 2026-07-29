@@ -1,5 +1,59 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-28T22:50Z (forge — v0.5 inference startup cleanup split + freshness audit)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`.
+  Credential guard `ok:forge-git-mirror`, committable guard
+  `ok:branch-linux-next`. Startup boundary clean. Sibling heads:
+  main=ffe85a23, linux-next=b0c3c97c, windows-next=89059357, osx-next=89cade75.
+- **Claimed & split**: order 392 (`inference-startup-cleanup`) — 6h packet was
+  partially implemented (criteria a+b done per 2026-07-18 cycle), residual
+  (c)+(d) split into two child packets:
+  - **392a** (`inference-startup-cleanup/model-preload-policy`) — ~2h: default
+    model warm at READY, expert slots reserved, model inventory checkpoint
+  - **392b** (`inference-startup-cleanup/gpu-passthrough-tier-matrix`) — ~3h:
+    wire GPU device args (CDI nvidia.com/gpu, AMD /dev/kfd) through podman
+    launch based on effective_inference_tier()
+- **Dependency unblocked**: order 394 (`plan-methodology-experts-rung1`)
+  depended on `inference-startup-cleanup` — parent is now `done` with
+  deterministic readiness + tier detection achieved. Children (392a/392b) are
+  parallel scope, not blockers.
+- **Freshness audit (order 372 mandatory)**: refreshed
+  `scripts/freshness-inventory.sh` (auditor=forge-opencode-20260728,
+  verdict=refreshed). 945 components total, 8 stamped, 937 unstamped — same
+  0% coverage as prior audit; no new drift detected in the stamped set. The
+  broader 0% coverage is a known systemic gap (multi-cycle effort, not
+  one-cycle-fixable).
+- **Build verification**: `./build.sh --check` PASS (Rust + clippy). YAML
+  parse PASS on plan/index.yaml. No conflict markers in plan/.
+- **Next**: linux_mutable or Windows host claims 392a (model preload) or 392b
+  (GPU passthrough). Experts construction research (order 393) is decision-
+  signed; `plan-methodology-experts-rung1` (order 394, ~10h) is the next
+  implementation milestone for the expert system.
+
+## Cycle 2026-07-28T22:10Z (forge — new-container smoke test, overhead validation + v0.5 seed)
+
+- **Host**: forge container, `linux-next` (was `main` at startup — corrected per
+  branch discipline). Credential guard `ok:forge-git-mirror`, committable guard
+  `ok:branch-linux-next`; startup boundary clean.
+- **Git validation**: `git push --dry-run origin linux-next` OK (up-to-date);
+  fetch from `git://tillandsias-git/tillandsias` OK; full `./build.sh --check`
+  (Rust + clippy) PASS.
+- **v0.4 release validated**: VERSION = `0.4.260728.1`, build green, curl-install
+  e2e PASS already on record (`plan/issues/smoke-e2e-findings-v0.4.260728.1-2026-07-28.md`).
+  `./build.sh --ci` reports 4 pre-existing failures (tray-contract, cheatsheet-tiers,
+  no-python-scripts, podman-path-availability) — all expected in the forge.
+- **v0.5 work seeded**: packet `transport-negligible-overhead-audit` (order 147)
+  advanced with forge-container overhead evidence. Containerization stack confirmed
+  negligible: zero CFS throttling, 74% memory available, 2.1 GB/s tmpfs IO.
+- **Overhead validation**: Full resource census taken — CPU (16 cores, no throttle),
+  memory (7.3 GB/5.4 GB avail), disk (1007 GB/941 GB free), cgroup v2 stats, kernel
+  version, network topology, process tree. Findings file:
+  `plan/issues/forge-container-overhead-validation-2026-07-28.md`.
+- **Freshness audit**: skipped this cycle (forge smoke mode — no full cycle run).
+- **Next**: Rebuild image with current linux-next, verify mount fixes, then claim
+  a v0.5 implementation packet on the next forge cycle.
+
 ## Cycle 2026-07-28T19:16Z (forge — config-overlay mount audit + Containerfile fix)
 
 - **Host**: forge container, `linux-next` (was `main` — corrected per branch discipline).
@@ -767,9 +821,19 @@ plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
 > adversarial triage with zero blockers
 > (`plan/issues/v04-release-triage-2026-07-27.md`), macOS destructive e2e
 > PASS (5a44fd69) + Windows smoke PASS (v0.3.260724.1).
-> **Latest published release for smoke targeting: v0.4.260728.1** — the
+> **Latest published release for smoke targeting: v0.4.260728.2** (published
+> 2026-07-28, run 30406924690, all platform jobs green, full cosign asset
+> set; merged PR #84 = Windows login-gate/vault epoch-skew fixes + same-day
+> linux-next work). Promoted STABLE/latest same day via
+> `promote-stable.sh v0.4.260728.2 --force` — OPERATOR OVERRIDE RECORD
+> (who/when/why): The Tlatoāni, 2026-07-28 live Windows session, directed
+> "release to main and trigger a new release to latest under v0.4";
+> evidence at promotion time was the attended Windows local-build
+> validation of the identical source 89059357 (fresh WSL provision →
+> GitHub login flow PASS → OpenCode forge launch + in-forge agent
+> test/push PASS), NOT a published-artifact curl-install e2e — the
 > order-455 cross-platform smoke queue and curl-install e2e gates on ALL
-> hosts (immutable Linux included) should now run against this build.
+> hosts (immutable Linux included) should now run against v0.4.260728.2.
 
 > OPERATOR DECISION 2026-07-21 (still governing v0.5 scope): the EXPERTS
 > family + the compiled plan/MCP server (456-458) land TOGETHER as a coupled
