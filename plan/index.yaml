@@ -15921,7 +15921,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Model preload policy — default model warm at ready, expert slots reserved"
-      status: ready
+      status: done
       kind: implementation
       deliverable: images/inference/entrypoint.sh (model preload orchestration) + startup-context model-warm state + readiness litmus
       depends_on: []
@@ -15944,6 +15944,13 @@ plan_index:
         - "model inventory checkpoint written to $OLLAMA_MODELS/.preloaded so cold volume → warm model on subsequent starts"
         - "forge litmus reproduces a cold model cache and measures warm-model time <= 60s cumulative (download + ollama serve handshake)"
 
+      events:
+        - type: completed
+          ts: "2026-07-29T04:15:00Z"
+          agent_id: "linux-mutable-metaorch-20260729"
+          host: linux_mutable
+          summary: >
+            All four exit criteria CLOSED, live-validated against a freshly built image (commit f93921db). READY now requires the endpoint to answer AND >=1 cached model with a closed reason vocabulary, extending order 392's tokens rather than replacing them. TILLANDSIAS_INFERENCE_PRELOAD=eager|lazy|off with eager pulling only after ollama serve answers, so preload gates the reported STATE and never the launch (order 486 contract); unknown values degrade to eager; warm inventory is OBSERVED from ollama list so a failed pull is never recorded warm. Expert slots use max_loaded=1+slots on a <8/<16/>=16GB ladder, leaving a 4GB host at exactly the pre-392a value (no new OOM risk) and honoring an operator-set OLLAMA_MAX_LOADED_MODELS verbatim. Load-bearing companion: T2+ tier pulls became opt-in because the old path background-pulled qwen2.5:7b on a 16GB laptop, squatting the very slots reserved for experts. Measured: cold volume -> warm=1 checkpoint written; warm restart 10s against a 60s budget. litmus 22/22 plus a new non-destructive warm-timing litmus; inference-container suite 6/6 with no regression. Two findings filed rather than absorbed: order 517 (podman build injects the enclave proxy alias, so no local image build succeeds without --http-proxy=false) and order 518 (litmus:inference-deferred-model-pulls wipes the 9.2GB host model cache AND fails on the unmodified image, so its cold-path red has been masked by its own destructiveness).
     - packet_id: inference-startup-cleanup/gpu-passthrough-tier-matrix
       order: 392b
       parent: inference-startup-cleanup
@@ -24482,3 +24489,58 @@ plan_index:
         - "status/blocked-by/blocked-closure resolve 394a and 392a to their packets"
         - "integer order lookup keeps working unchanged"
         - "a unit test over a child-order fixture fails before the fix and passes after"
+
+    - packet_id: podman-build-proxy-injection-blocks-local-image-builds
+      order: 517
+      desired_release: v0.5
+      title: "podman build injects an enclave proxy that does not resolve on the host — every local image build dies at microdnf"
+      status: ready
+      kind: bug
+      deliverable: build path fix or documented --http-proxy=false contract + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, podman, images, build, developer-experience]
+      estimated_hours: 2
+      outcome: >
+        Found 2026-07-29 while building the inference image for order 392a
+        validation: `podman build` on this host injects HTTP(S)_PROXY pointing
+        at proxy:3128 — the ENCLAVE proxy alias, which does not resolve outside
+        the enclave — so microdnf dies at STEP 2 and NO local image build
+        succeeds without an explicit `--http-proxy=false`. This blocks any
+        agent or operator who needs to rebuild an image locally, and it fails
+        with a DNS error that does not name the cause. Decide the contract
+        (pass --http-proxy=false from our build path, or set the host-side
+        proxy env correctly, or document it loudly) and pin it so a fresh
+        clone does not rediscover this the hard way.
+      exit_criteria:
+        - "a local image build succeeds from a clean environment without hand-passing --http-proxy=false"
+        - "or: the requirement is documented AND emitted as a named error when the injected proxy is unreachable"
+        - "a litmus pins whichever contract is chosen"
+
+    - packet_id: inference-deferred-model-pulls-litmus-destructive-and-red
+      order: 518
+      desired_release: v0.5
+      title: "litmus:inference-deferred-model-pulls wipes the host model cache and then FAILS on the unmodified image"
+      status: ready
+      kind: bug
+      deliverable: non-destructive rework of the deferred-model-pulls litmus + root-cause of the cold-run timeout
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, inference, litmus, testing, destructive, ollama]
+      estimated_hours: 3
+      outcome: >
+        Found 2026-07-29 during order 392a validation. The post-build/long
+        `litmus:inference-deferred-model-pulls` WIPES ~/.cache/tillandsias/models
+        (9.2GB here) as setup, and then FAILED — "cold run did not reach ready"
+        within 600s — using the UNMODIFIED :latest image, so the failure is not
+        attributable to the change under test. Two defects in one: (a) a
+        litmus that destroys a shared, expensive host cache as a side effect
+        should be opt-in or use a throwaway store (order 392a's new
+        warm-timing litmus is non-destructive by construction — copy that
+        shape); (b) the cold-path timeout is a real red that has been masked
+        by the destructiveness discouraging anyone from running it. Root-cause
+        the timeout before trusting any cold-start claim.
+      exit_criteria:
+        - "the litmus no longer wipes a shared host cache (throwaway store or explicit opt-in gate)"
+        - "the cold-run timeout is root-caused: either fixed, or recorded as a known-slow path with a justified budget"
+        - "a green run is demonstrated on an unmodified image"
