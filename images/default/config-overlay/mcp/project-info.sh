@@ -4,7 +4,8 @@
 # Communicates via JSON-RPC over stdin/stdout (MCP stdio transport)
 #
 # Tools: project_structure, file_summary, search_code, project_list, project_info,
-#        project_type, project_metadata
+#        project_type, project_metadata, find_files, grep_code, git_status,
+#        read_file, plan_query
 
 set -euo pipefail
 
@@ -149,7 +150,7 @@ while IFS= read -r line; do
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"project-info","version":"1.0.0"}}}'
             ;;
         "tools/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
+            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files (glob supports path patterns)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"find_files","description":"Find files by glob pattern (recursive, path-aware)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern e.g. **/*.sh, plan/index.yaml"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"grep_code","description":"Search for a pattern across source files with path-aware glob","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"include":{"type":"string","description":"File glob pattern (default: *)"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"git_status","description":"Show working tree status as structured JSON data","inputSchema":{"type":"object","properties":{}}},{"name":"read_file","description":"Read a file with offset and limit support","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"number","description":"Line number to start from (1-indexed, default: 0 for beginning)"},"limit":{"type":"number","description":"Number of lines to read (default: all)"}},"required":["path"]}},{"name":"plan_query","description":"Query plan/index.yaml for matching work packets by status, role, or capability tags","inputSchema":{"type":"object","properties":{"status":{"type":"string","description":"Filter by status (ready, pending, in_progress, blocked, completed, etc.)"},"pickup_role":{"type":"string","description":"Filter by pickup_role substring"},"capability_tags":{"type":"array","items":{"type":"string"},"description":"Filter by capability tags (all must match)"},"limit":{"type":"number","description":"Max results (default: 20)"}}}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
             ;;
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
@@ -175,7 +176,25 @@ ${preview}"
                 "search_code")
                     pattern=$(echo "$args" | jq -r '.pattern')
                     file_glob=$(echo "$args" | jq -r '.glob // "*"')
-                    result=$(grep -rn "$pattern" --include="$file_glob" . 2>&1 | head -50 || echo "No matches found")
+                    # Use find + grep for path-aware glob matching (fixes Bug 1)
+                    # Only strip **/ prefix when pattern starts with **/ (not a path)
+                    if [[ "$file_glob" == "**/"* ]]; then
+                        glob_for_find="${file_glob#**/}"
+                    else
+                        glob_for_find="$file_glob"
+                    fi
+                    # || true prevents set -e from killing script on SIGPIPE (pipefail + head close)
+                    if [[ "$glob_for_find" == *"/"* ]]; then
+                        files=$(find . -type f -path "*/$glob_for_find" 2>/dev/null | head -200 || true)
+                    else
+                        files=$(find . -type f -name "$glob_for_find" 2>/dev/null | head -200 || true)
+                    fi
+                    if [ -n "$files" ]; then
+                        result=$(echo "$files" | xargs grep -In "$pattern" 2>/dev/null | head -50 || true)
+                    fi
+                    if [ -z "${result:-}" ]; then
+                        result="No matches found"
+                    fi
                     ;;
                 "project_list")
                     # @trace spec:forge-environment-discoverability, gap:multi-workdir-git-worktree-handling
@@ -232,6 +251,134 @@ ${preview}"
                     path=$(echo "$args" | jq -r '.path // "."')
                     name=$(echo "$args" | jq -r '.name // "unknown"')
                     result=$(get_project_metadata "$path" "$name")
+                    ;;
+                "find_files")
+                    pattern=$(echo "$args" | jq -r '.pattern')
+                    path=$(echo "$args" | jq -r '.path // "."')
+                    if [[ "$pattern" == "**/"* ]]; then
+                        find_pattern="${pattern#**/}"
+                    else
+                        find_pattern="$pattern"
+                    fi
+                    # || true prevents set -e from killing script on SIGPIPE
+                    if [[ "$find_pattern" == *"/"* ]]; then
+                        result=$(find "$path" -type f -path "*/$find_pattern" 2>/dev/null | head -200 || true)
+                    else
+                        result=$(find "$path" -type f -name "$find_pattern" 2>/dev/null | head -200 || true)
+                    fi
+                    if [ -z "${result:-}" ]; then
+                        result="No files found"
+                    fi
+                    ;;
+                "grep_code")
+                    pattern=$(echo "$args" | jq -r '.pattern')
+                    include=$(echo "$args" | jq -r '.include // "*"')
+                    path=$(echo "$args" | jq -r '.path // "."')
+                    if [[ "$include" == "**/"* ]]; then
+                        glob_for_find="${include#**/}"
+                    else
+                        glob_for_find="$include"
+                    fi
+                    # || true prevents set -e from killing script on SIGPIPE
+                    if [[ "$glob_for_find" == *"/"* ]]; then
+                        files=$(find "$path" -type f -path "*/$glob_for_find" 2>/dev/null | head -200 || true)
+                    else
+                        files=$(find "$path" -type f -name "$glob_for_find" 2>/dev/null | head -200 || true)
+                    fi
+                    if [ -n "$files" ]; then
+                        result=$(echo "$files" | xargs grep -In "$pattern" 2>/dev/null | head -50 || true)
+                    fi
+                    if [ -z "${result:-}" ]; then
+                        result="No matches found"
+                    fi
+                    ;;
+                "git_status")
+                    porcelain=$(git status --porcelain 2>/dev/null) || porcelain=""
+                    if [ -z "$porcelain" ]; then
+                        if [ -e ".git" ]; then
+                            result='{"files":[],"porcelain":""}'
+                        else
+                            result='{"error":"not a git repository or git not available"}'
+                        fi
+                    else
+                        result=$(python3 -c "
+import json, sys
+lines = [l.rstrip() for l in sys.stdin if l.strip()]
+files = []
+for line in lines:
+    staged = line[0]
+    working = line[1]
+    path = line[3:]
+    if ' -> ' in path:
+        parts = path.split(' -> ')
+        entry = {'path': parts[0], 'new_path': parts[1], 'staged_status': staged, 'working_status': working}
+    else:
+        entry = {'path': path, 'staged_status': staged, 'working_status': working}
+    files.append(entry)
+print(json.dumps({'files': files}, indent=2))
+" <<< "$porcelain")
+                    fi
+                    ;;
+                "read_file")
+                    filepath=$(echo "$args" | jq -r '.path')
+                    offset=$(echo "$args" | jq -r '.offset // 0')
+                    limit=$(echo "$args" | jq -r '.limit // 0')
+                    if [ ! -f "$filepath" ]; then
+                        result="File not found: $filepath"
+                    else
+                        line_count=$(wc -l < "$filepath")
+                        if [ "$offset" -gt 0 ] && [ "$limit" -gt 0 ]; then
+                            result=$(tail -n +"$offset" "$filepath" | head -n "$limit")
+                            result="${result}
+---
+(offset=$offset limit=$limit of $line_count lines)"
+                        elif [ "$offset" -gt 0 ]; then
+                            result=$(tail -n +"$offset" "$filepath")
+                            result="${result}
+---
+(offset=$offset of $line_count lines)"
+                        elif [ "$limit" -gt 0 ]; then
+                            result=$(head -n "$limit" "$filepath")
+                            result="${result}
+---
+(limit=$limit of $line_count lines)"
+                        else
+                            result=$(cat "$filepath")
+                            result="${result}
+---
+($line_count lines total)"
+                        fi
+                    fi
+                    ;;
+                "plan_query")
+                    filter_args=$(echo "$args" | jq -c '.')
+                    result=$(python3 -c "
+import json, sys, yaml
+filter_data = json.loads(sys.argv[1]) if len(sys.argv) > 1 else {}
+limit = int(filter_data.get('limit', 20))
+try:
+    with open('plan/index.yaml') as f:
+        data = yaml.safe_load(f)
+    steps = data.get('plan_index', {}).get('steps', [])
+except Exception as e:
+    print(json.dumps({'error': str(e)}))
+    sys.exit(0)
+if filter_data.get('status'):
+    steps = [s for s in steps if s.get('status') == filter_data['status']]
+if filter_data.get('pickup_role'):
+    role_filter = filter_data['pickup_role'].lower()
+    steps = [s for s in steps if role_filter in s.get('pickup_role', '').lower()]
+if filter_data.get('capability_tags'):
+    tags = set(filter_data['capability_tags'])
+    steps = [s for s in steps if tags.issubset(set(s.get('capability_tags', [])))]
+steps = steps[:limit]
+keys = ['packet_id', 'order', 'title', 'status', 'kind', 'pickup_role', 'capability_tags', 'deliverable', 'depends_on']
+result = [{k: s.get(k) for k in keys if k in s} for s in steps]
+print(json.dumps(result, indent=2))
+" "$filter_args")
+                    if [ -z "$result" ]; then
+                        result="No matching packets found"
+                    fi
                     ;;
                 *)
                     result="Unknown tool: $tool"
