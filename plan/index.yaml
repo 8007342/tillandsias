@@ -16388,7 +16388,10 @@ plan_index:
       # REOPENED 2026-07-30: `done` was graded on script latency + wiring,
       # measured by running the script directly. The hook itself has never
       # executed anywhere — see the 07:05Z event.
-      status: ready
+      status: completed
+      split_into:
+        - experts-refresh-on-commit/cargo-target-install
+        - experts-refresh-on-commit/first-fire-e2e
       kind: implementation
       deliverable: git-hooks (existing /home/forge/.cache/tillandsias/git-hooks path) + incremental refresh
       depends_on: [plan-methodology-experts-rung1]
@@ -16446,6 +16449,35 @@ plan_index:
             confidence=unsupported to confidence=exact with grade 17/17.
             Residual closure is the new third exit criterion. Details:
             plan/issues/forge-local-experts-first-person-experience-2026-07-30.md.
+        - type: claim
+          ts: "2026-07-30T19:08:17Z"
+          agent_id: "forge-tillandsias-codex-20260730T1903Z"
+          host: forge
+          lease_id: "experts-refresh-on-commit-split-forge-20260730T1908Z"
+          expires_at: "2026-07-30T23:08:17Z"
+          summary: >
+            Bootstrap receipt: full meta-orchestration mode, multi-agent-
+            orchestration router intent, linux-next at bd5c49de, clean startup
+            boundary /tmp/meta-orchestration-boundary.hGkZds, sibling heads
+            main=7a5934090e5a linux-next=bd5c49de76f2
+            windows-next=e4102a802839 osx-next=89cade756013. Direction:
+            local EXPERTS. Claimed for forge-budget shaping.
+        - type: completed
+          ts: "2026-07-30T19:08:17Z"
+          agent_id: "forge-tillandsias-codex-20260730T1903Z"
+          host: forge
+          lease_id: "experts-refresh-on-commit-split-forge-20260730T1908Z"
+          summary: >
+            Forge-budget shaping completed. The reopened packet combined two
+            independently verifiable closures that cannot honestly fit one
+            in-forge launch envelope: a deterministic CARGO_TARGET_DIR-aware
+            install/failure-reporting fixture, and a destructive fresh-image
+            FIRST-FIRE proof requiring a mutable Linux launch host. Split
+            those boundaries into two ready children; no implementation
+            criterion was waived. Structured project-info plan_query and the
+            forge-plan MCP server both returned usable live queue data in this
+            cycle, while the Codex connector registrations named project-info
+            and project-plan remained not-ready.
       outcome: >
         Operator: experts get refreshed on commit/push. The forge already
         owns a hooks path (core.hooksPath is injected); post-commit /
@@ -16457,6 +16489,68 @@ plan_index:
         - "commit changing plan/index.yaml -> plan expert answers reflect it within a bounded window (harness-graded)"
         - "hook adds no perceptible latency to commit/push (measured budget pinned)"
         - "FIRST-FIRE PROOF: inside a forge launched from an image whose lib-common.sh contains the installer, a crate-touching commit appends a fire record to /tmp/tillandsias-hooks.log AND replaces ~/.local/bin/tillandsias-plan via a CARGO_TARGET_DIR-aware install (the answer surface observably changes); evidence recorded here with the commit hash"
+
+    - packet_id: experts-refresh-on-commit/cargo-target-install
+      order: provisional
+      provisional_id: forge-260730-1
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Expert refresh hook installs from the effective Cargo target and reports install failures honestly"
+      status: ready
+      kind: fix
+      deliverable: scripts/hooks/post-commit-expert-refresh.sh + behavioral fixture/litmus
+      depends_on: [plan-methodology-experts-rung1]
+      pickup_role: "forge or linux"
+      capability_tags: [forge, experts, git, hooks, shell, litmus]
+      estimated_hours: 1
+      owned_files:
+        - scripts/hooks/post-commit-expert-refresh.sh
+        - openspec/litmus-tests/
+      outcome: >
+        Replace the hook's hard-coded target/release source with the effective
+        CARGO_TARGET_DIR (falling back to the repository target directory),
+        separate build failure from install failure, and emit the success
+        record only after the built binary was actually installed. This is the
+        deterministic source/fixture boundary split from order 396 after the
+        first-person forge falsifier proved that the current hook silently
+        reports success when its cp source does not exist.
+      next_action: >
+        Add a fake cargo/timeout fixture that builds into a non-default
+        CARGO_TARGET_DIR, invoke the hook on a crate-touching commit, and assert
+        the installed binary bytes plus success/failure log grammar.
+      exit_criteria:
+        - "a crate-touching commit with CARGO_TARGET_DIR outside the checkout installs that target's release/tillandsias-plan"
+        - "the hook emits its binary-rebuilt success record only after a successful install; missing/unreadable build output produces a named install failure"
+        - "a behavioral fixture exercises both success and refusal paths without requiring a live forge image rebuild"
+
+    - packet_id: experts-refresh-on-commit/first-fire-e2e
+      order: provisional
+      provisional_id: forge-260730-2
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Fresh-image FIRST-FIRE proof for the installed expert refresh hook"
+      status: ready
+      kind: verification
+      deliverable: fresh forge launch evidence + order-396 completion event
+      depends_on: [experts-refresh-on-commit/cargo-target-install]
+      pickup_role: linux_mutable
+      capability_tags: [forge, experts, git, hooks, e2e, podman]
+      estimated_hours: 2
+      outcome: >
+        Rebuild the forge image from a commit carrying the hook installer and
+        the CARGO_TARGET_DIR-aware repair, launch a pristine forge, make a
+        crate-touching commit, and prove the installed binary and cited answer
+        surface change from inside that same seat. This is host-owned because
+        an already-running forge cannot rebuild/relaunch its own host image.
+      next_action: >
+        On mutable Linux, run the local-build forge gate from a clean substrate,
+        then execute the order-396 crate-touching commit probe inside the
+        launched forge and record the commit hash, fire log, installed binary
+        digest, and before/after answer.
+      exit_criteria:
+        - "the launched image contains and installs the post-commit expert refresh hook into core.hooksPath"
+        - "a real crate-touching commit appends a fire record and replaces ~/.local/bin/tillandsias-plan from the effective CARGO_TARGET_DIR"
+        - "the same in-forge session observes the expert answer surface change, and the evidence is recorded on this child and the milestone burndown"
 
     - packet_id: forge-expert-fresh-launch-source-gap
       order: 531

@@ -1,5 +1,44 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-30T19:08Z (forge — order 396 evidence-boundary split + MCP usability)
+
+- **Host**: forge container, full meta-orchestration mode, `linux-next`.
+  Credential guard `ok:forge-git-mirror`, committable guard
+  `ok:branch-linux-next`; clean startup boundary. Sibling heads:
+  main=7a5934090e5a, linux-next=bd5c49de76f2,
+  windows-next=e4102a802839, osx-next=89cade756013.
+- **MCP usability**: the Codex connector registrations named `project-info`,
+  `project-plan`, and `forge-plan` returned `server not ready`. The checked-out
+  server implementations themselves are usable: live JSON-RPC calls to
+  project-info returned structured clean Git status plus a filtered ready
+  EXPERTS queue, and forge-plan returned the forge-ready queue from the compiled
+  plan expert. The cycle used those structured answers instead of heuristically
+  scanning the 24k-line plan ledger.
+- **Worker drain (order 396)**: the reopened five-hour EXPERTS refresh packet
+  crossed two independent evidence boundaries and could not fit the forge's
+  600-second launch envelope. Split it into
+  `experts-refresh-on-commit/cargo-target-install` (deterministic hook/install
+  repair + fixture) and `experts-refresh-on-commit/first-fire-e2e` (mutable
+  Linux fresh-image proof). No exit criterion was waived.
+- **Freshness audit**: `scripts/check-cheatsheet-staleness.sh` disposition
+  **updated**. Its documented `--check-urls` form silently used the option text
+  as the day threshold and returned a false clean; its documented bold
+  `Last updated` grammar also collapsed to `MISSING_DATE`. Argument validation
+  now preserves the numeric default, rejects malformed/unknown options, and
+  extracts the ISO date correctly. Record:
+  `plan/issues/optimization/cheatsheet-staleness-option-parser-2026-07-30.md`.
+- **Direction cited**: local EXPERTS — this reduction makes the commit-refresh
+  mechanism independently implementable and its first-person proof explicitly
+  host-owned.
+- **Verification**: `./build.sh --check` PASS; `tillandsias-policy
+  validate-yaml plan/index.yaml` PASS; `tillandsias-plan check` PASS (only
+  pre-existing organic-reference warnings); cheatsheet option/date fixture
+  PASS. `cheatsheet-tooling` focused litmus PASS 2/2. The adjacent
+  `cheatsheet-source-layer` run was 1/2 because its validator hard-codes the
+  absent in-tree `target/debug/tillandsias-policy`; this exact fresh-forge
+  failure is already recorded in
+  `plan/issues/forge-litmus-failures-pre-existing-2026-07-24.md`.
+
 ## Cycle 2026-07-30T18:15Z (forge — order 440 plan-status-vocabulary normalization)
 
 - **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: 22 pre-existing `.opencode/` dirty paths (operator-identified disposable).

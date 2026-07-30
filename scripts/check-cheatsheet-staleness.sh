@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer
-# freshness: auditor=linux-bigpickle-forge-20260728T0112Z date=2026-07-28 verdict=refreshed scope=audited via freshness-audit class; still functional, surfaces MISSING_DATE + age for all cheatsheets, clean run against current cheatsheets/
+# freshness: auditor=forge-tillandsias-codex-20260730T1903Z date=2026-07-30 verdict=updated scope=fixed option-order parsing and documented bold Last-updated extraction
 # Check for stale cheatsheets older than 90 days.
 # Usage: ./check-cheatsheet-staleness.sh [--days 90] [--check-urls]
 #
@@ -10,14 +10,24 @@
 set -euo pipefail
 
 CHEATSHEETS_DIR="${TILLANDSIAS_CHEATSHEETS:-./cheatsheets}"
-STALENESS_DAYS="${1:-90}"
+STALENESS_DAYS=90
 CHECK_URLS=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --days) STALENESS_DAYS="$2"; shift 2 ;;
+        --days)
+            [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || {
+                echo "ERROR: --days requires a non-negative integer" >&2
+                exit 2
+            }
+            STALENESS_DAYS="$2"
+            shift 2
+            ;;
         --check-urls) CHECK_URLS=1; shift ;;
-        *) shift ;;
+        *)
+            echo "ERROR: unknown option: $1" >&2
+            exit 2
+            ;;
     esac
 done
 
@@ -34,7 +44,7 @@ echo ""
 
 for cheatsheet in $(find "$CHEATSHEETS_DIR" -name "*.md" -type f ! -name "INDEX.md" ! -name "TEMPLATE.md"); do
     # Extract "Last updated: YYYY-MM-DD"
-    last_updated=$(grep -E "^\*\*Last updated:\*\*" "$cheatsheet" | head -1 | sed 's/.*Last updated: //; s/\*\*.*//; s/`//g' || echo "")
+    last_updated=$(grep -E "^\*\*Last updated:\*\*" "$cheatsheet" | head -1 | sed -E 's/^\*\*Last updated:\*\*[[:space:]]*//; s/`//g' || echo "")
 
     if [[ -z "$last_updated" ]]; then
         echo "MISSING_DATE: $cheatsheet (no 'Last updated:' line found)"
