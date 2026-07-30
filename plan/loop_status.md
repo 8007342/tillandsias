@@ -1,5 +1,12 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-30T18:15Z (forge — order 440 plan-status-vocabulary normalization)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: 22 pre-existing `.opencode/` dirty paths (operator-identified disposable).
+- **Worker drain (order 440)**: Normalized the plan ledger's status vocabulary from 11 values with 3 synonym pairs to 10 canonical values. Migrated `done`/`success`/`implemented` → `completed` (199+2+0 = 295 total after merge); `claimed`/`active` → `in_progress` (2+1 = 16 total). Updated `plan/index.yaml default_status_values` and `plan/schema.yaml statuses` to identical canonical list. Added `scripts/check-plan-schema-divergence.sh` guard (verified: catches injected `fake-status`). `tillandsias-plan check`: ok 452 packets. `./build.sh --check`: PASS.
+- **Direction cited**: EXPERTS theme — consistent plan vocabulary means expert queries like "what is finished" return correct results without special-casing synonyms.
+- **Exit**: Clean. `.opencode/` dirt preserved.
+
 ## Cycle 2026-07-30T16:40Z (forge — project-info MCP optimization audit, benchmark against traditional tools)
 
 - **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: same 22 pre-existing `.opencode/` dirty paths (operator-identified disposable).

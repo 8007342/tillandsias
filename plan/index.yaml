@@ -6,9 +6,12 @@ plan_index:
     - ready
     - in_progress
     - blocked
-    - needs_clarification
     - completed
+    - provisional
     - obsoleted
+    - failed
+    - failed-retryable
+    - needs_clarification
 
   selection_policy:
     primary_rule: >
@@ -78,7 +81,7 @@ plan_index:
     - packet_id: github-e2e/forge-base-missing-ux
       order: 76
       title: "Detect missing forge-base image and emit actionable error instead of cryptic registry pull failure"
-      status: success
+      status: completed
       kind: enhancement
       deliverable: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
       depends_on: []
@@ -90,7 +93,7 @@ plan_index:
         "connection refused" from the localhost registry pull.
       tasks:
         - id: github-e2e/forge-base-missing-ux/implement
-          status: success
+          status: completed
           closed_at: "2026-06-21T23:13:00Z"
           ts: "2026-06-21T23:13:00Z"
           agent_id: "linux-antigravity-20260621T2313Z"
@@ -207,7 +210,7 @@ plan_index:
     - packet_id: container-dependency-graph-impl
       order: 122
       title: "Implement: compile-time container dependency model"
-      status: done
+      status: completed
       split_into:
         - "227 — container-dependency-graph-satisfier-typestate (slice 3: real Satisfier + typestate Up<S> + trybuild)"
         - "228 — container-dependency-graph-liveness (slice 4: runtime liveness probe)"
@@ -278,7 +281,7 @@ plan_index:
     - packet_id: host-guest-transport-normalization-spec
       order: 124
       title: "Normalization spec: host<->guest transport canon (protocol/facade/glossary)"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
       depends_on: [host-guest-transport-normalization-research]
@@ -674,7 +677,7 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-research
       order: 129
       title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/archive/agent-services-egress-allowlist-research-2026-06-28.md
       depends_on: []
@@ -2091,7 +2094,7 @@ plan_index:
     - packet_id: stable-state-codes-research
       order: 160
       title: "Research: stable finite state codes for host/vm/guest/podman status"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/stable-state-codes-research-2026-07-05.md
       depends_on: [socket-protocol-push-variants, vm-headless-persistent-listener]
@@ -2333,7 +2336,7 @@ plan_index:
     - packet_id: race-safeguards-research
       order: 160
       title: "Research: race-surface inventory + safeguard strategy (concurrent launches, lifecycle churn)"
-      status: done
+      status: completed
       kind: research
       events:
         - type: claim
@@ -2571,7 +2574,7 @@ plan_index:
     - packet_id: enclave-container-lifecycle-races
       order: 162
       title: "Headless: shared-container ownership + ensure_* concurrency safety"
-      status: done
+      status: completed
       completion_note: >
         2026-07-10T00:10Z linux-macuahuitl-fable5-20260709T1923Z: parent folded
         to done — all four split slices delivered with litmus coverage: 232
@@ -2665,7 +2668,7 @@ plan_index:
     - packet_id: keepalive-terminal-visibility
       order: 164
       title: "UX: hide the keepalive wsl.exe console (or make it the --debug console) + supervise it"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-05T22:32:00Z"
@@ -2795,7 +2798,7 @@ plan_index:
     - packet_id: git-mirror-upstream-forwarding
       order: 167
       title: "Git mirror: configure upstream remote so forge pushes reach GitHub (blocker for cloud projects)"
-      status: done
+      status: completed
       kind: bug-fix
       deliverable: plan/issues/git-mirror-no-upstream-remote-2026-07-02.md
       depends_on: []
@@ -3069,7 +3072,7 @@ plan_index:
     - packet_id: codex-forge-yolo-config-defaults
       order: 171
       title: "Codex forge config: default to full-auto / no approval prompts inside forge"
-      status: done
+      status: completed
       kind: enhancement+bug-fix
       deliverable: plan/issues/codex-forge-yolo-defaults-2026-07-04.md
       depends_on: [forge-agent-permission-defaults]
@@ -3092,7 +3095,7 @@ plan_index:
     - packet_id: codex-forge-yolo-regression-litmus
       order: 172
       title: "Codex forge litmus: fail if approval prompts are enabled in forge profile"
-      status: done
+      status: completed
       kind: test+guardrail
       deliverable: plan/issues/codex-forge-yolo-defaults-2026-07-04.md
       depends_on: [codex-forge-yolo-config-defaults]
@@ -3113,7 +3116,7 @@ plan_index:
     - packet_id: forge-credential-guard-mirror-reachability
       order: 173
       title: "Credential guard: verify forge mirror reachability (stop ok:forge-git-mirror false-positive)"
-      status: done
+      status: completed
       kind: bug+guardrail
       deliverable: plan/issues/forge-shared-host-checkout-mirror-alias-2026-07-04.md
       depends_on: []
@@ -3146,7 +3149,7 @@ plan_index:
     - packet_id: vault-secret-refresh-concurrent-race
       order: 174
       title: "Vault: atomic secret create --replace (fix concurrent-init 'secret name in use' race)"
-      status: done
+      status: completed
       kind: bug
       deliverable: plan/issues/vault-secret-refresh-concurrent-race-2026-07-04.md
       depends_on: []
@@ -3175,7 +3178,7 @@ plan_index:
     - packet_id: forge-node-agents-bypass-proxy
       order: 175
       title: "Forge: route Node agents (Codex/Claude) through the proxy (NODE_USE_ENV_PROXY)"
-      status: done
+      status: completed
       kind: bug
       deliverable: plan/issues/forge-node-agents-bypass-proxy-2026-07-04.md
       depends_on: []
@@ -3206,7 +3209,7 @@ plan_index:
     - packet_id: forge-launch-proxy-not-idempotent
       order: 176
       title: "Forge: idempotent proxy bring-up at all forge-launch sites (fix 'name already in use')"
-      status: done
+      status: completed
       kind: bug
       deliverable: plan/issues/forge-launch-proxy-not-idempotent-2026-07-04.md
       depends_on: []
@@ -3237,7 +3240,7 @@ plan_index:
     - packet_id: forge-validation-findings-2026-07-04
       order: 177
       title: "Forge: reduce in-forge validation findings from Codex meta-orchestration"
-      status: done
+      status: completed
       kind: enhancement+optimization+test-fix
       deliverable: plan/issues/forge-validation-findings-2026-07-04.md
       depends_on: []
@@ -3346,7 +3349,7 @@ plan_index:
     - packet_id: forge-image-creation-vs-firstrun-split-research
       order: 178
       title: "Research: split forge image into CREATION_TIME (dnf) / FIRST_RUN (persistent cache) / EVERY_LAUNCH (npm harnesses)"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
       depends_on: []
@@ -3370,7 +3373,7 @@ plan_index:
     - packet_id: forge-persistent-tool-cache-mount
       order: 179
       title: "Impl (prereq): guarantee a persistent writable tool cache mount on forge launch"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/forge-persistent-tool-cache-mount-2026-07-04.md
       depends_on: [forge-image-creation-vs-firstrun-split-research]
@@ -3437,7 +3440,7 @@ plan_index:
     - packet_id: forge-firstrun-installer-arch-aware
       order: 188
       title: "Impl (slice 1 of 180, macOS-blocking): arch-aware install_prebuilt helper + migrate cargo-tools group to FIRST_RUN"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md
       depends_on: [forge-persistent-tool-cache-mount]
@@ -3505,7 +3508,7 @@ plan_index:
     - packet_id: inference-firstrun-small-models-research
       order: 182
       title: "Research: default small models (0.3-1.5B) to pull on inference FIRST_RUN"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/inference-firstrun-small-models-research-2026-07-04.md
       depends_on: []
@@ -3527,7 +3530,7 @@ plan_index:
     - packet_id: inference-firstrun-small-models-impl
       order: 183
       title: "Impl: pull default small models on inference FIRST_RUN (idempotent, async, persistent)"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/inference-firstrun-small-models-impl-2026-07-04.md
       depends_on: [inference-firstrun-small-models-research]
@@ -3548,7 +3551,7 @@ plan_index:
       order: 184
       desired_release: v0.5
       title: "Master plan: e2e encrypted control channel — staged maturity ladder (M0-M4 gates, all platforms)"
-      status: active
+      status: in_progress
       kind: master-plan
       deliverable: plan/issues/secure-channel-maturity-ladder-2026-07-04.md
       depends_on: [encrypted-control-channel-impl, encrypted-channel-vsock-cutover]
@@ -3574,7 +3577,7 @@ plan_index:
     - packet_id: secure-channel-flag-and-maturity-metrics
       order: 185
       title: "Research: secure-channel flag propagation (boot-time, fail-closed) + maturity-gate metrics"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/secure-channel-flag-and-maturity-metrics-2026-07-04.md
       depends_on: [secure-channel-maturity-ladder]
@@ -3648,7 +3651,7 @@ plan_index:
     - packet_id: antigravity-agent-finish-up
       order: 187
       title: "Impl: finish the Antigravity (agy) forge agent — forge flags, install assert, e2e"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/antigravity-agent-finish-up-2026-07-04.md
       depends_on: []
@@ -3689,7 +3692,7 @@ plan_index:
     - packet_id: headless-secure-control-wire-image-refresh
       order: 189
       title: "Integrate the guest secure-control-wire responder onto linux-next (release-ready) — unblock macOS M1"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/headless-secure-control-wire-image-refresh-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder]
@@ -3715,7 +3718,7 @@ plan_index:
     - packet_id: embedded-guest-binary-linux-build
       order: 190
       title: "Linux build: produce the two-arch static musl guest binary the macOS/Windows trays embed (drop the in-VM releases/latest curl)"
-      status: done
+      status: completed
       kind: packaging
       deliverable: plan/issues/embedded-guest-binary-linux-build-2026-07-05.md
       depends_on: []
@@ -3791,7 +3794,7 @@ plan_index:
     - packet_id: multi-host-secure-wire-integration-freeze
       order: 191
       title: "Coordination: freeze sibling drift and integrate secure-wire + embedded-guest branches by merge"
-      status: done
+      status: completed
       status_note: >
         All three slices complete: windows evidence (flag-OFF/flag-ON hvsocket
         handshake), macOS evidence (build + test + deferred VM smoke), and linux
@@ -3884,7 +3887,7 @@ plan_index:
     - packet_id: semantic-distillation-and-ledger-pruning
       order: 192
       title: "Housekeeping: prune stale active ledgers and refresh dashboard provenance"
-      status: done
+      status: completed
       kind: housekeeping
       deliverable: plan/issues/semantic-distillation-and-ledger-pruning-2026-07-05.md
       depends_on: []
@@ -3995,7 +3998,7 @@ plan_index:
     - packet_id: secure-channel-release-and-probe-hardening
       order: 194
       title: "Security: harden secure-channel PSK parity, release-secret requirement, and readiness probes"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: plan/issues/secure-channel-release-and-probe-hardening-2026-07-05.md
       depends_on: [secure-channel-maturity-ladder]
@@ -4079,7 +4082,7 @@ plan_index:
     - packet_id: macos-litmus-runner-bash-version-gap
       order: 196
       title: "macOS: scripts/run-litmus-test.sh requires bash 4+ (declare -A), host ships bash 3.2"
-      status: done
+      status: completed
       kind: optimization
       deliverable: plan/issues/macos-litmus-runner-bash-version-gap-2026-07-06.md
       depends_on: []
@@ -4134,7 +4137,7 @@ plan_index:
     - packet_id: macos-tray-clippy-warnings
       order: 197
       title: "macOS tray: fix 3 pre-existing clippy warnings (large_enum_variant x2, match_result_ok)"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/macos-tray-clippy-warnings-2026-07-06.md
       depends_on: []
@@ -4174,7 +4177,7 @@ plan_index:
     - packet_id: litmus-full-suite-macos-first-run-findings
       order: 198
       title: "Triage 14 litmus failures newly visible after the macOS bash-3.2 runner fix"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
       depends_on: [macos-litmus-runner-bash-version-gap]
@@ -4302,7 +4305,7 @@ plan_index:
     - packet_id: macos-tray-menu-state-observatorium-v2-pin-test-missing
       order: 199
       title: "host-shell menu_state.rs is missing the macos-tray-architectural-invariants pin test"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
       depends_on: []
@@ -4351,7 +4354,7 @@ plan_index:
     - packet_id: pty-attach-project-threading-litmus-stale-import-shape
       order: 200
       title: "litmus:pty-attach-project-threading-symmetric pins a stale windows-tray import (missing PtyIntent)"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: plan/issues/litmus-full-suite-macos-first-run-findings-2026-07-06.md
       depends_on: []
@@ -4397,7 +4400,7 @@ plan_index:
     - packet_id: macos-build-check-podman-wrapper
       order: 201
       title: "macOS: ./build.sh --check fails in require_podman (Homebrew Podman rejects Linux storage flags)"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: plan/issues/macos-build-check-podman-wrapper-2026-07-05.md
       depends_on: []
@@ -4447,7 +4450,7 @@ plan_index:
     - packet_id: silverblue-immutable-development-workflow
       order: 195
       title: "Research: achieve 100% development workflow parity on immutable Fedora Silverblue hosts"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/silverblue-immutable-development-workflow-2026-07-05.md
       depends_on: []
@@ -4469,7 +4472,7 @@ plan_index:
     - packet_id: audit-plan-cross-branch-writes
       order: 196
       title: "Audit: clarify advance-work-from-plan cross-branch write instructions"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-05T22:45:00Z"
@@ -4502,7 +4505,7 @@ plan_index:
     - packet_id: audit-credential-guard-windows
       order: 197
       title: "Audit: fix check-credential-channel.sh invocation context on Windows"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-05T22:38:00Z"
@@ -4535,7 +4538,7 @@ plan_index:
     - packet_id: litmus-runner-command-backslash-escaping
       order: 201
       title: "Fix: litmus runner's command: extraction doesn't collapse \\\\ to \\, breaking valid-YAML regex escapes"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/litmus-runner-command-backslash-escaping-2026-07-06.md
       depends_on: []
@@ -4736,7 +4739,7 @@ plan_index:
     - packet_id: build-sh-unconditional-podman-gate
       order: 226
       title: "Fix: build.sh's top-level require_podman gate blocks flags that never touch podman"
-      status: done
+      status: completed
       kind: bug-fix
       deliverable: plan/issues/build-sh-unconditional-podman-gate-2026-07-07.md
       depends_on: []
@@ -4810,7 +4813,7 @@ plan_index:
     - packet_id: remote-projects-clone-test-flakiness
       order: 210
       title: "Fix: remote_projects.rs clone tests flaky (shared mutex poison + stale atomic-clone path assertion)"
-      status: done
+      status: completed
       kind: bug-fix
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-06.md
       depends_on: []
@@ -4872,7 +4875,7 @@ plan_index:
     - packet_id: ci-full-guest-binary-prereq-gap
       order: 211
       title: "Research: ./build.sh --ci-full hard-fails on a fresh checkout without a cross-compiled guest binary"
-      status: done
+      status: completed
       kind: research+fix
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
       depends_on: []
@@ -4929,7 +4932,7 @@ plan_index:
     - packet_id: forge-image-split-live-verification
       order: 220
       title: "Verify (live): forge CREATION/FIRST_RUN/EVERY_LAUNCH split actually works end-to-end"
-      status: done
+      status: completed
       kind: research+verification
       deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
       depends_on: []
@@ -5031,7 +5034,7 @@ plan_index:
     - packet_id: sidecar-containerfile-base-split-research
       order: 221
       title: "Research: would git/proxy/vault/inference benefit from a Containerfile.base + Containerfile split like default-image?"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
       depends_on: []
@@ -5098,7 +5101,7 @@ plan_index:
     - packet_id: selective-tillandsias-image-reset
       order: 222
       title: "Impl: selective destructive reset that wipes tillandsias images/containers but preserves pulled upstream base images"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md
       depends_on: []
@@ -5177,7 +5180,7 @@ plan_index:
     - packet_id: build-image-vault-hang-offline
       order: 223
       title: "Fix: scripts/build-image.sh vault hangs indefinitely offline before any Containerfile step runs"
-      status: done
+      status: completed
       kind: bug-fix
       deliverable: plan/issues/build-image-vault-hang-offline-2026-07-06.md
       depends_on: []
@@ -5384,7 +5387,7 @@ plan_index:
     - packet_id: container-dependency-graph-liveness
       order: 228
       title: "Container deps slice 4: runtime liveness probe for all managed containers"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/container_deps/
       depends_on: [container-dependency-graph-satisfier-typestate]
@@ -5426,7 +5429,7 @@ plan_index:
     - packet_id: container-dependency-graph-drift-litmus
       order: 229
       title: "Container deps slice 5: gated-launch drift litmus + compile-time dependency invariant"
-      status: done
+      status: completed
       kind: test+guardrail
       deliverable: crates/tillandsias-headless/src/container_deps/
       depends_on: [container-dependency-graph-liveness]
@@ -5465,7 +5468,7 @@ plan_index:
     - packet_id: headless-loginstatus-push
       order: 230
       title: "Headless: emit LoginStatePush on Vault token change"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-09T20:35:00Z"
@@ -5518,7 +5521,7 @@ plan_index:
     - packet_id: headless-cloudprojects-push
       order: 231
       title: "Headless: emit CloudProjectsPush on gh repo list result change"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-09T20:35:00Z"
@@ -5571,7 +5574,7 @@ plan_index:
     - packet_id: container-concurrency-flock
       order: 232
       title: "R4: ensure_proxy/vault/network/images concurrency-safe (advisory flock per resource)"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-09T21:40:00Z"
@@ -5621,7 +5624,7 @@ plan_index:
     - packet_id: container-shared-cleanup-guard
       order: 233
       title: "R5: cleanup_stack_containers stops removing SHARED containers"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-09T22:10:00Z"
@@ -5674,7 +5677,7 @@ plan_index:
     - packet_id: container-phase-self-heal
       order: 234
       title: "R6: self-heal and container-creating side effects consult VmPhase"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-09T22:45:00Z"
@@ -5727,7 +5730,7 @@ plan_index:
     - packet_id: container-vault-recreate-mutex
       order: 235
       title: "R7: vault recreate is mutually exclusive with lease holders (read/write lock)"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-09T23:20:00Z"
@@ -5786,7 +5789,7 @@ plan_index:
     - packet_id: container-microdnf-gpg-workaround
       order: 236
       title: "Add --nogpgcheck to microdnf install in forge-base and chromium-core for transient Fedora 44 upstream GPG signature failure"
-      status: done
+      status: completed
       kind: fix
       deliverable: images/default/Containerfile.base + images/chromium/Containerfile.core
       depends_on: []
@@ -5822,7 +5825,7 @@ plan_index:
     - packet_id: forge-git-mirror-agent-affordance
       order: 237
       title: "Research + implement: in-forge agent transparent git push to forge mirror (properly authenticated)"
-      status: done
+      status: completed
       kind: research+enhancement
       deliverable: plan/issues/forge-git-mirror-agent-affordance-2026-07-07.md
       depends_on: []
@@ -6014,7 +6017,7 @@ plan_index:
     - packet_id: forge-git-mirror-credential-injection
       order: 238
       title: "Research: forge mirror credential injection for transparent agent push (infrastructure side)"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/forge-git-mirror-credential-injection-2026-07-07.md
       depends_on: [forge-git-mirror-agent-affordance]
@@ -6098,7 +6101,7 @@ plan_index:
     - packet_id: silverblue-toolbox-builder
       order: 239
       title: "Research + implement: transparent toolbox-based builder layer for Fedora Silverblue hosts"
-      status: done
+      status: completed
       kind: research+enhancement
       deliverable: plan/issues/silverblue-toolbox-builder-2026-07-07.md
       depends_on: []
@@ -6193,7 +6196,7 @@ plan_index:
     - packet_id: forge-build-check-tooling-gap
       order: 240
       title: "Forge: make ./build.sh --check usable from inside the forge container"
-      status: done
+      status: completed
       kind: optimization
       deliverable: plan/issues/forge-build-check-tooling-gap-2026-07-08.md
       depends_on: []
@@ -6281,7 +6284,7 @@ plan_index:
     - packet_id: opencode-prompt-e2e-loop-status-contract
       order: 242
       title: "Post-build E2E: OpenCode prompt meta-orchestration loop_status.md litmus fails"
-      status: done
+      status: completed
       kind: bug
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
       depends_on: []
@@ -6318,7 +6321,7 @@ plan_index:
     - packet_id: tray-parity-matrix-complete-post-build
       order: 243
       title: "Post-build smoke: tray parity matrix completeness litmus fails"
-      status: done
+      status: completed
       kind: bug
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-07-08.md
       depends_on: []
@@ -7225,7 +7228,7 @@ plan_index:
     - packet_id: vault-image-in-init-declarative-set
       order: 253
       title: "Build the vault image in --init's declarative set (stop on-demand build in login path)"
-      status: done
+      status: completed
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -7528,7 +7531,7 @@ plan_index:
     - packet_id: windows-tray-parity-column-verify
       order: 258
       title: "Windows: verify the 8 unknown tray-parity cells (your --ci-full now gates on YOUR column)"
-      status: done
+      status: completed
       unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended-smoke blocker lifted"
       kind: verification
       deliverable: openspec/tray-parity-matrix.yaml
@@ -7658,7 +7661,7 @@ plan_index:
     - packet_id: litmus-runner-step-exit-code-ignored
       order: 256
       title: "Litmus runner: a step's non-zero exit code never fails the step (dead-check trap)"
-      status: done
+      status: completed
       split_into:
         - "267 — litmus-corpus-parse-health (burn down strict-exit reds, rewrite 31 folded commands, repair 4 YAML-invalid files, flip strict default)"
       kind: bug+litmus-infra
@@ -7885,7 +7888,7 @@ plan_index:
     - packet_id: parity-litmus-ruby-free-check
       order: 261
       title: "tillandsias-policy parity-matrix subcommand: ruby-free litmus:tray-parity-matrix-complete (gate cannot execute on Windows)"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-policy
       depends_on: []
@@ -8004,7 +8007,7 @@ plan_index:
     - packet_id: git-mirror-ledger-yaml-gate
       order: 263
       title: "git-mirror pre-receive: reject pushes whose plan/openspec YAML does not parse"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/inforge-ledger-yaml-validation-gap-2026-07-10.md
       depends_on: []
@@ -8100,7 +8103,7 @@ plan_index:
     - packet_id: guest-binary-embed-windows
       order: 282
       title: "Windows: embed the linux-staged musl guest headless + demote fetch-headless to fallback (order 190 steps 2-3, windows half)"
-      status: done
+      status: completed
       kind: packaging
       deliverable: crates/tillandsias-windows-tray
       depends_on: []
@@ -8184,7 +8187,7 @@ plan_index:
     - packet_id: wsl-headless-unit-lock-namespace
       order: 274
       title: "WSL2 headless unit lacks HOME/XDG_RUNTIME_DIR — vault flock likely inert across guest processes (order 259 sibling)"
-      status: done
+      status: completed
       unblocked_note: "operator directive 2026-07-12: operator will attend the Windows host and start agents there — attended blocker lifted"
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
@@ -8450,7 +8453,7 @@ plan_index:
     - packet_id: macos-oneshot-cli-live-tray-coexistence
       order: 277
       title: "macOS one-shot CLI modes vs running tray: disk-lock collision with opaque VZ error (attended smoke F-E)"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-macos-tray/src/main.rs
       depends_on: []
@@ -8499,7 +8502,7 @@ plan_index:
     - packet_id: macos-attended-smoke-ux-residue
       order: 269
       title: "Attended-smoke small residue: login popup dead-shell exit + ax-smoke pty-dump session resolution (F-F, F-G)"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-macos-tray/src/
       depends_on: []
@@ -8685,7 +8688,7 @@ plan_index:
     - packet_id: guest-ssh-backdoor-closure
       order: 272
       title: "Close the guest debug backdoor: cloud-init SSH key injection + NAT-reachable sshd violate secure-socket-only isolation"
-      status: done
+      status: completed
       kind: security
       deliverable: crates/tillandsias-vm-layer/src/vz.rs
       depends_on: []
@@ -9247,7 +9250,7 @@ plan_index:
     - packet_id: smoke-lock-fd-leaks-into-forge-sessions
       order: 283
       title: "with-smoke-lock fd leaks into launched forge agent sessions — orphaned agents deadlock the next gate"
-      status: done
+      status: completed
       kind: bug
       deliverable: scripts/with-smoke-lock.sh
       depends_on: []
@@ -9294,7 +9297,7 @@ plan_index:
     - packet_id: forge-opencode-harness-broken-by-upstream-latest
       order: 284
       title: "P1: forge opencode lane down — opencode-ai@latest refresh mid-night broke the harness (postinstall incomplete in-enclave)"
-      status: done
+      status: completed
       kind: bug
       deliverable: images/default/lib-common.sh
       depends_on: []
@@ -9372,7 +9375,7 @@ plan_index:
       order: 291
       renumbered_from: 285
       title: "P0 regression: ALL harness lanes + maintenance terminal die at startup after podman system reset (fatal require_* under set -e)"
-      status: done
+      status: completed
       kind: bug
       deliverable: images/default/lib-common.sh
       depends_on: []
@@ -9417,7 +9420,7 @@ plan_index:
     - packet_id: forge-e2e-token-budget-rate-limit
       order: 286
       title: "Rate-limit full in-forge /meta-orchestration e2e to once per 4h; downgrade other runs to skill Smoke Mode"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: scripts/forge-e2e-rate-limit.sh
       depends_on: []
@@ -9463,7 +9466,7 @@ plan_index:
     - packet_id: provider-login-vault-roles-never-provisioned
       order: 287
       title: "P1 regression: codex/claude/antigravity lanes crash at launch — provider-login vault roles never provisioned (half-landed 2026-06-30 agent-login work)"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-vault-client/src/policy.rs
       depends_on: []
@@ -9506,7 +9509,7 @@ plan_index:
     - packet_id: tray-status-menu-stack-trace-unusable
       order: 288
       title: "P0 UX: tray status menu item renders a full multi-line stack trace, spans offscreen, tray becomes unusable (cannot quit or launch)"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/tray
       depends_on: []
@@ -9549,7 +9552,7 @@ plan_index:
     - packet_id: shared-proxy-teardown-while-terminal-lane-live
       order: 289
       title: "Shared proxy/inference teardown while a maintenance-terminal lane is still running breaks its egress (curl: Could not resolve proxy)"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -9597,7 +9600,7 @@ plan_index:
     - packet_id: homebrew-harness-distribution-migration
       order: 290
       title: "Adopt Homebrew (pinned, attestation-verified) for eligible harness/tool installs; on-demand brew tool helper for forge agents"
-      status: done
+      status: completed
       decided_by: "The Tlatoāni, 2026-07-11 — approved brew WITH attestation, verifiable packets only; on-demand shims with brew-install hint/transparent first-use install"
       split_into: [brew-ondemand-tool-shims, brew-opencode-harness-migration]
       kind: enhancement
@@ -9651,7 +9654,7 @@ plan_index:
     - packet_id: brew-ondemand-tool-shims
       order: 294
       title: "On-demand userspace tools: brew shims with attested-formulae-only runner + generous general-use allowlist"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: images/default/brew-shim-exec.sh
       depends_on: []
@@ -9737,7 +9740,7 @@ plan_index:
     - packet_id: runtime-image-builds-missing-proxy-exemption
       order: 292
       title: "Proxy-exemption class, 4th instance: Rust runtime podman builds lack --http-proxy=false — post-bump image rebuilds die on apk/dnf DNS"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-podman/src/client.rs
       depends_on: []
@@ -9773,7 +9776,7 @@ plan_index:
     - packet_id: router-image-missing-from-launch-ensure-list
       order: 293
       title: "Bump window: forge-launch path ensures git/inference/forge images but launches a versioned router it never builds"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -9896,7 +9899,7 @@ plan_index:
     - packet_id: macos-guest-disk-resize-forge-fit
       order: 294
       title: "macOS guest disk grown to 250G so the forge-base image build fits (was ~5GB, every agent attach failed)"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/vz.rs
       depends_on: []
@@ -9934,7 +9937,7 @@ plan_index:
     - packet_id: windows-guest-disk-resize-forge-fit
       order: 297
       title: "Windows/WSL2 guest disk sizing for the forge-base image build (sibling of macOS order 294)"
-      status: done
+      status: completed
       kind: research+bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -10024,7 +10027,7 @@ plan_index:
     - packet_id: macos-antigravity-agent-menu-parity
       order: 296
       title: "Antigravity agent leaf added to the shared tray menu (macOS/windows parity with Linux)"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-host-shell/src/menu_state.rs
       depends_on: []
@@ -10058,7 +10061,7 @@ plan_index:
     - packet_id: curl-install-first-launch-proxy-absent
       order: 298
       title: "Fresh curl-install (v0.3.260711.8): maintenance terminal comes up with proxy hostname unresolvable — order 289 recurrence post-fix"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -10120,7 +10123,7 @@ plan_index:
     - packet_id: first-run-harness-bootstrap-fail-loud
       order: 299
       title: "Pristine forge with dead egress silently ships ZERO harnesses (opencode/claude/codex all 127) — first-run install failure must be loud"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: images/default/lib-common.sh
       depends_on: []
@@ -10178,7 +10181,7 @@ plan_index:
     - packet_id: litmus-name-filter-silent-noop
       order: 300
       title: "run-litmus-test.sh: a name filter matching zero tests must fail loud, not report PASS on 0 executed"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: scripts/run-litmus-test.sh
       depends_on: []
@@ -10235,7 +10238,7 @@ plan_index:
     - packet_id: git-mirror-fetch-clobbers-exported-ref
       order: 301
       title: "Git mirror: prevent relay fetch from clobbering just-received exported refs"
-      status: done
+      status: completed
       kind: bug+test
       deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
       depends_on: []
@@ -10303,7 +10306,7 @@ plan_index:
     - packet_id: git-mirror-ref-convergence-deploy-and-verify
       order: 302
       title: "Rebuild git-mirror image with the order-301 safe refspec and live-verify one-push convergence"
-      status: done
+      status: completed
       kind: deploy+verify
       deliverable: plan/issues/git-mirror-fetch-clobbers-exported-ref-2026-07-12.md
       depends_on: [git-mirror-fetch-clobbers-exported-ref]
@@ -10358,7 +10361,7 @@ plan_index:
       order: 303
       release_target: stable-milestone-v1
       title: "Tray forge launches run the same ensure_provider_auth vault ladder as the CLI lane"
-      status: done
+      status: completed
       retryable: false
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
@@ -10444,7 +10447,7 @@ plan_index:
       order: 304
       release_target: stable-milestone-v1
       title: "Agent-Login flows: persist in-forge OAuth/device credentials to the vault and re-inject at launch"
-      status: done
+      status: completed
       retryable: false
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-vault-2026-07-12.md
@@ -10524,7 +10527,7 @@ plan_index:
     - packet_id: stable-release-channel
       order: 305
       title: "Introduce a 'stable' release label; README install scripts pin to stable while dailies keep shipping"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/stable-release-channel-2026-07-12.md
       depends_on: []
@@ -10571,7 +10574,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Verify tray OpenCode TUI stays clean after background-installer TTY silencing; chase residual if not"
-      status: done
+      status: completed
       operator_note: "operator-interactive: watch the tray OpenCode TUI after background installer"
       retryable: true
       blocked_on: operator-attended-tray-visual-verification
@@ -10626,7 +10629,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Antigravity lane crashes instantly on tray launch — reproduce with new exit-pause trap and root-cause"
-      status: done
+      status: completed
       operator_note: "operator-interactive: reproduce the Antigravity instant-crash at the tray"
       retryable: true
       blocked_on: antigravity-device-auth-capability
@@ -10716,7 +10719,7 @@ plan_index:
     - packet_id: headless-unit-cap-hardening-podman-wedge
       order: 308
       title: "P1: recipe headless unit's NoNewPrivileges+CapabilityBoundingSet made uid-0 podman go rootless — every headless-driven ensure wedged; tray stuck on 'securing vault' after successful login"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
       depends_on: []
@@ -10798,7 +10801,7 @@ plan_index:
     - packet_id: antigravity-lane-flag-singleton-kills-service
       order: 310
       title: "P1: --antigravity missing from is_cli_mode — tray Antigravity click singleton-kills the running headless service (whole VM stack torn down)"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -10848,7 +10851,7 @@ plan_index:
     - packet_id: windows-background-spawn-console-flicker-and-hcsdiag-parse
       order: 311
       title: "Windows: background wsl.exe/hcsdiag spawns flash console windows; hcsdiag UTF-16 pipe output false-negatives the handshake VM lookup"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -10920,7 +10923,7 @@ plan_index:
       order: 312
       release_target: stable-milestone-v1
       title: "P1: non-elevated Windows tray can NEVER connect — hcsdiag VM-ID lookup is admin/Hyper-V-Administrators-only; every standard-user install is dead on arrival"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-vm-layer/src/transport_windows.rs
       depends_on: []
@@ -11072,7 +11075,7 @@ plan_index:
       order: 313
       desired_release: v0.4
       title: "Inference first-run ollama install: proxy warm-up race + enclave-dead direct fallback + swallowed errors + Debian CA tool on Fedora + non-persistent .tools dir"
-      status: done
+      status: completed
       kind: bug
       deliverable: images/inference/entrypoint.sh
       depends_on: []
@@ -11162,7 +11165,7 @@ plan_index:
     - packet_id: container-ensure-not-idempotent-exited
       order: 314
       title: "P1: container ensure does bare `podman run --name` — an EXITED dependency container name-collides (125) and is classified retry-Permanent, blocking every lane"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -11226,7 +11229,7 @@ plan_index:
     - packet_id: git-mirror-architecture-audit
       order: 315
       title: "Full git-mirror architecture audit — SIMPLICITY: DEFAULTS OVER CONFIGURATION (heavy-agent, provenance-backed)"
-      status: done
+      status: completed
       kind: research
       multi_cycle: true
       deliverable: plan/issues/git-mirror-architecture-audit-2026-07-12.md
@@ -11357,7 +11360,7 @@ plan_index:
     - packet_id: mirror-pre-receive-subshell-reject-loss
       order: 316
       title: "Mirror pre-receive: REJECTED=1 set in pipeline subshell is lost — YAML gate is advisory, never rejects"
-      status: done
+      status: completed
       kind: bug
       deliverable: images/git/pre-receive-hook.sh + scripts/test-pre-receive-yaml-gate.sh
       depends_on: []
@@ -11447,7 +11450,7 @@ plan_index:
       order: 318
       release_target: stable-milestone-v1
       title: "Ladder rung A: mirror MUST NOT ack a push it has not durably relayed (or must expose relay state) — kills the false-success P1"
-      status: done
+      status: completed
       kind: architecture
       deliverable: images/git/ (entrypoint + hooks) + openspec/specs/git-mirror-service/
       depends_on: []
@@ -11644,7 +11647,7 @@ plan_index:
       provisional_id: linux-260714-2
       release_target: stable-milestone-v1
       title: "Forge Git configuration: standard read-only ~/.gitconfig path, one generator, no GIT_CONFIG_GLOBAL"
-      status: done
+      status: completed
       kind: architecture+implementation
       deliverable: crates/tillandsias-headless/src/main.rs + fixture
       depends_on: [git-mirror-architecture-audit]
@@ -11704,7 +11707,7 @@ plan_index:
       provisional_id: linux-260714-3
       release_target: stable-milestone-v1
       title: "Forge dynamic CA trust: one rootless system-default path; delete duplicated SSL_CERT_FILE/GIT_SSL_CAINFO mesh"
-      status: done
+      status: completed
       kind: research+implementation
       deliverable: images/default/Containerfile* + images/default/lib-common.sh + entrypoints
       depends_on: [git-mirror-architecture-audit]
@@ -12071,7 +12074,7 @@ plan_index:
     - packet_id: forge-host-gitconfig-bidirectional-quarantine
       order: 321
       title: "Ladder rung D: bidirectional host/forge git-config isolation — forge can never write host .git/config; host git state never leaks in"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless (mount spec) + fixture
       depends_on: []
@@ -12180,7 +12183,7 @@ plan_index:
       order: 323
       release_target: stable-milestone-v1
       title: "Windows tray: classify wsl-platform-absent / reboot-pending / virtualization-disabled preflight states — 'WSL2 requires a restart' instead of generic VM-create failure"
-      status: done
+      status: completed
       kind: enhancement+bug
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -12267,7 +12270,7 @@ plan_index:
       order: 324
       release_target: stable-milestone-v1
       title: "install-windows.ps1: detect WSL-absent / reboot-pending / virtualization-off at install time and instruct the restart before first launch"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: scripts/install-windows.ps1
       depends_on: []
@@ -12323,7 +12326,7 @@ plan_index:
     - packet_id: github-login-non-tty-fail-loud
       order: 325
       title: "github-login: token read from /dev/tty hangs forever non-interactively — fail loud + stdin/--with-token mode"
-      status: done
+      status: completed
       kind: bug+enhancement
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -12475,7 +12478,7 @@ plan_index:
     - packet_id: guest-lazy-ensure-router-image
       order: 327
       title: "Guest lazy enclave-ensure never builds tillandsias-router — stage 'router' dies with cryptic localhost-registry pull 125 (order-76 parity gap)"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs
       depends_on: []
@@ -12786,7 +12789,7 @@ plan_index:
       order: 351
       provisional_id: linux-260714-1
       title: "Repair stale vsock handshake contract/litmus: wire v1 assertion and nonexistent probe binary"
-      status: done
+      status: completed
       kind: test-fix
       deliverable: openspec/specs/vsock-transport/spec.md + openspec/litmus-tests/litmus-vsock-handshake.yaml
       depends_on: []
@@ -12850,7 +12853,7 @@ plan_index:
       order: 328
       desired_release: v0.5
       title: "P1: in-forge cycle on macOS shared checkout git-cleaned sibling uncommitted work — exit-contract cleanliness must scope to cycle-created artifacts"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md
       depends_on:
@@ -12930,7 +12933,7 @@ plan_index:
     - packet_id: forge-dirty-tree-exit-contract
       order: 341
       title: "Meta-orchestration: preserve pre-existing dirty-tree bytes on blocked exit"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: skills/meta-orchestration/SKILL.md + openspec/litmus-tests/litmus-meta-orchestration-dirty-tree-safety.yaml
       depends_on: []
@@ -13185,7 +13188,7 @@ plan_index:
     - packet_id: pre-receive-yaml-fixture-no-python-policy
       order: 336
       title: "Pre-receive YAML gate fixture violates the repository no-Python policy"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: scripts/test-pre-receive-yaml-gate.sh
       depends_on: []
@@ -13225,7 +13228,7 @@ plan_index:
     - packet_id: git-mirror-audit-cheatsheet-image-sync
       order: 337
       title: "Order-315 git-mirror audit documents are absent from the default image cheatsheet mirror"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: images/default/cheatsheets/concurrent-git/
       depends_on: []
@@ -13265,7 +13268,7 @@ plan_index:
       order: 338
       release_target: stable-milestone-v1
       title: "Codex device-auth foundation: exact provider command and opaque credential schema"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
       depends_on: []
@@ -13310,7 +13313,7 @@ plan_index:
       order: 339
       release_target: stable-milestone-v1
       title: "Codex OAuth restore: inject opaque Vault auth document into the ephemeral forge home"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
       depends_on: [codex-device-auth-command-and-schema]
@@ -13352,7 +13355,7 @@ plan_index:
       order: 340
       release_target: stable-milestone-v1
       title: "Codex OAuth rotation harvest: persist credential-file changes before ephemeral forge teardown"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/issues/provider-device-auth-capability-blocker-2026-07-14.md
       depends_on: [codex-oauth-restore-inject]
@@ -13399,7 +13402,7 @@ plan_index:
     - packet_id: test-scripts-mutable-image-tag
       order: 343
       title: "Pin mutable :latest image tags in three test scripts to satisfy container-base-policy"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: plan/issues/local-ci-prebuild-gate-blockers-2026-07-14.md
       depends_on: []
@@ -13428,7 +13431,7 @@ plan_index:
     - packet_id: test-scripts-python3-elimination
       order: 344
       title: "Eliminate python3 from test-forge-runtime-ca-trust.sh (no-python-scripts + litmus gate blocker)"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: plan/issues/local-ci-prebuild-gate-blockers-2026-07-14.md
       depends_on: []
@@ -13461,7 +13464,7 @@ plan_index:
     - packet_id: test-scripts-base64-injection-elimination
       order: 345
       title: "Eliminate base64 decode-to-executable from codex auth test scripts"
-      status: done
+      status: completed
       kind: bugfix
       deliverable: plan/issues/local-ci-prebuild-gate-blockers-2026-07-14.md
       depends_on: []
@@ -13491,7 +13494,7 @@ plan_index:
     - packet_id: provider-login-live-verify
       order: 352
       title: "Live verify: --claude-login / --codex-login / --agy-login device flows into Vault + relaunch-without-reprompt (operator-attended)"
-      status: done
+      status: completed
       release_target: stable-milestone-v1
       kind: verification
       deliverable: plan/issues/provider-login-live-verify-2026-07-15.md
@@ -13645,7 +13648,7 @@ plan_index:
     - packet_id: service-catalog-architecture-research
       order: 354
       title: "Research (fat agent): publish-locally architecture — current-state map, transport candidates, request/grant sketch, packet-tree proposal"
-      status: done
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: research
       deliverable: plan/issues/enclave-service-catalog-architecture-2026-07-15.md
@@ -13682,7 +13685,7 @@ plan_index:
     - packet_id: service-catalog-external-research
       order: 355
       title: "Research (fat agent): MCP server practice, https for *.localhost, curated catalog candidates, allowlist prior art"
-      status: done
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: research
       deliverable: cheatsheets/architecture/enclave-service-catalog-research.md
@@ -13721,7 +13724,7 @@ plan_index:
     - packet_id: service-catalog-transport-decision
       order: 356
       title: "DECISION RECORD (Tlatoani-signed): publish-locally transport + request/grant protocol + allowlist enforcement point"
-      status: done
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: decision
       deliverable: plan/issues/service-catalog-transport-decision-2026-07.md
@@ -13864,7 +13867,7 @@ plan_index:
     - packet_id: forge-github-token-injection
       order: 359
       title: "Inject the vault GitHub token when forge tooling talks to GitHub (brew attestation, git checkout) — stop getting rate-limited/blocked"
-      status: done
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: enhancement
       deliverable: images/default/lib-common.sh + brew shim + entrypoints
@@ -13917,7 +13920,7 @@ plan_index:
       order: 360
       desired_release: v0.6
       title: "Transparent HTTPS for www.<project>.localhost — Caddy internal CA + host trust so localhost services get real https with zero prompts"
-      status: claimed
+      status: in_progress
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: images/router Caddyfile + host CA-trust install path + litmus
@@ -13956,7 +13959,7 @@ plan_index:
       order: 361
       desired_release: v0.6
       title: "Per-container share policy (ro/rw source or published-artifact mount) + exposed debug ports for local web dev"
-      status: claimed
+      status: in_progress
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: catalog manifest schema (mounts/ports/env contract) + enforcement + fixture
@@ -13994,7 +13997,7 @@ plan_index:
     - packet_id: cloudflare-login-and-public-deploy
       order: 362
       title: "ROADMAP: --cloudflare-login + 'host in www.<domain-i-own>.com' — public deploys via Cloudflare tunnel/DNS; service+environment affinity across tillandsias"
-      status: done
+      status: completed
       kind: research
       multi_cycle: true
       deliverable: plan/issues/cloudflare-deploy-affinity-roadmap-2026-07-15.md
@@ -14061,7 +14064,7 @@ plan_index:
     - packet_id: publish-local-mcp-tool-and-handler
       order: 363
       title: "357 rung I3b: McpFrame publish_local/service_status/service_stop tools + host-side handler + ensure_catalog_service orchestration"
-      status: done
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: implementation
       deliverable: crates/tillandsias-headless (McpFrame dispatch) + crates/tillandsias-browser-mcp (tool family) + config-overlay MCP entry
@@ -14136,7 +14139,7 @@ plan_index:
     - packet_id: publish-local-e2e-litmus
       order: 364
       title: "357 rung I3c: e2e litmus — curl http://www.<project>.localhost returns a fixture project's index"
-      status: done
+      status: completed
       release_target: enclave-service-catalog-milestone
       kind: verification
       deliverable: openspec/litmus-tests + scripts fixture project
@@ -14185,7 +14188,7 @@ plan_index:
       provisional_id: windows-260715-1
       order: 365
       title: "linux-next un-gated unix-only APIs break every Windows checkout — add a cross-target cfg probe to the Linux authoring-side check"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: openspec/litmus-tests/litmus-cross-target-cfg-gate-check.yaml
       depends_on: []
@@ -14248,7 +14251,7 @@ plan_index:
       provisional_id: windows-260715-2
       order: 366
       title: "wsl_root_sh arg-delivered commands are re-parsed by the guest login shell — audit callers and migrate script-shaped payloads to stdin delivery"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs
       depends_on: []
@@ -14307,7 +14310,7 @@ plan_index:
     - packet_id: smoke-curl-install-channel-distinction
       order: 367
       title: "Curl-install smoke distinguishes dailies vs stable — routine smoke tracks the newest daily; one-shot stable smoke post-promotion"
-      status: done
+      status: completed
       release_target: stable-milestone-v1
       kind: enhancement
       deliverable: scripts/resolve-smoke-release.sh + install.sh override + smoke skill + litmus
@@ -14347,7 +14350,7 @@ plan_index:
       provisional_id: windows-260715-3
       order: provisional
       title: "Build scripts WSL2-aware on Windows: transparent tillandsias-build distro re-exec (toolbox parity) so Linux-shaped build/CI work runs on Windows hosts"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: scripts/with-wsl2-builder.sh
       depends_on: []
@@ -14458,7 +14461,7 @@ plan_index:
       order: 369
       release_target: stable-milestone-v1
       title: "Implement: git mirror fetch-before-push reconciliation hooks"
-      status: done
+      status: completed
       kind: implementation
       deliverable: images/git hook scripts and config
       depends_on: [git-mirror-pre-reconcile-research]
@@ -14518,7 +14521,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Deploy: rebuild tillandsias-git image and live-verify order-369 auto-reconcile"
-      status: done
+      status: completed
       kind: deployment
       deliverable: plan/issues/git-mirror-pre-reconcile-research-2026-07-15.md (live-verify addendum)
       depends_on: [git-mirror-pre-reconcile-impl]
@@ -14565,7 +14568,7 @@ plan_index:
     - packet_id: freshness-inventory-and-stamps
       order: 370
       title: "FRESHNESS rung 2: component inventory + first freshness stamps + coverage report"
-      status: done
+      status: completed
       kind: implementation
       deliverable: scripts/freshness-inventory.sh + first stamped components
       depends_on: []
@@ -14604,7 +14607,7 @@ plan_index:
     - packet_id: freshness-ci-reflag
       order: 371
       title: "FRESHNESS rung 3: CI RE-FRESH flagging (advisory first, per migration ladder)"
-      status: done
+      status: completed
       kind: implementation
       deliverable: scripts/local-ci.sh advisory phase + threshold config
       depends_on: [freshness-inventory-and-stamps]
@@ -14635,7 +14638,7 @@ plan_index:
     - packet_id: freshness-skill-audit-class
       order: 372
       title: "FRESHNESS rung 4: standing freshness-audit work class in the recurring skills"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: skills/advance-work-from-plan + skills/meta-orchestration sections
       depends_on: [freshness-inventory-and-stamps]
@@ -14729,7 +14732,7 @@ plan_index:
       order: 374
       release_target: web-share-release-milestone
       title: "Forge MCP tool surface is organically discoverable (publish family reachable + advertised, zero out-of-band setup)"
-      status: done
+      status: completed
       kind: implementation
       deliverable: images/default/config-overlay (mcp entry + instructions + forge-welcome) + tray mcp.sock e2e
       depends_on: [publish-local-mcp-tool-and-handler]
@@ -14985,7 +14988,7 @@ plan_index:
     - packet_id: loop-status-direction-ledger
       order: 381
       title: "loop_status 'Direction' ledger: thematic what-are-we-all-doing-today for multi-host agents"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: plan/loop_status.md section + skill references
       depends_on: []
@@ -15855,7 +15858,7 @@ plan_index:
       # residual (preload policy, >=2-host tier matrix), not a credential.
       # SPLIT 2026-07-28: exit criteria (a)+(b) closed; (c) model preload
       # and (d) GPU passthrough + multi-tier matrix spun out as children.
-      status: done
+      status: completed
       split_into:
         - "392a — inference-startup-cleanup/model-preload-policy (slice c: default model warm at ready, expert slots reserved)"
         - "392b — inference-startup-cleanup/gpu-passthrough-tier-matrix (slice d: GPU device passthrough args, >=2-host-class tier matrix)"
@@ -15955,7 +15958,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Model preload policy — default model warm at ready, expert slots reserved"
-      status: done
+      status: completed
       kind: implementation
       deliverable: images/inference/entrypoint.sh (model preload orchestration) + startup-context model-warm state + readiness litmus
       depends_on: []
@@ -16028,7 +16031,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Research: expert-construction technique — fine-tune vs LoRA vs RAG-index vs Modelfile context, per tier, under a launch-time budget"
-      status: done
+      status: completed
       kind: research
       multi_cycle: true
       deliverable: plan/issues/experts-construction-decision-2026-07-17.md
@@ -16128,7 +16131,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Plan expert rung 1 slice 1 — build and install the tillandsias-plan binary at forge launch"
-      status: done
+      status: completed
       kind: implementation
       deliverable: images/default/lib-common.sh ensure_forge_experts + config-overlay/mcp/forge-plan.sh + litmus-forge-plan-expert-build-shape
       depends_on: []
@@ -16152,7 +16155,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Plan expert rung 1 slice 2 — the cited answer envelope + plan_answer MCP tool"
-      status: done
+      status: completed
       kind: implementation
       deliverable: answer envelope schema + plan_answer tool + envelope litmus
       depends_on: [plan-methodology-experts-rung1/plan-expert-binary-shipping]
@@ -16183,7 +16186,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Plan expert rung 1 slice 3 — methodology L0 YAML path query as an MCP tool"
-      status: done
+      status: completed
       kind: implementation
       deliverable: new subcommand on the existing tillandsias-plan crate + MCP tool beside forge-plan
       depends_on: [plan-methodology-experts-rung1/expert-answer-envelope]
@@ -16214,7 +16217,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Plan expert rung 1 slice 4 — committed ground-truth query set graded against the L0 engine"
-      status: done
+      status: completed
       kind: test
       deliverable: committed query set (plan + methodology) + grading harness runnable in-forge
       depends_on: [plan-methodology-experts-rung1/methodology-expert-layer0]
@@ -16333,7 +16336,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "OpenCode affordance — experts transparently queryable by forge agents (config provider entries + instructions; MCP only if needed)"
-      status: done
+      status: completed
       events:
         - type: claim
           ts: "2026-07-29T21:20:00Z"
@@ -16553,7 +16556,7 @@ plan_index:
       order: 533
       desired_release: v0.5
       title: "tillandsias-help segfaults (exit 139, empty output) — locale block sources itself forever under the symlink name"
-      status: done
+      status: completed
       kind: implementation
       deliverable: images/default/help.sh re-entry guard + wrapper-name execution check
       depends_on: []
@@ -17053,7 +17056,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Intentional EPHEMERAL RESET — one-click wipe+reprovision of the guest (destructive-by-design; re-auth is the only cost)"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: tray menu + --reset-guest CLI + host reprovision path + e2e
       depends_on: [guest-crashloop-detection]
@@ -17120,7 +17123,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Windows: WSL-absent is a first-class runtime state — preflight before download, background `wsl --install` with curated progress, restart-required surfacing; installer ends with the idempotent install"
-      status: done
+      status: completed
       kind: bug
       deliverable: scripts/install-windows.ps1 + crates/tillandsias-windows-tray (wsl_lifecycle preflight/ensure + notify_icon curated states) + vm-layer absent stderr signature + spec deltas + litmus updates
       depends_on: []
@@ -17214,7 +17217,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Windows app identity: VERSIONINFO metadata ('Tillandsias v#.#.######.# by Tlatoani'), stable shell identity across updates, single idempotent Installed-Software entry"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-windows-tray build.rs/.rc (VERSIONINFO) + notify-icon identity + scripts/install-windows.ps1 (uninstall key + stale-entry hygiene)
       depends_on: []
@@ -17295,7 +17298,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: --github-login token store dies with 'CA bundle not readable' on a fresh guest — login container lacks the CA mount and never runs ensure_ca_bundle"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-headless/src/main.rs run_provider_login (vault branch)
       depends_on: []
@@ -17343,7 +17346,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Curated connection-state chips (Tlatoani 'Workspace' family, cross-tray) + build-version skew guard compared the wrong version (0.1.0 crate version, false WARN every handshake)"
-      status: done
+      status: completed
       kind: bug
       deliverable: windows+macos tray chip consts/tests + notify_icon skew comparison
       depends_on: []
@@ -17458,7 +17461,7 @@ plan_index:
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: first forge launch races the mirror's initial upstream seed — readiness gate passes on 'reachable', clone retries exhaust minutes before refs arrive (live Windows repro for the 452/454 family)"
-      status: done
+      status: completed
       kind: bug
       deliverable: headless launch-readiness gate (wait for SEEDED, not reachable) + first-seed progress surfacing
       depends_on: []
@@ -18178,7 +18181,7 @@ plan_index:
       order: provisional
       release_target: stable-milestone-v1
       title: "Windows crash-loop diagnosability + resilience: Event Log relay (real), singleton contention/deadline fixes, console-flash suppression, connect backoff"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-windows-tray (eventlog.rs, notify_icon.rs, wsl_lifecycle.rs, main.rs) + tillandsias-core singleton + scripts/install-windows.ps1 + spec windows-event-logging (reactivated)
       depends_on: []
@@ -18529,7 +18532,7 @@ plan_index:
       order: 407
       desired_release: v0.5
       title: "Standing: backfill desired_release across open packets so every open packet carries a ship-bucket"
-      status: done
+      status: completed
       kind: housekeeping
       multi_cycle: true
       deliverable: plan/index.yaml (desired_release on open packets) + plan/loop_status.md active-release pointer kept current
@@ -18781,7 +18784,7 @@ plan_index:
       order: 411
       desired_release: v0.4
       title: "Tray forge-launch on a missing forge image must build it (or say 'run --init'), not report a misleading 'initialization may be in progress'"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-headless/src/tray/mod.rs (forge-launch image gate) + optional --install/--init coupling
       depends_on: []
@@ -19126,7 +19129,7 @@ plan_index:
       order: 417
       desired_release: v0.4
       title: "Windows crashloop fix: bound the keepalive wsl.exe respawn loop — cap + backoff + classified-fatal give-up instead of respawning every 1s forever"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs (spawn_keepalive) + terminal failed-state surfacing
       depends_on: []
@@ -19207,7 +19210,7 @@ plan_index:
       order: 418
       desired_release: v0.4
       title: "Windows: health-probe a 'registered' WSL distro before the re-import-skip fast path — a partial/corrupt import loops on every launch"
-      status: done
+      status: completed
       kind: bug
       deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs (registered fast path) + crates/tillandsias-vm-layer/src/wsl.rs (is_registered integrity)
       depends_on: []
@@ -19265,7 +19268,7 @@ plan_index:
       order: 419
       desired_release: v0.4
       title: "Windows: classify the still-generic VM-launch failures (import failure, host-disk-at-import, kernel/WSL mismatch, S2 healthy-on-paper) + add the missing graceful-launch-failure spec requirement"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-vm-layer/src/wsl.rs (classifier extension to the launch/import phase) + openspec/specs/vm-provisioning-lifecycle/spec.md (new requirement) + litmus
       depends_on: []
@@ -19335,7 +19338,7 @@ plan_index:
       order: 420
       desired_release: v0.4
       title: "Windows: auto-capture a diagnostic bundle on terminal VM-launch failure so a remote user's crashloop is debuggable without a live agent"
-      status: done
+      status: completed
       kind: enhancement
       deliverable: crates/tillandsias-windows-tray (on-terminal-failure diagnostic dump) reusing scripts/diagnose-windows.ps1 facts + tray pointer to the bundle
       depends_on: [windows-vm-launch-keepalive-loop-bound]
@@ -19454,7 +19457,7 @@ plan_index:
       packet_id: git-mirror-image-deploy-gate
       desired_release: v0.4
       title: "Deploy gate: rebuild tillandsias-git image so the mirror's vault-cli has renew-self — the running image is pre-order-414 and every forge session loses push ~1h after container start"
-      status: done
+      status: completed
       kind: deploy
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: []
@@ -19827,7 +19830,7 @@ plan_index:
       packet_id: forge-mirror-fail-loud-invariant
       desired_release: v0.4
       title: "Fail-loud invariant for the mirror redirect / gitdir facade / forge index — three subsystems silently degrade to no-ops and 3 of 5 live forge gitconfigs have NO mirror redirect"
-      status: done
+      status: completed
       kind: fix
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: []
@@ -20571,7 +20574,7 @@ plan_index:
       packet_id: codex-lane-api-key-env
       desired_release: v0.4
       title: "Codex lane is unauthenticated by construction: OPENAI_API_KEY does not authenticate Codex AND injecting it suppresses the vault OAuth restore"
-      status: done
+      status: completed
       kind: fix
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
       depends_on: []
@@ -20632,7 +20635,7 @@ plan_index:
       packet_id: opencode-vault-auth-content
       desired_release: v0.4
       title: "OpenCode vault provider: inject credentials via OPENCODE_AUTH_CONTENT so no auth.json ever touches disk"
-      status: done
+      status: completed
       operator_note: "operator decision to unblock: pin opencode version OR assert post-launch injection"
       kind: feature
       deliverable: plan/issues/forge-agent-delegation-research-2026-07-19.md
@@ -20759,7 +20762,7 @@ plan_index:
       packet_id: forge-gc-auto-split-brain
       desired_release: v0.4
       title: "gc.auto split-brain: host repo and forge container share objects/ and refs/ but keep SEPARATE packed-refs — a host-side auto-gc can delete refs the container resolves through"
-      status: done
+      status: completed
       kind: fix
       deliverable: plan/issues/git-mirror-architecture-decision-2026-07-19.md
       depends_on: []
@@ -20838,7 +20841,7 @@ plan_index:
       packet_id: test-gpu-tier-hermeticity
       desired_release: v0.4
       title: "Unit test inference_run_args_gate_gpu_delivery_on_tier_and_cdi fails on any GPU host — ./build.sh --test is red on the CUDA machine"
-      status: done
+      status: completed
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (test hermeticity)
       depends_on: []
@@ -20909,7 +20912,7 @@ plan_index:
       packet_id: test-init-build-state-hermeticity
       desired_release: v0.4
       title: "Flaky test: init_build_state_persists_to_cache_directory fails intermittently under the parallel runner (shared cache-directory state)"
-      status: done
+      status: completed
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (test hermeticity)
       depends_on: []
@@ -21026,7 +21029,7 @@ plan_index:
       packet_id: git-service-alias-unification
       desired_release: v0.5
       title: "Unify the git-service / tillandsias-git dual network alias — a rename migration, not a deletion (both names have live consumers)"
-      status: done
+      status: completed
       kind: cleanup
       deliverable: images/default/config-overlay/shell-helpers.sh, forge-welcome.sh, container_profile.rs, main.rs
       depends_on: []
@@ -21228,7 +21231,7 @@ plan_index:
       packet_id: test-transient-state-audit
       desired_release: v0.5
       title: "Audit the suite for tests that encode transient project state as an invariant — completing work should never break a test"
-      status: done
+      status: completed
       kind: fix
       deliverable: plan/issues (audit report) + test fixes
       depends_on: [test-gpu-tier-hermeticity]
@@ -21324,7 +21327,7 @@ plan_index:
       packet_id: harness-contract-verification
       desired_release: v0.4
       title: "Harness liveness probe cannot detect BEHAVIOURAL drift — a working @latest that changed an undocumented contract passes it"
-      status: done
+      status: completed
       kind: fix
       deliverable: images/default/lib-common.sh (harness_probe) + per-harness contract checks
       depends_on: []
@@ -21409,7 +21412,7 @@ plan_index:
       packet_id: plan-status-vocabulary-normalisation
       desired_release: v0.5
       title: "Plan ledger uses 11 status values with three semantic duplicate pairs — normalise the vocabulary"
-      status: ready
+      status: completed
       operator_note: "operator preference: canonical status vocabulary"
       kind: cleanup
       deliverable: plan/schema.yaml + plan/index.yaml status migration
@@ -21443,6 +21446,18 @@ plan_index:
           agent_id: "linux-tillandsias-opus48-20260719T0000Z"
           host: linux
           summary: Filed while closing order 438's schema-drift advisories.
+        - type: completed
+          ts: "2026-07-30T18:15:00Z"
+          agent_id: "forge-big-pickle-20260730"
+          host: forge
+          summary: >
+            Synonyms migrated: done/completed/success/implemented → completed;
+            claimed/active → in_progress. default_status_values and schema.yaml
+            statuses set to identical canonical list (10 values). Divergence
+            guard added as scripts/check-plan-schema-divergence.sh. 295 completed
+            + 16 in_progress occurrences after migration. Falsifiability proven:
+            injected fake-status was caught. tillandsias-plan check: ok 452
+            packets. build.sh --check: pass.
     - packet_id: mirror-startup-sweep-per-ref-tolerant
       order: 441
       desired_release: v0.4
@@ -21782,7 +21797,7 @@ plan_index:
       order: 446
       desired_release: v0.4
       title: "Git daemon must start BEFORE the startup sweep — clone-only forges crash on 'connection refused' during the minutes-long per-ref sweep"
-      status: done
+      status: completed
       capability_tags: [linux, git-mirror, startup, readiness, forge, p1]
       kind: fix
       deliverable: images/git/entrypoint.sh (daemon-first ordering)
@@ -22006,7 +22021,7 @@ plan_index:
       order: 450
       desired_release: v0.4
       title: "REGRESSION: order 423 disabled git daemon receive-pack before order 322 shipped — ALL forge pushes rejected"
-      status: done
+      status: completed
       capability_tags: [linux, git-mirror, transport, regression, release-blocker, p0]
       operator_note: "operator decision made 2026-07-20: option 1 (restore receive-pack on the internal-only enclave daemon); order 322 authenticated smart-HTTP remains the proper long-term fix"
       kind: fix
@@ -22144,7 +22159,7 @@ plan_index:
       order: 452
       desired_release: v0.4
       title: "Concurrent mirror-based forges: every launch clones a CURRENT, non-empty checkout from the git-mirror, all push transparently and coherently"
-      status: done
+      status: completed
       capability_tags: [linux, git-mirror, forge, concurrency, coherence, idempotency, release-blocker]
       operator_note: "operator 2026-07-20: the v0.4-blocking regression was forges INCONSISTENTLY sourcing the tree (some host-mounted the checkout, some cloned the mirror) -> .git credential collisions. Host checkout separated to 2src/tillandsias; project default stays ~/src/<project>. Goal: ALL forges clone from the mirror, concurrently, each own tree, all pushing transparently + coherently. Fix the coherence issues Hy3 and the host hit."
       kind: fix
@@ -22573,7 +22588,7 @@ plan_index:
       order: 459
       desired_release: v0.4
       title: "Claude + OpenCode install via OFFICIAL curl installers at container launch — cache-persisted, ephemeral, idempotent (operator directive 2026-07-21)"
-      status: done
+      status: completed
       capability_tags: [linux, forge, harness, ephemerality, idempotency]
       operator_note: >
         The Tlatoani 2026-07-21: image build could never curl (no enclave
@@ -22753,7 +22768,7 @@ plan_index:
       order: 477
       desired_release: v0.5
       title: "Last-lane teardown and the liveness supervisor disagree on the proxy's scope: teardown removes it, liveness re-creates it 3s later"
-      status: done
+      status: completed
       kind: fix
       deliverable: one shared core-vs-lane-scoped container set consumed by both teardown and liveness (plus a test pinning the post-teardown steady-state container set)
       depends_on: []
@@ -22908,7 +22923,7 @@ plan_index:
       order: 462
       desired_release: v0.4
       title: "git-mirror pre-receive full-tree YAML validation rejects EVERY new-branch push — in-guest agents cannot create branches, stranding salvage/WIP flows"
-      status: done
+      status: completed
       kind: fix
       deliverable: images/git/pre-receive-hook.sh (diff-base + legacy archive exemption)
       depends_on: []
@@ -22981,7 +22996,7 @@ plan_index:
       order: 461
       desired_release: v0.5
       title: "Reconcile generic Podman forge-secret prohibition with scoped Vault capability mounts"
-      status: done
+      status: completed
       kind: methodology
       deliverable: plan/issues/podman-idiomatic-forge-secret-contract-drift-2026-07-23.md
       depends_on: []
@@ -23023,7 +23038,7 @@ plan_index:
       order: 464
       desired_release: v0.5
       title: "Reject unknown delegated-result format values instead of silently disabling capture"
-      status: done
+      status: completed
       kind: fix
       deliverable: plan/issues/forge-result-format-unknown-value-fail-closed-2026-07-24.md
       depends_on: []
@@ -23147,7 +23162,7 @@ plan_index:
       order: 465
       desired_release: v0.4
       title: "PRINCIPLE: every forge stack MUST be enclave-isolated + git:// mirror push on ALL platforms (uniform container stack)"
-      status: done
+      status: completed
       kind: architecture
       deliverable: plan/issues/forge-enclave-isolation-uniform-principle-2026-07-23.md
       depends_on: []
@@ -23549,7 +23564,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Research: CPU/GPU/NPU heterogeneous inference — vendor landscape, engine matrix, policy prior art (operator-directed, 2026-07-24)"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/heterogeneous-inference-cpu-gpu-npu-research-2026-07-24.md
       depends_on: []
@@ -23576,7 +23591,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Spec: openspec deltas for accel capability probe, engine slots, policy router + NPU rows in the inference-container tier table"
-      status: done
+      status: completed
       kind: spec
       deliverable: openspec specs (accel-capability-probe, inference-engine-slots, inference-policy-router) + amended inference-container spec + litmus bindings
       depends_on: [heterogeneous-inference-landscape-research]
@@ -23613,7 +23628,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: structured hardware capability probe (CPU/GPU/NPU/bandwidth) replacing the string inference tier"
-      status: done
+      status: completed
       kind: implementation
       deliverable: capabilities probe in tillandsias-headless + capabilities.json surface + unit tests + litmus shape test
       depends_on: [heterogeneous-inference-specs]
@@ -23671,7 +23686,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: llama-server as a first-class engine slot beside ollama (Vulkan-first image variant)"
-      status: done
+      status: completed
       phase: implementation
       progress_summary: >
         Concurrent shaping converged on four evidence-bounded children. The
@@ -23765,7 +23780,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: engine-slot abstraction in tillandsias-headless (Ollama default, Vulkan/CUDA deterministic pinning)"
-      status: done
+      status: completed
       kind: implementation
       deliverable: engine_slots module + EngineKind + EngineSlotDescriptor + NPU refusal logic + backend env pinning + unit tests
       depends_on: [heterogeneous-inference-specs, accel-capability-probe]
@@ -24038,7 +24053,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Policy router foundation — TOML preferences and pure measured-fact routing"
-      status: done
+      status: completed
       kind: implementation
       deliverable: policy_router Rust module + images/inference/policy-router.toml + quick implementation litmus
       depends_on: [accel-capability-probe, engine-slot-abstraction-and-vulkan-pinning]
@@ -24364,7 +24379,7 @@ plan_index:
       order: 490
       desired_release: v0.4
       title: "Regenerate clickable trace indexes from every build-producing build.sh mode"
-      status: done
+      status: completed
       kind: fix
       deliverable: plan/issues/clickable-trace-index-build-dispatch-gap-2026-07-25.md
       depends_on: [postbuild-meta-orchestration-dirty-start-contract]
@@ -24460,7 +24475,7 @@ plan_index:
       order: 493
       desired_release: v0.5
       title: "Guest write_to_guest blocks unboundedly inline in the connection loop — wedge kills session/connection (audit D6)"
-      status: done
+      status: completed
       kind: fix
       deliverable: plan/issues/guest-pty-write-wedge-2026-07-27.md
       depends_on: []
@@ -24556,7 +24571,7 @@ plan_index:
       order: 495
       desired_release: v0.5
       title: "release-preflight local-ci regenerates evidence into the shared checkout, then its own post-build forge gate refuses the dirty worktree"
-      status: done
+      status: completed
       kind: fix
       deliverable: plan/issues/preflight-evidence-dirties-forge-gate-2026-07-28.md
       depends_on: []
@@ -24655,7 +24670,7 @@ plan_index:
       order: 497
       desired_release: v0.5
       title: "Research record: git branching model for multi-agent integration branches — trunk spine + agent/salvage exception tier, adopted with red-team repairs"
-      status: done
+      status: completed
       kind: research
       depends_on: []
       pickup_role: "linux_mutable"
@@ -24678,7 +24693,7 @@ plan_index:
       order: 498
       desired_release: v0.5
       title: "Research record: dev-gated in-forge rebuild/restart MCP surface (dev-control) — adopted with security-spine rebuild after adversarial review"
-      status: done
+      status: completed
       kind: research
       depends_on: []
       pickup_role: "linux_mutable"
@@ -24701,7 +24716,7 @@ plan_index:
       order: 499
       desired_release: v0.5
       title: "Branch scheme rung 1: codify branch_namespaces in methodology (doc-only) + dead-ref census with operator-approved archive+prune"
-      status: done
+      status: completed
       kind: docs
       events:
         - type: completed
@@ -24739,7 +24754,7 @@ plan_index:
       order: 500
       desired_release: v0.5
       title: "Branch scheme rung 2: warn-only name grammar, protected-branch salvage advice on the relay-failure path, salvage/* YAML-gate exemption"
-      status: done
+      status: completed
       kind: feature
       depends_on: [branch-namespace-rung1-docs]
       events:
@@ -24782,7 +24797,7 @@ plan_index:
       order: 501
       desired_release: v0.5
       title: "Fix sticky-HEAD: forge clone explicitly checks out the launch-gated seed branch on ALL transports (fallback chain, no hard -b failure)"
-      status: done
+      status: completed
       kind: fix
       depends_on: []
       events:
@@ -24928,7 +24943,7 @@ plan_index:
       order: 506
       desired_release: v0.5
       title: "dev-control P1: OpenSpec change — retro-specify mcp.sock transport, two dev verbs, two-key gate, refusal statuses; correct false grounding claims"
-      status: done
+      status: completed
       kind: spec
       events:
         - type: completed
@@ -25297,7 +25312,7 @@ plan_index:
       order: 516
       desired_release: v0.5
       title: "tillandsias-plan cannot resolve alphanumeric child orders (394a, 392a) by order — only by packet_id"
-      status: done
+      status: completed
       kind: fix
       deliverable: crates/tillandsias-plan reference resolver + unit test over a child-order fixture
       depends_on: []
@@ -25545,7 +25560,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "WRONG ANSWER path: experts cite unparseable corpora and citations the engine's own verifier refuses"
-      status: done
+      status: completed
       kind: bug
       deliverable: self-verifying envelope exit points + untrusted-corpus refusal + reproduction litmus
       depends_on: []
@@ -25604,7 +25619,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "skip_runtime_pulls inserts --env AFTER the image name, so the flag becomes container argv and is silently dropped"
-      status: done
+      status: completed
       kind: bug
       deliverable: arg-vector fix + flag-before-image unit assertion + removal of the dead trailing command
       depends_on: []
@@ -25695,7 +25710,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "The 'building' experts state is advertised as transient but has no upper bound — a killed builder pins it forever"
-      status: done
+      status: completed
       kind: bug
       deliverable: read-side bound on the building state + degraded(build-abandoned-after-Ns) rendering + litmus
       depends_on: []
