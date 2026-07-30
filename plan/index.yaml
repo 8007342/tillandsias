@@ -16494,6 +16494,13 @@ plan_index:
         - "in a fresh forge session with zero manual steps, plan_answer for the milestone's exemplar question returns confidence=exact with a resolving citation, and tillandsias-plan grade passes 17/17 in-forge (criterion (a) probe, re-run from the same seat)"
         - "a forge whose checkout lacks the expert subcommands reports an honest experts state (not ready) or a degraded reason that names stale-source — distinguishable from engine failure"
 
+      events:
+        - type: progress
+          ts: "2026-07-30T04:30:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260730"
+          host: linux_mutable
+          summary: >
+            ROOT CAUSE IS SHARPER THAN FILED, and it is not 'forges launch on main'. The forge base branch is NON-DETERMINISTIC. Corroborating evidence from the coordinator's own direct observation the same day: I exec'd into the ANTIGRAVITY forge mid-cycle and read its checkout — HEAD was 8898d5b9, and 'git branch -a --contains 8898d5b9' resolves to linux-next ONLY (not main). So that forge had linux-next while the Claude sibling's forge, launched hours later on the same host, had main. Two forges, one host, one day, different base branches. lib-common.sh:671 clones with NO -b (and :557 records that 'a hard git clone -b <seed> is FORBIDDEN (B6)'), so every forge takes whatever the mirror's exported HEAD happens to point at, unpinned. That dependency has DOCUMENTED drift: order 415 (completed) was exactly 'the mirror's exported refs/heads/main is not fast-forwarded to upstream' after a rejected push, root-caused to a refspec-less fetch updating only FETCH_HEAD. Independent third data point: plan/loop_status.md:203 and :243 record an EARLIER cycle that found itself on main at startup and manually rebased its commits to linux-next — i.e. agents have been silently absorbing this for at least two cycles by noticing, which is the mechanism-by-attentive-agent pattern this project forbids. CONSEQUENCE for grading: the expert failure is not 'the forge is on the wrong branch' but 'the forge's base is unpinned, so whether the expert can answer at all is luck'. The fix must PIN the base (or fail loud when the exported HEAD is not the expected branch), not merely correct main->linux-next once. Suggested added exit criterion: a fresh forge launch either lands on the host's canonical branch or refuses with a named reason; no agent is required to notice.
     - packet_id: inference-state-warm-grammar-multimodel
       order: 532
       desired_release: v0.5
