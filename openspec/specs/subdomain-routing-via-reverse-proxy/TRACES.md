@@ -19,7 +19,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/state.rs#L1504](../../../crates/tillandsias-core/src/state.rs#L1504)
 - [crates/tillandsias-core/src/state.rs#L1537](../../../crates/tillandsias-core/src/state.rs#L1537)
 - [crates/tillandsias-core/src/state.rs#L1577](../../../crates/tillandsias-core/src/state.rs#L1577)
-- [crates/tillandsias-headless/src/main.rs#L691](../../../crates/tillandsias-headless/src/main.rs#L691)
+- [crates/tillandsias-headless/src/main.rs#L693](../../../crates/tillandsias-headless/src/main.rs#L693)
 - [crates/tillandsias-headless/src/main.rs#L3401](../../../crates/tillandsias-headless/src/main.rs#L3401)
 - [crates/tillandsias-headless/src/main.rs#L3451](../../../crates/tillandsias-headless/src/main.rs#L3451)
 - [crates/tillandsias-headless/src/main.rs#L3472](../../../crates/tillandsias-headless/src/main.rs#L3472)
