@@ -452,6 +452,50 @@ _require_host_build_tools() {
 # TILLANDSIAS_SKIP_TRACE_INDEX=1 suppresses regeneration for callers that must
 # not mutate the tracked checkout; build.sh sets it for the post-build and
 # runtime litmus phases, which can launch a real forge.
+# Local build counter. methodology/versioning.yaml declares this and has since
+# the scheme was designed:
+#
+#   Build:
+#     meaning: "Local monotonic build counter — increments on every local build"
+#     monotonic: "Globally monotonic across all machines and branches"
+#     increment_rule: "Automatic on every local build (./build.sh), manual bump at merge"
+#
+# It was never automatic. scripts/bump-version.sh --bump-build existed,
+# scripts/verify-version-monotonic.sh existed, and build.sh called NEITHER — so
+# VERSION sat at 0.4.260728.1 through days of local builds while the published
+# tag moved to v0.4.260728.2, and the version-monotonicity gate was red the whole
+# time. The gate was not miscategorised; it was correctly reporting a real,
+# ongoing defect that nothing else surfaced.
+#
+# Bumped from the same dispatch set as the trace indexes — the build-PRODUCING
+# ones. `--check` and `--test` produce no artifact, so they are not builds and
+# must not move the counter (that distinction is already load-bearing for the
+# trace indexes; reuse it rather than invent a second rule).
+#
+# The bump is fail-soft on the script's own errors but LOUD: it dirties a tracked
+# file, and an agent that does not know that ships an unbumped VERSION.
+_BUILD_VERSION_BUMPED=false
+_bump_build_version() {
+    [[ "$_BUILD_VERSION_BUMPED" == false ]] || return 0
+    _BUILD_VERSION_BUMPED=true
+    if [[ "${TILLANDSIAS_SKIP_VERSION_BUMP:-0}" == "1" ]]; then
+        _info "Skipping build-counter bump (TILLANDSIAS_SKIP_VERSION_BUMP=1)"
+        return 0
+    fi
+    local before after
+    before="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION" 2>/dev/null || echo unknown)"
+    if ! "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build; then
+        _warn "Build-counter bump FAILED. VERSION is unchanged at ${before}; methodology/versioning.yaml requires it to increment on every local build. Run scripts/bump-version.sh --bump-build by hand and read its errors."
+        return 0
+    fi
+    after="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION" 2>/dev/null || echo unknown)"
+    if [[ "$before" != "$after" ]]; then
+        _warn "VERSION bumped ${before} -> ${after} (local build counter). This dirties tracked files."
+        _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
+        _warn "  Verify monotonicity before pushing: scripts/verify-version-monotonic.sh"
+    fi
+}
+
 _TRACE_INDEXES_REGENERATED=false
 _regenerate_trace_indexes() {
     [[ "$_TRACE_INDEXES_REGENERATED" == false ]] || return 0
@@ -499,6 +543,7 @@ if [[ "$FLAG_INIT" == true ]]; then
     # (it builds every container image). Fail fast with a clear message
     # here rather than a possibly-confusing downstream Rust error.
     require_podman || exit 1
+    _bump_build_version
     _regenerate_trace_indexes
     _step "Running tillandsias --init (builds all images with versioned tags)..."
     # Runs on the host where podman works.
@@ -510,6 +555,7 @@ if [[ "$FLAG_INIT" == true ]]; then
 fi
 
 if [[ "${FLAG_OBSERVATORIUM:-false}" == true ]]; then
+    _bump_build_version
     _regenerate_trace_indexes
     _step "Building workspace (debug)..."
     _require_host_build_tools
@@ -610,6 +656,7 @@ _prepare_ci_full_install_inputs() {
     [[ "$FLAG_INSTALL" == true ]] || return 0
 
     _step "Preparing trace indexes and staged guest binaries for full install CI..."
+    _bump_build_version
     _regenerate_trace_indexes
 
     if [[ ! -x "$SCRIPT_DIR/scripts/build-guest-binaries.sh" ]]; then
@@ -628,6 +675,7 @@ _prepare_ci_full_install_inputs() {
 # block is latched to a no-op by this one. The release dispatch owns its own
 # gate and regenerates at the top of its own block.
 if [[ "$FLAG_INSTALL" == true ]]; then
+    _bump_build_version
     _regenerate_trace_indexes
 fi
 
@@ -686,6 +734,7 @@ fi
 
 if [[ "$FLAG_INSTALL" == true ]]; then
     _step "Building portable launcher (musl-static) with tray support for install..."
+    _bump_build_version
     _regenerate_trace_indexes
 
     # Build only the Linux launcher here. macOS and Windows tray binaries share
@@ -822,6 +871,7 @@ fi
 
 # Release build
 if [[ "$FLAG_RELEASE" == true ]]; then
+    _bump_build_version
     _regenerate_trace_indexes
     if ! _run_local_ci_gate --fast "${CI_ARG_LIST[@]}"; then
         _error "CI/CD validation failed — fix issues before releasing"
@@ -850,6 +900,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 
 # Default: debug build (only if no other build or CI action was requested)
 elif [[ "$FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalse" ]]; then
+    _bump_build_version
     _regenerate_trace_indexes
     _step "Building workspace (debug)..."
     _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
