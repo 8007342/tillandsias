@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-web.sh#L2](../../../build-web.sh#L2)
-- [crates/tillandsias-headless/src/main.rs#L2365](../../../crates/tillandsias-headless/src/main.rs#L2365)
+- [crates/tillandsias-headless/src/main.rs#L2369](../../../crates/tillandsias-headless/src/main.rs#L2369)
 - [images/web/Containerfile#L1](../../../images/web/Containerfile#L1)
 - [images/web/entrypoint.sh#L3](../../../images/web/entrypoint.sh#L3)
 - [scripts/check-container-bases.sh#L8](../../../scripts/check-container-bases.sh#L8)
