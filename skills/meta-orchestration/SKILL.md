@@ -200,6 +200,46 @@ Read-only/inspection cycles on a `main` checkout remain allowed — the guard
 gates committable cycles only. Pinned by
 `litmus:committable-branch-guard-shape`.
 
+## Forge Expert Base Guard
+
+Run before launching a forge from this checkout. Run the executable guard
+instead of re-deriving the check in prose:
+
+```bash
+scripts/check-forge-expert-base.sh
+```
+
+It prints exactly one line matching
+`^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$`
+and exits `0` when a forge seeded from this checkout can build a working plan
+expert, non-zero when it cannot.
+
+Why this is a separate guard from the branch guard above: the launcher seeds a
+forge's branch from **this checkout's current branch**
+(`read_host_project_current_branch` → `TILLANDSIAS_FORGE_SEED_BRANCH`), so
+whatever branch you are parked on becomes the next forge's base. `main` carries
+no `crates/tillandsias-plan/src/answer.rs`, so a forge seeded from it builds a
+**pre-expert binary** and then reports `experts: ready` truthfully while every
+`plan_answer` / `methodology_path` returns `confidence=unsupported`. Truthful
+state, wrong artifact. Breach record: 2026-07-30, an in-forge session found both
+experts refusing the milestone's own exemplar question; two earlier cycles had
+absorbed the same condition by noticing and hand-rebasing
+(`plan/loop_status.md:203`, `:243`). Order 531.
+
+The test is **source presence, not a branch name** — deliberately. The names
+`linux-next`/`windows-next`/`osx-next`/`main` are Tillandsias's own conventions
+and are explicitly *not* a runtime convention of the product
+(`methodology/multi-host-development.yaml:21-27`), so a forge on an end user's
+project must not assume them. Source presence is a fact about the checkout, and
+it also catches the case a branch-name test cannot: when the seed and the actual
+branch agree because this checkout was itself parked on a pre-expert base,
+nothing looks wrong.
+
+On `blocked:expert-sources-absent`, do NOT launch a forge expecting expert
+answers. Switch this checkout to a branch carrying the expert sources first. On
+`ok:no-plan-crate` the target project simply has no plan expert, which is normal
+off-Tillandsias.
+
 ## Reduction Engine
 
 The loop is a reduction engine, not just a worker. Its job is the project's core

@@ -3251,25 +3251,47 @@ inject_startup_context() {
     # truthfully reports `experts: ready` while every plan_answer /
     # methodology_path call returns confidence=unsupported. Truthful state, wrong
     # artifact — the hardest kind to notice.
+    # SCOPE RULE (methodology/multi-host-development.yaml:21-27): the names
+    # linux-next / windows-next / osx-next / main are TILLANDSIAS'S OWN
+    # development conventions and are explicitly "NOT a runtime convention of the
+    # product" — a forge launched on an end user's project MUST NOT assume them.
+    # This code runs in EVERY forge, so it may not judge a branch by its NAME.
+    # An earlier draft of this block flagged `main` as non-committable and told
+    # the agent to switch to `linux-next`; that is correct only when the target
+    # project happens to be Tillandsias, and wrong everywhere else.
+    #
+    # So the verdict rests on two things that are true of ANY project:
+    #   - did the checkout land on the branch this launch was GATED on, and
+    #   - can this base actually build the expert.
     local _base_state _base_detail _seed
     _seed="${TILLANDSIAS_FORGE_SEED_BRANCH:-}"
-    if [[ "$branch" == "main" ]]; then
-        _base_state="non-committable"
-        _base_detail="this forge is on 'main', which is never a work branch (main advances only through PR) AND does not carry the expert engine sources"
+    if [[ "$branch" == "unknown" ]]; then
+        _base_state="unknown"
+        _base_detail="the checkout has no resolvable branch (detached HEAD, or not a git repo)"
     elif [[ -n "$_seed" && "$branch" != "$_seed" ]]; then
         _base_state="mismatch"
-        _base_detail="this launch was gated on '${_seed}' but the checkout is on '${branch}'"
-    elif [[ "$branch" == "unknown" ]]; then
-        _base_state="unknown"
-        _base_detail="the checkout has no resolvable branch (detached HEAD or not a git repo)"
+        _base_detail="this launch was gated on '${_seed}' but the checkout is on '${branch}' — work will land somewhere other than where the launch intended"
     else
         _base_state="ok"
         _base_detail="checkout is on the branch this launch was gated on"
     fi
-    # The expert engine is only present on branches carrying these sources. Say
-    # so directly rather than making the agent infer it from the branch name.
-    local _expert_sources="present"
-    [[ -f "$project_dir/crates/tillandsias-plan/src/answer.rs" ]] || _expert_sources="absent"
+
+    # The load-bearing signal, and the project-agnostic one: can this base build
+    # the plan expert at all? This is a FACT about the checkout, not a judgement
+    # about a branch name, so it is safe to assert on any project.
+    #
+    # It is what catches the order-531 case the `mismatch` test cannot: when the
+    # host checkout was itself parked on a pre-expert branch, the seed and the
+    # actual branch AGREE, so nothing looks wrong — while the expert build
+    # produces a pre-expert binary and truthfully reports `experts: ready`.
+    local _expert_sources
+    if [[ ! -d "$project_dir/crates/tillandsias-plan" ]]; then
+        _expert_sources="n/a"          # not a plan-expert project; nothing to expect
+    elif [[ -f "$project_dir/crates/tillandsias-plan/src/answer.rs" ]]; then
+        _expert_sources="present"
+    else
+        _expert_sources="absent"
+    fi
     version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
     agent_name="${TILLANDSIAS_AGENT_NAME:-forge}"
     local project_name
@@ -3282,8 +3304,8 @@ inject_startup_context() {
 **Startup branch**: ${branch} — \`base_state=${_base_state}\`
 > Note: Branch is a startup snapshot; agents may switch branches during orchestration.
 > Machine-readable (branch on this, do not parse the prose): \`base_state=${_base_state} base_actual=${branch} base_expected=${_seed:-<unset>} expert_sources=${_expert_sources}\`
-> \`base_state\` is one of \`ok\` | \`mismatch\` | \`non-committable\` | \`unknown\`. ${_base_detail}.
-> \`expert_sources=absent\` means this branch does NOT carry \`crates/tillandsias-plan/src/answer.rs\`, so the expert build produces a PRE-EXPERT binary: \`experts: ready\` will be reported truthfully while every \`plan_answer\` / \`methodology_path\` call returns \`confidence=unsupported\`. That is order 531. If you see \`expert_sources=absent\`, switch to the host's canonical branch (\`linux-next\` on Linux) BEFORE trusting any expert answer — and do not read \`unsupported\` as "the plan has no answer".
+> \`base_state\` is one of \`ok\` | \`mismatch\` | \`unknown\`. ${_base_detail}.
+> \`expert_sources=absent\` means this checkout HAS a \`crates/tillandsias-plan\` but NOT \`src/answer.rs\`, so the expert build produces a PRE-EXPERT binary: \`experts: ready\` is then reported truthfully while every \`plan_answer\` / \`methodology_path\` call returns \`confidence=unsupported\`. That is order 531, and note \`base_state\` can read \`ok\` in this situation — the launch landed exactly where it was gated, on a base that cannot build the expert. Do NOT read \`unsupported\` as "the plan has no answer"; it means the ARTIFACT is wrong. Switch to a branch carrying the expert sources before trusting any expert answer, and report which branch you moved to. (\`n/a\` means this project has no plan-expert crate at all, which is normal off-Tillandsias.)
 **Version**: ${version}
 **Agent**: ${agent_name}
 **Generated**: $(date -u +%Y-%m-%dT%H:%MZ)

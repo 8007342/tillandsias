@@ -1,0 +1,143 @@
+# @trace spec:meta-orchestration
+#
+# Pins the executable Forge Expert Base Guard (plan order 531).
+#
+# THE BREACH THIS PINS. On 2026-07-30 an in-forge Claude session asked milestone
+# 391's OWN exemplar question ("what is blocked by 391") through the registered
+# forge-plan MCP server and got confidence=unsupported — from BOTH experts —
+# while the forge startup state truthfully read `experts: ready`. Root cause: the
+# launcher seeds a forge's branch from the HOST CHECKOUT's current branch
+# (read_host_project_current_branch -> TILLANDSIAS_FORGE_SEED_BRANCH) and the
+# guest converges onto it, so a checkout parked on `main` pins the next forge to
+# `main` — which carries no crates/tillandsias-plan/src/answer.rs. The expert
+# build then produces a PRE-EXPERT binary and reports itself ready. Truthful
+# state, wrong artifact. Two EARLIER cycles absorbed the same condition by
+# noticing and hand-rebasing (plan/loop_status.md:203, :243), which is the
+# guard-by-attentive-agent pattern this project forbids.
+#
+# WHY SOURCE PRESENCE, NOT A BRANCH NAME. `linux-next`/`windows-next`/
+# `osx-next`/`main` are Tillandsias's own conventions and are explicitly NOT a
+# runtime convention of the product (methodology/multi-host-development.yaml
+# scope rule), so a forge on an end user's project must not assume them. Source
+# presence is a fact about the checkout, safe to assert anywhere — and it catches
+# the case a branch-name test cannot, when the seed and the actual branch AGREE
+# because the host checkout was itself parked on a pre-expert base.
+name: litmus:forge-expert-base-guard-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/check-forge-expert-base.sh: the falsifiable verdict grammar
+  ^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$,
+  all four branches with their exit codes, the source-presence (not branch-name)
+  test, the meta-orchestration skill's consultation of it, and the
+  methodology rule it binds to.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-forge-expert-base.sh
+  - workspace contains skills/meta-orchestration/SKILL.md
+  - workspace contains methodology/multi-host-development.yaml
+  - POSIX sh and git are available in PATH
+
+critical_path:
+  - step: "guard exists, is POSIX sh, parses, and is executable"
+    command: "test -x scripts/check-forge-expert-base.sh && sh -n scripts/check-forge-expert-base.sh && echo 'ok: guard executable'"
+    timeout_ms: 5000
+    expected_behavior: "ok: guard executable"
+
+  - step: "the verdict grammar is documented in the guard itself"
+    command: "grep -Fq '^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$' scripts/check-forge-expert-base.sh && echo 'ok: grammar documented'"
+    timeout_ms: 5000
+    expected_behavior: "ok: grammar documented"
+
+  - step: "this checkout carries the expert sources, so the guard passes with a zero exit"
+    # The Tillandsias platform branches carry answer.rs + methodology.rs. If this
+    # step goes red on a platform branch, the expert engine has been moved or
+    # deleted and every forge seeded here would silently degrade.
+    command: "out=$(sh scripts/check-forge-expert-base.sh 2>/dev/null); rc=$?; echo \"$out rc=$rc\"; [ \"$out\" = 'ok:expert-base-ready' ] && [ \"$rc\" -eq 0 ] && echo 'ok: expert base ready'"
+    timeout_ms: 10000
+    expected_behavior: "ok: expert base ready"
+
+  - step: "a checkout WITH a plan crate but WITHOUT the expert sources is REFUSED with a non-zero exit"
+    # The breach condition, reproduced in a scratch repo: this is exactly what a
+    # `main`-seeded forge looks like from the guard's point of view.
+    command: "d=$(mktemp -d); ( cd \"$d\" && git init -q . && mkdir -p crates/tillandsias-plan/src && : > crates/tillandsias-plan/src/lib.rs && : > crates/tillandsias-plan/src/main.rs && out=$(sh \"$OLDPWD/scripts/check-forge-expert-base.sh\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
+    timeout_ms: 15000
+    expected_behavior: "blocked:expert-sources-absent rc=1"
+
+  - step: "a project with NO plan crate passes as not-applicable, never as a failure"
+    # Off-Tillandsias projects have no plan expert; refusing them would make the
+    # guard unusable in the product it ships inside.
+    command: "d=$(mktemp -d); ( cd \"$d\" && git init -q . && out=$(sh \"$OLDPWD/scripts/check-forge-expert-base.sh\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
+    timeout_ms: 15000
+    expected_behavior: "ok:no-plan-crate rc=0"
+
+  - step: "a non-repo directory fails closed"
+    command: "d=$(mktemp -d); ( cd \"$d\" && out=$(sh \"$OLDPWD/scripts/check-forge-expert-base.sh\" 2>/dev/null); rc=$?; echo \"$out rc=$rc\" ); rm -rf \"$d\""
+    timeout_ms: 10000
+    expected_behavior: "blocked:not-a-git-repo rc=1"
+
+  - step: "the guard emits exactly ONE verdict line on stdout"
+    # Diagnostics belong on stderr; a caller branches on a single stdout line.
+    command: "n=$(sh scripts/check-forge-expert-base.sh 2>/dev/null | wc -l); echo \"lines=$n\"; [ \"$n\" -eq 1 ] && echo 'ok: single verdict line'"
+    timeout_ms: 10000
+    expected_behavior: "ok: single verdict line"
+
+  - step: "the test is SOURCE PRESENCE, not a branch name (the product-scope rule)"
+    # Judging by branch name would break every end-user project, whose branches
+    # are none of Tillandsias's business. If a future edit reintroduces a
+    # branch-name comparison here, this goes red.
+    command: "if grep -nE '(\\[|\\bif\\b).*(linux-next|osx-next|windows-next)' scripts/check-forge-expert-base.sh | grep -v '^[0-9]*:#'; then echo 'FAIL: guard branches on a Tillandsias branch name'; exit 1; fi; grep -q 'crates/tillandsias-plan/src/answer.rs' scripts/check-forge-expert-base.sh && echo 'ok: source-presence test'"
+    timeout_ms: 5000
+    expected_behavior: "ok: source-presence test"
+
+  - step: "the meta-orchestration skill consults the guard (wiring is real, not prose)"
+    command: "grep -q 'scripts/check-forge-expert-base.sh' skills/meta-orchestration/SKILL.md && echo 'ok: skill wired'"
+    timeout_ms: 5000
+    expected_behavior: "ok: skill wired"
+
+  - step: "the methodology rule exists, names the enforcing executable, and is QUERYABLE by the expert"
+    # A rule an agent cannot look up is prose. This asserts the compiled
+    # methodology engine resolves it with a citation, not merely that the YAML
+    # contains the words.
+    command: "out=$(./target/release/tillandsias-plan methodology 'forge_base_determinism.enforced_by' 2>/dev/null); printf '%s' \"$out\" | grep -q '\"confidence\": \"exact\"' || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; printf '%s' \"$out\" | grep -q 'check-forge-expert-base.sh' && echo 'ok: methodology rule queryable'"
+    timeout_ms: 20000
+    expected_behavior: "ok: methodology rule queryable"
+
+  - step: "the release skill returns the checkout, so it cannot arm the next forge with a pre-expert base"
+    # The systematic cause: the release flow parked the checkout on `main` and
+    # never returned it, so every forge launched afterwards was seeded there.
+    command: "grep -q 'release_source_branch' skills/merge-to-main-and-release/SKILL.md && echo 'ok: release skill returns the checkout'"
+    timeout_ms: 5000
+    expected_behavior: "ok: release skill returns the checkout"
+
+  - step: "the forge startup context emits a base verdict, not just a branch name"
+    command: "grep -q 'base_state=' images/default/lib-common.sh && grep -q 'expert_sources=' images/default/lib-common.sh && echo 'ok: startup context carries the verdict'"
+    timeout_ms: 5000
+    expected_behavior: "ok: startup context carries the verdict"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "forge expert base guard grammar, all four verdict branches with exit codes, source-presence test, skill + methodology + startup-context wiring"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "forge-expert-base-guard-shape"
+    artifact: "scripts/check-forge-expert-base.sh + skills/meta-orchestration/SKILL.md + methodology/multi-host-development.yaml + images/default/lib-common.sh"
+
+rollback:
+  on_failure: >
+    An order-531 surface drifted. Restore: scripts/check-forge-expert-base.sh
+    (the pinned verdict grammar, all four branches with their exit codes, and the
+    SOURCE-PRESENCE test — never a branch-name comparison, which would break
+    every end-user project per the multi-host-development scope rule);
+    skills/meta-orchestration/SKILL.md (the Forge Expert Base Guard section);
+    methodology/multi-host-development.yaml (forge_base_determinism, whose
+    enforced_by must name the guard); skills/merge-to-main-and-release/SKILL.md
+    (release_source_branch capture and return, so a release cannot leave the
+    checkout parked on a pre-expert base); and images/default/lib-common.sh
+    (the base_state / expert_sources verdict in inject_startup_context). NEVER
+    reduce the guard to a branch-name check — the failure it exists to catch
+    occurs when the seed and the actual branch AGREE.
+  command: "sh scripts/check-forge-expert-base.sh; echo rc=$?; ./target/release/tillandsias-plan methodology 'forge_base_determinism.rule'"
