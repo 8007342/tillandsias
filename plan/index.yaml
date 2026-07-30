@@ -24885,7 +24885,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "WRONG ANSWER path: experts cite unparseable corpora and citations the engine's own verifier refuses"
-      status: ready
+      status: done
       kind: bug
       deliverable: self-verifying envelope exit points + untrusted-corpus refusal + reproduction litmus
       depends_on: []
@@ -24927,6 +24927,12 @@ plan_index:
         - "litmus reproduces BOTH escapes and turns red if either returns anything other than unsupported"
 
       events:
+        - type: progress
+          ts: "2026-07-30T01:42:30Z"
+          agent_id: "forge-antigravity"
+          host: forge
+          summary: >
+            Residual criterion 3 CLOSED: Envelope carries citation_root (or verifier derives it), so verify-answer cannot disagree with emitter about same envelope. All 4 exit criteria fully satisfied.
         - type: progress
           ts: "2026-07-29T22:40:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260729"
@@ -25023,7 +25029,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "The 'building' experts state is advertised as transient but has no upper bound — a killed builder pins it forever"
-      status: ready
+      status: done
       kind: bug
       deliverable: read-side bound on the building state + degraded(build-abandoned-after-Ns) rendering + litmus
       depends_on: []
@@ -25051,6 +25057,13 @@ plan_index:
         - "the bound is enforced by the READER, so a killed or OOM'd builder cannot pin the state"
         - "litmus seeds a stale building state with no live builder and asserts the degraded rendering"
 
+      events:
+        - type: progress
+          ts: "2026-07-30T01:45:50Z"
+          agent_id: "forge-antigravity"
+          host: forge
+          summary: >
+            CLOSED. Read-side budget check enforced in lib-common.sh and forge-plan.sh (FORGE_EXPERTS_BUILD_BUDGET_SECS, default 300s), rendering degraded(build-abandoned-after-Ns) when building state exceeds budget. Behavioural litmus step 11 added to litmus-forge-plan-expert-build-shape and verified green.
     - packet_id: expert-keepalive-contradicts-ephemerality
       order: 527
       desired_release: v0.5

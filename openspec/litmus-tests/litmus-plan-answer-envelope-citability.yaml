@@ -63,7 +63,7 @@ critical_path:
     # file, so a stale copy from a previous run would let them all pass while
     # the engine emitted nothing at all — the dead-check trap order 256/267
     # closed for exit codes, applied to fixture state.
-    command: "rm -f /tmp/.litmus-394b-env.json /tmp/.litmus-394b-uns.json /tmp/.litmus-394b-mcp.json /tmp/.litmus-394b-f1 /tmp/.litmus-394b-f2 /tmp/.litmus-394b-f3 /tmp/.litmus-394b-f4; cargo run -q -p tillandsias-plan -- --index plan/index.yaml answer 'what is blocked by 394a' > /tmp/.litmus-394b-env.json && test \"$(jq -r 'keys | join(\",\")' /tmp/.litmus-394b-env.json)\" = 'answer,citations,confidence,freshness' && echo 'ok: envelope-keys-exact'"
+    command: "rm -f /tmp/.litmus-394b-env.json /tmp/.litmus-394b-uns.json /tmp/.litmus-394b-mcp.json /tmp/.litmus-394b-f1 /tmp/.litmus-394b-f2 /tmp/.litmus-394b-f3 /tmp/.litmus-394b-f4; cargo run -q -p tillandsias-plan -- --index plan/index.yaml answer 'what is blocked by 394a' > /tmp/.litmus-394b-env.json && test \"$(jq -r 'keys | join(\",\")' /tmp/.litmus-394b-env.json)\" = 'answer,citation_root,citations,confidence,freshness' && echo 'ok: envelope-keys-exact'"
     timeout_ms: 240000
     expected_behavior: "ok: envelope-keys-exact"
 
@@ -155,7 +155,7 @@ critical_path:
   - step: "BEHAVIOURAL: plan_answer over MCP returns a verified envelope end to end"
     # The whole path an agent actually takes: JSON-RPC in, envelope out, and
     # the envelope re-verified against the checkout.
-    command: "cargo build -q --release -p tillandsias-plan && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | TILLANDSIAS_PLAN_BIN=\"$PWD/target/release/tillandsias-plan\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > /tmp/.litmus-394b-mcp.json && test \"$(jq -r '.confidence' /tmp/.litmus-394b-mcp.json)\" = 'exact' && ./target/release/tillandsias-plan --index plan/index.yaml verify-answer < /tmp/.litmus-394b-mcp.json | grep -q '^ok: envelope verified' && echo 'ok: mcp-envelope-verified'"
+    command: "tb=\"${CARGO_TARGET_DIR:-target}/release/tillandsias-plan\"; cargo build -q --release -p tillandsias-plan && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | TILLANDSIAS_PLAN_BIN=\"$tb\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > /tmp/.litmus-394b-mcp.json && test \"$(jq -r '.confidence' /tmp/.litmus-394b-mcp.json)\" = 'exact' && \"$tb\" --index plan/index.yaml verify-answer < /tmp/.litmus-394b-mcp.json | grep -q '^ok: envelope verified' && echo 'ok: mcp-envelope-verified'"
     timeout_ms: 300000
     expected_behavior: "ok: mcp-envelope-verified"
 
@@ -178,7 +178,7 @@ critical_path:
   - step: "the wrapper's degraded envelope PASSES the same verifier the engine's does"
     # One contract, both producers. If the wrapper drifted into emitting
     # citations with `unsupported`, or a confident empty envelope, this fails.
-    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > \"$d/env.json\"; ./target/release/tillandsias-plan --index plan/index.yaml verify-answer < \"$d/env.json\" | grep -q 'confidence=Unsupported'; rc=$?; rm -rf \"$d\"; test $rc -eq 0 && echo 'ok: one-contract-both-producers'"
+    command: "tb=\"${CARGO_TARGET_DIR:-target}/release/tillandsias-plan\"; d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > \"$d/env.json\"; \"$tb\" --index plan/index.yaml verify-answer < \"$d/env.json\" | grep -q 'confidence=Unsupported'; rc=$?; rm -rf \"$d\"; test $rc -eq 0 && echo 'ok: one-contract-both-producers'"
     timeout_ms: 30000
     expected_behavior: "ok: one-contract-both-producers"
 

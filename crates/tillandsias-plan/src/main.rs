@@ -78,6 +78,11 @@ fn emit_verified_envelope(envelope: answer::Envelope, root: &Path) {
 /// unit-testable without capturing stdout. Returns the envelope unchanged when it
 /// verifies, and a self-refusal naming every violation when it does not.
 fn self_verified(envelope: answer::Envelope, root: &Path) -> answer::Envelope {
+    let envelope = if envelope.confidence() != answer::Confidence::Unsupported {
+        envelope.with_citation_root(root)
+    } else {
+        envelope
+    };
     let violations = answer::verify(&envelope, root);
     if violations.is_empty() {
         return envelope;
@@ -375,10 +380,12 @@ fn main() {
     // an envelope captured elsewhere.
     if args[0] == "verify-answer" {
         let mut root = root_for(&index);
+        let mut root_explicit = false;
         if let Some(i) = args.iter().position(|a| a == "--root")
             && let Some(r) = args.get(i + 1)
         {
             root = PathBuf::from(r);
+            root_explicit = true;
         }
         let mut raw = String::new();
         if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw) {
@@ -393,6 +400,9 @@ fn main() {
                 std::process::exit(1);
             }
         };
+        if !root_explicit && let Some(r) = envelope.citation_root() {
+            root = PathBuf::from(r);
+        }
         let violations = answer::verify(&envelope, &root);
         if violations.is_empty() {
             println!(
@@ -753,8 +763,57 @@ mod tests {
         let ok_env = Envelope::supported("demo is ready", vec![good], Confidence::Exact, fresh);
         let passed = self_verified(ok_env.clone(), &dir);
         assert_eq!(
-            passed, ok_env,
+            passed,
+            ok_env.with_citation_root(&dir),
             "a verifiable envelope must pass through byte-identical"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn citation_root_is_carried_and_derivable() {
+        let dir = std::env::temp_dir().join(format!("tilland-523-cr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("plan")).expect("mk plan dir");
+        std::fs::write(
+            dir.join("plan/real.yaml"),
+            "packet_id: demo\nstatus: ready\nline3: x\nline4: y\nline5: z\n",
+        )
+        .expect("write real file");
+
+        let fresh = Freshness::new("deadbeef".to_string(), "2026-07-29T00:00:00Z".to_string());
+        let mut authority = BTreeMap::new();
+        authority.insert("packet_id".to_string(), "demo".to_string());
+        let good = Citation::new(
+            "plan/real.yaml".to_string(),
+            1,
+            2,
+            CitationKind::Plan,
+            authority,
+        );
+        let ok_env = Envelope::supported("demo is ready", vec![good], Confidence::Exact, fresh);
+        let verified = self_verified(ok_env, &dir);
+        assert_eq!(
+            verified.citation_root(),
+            Some(dir.display().to_string().as_str())
+        );
+
+        let json = serde_json::to_string(&verified).expect("json");
+        let deserialized: Envelope = serde_json::from_str(&json).expect("deserialized");
+        assert_eq!(
+            deserialized.citation_root(),
+            Some(dir.display().to_string().as_str())
+        );
+
+        let violations = answer::verify(
+            &deserialized,
+            Path::new(deserialized.citation_root().unwrap()),
+        );
+        assert!(
+            violations.is_empty(),
+            "derived root verify must pass: {:?}",
+            violations
         );
 
         let _ = std::fs::remove_dir_all(&dir);

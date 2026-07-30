@@ -121,6 +121,12 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: wrapper-names-build-step"
 
+  - step: "BEHAVIOURAL: a building state older than budget renders as degraded(build-abandoned-after-Ns)"
+    # Order 526: a killed builder must not pin building indefinitely.
+    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; echo $(( $(date +%s) - 600 )) > \"$d/state/started_at\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_check\",\"arguments\":{}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" FORGE_EXPERTS_BUILD_BUDGET_SECS=300 bash images/default/config-overlay/mcp/forge-plan.sh); rm -rf \"$d\"; printf '%s' \"$out\" | grep -q 'degraded(build-abandoned-after-' && printf '%s' \"$out\" | grep -q 'FAILED/ABANDONED' && echo 'ok: stale-building-state-degraded'"
+    timeout_ms: 15000
+    expected_behavior: "ok: stale-building-state-degraded"
+
   # ── (c) the experts startup-context grammar ──────────────────────────────
   - step: "inject_startup_context emits the pinned experts state line + machine-readable tokens"
     # Extends the existing inference READY/NOT-READY grammar rather than
@@ -134,7 +140,7 @@ critical_path:
     # printf count is asserted exactly so a fourth, ambiguous state (the
     # "may still be building" that 394.5 explicitly forbids) cannot be added
     # to the renderer without turning this RED.
-    command: "sed -n '/^forge_experts_state_line() {/,/^}/p' images/default/lib-common.sh > /tmp/.litmus-experts-render && grep -q \"printf 'ready\" /tmp/.litmus-experts-render && grep -q \"printf 'building(%ss)\" /tmp/.litmus-experts-render && grep -q \"printf 'degraded(%s)\" /tmp/.litmus-experts-render && grep -q \"printf 'degraded(not-built)\" /tmp/.litmus-experts-render && test \"$(grep -c \"printf '\" /tmp/.litmus-experts-render)\" = 4 && rm -f /tmp/.litmus-experts-render && echo 'ok: three-state-grammar'"
+    command: "sed -n '/^forge_experts_state_line() {/,/^}/p' images/default/lib-common.sh > /tmp/.litmus-experts-render && grep -q \"printf 'ready\" /tmp/.litmus-experts-render && grep -q \"printf 'building(%ss)\" /tmp/.litmus-experts-render && grep -q \"printf 'degraded(build-abandoned-after-\" /tmp/.litmus-experts-render && grep -q \"printf 'degraded(%s)\" /tmp/.litmus-experts-render && grep -q \"printf 'degraded(not-built)\" /tmp/.litmus-experts-render && test \"$(grep -c \"printf '\" /tmp/.litmus-experts-render)\" = 5 && rm -f /tmp/.litmus-experts-render && echo 'ok: three-state-grammar'"
     timeout_ms: 5000
     expected_behavior: "ok: three-state-grammar"
 

@@ -1,5 +1,13 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-30T01:40Z (forge — Expert System v0.5 clearance: order 523 residual & order 526 completed)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary clean.
+- **Order 523 (`expert-envelope-self-verification`) CLOSED**: Added `citation_root` field to `Envelope` struct and updated `verify-answer` CLI to derive the root from `citation_root` when `--root` is omitted. Emitter and checker now share the exact root; envelope self-verification is 100% complete across all 4 exit criteria. `cargo test -p tillandsias-plan` 44/44 PASS.
+- **Order 526 (`experts-building-state-unbounded`) CLOSED**: Enforced read-side build budget check in `lib-common.sh` and `forge-plan.sh` (`FORGE_EXPERTS_BUILD_BUDGET_SECS`, default 300s). Older `building` states render as `degraded(build-abandoned-after-Ns)`. Added behavioural litmus step 11 to `litmus-forge-plan-expert-build-shape`.
+- **Litmus gates**: Litmus test suites (`forge-plan-expert-build-shape`, `plan-answer-envelope-citability`, `methodology-path-query-citability`, etc.) ALL 100% PASS.
+- **Build verification**: `./build.sh --check` PASS (formatting, type-check, clippy strict + listen-vsock). `tillandsias-plan check` clean.
+
 ## Cycle 2026-07-29T21:10Z (linux_mutable macuahuitl — GPU bringup + THE inference substrate was dead)
 
 - **Host**: `linux_mutable` (macuahuitl), `linux-next`. Credential guard

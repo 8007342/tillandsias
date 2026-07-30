@@ -93,7 +93,12 @@ experts_state_line() {
             now="$(date +%s 2>/dev/null || echo 0)"
             elapsed=$((now - started))
             [ "$elapsed" -ge 0 ] || elapsed=0
-            printf 'building(%ss)\n' "$elapsed"
+            budget="${FORGE_EXPERTS_BUILD_BUDGET_SECS:-300}"
+            if [ "$elapsed" -gt "$budget" ]; then
+                printf 'degraded(build-abandoned-after-%ss)\n' "$elapsed"
+            else
+                printf 'building(%ss)\n' "$elapsed"
+            fi
             ;;
         degraded:*) printf 'degraded(%s)\n' "${state#degraded:}" ;;
         *) printf 'degraded(not-built)\n' ;;
@@ -117,6 +122,12 @@ binary_missing_error() {
     case "$state" in
         building*)
             printf '  TRANSIENT: the build is still running. Retry this tool in a few seconds.\n'
+            ;;
+        'degraded(build-abandoned-after-'*)
+            printf '  FAILED/ABANDONED: the background build exceeded its budget without installing\n'
+            printf '  the binary (it may have been OOM-killed or failed). Build it manually:\n'
+            printf '  cargo build --release -p tillandsias-plan &&\n'
+            printf '  install -m0755 target/release/tillandsias-plan %s\n' "$PLAN_BIN_CANONICAL"
             ;;
         'degraded(no-plan-crate)')
             printf '  NOT APPLICABLE: this project has no crates/tillandsias-plan, so there is no\n'

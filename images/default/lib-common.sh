@@ -948,7 +948,12 @@ forge_experts_state_line() {
             now="$(date +%s 2>/dev/null || echo 0)"
             elapsed=$((now - started))
             [ "$elapsed" -ge 0 ] || elapsed=0
-            printf 'building(%ss)\n' "$elapsed"
+            budget="${FORGE_EXPERTS_BUILD_BUDGET_SECS:-300}"
+            if [ "$elapsed" -gt "$budget" ]; then
+                printf 'degraded(build-abandoned-after-%ss)\n' "$elapsed"
+            else
+                printf 'building(%ss)\n' "$elapsed"
+            fi
             ;;
         degraded:*)
             printf 'degraded(%s)\n' "${state#degraded:}"

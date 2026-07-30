@@ -199,6 +199,8 @@ pub struct Envelope {
     citations: Vec<Citation>,
     freshness: Freshness,
     confidence: Confidence,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    citation_root: Option<String>,
 }
 
 impl Envelope {
@@ -223,6 +225,7 @@ impl Envelope {
             citations,
             freshness,
             confidence,
+            citation_root: None,
         }
     }
 
@@ -235,7 +238,13 @@ impl Envelope {
             citations: Vec::new(),
             freshness,
             confidence: Confidence::Unsupported,
+            citation_root: None,
         }
+    }
+
+    pub fn with_citation_root(mut self, root: &Path) -> Self {
+        self.citation_root = Some(root.display().to_string());
+        self
     }
 
     pub fn answer(&self) -> &str {
@@ -249,6 +258,9 @@ impl Envelope {
     }
     pub fn confidence(&self) -> Confidence {
         self.confidence
+    }
+    pub fn citation_root(&self) -> Option<&str> {
+        self.citation_root.as_deref()
     }
 }
 
