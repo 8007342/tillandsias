@@ -3231,6 +3231,45 @@ inject_startup_context() {
 
     local branch version agent_name
     branch="$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
+
+    # Order 531: state a VERDICT on the base branch, not just its name.
+    #
+    # The branch name alone was already printed, and it was not enough: an agent
+    # landing on `main` saw "Startup branch: main" and had no signal that this
+    # was wrong. Two cycles absorbed exactly that by noticing and hand-rebasing
+    # (plan/loop_status.md:203, :243), which is the guard-by-attentive-agent
+    # pattern this project forbids.
+    #
+    # Why it happens: the launcher seeds the forge from the HOST CHECKOUT's
+    # current branch (read_host_project_current_branch ->
+    # TILLANDSIAS_FORGE_SEED_BRANCH), and the release skill used to park that
+    # checkout on `main` and never return it. So every forge launched after a
+    # release cycle was pinned to `main`.
+    #
+    # Why it MATTERS: `main` carries no crates/tillandsias-plan/src/answer.rs or
+    # methodology.rs, so the expert build produces a PRE-EXPERT binary and then
+    # truthfully reports `experts: ready` while every plan_answer /
+    # methodology_path call returns confidence=unsupported. Truthful state, wrong
+    # artifact — the hardest kind to notice.
+    local _base_state _base_detail _seed
+    _seed="${TILLANDSIAS_FORGE_SEED_BRANCH:-}"
+    if [[ "$branch" == "main" ]]; then
+        _base_state="non-committable"
+        _base_detail="this forge is on 'main', which is never a work branch (main advances only through PR) AND does not carry the expert engine sources"
+    elif [[ -n "$_seed" && "$branch" != "$_seed" ]]; then
+        _base_state="mismatch"
+        _base_detail="this launch was gated on '${_seed}' but the checkout is on '${branch}'"
+    elif [[ "$branch" == "unknown" ]]; then
+        _base_state="unknown"
+        _base_detail="the checkout has no resolvable branch (detached HEAD or not a git repo)"
+    else
+        _base_state="ok"
+        _base_detail="checkout is on the branch this launch was gated on"
+    fi
+    # The expert engine is only present on branches carrying these sources. Say
+    # so directly rather than making the agent infer it from the branch name.
+    local _expert_sources="present"
+    [[ -f "$project_dir/crates/tillandsias-plan/src/answer.rs" ]] || _expert_sources="absent"
     version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
     agent_name="${TILLANDSIAS_AGENT_NAME:-forge}"
     local project_name
@@ -3240,8 +3279,11 @@ inject_startup_context() {
 # Forge Startup Context
 
 **Project**: ${project_name}
-**Startup branch**: ${branch}
+**Startup branch**: ${branch} — \`base_state=${_base_state}\`
 > Note: Branch is a startup snapshot; agents may switch branches during orchestration.
+> Machine-readable (branch on this, do not parse the prose): \`base_state=${_base_state} base_actual=${branch} base_expected=${_seed:-<unset>} expert_sources=${_expert_sources}\`
+> \`base_state\` is one of \`ok\` | \`mismatch\` | \`non-committable\` | \`unknown\`. ${_base_detail}.
+> \`expert_sources=absent\` means this branch does NOT carry \`crates/tillandsias-plan/src/answer.rs\`, so the expert build produces a PRE-EXPERT binary: \`experts: ready\` will be reported truthfully while every \`plan_answer\` / \`methodology_path\` call returns \`confidence=unsupported\`. That is order 531. If you see \`expert_sources=absent\`, switch to the host's canonical branch (\`linux-next\` on Linux) BEFORE trusting any expert answer — and do not read \`unsupported\` as "the plan has no answer".
 **Version**: ${version}
 **Agent**: ${agent_name}
 **Generated**: $(date -u +%Y-%m-%dT%H:%MZ)

@@ -165,7 +165,40 @@ git checkout main
 git pull origin main                           # now contains the bump merge
 git push origin --delete "${bump_branch}" 2>/dev/null || true
 git branch -D "${bump_branch}"
+
+# RETURN THE CHECKOUT. Non-negotiable, and the reason is not tidiness.
+#
+# The forge launcher seeds a new forge's branch from the HOST CHECKOUT'S CURRENT
+# BRANCH (read_host_project_current_branch, crates/tillandsias-headless/src/
+# main.rs:2701 -> TILLANDSIAS_FORGE_SEED_BRANCH), and the guest converges to it
+# (images/default/lib-common.sh:565 checkout_forge_seed_branch). So leaving this
+# checkout parked on `main` silently pins EVERY forge launched afterwards to
+# `main`.
+#
+# That is not cosmetic. `main` does not carry crates/tillandsias-plan/src/
+# answer.rs or methodology.rs, so a forge seeded from it builds a PRE-EXPERT
+# binary; ensure_forge_experts then truthfully reports `experts: ready` while
+# every plan_answer / methodology_path call returns confidence=unsupported.
+# Order 531 is exactly this, and it made milestone 391 ungradeable from inside a
+# forge. Two prior cycles absorbed it by noticing and hand-rebasing
+# (plan/loop_status.md:203, :243).
+git checkout "${release_source_branch:-linux-next}"
+git pull --ff-only origin "${release_source_branch:-linux-next}" || true
 ```
+
+Capture `release_source_branch="$(git symbolic-ref --short HEAD)"` at the START
+of the release flow, before the first `git checkout main`, so this returns to
+wherever the operator actually was rather than assuming `linux-next`.
+
+Verify before considering the release complete:
+
+```bash
+git symbolic-ref --short HEAD   # MUST NOT be `main`
+```
+
+A release that ends with the checkout on `main` is not finished, however green
+the tag is: it has armed the next forge launch to build an expert-less binary
+that reports itself ready.
 
 Confirm `cat VERSION` on main equals `${new_version}` before tagging. If
 the bump PR's checks fail, surface the run URL and stop — do not tag a

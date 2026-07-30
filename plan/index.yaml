@@ -16496,6 +16496,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-07-30T06:00:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260730"
+          host: linux_mutable
+          summary: >
+            ROOT CAUSE FULLY ESTABLISHED and it is DETERMINISTIC, not random. My earlier note said the base was 'whatever the mirror's exported HEAD points at, unpinned'. That was wrong. A pin mechanism already exists (order 501, checkout_forge_seed_branch at lib-common.sh:565, called from both clone transports) and it works. The defect is the pinned VALUE: the launcher seeds TILLANDSIAS_FORGE_SEED_BRANCH from read_host_project_current_branch (main.rs:2701 -> :5107/:11138), i.e. the HOST CHECKOUT's current branch — and skills/merge-to-main-and-release/SKILL.md ended with 'git checkout main; git pull origin main' and never returned the checkout. So every forge launched AFTER a release cycle was deterministically pinned to main, and every forge launched before it got linux-next. That is exactly the antigravity(linux-next)/Claude(main) split I observed on one host in one day, and exactly what loop_status.md:203,:243 recorded twice. VERIFIED that main lacks the engine: 'git ls-tree origin/main crates/tillandsias-plan/src/' lists only lib.rs and main.rs — no answer.rs, no methodology.rs, no groundtruth.rs. So a main-seeded forge builds a PRE-EXPERT binary and ensure_forge_experts truthfully reports 'experts: ready' while every query returns unsupported. Truthful state, wrong artifact. TWO FIXES LANDED: (1) the release skill now captures release_source_branch at the start and returns the checkout at the end, with a verify step asserting HEAD is not main — removing the systematic cause; (2) inject_startup_context now emits a VERDICT, not just a branch name: 'base_state=ok|mismatch|non-committable|unknown' plus base_actual/base_expected/expert_sources, machine-readable, with prose telling the agent that expert_sources=absent means unsupported answers are an ARTIFACT problem and not 'the plan has no answer'. Note base_state=non-committable fires even when branch==seed==main, which is the case that bit the in-forge sibling. RESIDUAL for closure: an executable guard + litmus pinning the verdict grammar, and the host-mount clone lane (lib-common.sh:650-651) still returns before any convergence or verdict, so a bind-mounted operator checkout gets no branch statement at all.
+        - type: progress
           ts: "2026-07-30T04:30:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260730"
           host: linux_mutable
