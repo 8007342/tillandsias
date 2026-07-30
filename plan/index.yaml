@@ -18205,6 +18205,12 @@ plan_index:
         - "the launch path already gates GPU passthrough on the tier probe (tier:gpu-cuda) + CDI presence (order 392 code, present); confirm cpu host is unaffected"
       events:
         - type: progress
+          ts: "2026-07-30T00:45:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            COLD-START VERIFIED end to end through the shipped code, which the earlier evidence did NOT cover. Prior runs used a hand-staged lib/ollama tree, so the entrypoint's own extraction, backend discovery, and .engine-set manifest were unproven. Rebuilt the inference image from the new Containerfile (4s, 151 MB), MOVED the hand-staged tree aside so the payload path ran from 'have none', and relaunched with GPU passthrough. Log, verbatim in order: preload: policy=off expert_slots=2 max_loaded=3 ram_gb=62 | tuning: tier=gpu-cuda flash_attn=1 kv_cache=q8_0 num_parallel=4 vram_mb=24564 (VRAM read via nvidia-smi INSIDE the container, so CDI delivered the tooling too) | engine payload: need 'core+cuda_v13' (have 'none') | engine backends available: cuda_v12 cuda_v13 vulkan (pass-1 discovery over the streamed tarball) | ollama amd64 engine 'core+cuda_v13' installed (834M libs) | engine: set=core+cuda_v13 backends=[cuda_v13] llama-server=ok. Result: 834 MB installed instead of 2139 MB, only the usable backend present, container Up (healthy) where healthy now MEANS serveable (the new healthcheck asserts llama-server and is confirmed present in the built image), inference compute id=0 library=CUDA compute=8.6 RTX A5000 libdirs=ollama,cuda_v13 driver=13.3 total=23.5 GiB, default_num_ctx=32768, /api/generate HTTP=200, llama-server holding 1692 MiB VRAM. Cold first-load cost measured: load_duration 10.5s + prompt_eval 13.2s (CUDA graph build), matching the earlier cold figure. Hand-staged backup deleted afterwards so no artifact of the manual path survives.
+        - type: progress
           ts: "2026-07-29T21:45:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260729"
           host: linux_mutable
