@@ -23543,7 +23543,23 @@ plan_index:
       outcome: >
         Implemented engine_slots module in tillandsias-headless providing EngineKind (Ollama default per SLOT-3),
         EngineSlotDescriptor, validate_slot_registration() refusing NPU on Ollama, and pin_backend_environment()
-        disabling Vulkan on CUDA hosts to prevent nondeterministic backend selection. Unit tests 100% GREEN.
+        disabling Vulkan and selecting cuda_v12/cuda_v13 explicitly on CUDA hosts,
+        or selecting Vulkan explicitly on the current AMD lane, to prevent
+        nondeterministic backend selection. Production Podman run arguments
+        now consume the pin. Unit tests and the quick implementation litmus
+        are green.
+      events:
+        - type: implementation-complete
+          ts: "2026-07-30T04:09:00Z"
+          agent_id: "forge-tillandsias-codex-20260730T0348Z"
+          host: forge
+          lease_id: "67b6a1643ea8"
+          evidence:
+            - "cargo test -p tillandsias-headless engine_slots::tests"
+            - "cargo test -p tillandsias-headless inference_run_args_apply_the_selected_backend_pin"
+            - "seeded cuda_v12 fallback regression failed test_backend_env_pinning"
+            - "pre/post engine_slots.rs SHA-256 64863a8015a9d36986d6e52560d48af6c5a4afa4af85f288484c886eb6b96c41"
+            - "litmus:inference-policy-router-implementation (size quick)"
 
     - packet_id: llama-server-vulkan-image-variant
       order: 482b
@@ -23690,7 +23706,22 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: workload-class policy router with adaptive power/thermal signals (what's-best-for-every-scenario)"
-      status: done
+      status: ready
+      phase: implementation
+      progress_summary: >
+        Foundation slice 484a is implementation-complete: the routing table is
+        TOML data; exact four-class/load-time CPU tier-S validation, pure
+        serialized-fact routing, measured class objectives, exact 10% memory
+        headroom, context ceilings, degraded-lane suppression, and resident
+        small-model cold handoff have executable quick coverage. Remaining
+        ready children own failure quarantine, subscribed Linux power signals,
+        adaptive preemption/resume/priority, and status/pin semantics.
+      split_into:
+        - "484a — inference-policy-router/data-pure-route (CLASS-1, ROUTE-1/2/4/5, NEG-2 foundation)"
+        - "484b — inference-policy-router/failure-quarantine (ROUTE-3 failure advance + three strikes until re-probe)"
+        - "484c — inference-policy-router/linux-signal-watcher (ADAPT-1 UPower + PowerProfiles PropertiesChanged)"
+        - "484d — inference-policy-router/preemption-resume-priority (ADAPT-2/3 + battery residency guard)"
+        - "484e — inference-policy-router/status-pin (ADAPT-4 explanatory status + ephemeral expiring pin)"
       kind: implementation
       multi_cycle: true
       deliverable: policy router in tillandsias-headless (data-driven routing table, fallback chains, D-Bus power signal watcher) + policy status surface + unit tests over serialized fixtures
@@ -23727,6 +23758,201 @@ plan_index:
           host: forge
           summary: >
             CLOSED. Implemented policy_router module in tillandsias-headless with WorkloadClass, FallbackChain terminating in CPU tier-S terminal, memory headroom validation (90% ceiling), pure route_request() decision function, and unit tests.
+        - type: claim
+          ts: "2026-07-30T03:57:46Z"
+          agent_id: "forge-tillandsias-codex-20260730T0348Z"
+          host: forge
+          lease_id: "150be2261adf"
+          expires_at: "2026-07-30T07:57:46Z"
+        - type: revision
+          ts: "2026-07-30T04:05:00Z"
+          agent_id: "forge-tillandsias-codex-20260730T0348Z"
+          host: forge
+          lease_id: "150be2261adf"
+          summary: >
+            Reopened the concurrent done claim after auditing every requirement
+            in spec:inference-policy-router. The landed 136-line module had no
+            TOML table, ignored workload class and signals, accepted
+            quarantine only as caller-supplied slot strings, and omitted
+            ROUTE-3/5 plus every ADAPT requirement. Replaced the foundation
+            with a real TOML/pure-routing slice and split the remaining
+            ownership/evidence boundaries into ready children. No UX surface
+            changed.
+          current_plan:
+            - "484a closes the data/pure-route foundation with quick executable coverage."
+            - "484b adds failure advance and three-strike device+slot quarantine."
+            - "484c subscribes to both supported Linux D-Bus power-daemon shapes."
+            - "484d owns checkpoint/suspend/resume plus SCHED_IDLE and battery residency."
+            - "484e owns explanatory status and ephemeral expiring pin state."
+          files_touched:
+            - "crates/tillandsias-headless/src/policy_router.rs"
+            - "images/inference/policy-router.toml"
+            - "openspec/litmus-tests/litmus-inference-policy-router-implementation.yaml"
+            - "openspec/litmus-bindings.yaml"
+            - "plan/index.yaml"
+          evidence:
+            - "cargo test -p tillandsias-headless policy_router::tests"
+            - "quick litmus:inference-policy-router-implementation"
+            - "seeded source regression fails and restores byte-identically"
+          direction: >
+            Reduce the operator-owned local EXPERTS theme by making adaptive
+            heterogeneous inference routing executable rather than trace-only.
+          next_checkpoint: "Claim 484b; keep the parent ready until every child has passing evidence."
+          lease_intent: "release"
+
+    - packet_id: inference-policy-router/data-pure-route
+      order: 484a
+      parent: inference-policy-router
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Policy router foundation — TOML preferences and pure measured-fact routing"
+      status: done
+      kind: implementation
+      deliverable: policy_router Rust module + images/inference/policy-router.toml + quick implementation litmus
+      depends_on: [accel-capability-probe, engine-slot-abstraction-and-vulkan-pinning]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [inference, rust, policy, testing]
+      estimated_hours: 4
+      outcome: >
+        Exactly four TOML-defined workload chains validate at load and end in
+        CPU tier-S. The pure decision boundary consumes serialized placement
+        facts, signals, request context, and quarantine input; applies exact
+        integer 10% memory headroom and context ceilings; suppresses degraded
+        lanes when a healthy lane exists; selects measured J/token, TTFT,
+        capability, or sustained throughput by class; and serves a resident
+        small model while a cold preferred model loads.
+      exit_criteria:
+        - "preference order lives in images/inference/policy-router.toml and changing it requires no Rust edit"
+        - "table load rejects missing/extra classes and any chain not ending in CPU tier-S"
+        - "serialized fixtures prove all four measured objectives, memory/context filtering, NEG-2, and cold preferred handoff"
+        - "no vendor TOPS or per-operator graph-split field exists in the data or decision inputs"
+        - "the quick closure fails for a seeded CPU-terminal regression and passes after byte-identical restoration"
+      events:
+        - type: implementation-complete
+          ts: "2026-07-30T04:05:00Z"
+          agent_id: "forge-tillandsias-codex-20260730T0348Z"
+          host: forge
+          lease_id: "150be2261adf"
+          evidence:
+            - "cargo test -p tillandsias-headless policy_router::tests"
+            - "litmus:inference-policy-router-implementation (size quick)"
+            - "seeded CPU tier-S terminal regression made the quick litmus fail"
+            - "pre/post policy-router.toml SHA-256 5bf8a37871b3012c86c9b5799f7e0754405345297b8ec32f540a5cdd0d784596"
+      next_action: "No implementation residual; parent completion waits on 484b-484e."
+
+    - packet_id: inference-policy-router/failure-quarantine
+      order: 484b
+      parent: inference-policy-router
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Policy router failure advance and three-strike device-slot quarantine"
+      status: ready
+      kind: implementation
+      deliverable: session failure tracker + observable quarantine reasons + re-probe reset tests
+      depends_on: [inference-policy-router/data-pure-route]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [inference, rust, policy, reliability]
+      estimated_hours: 3
+      outcome: >
+        Engine/OOM/device/readiness failures advance the active chain. Three
+        consecutive failures quarantine the exact (device, slot) pair with a
+        reason until capability re-probe; later requests skip it without an
+        attempt and a successful attempt resets the consecutive count.
+      exit_criteria:
+        - "each named failure class advances to the next viable candidate and CPU tier-S still serves"
+        - "the third consecutive failure quarantines device+slot with a reason; a success resets the count"
+        - "re-probe clears quarantine and no earlier request silently retries it"
+        - "quick mutation closure fails at a two-strike or four-strike regression and restores byte-identically"
+      next_action: "Add a session-scoped failure tracker around the pure route result without performing I/O inside route_request."
+
+    - packet_id: inference-policy-router/linux-signal-watcher
+      order: 484c
+      parent: inference-policy-router
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Linux adaptive signal watcher — UPower and PowerProfiles PropertiesChanged"
+      status: ready
+      kind: implementation
+      deliverable: zbus watcher + serialized signal-state reducer + daemon/no-daemon fixtures
+      depends_on: [inference-policy-router/data-pure-route]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [inference, rust, dbus, power, battery]
+      estimated_hours: 4
+      outcome: >
+        Subscribe to UPower and PowerProfiles PropertiesChanged using the
+        interface shared by power-profiles-daemon and Fedora tuned-ppd.
+        Polled thermal/battery/GPU-busy facts may supplement the stream. No
+        source degrades to AC+nominal with a warning; it never blocks launch.
+      exit_criteria:
+        - "serialized signal fixtures cover power-profiles-daemon, tuned-ppd, UPower battery transitions, and no-source fallback"
+        - "the watcher is subscription-driven; polling is not its only source"
+        - "missing D-Bus services log one warning and yield AC+thermal-nominal"
+        - "quick mutation closure fails when either daemon shape is removed and restores byte-identically"
+      next_action: "Define the pure PropertiesChanged reducer first, then wrap it with a bounded zbus subscription task."
+
+    - packet_id: inference-policy-router/preemption-resume-priority
+      order: 484d
+      parent: inference-policy-router
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Adaptive preemption, resume gates, low-priority engines, and battery residency"
+      status: ready
+      kind: implementation
+      deliverable: checkpoint/suspend coordinator + 5s/60s state-machine tests + Linux SCHED_IDLE helper
+      depends_on:
+        - inference-policy-router/failure-quarantine
+        - inference-policy-router/linux-signal-watcher
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [inference, rust, scheduling, power, battery]
+      estimated_hours: 5
+      outcome: >
+        Battery or power-saver signals checkpoint and suspend background work
+        within five seconds, downgrade interactive placement and context, and
+        release idle accelerator models. Resume requires AC, nominal thermals,
+        and 60 seconds without an interactive request. Linux background engines
+        self-tag SCHED_IDLE.
+      exit_criteria:
+        - "fake-clock tests prove the 5s suspend bound with no completed-work loss"
+        - "all three resume predicates are independently necessary and 60s idle is exact"
+        - "Linux background child startup applies SCHED_IDLE; interactive service remains available"
+        - "idle accelerator residency on battery and Linux phase splitting remain impossible"
+        - "quick mutation closure fails for 6s suspend or 59s resume and restores byte-identically"
+      next_action: "Implement the fake-clock state machine and checkpoint contract before wiring process-priority effects."
+
+    - packet_id: inference-policy-router/status-pin
+      order: 484e
+      parent: inference-policy-router
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Policy status and ephemeral auto-release placement pins"
+      status: ready
+      kind: implementation
+      deliverable: non-UX policy status data surface + expiring in-memory pin state + tests
+      depends_on:
+        - inference-policy-router/failure-quarantine
+        - inference-policy-router/linux-signal-watcher
+        - inference-policy-router/preemption-resume-priority
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [inference, rust, policy, observability]
+      estimated_hours: 4
+      outcome: >
+        Expose machine-readable status containing placement and measured reason
+        per class, quarantined device-slot reasons, current signals, and any
+        active pin. Pins refuse unusable devices, expire automatically, live
+        only in memory, and never survive application restart. This packet adds
+        no user-visible menu, label, dialog, notification, or chip.
+      exit_criteria:
+        - "status fixtures include all four placements+reasons, quarantine reasons, signals, and active pin"
+        - "fake-clock tests prove pin expiry; process reconstruction proves no restart persistence"
+        - "pinning an unusable probe device returns its unusable_reason"
+        - "quick mutation closure fails for non-expiring or persisted pins and restores byte-identically"
+      next_action: "Define the serialized status snapshot and in-memory expiry state without adding a UX surface."
+
     - packet_id: plan-yaml-duplicate-note-lines
       order: 485
       desired_release: v0.5

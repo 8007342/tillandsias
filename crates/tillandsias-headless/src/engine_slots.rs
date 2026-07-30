@@ -58,17 +58,47 @@ pub fn validate_slot_registration(
     Ok(())
 }
 
+/// Parse the CUDA UMD major from `nvidia-smi -q`. The driver is backward
+/// compatible, so an unparseable version deterministically selects cuda_v12
+/// rather than leaving both shipped CUDA runners eligible.
 // @trace spec:inference-engine-slots
-pub fn pin_backend_environment(effective_tier: &str) -> Vec<(String, String)> {
+pub fn parse_cuda_major(nvidia_smi_query: &str) -> Option<u32> {
+    nvidia_smi_query.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        if !matches!(key.trim(), "CUDA UMD Version" | "CUDA Version") {
+            return None;
+        }
+        value
+            .split(|character: char| !character.is_ascii_digit())
+            .find(|part| !part.is_empty())
+            .and_then(|major| major.parse().ok())
+    })
+}
+
+// @trace spec:inference-engine-slots
+pub fn pin_backend_environment(
+    effective_tier: &str,
+    cuda_major: Option<u32>,
+) -> Vec<(String, String)> {
     let mut envs = Vec::new();
     // SLOT-4 & Determinism: OLLAMA_VULKAN defaults to TRUE, so when vulkan and a cuda dir are present,
     // explicitly pin the backend variables to ensure deterministic execution.
     match effective_tier {
         "gpu-cuda" => {
             envs.push(("OLLAMA_VULKAN".to_string(), "0".to_string()));
+            let library = if cuda_major.is_some_and(|major| major >= 13) {
+                "cuda_v13"
+            } else {
+                // NVIDIA drivers are backward compatible. cuda_v12 is the
+                // deterministic safe fallback when nvidia-smi cannot report
+                // the UMD major and the payload carries both CUDA runners.
+                "cuda_v12"
+            };
+            envs.push(("OLLAMA_LLM_LIBRARY".to_string(), library.to_string()));
         }
-        "vulkan" | "gpu-vulkan" => {
+        "vulkan" | "gpu-vulkan" | "gpu-rocm" => {
             envs.push(("OLLAMA_VULKAN".to_string(), "1".to_string()));
+            envs.push(("OLLAMA_LLM_LIBRARY".to_string(), "vulkan".to_string()));
         }
         _ => {}
     }
@@ -110,9 +140,31 @@ mod tests {
     #[test]
     // @trace spec:inference-engine-slots
     fn test_backend_env_pinning() {
-        let cuda_env = pin_backend_environment("gpu-cuda");
+        let cuda_env = pin_backend_environment("gpu-cuda", Some(13));
         assert!(cuda_env.contains(&("OLLAMA_VULKAN".to_string(), "0".to_string())));
-        let vulkan_env = pin_backend_environment("vulkan");
+        assert!(cuda_env.contains(&("OLLAMA_LLM_LIBRARY".to_string(), "cuda_v13".to_string())));
+        let cuda_12_env = pin_backend_environment("gpu-cuda", Some(12));
+        assert!(cuda_12_env.contains(&("OLLAMA_LLM_LIBRARY".to_string(), "cuda_v12".to_string())));
+        let unknown_cuda_env = pin_backend_environment("gpu-cuda", None);
+        assert!(
+            unknown_cuda_env.contains(&("OLLAMA_LLM_LIBRARY".to_string(), "cuda_v12".to_string()))
+        );
+        let vulkan_env = pin_backend_environment("vulkan", None);
         assert!(vulkan_env.contains(&("OLLAMA_VULKAN".to_string(), "1".to_string())));
+        assert!(vulkan_env.contains(&("OLLAMA_LLM_LIBRARY".to_string(), "vulkan".to_string())));
+    }
+
+    #[test]
+    // @trace spec:inference-engine-slots
+    fn test_cuda_major_parser() {
+        assert_eq!(
+            parse_cuda_major("CUDA UMD Version                  : 13.3\n"),
+            Some(13)
+        );
+        assert_eq!(
+            parse_cuda_major("CUDA Version                      : 12.8\n"),
+            Some(12)
+        );
+        assert_eq!(parse_cuda_major("CUDA Version : N/A\n"), None);
     }
 }

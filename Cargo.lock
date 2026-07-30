@@ -3137,6 +3137,7 @@ dependencies = [
  "tillandsias-vault-client",
  "tokio",
  "tokio-vsock",
+ "toml 0.8.2",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",

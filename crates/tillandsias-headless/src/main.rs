@@ -2977,6 +2977,19 @@ fn effective_inference_tier() -> &'static str {
     }
 }
 
+/// The Ollama payload may contain cuda_v12 and cuda_v13 together when the
+/// entrypoint cannot identify the driver major. Resolve the same fact on the
+/// host so the launch arguments can pin one runner deterministically.
+// @trace spec:inference-engine-slots
+fn detected_cuda_major() -> Option<u32> {
+    std::process::Command::new("nvidia-smi")
+        .arg("-q")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| engine_slots::parse_cuda_major(&String::from_utf8_lossy(&output.stdout)))
+}
+
 /// Order 392: can rootless podman actually deliver the NVIDIA GPU to a
 /// container? Requires a CDI spec (`nvidia-ctk cdi generate`). Hardware
 /// without CDI is reported loudly with the exact remedy instead of
@@ -3356,6 +3369,12 @@ fn build_inference_run_args(
             "--env".into(),
             format!("TILLANDSIAS_INFERENCE_TIER={effective_tier}"),
         ]);
+    }
+    let cuda_major = (effective_tier == "gpu-cuda")
+        .then(detected_cuda_major)
+        .flatten();
+    for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
+        args.extend(["--env".into(), format!("{name}={value}")]);
     }
     args.extend(proxy_env_args());
     // Order 524: this env pair MUST be built before the mount/image tail.
@@ -13249,6 +13268,21 @@ mod tests {
             forge.contains("TILLANDSIAS_INFERENCE_TIER")
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    #[test]
+    // @trace spec:inference-engine-slots
+    fn inference_run_args_apply_the_selected_backend_pin() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn build_inference_run_args(");
+        assert!(
+            window.contains("engine_slots::pin_backend_environment(effective_tier, cuda_major)"),
+            "the backend pin must be emitted by the production podman argument builder"
+        );
+        assert!(
+            window.contains("detected_cuda_major"),
+            "CUDA runner selection must be based on the detected UMD major"
         );
     }
 

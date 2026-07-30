@@ -7,7 +7,7 @@ specs:
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
   coverage_ratio: 100
-  last_verified: '2026-07-28'
+  last_verified: '2026-07-30'
 - spec_id: agent-cheatsheets
   status: obsolete
   litmus_tests: []
@@ -473,9 +473,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-engine-slot-boundary-shape
+  - litmus:inference-policy-router-implementation
   - litmus:enclave-isolation
   coverage_ratio: 100
-  last_verified: '2026-07-28'
+  last_verified: '2026-07-30'
 - spec_id: inference-host-side-pull
   status: obsolete
   litmus_tests: null
@@ -485,6 +486,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-policy-router-invariants-shape
+  - litmus:inference-policy-router-implementation
   coverage_ratio: 100
   last_verified: '2026-07-28'
 - spec_id: init-command
