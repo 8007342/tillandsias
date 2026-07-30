@@ -54,4 +54,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-host-shell/src/menu_state.rs#L445](../../../crates/tillandsias-host-shell/src/menu_state.rs#L445)
 - [crates/tillandsias-host-shell/src/menu_state.rs#L1188](../../../crates/tillandsias-host-shell/src/menu_state.rs#L1188)
 - [crates/tillandsias-podman/src/container_spec.rs#L312](../../../crates/tillandsias-podman/src/container_spec.rs#L312)
-- [scripts/local-ci.sh#L921](../../../scripts/local-ci.sh#L921)
+- [scripts/local-ci.sh#L941](../../../scripts/local-ci.sh#L941)

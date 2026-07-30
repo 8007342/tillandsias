@@ -54,4 +54,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [locales/en.toml#L48](../../../locales/en.toml#L48)
 - [locales/es.toml#L30](../../../locales/es.toml#L30)
 - [scripts/container-teardown-straggler-probe.sh#L2](../../../scripts/container-teardown-straggler-probe.sh#L2)
-- [scripts/local-ci.sh#L921](../../../scripts/local-ci.sh#L921)
+- [scripts/local-ci.sh#L941](../../../scripts/local-ci.sh#L941)
