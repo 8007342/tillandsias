@@ -1,5 +1,13 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-30T16:40Z (forge — project-info MCP optimization audit, benchmark against traditional tools)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: same 22 pre-existing `.opencode/` dirty paths (operator-identified disposable).
+- **Mission**: operator-directed project-info MCP server correctness test + efficiency comparison vs traditional tools across 8 common meta-orch scenarios.
+- **Findings filed**: `plan/issues/project-info-mcp-optimization-2026-07-30.md` — 3 bugs found (search_code glob is basename-only, no file-glob tool, project_structure depth-capped), 5 new endpoint proposals to fold multiple tool calls into one MCP call (find_files, grep_code, git_status, read_file, plan_query).
+- **Key metric**: `search_code(glob="plan/index.yaml")` silently returns zero results — broken for the single most common search target in any meta-orch cycle. Current project-info ADDS calls rather than saving them; with the proposed 5 new endpoints, it would save 3-5 calls per cycle.
+- **Exit**: No uncommitted cycle-owned changes. Pre-existing `.opencode/` dirt preserved.
+
 ## Cycle 2026-07-30T16:18Z (forge — order 533 help segfault fix, forge-launch gitignore issue filed)
 
 - **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: 22 pre-existing `.opencode/` dirty paths (forge-launch openspec regeneration artifacts), operator-identified as disposable. Issue filed: `plan/issues/forge-opencode-skills-commands-dirty-launch-2026-07-30.md`.
