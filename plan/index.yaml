@@ -15808,6 +15808,40 @@ plan_index:
         - "METHODOLOGY EXPERT answers discipline questions matching methodology.yaml ground truth"
         - "experts are ephemeral (gone after stack shutdown) and rebuilt from the CURRENT checkout at launch; commit/push refreshes them"
         - "tier matrix proven on >=2 host classes (GPU ollama + one CPU/llama.cpp tier)"
+      events:
+        - type: progress
+          ts: "2026-07-30T07:07:00Z"
+          agent_id: "forge-linux-fable5-firstperson-20260730T0638Z"
+          host: forge
+          summary: >
+            FIRST-PERSON EXIT-CRITERIA JUDGMENT from inside a live forge
+            (launch 2026-07-30 06:31Z) — the milestone's criteria are
+            written from this seat and had never been tested from it.
+            VERDICT: stays ready, do NOT close. (a) NOT MET fresh: both
+            experts answered confidence=unsupported ("returned no envelope
+            — experts state: ready") for the milestone's own exemplar
+            question via the registered forge-plan MCP server. Root cause:
+            forges launch on main; the expert subcommands exist only on
+            linux-next, so ensure_forge_experts faithfully builds a
+            pre-394b binary. After a manual in-forge rebuild from a
+            linux-next checkout the same question answers confidence=exact
+            in 33ms with a resolving citation and grade passes 17/17 in
+            124ms IN-FORGE — source is sound, product is not. Residual:
+            packet 531. (b) identical shape: NOT MET fresh, MET
+            post-rebuild (10ms, exact citation to
+            methodology/distributed-work.yaml:895-904). (c) HALF MET:
+            ephemerality + launch rebuild proven (tmpfs state,
+            container-local binary, launch build observed in lifecycle
+            log); commit/push refresh FALSIFIED — 396 reopened (hook never
+            installed anywhere + CARGO_TARGET_DIR false-success install).
+            (d) NOT MET: 392b/397/401/402 all ready; only the Linux
+            fat-GPU class proven. Envelope contract positively verified
+            in-forge: refusal-over-guess held on every degraded path,
+            verify-answer round-trip exit 0, seeded citation corruption
+            REFUSED exit 1. Layer honesty: every PASS is deterministic L0;
+            no inference token was generated for any expert answer this
+            cycle. Full report:
+            plan/issues/forge-local-experts-first-person-experience-2026-07-30.md.
 
     - packet_id: inference-startup-cleanup
       order: 392
@@ -16270,6 +16304,30 @@ plan_index:
           host: linux_mutable
           summary: >
             Two of three criteria CLOSED (23a263dc), zero edits to lib-common.sh — the state line and tmpfs placement were already correct from 52ef1de7 and were VERIFIED by real execution rather than grep: the HEAD lib-common.sh was run inside tillandsias-forge:latest and inject_startup_context called for real, exercising all four states. Criterion (iii) teardown proof CLOSED with a real container, a real teardown, and a negative control proving the check can fail. REMAINS: criterion (ii), a cold launch with inference DOWN reaching the agent prompt — structurally pinned at two sites and the guest-side context proven non-aborting, but 'reaches the agent prompt' was not exercised end to end (vault/auth unavailable offline). That is the honest gap; it wants a live forge session.
+        - type: progress
+          ts: "2026-07-30T07:06:00Z"
+          agent_id: "forge-linux-fable5-firstperson-20260730T0638Z"
+          host: forge
+          summary: >
+            IN-FORGE EVIDENCE for criterion (ii), from inside a live launch
+            (2026-07-30 06:31Z). What this seat CAN prove: the ACTIVE image's
+            probe (the code that actually ran, not the repo copy) is a
+            report, never a gate — sourcing
+            /usr/local/lib/tillandsias/lib-inference-state.sh and calling
+            tillandsias_inference_state against a dead endpoint
+            (http://127.0.0.1:9) returns exit 0 with
+            inference_state=not-ready inference_reason=endpoint-unreachable
+            on a 1s budget, and the entrypoint call site only writes a
+            lifecycle trace on failure. Order 486 warn-and-continue is
+            intact in the shipped image. What this seat CANNOT prove: this
+            launch had inference UP (3 models resident), so "cold launch
+            with inference DOWN reaches the agent prompt" needs a host-side
+            launch with a genuinely non-serving endpoint (per the
+            2026-07-29 21:45Z sharpening). Criterion (ii) stays open;
+            packet stays in_progress. Side finding while probing: the
+            state helper's one-line machine grammar breaks with >1 model
+            (filed as packet 532). Details:
+            plan/issues/forge-local-experts-first-person-experience-2026-07-30.md.
     - packet_id: experts-opencode-affordance
       order: 395
       desired_release: v0.5
@@ -16324,7 +16382,10 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Expert refresh on commit/push — answers track the working tree"
-      status: done
+      # REOPENED 2026-07-30: `done` was graded on script latency + wiring,
+      # measured by running the script directly. The hook itself has never
+      # executed anywhere — see the 07:05Z event.
+      status: ready
       kind: implementation
       deliverable: git-hooks (existing /home/forge/.cache/tillandsias/git-hooks path) + incremental refresh
       depends_on: [plan-methodology-experts-rung1]
@@ -16352,6 +16413,36 @@ plan_index:
             Hook latency measured at 2ms (budget pinned: <50ms). Files:
             scripts/hooks/post-commit-expert-refresh.sh (source),
             images/default/lib-common.sh (installer + wiring).
+        - type: progress
+          ts: "2026-07-30T07:05:00Z"
+          agent_id: "forge-linux-fable5-firstperson-20260730T0638Z"
+          host: forge
+          summary: >
+            FALSIFIED IN-FORGE, REOPENED (done -> ready). Two independent
+            falsifiers, both first-person inside a live forge (launch
+            2026-07-30 06:31Z). (1) The hook has never executed anywhere:
+            this forge's core.hooksPath dir
+            (/home/forge/.cache/tillandsias/git-hooks) contains ONLY
+            prepare-commit-msg; the active image's lib-common.sh (3243
+            lines, image built 2026-07-29 04:09Z) has zero occurrences of
+            _install_expert_refresh_hook — the installer landed 2026-07-30
+            01:00Z (5738217c), ~21h after the image build. Empirical proof:
+            real commit b942940f made in this forge produced no
+            /tmp/tillandsias-hooks.log and no hook execution. Host checkouts
+            have empty .git/hooks and no core.hooksPath, so it never fired
+            there either. (2) Latent false-success even once installed: the
+            hook installs with cp "target/release/tillandsias-plan"
+            "$BIN_PATH" 2>/dev/null — relative path, ignores
+            CARGO_TARGET_DIR. In the forge
+            CARGO_TARGET_DIR=/home/forge/.cache/tillandsias-project/cargo/target
+            (this cycle hit exactly that stat failure), so the cp would fail
+            silently while the hook still logs "binary rebuilt from commit
+            X". The refresh MECHANISM is sound: this cycle manually ran the
+            equivalent (cargo build -p tillandsias-plan from a linux-next
+            checkout + install) and the expert surface went from
+            confidence=unsupported to confidence=exact with grade 17/17.
+            Residual closure is the new third exit criterion. Details:
+            plan/issues/forge-local-experts-first-person-experience-2026-07-30.md.
       outcome: >
         Operator: experts get refreshed on commit/push. The forge already
         owns a hooks path (core.hooksPath is injected); post-commit /
@@ -16362,6 +16453,104 @@ plan_index:
       exit_criteria:
         - "commit changing plan/index.yaml -> plan expert answers reflect it within a bounded window (harness-graded)"
         - "hook adds no perceptible latency to commit/push (measured budget pinned)"
+        - "FIRST-FIRE PROOF: inside a forge launched from an image whose lib-common.sh contains the installer, a crate-touching commit appends a fire record to /tmp/tillandsias-hooks.log AND replaces ~/.local/bin/tillandsias-plan via a CARGO_TARGET_DIR-aware install (the answer surface observably changes); evidence recorded here with the commit hash"
+
+    - packet_id: forge-expert-fresh-launch-source-gap
+      order: 531
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Fresh forges get a pre-expert binary — close the main/linux-next source gap so criterion (a) holds where it is graded"
+      status: ready
+      kind: implementation
+      deliverable: images/default/lib-common.sh (ensure_forge_experts staleness signal) + release/branch decision record + fresh-forge probe evidence
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, experts, release, mcp]
+      estimated_hours: 4
+      outcome: >
+        FILED FROM FIRST-PERSON EXPERIENCE (2026-07-30, in-forge): every
+        fresh forge session today gets confidence=unsupported from
+        plan_answer and methodology_ask — "the plan expert returned no
+        envelope for this question — experts state: ready" — because forges
+        clone and launch on main, while answer.rs / methodology.rs exist
+        only on linux-next. ensure_forge_experts faithfully builds the
+        pre-394b binary from the checkout it was given and truthfully
+        reports ready; the MCP wrapper correctly downgrades every reply.
+        Milestone 391 criteria (a)+(b) cannot hold in the graded seat until
+        this closes. Two sub-defects sharpen the fix: (1) the degraded
+        reason string cannot distinguish "stale binary lacking the answer
+        subcommand" from "engine crash" — both render identically, which
+        reads as a contradiction beside state=ready and cost this cycle a
+        diagnosis round-trip; ensure_forge_experts (or the wrapper) should
+        probe the built binary's surface (e.g. `tillandsias-plan --help`
+        lists `answer`) and publish degraded(stale-source) or an equivalent
+        honest state. (2) /dev/shm/tillandsias-experts records a source
+        hash but not the built feature surface. The full closure is a
+        DECISION plus mechanism: ship the expert family to main with v0.5,
+        or teach the forge to build experts from the release/expert branch
+        — recorded either way. Evidence:
+        plan/issues/forge-local-experts-first-person-experience-2026-07-30.md.
+      exit_criteria:
+        - "in a fresh forge session with zero manual steps, plan_answer for the milestone's exemplar question returns confidence=exact with a resolving citation, and tillandsias-plan grade passes 17/17 in-forge (criterion (a) probe, re-run from the same seat)"
+        - "a forge whose checkout lacks the expert subcommands reports an honest experts state (not ready) or a degraded reason that names stale-source — distinguishable from engine failure"
+
+    - packet_id: inference-state-warm-grammar-multimodel
+      order: 532
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "lib-inference-state.sh breaks its own pinned one-line grammar with >1 cached model"
+      status: ready
+      kind: implementation
+      deliverable: images/default/lib-inference-state.sh fix + litmus:inference-model-preload-policy multi-model case
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [inference, forge, litmus]
+      estimated_hours: 2
+      outcome: >
+        FILED FROM FIRST-PERSON EXPERIENCE (2026-07-30, in-forge, reproduced
+        against live inference:11434 with THREE models cached, from BOTH the
+        active image copy and the repo copy at
+        images/default/lib-inference-state.sh): the helper printed
+        "READY (models=1, warm=<model1>\n<model2>\n<model3>)" — the model
+        count is wrong (1 vs 3) and inference_warm carries embedded
+        newlines, so the PINNED one-line machine grammar
+        (inference_state=... inference_warm=<csv|-> ...) becomes four lines.
+        Any consumer that greps or field-splits the machine line mis-parses
+        exactly when more than one model is cached — which is now the normal
+        forge state. litmus:inference-model-preload-policy passes because
+        its stub exercises a single model; extend it with a multi-model
+        /api/tags stub and prove it goes RED against the current code before
+        fixing (seeded falsifiability), then fix count + csv-join.
+      exit_criteria:
+        - "with a stubbed /api/tags serving 3 models, the machine line is exactly ONE line with inference_models=3 and inference_warm a comma-separated csv; the extended litmus case is committed and was demonstrated red against the pre-fix code"
+
+    - packet_id: forge-help-symlink-self-source-segfault
+      order: 533
+      desired_release: v0.5
+      title: "tillandsias-help segfaults (exit 139, empty output) — locale block sources itself forever under the symlink name"
+      status: ready
+      kind: implementation
+      deliverable: images/default/help.sh re-entry guard + wrapper-name execution check
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, ux, shell]
+      estimated_hours: 1
+      outcome: >
+        FILED FROM FIRST-PERSON EXPERIENCE (2026-07-30, in-forge): the
+        advertised help command prints NOTHING. /usr/local/bin/tillandsias-help
+        is a symlink to /usr/local/share/tillandsias/help.sh
+        (images/default/Containerfile:139). help.sh's locale-detection block
+        sources help.sh when $0 differs from the resolved help file — but
+        `source` does not change $0, so the sourced copy re-enters the same
+        block and sources itself until the stack dies: exit 139 (SIGSEGV),
+        empty output, for every user and agent typing the command the
+        welcome banner advertises. Direct `bash help.sh` works because $0
+        then matches. Fix: set a re-entry sentinel (e.g.
+        _TILLANDSIAS_HELP_REENTRY=1) before sourcing, or compare resolved
+        paths (readlink -f "$0") instead of $0. The check must execute the
+        wrapper under its installed name — that is the case that segfaults.
+      exit_criteria:
+        - "`tillandsias-help` (invoked via the symlink name) prints the help text and exits 0; an executable check runs the wrapper under the installed name and fails on empty output or non-zero exit"
 
     - packet_id: experts-tier-backends
       order: 397

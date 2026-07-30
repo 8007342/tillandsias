@@ -1,5 +1,56 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-30T06:38Z (forge — milestone 391 first-person experience verification: experts refuse everything in a fresh forge)
+
+- **Host**: forge container, `linux-next` (launched on `main`, switched — see below).
+  Credential guard `ok:forge-git-mirror`, committable guard blocked on `main` at
+  startup → switched to `linux-next` before committable work. Startup boundary:
+  22 pre-existing openspec-regeneration dirty paths under `.claude/`, snapshotted
+  and preserved byte-identically (tree-identical between main and linux-next).
+- **MISSION (operator-directed)**: be milestone 391's test subject — the criteria
+  are written from the in-forge seat and had only ever been verified from the
+  host. Method: USE before READ; implementation was read only to diagnose.
+- **HEADLINE**: in a fresh forge session, BOTH experts refuse every question —
+  `plan_answer` and `methodology_ask` return `confidence=unsupported` ("returned
+  no envelope — experts state: ready") for the milestone's own exemplar question.
+  Root cause: forges launch on `main`; the expert subcommands exist only on
+  `linux-next`; `ensure_forge_experts` faithfully builds the pre-394b binary and
+  truthfully reports `ready`. Machinery proven sound in the same seat after a
+  manual rebuild from linux-next: `confidence=exact` in 33ms with resolving
+  citations, `grade` **17/17 in 124ms in-forge**, `verify-answer` round-trip
+  green with seeded corruption REFUSED (exit 1). Residual filed as **order 531**.
+- **Order 396 FALSIFIED, reopened (done → ready)**: the post-commit
+  expert-refresh hook has never executed anywhere — this forge's
+  `core.hooksPath` dir has only `prepare-commit-msg`; the active image's
+  lib-common.sh (built 2026-07-29 04:09Z) predates the installer (landed
+  2026-07-30 01:00Z) by ~21h. Empirical proof: real commit `b942940f` in this
+  forge, no hook fired. Second falsifier: the hook's install line ignores
+  `CARGO_TARGET_DIR` (`cp target/release/... 2>/dev/null`) and logs a false
+  "binary rebuilt" success — in-forge the cp can never succeed. New FIRST-FIRE
+  exit criterion added.
+- **Order 394e evidence recorded, stays in_progress**: the ACTIVE image's probe
+  proven report-not-gate by direct execution against a dead endpoint (exit 0,
+  `reason=endpoint-unreachable`); this launch had inference UP, so criterion (ii)
+  (cold launch, inference DOWN, prompt reached) still needs a host-side launch.
+- **Milestone 391 judgment recorded on the ledger: stays `ready`, do NOT
+  close.** (a) NOT MET fresh / met by source; (b) same; (c) half — ephemerality
+  + launch rebuild proven, refresh falsified; (d) NOT MET (392b/397/401/402 all
+  ready; one host class proven). Burndown now: **32 ready / 17 done /
+  5 completed / 1 in_progress**.
+- **New packets**: 531 (fresh-launch source gap + honest stale-source state),
+  532 (`lib-inference-state.sh` breaks its pinned one-line grammar with >1
+  model — repo copy affected, reproduced live), 533 (`tillandsias-help`
+  segfaults: symlink + `source` never changes `$0` → infinite self-source).
+  Full report: `plan/issues/forge-local-experts-first-person-experience-2026-07-30.md`.
+- **Freshness disposition (standing audit)**: the forge expert stack itself was
+  this cycle's re-validated component — dispositions: expert machinery
+  REFRESHED (verified by execution), order 396 claim OBSOLETED/reopened,
+  helpers 532/533 flagged for update.
+- **Verification**: `tillandsias-plan check` `ok: 451 packets, ids unique, live
+  references sound` (warnings all pre-existing organic debt). No code touched;
+  no @trace changes (TRACES.md untouched). Layer honesty: every expert PASS
+  this cycle is deterministic L0; zero inference tokens served for answers.
+
 ## Cycle 2026-07-30T01:40Z (forge — Expert System v0.5 clearance: order 523 residual & order 526 completed)
 
 - **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary clean.
