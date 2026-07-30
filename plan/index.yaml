@@ -16496,6 +16496,18 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-07-30T08:05:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260730"
+          host: linux_mutable
+          summary: >
+            END-TO-END PROOF FROM INSIDE A FRESHLY BUILT FORGE — the only honest test, since three separate 'verified where it was written' claims failed today. Rebuilt the forge image (lib-common.sh changed), launched a fresh forge, and read what an agent actually sees. Startup context, verbatim: '**Startup branch**: linux-next — base_state=ok' with the machine line 'base_state=ok base_actual=linux-next base_expected=linux-next expert_sources=present'. Experts converged ready in ~10s (captured mid-build at building(2s), the transient state reported correctly). THEN asked milestone 391's OWN exemplar question through the registered forge-plan MCP server — the exact query that returned confidence=unsupported for the in-forge sibling: plan_answer 'what is blocked by 391' now returns a real cited answer (order 403 zeroclaw-reintroduction-roadmap) with citations resolving to plan/index.yaml:16841-16878, authority {order, packet_id, status}, and freshness.source_commit=a49d42fe — i.e. reading the CURRENT tree, not a stale one. methodology_path 'forge_base_determinism.rule' returns confidence=exact with citation_root=/home/forge/src/tillandsias, so the methodology rule written this cycle is queryable from inside the forge. The 531 failure mode is closed on the launch path. TWO LANES REMAIN UNCOVERED and are split out as 534: the host-mount clone lane (lib-common.sh:650-651) returns before any convergence or verdict, so a bind-mounted operator checkout still gets no branch statement; and entrypoint-terminal.sh never calls inject_startup_context, so the terminal lane sees no verdict at all.
+        - type: progress
+          ts: "2026-07-30T07:30:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260730"
+          host: linux_mutable
+          summary: >
+            ENFORCEMENT LANDED (a49d42fe). scripts/check-forge-expert-base.sh is a check-*.sh-style guard with the pinned grammar ^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$, all four branches verified with exit codes including a scratch-repo reproduction of the breach (plan crate present, answer.rs absent -> blocked rc=1) and the off-Tillandsias case (no plan crate -> ok rc=0). methodology/multi-host-development.yaml gains forge_base_determinism, verified QUERYABLE not merely present (methodology forge_base_determinism.enforced_by resolves confidence=exact and names the guard). litmus:forge-expert-base-guard-shape registered and 12/12 green; falsifiability proven by seeding a branch-name test (step 8 red) and unwiring the skill reference (step 9 red), both restored byte-identically. IMPORTANT SELF-CORRECTION: the multi-host scope rule (branch names are NOT a runtime convention of the product) caught a defect in my OWN previous commit — the startup context I shipped told agents to switch to 'linux-next' and flagged main as non-committable, which is correct only when the target project IS Tillandsias. Rewritten so base_state is ok|mismatch|unknown with no branch-name judgement, and the load-bearing signal is expert_sources=present|absent|n/a, a fact about the checkout. The guard tests source presence for the same reason, and because a branch-name test CANNOT catch the real failure: when the host checkout is itself parked on a pre-expert base the seed and actual branch AGREE and nothing looks wrong. REMAINING for closure, unchanged: (a) the host-mount clone lane (lib-common.sh:650-651) returns before any convergence or verdict, so a bind-mounted operator checkout still gets no branch statement; (b) entrypoint-terminal.sh never calls inject_startup_context, so the terminal lane sees no verdict at all; (c) no end-to-end proof from inside a freshly built forge yet — that is the next step and is the only honest test, since three separate 'verified where it was written' claims failed today.
+        - type: progress
           ts: "2026-07-30T06:00:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260730"
           host: linux_mutable
@@ -25847,3 +25859,37 @@ plan_index:
         - "the litmus exits non-zero with a named failure step when any of the above checks fails"
         - "the litmus runs as a standalone script without requiring the full enclave stack (proxy container + its dependencies)"
         - "the litmus is registered in the litmus index (TRACES.md) and gated in the appropriate CI phase"
+
+    - packet_id: forge-base-verdict-uncovered-lanes
+      order: 534
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Two forge launch lanes bypass the base-branch verdict entirely (host-mount clone, terminal entrypoint)"
+      status: ready
+      kind: bug
+      deliverable: convergence + verdict on the host-mount lane, startup context on the terminal lane, litmus covering both
+      depends_on: [forge-expert-fresh-launch-source-gap]
+      pickup_role: linux
+      capability_tags: [forge, lifecycle, git, observability, litmus]
+      estimated_hours: 3
+      outcome: >
+        Split from order 531 after its fix was proven end-to-end on the standard
+        launch path. Two lanes still get no base-branch statement at all, so the
+        order-531 failure mode remains reachable through them:
+        (a) HOST-MOUNT CLONE LANE — _clone_project_from_mirror_impl returns at
+        images/default/lib-common.sh:650-651 (rewrite_origin_for_enclave_push;
+        return 0) BEFORE checkout_forge_seed_branch runs. A bind-mounted operator
+        checkout therefore never converges to the launch-gated seed and never
+        reports a verdict. It inherits whatever branch the operator's directory
+        is on, silently — which is precisely the condition 531 exists to catch.
+        (b) TERMINAL LANE — images/default/entrypoint-terminal.sh calls
+        clone_project_from_mirror but never inject_startup_context, so an agent
+        attaching through the terminal sees no base_state, no expert_sources, and
+        no inference/experts state either. Five other lanes call it; this one does
+        not.
+        Neither is hypothetical: both are on the live launch surface, and the
+        verdict added by 531 is what an agent is now told to rely on.
+      exit_criteria:
+        - "the host-mount lane converges to the launch-gated seed (or reports a named reason why it cannot) and emits the same base_state verdict as the clone lanes"
+        - "the terminal lane emits a startup context carrying base_state, expert_sources, and the inference/experts state"
+        - "litmus:forge-expert-base-guard-shape (or a sibling) asserts BOTH lanes, and turns red when either stops reporting"
