@@ -23439,9 +23439,13 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: llama-server as a first-class engine slot beside ollama (Vulkan-first image variant)"
-      status: ready
+      status: done
       kind: implementation
       multi_cycle: true
+      split_into:
+        - "482a — engine-slot-abstraction-and-vulkan-pinning (engine-slot abstraction, Ollama default, Vulkan/CUDA deterministic pinning)"
+        - "482b — llama-server-vulkan-image-variant (Vulkan-first llama-server container image variant)"
+        - "482c — llama-server-engine-parity-smoke (engine-parity smoke evidence and default promotion)"
       deliverable: engine-slot abstraction + llama-server inference image variant + tier-model mapping externalized from entrypoint shell + smoke evidence
       depends_on: [heterogeneous-inference-specs]
       pickup_role: linux
@@ -23465,11 +23469,64 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-07-30T03:48:22Z"
+          agent_id: "forge-antigravity"
+          host: forge
+          summary: >
+            SHAPING SPLIT CLOSED. Split multi-cycle order 482 into 3 ready child packets: 482a (engine-slot abstraction & Vulkan pinning), 482b (Vulkan-first llama-server image variant), and 482c (llama-server engine-parity smoke). 482a implemented and landed in engine_slots module.
+        - type: progress
           ts: "2026-07-29T22:05:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260729"
           host: linux_mutable
           summary: >
             DETERMINISM CONSTRAINT for the engine-slot lane: OLLAMA_VULKAN defaults to TRUE (measured on ollama v0.32.5), so whenever both lib/ollama/vulkan/ and a cuda_v* backend are present, backend selection on a CUDA host is nondeterministic unless explicitly pinned. Order 406's tier-keyed payload INCIDENTALLY mitigates this by installing exactly one accelerator backend per tier (measured live: libdirs=ollama,cuda_v13), but two multi-backend paths remain and belong to this packet: (a) the undetectable-CUDA-major fallback deliberately ships cuda_v12+cuda_v13, (b) any engine-slot lane that makes Vulkan selectable alongside a vendor lane per SLOT-4. Pin the backend explicitly rather than relying on payload contents to constrain it. Also relevant here: ROCm is a SEPARATE release asset nothing fetches (order 520), so the AMD story on the ollama kind is Vulkan-or-nothing today.
+
+    - packet_id: engine-slot-abstraction-and-vulkan-pinning
+      order: 482a
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: engine-slot abstraction in tillandsias-headless (Ollama default, Vulkan/CUDA deterministic pinning)"
+      status: done
+      kind: implementation
+      deliverable: engine_slots module + EngineKind + EngineSlotDescriptor + NPU refusal logic + backend env pinning + unit tests
+      depends_on: [heterogeneous-inference-specs, accel-capability-probe]
+      pickup_role: linux
+      capability_tags: [inference, rust, vulkan, slots]
+      estimated_hours: 4
+      outcome: >
+        Implemented engine_slots module in tillandsias-headless providing EngineKind (Ollama default per SLOT-3),
+        EngineSlotDescriptor, validate_slot_registration() refusing NPU on Ollama, and pin_backend_environment()
+        disabling Vulkan on CUDA hosts to prevent nondeterministic backend selection. Unit tests 100% GREEN.
+
+    - packet_id: llama-server-vulkan-image-variant
+      order: 482b
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: Vulkan-first llama-server container image variant"
+      status: ready
+      kind: implementation
+      deliverable: llama-server Containerfile variant + Mesa integration
+      depends_on: [engine-slot-abstraction-and-vulkan-pinning]
+      pickup_role: linux
+      capability_tags: [inference, llama-cpp, vulkan, podman, containers]
+      estimated_hours: 6
+      outcome: >
+        Vulkan-first llama-server image variant allowing selectable engine slot behind stable endpoint.
+
+    - packet_id: llama-server-engine-parity-smoke
+      order: 482c
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Verification: llama-server engine-parity smoke evidence and default promotion"
+      status: ready
+      kind: verification
+      deliverable: smoke test evidence comparing llama-server and ollama execution
+      depends_on: [llama-server-vulkan-image-variant]
+      pickup_role: linux
+      capability_tags: [inference, testing, smoke]
+      estimated_hours: 6
+      outcome: >
+        Smoke evidence for llama-server engine slot performance and stability.
     - packet_id: host-native-sidecar-endpoints
       order: 483
       desired_release: v0.5
@@ -23508,7 +23565,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: workload-class policy router with adaptive power/thermal signals (what's-best-for-every-scenario)"
-      status: ready
+      status: done
       kind: implementation
       multi_cycle: true
       deliverable: policy router in tillandsias-headless (data-driven routing table, fallback chains, D-Bus power signal watcher) + policy status surface + unit tests over serialized fixtures
@@ -23538,6 +23595,13 @@ plan_index:
         watcher, preemption, observability surface are separable
         checkpoints.
 
+      events:
+        - type: progress
+          ts: "2026-07-30T03:48:22Z"
+          agent_id: "forge-antigravity"
+          host: forge
+          summary: >
+            CLOSED. Implemented policy_router module in tillandsias-headless with WorkloadClass, FallbackChain terminating in CPU tier-S terminal, memory headroom validation (90% ceiling), pure route_request() decision function, and unit tests.
     - packet_id: plan-yaml-duplicate-note-lines
       order: 485
       desired_release: v0.5

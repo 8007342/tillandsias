@@ -87,6 +87,10 @@ mod catalog;
 mod runtime_phase;
 // @trace spec:accel-capability-probe: Structured hardware capability probe (CPU/GPU/NPU/bandwidth).
 pub mod accel_probe;
+// @trace spec:inference-engine-slots: Engine slot abstraction and backend pinning.
+pub mod engine_slots;
+// @trace spec:inference-policy-router: Workload-class policy router and fallback chains.
+pub mod policy_router;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
