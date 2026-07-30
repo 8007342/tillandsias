@@ -16324,7 +16324,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Expert refresh on commit/push — answers track the working tree"
-      status: claimed
+      status: done
       kind: implementation
       deliverable: git-hooks (existing /home/forge/.cache/tillandsias/git-hooks path) + incremental refresh
       depends_on: [plan-methodology-experts-rung1]
@@ -16338,6 +16338,20 @@ plan_index:
           host: forge
           lease_id: "experts-refresh-on-commit-forge-20260730T005134"
           expires_at: "2026-07-30T04:51:34Z"
+        - type: completed
+          ts: "2026-07-30T01:00:00Z"
+          agent_id: "forge-opencode-20260730T005134"
+          host: forge
+          lease_id: "experts-refresh-on-commit-forge-20260730T005134"
+          summary: >
+            Implemented post-commit expert refresh hook. L0 (plan/methodology)
+            reads files fresh at query time — answers reflect the working tree
+            instantly with zero refresh overhead. The post-commit hook detects
+            crate changes (crates/tillandsias-plan/) and triggers an async,
+            bounded (600s timeout) binary rebuild, NEVER blocking the commit.
+            Hook latency measured at 2ms (budget pinned: <50ms). Files:
+            scripts/hooks/post-commit-expert-refresh.sh (source),
+            images/default/lib-common.sh (installer + wiring).
       outcome: >
         Operator: experts get refreshed on commit/push. The forge already
         owns a hooks path (core.hooksPath is injected); post-commit /

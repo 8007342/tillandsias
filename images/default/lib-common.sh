@@ -321,6 +321,7 @@ configure_git_identity() {
     git config user.email "$email" 2>/dev/null || true
     trace_lifecycle "git-identity" "configured"
     _install_agent_trailer_hook
+    _install_expert_refresh_hook
 }
 
 # @trace spec:forge-git-identity-anonymization
@@ -364,6 +365,84 @@ HOOK
     chmod 0755 "$hook_file" 2>/dev/null || true
     git config --global core.hooksPath "$hooks_dir" 2>/dev/null || true
     trace_lifecycle "git-hook" "agent trailer hook installed (core.hooksPath=${hooks_dir})"
+}
+
+# @trace packet:experts-refresh-on-commit
+# Install a post-commit hook that triggers incremental expert refresh.
+# Never blocks the commit — forks background work immediately.
+# The hook's source lives at scripts/hooks/post-commit-expert-refresh.sh
+# in the tillandsias repository; this inlines it into the hooks dir.
+_install_expert_refresh_hook() {
+    local hooks_dir="$HOME/.cache/tillandsias/git-hooks"
+    local hook_file="$hooks_dir/post-commit"
+    mkdir -p "$hooks_dir" 2>/dev/null || return 0
+
+    # Idempotent: skip if hook already installed with our marker
+    if [ -f "$hook_file" ] && grep -q "experts-refresh-on-commit" "$hook_file" 2>/dev/null; then
+        return 0
+    fi
+
+    cat > "$hook_file" <<-'HOOK'
+#!/usr/bin/env bash
+# post-commit hook — Tillandsias forge expert refresh (auto-installed, order 396)
+# @trace packet:experts-refresh-on-commit
+HOOK
+
+    # Append the refresh logic (shared from repository source)
+    # This is inlined so the hook is self-contained with no source dependency.
+    cat >> "$hook_file" <<-'REFRESH'
+set -uo pipefail
+
+HOOK_NAME="post-commit-expert-refresh"
+HOOK_START=$(date +%s%N 2>/dev/null || echo 0)
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$REPO_ROOT/plan/index.yaml" ] || exit 0
+
+CHANGED=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null) || exit 0
+[ -n "$CHANGED" ] || exit 0
+
+HOOK_LOG="${TILLANDSIAS_HOOK_LOG:-/tmp/tillandsias-hooks.log}"
+
+# L0: plan/ and methodology/ — engine reads files fresh at query time.
+# When L1 prose indexes are added, re-index changed corpora here.
+
+# Crate changes → async binary rebuild (bounded, loud on failure)
+if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/'; then
+    (
+        BIN_DIR="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}"
+        mkdir -p "$BIN_DIR" 2>/dev/null || true
+        BIN_PATH="$BIN_DIR/tillandsias-plan"
+        BUILD_TIMEOUT="${FORGE_EXPERTS_BUILD_TIMEOUT:-600}"
+
+        if command -v cargo &>/dev/null; then
+            timeout "$BUILD_TIMEOUT" cargo build --release -p tillandsias-plan \
+                >> "$HOOK_LOG" 2>&1 \
+                && {
+                    mkdir -p "$BIN_DIR" 2>/dev/null
+                    cp "target/release/tillandsias-plan" "$BIN_PATH" 2>/dev/null
+                    echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) binary rebuilt from commit $(git rev-parse --short HEAD 2>/dev/null)" >> "$HOOK_LOG"
+                } \
+                || echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) FAILED: binary rebuild exited $? (timeout=${BUILD_TIMEOUT}s)" >> "$HOOK_LOG"
+        else
+            echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: cargo not available" >> "$HOOK_LOG"
+        fi
+    ) &
+    disown 2>/dev/null || true
+fi
+
+# Measure latency (fork-only, must be <50ms)
+HOOK_END=$(date +%s%N 2>/dev/null || echo 0)
+if [ "$HOOK_START" -ne 0 ] && [ "$HOOK_END" -ne 0 ]; then
+    HOOK_LATENCY_MS=$(( (HOOK_END - HOOK_START) / 1000000 ))
+    echo "[$HOOK_NAME] latency=${HOOK_LATENCY_MS}ms budget_commit=<50ms budget_total=<50ms" >> "$HOOK_LOG" 2>/dev/null || true
+fi
+
+exit 0
+REFRESH
+
+    chmod 0755 "$hook_file" 2>/dev/null || true
+    trace_lifecycle "git-hook" "expert refresh hook installed (post-commit)"
 }
 
 # @trace spec:git-mirror-service, spec:forge-offline, spec:enclave-network
