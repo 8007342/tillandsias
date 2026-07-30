@@ -16275,7 +16275,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "OpenCode affordance — experts transparently queryable by forge agents (config provider entries + instructions; MCP only if needed)"
-      status: claimed
+      status: done
       events:
         - type: claim
           ts: "2026-07-29T21:20:00Z"
@@ -16283,6 +16283,21 @@ plan_index:
           host: forge
           lease_id: "experts-opencode-affordance-395-forge-20260729"
           expires_at: "2026-07-30T01:20:00Z"
+        - type: completed
+          ts: "2026-07-29T21:30:00Z"
+          agent_id: "forge-bigpickle-opencode-20260729T2120Z"
+          host: forge
+          summary: >
+            All exit criteria closed. (1) forge-plan MCP server already
+            registered in config.json — fresh OpenCode session discovers
+            plan_answer/methodology_path/plan_blocked_by via tools/list
+            with zero out-of-band setup. (2) forge-discovery.md now carries
+            the single discoverability row in the "Where to Look When Stuck"
+            table; discoverability litmus
+            (litmus:forge-experts-discoverability-shape) pins config.json
+            registration, MCP server tool literals, and the single
+            instruction-file mention — all 7/7 steps PASS. build.sh --check
+            green.
       kind: implementation
       deliverable: images/default/config-overlay/opencode + instructions + discoverability litmus
       depends_on: [plan-methodology-experts-rung1]

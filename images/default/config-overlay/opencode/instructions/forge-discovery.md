@@ -100,6 +100,7 @@ User: "Cargo builds take 3 minutes"
 | "How do I declare shared deps?" | `cheatsheets/runtime/forge-shared-cache-via-nix.md` |
 | "What OpenSpec workflow step am I on?" | `cheatsheets/agents/openspec.md` |
 | "What changes are in flight?" | `openspec status` or `ls openspec/changes/` |
+| "How do I query plan/index.yaml or methodology?" | Use the `forge-plan` MCP tools (`plan_answer`, `methodology_path`, `plan_blocked_by`, etc.) before grepping — see startup context |
 
 ## Sources of Truth
 

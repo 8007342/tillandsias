@@ -1,0 +1,103 @@
+# @trace spec:forge-environment-discoverability, spec:inference-container
+#
+# OpenCode affordance (order 395): drift-protection for the forge-plan
+# expert discoverability surface. Pins:
+#
+#   * forge-plan MCP server registration in config.json (exit criterion 1:
+#     "fresh OpenCode session lists/queries the experts with zero out-of-band
+#     setup" — the MCP entry IS the zero-setup path)
+#   * forge-plan.sh MCP server file + key tool literals (the server exists
+#     and exposes the canonical tool set)
+#   * ONE instruction file mentions the forge-plan MCP tools (exit criterion
+#     2: "instructions mention the experts exactly once (discoverable, not
+#     spammy)") — forge-discovery.md is the canonical discoverability surface
+#
+# Combined with litmus:forge-plan-expert-build-shape (which pins the
+# build+install path, the startup-context grammar, and the probe/binary
+# agreement), this completes the discoverability coverage for order 395.
+name: litmus:forge-experts-discoverability-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin the forge-plan MCP registration in config.json, the MCP server file
+  tool literals, and the single discoverability mention in forge-discovery.md.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/config-overlay/opencode/config.json
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - workspace contains images/default/config-overlay/opencode/instructions/forge-discovery.md
+  - shell utilities (grep, jq) are available in PATH
+
+critical_path:
+  - step: "forge-plan MCP server registered in config.json"
+    # Exit criterion 1: zero out-of-band setup. The forge-plan MCP entry
+    # in config.json is what makes the tools visible to a fresh OpenCode
+    # session — no manual tool registration needed. Pin the entry name
+    # and the command path so a rename breaks here rather than silently.
+    command: "jq -e '.mcp[\"forge-plan\"]' images/default/config-overlay/opencode/config.json >/dev/null && echo \"ok: forge-plan MCP registered\""
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-plan MCP registered"
+
+  - step: "forge-plan MCP command resolves to forge-plan.sh"
+    # The command path must point to the real server file. A stale path
+    # (after a relocate) would silently break every expert tool.
+    command: "jq -r '.mcp[\"forge-plan\"].command[0]' images/default/config-overlay/opencode/config.json | grep -qF 'forge-plan.sh' && echo \"ok: forge-plan command resolves\""
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-plan command resolves"
+
+  - step: "forge-plan.sh MCP server file exists"
+    # The server binary must exist at the expected location. A deletion
+    # or rename breaks the MCP registration silently.
+    command: "test -f images/default/config-overlay/mcp/forge-plan.sh && echo \"ok: forge-plan.sh exists\""
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-plan.sh exists"
+
+  - step: "forge-plan.sh exposes plan_answer tool"
+    # Order 394b: plan_answer is the canonical cited-envelope tool.
+    # If the literal disappears, the expert contract is broken.
+    command: "grep -F 'plan_answer' images/default/config-overlay/mcp/forge-plan.sh"
+    timeout_ms: 3000
+    expected_behavior: "plan_answer"
+
+  - step: "forge-plan.sh exposes methodology_path tool"
+    # Order 394c: methodology_path is the L0 methodology query tool.
+    # Pin the literal so a regression surfaces here.
+    command: "grep -F 'methodology_path' images/default/config-overlay/mcp/forge-plan.sh"
+    timeout_ms: 3000
+    expected_behavior: "methodology_path"
+
+  - step: "forge-plan.sh exposes plan_blocked_by tool"
+    # Core query tool — pin the literal.
+    command: "grep -F 'plan_blocked_by' images/default/config-overlay/mcp/forge-plan.sh"
+    timeout_ms: 3000
+    expected_behavior: "plan_blocked_by"
+
+  - step: "instruction file mentions forge-plan MCP tools exactly once"
+    # Exit criterion 2: "instructions mention the experts exactly once
+    # (discoverable, not spammy)". forge-discovery.md is the canonical
+    # discoverability surface. Verify the mention contains the key
+    # "forge-plan" and "plan_answer" / "before grepping" guidance.
+    command: "grep -cF 'forge-plan' images/default/config-overlay/opencode/instructions/forge-discovery.md | grep -qF '1' && grep -F 'forge-plan' images/default/config-overlay/opencode/instructions/forge-discovery.md | grep -qF 'plan_answer' && echo \"ok: forge-plan mentioned exactly once in forge-discovery.md with tool guidance\""
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-plan mentioned exactly once in forge-discovery.md with tool guidance"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace spec:inference-container"
+  expected_log: "forge-plan MCP registered, server file present, canonical tools pinned, instruction mention exactly once"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-experts-discoverability-shape"
+    artifact: "images/default/config-overlay/opencode/config.json + images/default/config-overlay/mcp/forge-plan.sh + images/default/config-overlay/opencode/instructions/forge-discovery.md"
+
+rollback:
+  on_failure: >
+    An order-395 affordance surface drifted. Restore: `forge-plan` entry in
+    config.json `.mcp` section; `forge-plan.sh` server file with the
+    canonical tool set (plan_answer, methodology_path, plan_blocked_by);
+    `forge-plan` mention in forge-discovery.md's "Where to Look When Stuck"
+    table.
+  command: "grep -nE 'forge-plan|plan_answer|methodology_path' images/default/config-overlay/opencode/config.json images/default/config-overlay/mcp/forge-plan.sh images/default/config-overlay/opencode/instructions/forge-discovery.md | head -15"
