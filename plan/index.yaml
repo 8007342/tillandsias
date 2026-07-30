@@ -25074,3 +25074,47 @@ plan_index:
         - "the mount/identity/security assertions for build_inference_run_args are made against the generated arg vector, not a grep line window"
         - "a positional defect (a flag emitted after the image name) fails the suite, proving the new form catches what the window could not"
         - "any remaining grep -A N step carries a comment saying WHY source text, not behaviour, is the right assertion there"
+
+    - packet_id: local-ci-full-cannot-pass-on-linux-next
+      order: 529
+      desired_release: v0.5
+      title: "`build.sh --ci-full --install` CANNOT succeed on linux-next — three pre-existing gates fail, so nobody can produce a locally-installed build"
+      status: ready
+      kind: bug
+      deliverable: the three gates green (or explicitly reclassified) so --ci-full --install installs again
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, ci, litmus, release, developer-experience, blocking]
+      estimated_hours: 5
+      outcome: >
+        Found 2026-07-29 while producing a testable local build for the operator.
+        `./build.sh --ci-full --install` runs the CI gate BEFORE installing, the
+        gate fails, and the install never happens — so the documented way to get
+        a locally-built tray onto this host does not work at all. All three
+        failures were PROVEN pre-existing by re-running them on a detached
+        worktree at 11fd37f2 (the commit before this cycle's work):
+        (1) litmus:concurrent-forge-shared-stack-safety, fixture 2c — "proxy
+        survived the last-forge exit (teardown regressed)". Fails IDENTICALLY at
+        11fd37f2, so shared-stack teardown has a real regression that predates
+        this cycle. This is the one with actual product meaning: the control
+        fixture asserting that the LAST forge exiting tears the stack down.
+        (2) spec-code-drift — validate-traces reports 7 error(s) / 107 warning(s),
+        byte-identical counts on both trees. The OpenSpec half names three
+        zero-trace specs (accel-capability-probe, inference-engine-slots,
+        inference-policy-router), all landed by order 479 as specs-AHEAD-of-code;
+        their implementations are orders 480/482/484, still ready. So CI has been
+        red since the specs landed, and the drift check has no sanctioned
+        "spec pending implementation" state to distinguish deliberate
+        specs-first work from genuine drift.
+        (3) version-monotonicity — VERSION is 0.4.260728.1 while the newest tag
+        is v0.4.260728.2, i.e. a release shipped without the branch VERSION being
+        bumped. Unchanged at 11fd37f2.
+        Interim workaround used this cycle: `./build.sh --install`, which builds
+        and installs without the release gate. That is a workaround, not a fix —
+        the gate exists for a reason and a permanently-red gate trains everyone
+        to bypass it, which is how the next real regression ships.
+      exit_criteria:
+        - "fixture 2c passes, or the teardown regression it detects is root-caused and filed as its own packet with the fixture left red on purpose and documented"
+        - "the drift check distinguishes a spec awaiting its implementation packet from genuine spec-code drift, so specs-first work does not hold CI red"
+        - "VERSION is monotonically >= the newest release tag"
+        - "`./build.sh --ci-full --install` completes and the binary is installed, demonstrated end to end on a linux_mutable host"

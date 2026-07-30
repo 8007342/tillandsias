@@ -1289,7 +1289,16 @@ plain_list:
     /// so a wrong answer reached agents wearing `confidence: exact`.
     #[test]
     fn an_unparseable_corpus_file_is_uncitable_and_names_why() {
-        let dir = std::env::temp_dir().join(format!("tilland-523-{}", std::process::id()));
+        // Deterministic name on purpose. A pid-based uniquifier would be the
+        // obvious choice, but litmus:methodology-path-query-citability asserts
+        // that this module contains ZERO references to the process module of the
+        // standard library — the L0 engine must be provably unable to reach any
+        // subprocess or interpreter, and the pin is a grep over the whole file,
+        // so it counts comments too. Reading the pid spawns nothing, but
+        // weakening a strong structural guarantee to buy a test convenience is
+        // the wrong trade. The name is unique within this binary and the
+        // directory is removed first, so determinism costs nothing.
+        let dir = std::env::temp_dir().join("tilland-523-unparseable-corpus-uncitable");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("methodology")).expect("mk corpus dir");
         // A parseable file, so the corpus loads and the query surface is real.
