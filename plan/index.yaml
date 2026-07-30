@@ -25614,3 +25614,34 @@ plan_index:
         - "the drift check distinguishes a spec awaiting its implementation packet from genuine spec-code drift, so specs-first work does not hold CI red"
         - "VERSION is monotonically >= the newest release tag"
         - "`./build.sh --ci-full --install` completes and the binary is installed, demonstrated end to end on a linux_mutable host"
+
+    - packet_id: proxy-end-to-end-health-litmus
+      order: 530
+      desired_release: v0.5
+      title: "No end-to-end proxy health litmus — source-surface pins exist but runtime function (CONNECT, TLS, allowlist, dual-port) is never asserted"
+      status: ready
+      kind: enhancement
+      deliverable: A litmus YAML + shell or curl harness that verifies the running proxy's full stack
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, proxy, litmus, testing, observability]
+      estimated_hours: 2
+      outcome: >
+        Found 2026-07-30 during the architecture audit cluster (order 247,
+        proxy-git-mirror-configuration-audit). The shape litmus at
+        openspec/litmus-tests/litmus-proxy-container-shape.yaml (169 lines)
+        pins source surfaces (Containerfile, squid.conf, allowlist.txt,
+        entrypoint.sh) with a pre-build `size: instant` gate but has NO runtime
+        health assertion. There is no automated check that the running proxy
+        actually accepts HTTPS CONNECT tunnels, intercepts TLS with the correct
+        CA, enforces the domain allowlist, or serves the dual-port architecture
+        (3128 ssl-bump, 3129 non-TLS). The proxy is critical enclave
+        infrastructure — a silent proxy failure causes every forge/inference/git
+        container to lose internet egress. Without a health litmus, a proxy
+        deploy that starts but fails to CONNECT will be detected only when an
+        agent or operator reports a failure.
+      exit_criteria:
+        - "the litmus exits 0 when the proxy container is fully functional: ports 3128/3129 accept connections, HTTPS CONNECT to github.com succeeds, TLS fingerprint matches the enclave intermediate CA, an unlisted domain is rejected by the allowlist"
+        - "the litmus exits non-zero with a named failure step when any of the above checks fails"
+        - "the litmus runs as a standalone script without requiring the full enclave stack (proxy container + its dependencies)"
+        - "the litmus is registered in the litmus index (TRACES.md) and gated in the appropriate CI phase"
