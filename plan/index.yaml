@@ -16324,13 +16324,20 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Expert refresh on commit/push — answers track the working tree"
-      status: ready
+      status: claimed
       kind: implementation
       deliverable: git-hooks (existing /home/forge/.cache/tillandsias/git-hooks path) + incremental refresh
       depends_on: [plan-methodology-experts-rung1]
       pickup_role: linux
       capability_tags: [inference, experts, git, hooks]
       estimated_hours: 5
+      events:
+        - type: claim
+          ts: "2026-07-30T00:51:34Z"
+          agent_id: "forge-opencode-20260730T005134"
+          host: forge
+          lease_id: "experts-refresh-on-commit-forge-20260730T005134"
+          expires_at: "2026-07-30T04:51:34Z"
       outcome: >
         Operator: experts get refreshed on commit/push. The forge already
         owns a hooks path (core.hooksPath is injected); post-commit /
