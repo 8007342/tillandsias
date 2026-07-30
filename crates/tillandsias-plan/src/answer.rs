@@ -243,7 +243,17 @@ impl Envelope {
     }
 
     pub fn with_citation_root(mut self, root: &Path) -> Self {
-        self.citation_root = Some(root.display().to_string());
+        let path = if root.as_os_str().is_empty() {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        } else {
+            root.canonicalize().unwrap_or_else(|_| root.to_path_buf())
+        };
+        let s = path.display().to_string();
+        if !s.is_empty() {
+            self.citation_root = Some(s);
+        } else {
+            self.citation_root = None;
+        }
         self
     }
 

@@ -124,11 +124,13 @@ fn citation_path(index: &Path, root: &Path) -> String {
 /// The checkout the citation paths are resolved against: the parent of the
 /// index's `plan/` directory, falling back to the process cwd.
 fn root_for(index: &Path) -> PathBuf {
-    index
+    let candidate = index
         .parent()
         .and_then(Path::parent)
+        .filter(|p| !p.as_os_str().is_empty())
         .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|| PathBuf::from("."));
+    candidate.canonicalize().unwrap_or(candidate)
 }
 
 fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
@@ -792,18 +794,35 @@ mod tests {
             CitationKind::Plan,
             authority,
         );
-        let ok_env = Envelope::supported("demo is ready", vec![good], Confidence::Exact, fresh);
+        let canonical_dir = dir.canonicalize().expect("canonicalize dir");
+        let ok_env = Envelope::supported(
+            "demo is ready",
+            vec![good.clone()],
+            Confidence::Exact,
+            fresh,
+        );
         let verified = self_verified(ok_env, &dir);
+        let root_str = verified.citation_root().expect("citation_root present");
+        assert!(!root_str.is_empty(), "citation_root must be non-empty");
+        let root_path = Path::new(root_str);
+        assert!(
+            root_path.is_absolute(),
+            "citation_root must be absolute: {root_str}"
+        );
+        assert!(
+            root_path.is_dir(),
+            "citation_root must be an existing directory: {root_str}"
+        );
         assert_eq!(
             verified.citation_root(),
-            Some(dir.display().to_string().as_str())
+            Some(canonical_dir.display().to_string().as_str())
         );
 
         let json = serde_json::to_string(&verified).expect("json");
         let deserialized: Envelope = serde_json::from_str(&json).expect("deserialized");
         assert_eq!(
             deserialized.citation_root(),
-            Some(dir.display().to_string().as_str())
+            Some(canonical_dir.display().to_string().as_str())
         );
 
         let violations = answer::verify(
@@ -814,6 +833,28 @@ mod tests {
             violations.is_empty(),
             "derived root verify must pass: {:?}",
             violations
+        );
+
+        // Test passing relative path ".": citation_root must canonicalize to non-empty absolute dir
+        let rel_env = Envelope::supported(
+            "demo is ready",
+            vec![],
+            Confidence::Retrieved,
+            Freshness::new("a".to_string(), "b".to_string()),
+        )
+        .with_citation_root(Path::new("."));
+        let rel_root = rel_env.citation_root().expect("rel citation_root present");
+        assert!(
+            !rel_root.is_empty(),
+            "relative citation_root must be non-empty"
+        );
+        assert!(
+            Path::new(rel_root).is_absolute(),
+            "relative citation_root must canonicalize to absolute"
+        );
+        assert!(
+            Path::new(rel_root).is_dir(),
+            "relative citation_root must point to an existing directory"
         );
 
         let _ = std::fs::remove_dir_all(&dir);

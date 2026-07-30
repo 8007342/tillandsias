@@ -22521,7 +22521,7 @@ plan_index:
       order: 477
       desired_release: v0.5
       title: "Last-lane teardown and the liveness supervisor disagree on the proxy's scope: teardown removes it, liveness re-creates it 3s later"
-      status: in_progress
+      status: done
       kind: fix
       deliverable: one shared core-vs-lane-scoped container set consumed by both teardown and liveness (plus a test pinning the post-teardown steady-state container set)
       depends_on: []
@@ -22551,6 +22551,12 @@ plan_index:
         - "a test pins the post-last-lane steady-state container set (no create/remove churn within the settling window)"
         - "the chosen proxy scope is recorded with rationale (idle footprint vs warm-start latency)"
       events:
+        - type: progress
+          ts: "2026-07-30T02:03:15Z"
+          agent_id: "forge-antigravity"
+          host: forge
+          summary: >
+            CLOSED. Stale fixture 2c in test-concurrent-forge-shared-stack.sh updated to match the post-477 contract (core application-lifetime containers tillandsias-proxy/vault/router survive last exit; lane-scoped tillandsias-inference is removed). Asserted rm -f for inference and absence of rm -f for proxy. Proven falsifiable by seeding regression and verifying RED. test-concurrent-forge-shared-stack.sh and litmus:concurrent-forge-shared-stack-safety 100% GREEN.
         - type: progress
           ts: "2026-07-29T05:30:00Z"
           agent_id: "linux-mutable-metaorch-20260729"
@@ -24944,7 +24950,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "skip_runtime_pulls inserts --env AFTER the image name, so the flag becomes container argv and is silently dropped"
-      status: ready
+      status: done
       kind: bug
       deliverable: arg-vector fix + flag-before-image unit assertion + removal of the dead trailing command
       depends_on: []
@@ -24979,6 +24985,12 @@ plan_index:
         - "the status-check mode log line is demonstrated to print"
 
       events:
+        - type: progress
+          ts: "2026-07-30T01:57:30Z"
+          agent_id: "forge-antigravity"
+          host: forge
+          summary: >
+            CLOSED. Implementation landed in commit 8a06a9f7. build_inference_run_args now builds the --env pair BEFORE the mount/image tail, the dead /usr/bin/ollama serve tail is removed, and unit test inference_run_args_place_every_flag_before_the_image asserts flag ordering.
         - type: progress
           ts: "2026-07-29T22:40:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260729"
