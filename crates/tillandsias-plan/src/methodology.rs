@@ -79,9 +79,14 @@ pub struct CorpusFile {
     pub rel: String,
     pub entries: Vec<Entry>,
     pub line_count: usize,
-    /// `Some` when `serde_yaml` refused the file. The text index is still
-    /// built (a partially-broken file is still greppable), but the parse
-    /// failure is surfaced so nobody mistakes a mis-scan for methodology.
+    /// `Some` when `serde_yaml` refused the file. The text index is still built
+    /// so the failure can be named precisely, but ORDER 523 makes such a file
+    /// UNCITABLE: [`Corpus::query`] skips it entirely and
+    /// [`Corpus::untrusted_hit`] reports it as the refusal reason. Before that,
+    /// entries from an unparseable file were indexed AND citable, and the only
+    /// signal was a stderr warning that the MCP wrapper discarded with
+    /// `2>/dev/null` — so a wrong answer reached the agent wearing
+    /// `confidence: exact`.
     pub parse_error: Option<String>,
 }
 
@@ -199,15 +204,58 @@ impl Corpus {
     /// — the complete match set, never a "best" one, because picking a best
     /// among equals is the guess this module exists to refuse.
     pub fn query(&self, q: &str, file_filter: Option<&str>) -> (Vec<Hit>, MatchKind) {
+        // ORDER 523 (R1): TRUSTED files only. A file `serde_yaml` refused is not
+        // a citable source — its line spans may straddle whatever broke the
+        // parse, so a "hit" inside it can glue one claim's fields onto another's
+        // key. That is exactly what was observed: a query returned
+        // confidence=exact and rendered a span that attributed one claim's
+        // limits/falsification_signal to a DIFFERENT claim. `verify-answer` said
+        // "ok" because the span really does contain the token — the span is
+        // simply not meaningful. Untrusted files are still INDEXED, so
+        // [`Corpus::untrusted_hit`] can name the parse error as the refusal
+        // reason instead of reporting a bare "unknown path".
+        self.query_within(q, file_filter, false)
+    }
+
+    /// ORDER 523 (R1). Would this query have matched inside a file that does not
+    /// parse? Returns the first such `(rel, parse_error)` so the caller can
+    /// refuse with a reason that names the real cause. Distinguishing "your path
+    /// is wrong" from "the file holding your path is unparseable" is the whole
+    /// point — collapsing them is the ambiguity this project forbids.
+    pub fn untrusted_hit(&self, q: &str, file_filter: Option<&str>) -> Option<(String, String)> {
+        let (hits, _) = self.query_within(q, file_filter, true);
+        let first = hits.first()?;
+        let err = self
+            .files
+            .iter()
+            .find(|f| f.rel == first.file)
+            .and_then(|f| f.parse_error.clone())?;
+        Some((first.file.clone(), err))
+    }
+
+    /// Shared matcher. `untrusted` selects WHICH half of the corpus is searched:
+    /// `false` = files that parse (the only citable ones), `true` = files that do
+    /// not. The two sets are disjoint, so no hit can ever appear in both.
+    fn query_within(
+        &self,
+        q: &str,
+        file_filter: Option<&str>,
+        untrusted: bool,
+    ) -> (Vec<Hit>, MatchKind) {
         let q = q.trim().trim_matches('.');
         if q.is_empty() {
             // `ends_with("")` is true for every path; an empty query would
             // "match" the entire corpus. It is a refusal, not a wildcard.
             return (Vec::new(), MatchKind::Exact);
         }
-        let considered = |f: &CorpusFile| match file_filter {
-            Some(sub) if !sub.is_empty() => f.rel.contains(sub),
-            _ => true,
+        let considered = |f: &CorpusFile| {
+            if f.parse_error.is_some() != untrusted {
+                return false;
+            }
+            match file_filter {
+                Some(sub) if !sub.is_empty() => f.rel.contains(sub),
+                _ => true,
+            }
         };
 
         let mut exact = Vec::new();
@@ -331,6 +379,20 @@ pub fn answer_path_query(corpus: &Corpus, query: &str, file_filter: Option<&str>
 
     let (hits, kind) = corpus.query(trimmed, file_filter);
     if hits.is_empty() {
+        // ORDER 523 (R1). Before reporting "no such path", check whether the path
+        // DOES exist but only inside a file that does not parse. Those are
+        // different faults and an agent must be able to tell them apart: one
+        // means re-ask, the other means a corpus file is broken and needs fixing.
+        if let Some((rel, err)) = corpus.untrusted_hit(trimmed, file_filter) {
+            return Envelope::unsupported(
+                format!(
+                    "{trimmed:?} resolves only inside {rel}, which does not parse as YAML ({err}) \
+                     — its line spans cannot be trusted to delimit the claim, so no citation is \
+                     offered. Fix {rel} and re-ask"
+                ),
+                freshness,
+            );
+        }
         let mut reason = format!(
             "no methodology YAML path matches {trimmed:?} (searched {} keys across {} file(s){})",
             corpus.entry_count(),
@@ -1198,22 +1260,91 @@ plain_list:
     /// file whose spans nobody should trust, so the set of such files is
     /// pinned as a SUBSET of what is known-broken at HEAD: fixing one keeps
     /// this green, breaking a new one turns it red.
+    ///
+    /// ORDER 523: the allowance is now EMPTY. The single known offender —
+    /// `methodology/provenance.yaml`, whose `claims[5]` declared `limits:` twice
+    /// — was not a formatting nit: the duplicate arose because the TELEMETRY
+    /// claim's `limits`/`falsification_signal`/`review_cadence` had been pasted
+    /// into the compiled-cli-orchestration claim, so the file both failed to
+    /// parse AND attributed one claim's caveats to another. Both were repaired
+    /// (the fields moved back to `methodology.telemetry.semantic-fields@v1`), so
+    /// the bar tightens to "no methodology file may fail to parse". This matters
+    /// more than hygiene now that order 523 makes an unparseable file entirely
+    /// UNCITABLE: leaving one broken silently removes it from the expert's
+    /// answerable surface.
     #[test]
-    fn no_new_methodology_file_stops_parsing_as_yaml() {
+    fn no_methodology_file_fails_to_parse_as_yaml() {
         let corpus = corpus();
-        // Known defect at HEAD: methodology_provenance.claims[5] declares
-        // `limits:` twice (methodology/provenance.yaml:222). Reported to the
-        // coordinator for filing under the issue_filing_mandate.
-        const KNOWN_BROKEN: &[&str] = &["methodology/provenance.yaml"];
-        let unexpected: Vec<(&str, &str)> = corpus
-            .parse_errors()
-            .into_iter()
-            .filter(|(rel, _)| !KNOWN_BROKEN.contains(rel))
-            .collect();
+        let unexpected: Vec<(&str, &str)> = corpus.parse_errors().into_iter().collect();
         assert!(
             unexpected.is_empty(),
-            "methodology files stopped parsing: {unexpected:#?}"
+            "methodology files do not parse (and are therefore UNCITABLE — order 523): {unexpected:#?}"
         );
+    }
+
+    /// ORDER 523 (R1). An unparseable corpus file must be uncitable, and the
+    /// refusal must NAME the parse failure rather than collapsing into a generic
+    /// "unknown path". Before this, entries from such a file were indexed and
+    /// citable and the only signal was a stderr line the MCP wrapper discarded,
+    /// so a wrong answer reached agents wearing `confidence: exact`.
+    #[test]
+    fn an_unparseable_corpus_file_is_uncitable_and_names_why() {
+        let dir = std::env::temp_dir().join(format!("tilland-523-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("methodology")).expect("mk corpus dir");
+        // A parseable file, so the corpus loads and the query surface is real.
+        std::fs::write(
+            dir.join("methodology.yaml"),
+            "methodology:\n  good_key:\n    rule: this one parses\n",
+        )
+        .expect("write good file");
+        // A file with a duplicate key — exactly the real defect's shape.
+        std::fs::write(
+            dir.join("methodology/broken.yaml"),
+            "broken_root:\n  target_key:\n    limits: first\n    limits: second\n",
+        )
+        .expect("write broken file");
+
+        let corpus = Corpus::load(&dir).expect("corpus loads despite one broken file");
+        assert_eq!(
+            corpus.parse_errors().len(),
+            1,
+            "the broken file must be recorded as unparseable"
+        );
+
+        // The trusted half still answers.
+        let good = answer_path_query(&corpus, "methodology.good_key.rule", None);
+        assert_ne!(
+            good.confidence(),
+            Confidence::Unsupported,
+            "a parseable path must still answer: {}",
+            good.answer()
+        );
+
+        // The untrusted half refuses, and says WHY.
+        let bad = answer_path_query(&corpus, "broken_root.target_key", None);
+        assert_eq!(
+            bad.confidence(),
+            Confidence::Unsupported,
+            "a path inside an unparseable file MUST NOT be citable, got: {}",
+            bad.answer()
+        );
+        assert!(
+            bad.citations().is_empty(),
+            "a refusal must carry zero citations"
+        );
+        assert!(
+            bad.answer().contains("does not parse as YAML"),
+            "the refusal must name the parse failure, got: {}",
+            bad.answer()
+        );
+        assert!(
+            bad.answer().contains("methodology/broken.yaml"),
+            "the refusal must name the offending file, got: {}",
+            bad.answer()
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The corpus really is both roots, and both are reachable from one query

@@ -45,13 +45,63 @@ fn usage() -> ! {
     std::process::exit(2);
 }
 
+/// ORDER 523 (R2). Emit an envelope only after it verifies against the root its
+/// own citations are relative to — and downgrade to `unsupported` naming the
+/// violations when it does not.
+///
+/// `answer::verify` existed and was exercised only by `verify-answer` and the
+/// litmus, i.e. by whoever chose to run it. Nothing on the RUNTIME path called
+/// it, so an envelope could be emitted with `confidence: exact` carrying a
+/// citation that `verify-answer` would refuse against the same checkout —
+/// reachable in practice because the MCP wrapper probes several candidate index
+/// locations and caches the first non-empty one, so the root the paths were built
+/// against need not be the root a reader resolves them from.
+///
+/// Running the verifier at the exit point makes it unavoidable: the emitter and
+/// the checker can no longer disagree about the same envelope, because the
+/// emitter IS a checker.
+///
+/// Exits 0 in every case, including a downgrade: `unsupported` is a well-formed
+/// answer, and the forge-plan MCP wrapper runs under `set -e` where a non-zero
+/// status kills the server mid-request. The envelope is the signal.
+fn emit_verified_envelope(envelope: answer::Envelope, root: &Path) {
+    match serde_json::to_string_pretty(&self_verified(envelope, root)) {
+        Ok(json) => println!("{json}"),
+        Err(e) => {
+            eprintln!("error: serialize envelope: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// The pure half of [`emit_verified_envelope`], split out so the downgrade is
+/// unit-testable without capturing stdout. Returns the envelope unchanged when it
+/// verifies, and a self-refusal naming every violation when it does not.
+fn self_verified(envelope: answer::Envelope, root: &Path) -> answer::Envelope {
+    let violations = answer::verify(&envelope, root);
+    if violations.is_empty() {
+        return envelope;
+    }
+    answer::Envelope::unsupported(
+        format!(
+            "this answer FAILED its own citation check against {} and was withheld \
+             ({} violation(s)): {}",
+            root.display(),
+            violations.len(),
+            violations.join("; ")
+        ),
+        envelope.freshness().clone(),
+    )
+}
+
 /// The repo-relative path the citations carry. A citation must name a path a
 /// READER can open from the checkout root, so an absolute or `../`-laden
 /// `--index` is reduced to its `plan/index.yaml`-shaped tail.
 ///
 /// The tail is only ever used as a LABEL: `verify-answer` re-resolves it
 /// against the root and re-reads the span, so a wrong label is caught there
-/// rather than being trusted.
+/// rather than being trusted — and since order 523 the emitter runs that same
+/// check itself before printing, so a wrong label is caught at emission too.
 fn citation_path(index: &Path, root: &Path) -> String {
     if let Ok(rel) = index.strip_prefix(root) {
         return rel.to_string_lossy().replace('\\', "/");
@@ -429,13 +479,9 @@ fn main() {
             }
             _ => usage(),
         };
-        match serde_json::to_string_pretty(&envelope) {
-            Ok(json) => println!("{json}"),
-            Err(e) => {
-                eprintln!("error: serialize envelope: {e}");
-                std::process::exit(1);
-            }
-        }
+        // ORDER 523 (R2): self-verify before emitting. The methodology corpus
+        // root IS the checkout, so citations resolve against `root`.
+        emit_verified_envelope(envelope, &root);
         return;
     }
 
@@ -543,13 +589,11 @@ fn main() {
             let root = root_for(&index);
             let envelope =
                 answer::answer_question(&ledger, &question, &citation_path(&index, &root));
-            match serde_json::to_string_pretty(&envelope) {
-                Ok(json) => println!("{json}"),
-                Err(e) => {
-                    eprintln!("error: serialize envelope: {e}");
-                    std::process::exit(1);
-                }
-            }
+            // ORDER 523 (R2): self-verify against the SAME root the citation
+            // paths were built relative to. This is the exact disagreement that
+            // was observed — an index reached through a probe path yielded
+            // confidence=exact with a citation `verify-answer` refused.
+            emit_verified_envelope(envelope, &root);
         }
         "append-event" => {
             // append-event <ref> <type> <summary> --ts <ISO> [--agent A] [--host H]
@@ -625,5 +669,94 @@ fn main() {
             println!("appended {etype} event to {target}");
         }
         _ => usage(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
+    use std::collections::BTreeMap;
+
+    /// ORDER 523 (R2). `answer::verify` existed but nothing on the RUNTIME path
+    /// called it, so the emitter and the checker could disagree about the same
+    /// envelope: an answer could ship `confidence: exact` carrying a citation
+    /// `verify-answer` would refuse against the same checkout. Self-verifying at
+    /// the exit point makes the verifier unavoidable — but only if the downgrade
+    /// actually fires, which is what this pins.
+    #[test]
+    fn a_failing_envelope_is_downgraded_to_unsupported_naming_the_violations() {
+        let dir = std::env::temp_dir().join(format!("tilland-523-sv-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("mk root");
+        let fresh = Freshness::new("deadbeef".to_string(), "2026-07-29T00:00:00Z".to_string());
+
+        // A citation into a file that does not exist under `root` — precisely the
+        // shape of the observed defect, where the paths were built against one
+        // root and resolved against another.
+        let mut authority = BTreeMap::new();
+        authority.insert("packet_id".to_string(), "demo".to_string());
+        let bogus = Citation::new(
+            "plan/does-not-exist.yaml".to_string(),
+            1,
+            5,
+            CitationKind::Plan,
+            authority,
+        );
+        let envelope = Envelope::supported(
+            "some confident prose",
+            vec![bogus],
+            Confidence::Exact,
+            fresh.clone(),
+        );
+        // Precondition: it really did construct as a supported answer.
+        assert_eq!(envelope.confidence(), Confidence::Exact);
+
+        let out = self_verified(envelope, &dir);
+        assert_eq!(
+            out.confidence(),
+            Confidence::Unsupported,
+            "an envelope whose citation cannot resolve MUST be withheld, got: {}",
+            out.answer()
+        );
+        assert!(
+            out.citations().is_empty(),
+            "a withheld answer must carry zero citations"
+        );
+        assert!(
+            out.answer().starts_with("unsupported:"),
+            "the refusal must use the pinned rendering, got: {}",
+            out.answer()
+        );
+        assert!(
+            out.answer().contains("FAILED its own citation check"),
+            "the refusal must say the answer failed ITS OWN check, got: {}",
+            out.answer()
+        );
+
+        // And a genuinely verifiable envelope passes through untouched.
+        std::fs::create_dir_all(dir.join("plan")).expect("mk plan dir");
+        std::fs::write(
+            dir.join("plan/real.yaml"),
+            "packet_id: demo\nstatus: ready\nline3: x\nline4: y\nline5: z\n",
+        )
+        .expect("write real file");
+        let mut authority2 = BTreeMap::new();
+        authority2.insert("packet_id".to_string(), "demo".to_string());
+        let good = Citation::new(
+            "plan/real.yaml".to_string(),
+            1,
+            2,
+            CitationKind::Plan,
+            authority2,
+        );
+        let ok_env = Envelope::supported("demo is ready", vec![good], Confidence::Exact, fresh);
+        let passed = self_verified(ok_env.clone(), &dir);
+        assert_eq!(
+            passed, ok_env,
+            "a verifiable envelope must pass through byte-identical"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -3354,6 +3354,23 @@ fn build_inference_run_args(
         ]);
     }
     args.extend(proxy_env_args());
+    // Order 524: this env pair MUST be built before the mount/image tail.
+    // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
+    // ..)` calls — but the tail ended `[.., image, "/usr/bin/ollama", "serve"]`,
+    // so `len() - 2` was the index of "/usr/bin/ollama" and both inserts landed
+    // BEHIND the image name. Everything after the image is the container's argv,
+    // not a podman flag, so the variable was never set: status-check mode never
+    // announced itself and the "[inference] status-check mode" line could not
+    // print. No litmus caught it because every SKIP_RUNTIME_PULLS test bypasses
+    // this function and passes `-e` straight to podman. The flag-before-image
+    // invariant is now asserted by a unit test
+    // (inference_run_args_place_every_flag_before_the_image).
+    if skip_runtime_pulls {
+        args.extend([
+            "--env".into(),
+            "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1".into(),
+        ]);
+    }
     args.extend([
         "-v".into(),
         format!(
@@ -3365,18 +3382,15 @@ fn build_inference_run_args(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
+        // Order 524: no container command follows the image. The previous
+        // `/usr/bin/ollama serve` was dead weight AND a latent failure: the
+        // image is ENTRYPOINT-only (images/inference/Containerfile) and
+        // entrypoint.sh never reads "$@", so those two words were silently
+        // discarded — and `/usr/bin/ollama` does not exist in the image at all
+        // (ollama self-installs into `${OLLAMA_MODELS}.tools/`), so the day the
+        // image switched ENTRYPOINT to CMD the container would have exec-failed.
         image.into(),
-        "/usr/bin/ollama".into(),
-        "serve".into(),
     ]);
-
-    if skip_runtime_pulls {
-        args.insert(args.len() - 2, "--env".into());
-        args.insert(
-            args.len() - 2,
-            "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1".into(),
-        );
-    }
 
     args
 }
@@ -13079,6 +13093,76 @@ mod tests {
             seen,
             "a user-level ~/.config/cdi/nvidia.yaml must be honored"
         );
+    }
+
+    #[test]
+    fn inference_run_args_place_every_flag_before_the_image() {
+        // Order 524. The generated arg VECTOR is the only observable form of the
+        // podman boundary, so it has to be asserted directly — reading the code
+        // is what let the original defect live: the skip_runtime_pulls env pair
+        // was spliced in at `args.len() - 2` after a tail ending
+        // [.., image, "/usr/bin/ollama", "serve"], so it landed BEHIND the image
+        // and became container argv. podman silently accepted it, the variable
+        // was never set, and no existing litmus could see it because they all
+        // bypass this function.
+        //
+        // Invariant: podman's positional grammar is `podman run [FLAGS] IMAGE
+        // [CMD...]`, so nothing flag-shaped may appear at or after the image.
+        let certs = Path::new("/tmp/tilland-test-certs");
+        let image = "localhost/tillandsias-inference:test";
+
+        for skip in [false, true] {
+            let args = build_inference_run_args(certs, image, skip);
+            let image_at = args
+                .iter()
+                .position(|a| a == image)
+                .unwrap_or_else(|| panic!("image {image} missing from args (skip={skip})"));
+
+            // Nothing may follow the image: this container is ENTRYPOINT-only and
+            // its entrypoint never reads "$@", so any trailing word is silently
+            // discarded today and an exec failure the day it becomes a CMD image.
+            assert_eq!(
+                image_at,
+                args.len() - 1,
+                "the image must be the LAST argument (skip={skip}); trailing args: {:?}",
+                &args[image_at + 1..]
+            );
+
+            // And every flag must precede it.
+            for (i, a) in args.iter().enumerate() {
+                if i >= image_at && a.starts_with('-') {
+                    panic!(
+                        "flag-shaped arg {a:?} at index {i} is at/after the image \
+                         (index {image_at}, skip={skip}) — podman would treat it as \
+                         container argv, not a flag. Full args: {args:?}"
+                    );
+                }
+            }
+
+            // The regression itself: with skip requested, the env pair must be a
+            // real podman --env BEFORE the image, not stray container argv.
+            let want = "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1";
+            let present = args.iter().position(|a| a == want);
+            if skip {
+                let at = present.unwrap_or_else(|| {
+                    panic!("skip_runtime_pulls=true must set {want}; args: {args:?}")
+                });
+                assert!(
+                    at < image_at,
+                    "{want} must precede the image (found {at} vs image {image_at})"
+                );
+                assert_eq!(
+                    args.get(at - 1).map(String::as_str),
+                    Some("--env"),
+                    "{want} must be introduced by --env; args: {args:?}"
+                );
+            } else {
+                assert!(
+                    present.is_none(),
+                    "skip_runtime_pulls=false must NOT set {want}; args: {args:?}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -17,14 +17,36 @@ if [ -f /etc/tillandsias/ca.crt ]; then
     # the command is absent and the failure was swallowed by || true).
     # Guard the mkdir in case we're running on an older image — `set -e` is active
     # and a Permission denied here exits the container immediately.
-    mkdir -p /etc/pki/ca-trust/source/anchors/ 2>/dev/null || true
-    cp /etc/tillandsias/ca.crt /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt 2>/dev/null || true
-    update-ca-trust 2>/dev/null || true
-    # Order 486: the anchor + update-ca-trust above is fail-soft — as uid 1000
-    # it can fail silently (root-owned trust store), leaving curl unable to
-    # verify squid's TLS bump (curl exit 60). Point curl at the mounted
-    # enclave CA directly so downloads verify regardless of trust-store state.
+    # Order 525: this update CANNOT succeed as uid 1000 on this image — the
+    # Containerfile chowns only source/anchors, so /etc/pki/ca-trust/extracted
+    # stays root-owned under `USER 1000:1000`. It is attempted anyway (a future
+    # image may fix the ownership) but its failure is now REPORTED once with its
+    # rc instead of disappearing behind three separate `|| true`s.
+    _trust_rc=0
+    {
+        mkdir -p /etc/pki/ca-trust/source/anchors/ \
+            && cp /etc/tillandsias/ca.crt /etc/pki/ca-trust/source/anchors/tillandsias-ca.crt \
+            && update-ca-trust
+    } 2>/dev/null || _trust_rc=$?
+    if [ "$_trust_rc" -ne 0 ]; then
+        echo "[inference] WARN: system trust store not updated (rc=$_trust_rc, expected as uid $(id -u) on this image) — relying on SSL_CERT_FILE/CURL_CA_BUNDLE" >&2
+    fi
+    # Order 486: point curl at the mounted enclave CA directly so downloads
+    # verify regardless of trust-store state (curl exit 60 otherwise).
     export CURL_CA_BUNDLE=/etc/tillandsias/ca.crt
+    # Order 525: CURL_CA_BUNDLE fixes CURL ONLY. ollama is a Go binary and Go's
+    # crypto/x509 reads SSL_CERT_FILE — which appeared NOWHERE in this image — so
+    # with the trust store unwritable every `ollama pull` through squid's TLS bump
+    # failed x509 verification. That failure is non-fatal, so it surfaced to the
+    # agent as `inference_reason=no-models`, making "the enclave CA is not
+    # trusted" indistinguishable from "nothing is cached yet". Two very different
+    # faults, one message. Export the variable Go actually honours.
+    export SSL_CERT_FILE=/etc/tillandsias/ca.crt
+    # Some Go/OpenSSL paths consult a directory rather than a file; pointing it at
+    # the anchors dir is harmless when the copy above failed and correct when it
+    # succeeded.
+    export SSL_CERT_DIR=/etc/pki/ca-trust/source/anchors
+    echo "[inference] ca-trust: store_rc=$_trust_rc ssl_cert_file=$SSL_CERT_FILE curl_ca_bundle=$CURL_CA_BUNDLE"
 fi
 
 # Bind to all interfaces — reachable from other containers in the enclave.

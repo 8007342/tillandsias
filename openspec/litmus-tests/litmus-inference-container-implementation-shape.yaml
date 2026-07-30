@@ -76,7 +76,21 @@ critical_path:
     # trust for proxy bumping.
     # Window widened 60 -> 120 (order 392): the tier-gated GPU-delivery
     # block now sits between the base args and these mounts.
-    command: "grep -A 120 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/home/ollama/.ollama/models:rw' && grep -A 120 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/etc/tillandsias/ca.crt' | head -1"
+    # Window widened 120 -> 200 (order 524): the skip_runtime_pulls env pair
+    # moved BEFORE the mount/image tail (it used to be spliced in at
+    # `args.len() - 2`, which put it AFTER the image name where podman treats it
+    # as container argv), and the rationale comment came with it. The mounts now
+    # sit at roughly +130 and the whole function spans ~155 lines, so 200 covers
+    # it with margin.
+    #
+    # THIRD WIDENING = CONVERT THIS STEP. A line-distance window is not a
+    # property of the code, so it goes red on unrelated edits and says nothing
+    # about behaviour; twice is a coincidence, three times is a design signal.
+    # The replacement already exists in shape: assert the generated ARG VECTOR
+    # (see tests::inference_run_args_place_every_flag_before_the_image in
+    # crates/tillandsias-headless/src/main.rs), which is the only observable form
+    # of this boundary. Filed as order 528.
+    command: "grep -A 200 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/home/ollama/.ollama/models:rw' && grep -A 200 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/etc/tillandsias/ca.crt' | head -1"
     timeout_ms: 3000
     expected_behavior: "/etc/tillandsias/ca.crt"
 

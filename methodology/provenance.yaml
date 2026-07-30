@@ -218,6 +218,13 @@ methodology_provenance:
       inference: >
         OpenTelemetry semantic conventions show why common field names make
         heterogeneous telemetry easier to correlate.
+      limits: >
+        Tillandsias field names are project-local unless mapped to OpenTelemetry
+        attributes by an exporter.
+      falsification_signal: >
+        Trace, log, or event records use incompatible names for the same evidence
+        concept, blocking joins across artifacts.
+      review_cadence: on_trace_or_event_schema_change
 
     - claim_id: methodology.runtime.compiled-cli-orchestration@v1
       statement: >
@@ -249,13 +256,6 @@ methodology_provenance:
         A shipped runtime path shells out to a repository script for ordinary
         user-facing orchestration.
       review_cadence: on_runtime_contract_change
-      limits: >
-        Tillandsias field names are project-local unless mapped to OpenTelemetry
-        attributes by an exporter.
-      falsification_signal: >
-        Trace, log, or event records use incompatible names for the same evidence
-        concept, blocking joins across artifacts.
-      review_cadence: on_trace_or_event_schema_change
 
     - claim_id: methodology.proximity.weighted-obligation-score@v1
       statement: >

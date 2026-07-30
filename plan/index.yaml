@@ -24877,6 +24877,13 @@ plan_index:
         - "the envelope carries (or the verifier derives) the root its citation paths are relative to, so verify-answer cannot disagree with the emitter about the same envelope"
         - "litmus reproduces BOTH escapes and turns red if either returns anything other than unsupported"
 
+      events:
+        - type: progress
+          ts: "2026-07-29T22:40:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            BOTH halves CLOSED with regression tests. R1: Corpus::query now searches TRUSTED files only; an unparseable file stays indexed solely so untrusted_hit() can name the parse error as the refusal reason instead of collapsing into 'unknown path'. R1 turned out NOT to be hypothetical — methodology/provenance.yaml genuinely did not parse at HEAD (claims[5] declared limits: twice), and the cause was exactly the corruption predicted: the TELEMETRY claim's limits/falsification_signal/review_cadence had been pasted into the compiled-cli-orchestration claim. Both repaired (fields moved back to methodology.telemetry.semantic-fields@v1); the file parses, all 9 claims carry all 4 fields, and the path is citable again at exact-path. The pre-existing test allowance KNOWN_BROKEN=[provenance.yaml] is retired and the bar tightened to no_methodology_file_fails_to_parse_as_yaml — which matters more now, because an unparseable file is entirely UNCITABLE under this fix, so leaving one broken silently removes it from the expert's answerable surface. R2: both envelope exit points (answer, methodology, methodology-ask) now self-verify via emit_verified_envelope/self_verified and downgrade to unsupported naming every violation, so the emitter and the checker can no longer disagree about the same envelope. New tests: an_unparseable_corpus_file_is_uncitable_and_names_why, a_failing_envelope_is_downgraded_to_unsupported_naming_the_violations. Suite 42+1 pass, grade 17/17, clippy clean. RESIDUAL: exit criterion 3 is NOT closed — the envelope still carries no field naming the root its citation paths are relative to, so a reader resolving against a different root can still disagree with the emitter. Packet stays ready for that slice.
     - packet_id: inference-run-args-flag-after-image
       order: 524
       desired_release: v0.5
@@ -24916,6 +24923,13 @@ plan_index:
         - "a unit test asserts EVERY flag precedes the image name in the generated vector, so a future insert cannot regress past it"
         - "the status-check mode log line is demonstrated to print"
 
+      events:
+        - type: progress
+          ts: "2026-07-29T22:40:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            CLOSED. The env pair is built BEFORE the mount/image tail, and the dead trailing '/usr/bin/ollama serve' is removed (it did not exist in the image and was silently discarded by an ENTRYPOINT-only container that never reads $@). New unit test inference_run_args_place_every_flag_before_the_image asserts the generated VECTOR: the image is the LAST argument, nothing flag-shaped appears at or after it, and with skip requested the variable is present, precedes the image, and is introduced by --env. Falsifiability proven by re-seeding the original defect (restoring the trailing command + the len()-2 splice) and confirming the test fails with 'the image must be the LAST argument; trailing args: ["/usr/bin/ollama", "serve"]'; file restored byte-identical. Side effect: this pushed the mounts past litmus:inference-container-implementation-shape's grep -A 120 window, the SECOND such widening, so order 528 is filed to convert those source-window steps to arg-vector assertions — note the window could never have caught this defect, since a positional error inside the window still greps green.
     - packet_id: inference-enclave-ca-not-trusted-by-engine
       order: 525
       desired_release: v0.5
@@ -24948,6 +24962,13 @@ plan_index:
         - "a trust-store update failure emits ONE named warning with its rc instead of three silent `|| true`s"
         - "a TLS-trust failure is distinguishable from an empty cache in the startup reason vocabulary"
 
+      events:
+        - type: progress
+          ts: "2026-07-29T22:40:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260729"
+          host: linux_mutable
+          summary: >
+            CLOSED. SSL_CERT_FILE (and SSL_CERT_DIR) are now exported beside CURL_CA_BUNDLE — Go's crypto/x509 reads the former and ollama is a Go binary, so CURL_CA_BUNDLE alone left every ollama pull failing x509 through squid's TLS bump. The three separate '|| true' calls are collapsed into one guarded block that reports rc once, plus a pinned 'ca-trust: store_rc=.. ssl_cert_file=.. curl_ca_bundle=..' line so the trust posture is observable instead of inferred. VERIFIED EMPIRICALLY in the real image as uid 1000: rc=1 (the trust-store update genuinely cannot succeed, confirming the audit's claim rather than assuming it), the WARN is emitted once, set -e survives so the container is not killed, and SSL_CERT_FILE is exported. RESIDUAL: the third exit criterion — making a TLS-trust failure distinguishable from an empty cache in the startup reason vocabulary — is NOT closed; inference_reason=no-models still covers both. Needs a new named reason in lib-inference-state.sh's closed vocabulary.
     - packet_id: experts-building-state-unbounded
       order: 526
       desired_release: v0.5
@@ -25012,3 +25033,44 @@ plan_index:
         - "expert model residency does not outlive the stack: after teardown no expert model holds VRAM (asserted, not assumed)"
         - "the keep-alive value is derived from a documented policy with a rationale comment, not a bare literal"
         - "the teardown/ephemerality litmus gains a VRAM-residency assertion on a GPU tier (skipped with a named reason on CPU hosts)"
+
+    - packet_id: source-window-litmus-assertions-are-brittle
+      order: 528
+      desired_release: v0.5
+      title: "Line-distance source-window litmus assertions go red on unrelated edits — convert the inference ones to arg-vector assertions"
+      status: ready
+      kind: enhancement
+      deliverable: arg-vector/behavioural assertions replacing grep -A N source windows in the inference litmus family
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [litmus, testing, rust, maintainability]
+      estimated_hours: 3
+      outcome: >
+        Filed 2026-07-29 after the SECOND widening of the same window.
+        litmus:inference-container-implementation-shape asserts the model-cache
+        and CA mounts by grepping a fixed line window after
+        `fn build_inference_run_args` (`grep -A N`). The window was widened
+        60 -> 120 by order 392 and 120 -> 200 by order 524, both times because
+        code was legitimately ADDED to the function, not because the asserted
+        property changed. A line distance is not a property of the code: the
+        step goes red on unrelated edits (a false alarm that trains agents to
+        widen the number rather than think) and it would stay green if the mount
+        moved to a wrong POSITION inside the window (a false pass on the thing
+        that actually matters — order 524 was exactly a positional defect, and
+        no source-window step could see it).
+        The replacement already exists in shape:
+        tests::inference_run_args_place_every_flag_before_the_image asserts the
+        generated ARG VECTOR, which is the only observable form of that boundary.
+        Convert the inference litmus family's source-window steps to behavioural
+        assertions over the produced vector, and keep grep only for genuine
+        source-text pins (e.g. the CDI remedy literal, which a test at
+        main.rs:13143-13146 deliberately pins as TEXT because its audience is a
+        human reading stderr).
+        NOTE for the implementer: order 392's remedy-literal window assertion is
+        NOT a candidate for conversion — an adversarial review this cycle
+        confirmed that moving that literal out of the source text turns that pin
+        red by design.
+      exit_criteria:
+        - "the mount/identity/security assertions for build_inference_run_args are made against the generated arg vector, not a grep line window"
+        - "a positional defect (a flag emitted after the image name) fails the suite, proving the new form catches what the window could not"
+        - "any remaining grep -A N step carries a comment saying WHY source text, not behaviour, is the right assertion there"
