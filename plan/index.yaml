@@ -23381,7 +23381,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: structured hardware capability probe (CPU/GPU/NPU/bandwidth) replacing the string inference tier"
-      status: ready
+      status: done
       kind: implementation
       deliverable: capabilities probe in tillandsias-headless + capabilities.json surface + unit tests + litmus shape test
       depends_on: [heterogeneous-inference-specs]
@@ -23400,6 +23400,13 @@ plan_index:
         exists (per spec). Host-side only; no container changes in this
         packet. Rust, no Python (tlatoani_hard_no_python).
 
+      events:
+        - type: progress
+          ts: "2026-07-30T03:36:45Z"
+          agent_id: "forge-antigravity"
+          host: forge
+          summary: >
+            CLOSED. Implemented structured hardware capability probe (accel_probe module) per spec:accel-capability-probe (PROBE-1..8). Emits capabilities.json carrying schema_version=1, legacy_tier string derived from effective_inference_tier(), devices, engines, measurements, and host metadata. Vendor-resolved NPU enumeration (AMD XDNA, Intel NPU, unknown), DRM/Vulkan GPU enumeration, CPU flags and topology, and battery presence. Marked NPU usable:false with unusable_reason:engine-missing per PROBE-3. Enforced macOS Metal container isolation (host-native only). Added unit tests asserting document generation, roundtrip serialization, NPU resolution, and macOS Metal isolation. Verified falsifiability by seeding regression. cargo test passed. litmus:accel-capability-probe-contract-shape 100% PASS.
     - packet_id: npu-device-passthrough
       order: 481
       desired_release: v0.5

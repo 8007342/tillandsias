@@ -85,6 +85,8 @@ mod resource_lock;
 mod agent_result;
 mod catalog;
 mod runtime_phase;
+// @trace spec:accel-capability-probe: Structured hardware capability probe (CPU/GPU/NPU/bandwidth).
+pub mod accel_probe;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -2958,14 +2960,11 @@ fn detect_inference_tier() -> &'static str {
     }
 }
 
-/// Order 392: the tier agents are TOLD must match what the container ACTUALLY
-/// runs, not just the hardware. A `gpu-cuda` host with no CDI spec (order 408
-/// automates generation once the toolkit package is present) silently runs
-/// CPU-only — reporting `gpu-cuda` there is a lie that makes agents expect a
-/// GPU that is not delivered. The effective tier downgrades `gpu-cuda` to
-/// `cpu` when podman cannot hand the GPU to the container, while `gpu-rocm`
-/// (explicit --device) and `metal` are delivered as-is. Keeps the pinned
-/// grammar: `gpu-cuda | gpu-rocm | metal | cpu`.
+/// Order 392 & Order 480: the tier agents are TOLD must match what the container
+/// ACTUALLY runs, not just the hardware. Retained as the derived `legacy_tier`
+/// field in capabilities.json per spec:accel-capability-probe.
+// @trace spec:accel-capability-probe
+// @trace spec:inference-policy-router: Hardware-aware tier routing and fallback chain.
 fn effective_inference_tier() -> &'static str {
     let hardware = detect_inference_tier();
     match hardware {
@@ -3245,6 +3244,7 @@ async fn wait_for_git_mirror_ready(
     ))
 }
 
+// @trace spec:inference-engine-slots: Stable enclave inference endpoint (http://inference:11434) and engine slot run args.
 fn build_inference_run_args(
     certs_dir: &Path,
     image: &str,
