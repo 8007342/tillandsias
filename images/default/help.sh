@@ -4,13 +4,14 @@
 # English version with common commands, tips, and troubleshooting
 
 # Detect locale if available
-if [ -z "${L_WELCOME_TITLE:-}" ]; then
+if [ -z "${L_WELCOME_TITLE:-}" ] && [ -z "${_THS:-}" ]; then
     _LOCALE_RAW="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
     _LOCALE="${_LOCALE_RAW%%_*}"
     _LOCALE="${_LOCALE%%.*}"
     _HELP_FILE="/usr/local/share/tillandsias/help-${_LOCALE}.sh"
     [ -f "$_HELP_FILE" ] || _HELP_FILE="/usr/local/share/tillandsias/help.sh"
     if [ "$_HELP_FILE" != "$0" ] && [ -f "$_HELP_FILE" ]; then
+        export _THS=1
         source "$_HELP_FILE"
         exit 0
     fi
