@@ -1,5 +1,13 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-30T16:18Z (forge — order 533 help segfault fix, forge-launch gitignore issue filed)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: 22 pre-existing `.opencode/` dirty paths (forge-launch openspec regeneration artifacts), operator-identified as disposable. Issue filed: `plan/issues/forge-opencode-skills-commands-dirty-launch-2026-07-30.md`.
+- **Worker drain (order 533)**: `tillandsias-help` segfault fix — `images/default/help.sh` locale-detection block sourced itself infinitely when invoked via the symlink name (`tillandsias-help`), because `$0` never changes under `source`. Fix: `[ -z "${_THS:-}" ]` re-entry guard with `export _THS=1` before source. Commit `61075061`. Freshness stamp applied (verdict=updated).
+- **Issue filed**: `forge-opencode-skills-commands-dirty-launch-2026-07-30.md` — tracked `.opencode/commands/opsx-*.md` and `.opencode/skills/openspec-*/SKILL.md` get regenerated on every forge launch, making every cycle start dirty. Solution: `git update-index --skip-worktree` in forge entrypoint (zero-token mechanical fix).
+- **Verification**: `./build.sh --check` PASS. YAML validated. No crate changes.
+- **Exit**: Clean push to `origin/linux-next`. No uncommitted cycle-owned changes. Pre-existing `.opencode/` dirt preserved byte-identically.
+
 ## Cycle 2026-07-30T06:38Z (forge — milestone 391 first-person experience verification: experts refuse everything in a fresh forge)
 
 - **Host**: forge container, `linux-next` (launched on `main`, switched — see below).

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:help-system-localization
+# freshness: auditor=forge-tillandsias-20260730T1619Z date=2026-07-30 verdict=updated scope=fixed infinite self-source segfault (exit 139) when invoked via tillandsias-help symlink; added _THS re-entry guard
 # help.sh — Tillandsias Forge help system
 # English version with common commands, tips, and troubleshooting
 
