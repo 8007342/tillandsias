@@ -461,7 +461,33 @@ _regenerate_trace_indexes() {
         return 0
     fi
     _step "Regenerating clickable trace indexes..."
-    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    # Order 495 requires the regeneration to run here, BEFORE any gate. What it
+    # must NOT do is run silently: `2>/dev/null || true` swallowed every error
+    # AND every signal that the tracked indexes had just changed. The build
+    # dirtied TRACES.md and said nothing, so an agent shipped its @trace change
+    # without the index refresh and the NEXT agent's pre-build sweep failed
+    # litmus:local-ci-self-clean-evidence for dirt it did not create. That
+    # happened three times in one day before this was fixed.
+    #
+    # Ask first, so we can tell the agent whether ITS change is what moved them.
+    local _traces_were_stale=0
+    if ! "$SCRIPT_DIR/scripts/generate-traces.sh" --check >/dev/null 2>&1; then
+        _traces_were_stale=1
+    fi
+
+    if ! "$SCRIPT_DIR/scripts/generate-traces.sh"; then
+        _warn "Trace index regeneration FAILED. The committed indexes are now of unknown currency; run ./scripts/generate-traces.sh by hand and read its errors."
+        return 0
+    fi
+
+    if [[ "$_traces_were_stale" == "1" ]]; then
+        _warn "Trace indexes were STALE and have just been regenerated — your worktree is now dirty."
+        _warn "  This build changed tracked files. That is expected when you add, move, or remove an @trace annotation."
+        _warn "  YOU MUST commit them IN THE SAME COMMIT as the change that moved them:"
+        _warn "      git add TRACES.md openspec/specs/*/TRACES.md"
+        _warn "  Leaving them uncommitted fails litmus:local-ci-self-clean-evidence for the NEXT agent,"
+        _warn "  far from the cause. Verify before pushing:  ./scripts/generate-traces.sh --check"
+    fi
 }
 
 # ---------------------------------------------------------------------------
