@@ -59,6 +59,23 @@ resolve_plan_index() {
 }
 
 # Locate the tillandsias-plan binary.
+#
+# The probe list used to cover only INSTALLED locations, which meant this server
+# worked exclusively inside a forge — where ensure_forge_experts builds and
+# installs to PLAN_BIN_CANONICAL — and returned "the tillandsias-plan binary is
+# not installed" everywhere else. On a host checkout the binary normally lives at
+# target/release/tillandsias-plan (that is what ./build.sh produces and what the
+# coordinator runs all day), so every plan_* tool errored on the host even though
+# a perfectly good binary was sitting in the tree. Reproduced 2026-07-30:
+# plan_check / plan_ready / plan_status all returned the not-installed
+# diagnostic, and plan_answer / methodology_ask degraded to
+# confidence=unsupported.
+#
+# Adding the cargo output path makes ONE server correct in both contexts. The
+# installed locations still win: inside a forge the canonical install is the
+# artifact ensure_forge_experts just produced and is the one the launch state
+# reports on, so preferring a possibly-stale target/release there would make the
+# experts state line lie about which binary is answering.
 resolve_plan_bin() {
     if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_BIN"
@@ -73,6 +90,17 @@ resolve_plan_bin() {
             return 0
         fi
     done
+    # Fallback: a cargo-built binary in the checkout this server is serving.
+    # Derived from the resolved index rather than assumed, so it follows
+    # TILLANDSIAS_PLAN_INDEX and the probe order above.
+    _idx="$(resolve_plan_index)"
+    if [ -n "$_idx" ]; then
+        _root="$(dirname "$(dirname "$_idx")")"
+        if [ -x "$_root/target/release/tillandsias-plan" ]; then
+            printf '%s\n' "$_root/target/release/tillandsias-plan"
+            return 0
+        fi
+    fi
     printf '\n'
 }
 

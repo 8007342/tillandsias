@@ -183,14 +183,34 @@ ${preview}"
                     else
                         glob_for_find="$file_glob"
                     fi
-                    # || true prevents set -e from killing script on SIGPIPE (pipefail + head close)
+                    # Capping the FILE list produced SILENT FALSE NEGATIVES. `find`
+                    # emits in readdir order, not sorted, and that order shifts as
+                    # the tree is written to. With `head -200` against 260 matching
+                    # .sh files, ~60 were dropped ARBITRARILY and differently on
+                    # each call — so `search_code(pattern, glob="*.sh")` reported
+                    # "No matches found" for a pattern that is plainly in
+                    # ./build.sh (find position 14; the captured list happened to
+                    # start at position 15). A search tool that says "not found"
+                    # for something present is worse than no search tool: the agent
+                    # concludes the code does not exist and acts on it.
+                    #
+                    # Search EVERY matching file. Cap the RESULTS instead, and say
+                    # so when the cap is hit, so truncation is never mistaken for
+                    # absence.
+                    # || true prevents set -e killing the script on SIGPIPE.
                     if [[ "$glob_for_find" == *"/"* ]]; then
-                        files=$(find . -type f -path "*/$glob_for_find" 2>/dev/null | head -200 || true)
+                        files=$(find . -type f -path "*/$glob_for_find" 2>/dev/null || true)
                     else
-                        files=$(find . -type f -name "$glob_for_find" 2>/dev/null | head -200 || true)
+                        files=$(find . -type f -name "$glob_for_find" 2>/dev/null || true)
                     fi
                     if [ -n "$files" ]; then
-                        result=$(echo "$files" | xargs grep -In "$pattern" 2>/dev/null | head -50 || true)
+                        all_hits=$(echo "$files" | xargs grep -In "$pattern" 2>/dev/null || true)
+                        hit_count=$(printf '%s' "$all_hits" | grep -c . || true)
+                        result=$(printf '%s' "$all_hits" | head -50 || true)
+                        if [ "${hit_count:-0}" -gt 50 ]; then
+                            result="${result}
+[truncated: showing 50 of ${hit_count} matches — narrow the glob or pattern to see the rest]"
+                        fi
                     fi
                     if [ -z "${result:-}" ]; then
                         result="No matches found"
