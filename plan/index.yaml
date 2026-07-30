@@ -25926,3 +25926,40 @@ plan_index:
         - "the host-mount lane converges to the launch-gated seed (or reports a named reason why it cannot) and emits the same base_state verdict as the clone lanes"
         - "the terminal lane emits a startup context carrying base_state, expert_sources, and the inference/experts state"
         - "litmus:forge-expert-base-guard-shape (or a sibling) asserts BOTH lanes, and turns red when either stops reporting"
+
+    - packet_id: version-bump-invalidates-image-aliases
+      order: 535
+      desired_release: v0.5
+      title: "Every local build now bumps VERSION, which invalidates image alias tags and makes the tray rebuild on next launch"
+      status: ready
+      kind: enhancement
+      deliverable: decouple image identity from the version alias (or make alias re-tag cheap and explicit) + evidence of launch cost
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, images, versioning, podman, developer-experience]
+      estimated_hours: 3
+      outcome: >
+        Introduced deliberately 2026-07-30 while making the build counter
+        automatic, and observed immediately: build.sh now increments VERSION on
+        every build-producing dispatch (methodology/versioning.yaml has always
+        required this; nothing implemented it). Images are tagged by CONTENT HASH
+        with human aliases `:v<VERSION>` and `:latest`, so a bump does not change
+        image content — but it does mean the alias `:v0.4.260730.2` does not exist
+        until something creates it. The tray therefore reports
+        "building missing image git (localhost/tillandsias-git:v0.4.260730.2)"
+        on the first launch after any build, for each image.
+        Observed live: vault and proxy came up healthy and the tray reached a
+        working UI (cloud refresh loaded 23 repos), so this is COST, not breakage
+        — layers are cached and the content hash is unchanged. But it is per-image
+        work on every post-build launch, and it will get worse as image count
+        grows.
+        The two are only coupled through the alias. Options to weigh: alias by
+        content hash and let :v<VERSION> be a pure re-tag (no build path), or have
+        the tray re-tag an existing content-hash image rather than treating a
+        missing version alias as a missing image, or bump on a coarser trigger.
+        Do NOT resolve it by making the counter less monotonic — the methodology
+        rule is correct and was unimplemented for months.
+      exit_criteria:
+        - "a VERSION bump alone does not cause the tray to run an image BUILD when a content-identical image already exists"
+        - "the launch cost after a build is measured before and after, on this host, and recorded"
+        - "the build counter still increments on every build-producing dispatch (methodology/versioning.yaml increment_rule unchanged)"
