@@ -16275,7 +16275,14 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "OpenCode affordance — experts transparently queryable by forge agents (config provider entries + instructions; MCP only if needed)"
-      status: ready
+      status: claimed
+      events:
+        - type: claim
+          ts: "2026-07-29T21:20:00Z"
+          agent_id: "forge-bigpickle-opencode-20260729T2120Z"
+          host: forge
+          lease_id: "experts-opencode-affordance-395-forge-20260729"
+          expires_at: "2026-07-30T01:20:00Z"
       kind: implementation
       deliverable: images/default/config-overlay/opencode + instructions + discoverability litmus
       depends_on: [plan-methodology-experts-rung1]
