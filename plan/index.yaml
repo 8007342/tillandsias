@@ -23440,12 +23440,21 @@ plan_index:
       release_target: forge-local-experts-milestone
       title: "Impl: llama-server as a first-class engine slot beside ollama (Vulkan-first image variant)"
       status: done
+      phase: implementation
+      progress_summary: >
+        Concurrent shaping converged on four evidence-bounded children. The
+        engine-slot abstraction and deterministic Ollama Vulkan/CUDA pinning
+        landed in 482a; the residual children own the shared tier-table
+        migration, Vulkan-first llama-server image, and engine-parity smoke.
+        Ollama remains the selected default until the smoke child records
+        passing evidence.
       kind: implementation
       multi_cycle: true
       split_into:
         - "482a — engine-slot-abstraction-and-vulkan-pinning (engine-slot abstraction, Ollama default, Vulkan/CUDA deterministic pinning)"
         - "482b — llama-server-vulkan-image-variant (Vulkan-first llama-server container image variant)"
         - "482c — llama-server-engine-parity-smoke (engine-parity smoke evidence and default promotion)"
+        - "482d — llama-server-shared-tier-model-table (one declarative T0-T5 table consumed by both engines)"
       deliverable: engine-slot abstraction + llama-server inference image variant + tier-model mapping externalized from entrypoint shell + smoke evidence
       depends_on: [heterogeneous-inference-specs]
       pickup_role: linux
@@ -23480,6 +23489,44 @@ plan_index:
           host: linux_mutable
           summary: >
             DETERMINISM CONSTRAINT for the engine-slot lane: OLLAMA_VULKAN defaults to TRUE (measured on ollama v0.32.5), so whenever both lib/ollama/vulkan/ and a cuda_v* backend are present, backend selection on a CUDA host is nondeterministic unless explicitly pinned. Order 406's tier-keyed payload INCIDENTALLY mitigates this by installing exactly one accelerator backend per tier (measured live: libdirs=ollama,cuda_v13), but two multi-backend paths remain and belong to this packet: (a) the undetectable-CUDA-major fallback deliberately ships cuda_v12+cuda_v13, (b) any engine-slot lane that makes Vulkan selectable alongside a vendor lane per SLOT-4. Pin the backend explicitly rather than relying on payload contents to constrain it. Also relevant here: ROCm is a SEPARATE release asset nothing fetches (order 520), so the AMD story on the ollama kind is Vulkan-or-nothing today.
+        - type: claim
+          ts: "2026-07-30T03:48:07Z"
+          agent_id: "forge-tillandsias-codex-20260730T0348Z"
+          host: forge
+          lease_id: "67b6a1643ea8"
+          expires_at: "2026-07-30T07:48:07Z"
+        - type: reconcile
+          ts: "2026-07-30T03:56:00Z"
+          agent_id: "forge-tillandsias-codex-20260730T0348Z"
+          host: forge
+          lease_id: "67b6a1643ea8"
+          summary: >
+            Rebased the shaping checkpoint over concurrent commit f7bf881b,
+            which had already landed 482a and a three-child split. Preserved
+            that implementation and its child IDs, added the missing SLOT-7
+            shared-tier-table child 482d at the restricted-surface ownership
+            boundary, and strengthened the image/smoke dependency and evidence
+            contracts. No source or user-visible UX changed in this checkpoint.
+          current_plan:
+            - "482a remains done and receives independent mutation verification in the policy-router cycle."
+            - "482d externalizes the shared tier table under the coordinator-owned entrypoint surface."
+            - "482b consumes 482a+482d and supplies Vulkan-first/CPU-fallback image behavior."
+            - "482c proves the unchanged endpoint, readiness, lifecycle, memory guard, and pre-promotion smoke."
+          files_touched:
+            - "plan/index.yaml"
+          evidence:
+            - "tillandsias-plan check rejected a seeded duplicate packet_id with exit 1"
+            - "pre-seed and restored plan/index.yaml SHA-256 d03276d7815dfcc36f5fbc466faab8994d63b92ca914aa71f6142111916081b9"
+          observed_sibling_heads:
+            main: "7a5934090e5a77eb0620815735cdd1db3b12ed66"
+            linux-next: "e2ea27dc1fd7f27312a1f5beaa23296c14a56f59"
+            windows-next: "e4102a802839ca7f2d2ba4ff928c5d42ec7673c3"
+            osx-next: "89cade756013b0d6b9091b6d199049893c48106e"
+          direction: >
+            Reduce the operator-owned local EXPERTS theme by making the
+            heterogeneous inference substrate truthful and executable.
+          next_checkpoint: "Audit and mutation-test the concurrently landed 482a/484 implementation before accepting their done claims."
+          lease_intent: "release"
 
     - packet_id: engine-slot-abstraction-and-vulkan-pinning
       order: 482a
@@ -23506,12 +23553,33 @@ plan_index:
       status: ready
       kind: implementation
       deliverable: llama-server Containerfile variant + Mesa integration
-      depends_on: [engine-slot-abstraction-and-vulkan-pinning]
+      depends_on:
+        - engine-slot-abstraction-and-vulkan-pinning
+        - llama-server-shared-tier-model-table
       pickup_role: linux
       capability_tags: [inference, llama-cpp, vulkan, podman, containers]
       estimated_hours: 6
       outcome: >
-        Vulkan-first llama-server image variant allowing selectable engine slot behind stable endpoint.
+        Add the container-resident llama-server lane behind the unchanged
+        inference endpoint. Supply Mesa/Vulkan userspace in the image, select
+        /dev/dri by default when the probe reports a usable render node, and
+        degrade to CPU when it does not. Provide /v1/models,
+        /v1/chat/completions, and the mandatory bounded /api/version
+        compatibility response. Vendor lanes remain probe-gated. Explicitly
+        pin the selected backend so OLLAMA_VULKAN=true cannot race bundled
+        cuda_v12/cuda_v13 directories, and keep .engine-set authoritative.
+      exit_criteria:
+        - "a usable /dev/dri fixture selects Vulkan without requiring a host CUDA or ROCm stack"
+        - "a missing or unusable /dev/dri fixture selects CPU and launch still succeeds"
+        - "CUDA and ROCm variants are refused unless their exact probe lane is usable and container-reachable"
+        - "backend selection is explicit and agrees with the exactly-one-backend .engine-set manifest"
+        - "/api/version answers successfully within the existing one-second probe bound once ready"
+        - "the focused closure fails for an unpinned multi-backend payload and passes after byte-identical restoration"
+      acceptance_evidence:
+        - "explicit quick-size container-argument and readiness tests"
+        - "image build plus Vulkan/CPU smoke on a mutable Podman host"
+        - "pre/post mutation SHA-256 plus failing and restored-pass command output"
+      next_action: "Add the image variant and first prove /dev/dri-present versus absent selection with fixtures."
 
     - packet_id: llama-server-engine-parity-smoke
       order: 482c
@@ -23521,12 +23589,69 @@ plan_index:
       status: ready
       kind: verification
       deliverable: smoke test evidence comparing llama-server and ollama execution
-      depends_on: [llama-server-vulkan-image-variant]
-      pickup_role: linux
-      capability_tags: [inference, testing, smoke]
+      depends_on:
+        - llama-server-vulkan-image-variant
+        - llama-server-shared-tier-model-table
+      pickup_role: "linux mutable host with Podman and /dev/dri"
+      capability_tags: [inference, llama-cpp, vulkan, podman, testing, smoke]
       estimated_hours: 6
       outcome: >
-        Smoke evidence for llama-server engine slot performance and stability.
+        Prove ollama and llama-server behind exactly one
+        http://inference:11434 consumer endpoint, including the
+        OpenAI-compatible calls, /api/version readiness, double-ensure
+        idempotency, no model re-download, soft readiness failure, and
+        teardown. Exercise the 7B Q4_K_M, 32768-context, flash-attention,
+        q8_0-KV profile against the measured 5690 MiB residency guard. Record
+        smoke evidence before any data change may promote llama-server over
+        ollama.
+      exit_criteria:
+        - "ollama remains the selected default throughout the pre-evidence run"
+        - "both engines serve /v1/models and /v1/chat/completions through the unchanged endpoint"
+        - "double ensure leaves exactly one engine and performs no model re-download"
+        - "readiness failure is DEGRADED and never blocks forge launch; teardown leaves no engine running"
+        - "the measured 5690 MiB profile is admitted only with the required memory headroom"
+        - "the quick/e2e closure fails for a seeded endpoint, idempotency, or memory-guard regression and passes after byte-identical restoration"
+      acceptance_evidence:
+        - "explicit quick-size parity litmus plus mutable-host e2e run"
+        - "container inspect/log evidence naming selected engine, backend, .engine-set, and stable endpoint"
+        - "pre/post mutation SHA-256 plus failing and restored-pass command output"
+      next_action: "Run the quick parity closure before the mutable-host Vulkan smoke; do not promote the default during the pre-evidence run."
+
+    - packet_id: llama-server-shared-tier-model-table
+      order: 482d
+      parent: llama-server-engine-slot
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Shared tier-model table — externalize T0-T5 data for ollama and llama-server"
+      status: ready
+      kind: implementation
+      deliverable: declarative T0-T5 model table + ollama and llama-server mapping adapters + migration litmus
+      depends_on: [engine-slot-abstraction-and-vulkan-pinning]
+      pickup_role: "linux coordinator (restricted inference entrypoint surface)"
+      owner_host: linux
+      capability_tags: [inference, data, shell, containers]
+      estimated_hours: 3
+      outcome: >
+        Move the shared T0-T5 rows out of inline inference entrypoint shell
+        into one non-executable data file. Both engines consume the same shared
+        rows through engine-specific adapters without placing ollama tags,
+        GGUF names, or graph artifacts in the shared row format. Preserve order
+        406's payload selector: one accelerator backend per selected tier and
+        the matching .engine-set manifest remain authoritative.
+      owned_files:
+        - "images/inference/entrypoint.sh"
+        - "images/inference tier data and mapping adapters"
+      exit_criteria:
+        - "one declarative non-Python T0-T5 table is the only shared tier-row source"
+        - "ollama and llama-server adapters resolve every shared row without divergent inline copies"
+        - "the selected accelerator payload still contains exactly one backend and .engine-set names it"
+        - "the migration closure fails when an inline row is reintroduced or either adapter diverges, then passes after byte-identical restoration"
+      acceptance_evidence:
+        - "quick-size migration litmus executed explicitly"
+        - "payload-selector fixture for one-backend plus .engine-set agreement"
+        - "pre/post mutation SHA-256 plus failing and restored-pass command output"
+      next_action: "Inventory the current inline rows and define the narrow declarative schema before changing the coordinator-owned entrypoint."
+
     - packet_id: host-native-sidecar-endpoints
       order: 483
       desired_release: v0.5
