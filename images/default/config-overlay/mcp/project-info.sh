@@ -321,22 +321,23 @@ ${preview}"
                             result='{"error":"not a git repository or git not available"}'
                         fi
                     else
-                        result=$(python3 -c "
-import json, sys
-lines = [l.rstrip() for l in sys.stdin if l.strip()]
-files = []
-for line in lines:
-    staged = line[0]
-    working = line[1]
-    path = line[3:]
-    if ' -> ' in path:
-        parts = path.split(' -> ')
-        entry = {'path': parts[0], 'new_path': parts[1], 'staged_status': staged, 'working_status': working}
-    else:
-        entry = {'path': path, 'staged_status': staged, 'working_status': working}
-    files.append(entry)
-print(json.dumps({'files': files}, indent=2))
-" <<< "$porcelain")
+                        # Rewritten from python3 (tlatoani_hard_no_python). jq is present in the forge
+# image; ruby is NOT, so jq is the correct tool here rather than the host's.
+                        result=$(printf '%s\n' "$porcelain" | awk 'NF {
+                            staged = substr($0, 1, 1);
+                            working = substr($0, 2, 1);
+                            path = substr($0, 4);
+                            print staged "\t" working "\t" path;
+                        }' | jq -R -s '
+                            [ split("\n")[] | select(length > 0) | split("\t")
+                              | { staged_status: .[0], working_status: .[1], path: .[2] }
+                              | if (.path | test(" -> ")) then
+                                    (.path | split(" -> ")) as $p
+                                    | { path: $p[0], new_path: $p[1],
+                                        staged_status: .staged_status,
+                                        working_status: .working_status }
+                                else . end
+                            ] | { files: . }')
                     fi
                     ;;
                 "read_file")
@@ -372,30 +373,17 @@ print(json.dumps({'files': files}, indent=2))
                     ;;
                 "plan_query")
                     filter_args=$(echo "$args" | jq -c '.')
-                    result=$(python3 -c "
-import json, sys, yaml
-filter_data = json.loads(sys.argv[1]) if len(sys.argv) > 1 else {}
-limit = int(filter_data.get('limit', 20))
-try:
-    with open('plan/index.yaml') as f:
-        data = yaml.safe_load(f)
-    steps = data.get('plan_index', {}).get('steps', [])
-except Exception as e:
-    print(json.dumps({'error': str(e)}))
-    sys.exit(0)
-if filter_data.get('status'):
-    steps = [s for s in steps if s.get('status') == filter_data['status']]
-if filter_data.get('pickup_role'):
-    role_filter = filter_data['pickup_role'].lower()
-    steps = [s for s in steps if role_filter in s.get('pickup_role', '').lower()]
-if filter_data.get('capability_tags'):
-    tags = set(filter_data['capability_tags'])
-    steps = [s for s in steps if tags.issubset(set(s.get('capability_tags', [])))]
-steps = steps[:limit]
-keys = ['packet_id', 'order', 'title', 'status', 'kind', 'pickup_role', 'capability_tags', 'deliverable', 'depends_on']
-result = [{k: s.get(k) for k in keys if k in s} for s in steps]
-print(json.dumps(result, indent=2))
-" "$filter_args")
+                    # Rewritten from python3 (tlatoani_hard_no_python). yq v4 is present in the
+# forge image and reads the ledger natively, so this no longer hand-parses YAML.
+                        result=$(yq -o=json '
+                            [ .plan_index.steps[]
+                              | pick(["packet_id","order","title","status","kind","pickup_role","capability_tags","deliverable","depends_on"]) ]
+                        ' plan/index.yaml 2>/dev/null | jq --argjson f "$filter_args" '
+                            [ .[]
+                              | select(($f.status // null) == null or .status == $f.status)
+                              | select(($f.pickup_role // null) == null or ((.pickup_role // "") | ascii_downcase | contains($f.pickup_role | ascii_downcase)))
+                              | select(($f.capability_tags // null) == null or (((.capability_tags // []) - $f.capability_tags) | length) == ((.capability_tags // []) | length) - ($f.capability_tags | length))
+                            ] | .[0:(($f.limit // 20) | tonumber)]')
                     if [ -z "$result" ]; then
                         result="No matching packets found"
                     fi

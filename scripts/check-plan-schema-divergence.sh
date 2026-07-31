@@ -16,23 +16,16 @@ if [ ! -f "$INDEX" ] || [ ! -f "$SCHEMA" ]; then
   exit 1
 fi
 
-python3 -c "
-import yaml, sys
-
-with open('$INDEX') as f:
-    idx = yaml.safe_load(f)
-with open('$SCHEMA') as f:
-    sch = yaml.safe_load(f)
-
-idx_list = idx.get('plan_index', {}).get('default_status_values', [])
-sch_list = sch.get('statuses', [])
-
-if idx_list != sch_list:
-    i = ' '.join(idx_list)
-    s = ' '.join(sch_list)
-    print('blocked:status-vocab-diverges: plan/index.yaml=(' + i + ') vs plan/schema.yaml=(' + s + ')')
-    sys.exit(1)
-
-print('ok:status-vocab-in-sync')
-sys.exit(0)
-"
+# Rewritten from python3 (tlatoani_hard_no_python). Ruby is the methodology's
+# sanctioned YAML fallback and this script runs HOST-side, where ruby exists.
+ruby -ryaml -e '
+  idx = YAML.load_file(ARGV[0])
+  sch = YAML.load_file(ARGV[1])
+  idx_list = (idx["plan_index"] || {})["default_status_values"] || []
+  sch_list = sch["statuses"] || []
+  if idx_list != sch_list
+    puts "blocked:status-vocab-diverges: plan/index.yaml=(#{idx_list.join(" ")}) vs plan/schema.yaml=(#{sch_list.join(" ")})"
+    exit 1
+  end
+  puts "ok:status-vocab-in-sync"
+' "$INDEX" "$SCHEMA"
