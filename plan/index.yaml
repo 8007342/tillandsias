@@ -26079,3 +26079,82 @@ plan_index:
           host: linux_mutable
           summary: >
             OBSOLETED — the premise was wrong and the operator corrected it. I filed this on the assumption that a VERSION bump forces meaningful per-image work on the next launch. It does not, for two independent reasons I should have checked before filing. (1) The image identity is already SOURCE-derived, exactly as specced: scripts/hash-image-sources.sh walks the image's source dir and folds path+content sha256 per file, sorted, into one digest — VERSION is NOT an input. So a bump cannot change an image's content hash; it only leaves the human alias :v<VERSION> pointing at nothing yet. (2) openspec/specs/containerfile-staleness already governs when a rebuild is legitimate: 'Runtime image builds MUST compare the current runtime image source digest with the digest stored after the last successful build ... and MUST NOT rely on repository file mtimes.' Rebuild-on-digest-change is the designed behaviour, and the project's ephemerality and idempotency principles make a triggered rebuild correct rather than costly. MEASURED, since I claimed cost without measuring: rebuilding the git image with UNCHANGED sources and a missing version alias took 9.8s wall for a 552 MB image and re-tagged to :v0.4.260730.2 — a source-hash cache hit and alias re-tag, not a rebuild. My 'per-image work that scales with image count' framing overstated a ~9s idempotent re-tag into a design problem. No defect here; the exit criteria are withdrawn. The build counter stays automatic (methodology/versioning.yaml increment_rule), which was the real and long-unimplemented rule.
+
+    - packet_id: harness-first-run-onboarding-bypass
+      order: 536
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Codex/Claude/Antigravity each block on first-run onboarding (theme picker + 'I trust this folder') even in an authenticated session"
+      status: ready
+      kind: bug
+      deliverable: pre-seeded harness onboarding state in the forge image + a litmus proving a seeded launch reaches the agent prompt with zero interaction
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, harness, automation, codex, claude, antigravity, ux]
+      estimated_hours: 4
+      outcome: >
+        Operator directive 2026-07-31: "they currently for codex, agy, and claude,
+        at launch even during an authenticated session they prompt for selecting a
+        color theme, and accepting risks for the current folder 'I trust this
+        folder' disclaimer, we'll need to bypass that."
+        This is the single most concrete blocker to hands-off automation: every
+        delegated session stops on an interactive wizard before it reads its
+        prompt, so no unattended dispatch can complete. It is NOT the approvals
+        problem — entrypoint-forge-codex.sh already passes
+        `--dangerously-bypass-approvals-and-sandbox` (:135) for that. Onboarding
+        is a separate, earlier gate.
+        Verified 2026-07-31: NOTHING in images/default/ seeds onboarding state for
+        any harness. There is no reference anywhere in the tree to
+        hasCompletedOnboarding, hasTrustDialogAccepted, trust_level, or any
+        equivalent, so each harness hits its first-run wizard on every launch of
+        every ephemeral forge — by construction, since the config lives in the
+        container's home which dies with the lane.
+        Scope: determine the ACTUAL state file and keys each harness writes after
+        onboarding (empirically — launch each lane once, complete the wizard, diff
+        the home dir; do not guess schemas), then seed exactly those keys into the
+        image so a fresh lane starts post-onboarding. Trust must be scoped to the
+        forge's own checkout path, never blanket.
+      exit_criteria:
+        - "a fresh forge launch of each of codex, claude and antigravity reaches the agent prompt with ZERO interactive input, from a cold image"
+        - "the seeded state is derived from an observed post-onboarding diff, not a guessed schema, and the observation is recorded in the packet"
+        - "folder trust is scoped to the forge checkout path only"
+        - "litmus asserts the seed for each harness and turns red if a harness's state file drifts"
+
+    - packet_id: v06-automation-milestone
+      order: 537
+      desired_release: v0.6
+      title: "MILESTONE: hands-off delegated automation — the operator discusses specs, the system does the ground work"
+      status: ready
+      kind: milestone
+      multi_cycle: true
+      deliverable: plan/index.yaml (criteria holder; children carry the work)
+      depends_on: [forge-local-experts-milestone]
+      pickup_role: any
+      capability_tags: [milestone, automation, delegation, orchestration, tray]
+      estimated_hours: 0
+      outcome: >
+        Operator vision (The Tlatoani, verbatim 2026-07-31): "I shouldn't have to
+        be here just copy-pasting prompts around... We need some automation so we
+        can only discuss technical decisions and specs, and let you do all the
+        ground work which is applying the reduction engine to the specs towards
+        our implementation using our ./methodology." And: "our tray app will
+        likely have a container orchestrating long running tasks and launching
+        harnesses and agents along the way."
+        This milestone is the DELEGATION AND ORCHESTRATION layer only. It is
+        explicitly NOT zeroclaw: order 403 remains v0.7, pending, and
+        Tlatoani-gated, and its own text states that filing is not authorization.
+        The 2026-07-31 directive adds v0.6 research and planning scope; it does
+        NOT flip 403's gate, and nothing here may introduce a zeroclaw binary,
+        container, or release artifact.
+        Builds on what already exists rather than restarting: the delegation
+        research (plan/issues/forge-agent-delegation-research-2026-07-19.md) has
+        verified credential-injection recipes for OpenCode and Codex workers and a
+        recommended implementation ladder; orders 427/429 and their children carry
+        instance naming, worker state isolation, teardown targeting, JSONL result
+        parsing, and outcome surfacing.
+      exit_criteria:
+        - "the operator can state a goal once and the system decomposes, dispatches, verifies and reports without further prompt-passing"
+        - "long-running work survives the operator being away: dispatch, progress, failure and completion are all observable after the fact"
+        - "a delegated harness session is seeded with its prompt and reaches work with zero interactive input (order 536)"
+        - "every delegated result is verified before it is believed — an agent's self-report is never the closure"
+        - "zeroclaw remains untouched: order 403 still pending and Tlatoani-gated at the end of this milestone"
