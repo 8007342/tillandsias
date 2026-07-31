@@ -541,9 +541,11 @@ rewrite_origin_for_enclave_push() {
 # plan/issues/git-branching-methodology-research-2026-07-28.md §5.2): runs on
 # EVERY clone transport (Linux git-daemon network, Windows/WSL filesystem,
 # macOS staged filesystem) so no transport is left with the sticky-HEAD
-# hazard. Deliberately NOT run on the host-mount path — that is the
-# operator's own working tree, not a clone, and it is already on the
-# operator's branch.
+# hazard. The host-mount path also runs this convergence step: the launcher
+# already captured the operator checkout's branch as the launch-gated seed, and
+# the mounted checkout may have moved between that gate and container startup.
+# A failed switch remains fail-soft and is surfaced by the startup context as
+# base_state=mismatch; the verdict never judges the branch by name.
 #
 # The mirror's HEAD symref is global and STICKY: a persisted mirror volume
 # can hand a fresh clone branch Y after this launch's gate passed on branch
@@ -648,6 +650,10 @@ _clone_project_from_mirror_impl() {
         # but the actual transport is the enclave mirror. The host's `.git/config` is
         # never modified — the host can keep using its own `origin` directly.
         rewrite_origin_for_enclave_push
+        # Order 534: a bind-mounted checkout must converge just like every clone
+        # transport. This is intentionally seed-based, never a Tillandsias
+        # branch-name allowlist; end-user projects keep their own conventions.
+        checkout_forge_seed_branch
         return 0
     fi
 

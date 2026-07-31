@@ -29,8 +29,9 @@ description: >
   Pin scripts/check-forge-expert-base.sh: the falsifiable verdict grammar
   ^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$,
   all four branches with their exit codes, the source-presence (not branch-name)
-  test, the meta-orchestration skill's consultation of it, and the
-  methodology rule it binds to.
+  test, the meta-orchestration skill's consultation of it, the methodology rule
+  it binds to, and the host-mount + terminal lanes that previously bypassed the
+  startup verdict.
 severity: high
 size: instant
 
@@ -124,10 +125,34 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: startup context carries the verdict"
 
+  - step: "the host-mount lane converges to the launch-gated seed before returning"
+    # Order 534 regression boundary: the old host-mount block called
+    # rewrite_origin_for_enclave_push and returned immediately. Constrain this
+    # assertion to that block so checkout calls in clone transports cannot
+    # produce a false pass.
+    command: "block=$(sed -n '/^    if \\[\\[.*TILLANDSIAS_PROJECT_HOST_MOUNT/,/^    fi$/p' images/default/lib-common.sh); printf '%s\\n' \"$block\" | awk '/rewrite_origin_for_enclave_push/{rewrite=NR} /checkout_forge_seed_branch/{checkout=NR} /return 0/{ret=NR} END {exit !(rewrite && checkout > rewrite && ret > checkout)}' && echo 'ok: host-mount converges before return'"
+    timeout_ms: 5000
+    expected_behavior: "ok: host-mount converges before return"
+
+  - step: "seed convergence switches by the supplied project branch, not by a Tillandsias branch name"
+    # Exercise checkout_forge_seed_branch in a scratch end-user-shaped repo.
+    # The arbitrary names prove the runtime mechanism is convention-neutral.
+    command: "d=$(mktemp -d); git -C \"$d\" init -q; git -C \"$d\" config user.name litmus; git -C \"$d\" config user.email litmus@example.invalid; : > \"$d/file\"; git -C \"$d\" add file; git -C \"$d\" commit -qm initial; git -C \"$d\" branch customer-release; git -C \"$d\" switch -qc scratch-work; ( cd \"$d\"; trace_lifecycle() { :; }; source <(sed -n '/^checkout_forge_seed_branch() {/,/^}$/p' \"$OLDPWD/images/default/lib-common.sh\"); TILLANDSIAS_FORGE_SEED_BRANCH=customer-release checkout_forge_seed_branch >/dev/null; test \"$(git symbolic-ref --short HEAD)\" = customer-release ); rc=$?; rm -rf \"$d\"; test \"$rc\" -eq 0 && echo 'ok: arbitrary seed converged'"
+    timeout_ms: 15000
+    expected_behavior: "ok: arbitrary seed converged"
+
+  - step: "the terminal lane injects the complete startup verdict after project discovery"
+    # Calling inject_startup_context is the common producer for base_state,
+    # expert_sources, inference_state, and experts_state. Pin both the terminal
+    # call and all four machine-readable fields at the producer.
+    command: "terminal=$(cat images/default/entrypoint-terminal.sh); printf '%s\\n' \"$terminal\" | awk '/^find_project_dir$/{found=NR} /^inject_startup_context \"\\$PROJECT_DIR\"$/{inject=NR} END {exit !(found && inject > found)}'; grep -q 'base_state=' images/default/lib-common.sh; grep -q 'expert_sources=' images/default/lib-common.sh; grep -q 'inference_state=' images/default/lib-common.sh; grep -q 'experts_state=' images/default/lib-common.sh; echo 'ok: terminal carries complete startup verdict'"
+    timeout_ms: 5000
+    expected_behavior: "ok: terminal carries complete startup verdict"
+
 observability:
   traces:
     - "@trace spec:meta-orchestration"
-  expected_log: "forge expert base guard grammar, all four verdict branches with exit codes, source-presence test, skill + methodology + startup-context wiring"
+  expected_log: "forge expert base guard grammar, all four verdict branches with exit codes, source-presence test, skill + methodology + startup-context wiring, host-mount convergence, terminal verdict injection"
   log_fields:
     spec: "meta-orchestration"
     test: "forge-expert-base-guard-shape"
