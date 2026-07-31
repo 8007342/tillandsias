@@ -26749,3 +26749,187 @@ plan_index:
         - "tillandsias-plan verify-answer / the grade litmus still pass on the post-synthesized envelope (citations still resolve)"
         - "experts_npu_state=ready (or degraded(<reason>)) appears in the forge launch-state context when a usable NPU + endpoint are present"
         - "no LLM call is added to crates/tillandsias-plan (the compiled crate stays network-free)"
+
+    - packet_id: fat-spec-corpus-index
+      order: 547
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: span-addressable RAG index over the whole-spec corpus (network-free Rust; spec-index/spec-retrieve)"
+      status: ready
+      kind: implementation
+      deliverable: tillandsias-plan spec-index + spec-retrieve subcommands (heading-section chunker for md, reuse methodology.rs index_text for yaml; flat f32 blob + JSONL sidecar with path/line_start/line_end/decl/content_hash) + unit tests over the live corpus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, rag, experts, spec, embeddings, network-free]
+      estimated_hours: 12
+      outcome: >
+        Foundation for the GPU fat spec expert (design + PoC:
+        plan/issues/gpu-fat-spec-expert-2026-07-31.md). The whole-spec corpus is
+        ~950K tokens (340 openspec/specs + 266 cheatsheets + 56 methodology yaml)
+        — fits no context, so RAG is mandatory. Build a SPAN-ADDRESSABLE index so
+        the citation/verify contract survives: reuse crates/tillandsias-plan/src/
+        methodology.rs index_text (already emits citable key spans with file:line
+        + decl) for yaml; add a NEW heading-section chunker for md (## / ###) with
+        each chunk carrying path + line_start + line_end + heading decl +
+        content_hash. Store as a FLAT f32 blob + JSONL sidecar — ~2-4K chunks, so
+        brute-force cosine top-k is sub-ms; NO ANN dependency until the corpus
+        grows ~10x (recorded as a scaling risk). All in Rust, network-free
+        (embedding is done by the caller via /v1; this crate only chunks, stores,
+        and does the cosine top-k), preserving the falsifiability story
+        (answer.rs verify()). Index lives on app-cache/tmpfs, ephemeral like
+        ensure_forge_experts.
+      exit_criteria:
+        - "spec-retrieve top-k citations all resolve under answer.rs verify()"
+        - "delta re-embed touches only chunks whose content_hash changed"
+        - "a fabricated chunk citation is refused (verify fails)"
+        - "unit-tested over the live corpus; the crate adds no network dependency"
+
+    - packet_id: spec-expert-embed-and-synthesis
+      order: 548
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: spec_answer tool — embed + retrieve + GPU synthesis over cited spans (fail-soft, generalizes synthesize_prose)"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: forge-plan.sh spec_answer tool (embed query via pinned /v1/embeddings, spec-retrieve, synthesize on the GPU /v1/chat, build+verify Envelope, fail-soft/escalate) + two-branch litmus
+      depends_on: [fat-spec-corpus-index, npu-beginner-experts-serving]
+      pickup_role: linux
+      capability_tags: [rag, experts, mcp, gpu, forge, shell]
+      estimated_hours: 10
+      outcome: >
+        The fat spec expert's serving path (design + PoC on-host: Qwen3-4B on the
+        Radeon 840M/Vulkan gave an accurate cited cross-cutting answer over a
+        5.5K-token retrieved context; embedding retrieval via nomic ranked the
+        relevant chunk first, cosine in awk, no python). Generalizes order 546's
+        synthesize_prose: a spec_answer tool in forge-plan.sh embeds the query via
+        the pinned CPU/GPU embedding slot /v1/embeddings (FLM is chat-only, so
+        embeddings PIN off-NPU per order 544), runs spec-retrieve (order 547),
+        re-runs any methodology/plan chunks through the deterministic engine to
+        upgrade citations to exact, POSTs the cited spans + question to the GPU
+        slot /v1/chat with an answer-ONLY-from-these-cited-spans prompt, builds
+        the Envelope (confidence=retrieved), runs verify-answer, and on any
+        failure escalates to cloud then to retrieval-only cited chunks. The
+        compiled crate stays network-free; embedding + synthesis are the shell
+        job. Reuses the 546 fail-soft shape (replace only Envelope.answer, copy
+        citations/freshness/confidence verbatim).
+      exit_criteria:
+        - "with no GPU endpoint set, spec_answer returns retrieval-only cited chunks and verify passes (fail-soft, no regression)"
+        - "with a stub /v1, the returned envelope's citations/freshness are byte-identical and only the prose differs; confidence=retrieved"
+        - "verify-answer passes on the post-synthesis envelope (every cited span still resolves)"
+
+    - packet_id: fat-spec-expert-gpu-slot
+      order: 549
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: optional capability-gated GPU embed+synthesis component (Vulkan backend pinned) behind the enclave"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: optional GPU component via order-542 registry (SkippedNotApplicable when absent) + Vulkan backend pin (-ngl) + TILLANDSIAS_SPEC_EXPERT/EMBED endpoints in container_profile.rs + enclave alias in NO_PROXY + presence/absence litmus
+      depends_on: [optional-component-registry, accel-capability-probe]
+      pickup_role: linux
+      capability_tags: [gpu, vulkan, rag, experts, podman, enclave, containers]
+      estimated_hours: 12
+      outcome: >
+        The GPU serving slot for the fat expert. An optional capability-gated
+        component (order 542 registry; SkippedNotApplicable on a non-GPU host),
+        gated on capabilities.json (order 480) reporting a usable device_class
+        gpu with VRAM/RAM headroom AND an embedding-capable engine slot. CRITICAL
+        from the PoC: lemonade's llamacpp DEFAULTS TO CPU — the GPU slot MUST pin
+        the Vulkan backend explicitly (llama-server -ngl 99; both bin/llamacpp/
+        {vulkan,cpu}/ ship). Serves the fat synthesis model (mid-tier 3-4B Q4 on
+        shared RAM; top-tier 14B+ on discrete VRAM) + the embedding model
+        (co-resident). Add TILLANDSIAS_SPEC_EXPERT_ENDPOINT + TILLANDSIAS_EMBED_
+        ENDPOINT as ProfileEnvVars in crates/tillandsias-core/src/container_
+        profile.rs (peer to OLLAMA_HOST + the order-546 TILLANDSIAS_NPU_ENDPOINT);
+        the enclave alias joins ENCLAVE_NO_PROXY_BASE (main.rs:1022). On
+        shared-RAM mid-tier, keep the retrieved context tight (prefill-bound:
+        ~182 t/s prefill measured) and load-on-demand/evict-when-idle; on
+        discrete-VRAM top-tier it runs concurrently with the NPU beginner lane
+        (no contention).
+      exit_criteria:
+        - "present + reachable on a GPU host; absent with zero footprint on a non-GPU host (absence litmus)"
+        - "the GPU slot pins the Vulkan backend (not CPU) — verified by gpu_busy during a generation"
+        - "requests to the spec-expert alias bypass Squid (alias in ENCLAVE_NO_PROXY_BASE)"
+
+    - packet_id: tiered-expert-router
+      order: 550
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: confidence-escalation tiered expert router (deterministic -> NPU beginner -> GPU fat-RAG -> cloud)"
+      status: ready
+      kind: implementation
+      deliverable: router-consumer above order-484 route() (pure function over serialized capability+confidence fixtures) + this host as a committed fixture + routing litmus
+      depends_on: [spec-expert-embed-and-synthesis, npu-beginner-experts-serving, inference-policy-router]
+      pickup_role: linux
+      capability_tags: [rust, policy, experts, rag, routing]
+      estimated_hours: 8
+      outcome: >
+        The tier selector — and the key design insight is that it ALREADY EXISTS:
+        the Envelope's confidence field (answer.rs) is the router, no new
+        classifier needed. Always run the deterministic engine first (free,
+        network-free); confidence != unsupported -> BEGINNER -> NPU synthesis
+        (order 546); confidence == unsupported AND spec-shaped (a JOIN across the
+        340-file corpus) -> FAT -> GPU RAG (order 548); GPU absent OR cosine below
+        floor OR hardest -> CLOUD (which still synthesizes only over locally-
+        retrieved cited spans). Implement as a router-CONSUMER sitting above
+        order-484's route() in the MCP wrapper (NOT a change to route() itself); a
+        pure function over serialized capability+confidence fixtures. The
+        never-guess contract (answer.rs:211-230: an uncited confident answer is
+        unrepresentable) holds at every hop. This host is a committed fixture.
+      exit_criteria:
+        - "a single-node lookup routes to the deterministic/NPU path and NEVER invokes RAG"
+        - "an unsupported spec-wide query escalates to the GPU RAG; with no GPU it escalates to cloud"
+        - "every hop preserves the citation/verify contract (no uncited confident answer)"
+        - "route() is a pure function over serialized fixtures; this host is a committed capability fixture"
+
+    - packet_id: spec-expert-groundtruth
+      order: 551
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: spec.answer ground-truth engine + cross-cutting spec query set (grader unchanged)"
+      status: ready
+      kind: implementation
+      deliverable: spec.answer engine in crates/tillandsias-plan/src/groundtruth.rs ENGINES + committed cross-cutting spec query set + green grade at HEAD
+      depends_on: [fat-spec-corpus-index]
+      pickup_role: linux
+      capability_tags: [rust, experts, rag, groundtruth, testing]
+      estimated_hours: 6
+      outcome: >
+        Verifiable grading for the fat spec expert. Add a spec.answer engine to
+        crates/tillandsias-plan/src/groundtruth.rs ENGINES (the grader is already
+        corpus-agnostic, so no grader change) plus a committed set of cross-
+        cutting spec queries with expected cited spans. Both retrieval-only and
+        synthesized envelopes are graded (the citation set is what is graded, not
+        the prose). This is the falsifiable closure that lets the fat expert be
+        trusted and dogfooded.
+      exit_criteria:
+        - "the spec.answer ground-truth set is green at HEAD"
+        - "both retrieval-only and synthesized envelopes are graded (citations, not prose)"
+        - "a wrong expected span turns a case red (falsifiability spot-check)"
+
+    - packet_id: spec-index-commit-freshness
+      order: 552
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: delta re-embed of the spec index on commit (order-396 freshness; ephemeral lifecycle)"
+      status: ready
+      kind: implementation
+      deliverable: wire delta re-embed into the order-396 on-commit refresh + content-hash stale detection + ephemeral tmpfs lifecycle + litmus
+      depends_on: [fat-spec-corpus-index]
+      pickup_role: linux
+      capability_tags: [rust, rag, experts, freshness, commit-hook]
+      estimated_hours: 5
+      outcome: >
+        Keeps the fat spec index commit-stable and cheap (the operator's "stable
+        RAG between commits" property). Wire per-chunk content_hash delta
+        re-embed into the order-396 on-commit expert refresh: a commit that
+        changes one file re-embeds only that file's chunks. Envelope freshness =
+        git HEAD + index mtime via Freshness::for_source (answer.rs:180); a
+        content-hash mismatch is the stale-index detector. Ephemeral lifecycle
+        mirrors ensure_forge_experts (app-cache/tmpfs, dies with the stack).
+      exit_criteria:
+        - "a one-file commit re-embeds only that file's chunks (not the whole corpus)"
+        - "the Envelope freshness block reports the new HEAD sha after a commit"
+        - "a content-hash mismatch flags a stale index (fails closed)"

@@ -1,5 +1,40 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-31T23:10Z (linux_immutable — GPU fat RAG spec expert designed + PROVEN; tiered expert system)
+
+- **Host**: `yoga` (XDNA2 NPU + Radeon 840M iGPU), branch `linux-next`, guards
+  green. Operator directive: super-power the expert layer with a fat GPU spec
+  expert (RAG over "the whole spec") beside the NPU beginner experts.
+- **PoC — SUCCESS** (plan/issues/gpu-fat-spec-expert-2026-07-31.md): the fat
+  spec expert (Qwen3-4B Q4) ran on the Radeon 840M via Vulkan (`-ngl 99`) —
+  **GPU 100% busy** (vs 0% on CPU), prefill 182 t/s, decode 15.5 t/s (~4x the
+  CPU run), giving an accurate cited cross-cutting answer over a 5.5K-token
+  retrieved multi-spec context. Embedding retrieval (nomic on GPU) ranked the
+  relevant chunk first (cosine 0.73 vs 0.50, 768-dim, cosine in awk — no python).
+  Whole-spec corpus = ~950K tokens (340 specs + 266 cheatsheets + 56 methodology)
+  → fits no context → RAG mandatory. Clean teardown (GPU idle, RAM freed).
+- **Design (3-agent workflow)**: the tier router ALREADY EXISTS — the Envelope's
+  `confidence` field is the funnel (deterministic -> NPU beginner -> GPU fat-RAG
+  -> cloud); no new classifier. No-python split at the network boundary
+  (retrieval/chunking/verify in the network-free Rust crate; embedding+synthesis
+  as shell over /v1). Reuses Envelope/verify, methodology.rs indexer, order-546
+  synthesize_prose, order-542 registry, order-480 probe, order-484 router.
+- **Hardware tiers**: mid (this iGPU) = 3-4B comfortable, prefill-bound, keep
+  context tight, load-on-demand; top (fat discrete GPU + NPU) = 14B+ with the NPU
+  beginner lane running CONCURRENTLY (separate VRAM pool, no contention); low =
+  CPU-RAG/cloud fallback with a zero-LLM-token cited-facts floor.
+- **Plan changes**: filed orders **547** fat-spec-corpus-index (Rust RAG index),
+  **548** spec-expert-embed-and-synthesis (spec_answer tool), **549**
+  fat-spec-expert-gpu-slot (Vulkan-pinned optional GPU component), **550**
+  tiered-expert-router (confidence funnel), **551** spec-expert-groundtruth,
+  **552** spec-index-commit-freshness. All release_target
+  forge-local-experts-milestone, all with verifiable exit criteria.
+- **Verification**: plan/index.yaml YAML parse PASS; orders 547-552 unique; no
+  python introduced. Deliverables kept: toolboxes + Qwen3-4B-GGUF + nomic-embed.
+- **Next**: 547 (index) is the unblocked foundation -> 548 (serving) -> 549 (GPU
+  slot) + 550 (router). 542/543/546 (NPU tier) proceed in parallel. The tiered
+  expert system is the operator's dogfood-early velocity play.
+
 ## Cycle 2026-07-31T22:40Z (linux_immutable — beginner experts PROVEN on the NPU; v0.5 drain)
 
 - **Host**: `yoga` (XDNA2), branch `linux-next`. Guards green (credential
