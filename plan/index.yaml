@@ -16496,7 +16496,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Expert refresh hook installs from the effective Cargo target and reports install failures honestly"
-      status: ready
+      status: completed
       kind: fix
       deliverable: scripts/hooks/post-commit-expert-refresh.sh + behavioral fixture/litmus
       depends_on: [plan-methodology-experts-rung1]
@@ -16506,6 +16506,21 @@ plan_index:
       owned_files:
         - scripts/hooks/post-commit-expert-refresh.sh
         - openspec/litmus-tests/
+      events:
+        - type: claim
+          ts: "2026-07-31T01:59:55Z"
+          agent_id: "forge-antigravity-20260731"
+          host: forge
+          summary: "Claimed for implementation of CARGO_TARGET_DIR support and honest install failure logging."
+        - type: completed
+          ts: "2026-07-31T02:00:40Z"
+          agent_id: "forge-antigravity-20260731"
+          host: forge
+          summary: >
+            Implemented CARGO_TARGET_DIR resolution (falling back to $REPO_ROOT/target),
+            separated cargo build exit status from binary install check (missing or unreadable
+            built binary emits a named install failure log record), and added
+            litmus:expert-refresh-cargo-target-shape behavioral fixture.
       outcome: >
         Replace the hook's hard-coded target/release source with the effective
         CARGO_TARGET_DIR (falling back to the repository target directory),

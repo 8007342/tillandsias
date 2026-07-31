@@ -330,6 +330,7 @@ specs:
   - litmus:plan-answer-envelope-citability
   - litmus:methodology-path-query-citability
   - litmus:expert-groundtruth-harness
+  - litmus:expert-refresh-cargo-target-shape
   coverage_ratio: 80
   last_verified: '2026-07-29'
 - spec_id: forge-forward-compat

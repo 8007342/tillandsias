@@ -1,5 +1,12 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-31T02:00Z (forge — order experts-refresh-on-commit/cargo-target-install)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Clean startup boundary (`/tmp/meta-orchestration-boundary.kSJA7U`). Sibling heads: main=7a5934090e5a, linux-next=440f9885b23a, windows-next=e4102a802839, osx-next=89cade756013.
+- **Worker drain (experts-refresh-on-commit/cargo-target-install)**: Implemented effective `CARGO_TARGET_DIR` resolution in `scripts/hooks/post-commit-expert-refresh.sh` (falling back to `$REPO_ROOT/target`), separated cargo build exit status from binary install check (missing/unreadable output logs a named install failure), made script executable, and added `litmus:expert-refresh-cargo-target-shape` behavioral fixture in `openspec/litmus-tests/`. Packet marked `completed`.
+- **Freshness audit**: `scripts/freshness-inventory.sh` disposition **refreshed**. Re-validated inventory coverage and report grammar contracts (`auditor=forge-antigravity-20260731 date=2026-07-31`).
+- **Verification**: `./build.sh --check` PASS; `tillandsias-plan check` PASS; `litmus:expert-refresh-cargo-target-shape` PASS (3/3 steps: syntax & executable, CARGO_TARGET_DIR success, missing binary install failure).
+
 ## Cycle 2026-07-30T19:08Z (forge — order 396 evidence-boundary split + MCP usability)
 
 - **Host**: forge container, full meta-orchestration mode, `linux-next`.

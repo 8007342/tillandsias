@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# freshness: auditor=forge-opencode-20260728 date=2026-07-28 verdict=refreshed scope=revalidated inventory coverage (945 components, 8 stamped, 937 unstamped — 0% stamped), stale-report grammar, and advisory output contract; same findings as prior audit — no new drift detected in the stamped set
+# freshness: auditor=forge-antigravity-20260731 date=2026-07-31 verdict=refreshed scope=revalidated inventory coverage (969 components, 8 stamped, 961 unstamped — 0% stamped), stale-report grammar, and advisory output contract; same findings as prior audit — no new drift detected in the stamped set
 # =============================================================================
 # freshness-inventory.sh — FRESHNESS rung 2: component inventory + coverage
 #

@@ -55,15 +55,33 @@ if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/'; then
         # Bounded rebuild: 600s default (matches FORGE_EXPERTS_BUILD_TIMEOUT)
         BUILD_TIMEOUT="${FORGE_EXPERTS_BUILD_TIMEOUT:-600}"
 
+        # Resolve target directory from CARGO_TARGET_DIR or default repository target/
+        if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+            if [[ "$CARGO_TARGET_DIR" = /* ]]; then
+                TARGET_DIR="$CARGO_TARGET_DIR"
+            else
+                TARGET_DIR="$REPO_ROOT/$CARGO_TARGET_DIR"
+            fi
+        else
+            TARGET_DIR="$REPO_ROOT/target"
+        fi
+        BUILT_BIN="$TARGET_DIR/release/tillandsias-plan"
+
         if command -v cargo &>/dev/null; then
-            timeout "$BUILD_TIMEOUT" cargo build --release -p tillandsias-plan \
-                >> "$HOOK_LOG" 2>&1 \
-                && {
+            if timeout "$BUILD_TIMEOUT" cargo build --release -p tillandsias-plan >> "$HOOK_LOG" 2>&1; then
+                if [ -f "$BUILT_BIN" ] && [ -r "$BUILT_BIN" ]; then
                     mkdir -p "$BIN_DIR" 2>/dev/null
-                    cp "target/release/tillandsias-plan" "$BIN_PATH" 2>/dev/null
-                    echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) binary rebuilt from commit $(git rev-parse --short HEAD 2>/dev/null)" >> "$HOOK_LOG"
-                } \
-                || echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) FAILED: binary rebuild exited $? (timeout=${BUILD_TIMEOUT}s)" >> "$HOOK_LOG"
+                    if cp "$BUILT_BIN" "$BIN_PATH" 2>/dev/null; then
+                        echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) binary rebuilt from commit $(git rev-parse --short HEAD 2>/dev/null)" >> "$HOOK_LOG"
+                    else
+                        echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) FAILED: binary install failed (cp to $BIN_PATH failed)" >> "$HOOK_LOG"
+                    fi
+                else
+                    echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) FAILED: binary install failed (built artifact $BUILT_BIN missing or unreadable)" >> "$HOOK_LOG"
+                fi
+            else
+                echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) FAILED: binary rebuild exited $? (timeout=${BUILD_TIMEOUT}s)" >> "$HOOK_LOG"
+            fi
         else
             echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: cargo not available — binary rebuild deferred" >> "$HOOK_LOG"
         fi

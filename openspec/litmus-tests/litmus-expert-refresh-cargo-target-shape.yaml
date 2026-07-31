@@ -1,0 +1,54 @@
+# @trace spec:forge-environment-discoverability
+# @trace packet:experts-refresh-on-commit/cargo-target-install
+#
+# Pins the post-commit expert refresh hook's target directory handling and
+# honest install failure reporting (order provisional experts-refresh-on-commit/cargo-target-install).
+name: litmus:expert-refresh-cargo-target-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin scripts/hooks/post-commit-expert-refresh.sh:
+  1. A crate-touching commit with CARGO_TARGET_DIR set outside the checkout installs
+     the binary from $CARGO_TARGET_DIR/release/tillandsias-plan.
+  2. Missing or unreadable build output emits a named install failure rather than
+     reporting success.
+  3. Uses a behavioral fake cargo fixture to test success and failure paths fast without
+     rebuilding live crates or image substrate.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/hooks/post-commit-expert-refresh.sh
+  - shell utilities (bash, git, mktemp, grep) are available in PATH
+
+critical_path:
+  - step: "post-commit-expert-refresh.sh syntax is valid and executable"
+    command: "bash -n scripts/hooks/post-commit-expert-refresh.sh && test -x scripts/hooks/post-commit-expert-refresh.sh && echo 'ok: syntax-and-executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: syntax-and-executable"
+
+  - step: "fake cargo fixture with custom CARGO_TARGET_DIR installs built binary and logs success"
+    command: "d=$(mktemp -d); git init -q \"$d/repo\"; git -C \"$d/repo\" config user.email \"litmus@tillandsias\"; git -C \"$d/repo\" config user.name \"litmus\"; mkdir -p \"$d/repo/plan\" \"$d/repo/crates/tillandsias-plan\" \"$d/repo/scripts/hooks\"; touch \"$d/repo/plan/index.yaml\" \"$d/repo/crates/tillandsias-plan/Cargo.toml\"; cp scripts/hooks/post-commit-expert-refresh.sh \"$d/repo/scripts/hooks/post-commit\"; chmod +x \"$d/repo/scripts/hooks/post-commit\"; git -C \"$d/repo\" config core.hooksPath scripts/hooks; git -C \"$d/repo\" add .; git -C \"$d/repo\" commit -q -m \"initial\"; mkdir -p \"$d/custom_target/release\" \"$d/fake_bin\" \"$d/path_bin\"; printf '#!/bin/sh\\nmkdir -p \"$CARGO_TARGET_DIR/release\" && echo \"fake-binary-content\" > \"$CARGO_TARGET_DIR/release/tillandsias-plan\"\\n' > \"$d/path_bin/cargo\"; chmod +x \"$d/path_bin/cargo\"; echo \"crates/tillandsias-plan/src.rs\" > \"$d/repo/crates/tillandsias-plan/src.rs\"; git -C \"$d/repo\" add .; log_file=\"$d/hook.log\"; PATH=\"$d/path_bin:$PATH\" TILLANDSIAS_HOOK_LOG=\"$log_file\" FORGE_EXPERTS_BIN_DIR=\"$d/fake_bin\" CARGO_TARGET_DIR=\"$d/custom_target\" git -C \"$d/repo\" commit -q -m \"touch crate\"; sleep 1; installed_content=$(cat \"$d/fake_bin/tillandsias-plan\" 2>/dev/null); log_has_success=$(grep -c \"binary rebuilt from commit\" \"$log_file\" 2>/dev/null || echo 0); rm -rf \"$d\"; [ \"$installed_content\" = \"fake-binary-content\" ] && [ \"$log_has_success\" -ge 1 ] && echo \"ok: cargo-target-dir-success\" || { echo \"FAIL: content=$installed_content log_success=$log_has_success\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: cargo-target-dir-success"
+
+  - step: "missing build output produces a named install failure log record"
+    command: "d=$(mktemp -d); git init -q \"$d/repo\"; git -C \"$d/repo\" config user.email \"litmus@tillandsias\"; git -C \"$d/repo\" config user.name \"litmus\"; mkdir -p \"$d/repo/plan\" \"$d/repo/crates/tillandsias-plan\" \"$d/repo/scripts/hooks\"; touch \"$d/repo/plan/index.yaml\" \"$d/repo/crates/tillandsias-plan/Cargo.toml\"; cp scripts/hooks/post-commit-expert-refresh.sh \"$d/repo/scripts/hooks/post-commit\"; chmod +x \"$d/repo/scripts/hooks/post-commit\"; git -C \"$d/repo\" config core.hooksPath scripts/hooks; git -C \"$d/repo\" add .; git -C \"$d/repo\" commit -q -m \"initial\"; mkdir -p \"$d/fake_bin\" \"$d/path_bin\"; printf '#!/bin/sh\\nexit 0\\n' > \"$d/path_bin/cargo\"; chmod +x \"$d/path_bin/cargo\"; echo \"crates/tillandsias-plan/src.rs\" > \"$d/repo/crates/tillandsias-plan/src.rs\"; git -C \"$d/repo\" add .; log_file=\"$d/hook.log\"; PATH=\"$d/path_bin:$PATH\" TILLANDSIAS_HOOK_LOG=\"$log_file\" FORGE_EXPERTS_BIN_DIR=\"$d/fake_bin\" CARGO_TARGET_DIR=\"$d/custom_target\" git -C \"$d/repo\" commit -q -m \"touch crate\"; sleep 1; log_has_install_fail=$(grep -c \"FAILED: binary install failed\" \"$log_file\" 2>/dev/null || echo 0); rm -rf \"$d\"; [ \"$log_has_install_fail\" -ge 1 ] && echo \"ok: missing-binary-install-fail-logged\" || { echo \"FAIL: log_install_fail=$log_has_install_fail\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: missing-binary-install-fail-logged"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace packet:experts-refresh-on-commit/cargo-target-install"
+  expected_log: "post-commit expert refresh cargo target directory handling and install failure logging pinned"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "expert-refresh-cargo-target-shape"
+    artifact: "scripts/hooks/post-commit-expert-refresh.sh"
+
+rollback:
+  on_failure: >
+    Restore scripts/hooks/post-commit-expert-refresh.sh to handle CARGO_TARGET_DIR
+    and distinguish build failure from missing binary install failure.
+  command: "grep -n 'CARGO_TARGET_DIR' scripts/hooks/post-commit-expert-refresh.sh"
